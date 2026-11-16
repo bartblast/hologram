@@ -15,8 +15,8 @@ import Type from "../../type.mjs";
 // Enqueuing a job, hand-written for the client the way the data verbs are.
 //
 // On the wire a job is an ORDINARY CREATE of one of its rows - there is no enqueue op and no
-// job-shaped branch in the batch path - so this is Entity.new plus whatever authority the call
-// claimed, written through the same create every other verb goes through. What makes it its own
+// job-shaped branch in the batch path - so this is Entity.new written through the same create
+// every other verb goes through, and the server judges it by its :create rules like any other. What makes it its own
 // verb is that a job's create schedules work to run after the batch commits, which is why
 // DB.create refuses a job type and points here.
 //
@@ -38,9 +38,10 @@ function applyClaim(job, claim) {
     : Elixir_Hologram_Query_Stage["authorize/2"](job, claim);
 }
 
-// The job the enqueue writes: constructed the way any entity is, then carrying whatever authority
-// the call claimed. Built here rather than in each verb so the bang has the job in hand and can
-// name the values a refusal objected to.
+// The job the enqueue writes: constructed the way any entity is. An authorize option is still
+// checked and recorded on the struct, the way the authorize/2 stage records it, but a write sends
+// no claim. Built here rather than in each verb so the bang has the job in hand and can name the
+// values a refusal objected to.
 function build(jobType, values, opts) {
   validateJobType(jobType);
 

@@ -182,10 +182,16 @@ defmodule Hologram.DB.Writer do
   # Which authority the write is on, and for which operation. A trust claim is the server's own
   # and evaluates nothing. An authorize claim names an operation and is evaluated whether or not
   # an actor is set - without one the evaluator's anonymous semantics apply, which is what a seed
-  # claiming a user's authority gets. No claim under an actor is the verb's own operation on the
-  # acting user's authority, which is what keeps every write under an actor evaluated. No claim
-  # and no actor is the trusted tier, and writes raw.
+  # claiming a user's authority gets. A client claim is a write a browser sent, the verb's own
+  # operation evaluated whether or not an actor is set: a client is never the trusted tier, so an
+  # anonymous session's write is judged with the anonymous semantics. No claim under an actor is
+  # the verb's own operation on the acting user's authority, which is what keeps every write under
+  # an actor evaluated. No claim and no actor is the trusted tier, and writes raw.
   defp evaluate!(%{__meta__: %Metadata{claim: :trust}}, _default_operation, _row), do: :ok
+
+  defp evaluate!(%{__meta__: %Metadata{claim: :client}}, default_operation, row) do
+    evaluate_operation!(default_operation, row)
+  end
 
   defp evaluate!(%{__meta__: %Metadata{claim: {:authorize, operation}}}, _default_operation, row) do
     evaluate_operation!(operation, row)

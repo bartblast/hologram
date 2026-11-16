@@ -18,7 +18,7 @@ defineRuntimeGlobals();
 
 // Mirrors the create describes of test/elixir/hologram/job_test.exs, as far as this tier goes:
 // there is no worker here, so what a job DOES is not among them - only that enqueuing one is an
-// ordinary create of its row, carrying whatever authority the call claimed.
+// ordinary create of its row.
 describe("Elixir_Hologram_Job", () => {
   const NOTIFY = "MyApp.Jobs.Notify";
   const TASK = "MyApp.Task";
@@ -127,23 +127,21 @@ describe("Elixir_Hologram_Job", () => {
       assert.notProperty(write.data, "status");
     });
 
-    it("carries no claim when the call names none", () => {
+    it("sends no claim", () => {
       create(notify, values([["reason", Type.bitstring("x")]]));
 
-      assert.isNull(Batches.current().writes[0].claim);
+      assert.notProperty(Batches.current().writes[0], "claim");
     });
 
-    it("carries the operation an authorize option named", () => {
+    // The server judges a write by what it does, so a claim could only ask for more.
+    it("sends no claim when an authorize option named an operation", () => {
       createWithOpts(
         notify,
         values([["reason", Type.bitstring("x")]]),
         opts([["authorize", Type.atom("notify")]]),
       );
 
-      assert.deepStrictEqual(Batches.current().writes[0].claim, [
-        "authorize",
-        "notify",
-      ]);
+      assert.notProperty(Batches.current().writes[0], "claim");
     });
 
     it("raises on an operation the job type never declared", () => {

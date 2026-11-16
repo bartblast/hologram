@@ -1880,6 +1880,8 @@ const Elixir_Hologram_Query_Stage = {
     }
 
     // The entity refusal wins, then the operation's, then the double-claim's - the server's order.
+    // The claim stays on the struct only: a write sends none, since the server judges it by what
+    // it does.
     Model.validateOperation(entityTypeOf(entity, "authorize"), operation);
 
     return putClaim(
@@ -1981,7 +1983,7 @@ const Elixir_Hologram_Query_Stage = {
   "take/2": (query, value) => setViewBound(query, "take", value),
 
   // Both forms the server accepts - an entity struct and a query - are refused here, in the wire's
-  // own words. Trust is the SERVER's authority: a batch claiming it is refused by name, and a read
+  // own words. Trust is the SERVER's authority: a batch carries no claim at all, and a read
   // claiming it would be asking this client's copy of the data to answer past the policies that
   // decided what it holds. A helper reaching for it learns at its own line that it is server code.
   "trust/1": (_subject) => {

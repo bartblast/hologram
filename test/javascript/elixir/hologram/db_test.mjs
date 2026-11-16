@@ -241,7 +241,6 @@ describe("Elixir_Hologram_DB", () => {
 
       assert.deepStrictEqual(Batches.current().writes, [
         {
-          claim: null,
           data: {done: false, title: "alpha"},
           id: ID_1,
           op: "create",
@@ -251,7 +250,8 @@ describe("Elixir_Hologram_DB", () => {
       ]);
     });
 
-    it("carries the claim a stage recorded", () => {
+    // The server judges a write by what it does, so a claim could only ask for more.
+    it("sends no claim, even for a struct a stage recorded one on", () => {
       const claimed = authorize(
         struct(TASK, {done: false, title: "alpha"}),
         Type.atom("publish"),
@@ -259,10 +259,7 @@ describe("Elixir_Hologram_DB", () => {
 
       create(claimed);
 
-      assert.deepStrictEqual(Batches.current().writes[0].claim, [
-        "authorize",
-        "publish",
-      ]);
+      assert.notProperty(Batches.current().writes[0], "claim");
     });
 
     // The server writes these inside the create's own transaction, and both tiers derive a
@@ -275,7 +272,6 @@ describe("Elixir_Hologram_DB", () => {
 
       assert.deepStrictEqual(Batches.current().writes, [
         {
-          claim: null,
           data: {title: "alpha"},
           id: ID_1,
           op: "create",
@@ -283,7 +279,6 @@ describe("Elixir_Hologram_DB", () => {
           type: NOTE,
         },
         {
-          claim: null,
           data: {
             granted_by_id: ACTOR,
             entity_id: ID_1,
@@ -546,7 +541,6 @@ describe("Elixir_Hologram_DB", () => {
       assert.deepStrictEqual(Batches.current().writes, [
         {
           based_on: {title: 11},
-          claim: null,
           data: {title: "Ship it"},
           id: ID_1,
           op: "update",
@@ -604,7 +598,7 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
-    it("carries the claim a stage recorded on every entry it appends", () => {
+    it("sends no claim on any entry, even for a struct a stage recorded one on", () => {
       const entity = authorize(
         addRelationship(
           putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
@@ -617,7 +611,7 @@ describe("Elixir_Hologram_DB", () => {
       update(entity);
 
       for (const write of Batches.current().writes) {
-        assert.deepStrictEqual(write.claim, ["authorize", "publish"]);
+        assert.notProperty(write, "claim");
       }
     });
 
@@ -639,7 +633,6 @@ describe("Elixir_Hologram_DB", () => {
 
       assert.deepStrictEqual(Batches.current().writes, [
         {
-          claim: null,
           deltas: {stock: 2},
           id: ID_2,
           op: "update",
@@ -849,7 +842,7 @@ describe("Elixir_Hologram_DB", () => {
     const changes = (values) =>
       Type.map(values.map(([name, value]) => [Type.atom(name), value]));
 
-    it("writes the changes it was given, carrying no claim", () => {
+    it("writes the changes it was given", () => {
       assert.deepStrictEqual(
         updateById(
           task,
@@ -862,7 +855,6 @@ describe("Elixir_Hologram_DB", () => {
       assert.deepStrictEqual(Batches.current().writes, [
         {
           based_on: {title: 11},
-          claim: null,
           data: {title: "Ship it"},
           id: ID_1,
           op: "update",
@@ -1007,7 +999,6 @@ describe("Elixir_Hologram_DB", () => {
       assert.deepStrictEqual(Batches.current().writes, [
         {
           based_on: {done: 10, title: 11},
-          claim: null,
           id: ID_1,
           op: "delete",
           stamp: STAMP,
@@ -1031,19 +1022,10 @@ describe("Elixir_Hologram_DB", () => {
       });
     });
 
-    it("carries the claim a stage recorded on the struct", () => {
+    it("sends no claim, even for a struct a stage recorded one on", () => {
       deleteEntity(authorize(held(), Type.atom("archive")));
 
-      assert.deepStrictEqual(Batches.current().writes[0].claim, [
-        "authorize",
-        "archive",
-      ]);
-    });
-
-    it("carries no claim when the row is named by type and id", () => {
-      deleteById(task, Type.bitstring(ID_1));
-
-      assert.isNull(Batches.current().writes[0].claim);
+      assert.notProperty(Batches.current().writes[0], "claim");
     });
 
     it("takes the row and its outgoing edges out of the database", () => {

@@ -63,7 +63,7 @@ defmodule Hologram.Mutation.WriteTest do
       }
 
       assert to_entity(write) == %Module2{
-               __meta__: %Metadata{claim: {:authorize, :create}, stamp: 5},
+               __meta__: %Metadata{claim: :client, stamp: 5},
                a: false,
                b: nil,
                c: "x",
@@ -86,7 +86,7 @@ defmodule Hologram.Mutation.WriteTest do
       assert to_entity(write) == %Module2{
                __meta__: %Metadata{
                  attribute_ops: %{c: {:put, "x"}},
-                 claim: {:authorize, :update},
+                 claim: :client,
                  revisions: %{c: 3},
                  stamp: 5
                },
@@ -106,7 +106,7 @@ defmodule Hologram.Mutation.WriteTest do
 
       assert entity.__meta__ == %Metadata{
                attribute_ops: %{count: {:increment, 2}},
-               claim: {:authorize, :update},
+               claim: :client,
                stamp: 5
              }
 
@@ -124,7 +124,7 @@ defmodule Hologram.Mutation.WriteTest do
 
       assert to_entity(write) == %Module2{
                __meta__: %Metadata{
-                 claim: {:authorize, :delete},
+                 claim: :client,
                  revisions: %{a: 1, c: 3},
                  stamp: 5
                },
@@ -148,7 +148,7 @@ defmodule Hologram.Mutation.WriteTest do
 
       assert to_entity(write) == %Module16{
                __meta__: %Metadata{
-                 claim: {:authorize, :update},
+                 claim: :client,
                  relationship_ops: %{{:secrets, @target_id} => :add}
                },
                created_at: nil,
@@ -169,27 +169,14 @@ defmodule Hologram.Mutation.WriteTest do
       }
 
       assert to_entity(write).__meta__ == %Metadata{
-               claim: {:authorize, :update},
+               claim: :client,
                relationship_ops: %{{:secrets, @target_id} => :delete}
              }
     end
 
-    test "keeps the claim the write makes" do
-      write = %Write{
-        claim: {:authorize, :publish},
-        data: %{c: "x"},
-        entity_type: Module2,
-        id: @id,
-        op: :create,
-        stamp: 5
-      }
-
-      assert to_entity(write).__meta__.claim == {:authorize, :publish}
-    end
-
     # A client is never the trusted tier: a server-side verb writes raw when nobody is acting,
     # and a batch instead evaluates the verb's own operation under whatever authority there is.
-    test "gives a write claiming nothing the operation of the verb it is" do
+    test "gives every write the client claim" do
       create = %Write{data: %{label: "x"}, entity_type: Module15, id: @id, op: :create, stamp: 5}
 
       added_edge = %Write{
@@ -209,11 +196,11 @@ defmodule Hologram.Mutation.WriteTest do
       ]
 
       assert Enum.map(writes, &to_entity(&1).__meta__.claim) == [
-               {:authorize, :create},
-               {:authorize, :update},
-               {:authorize, :delete},
-               {:authorize, :update},
-               {:authorize, :update}
+               :client,
+               :client,
+               :client,
+               :client,
+               :client
              ]
     end
 

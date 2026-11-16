@@ -3506,7 +3506,6 @@ describe("a grant written into a batch", () => {
       assert.deepStrictEqual(
         grantEntry(USER_ID, ENTITY_TYPE, RESOURCE_ID, "member", ACTOR_ID),
         {
-          claim: null,
           data: {
             granted_by_id: ACTOR_ID,
             entity_id: RESOURCE_ID,
@@ -3792,7 +3791,6 @@ describe("grant_role/3", () => {
 
     assert.deepStrictEqual(Batches.current().writes, [
       {
-        claim: null,
         data: {
           granted_by_id: GATED_ALICE,
           entity_id: GATED_DOC,
@@ -4035,7 +4033,6 @@ describe("revoke_role/3", () => {
     assert.deepStrictEqual(Batches.current().writes, [
       {
         based_on: REVISIONS,
-        claim: null,
         data: {
           entity_id: GATED_DOC,
           entity_type: GATED_DOCUMENT,

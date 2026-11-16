@@ -992,7 +992,6 @@ const Elixir_Hologram_Auth = {
     // write states, so a row it no longer holds is refused or confirmed the same as one it does.
     batch.append({
       based_on: {...(held["$revisions"] ?? {})},
-      claim: null,
       data: {
         entity_id: entityId,
         entity_type: entityType,
@@ -1088,7 +1087,6 @@ export function grantEntry(
   actorUserId,
 ) {
   return {
-    claim: null,
     data: {
       entity_id: entityId,
       entity_type: entityType,

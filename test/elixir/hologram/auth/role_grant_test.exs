@@ -11,6 +11,7 @@ defmodule Hologram.Auth.RoleGrantTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Job
+  alias Hologram.Test.Fixtures.Mutation
   alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Role
 
@@ -80,6 +81,10 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Job.Module1,
                     Job.Module2,
                     Job.Module3,
+                    Mutation.Module1,
+                    Mutation.Module2,
+                    Mutation.Module3,
+                    Mutation.Module4,
                     Policy.Module1,
                     Policy.Module10,
                     Policy.Module11,

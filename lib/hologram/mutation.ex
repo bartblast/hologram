@@ -4,9 +4,12 @@ defmodule Hologram.Mutation do
   # Applies a batch of client writes: refuses one built against another model, answers one already
   # answered from its record, and runs the rest in ONE transaction under the session's own user.
   #
-  # Every write goes through the same executor a server-side verb goes through, so a claim, a
-  # value, a reference and a merge are judged exactly as they are for a write made on the server -
-  # there is no second set of rules for a write that arrived over the wire. A refusal at any step
+  # Every write goes through the same executor a server-side verb goes through, so a value, a
+  # reference and a merge are judged exactly as they are for a write made on the server - there is
+  # no second set of rules for a write that arrived over the wire. Its authority is the one
+  # difference: a batch carries no claim, and every write in it is judged by the verb's own
+  # operation, under the anonymous semantics when nobody is signed in, where a server-side verb
+  # with no acting user would write raw. A refusal at any step
   # rolls the whole batch back and names the write it refused - and a refusal the EVALUATOR made
   # is then kept, the batch as it arrived beside its answer, for the session that sent it.
 

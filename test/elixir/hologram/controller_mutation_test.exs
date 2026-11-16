@@ -18,8 +18,8 @@ defmodule Hologram.ControllerMutationTest do
   alias Hologram.Runtime.Serializer
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module19
-  alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
-  alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+  alias Hologram.Test.Fixtures.Mutation.Module1, as: MutationModule1
+  alias Hologram.Test.Fixtures.Mutation.Module2, as: MutationModule2
 
   @unmasked_csrf_token CSRFProtection.generate_unmasked_token()
   @masked_csrf_token CSRFProtection.get_masked_token(@unmasked_csrf_token)
@@ -45,15 +45,14 @@ defmodule Hologram.ControllerMutationTest do
     :ok
   end
 
-  # An update claiming the one operation the fixtures grant without a role grant - refused with
-  # :not_found while the row it names is absent, and landing once it exists.
-  defp archive_write(id) do
+  # An update Mutation.Module1 grants its author - refused with :not_found while the row it names
+  # is absent, and landing once it exists.
+  defp authored_write(id) do
     %{
       "op" => "update",
-      "type" => inspect(PolicyModule1),
+      "type" => inspect(MutationModule1),
       "id" => id,
       "data" => %{"priority" => 9},
-      "claim" => ["authorize", "archive"],
       "stamp" => System.os_time(:millisecond) * 1024
     }
   end
@@ -111,13 +110,12 @@ defmodule Hologram.ControllerMutationTest do
     |> handle_mutation_request()
   end
 
-  defp publish_write(id, opts \\ []) do
+  defp public_write(id, opts \\ []) do
     %{
       "op" => "create",
-      "type" => inspect(PolicyModule2),
+      "type" => inspect(MutationModule2),
       "id" => id,
       "data" => %{"public" => true},
-      "claim" => ["authorize", "publish"],
       "stamp" => Keyword.get(opts, :stamp, System.os_time(:millisecond) * 1024)
     }
   end
@@ -132,7 +130,7 @@ defmodule Hologram.ControllerMutationTest do
     test "applies a batch and answers confirmed" do
       id = Entity.generate_id()
 
-      conn = post_batch(envelope([publish_write(id)]))
+      conn = post_batch(envelope([public_write(id)]))
 
       assert conn.halted == true
       assert conn.state == :sent
@@ -144,14 +142,14 @@ defmodule Hologram.ControllerMutationTest do
                "kept" => %{}
              }
 
-      assert EntityOperations.get(PolicyModule2, id) != nil
+      assert EntityOperations.get(MutationModule2, id) != nil
     end
 
     test "applies the batch under the session's user" do
       user = create_user("publisher@example.com")
       replica_id = Entity.generate_id()
 
-      raw = envelope([publish_write(Entity.generate_id())], replica_id: replica_id)
+      raw = envelope([public_write(Entity.generate_id())], replica_id: replica_id)
 
       conn = post_batch(raw, session_of(user.id))
 
@@ -168,7 +166,7 @@ defmodule Hologram.ControllerMutationTest do
       # Bound to the session, as an anonymous visitor's identity is. Signing in does not rotate the
       # session id, so the statement keeps working in that session afterwards.
       raw =
-        envelope([publish_write(id)],
+        envelope([public_write(id)],
           replica_id: replica_id,
           replica_token: ReplicaIdentity.issue(replica_id, @hologram_session_id, nil)
         )
@@ -183,7 +181,7 @@ defmodule Hologram.ControllerMutationTest do
                "kept" => %{}
              }
 
-      assert EntityOperations.get(PolicyModule2, id) != nil
+      assert EntityOperations.get(MutationModule2, id) != nil
     end
 
     test "answers a refused batch with the write and the reason" do
@@ -192,7 +190,6 @@ defmodule Hologram.ControllerMutationTest do
         "type" => inspect(Module19),
         "id" => Entity.generate_id(),
         "data" => %{"code" => "c"},
-        "claim" => ["authorize", "read"],
         "stamp" => System.os_time(:millisecond) * 1024
       }
 
@@ -211,14 +208,14 @@ defmodule Hologram.ControllerMutationTest do
       user = create_user("resender@example.com")
       replica_id = Entity.generate_id()
       id = Entity.generate_id()
-      raw = envelope([archive_write(id)], replica_id: replica_id)
+      raw = envelope([authored_write(id)], replica_id: replica_id)
 
       first = post_batch(raw, session_of(user.id))
 
       # The world changes between the two posts - a second evaluation would find the row and land
       # the update - so an answer that still refuses is one the record replayed.
       %{id: id, author_id: user.id, priority: 5}
-      |> PolicyModule1.new()
+      |> MutationModule1.new()
       |> DB.create!()
 
       second = post_batch(raw, session_of(user.id))
@@ -231,11 +228,11 @@ defmodule Hologram.ControllerMutationTest do
       assert second.resp_body == first.resp_body
 
       assert Jason.decode!(first.resp_body)["status"] == "rejected"
-      assert EntityOperations.get(PolicyModule1, id).priority == 5
+      assert EntityOperations.get(MutationModule1, id).priority == 5
     end
 
     test "answers a batch built against another model with no write" do
-      raw = envelope([publish_write(Entity.generate_id())], model_hash: "other")
+      raw = envelope([public_write(Entity.generate_id())], model_hash: "other")
 
       conn = post_batch(raw)
 
@@ -259,7 +256,7 @@ defmodule Hologram.ControllerMutationTest do
 
     test "refuses a batch with no CSRF token" do
       conn =
-        post_batch(envelope([publish_write(Entity.generate_id())]), @anonymous_session,
+        post_batch(envelope([public_write(Entity.generate_id())]), @anonymous_session,
           csrf_token: nil
         )
 
@@ -272,7 +269,7 @@ defmodule Hologram.ControllerMutationTest do
       other_token = CSRFProtection.get_masked_token(CSRFProtection.generate_unmasked_token())
 
       conn =
-        post_batch(envelope([publish_write(Entity.generate_id())]), @anonymous_session,
+        post_batch(envelope([public_write(Entity.generate_id())]), @anonymous_session,
           csrf_token: other_token
         )
 
@@ -285,7 +282,7 @@ defmodule Hologram.ControllerMutationTest do
       :ok = SubscriptionRegistry.register_connection(@instance_id, self())
       :ok = SubscriptionRegistry.update_identity(@instance_id, "other-session-id", nil)
 
-      conn = post_batch(envelope([publish_write(Entity.generate_id())]))
+      conn = post_batch(envelope([public_write(Entity.generate_id())]))
 
       assert conn.halted == true
       assert conn.status == 403
@@ -295,13 +292,13 @@ defmodule Hologram.ControllerMutationTest do
     test "refuses a batch carrying no replica token" do
       id = Entity.generate_id()
 
-      conn = post_batch(envelope([publish_write(id)], replica_token: nil))
+      conn = post_batch(envelope([public_write(id)], replica_token: nil))
 
       assert conn.halted == true
       assert conn.status == 403
       assert conn.resp_body == "Forbidden"
 
-      assert EntityOperations.get(PolicyModule2, id) == nil
+      assert EntityOperations.get(MutationModule2, id) == nil
     end
 
     test "refuses a batch whose replica token is not genuine" do
@@ -309,7 +306,7 @@ defmodule Hologram.ControllerMutationTest do
       replica_id = Entity.generate_id()
 
       raw =
-        envelope([publish_write(id)],
+        envelope([public_write(id)],
           replica_id: replica_id,
           replica_token: ReplicaIdentity.issue(replica_id, @hologram_session_id, nil) <> "x"
         )
@@ -320,14 +317,14 @@ defmodule Hologram.ControllerMutationTest do
       assert conn.status == 403
       assert conn.resp_body == "Forbidden"
 
-      assert EntityOperations.get(PolicyModule2, id) == nil
+      assert EntityOperations.get(MutationModule2, id) == nil
     end
 
     test "refuses a batch naming a replica its token does not vouch for" do
       id = Entity.generate_id()
 
       raw =
-        envelope([publish_write(id)],
+        envelope([public_write(id)],
           replica_token: ReplicaIdentity.issue(Entity.generate_id(), @hologram_session_id, nil)
         )
 
@@ -337,7 +334,7 @@ defmodule Hologram.ControllerMutationTest do
       assert conn.status == 403
       assert conn.resp_body == "Forbidden"
 
-      assert EntityOperations.get(PolicyModule2, id) == nil
+      assert EntityOperations.get(MutationModule2, id) == nil
     end
 
     test "refuses a batch whose replica belongs to another user" do
@@ -346,7 +343,7 @@ defmodule Hologram.ControllerMutationTest do
       replica_id = Entity.generate_id()
 
       raw =
-        envelope([publish_write(id)],
+        envelope([public_write(id)],
           replica_id: replica_id,
           replica_token: ReplicaIdentity.issue(replica_id, "another-session", "another-user")
         )
@@ -357,7 +354,7 @@ defmodule Hologram.ControllerMutationTest do
       assert conn.status == 403
       assert conn.resp_body == "Forbidden"
 
-      assert EntityOperations.get(PolicyModule2, id) == nil
+      assert EntityOperations.get(MutationModule2, id) == nil
     end
 
     test "refuses a batch whose replica belongs to another session" do
@@ -365,7 +362,7 @@ defmodule Hologram.ControllerMutationTest do
       replica_id = Entity.generate_id()
 
       raw =
-        envelope([publish_write(id)],
+        envelope([public_write(id)],
           replica_id: replica_id,
           replica_token: ReplicaIdentity.issue(replica_id, "another-session", nil)
         )
@@ -376,7 +373,7 @@ defmodule Hologram.ControllerMutationTest do
       assert conn.status == 403
       assert conn.resp_body == "Forbidden"
 
-      assert EntityOperations.get(PolicyModule2, id) == nil
+      assert EntityOperations.get(MutationModule2, id) == nil
     end
   end
 end
