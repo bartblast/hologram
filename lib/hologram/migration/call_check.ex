@@ -44,6 +44,11 @@ defmodule Hologram.Migration.CallCheck do
   # follows the default inspect function the app may set; an exception's message can name
   # loaded modules; and Logger's level decides whether a log message is built at all.
 
+  # The structs a migration may not build though their module is listed: a URI's port and
+  # string form follow the default port the app may set for its scheme, so URI keeps only
+  # its functions on strings.
+  @refused_structs [URI]
+
   # The functions a migration may call, by module: :all for a module whose every function
   # computes on its arguments only, otherwise the functions by name, or by name and arity.
   @allowed_functions %{
@@ -519,8 +524,6 @@ defmodule Hologram.Migration.CallCheck do
     ],
     Tuple => :all,
     URI => [
-      :append_path,
-      :append_query,
       :char_reserved?,
       :char_unescaped?,
       :char_unreserved?,
@@ -530,12 +533,7 @@ defmodule Hologram.Migration.CallCheck do
       :encode,
       :encode_query,
       :encode_www_form,
-      :merge,
-      :new,
-      :new!,
-      :parse,
-      :query_decoder,
-      :to_string
+      :query_decoder
     ],
     :base64 => :all,
     :binary => :all,
@@ -759,7 +757,8 @@ defmodule Hologram.Migration.CallCheck do
   defp allowed?({:struct, migration, _line}, migration), do: true
 
   defp allowed?({:struct, module, _line}, _migration) do
-    Map.has_key?(@allowed_functions, module) or exception?(module)
+    module not in @refused_structs and
+      (Map.has_key?(@allowed_functions, module) or exception?(module))
   end
 
   defp allowed?({:dynamic, _line}, _migration), do: false

@@ -39,9 +39,9 @@ defmodule Hologram.Migration.CallCheckTest do
 
       defp log(message), do: Logger.debug(message)
 
-      defp uri, do: %URI{host: "example.com"}
+      defp date, do: %Date{year: 2026, month: 8, day: 13}
 
-      def unused, do: {&log/1, uri(), &count/1, &owner/1}
+      def unused, do: {&log/1, date(), &count/1, &owner/1}
       """
 
       assert [%{op: :add_attribute}] =
@@ -209,7 +209,7 @@ defmodule Hologram.Migration.CallCheckTest do
 
       @pattern ~r/^[a-z]+$/
       @since %Date{year: 2026, month: 8, day: 13}
-      @host URI.parse("https://example.com").host
+      @host URI.decode("example%2Ecom")
 
       change_entity MyApp.Task do
         add_attribute :code, :string, default: upcase(@host)
@@ -508,6 +508,29 @@ defmodule Hologram.Migration.CallCheckTest do
           "  app/migrations/20260813091522.ex:4 - calls Map.from_struct/1\n" <>
           "  app/migrations/20260813091522.ex:5 - calls Regex.version/0\n" <>
           "  app/migrations/20260813091522.ex:6 - calls Exception.format/3"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "refuses the URI functions and struct that follow the default port the app may set" do
+      body = ~S"""
+      def a(url), do: URI.parse(url).port
+      def b(url), do: {URI.new(url), URI.new!(url)}
+      def c(base, url), do: URI.merge(base, url)
+      def d(uri), do: URI.to_string(uri)
+      def e, do: %URI{scheme: "https", host: "example.com"}
+      """
+
+      expected_msg =
+        @refusal_head <>
+          "  app/migrations/20260813091522.ex:4 - calls URI.parse/1\n" <>
+          "  app/migrations/20260813091522.ex:5 - calls URI.new!/1\n" <>
+          "  app/migrations/20260813091522.ex:5 - calls URI.new/1\n" <>
+          "  app/migrations/20260813091522.ex:6 - calls URI.merge/2\n" <>
+          "  app/migrations/20260813091522.ex:7 - calls URI.to_string/1\n" <>
+          "  app/migrations/20260813091522.ex:8 - builds a %URI{} struct"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         compile_migration("20260813091522", body)
@@ -916,7 +939,7 @@ defmodule Hologram.Migration.CallCheckTest do
       def collections(list) do
         {MapSet.new(list), Keyword.get([a: 1], :a), Map.get(%{a: 1}, :a), List.flatten([list]),
          Tuple.to_list({1}), Integer.parse("1"), Float.round(1.25, 1), Atom.to_string(:a),
-         Base.encode16("a"), URI.parse("https://example.com").host, Stream.map(list, & &1),
+         Base.encode16("a"), URI.encode_www_form("a b"), Stream.map(list, & &1),
          :lists.reverse(list), :maps.keys(%{}), :binary.part("ab", 0, 1), :math.pow(2, 3),
          then(list, & &1), Enum.reduce(1..3//1, 0, &+/2), for(<<c <- "ab">>, do: c)}
       end
