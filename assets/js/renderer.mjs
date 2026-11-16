@@ -480,6 +480,14 @@ export default class Renderer {
 
     const cid = Type.bitstring("page");
 
+    // The session user is answered from the rows this client holds now, as a derived field holding
+    // a query is, so a write to its row since the last render reaches every prop reading it. A
+    // build with no data layer, or whose model holds no user entity type, keeps the value the
+    // server rendered the page with.
+    if (Hologram.dataLayer && globalThis.Hologram.sync?.userEntity) {
+      Renderer.#putSessionUserContext(cid);
+    }
+
     // A page's params are its props, and it is re-rendered on every action like everything else,
     // so they are rewritten here for the same reason a component's are.
     ComponentRegistry.putComponentProps(cid, pageParams);
@@ -2973,6 +2981,23 @@ export default class Renderer {
     $.refBindings.set(key, binding);
 
     return binding;
+  }
+
+  // Based on put_user_context/1
+  // Deps: [:maps.put/3]
+  //
+  // WARNING: must match put_user_context/1 (renderer.ex).
+  static #putSessionUserContext(cid) {
+    const emittedContext = ComponentRegistry.getComponentEmittedContext(cid);
+
+    ComponentRegistry.putComponentEmittedContext(
+      cid,
+      Erlang_Maps["put/3"](
+        Type.tuple([Type.alias("Hologram"), Type.atom("user")]),
+        Hologram.dataLayer.sessionUser(),
+        emittedContext,
+      ),
+    );
   }
 
   // Based on raise_invalid_explicit_key/1
