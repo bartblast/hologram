@@ -2098,6 +2098,285 @@ defmodule Hologram.Policy.ValidatorTest do
     end
   end
 
+  describe "validate_model!/2 for field-limited lines" do
+    test "accepts attributes and relationships, a to-one by its relationship name" do
+      defmodule LimitedFieldsFixture do
+        use Hologram.Entity
+
+        attribute :topic, :string
+
+        relationship :parent, Module1, optional: true
+        relationship :tags, [Module2]
+
+        allow :update, only: [:topic, :parent, :tags]
+      end
+
+      assert validate_model!([LimitedFieldsFixture], []) == :ok
+    end
+
+    test "rejects a to-one's reference field, naming the relationship" do
+      defmodule ReferenceFieldFixture do
+        use Hologram.Entity
+
+        relationship :parent, Module1, optional: true
+
+        allow :update, only: [:parent_id]
+      end
+
+      expected_msg =
+        "invalid only option [:parent_id] for allow :update in Hologram.Policy.ValidatorTest.ReferenceFieldFixture - :parent_id is the reference field of relationship :parent - name the relationship: :parent"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([ReferenceFieldFixture], [])
+      end
+    end
+
+    test "rejects a to-many's name with _id as no field, not as a reference field" do
+      defmodule ToManyIdFixture do
+        use Hologram.Entity
+
+        relationship :tags, [Module2]
+
+        allow :update, only: [:tags_id]
+      end
+
+      expected_msg =
+        "invalid only option [:tags_id] for allow :update in Hologram.Policy.ValidatorTest.ToManyIdFixture - :tags_id is no field of Hologram.Policy.ValidatorTest.ToManyIdFixture - the fields an update sets are :tags"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([ToManyIdFixture], [])
+      end
+    end
+
+    test "rejects a job's framework-owned attribute" do
+      defmodule FrameworkJobFieldFixture do
+        use Hologram.Job
+
+        attribute :reason, :string, optional: true
+
+        allow :update, only: [:status]
+
+        @impl Hologram.Job
+        def run(_job), do: :ok
+      end
+
+      expected_msg =
+        "invalid only option [:status] for allow :update in Hologram.Policy.ValidatorTest.FrameworkJobFieldFixture - :status is the framework's to set, so no only or except list names it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([FrameworkJobFieldFixture], [])
+      end
+    end
+
+    test "rejects an inverse relationship" do
+      defmodule InverseFieldChild do
+        use Hologram.Entity
+
+        relationship :parent, Hologram.Policy.ValidatorTest.InverseFieldParent, optional: true
+      end
+
+      defmodule InverseFieldParent do
+        use Hologram.Entity
+
+        relationship :children, [Hologram.Policy.ValidatorTest.InverseFieldChild], inverse: parent
+
+        allow :update, only: [:children]
+      end
+
+      expected_msg =
+        "invalid only option [:children] for allow :update in Hologram.Policy.ValidatorTest.InverseFieldParent - :children is an inverse relationship, which is written through the relationship it reverses"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InverseFieldChild, InverseFieldParent], [])
+      end
+    end
+
+    test "rejects a derived field" do
+      defmodule DerivedFieldFixture do
+        use Hologram.Entity
+
+        attribute :topic, :string
+
+        derived :shout, :string, fn topic -> topic <> "!" end
+
+        allow :update, except: [:shout]
+      end
+
+      expected_msg =
+        "invalid except option [:shout] for allow :update in Hologram.Policy.ValidatorTest.DerivedFieldFixture - :shout is a derived field, which no update sets"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([DerivedFieldFixture], [])
+      end
+    end
+
+    test "rejects a field the framework sets" do
+      defmodule FrameworkFieldFixture do
+        use Hologram.Entity
+
+        attribute :topic, :string
+
+        allow :update, only: [:created_at]
+      end
+
+      expected_msg =
+        "invalid only option [:created_at] for allow :update in Hologram.Policy.ValidatorTest.FrameworkFieldFixture - :created_at is the framework's to set, so no only or except list names it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([FrameworkFieldFixture], [])
+      end
+    end
+
+    test "rejects a field the entity type doesn't have, listing the ones it does" do
+      defmodule UnknownFieldFixture do
+        use Hologram.Entity
+
+        attribute :name, :string
+        attribute :topic, :string
+
+        allow :update, only: [:topik]
+      end
+
+      expected_msg =
+        "invalid only option [:topik] for allow :update in Hologram.Policy.ValidatorTest.UnknownFieldFixture - :topik is no field of Hologram.Policy.ValidatorTest.UnknownFieldFixture - the fields an update sets are :name, :topic"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([UnknownFieldFixture], [])
+      end
+    end
+
+    test "rejects an except line leaving no field covered" do
+      defmodule NothingLeftFixture do
+        use Hologram.Entity
+
+        attribute :topic, :string
+
+        allow :update, except: [:topic]
+      end
+
+      expected_msg =
+        "invalid except option [:topic] for allow :update in Hologram.Policy.ValidatorTest.NothingLeftFixture - it leaves no field of Hologram.Policy.ValidatorTest.NothingLeftFixture covered"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NothingLeftFixture], [])
+      end
+    end
+
+    # A's only update line is limited, so A's :update holds no rule and B's delegation to it ends
+    # there - no cycle, though both lines delegate an update to each other.
+    test "accepts a limited line delegating back to a type delegating to it" do
+      defmodule LimitedCycleEntityA do
+        use Hologram.Entity
+
+        attribute :topic, :string, optional: true
+
+        relationship :peer, Hologram.Policy.ValidatorTest.LimitedCycleEntityB, optional: true
+
+        allow :read
+        allow :update, only: [:topic], via: peer
+      end
+
+      defmodule LimitedCycleEntityB do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.ValidatorTest.LimitedCycleEntityA, optional: true
+
+        allow :read
+        allow :update, via: peer
+      end
+
+      assert validate_model!([LimitedCycleEntityA, LimitedCycleEntityB], []) == :ok
+    end
+
+    test "rejects a via cycle through a limited line's name" do
+      defmodule LimitedNameCycleEntityA do
+        use Hologram.Entity
+
+        attribute :topic, :string, optional: true
+
+        relationship :peer, Hologram.Policy.ValidatorTest.LimitedNameCycleEntityB, optional: true
+
+        allow :update, as: :retitle, only: [:topic], via: {:retitle, peer}
+      end
+
+      defmodule LimitedNameCycleEntityB do
+        use Hologram.Entity
+
+        attribute :topic, :string, optional: true
+
+        relationship :peer, Hologram.Policy.ValidatorTest.LimitedNameCycleEntityA, optional: true
+
+        allow :update, as: :retitle, only: [:topic], via: {:retitle, peer}
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        cyclic policy delegation for allow :update, as: :retitle - a via chain can't return to the entity type it starts from:
+          * Hologram.Policy.ValidatorTest.LimitedNameCycleEntityA (via {:retitle, :peer}) -> Hologram.Policy.ValidatorTest.LimitedNameCycleEntityB (via {:retitle, :peer}) -> Hologram.Policy.ValidatorTest.LimitedNameCycleEntityA\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([LimitedNameCycleEntityA, LimitedNameCycleEntityB], [])
+      end
+    end
+
+    test "describes an except line reading through a type nobody may read as it was written" do
+      defmodule ExceptChainTarget do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        allow :create
+      end
+
+      defmodule ExceptChainSource do
+        use Hologram.Entity
+
+        attribute :topic, :string
+
+        relationship :parent, Hologram.Policy.ValidatorTest.ExceptChainTarget
+
+        allow :read
+        allow :update, except: [:parent], when: parent.archived == false
+      end
+
+      expected_msg =
+        "allow :update, except: [:parent] in Hologram.Policy.ValidatorTest.ExceptChainSource reads Hologram.Policy.ValidatorTest.ExceptChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.ExceptChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([ExceptChainTarget, ExceptChainSource], [])
+      end
+    end
+
+    test "describes a limited line reading through a type nobody may read as it was written" do
+      defmodule LimitedChainTarget do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        allow :create
+      end
+
+      defmodule LimitedChainSource do
+        use Hologram.Entity
+
+        attribute :topic, :string
+
+        relationship :parent, Hologram.Policy.ValidatorTest.LimitedChainTarget
+
+        allow :read
+        allow :update, only: [:topic], when: parent.archived == false
+      end
+
+      expected_msg =
+        "allow :update, only: [:topic] in Hologram.Policy.ValidatorTest.LimitedChainSource reads Hologram.Policy.ValidatorTest.LimitedChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.LimitedChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([LimitedChainTarget, LimitedChainSource], [])
+      end
+    end
+  end
+
   # Every message below has a local-line twin in the describe above, asserting the same text
   # WITHOUT the tail - so the pair pins that the tail appears exactly when the line was taken.
   describe "validate_model!/2 for a line taken from a policy" do

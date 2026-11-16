@@ -35,6 +35,8 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module25, as: PolicyProfile
   alias Hologram.Test.Fixtures.Policy.Module36
   alias Hologram.Test.Fixtures.Policy.Module37
+  alias Hologram.Test.Fixtures.Policy.Module38
+  alias Hologram.Test.Fixtures.Policy.Module39
   alias Hologram.Test.Fixtures.Policy.Module4
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module8
@@ -356,6 +358,27 @@ defmodule Hologram.AuthTest do
       assert can?(other, :edit, message)
       refute can?(other, :moderate, message)
       assert can?(owner, :moderate, message)
+    end
+
+    # A field-limited line holds for this user, but it covers some fields, not the whole row - so
+    # neither the update nor a delegation asking it counts it.
+    test "counts no field-limited line for a whole-row update" do
+      owner = create_user("limited-owner@example.com")
+      other = create_user("limited-other@example.com")
+
+      channel =
+        [owner_id: owner.id]
+        |> Module38.new()
+        |> DB.create!()
+
+      message =
+        [channel_id: channel.id]
+        |> Module39.new()
+        |> DB.create!()
+
+      assert can?(other, :set_topic, channel)
+      refute can?(other, :update, channel)
+      refute can?(other, :update, message)
     end
 
     test "matches a rule referencing the acting user" do

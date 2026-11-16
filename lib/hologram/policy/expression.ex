@@ -3,10 +3,11 @@ defmodule Hologram.Policy.Expression do
 
   # Lowers what an allow line was written with to the data form Hologram.Entity.__put_policy__/4
   # stores. Every key on the line is an option - as: the name the line answers can? and via: by,
-  # to: who holds the operation, via: the relationship it is delegated through and, written as a
-  # tuple, the operation it asks there, when: the condition - so no attribute name is taken by the
-  # line. Names, roles and operations are atoms, relationships are bare names or paths, the
-  # condition is an expression, and anything from the surrounding code is pinned with ^.
+  # only: and except: the fields an update line covers, to: who holds the operation, via: the
+  # relationship it is delegated through and, written as a tuple, the operation it asks there,
+  # when: the condition - so no attribute name is taken by the line. Names, fields, roles and
+  # operations are atoms, relationships are bare names or paths, the condition is an expression,
+  # and anything from the surrounding code is pinned with ^.
   #
   # It runs at expansion and judges the spelling only. Whether a role, a relationship or an
   # attribute is declared stays with the declaration and the whole-model validation, which judge
@@ -16,20 +17,21 @@ defmodule Hologram.Policy.Expression do
 
   @delegation_names %{stage: "via", names: "a relationship", spelled: "a bare name or a path"}
 
-  @option_names [:as, :to, :via, :when]
+  @option_names [:as, :except, :only, :to, :via, :when]
 
   @doc """
   Lowers the options argument of an `allow` line, written for the given operation, to the AST of
   the keyword list `Hologram.Entity.__put_policy__/4` takes.
 
-  `as:` keeps a name atom, and a bare name is refused with the atom it means. `to:` keeps role
+  `as:` keeps a name atom, and a bare name is refused with the atom it means. `only:` and `except:`
+  keep a list of field name atoms, a bare name in it refused the same way. `to:` keeps role
   names and role modules, lowers a `{role, relationship}` tuple's bare name to an
   atom (`{:editor, project}` to `{:editor, :project}`) and a path to the list of its names
   (`{:owner, trip.user}` to `{:owner, [:trip, :user]}`), and keeps a `{role, entity type}` tuple,
   in a list or alone. `via:` lowers a bare name to an atom and a path to the list of its names,
   alone or as the relationship of an `{operation, relationship}` tuple (`{:update, project}` to
   `{:update, :project}`, `trip.user` to `[:trip, :user]`). `when:`
-  lowers through `Hologram.Query.Expression.condition/2`. A pinned `as:`, `to:`, `via:` or `when:` value, a pinned
+  lowers through `Hologram.Query.Expression.condition/2`. A pinned `as:`, `except:`, `only:`, `to:`, `via:` or `when:` value, a pinned
   element of a `to:` list, a pinned role or scope of a grant reference and a pinned operation or
   relationship of a delegation lower to the expression.
   `__MODULE__` names a module wherever a module goes. A nil `to:` or `via:` value and a list
@@ -209,6 +211,11 @@ defmodule Hologram.Policy.Expression do
 
   defp option!({:as, value}, _operation, env), do: {:as, rule_name!(value, env)}
 
+  defp option!({:except, value}, _operation, env),
+    do: {:except, field_names!(value, :except, env)}
+
+  defp option!({:only, value}, _operation, env), do: {:only, field_names!(value, :only, env)}
+
   defp option!({:to, value}, _operation, env), do: {:to, grant_references!(value, env)}
 
   defp option!({:via, value}, _operation, env), do: {:via, delegation!(value, env)}
@@ -285,6 +292,8 @@ defmodule Hologram.Policy.Expression do
     fix =
       case key do
         :as -> ""
+        :except -> " - list the fields in one except option"
+        :only -> " - list the fields in one only option"
         :to -> " - list the role references in one to option"
         :via -> ""
         :when -> " - join the conditions with and"
@@ -296,6 +305,29 @@ defmodule Hologram.Policy.Expression do
       env
     )
   end
+
+  # A field is named by its atom, as a name is - a bare name in the list is the atom written without
+  # its colon. A pinned list is the surrounding code's, and anything else passes through for the
+  # declaration to refuse.
+  defp field_names!(fields, key, env) when is_list(fields) do
+    Enum.map(fields, fn
+      {name, _meta, _context} = ast when is_atom(name) ->
+        if bare_name?(ast) do
+          QueryExpression.compile_error!(
+            "#{key} names a field with an atom, got: #{name} - write #{inspect(name)}",
+            ast,
+            env
+          )
+        else
+          unpinned(ast)
+        end
+
+      field ->
+        field
+    end)
+  end
+
+  defp field_names!(fields, _key, _env), do: unpinned(fields)
 
   # A name is an atom, as an operation is - a bare name is the atom written without its colon. Any
   # other value passes through for the declaration to refuse.
@@ -345,7 +377,7 @@ defmodule Hologram.Policy.Expression do
       end
 
     QueryExpression.compile_error!(
-      "unknown option #{inspect(key)} for allow #{Macro.to_string(operation)} - the allow options are as, to, via and when#{hint}",
+      "unknown option #{inspect(key)} for allow #{Macro.to_string(operation)} - the allow options are as, except, only, to, via and when#{hint}",
       value,
       env
     )

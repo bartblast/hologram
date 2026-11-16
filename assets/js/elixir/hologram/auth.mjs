@@ -805,7 +805,7 @@ function grants(entityType, row, operation, actorUserId) {
 }
 
 // The key an entity operation is baked under: an atom as its name, a per-role grant lifecycle
-// operation as the two names joined by a colon. Policy.operation_key/1 is the twin on the server
+// operation or a field of an update as the two names joined by a colon. Policy.operation_key/1 is the twin on the server
 // (rendered by Compiler.render_policy/2), and the two must agree.
 //
 // A tuple naming a LIST of roles is refused: the DSL takes one as sugar for a line per role, so

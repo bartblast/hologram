@@ -236,6 +236,11 @@ defmodule Hologram.Policy do
   A named line (`as:`) is keyed under its name as well as its operation, so a name is asked the way
   an operation is - by can?, and by a delegation naming it. For a grant lifecycle line the name
   holds the line's per-role rules.
+  An update line limited to some fields (`only:` or `except:`) is keyed under `{:update, field}` for
+  each field it covers, and not under :update, which holds the lines covering the whole row - so
+  `can?(user, :update, row)` and a delegation asking :update count those alone. A field key exists
+  only for a field some limited line covers, and holds the limited lines alone: the rules covering a
+  field are its key's together with :update's (see `field_rules/2`).
   The grant lifecycle operations grant_role and revoke_role are compiled per role: a line naming a
   role, or a list of them, yields one {operation, role} key per role, and a bare line yields one per
   declared role its holders may cover - a holder's own role and every role it extends, so nobody is
@@ -259,19 +264,28 @@ defmodule Hologram.Policy do
     Model.ensure_released!()
 
     entity_type.__policies__()
-    |> Enum.flat_map(fn {operation, to, via, predicates, name, _fields} ->
+    |> Enum.flat_map(fn {operation, to, via, predicates, name, fields} ->
       rule = %{
         predicates: Stage.predicate_triples!(entity_type, predicates),
         to: build_to(entity_type, to),
         via: delegation(operation, via)
       }
 
-      keyed_rules = expand_role_operation(entity_type, {operation, rule})
+      keyed_rules = keyed_rules(entity_type, operation, fields, rule)
 
       keyed_rules ++ named_rules(name, keyed_rules)
     end)
     |> Enum.group_by(fn {operation, _rule} -> operation end, fn {_operation, rule} -> rule end)
     |> put_role_operation_unions()
+  end
+
+  @doc """
+  Returns the rules of the given compiled policy that cover the given field of an update: the ones
+  of the limited update lines covering it, then the ones covering the whole row.
+  """
+  @spec field_rules(map, atom) :: list(map)
+  def field_rules(policy, field) do
+    Map.get(policy, {:update, field}, []) ++ Map.get(policy, :update, [])
   end
 
   @doc """
@@ -514,7 +528,7 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns the key the given entity operation is baked under for the client: an atom as its name, and a per-role grant lifecycle operation as the two names joined by a colon, which no role name can contain.
+  Returns the key the given entity operation is baked under for the client: an atom as its name, and a per-role grant lifecycle operation or a field of an update as the two names joined by a colon - a field key always starts with update:, and no role or allow line name can contain a colon, so no two keys spell alike.
 
   The client builds the same key in operationKey in assets/js/elixir/hologram/auth.mjs - a hand-ported pair, so a change here is a change there.
   """
@@ -538,6 +552,30 @@ defmodule Hologram.Policy do
     |> Enum.concat(@framework_operations)
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  @doc """
+  Returns the fields an allow line can cover on the given entity type, sorted: its declared
+  attributes, but a job type's framework-owned ones (`Hologram.Job.framework_attribute_names/0`),
+  and its relationships, a to-one by its relationship name - the names `only:` and `except:` take
+  and `can?(user, {:update, field}, row)` asks about. Inverses, derived fields and system
+  attributes are left out, since no update sets them, and so are a job's framework-owned
+  attributes, the framework's to set: an update changing one is covered by the whole-row rules
+  alone.
+  """
+  @spec update_fields(module) :: list(atom)
+  def update_fields(entity_type) do
+    framework_names =
+      if Reflection.job?(entity_type), do: Hologram.Job.framework_attribute_names(), else: []
+
+    attribute_names =
+      for {name, _type, _opts} <- entity_type.__attributes__(),
+          name not in framework_names,
+          do: name
+
+    relationship_names = for {name, _type, _opts} <- entity_type.__relationships__(), do: name
+
+    Enum.sort(attribute_names ++ relationship_names)
   end
 
   @doc """
@@ -1198,6 +1236,22 @@ defmodule Hologram.Policy do
       end
     end)
   end
+
+  # A limited update line is keyed by the fields it covers, any other line by its operation, per
+  # role for a grant lifecycle one.
+  defp keyed_rules(entity_type, :update, fields, rule) when fields != nil do
+    entity_type
+    |> covered_fields(fields)
+    |> Enum.map(&{{:update, &1}, rule})
+  end
+
+  defp keyed_rules(entity_type, operation, nil, rule) do
+    expand_role_operation(entity_type, {operation, rule})
+  end
+
+  defp covered_fields(_entity_type, {:only, names}), do: Enum.uniq(names)
+
+  defp covered_fields(entity_type, {:except, names}), do: update_fields(entity_type) -- names
 
   # A named line's rules, keyed under its name - each rule once, since a grant lifecycle line
   # expanded per role can yield the same rule for several roles.

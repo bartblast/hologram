@@ -107,9 +107,10 @@ defmodule Hologram.Policy.Validator do
         name == key
       end)
 
-    case named_line do
-      {operation, _to, _via, _predicates, name, _fields} -> describe_line(operation, name)
-      nil -> "allow #{inspect(key)}"
+    case {key, named_line} do
+      {_key, {operation, _to, _via, _predicates, name, _fields}} -> describe_line(operation, name)
+      {{:update, field}, nil} -> describe_field_key(entity_type, field)
+      {key, nil} -> "allow #{inspect(key)}"
     end
   end
 
@@ -117,6 +118,75 @@ defmodule Hologram.Policy.Validator do
 
   defp describe_line(operation, name),
     do: "allow #{inspect(line_operation(operation))}, as: #{inspect(name)}"
+
+  # A field key stands for the limited lines covering the field, described by the first of them.
+  defp describe_field_key(entity_type, field) do
+    {_operation, _to, _via, _predicates, name, {key, names}} =
+      Enum.find(entity_type.__policies__(), fn {_operation, _to, _via, _predicates, _name, fields} ->
+        fields != nil and field in covered_fields(entity_type, fields)
+      end)
+
+    named = if name, do: ", as: #{inspect(name)}", else: ""
+
+    "allow :update#{named}, #{key}: #{inspect(names)}"
+  end
+
+  defp covered_fields(_entity_type, {:only, names}), do: names
+
+  defp covered_fields(entity_type, {:except, names}),
+    do: Policy.update_fields(entity_type) -- names
+
+  # Each field a limited update line lists has to be one an update sets, and an except: line has to
+  # leave some field covered. A field spelled the way the row stores it, or one no update sets, is
+  # refused with what to write instead.
+  defp validate_fields!(_entity_type, _operation, nil, _location), do: :ok
+
+  defp validate_fields!(entity_type, operation, {key, names} = fields, location) do
+    update_fields = Policy.update_fields(entity_type)
+
+    Enum.each(names, fn name ->
+      if name not in update_fields do
+        raise Hologram.CompileError,
+          message:
+            "invalid #{key} option #{inspect(names)} for allow #{inspect(operation)} in #{location} - #{field_reason(entity_type, name, update_fields)}"
+      end
+    end)
+
+    if covered_fields(entity_type, fields) == [] do
+      raise Hologram.CompileError,
+        message:
+          "invalid #{key} option #{inspect(names)} for allow #{inspect(operation)} in #{location} - it leaves no field of #{inspect(entity_type)} covered"
+    end
+
+    :ok
+  end
+
+  defp field_reason(entity_type, name, update_fields) do
+    reference_relationship =
+      Enum.find(entity_type.__relationships__(), fn {relationship_name, type, _opts} ->
+        not is_list(type) and Atom.to_string(name) == "#{relationship_name}_id"
+      end)
+
+    cond do
+      reference_relationship != nil ->
+        {relationship_name, _type, _opts} = reference_relationship
+
+        "#{inspect(name)} is the reference field of relationship #{inspect(relationship_name)} - name the relationship: #{inspect(relationship_name)}"
+
+      Entity.inverse_relationship(entity_type, name) != nil ->
+        "#{inspect(name)} is an inverse relationship, which is written through the relationship it reverses"
+
+      Derived.declared?(entity_type, name) ->
+        "#{inspect(name)} is a derived field, which no update sets"
+
+      List.keymember?(entity_type.__system_attributes__(), name, 0) or
+          List.keymember?(entity_type.__attributes__(), name, 0) ->
+        "#{inspect(name)} is the framework's to set, so no only or except list names it"
+
+      true ->
+        "#{inspect(name)} is no field of #{inspect(entity_type)} - the fields an update sets are #{Enum.map_join(update_fields, ", ", &inspect/1)}"
+    end
+  end
 
   # An option as a message quotes it: written as it was, a relationship as inspect/1 spells it and
   # a path dotted - {:update, stop.trip}, {:owner, trip.user}.
@@ -533,9 +603,11 @@ defmodule Hologram.Policy.Validator do
 
   defp validate_policy_line!(
          entity_type,
-         {{operation, to, via, predicates, name, _fields}, source}
+         {{operation, to, via, predicates, name, fields}, source}
        ) do
     location = location(entity_type, source)
+
+    validate_fields!(entity_type, operation, fields, location)
 
     validate_to!(entity_type, operation, to, location)
     validate_via!(entity_type, operation, via, location)
@@ -868,14 +940,17 @@ defmodule Hologram.Policy.Validator do
     |> Enum.reject(fn {{_operation, _to, via, _predicates, _name, _fields}, _source} ->
       is_nil(via)
     end)
-    |> Enum.flat_map(fn {{operation, _to, via, _predicates, name, _fields}, source} ->
+    |> Enum.flat_map(fn {{operation, _to, via, _predicates, name, fields}, source} ->
       {delegated_operation, relationship_names} = Policy.delegation(operation, via)
       target_type = Entity.path_target(entity_type, relationship_names)
       edge = {via, {target_type, delegated_operation}, source}
 
       # A named line is keyed under its name as well, so a delegation asking for the name leaves
-      # from there too.
-      [operation, name]
+      # from there too. A line limited to some fields is keyed under none of its operation's keys a
+      # delegation can ask, so only its name leads anywhere.
+      keys = if fields, do: [name], else: [operation, name]
+
+      keys
       |> Enum.reject(&is_nil/1)
       |> Enum.map(&{{entity_type, &1}, edge})
     end)

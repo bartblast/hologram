@@ -5100,7 +5100,8 @@ defmodule Hologram.Compiler do
   # type, the ingest and read paths already fetch the entry, and every type named here is one the
   # model names anyway.
   #
-  # A per-role grant lifecycle operation is keyed the way the client spells it when asking -
+  # A per-role grant lifecycle operation and a field of an update are keyed the way the client
+  # spells them when asking -
   # Policy.operation_key/1 here and operationKey in assets/js/elixir/hologram/auth.mjs are a
   # hand-ported pair, so the two must agree.
   defp render_policy(entity_type) do

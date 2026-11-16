@@ -134,13 +134,13 @@ defmodule Hologram.Entity do
         def __attributes__, do: Enum.sort(@__attributes__)
 
         @doc """
-        Returns the list of policy definitions for the compiled entity type, in declaration order, each as {operation, to, via, predicates, name, fields}: name is the line's as: option or nil, and fields is nil (a line covering the whole row).
+        Returns the list of policy definitions for the compiled entity type, in declaration order, each as {operation, to, via, predicates, name, fields}: name is the line's as: option or nil, and fields is {:only, names} or {:except, names} for an update line limited to some fields, or nil for a line covering the whole row.
         Policy rules are OR'd, so the order carries no semantics - it is preserved to keep reflection output readable against the source.
         """
         @spec __policies__() ::
                 list(
                   {Hologram.Entity.operation(), term, atom | {atom, atom} | nil, keyword,
-                   atom | nil, nil}
+                   atom | nil, {:only | :except, list(atom)} | nil}
                 )
         def __policies__, do: Enum.reverse(@__policies__)
 
@@ -188,6 +188,15 @@ defmodule Hologram.Entity do
       its other options allow. Several lines of one operation may share a name, and `can?` is true
       when any of them holds. A name can't be a framework operation, and one name can't label lines
       of two operations (`allow :grant_role` and `allow {:grant_role, role}` are one operation).
+    * `only:` / `except:` - on an update line, the fields it covers: `only: [:topic]` covers the
+      listed fields, `except: [:project]` every field but the listed ones, fields added to the
+      entity type later included. A field is an attribute or a relationship, a to-one by its
+      relationship name (`:project`, not `:project_id`). An update passes when every field it
+      changes is covered by some update line that holds - a line without either option covers
+      every field. `can?(user, :update, row)` and `via: {:update, relationship}` count only the
+      lines without either. A line covering a relationship lets its holders point the row at any
+      row of the related type: a condition reads the row as stored, so it can't say anything about
+      the row the change points it at.
     * `to:` - who holds the operation: a role name (`:editor`), a global role module (`Admin`), a
       role held on the row a to-one relationship, or a path of them, points at as
       `{role, relationship}` (`{:editor, project}`, `{:owner, trip.user}`), a role held on a whole
@@ -457,12 +466,20 @@ defmodule Hologram.Entity do
 
     policy =
       {operation, Keyword.get(spec, :to), Keyword.get(spec, :via), Keyword.get(spec, :when, []),
-       Keyword.get(spec, :as), nil}
+       Keyword.get(spec, :as), fields(spec)}
 
     Module.put_attribute(module, :__policies__, policy)
     Module.put_attribute(module, :__policy_sources__, source)
 
     :ok
+  end
+
+  defp fields(spec) do
+    cond do
+      Keyword.has_key?(spec, :only) -> {:only, Keyword.fetch!(spec, :only)}
+      Keyword.has_key?(spec, :except) -> {:except, Keyword.fetch!(spec, :except)}
+      true -> nil
+    end
   end
 
   # An inverse goes into a list of its own: every reader of the stored relationships reads what a

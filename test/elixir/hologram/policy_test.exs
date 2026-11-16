@@ -10,6 +10,7 @@ defmodule Hologram.PolicyTest do
       delegation: 2,
       expand_global_role: 1,
       expand_global_role: 2,
+      field_rules: 2,
       framework_operations: 0,
       grant_role_qualifying_roles: 1,
       grant_role_qualifying_roles: 2,
@@ -24,6 +25,7 @@ defmodule Hologram.PolicyTest do
       related_chains: 2,
       revoke_role_qualifying_roles: 1,
       revoke_role_qualifying_roles: 2,
+      update_fields: 1,
       validate_operation!: 2,
       verdict_key: 3,
       verdict_reads: 2,
@@ -573,6 +575,123 @@ defmodule Hologram.PolicyTest do
       editor_rule = %{predicates: [], to: [{:own, [:editor, :owner]}], via: nil}
 
       assert build(NamedGrantLineFixture)[:invite] == [owner_rule, editor_rule]
+    end
+  end
+
+  describe "build/1 for field-limited lines" do
+    test "keys an only line under each field it lists, and not under :update" do
+      defmodule OnlyLineFixture do
+        use Hologram.Entity
+
+        attribute :name, :string
+        attribute :topic, :string
+
+        role :member
+
+        allow :read
+        allow :update, to: :member, only: [:topic, :name]
+      end
+
+      member_rule = %{predicates: [], to: [{:own, [:member]}], via: nil}
+
+      assert build(OnlyLineFixture) == %{
+               :read => [%{predicates: [], to: nil, via: nil}],
+               {:update, :name} => [member_rule],
+               {:update, :topic} => [member_rule]
+             }
+    end
+
+    test "keys a field listed twice once" do
+      defmodule RepeatedFieldFixture do
+        use Hologram.Entity
+
+        attribute :topic, :string
+
+        allow :update, only: [:topic, :topic]
+      end
+
+      assert build(RepeatedFieldFixture) == %{
+               {:update, :topic} => [%{predicates: [], to: nil, via: nil}]
+             }
+    end
+
+    test "keys an except line under every update field but the listed ones" do
+      defmodule ExceptLineFixture do
+        use Hologram.Entity
+
+        attribute :name, :string
+        attribute :topic, :string
+
+        relationship :parent, Hologram.Test.Fixtures.Entity.Module1, optional: true
+        relationship :tags, [Hologram.Test.Fixtures.Entity.Module2]
+
+        allow :update, except: [:name]
+      end
+
+      rule = %{predicates: [], to: nil, via: nil}
+
+      assert build(ExceptLineFixture) == %{
+               {:update, :parent} => [rule],
+               {:update, :tags} => [rule],
+               {:update, :topic} => [rule]
+             }
+    end
+
+    test "keys a named limited line under its name and its fields, beside a whole-row line" do
+      defmodule NamedLimitedLineFixture do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+        attribute :topic, :string
+
+        role :member
+        role :owner
+
+        allow :update, to: :owner
+        allow :update, as: :set_topic, to: :member, only: [:topic]
+      end
+
+      owner_rule = %{predicates: [], to: [{:own, [:owner]}], via: nil}
+      member_rule = %{predicates: [], to: [{:own, [:member]}], via: nil}
+
+      assert build(NamedLimitedLineFixture) == %{
+               :set_topic => [member_rule],
+               :update => [owner_rule],
+               {:update, :topic} => [member_rule]
+             }
+    end
+  end
+
+  describe "field_rules/2" do
+    test "returns a field's limited rules followed by the whole-row ones" do
+      limited = %{predicates: [], to: [{:own, [:member]}], via: nil}
+      whole = %{predicates: [], to: [{:own, [:owner]}], via: nil}
+      policy = %{:update => [whole], {:update, :topic} => [limited]}
+
+      assert field_rules(policy, :topic) == [limited, whole]
+      assert field_rules(policy, :name) == [whole]
+      assert field_rules(%{}, :name) == []
+    end
+  end
+
+  describe "update_fields/1" do
+    test "returns the attributes and relationships, sorted" do
+      defmodule UpdateFieldsFixture do
+        use Hologram.Entity
+
+        attribute :topic, :string
+
+        relationship :parent, Hologram.Test.Fixtures.Entity.Module1, optional: true
+        relationship :tags, [Hologram.Test.Fixtures.Entity.Module2]
+
+        derived :shout, :string, fn topic -> topic <> "!" end
+      end
+
+      assert update_fields(UpdateFieldsFixture) == [:parent, :tags, :topic]
+    end
+
+    test "leaves out a job type's framework-owned attributes" do
+      assert update_fields(Hologram.Test.Fixtures.Job.Module1) == []
     end
   end
 

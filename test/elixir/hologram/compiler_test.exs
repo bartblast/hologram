@@ -94,6 +94,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module20, as: TaskPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module24, as: ShelfPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module36, as: NamedChannel
+  alias Hologram.Test.Fixtures.Policy.Module38, as: LimitedChannel
   alias Hologram.Test.Fixtures.Policy.Module5, as: DelegationPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
@@ -4078,6 +4079,30 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/"policy":{"archive":[{"predicates":[["owner_id","==",{"actor":true}]]/
              )
+    end
+
+    # A field key is spelled the way a per-role key is, so the client asks a field the way it asks a
+    # role.
+    test "bakes a field-limited line under each field it covers", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([LimitedChannel])}
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(js, ~s/"update:tags":[{"predicates":[["archived","==",false]]/)
+      assert String.contains?(js, ~s/"update:topic":[{"predicates":[["archived","==",false]]/)
     end
 
     # The client writes a creator's grants itself as it creates the row, so the build names which

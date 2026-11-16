@@ -20,7 +20,7 @@ defmodule Hologram.Entity.Validator do
 
   # The allow options whose nil value reaches the declaration, to be refused there - a when: nil is
   # refused where it is written, as no condition.
-  @policy_option_names [:as, :to, :via]
+  @policy_option_names [:as, :except, :only, :to, :via]
 
   @reserved_names [:created_at, :id, :updated_at]
 
@@ -225,6 +225,7 @@ defmodule Hologram.Entity.Validator do
 
     Enum.each(@policy_option_names, &validate_policy_option_value!(module, operation, spec, &1))
     validate_as_opt!(module, operation, spec)
+    validate_fields_opts!(module, operation, spec)
     validate_to_opt_shape!(module, operation, spec)
     validate_when_opt_shape!(module, operation, spec)
 
@@ -1629,6 +1630,41 @@ defmodule Hologram.Entity.Validator do
       :error ->
         :ok
     end
+  end
+
+  # Which fields a line covers is a question for update lines alone: every other operation acts on
+  # the row whole. The fields themselves are checked at the whole-model point, against reflection
+  # that does not exist yet here.
+  defp validate_fields_opts!(module, operation, spec) do
+    keys = Enum.filter([:only, :except], &Keyword.has_key?(spec, &1))
+
+    case keys do
+      [] ->
+        :ok
+
+      [_only, _except] ->
+        raise Hologram.CompileError,
+          message:
+            "invalid options for allow #{inspect(operation)} in #{inspect(module)} - a line takes only or except, not both"
+
+      [key] when operation != :update ->
+        raise Hologram.CompileError,
+          message:
+            "invalid #{key} option for allow #{inspect(operation)} in #{inspect(module)} - only and except name the fields an update line covers, so they go on allow :update lines alone"
+
+      [key] ->
+        validate_fields_opt_value!(module, operation, key, Keyword.fetch!(spec, key))
+    end
+  end
+
+  defp validate_fields_opt_value!(module, operation, key, fields) do
+    if fields == [] or not is_list(fields) or not Enum.all?(fields, &is_atom/1) do
+      raise Hologram.CompileError,
+        message:
+          "invalid #{key} option #{inspect(fields)} for allow #{inspect(operation)} in #{inspect(module)} - the #{key} option must be a non-empty list of field names"
+    end
+
+    :ok
   end
 
   defp plain_name?(name) do

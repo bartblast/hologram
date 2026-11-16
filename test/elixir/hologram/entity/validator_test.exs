@@ -778,6 +778,91 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "accepts an update line limited to some fields" do
+      defmodule LimitedLineFixture do
+        use Hologram.Entity
+
+        attribute :topic, :string
+
+        allow :update, only: [:topic]
+        allow :update, except: [:topic]
+      end
+
+      assert LimitedLineFixture.__policies__() == [
+               {:update, nil, nil, [], nil, {:only, [:topic]}},
+               {:update, nil, nil, [], nil, {:except, [:topic]}}
+             ]
+    end
+
+    test "rejects only and except on one line" do
+      expected_msg =
+        "invalid options for allow :update in Hologram.Entity.ValidatorTest.OnlyAndExceptFixture - a line takes only or except, not both"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule OnlyAndExceptFixture do
+          use Hologram.Entity
+
+          attribute :topic, :string
+
+          allow :update, only: [:topic], except: [:topic]
+        end
+      end
+    end
+
+    test "rejects a field option on a line of another operation" do
+      expected_msg =
+        "invalid only option for allow :read in Hologram.Entity.ValidatorTest.ReadOnlyOptionFixture - only and except name the fields an update line covers, so they go on allow :update lines alone"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule ReadOnlyOptionFixture do
+          use Hologram.Entity
+
+          attribute :topic, :string
+
+          allow :read, only: [:topic]
+        end
+      end
+    end
+
+    test "rejects an empty field list" do
+      expected_msg =
+        "invalid except option [] for allow :update in Hologram.Entity.ValidatorTest.EmptyExceptFixture - the except option must be a non-empty list of field names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule EmptyExceptFixture do
+          use Hologram.Entity
+
+          allow :update, except: []
+        end
+      end
+    end
+
+    test "rejects a field list holding something other than an atom" do
+      expected_msg =
+        ~s(invalid only option ["topic"] for allow :update in Hologram.Entity.ValidatorTest.StringFieldFixture - the only option must be a non-empty list of field names)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule StringFieldFixture do
+          use Hologram.Entity
+
+          allow :update, only: ["topic"]
+        end
+      end
+    end
+
+    test "rejects a nil field option" do
+      expected_msg =
+        "invalid only option nil for allow :update in Hologram.Entity.ValidatorTest.NilOnlyFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilOnlyFixture do
+          use Hologram.Entity
+
+          allow :update, only: nil
+        end
+      end
+    end
+
     test "rejects a name spelling a framework operation" do
       expected_msg =
         "invalid as option :delete for allow :update in Hologram.Entity.ValidatorTest.FrameworkAsOptionFixture - a name can't be a framework operation, since can? and via ask those by the same atom"
