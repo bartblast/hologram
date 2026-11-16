@@ -267,6 +267,25 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     end)
   end
 
+  # Module2's mapping with a key over ("b", "c").
+  defp key_over_b_c_context(entity_types) do
+    entity_types
+    |> reconcile_context()
+    |> update_mapping_indexes(Module2, fn indexes ->
+      Map.put(indexes, "test_fixtures_entity_module2_b_c_$uidx", %{
+        columns: ["b", "c"],
+        nulls_distinct: true,
+        unique: true
+      })
+    end)
+  end
+
+  defp filled_duplicate_key_msg do
+    ~s(cannot make column "b" on table "test_fixtures_entity_module2" required - ) <>
+      ~s{filling its NULLs with the default would make 1 key repeat over ("b", "c") - } <>
+      "fix the data, keep the attribute optional: true, or drop the unique declaration"
+  end
+
   defp unique_column_context(null) do
     new_column = %{
       name: "z",
@@ -1533,24 +1552,100 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       context =
         [Module2]
-        |> reconcile_context()
+        |> key_over_b_c_context()
+        |> update_mapping_column(Module2, "b", &%{&1 | default: 7, null: false})
+
+      assert_error RuntimeError, filled_duplicate_key_msg(), fn ->
+        reconcile(context)
+      end
+    end
+
+    test "raises when filling a tightened column makes rows repeat a key that stands" do
+      reconcile(key_over_b_c_context([Module2]))
+      insert_module2_rows(["abc", "abc"])
+
+      context =
+        [Module2]
+        |> key_over_b_c_context()
+        |> update_mapping_column(Module2, "b", &%{&1 | default: 7, null: false})
+
+      assert_error RuntimeError, filled_duplicate_key_msg(), fn ->
+        reconcile(context)
+      end
+
+      assert Introspection.schema() ==
+               Schema.from_mapping(key_over_b_c_context([Module2]).mapping)
+    end
+
+    test "raises when a filled row would repeat the key of a row holding the default" do
+      reconcile(key_over_b_c_context([Module2]))
+      insert_module2_rows(["abc", "abc"])
+
+      {:ok, _result} =
+        Connection.query("""
+        UPDATE "hologram_data"."test_fixtures_entity_module2" SET "b" = 7
+        WHERE "id" = '00000000-0000-0000-0000-000000000001'
+        """)
+
+      context =
+        [Module2]
+        |> key_over_b_c_context()
+        |> update_mapping_column(Module2, "b", &%{&1 | default: 7, null: false})
+
+      assert_error RuntimeError, filled_duplicate_key_msg(), fn ->
+        reconcile(context)
+      end
+    end
+
+    # The fill touches no row here, so the refusal is the index build's.
+    test "leaves rows that repeat a key without the fill to the index build" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_rows(["abc", "abd"])
+
+      {:ok, _result} =
+        Connection.query(~s(UPDATE "hologram_data"."test_fixtures_entity_module2" SET "b" = 5))
+
+      context =
+        "en"
+        |> key_over_added_column_context(false)
         |> update_mapping_column(Module2, "b", &%{&1 | default: 7, null: false})
         |> update_mapping_indexes(Module2, fn indexes ->
-          Map.put(indexes, "test_fixtures_entity_module2_b_c_$uidx", %{
-            columns: ["b", "c"],
+          Map.put(indexes, "test_fixtures_entity_module2_b_z_$uidx", %{
+            columns: ["b", "z"],
             nulls_distinct: true,
             unique: true
           })
         end)
 
       expected_msg =
-        ~s{found 1 duplicate key in "test_fixtures_entity_module2" over ("b", "c") - } <>
+        ~s{found 1 duplicate key in "test_fixtures_entity_module2" over ("b", "z") - } <>
           "a unique index cannot be built while rows repeat a key - " <>
           "update the rows or drop the unique declaration"
 
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)
       end
+    end
+
+    test "fills a tightened column of a key that stands when no rows repeat the rest" do
+      reconcile(key_over_b_c_context([Module2]))
+      insert_module2_rows(["abc", "abd"])
+
+      context =
+        [Module2]
+        |> key_over_b_c_context()
+        |> update_mapping_column(Module2, "b", &%{&1 | default: 7, null: false})
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+
+      {:ok, %{rows: rows}} =
+        Connection.query(
+          ~s(SELECT "b" FROM "hologram_data"."test_fixtures_entity_module2" ORDER BY "id")
+        )
+
+      assert rows == [[7], [7]]
     end
 
     test "raises when making a to-one unique over rows that repeat a reference" do

@@ -203,6 +203,38 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "filled_duplicate_check_statement/4" do
+    test "counts the key groups that repeat once the column's nulls take the bound value" do
+      statement =
+        filled_duplicate_check_statement("task", ["project_id", "slug"], "slug", true)
+
+      assert statement ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
+                 ~s{WHERE "project_id" IS NOT NULL } <>
+                 ~s{GROUP BY "project_id", COALESCE("slug", $1) HAVING COUNT(*) > 1 } <>
+                 ~s{AND COUNT(*) FILTER (WHERE "slug" IS NULL) > 0) AS duplicates}
+    end
+
+    test "compares the nulls of the other columns as values when nulls are not distinct" do
+      statement =
+        filled_duplicate_check_statement("task", ["project_id", "slug"], "project_id", false)
+
+      assert statement ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
+                 ~s{GROUP BY COALESCE("project_id", $1), "slug" HAVING COUNT(*) > 1 } <>
+                 ~s{AND COUNT(*) FILTER (WHERE "project_id" IS NULL) > 0) AS duplicates}
+    end
+
+    test "filters nothing for an index over the filled column alone" do
+      statement = filled_duplicate_check_statement("task", ["slug"], "slug", true)
+
+      assert statement ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
+                 ~s{GROUP BY COALESCE("slug", $1) HAVING COUNT(*) > 1 } <>
+                 ~s{AND COUNT(*) FILTER (WHERE "slug" IS NULL) > 0) AS duplicates}
+    end
+  end
+
   describe "invalid_index_check_statement/1" do
     test "counts the invalid indexes carrying the name" do
       expected =

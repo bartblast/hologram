@@ -222,6 +222,42 @@ defmodule Hologram.DB.DDL do
   end
 
   @doc """
+  Returns the check statement counting the key groups of the given table's columns that would
+  hold more than one row once the NULLs of the given column, one of them, take the value
+  bound as $1 - the duplicates a fill of that column would make under a unique index. A group
+  with no NULL in the column is not counted: the fill does not touch its rows.
+
+  Nulls in the other columns compare as values when nulls_distinct is false, matching the
+  index.
+  """
+  @spec filled_duplicate_check_statement(String.t(), list(String.t()), String.t(), boolean) ::
+          String.t()
+  def filled_duplicate_check_statement(table, columns, filled_column, nulls_distinct) do
+    other_columns =
+      columns
+      |> List.delete(filled_column)
+      |> Enum.map(&Mapper.quote_identifier/1)
+
+    grouped =
+      Enum.map_join(columns, ", ", fn
+        ^filled_column -> "COALESCE(#{Mapper.quote_identifier(filled_column)}, $1)"
+        column -> Mapper.quote_identifier(column)
+      end)
+
+    not_null_part =
+      if nulls_distinct and other_columns != [] do
+        " WHERE " <> Enum.map_join(other_columns, " AND ", &"#{&1} IS NOT NULL")
+      else
+        ""
+      end
+
+    "SELECT COUNT(*) FROM (SELECT 1 FROM #{qualified(table)}#{not_null_part} " <>
+      "GROUP BY #{grouped} HAVING COUNT(*) > 1 " <>
+      "AND COUNT(*) FILTER (WHERE #{Mapper.quote_identifier(filled_column)} IS NULL) > 0) " <>
+      "AS duplicates"
+  end
+
+  @doc """
   Returns the check statement counting the VALID indexes carrying the given name - the ones
   already built and in use, which a build asked for again has nothing left to do about.
   """

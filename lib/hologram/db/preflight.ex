@@ -6,12 +6,41 @@ defmodule Hologram.DB.Preflight do
   alias Hologram.DB.DDL
 
   @doc """
+  Validates that filling the NULLs of the given table's column with the given encoded value
+  makes no rows repeat a key of a unique index the mapping gives the table.
+
+  Returns :ok, or raises naming the column, the key and how many keys would repeat. A column
+  made required takes its default in the rows that hold NULL, and NULL never repeats a key
+  while the default can - under an index that already stands the fill itself would fail, so
+  this asks before it. Only the keys the fill would make repeat are counted: rows that repeat
+  a key without it are the index build's to refuse.
+  """
+  @spec check_fill!(%{module => %{atom => any}}, String.t(), String.t(), any) :: :ok
+  def check_fill!(mapping, table, column_name, encoded_value) do
+    mapping
+    |> unique_indexes_over(table, column_name)
+    |> Enum.each(fn index ->
+      statement =
+        DDL.filled_duplicate_check_statement(
+          table,
+          index.columns,
+          column_name,
+          index.nulls_distinct
+        )
+
+      {:ok, %{rows: [[count]]}} = Connection.query(statement, [encoded_value])
+
+      raise_filled_duplicate_keys!(table, column_name, index.columns, count)
+    end)
+  end
+
+  @doc """
   Validates that the rows the given unique index op's table holds at this moment repeat no key
   of the index.
 
   Returns :ok, or raises naming the table, its columns and how many keys repeat. The check run!/3
-  makes before any DDL sees the rows as they stood then, so a run that fills a column on the way
-  asks again here, with every column of the index in place.
+  makes before any DDL sees the rows as they stood then, so a run that adds a column filled
+  with its default asks again here, with every column of the index in place.
   """
   @spec check_unique_index!(%{atom => any}) :: :ok
   def check_unique_index!(op) do
@@ -30,10 +59,7 @@ defmodule Hologram.DB.Preflight do
   @spec fill_value(%{module => %{atom => any}}, String.t(), String.t()) ::
           {:ok, any} | :none
   def fill_value(mapping, table, column_name) do
-    entity_mapping =
-      mapping
-      |> Map.values()
-      |> Enum.find(&(&1.table == table))
+    entity_mapping = entity_mapping(mapping, table)
 
     column = entity_mapping && Enum.find(entity_mapping.columns, &(&1.name == column_name))
 
@@ -54,8 +80,9 @@ defmodule Hologram.DB.Preflight do
 
   A check against a table the ops create, or a unique index over a column they add, answers
   zero without a query: the table holds no rows yet, and the column is not there to ask
-  about. A run that fills columns asks about its unique indexes again once they are filled
-  (see check_unique_index!/1).
+  about. A run that fills columns asks about its unique indexes again: before it fills the
+  NULLs of a column that stands (see check_fill!/4), and right before it builds an index (see
+  check_unique_index!/1).
 
   An enum rebuild's removed values exclude the ones an unscoped remap carries: those rows
   follow the value to its new label rather than losing it.
@@ -95,9 +122,10 @@ defmodule Hologram.DB.Preflight do
   # query. A unique attribute declares no default, so its column arrives NULL in every row, and
   # NULL is never a duplicate key on a declared unique index, which keeps nulls distinct - the
   # one index comparing nulls as values, the role grant store's, is born with its table. A key
-  # declared with unique may name a column that arrives filled with its default, though, and
-  # a run may fill the NULLs of a column that stands - so a run that fills columns asks again
-  # once they are filled, right before it builds the index (see check_unique_index!/1).
+  # declared with unique may name a column that arrives filled with its default, though - so
+  # a run asks again right before it builds the index, with the added columns filled (see
+  # check_unique_index!/1). A run filling the NULLs of a column that stands asks before that
+  # fill (see check_fill!/4).
   defp check_op!(%{op: :create_index, unique: true} = op, actual, _mapping) do
     statement = DDL.duplicate_check_statement(op.table, op.columns, op.nulls_distinct)
 
@@ -218,6 +246,12 @@ defmodule Hologram.DB.Preflight do
     count
   end
 
+  defp entity_mapping(mapping, table) do
+    mapping
+    |> Map.values()
+    |> Enum.find(&(&1.table == table))
+  end
+
   defp raise_duplicate_keys!(_op, 0), do: :ok
 
   defp raise_duplicate_keys!(op, count) do
@@ -226,6 +260,17 @@ defmodule Hologram.DB.Preflight do
     raise ~s{found #{count} duplicate #{pluralize_keys(count)} in "#{op.table}" } <>
             "over (#{columns}) - a unique index cannot be built while rows repeat a " <>
             "key - update the rows or drop the unique declaration"
+  end
+
+  defp raise_filled_duplicate_keys!(_table, _column, _columns, 0), do: :ok
+
+  defp raise_filled_duplicate_keys!(table, column, columns, count) do
+    key = Enum.map_join(columns, ", ", &~s("#{&1}"))
+
+    raise ~s(cannot make column "#{column}" on table "#{table}" required - ) <>
+            "filling its NULLs with the default would make #{count} " <>
+            "#{pluralize_keys(count)} repeat over (#{key}) - " <>
+            "fix the data, keep the attribute optional: true, or drop the unique declaration"
   end
 
   defp pluralize_keys(1), do: "key"
@@ -239,4 +284,19 @@ defmodule Hologram.DB.Preflight do
   defp pluralize_values([_value]), do: "value"
 
   defp pluralize_values(_values), do: "values"
+
+  # The column indexes a mapping derives are never unique, so the entity's own index entries
+  # hold every unique index of its table.
+  defp unique_indexes_over(mapping, table, column_name) do
+    case entity_mapping(mapping, table) do
+      nil ->
+        []
+
+      %{indexes: indexes} ->
+        indexes
+        |> Enum.sort_by(fn {name, _index} -> name end)
+        |> Enum.map(fn {_name, index} -> index end)
+        |> Enum.filter(&(&1.unique and column_name in &1.columns))
+    end
+  end
 end
