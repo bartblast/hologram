@@ -940,6 +940,17 @@ defmodule Hologram.DB.WriterTest do
       end
     end
 
+    test "raises for a role grant under an acting user" do
+      user = create_user("grant-updater@example.com")
+
+      expected_msg =
+        "cannot update Hologram.Auth.RoleGrant - a role grant is never changed in place, revoke the role and grant the new one instead"
+
+      assert_error MisuseError, expected_msg, fn ->
+        as_user(user, fn -> update(RoleGrant, Entity.generate_id(), %{role: :editor}) end)
+      end
+    end
+
     test "writes raw without an acting user" do
       entity =
         %{priority: 5}
@@ -988,6 +999,22 @@ defmodule Hologram.DB.WriterTest do
 
       assert_error AccessDeniedError, expected_msg, fn ->
         as_user(member, fn -> update(Channel, channel.id, name: "mine", parent_id: nil) end)
+      end
+    end
+
+    test "refuses a misspelt field as misuse before judging it" do
+      member = create_user("type-indexed-typo@example.com")
+
+      channel =
+        [name: "general"]
+        |> Channel.new()
+        |> DB.create!()
+
+      expected_msg =
+        "invalid changes for Hologram.Test.Fixtures.Policy.Module38 - only declared attributes and to-one relationships can be updated: :titel"
+
+      assert_error MisuseError, expected_msg, fn ->
+        as_user(member, fn -> update(Channel, channel.id, titel: "x") end)
       end
     end
 

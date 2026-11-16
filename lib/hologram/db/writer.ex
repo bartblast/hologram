@@ -130,6 +130,8 @@ defmodule Hologram.DB.Writer do
           :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity_type, id, changes) do
     if Context.actor_user_id() do
+      EntityOperations.validate_update!(entity_type, changes)
+
       names = Enum.map(changes, fn {name, _value} -> name end)
       fields = changed_fields(entity_type, names, [])
 
