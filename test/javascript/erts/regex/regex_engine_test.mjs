@@ -784,6 +784,53 @@ describe("RegexEngine", () => {
         match("(*LIMIT_MATCH=1000)(a+)+b", "aaaaaaaaaax", {}, {matchLimit: 1}),
       );
     });
+
+    it("matches a property escape with the unicode option", () => {
+      assert.deepEqual(match("\\p{L}+", "1zażółć2", {unicode: true}), {
+        start: 1,
+        end: 7,
+        captures: [null],
+      });
+    });
+
+    it("matches a negated property escape with the unicode option", () => {
+      assert.deepEqual(match("\\P{L}", "ż1", {unicode: true}), {
+        start: 1,
+        end: 2,
+        captures: [null],
+      });
+    });
+
+    it("matches a property class member with the unicode option", () => {
+      assert.deepEqual(match("[\\p{L}]+", "1żó2", {unicode: true}), {
+        start: 1,
+        end: 3,
+        captures: [null],
+      });
+    });
+
+    it("matches a colon-separated property escape with the unicode option", () => {
+      assert.deepEqual(match("\\p{sc:Greek}+", "aαβ1", {unicode: true}), {
+        start: 1,
+        end: 3,
+        captures: [null],
+      });
+    });
+
+    it("matches a property escape after a literal with the unicode option", () => {
+      assert.deepEqual(match("a\\p{Lu}", "abaB", {unicode: true}), {
+        start: 2,
+        end: 4,
+        captures: [null],
+      });
+    });
+
+    it("matches a property escape with the caseless and unicode options", () => {
+      assert.deepEqual(
+        match("\\p{Lu}", "1a", {caseless: true, unicode: true}),
+        {start: 1, end: 2, captures: [null]},
+      );
+    });
   });
 
   describe("matchGlobal()", () => {
