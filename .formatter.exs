@@ -16,6 +16,7 @@ exported_locals_without_parens = [
   relationship: 3,
   role: 1,
   role: 2,
+  unique: 1,
 
   # Hologram.JS
   js_import: 1,
@@ -34,6 +35,7 @@ exported_locals_without_parens = [
   add_relationship: 3,
   add_role: 1,
   add_role: 2,
+  add_unique: 1,
   change_attribute: 2,
   change_relationship: 2,
   change_role: 2,
@@ -43,6 +45,7 @@ exported_locals_without_parens = [
   delete_enum_value: 2,
   delete_relationship: 1,
   delete_role: 1,
+  delete_unique: 1,
   designate_user_entity: 1,
   rename_attribute: 2,
   rename_entity: 2,

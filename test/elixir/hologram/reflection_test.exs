@@ -1405,6 +1405,28 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "list_migrations/0" do
+    test "lists no migration of the project, which defines none" do
+      assert list_migrations() == []
+    end
+
+    test "lists a migration compiled in memory that an application spec declares" do
+      module = compile_migration("20260813091522", "")
+
+      load_app_with_modules(:hologram_reflection_in_memory_migration_fixture_app, [module])
+
+      assert list_migrations() == [module]
+    end
+
+    test "lists no migration of an application that does not depend on Hologram" do
+      module = compile_migration("20260813091522", "")
+
+      load_app_with_modules(:hologram_reflection_unrelated_migration_fixture_app, [module], [])
+
+      refute module in list_migrations()
+    end
+  end
+
   describe "list_roles/0" do
     test "lists the global roles of the project, sorted by name" do
       result = list_roles()

@@ -73,6 +73,9 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Entity.Module5,
                     Entity.Module50,
                     Entity.Module51,
+                    Entity.Module52,
+                    Entity.Module53,
+                    Entity.Module54,
                     Entity.Module6,
                     Entity.Module7,
                     Entity.Module8,
@@ -121,6 +124,11 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Policy.Readers.Module12,
                     Policy.Readers.Module13,
                     Policy.Readers.Module14,
+                    Policy.Readers.Module15,
+                    Policy.Readers.Module16,
+                    Policy.Readers.Module17,
+                    Policy.Readers.Module18,
+                    Policy.Readers.Module19,
                     Policy.Readers.Module2,
                     Policy.Readers.Module3,
                     Policy.Readers.Module4,
@@ -176,6 +184,10 @@ defmodule Hologram.Auth.RoleGrantTest do
 
   test "__roles__/0" do
     assert RoleGrant.__roles__() == []
+  end
+
+  test "__uniques__/0" do
+    assert RoleGrant.__uniques__() == []
   end
 
   describe "__struct__/0" do

@@ -856,6 +856,20 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Lists the Hologram migration modules of Hologram and of the loaded OTP applications that depend
+  on it, directly or through other applications, sorted by name: the modules whose beam in an
+  application's ebin directory exports `__hologram_migration__/0`, and the ones an application's
+  spec names with no beam there that export it. The beams and the specs are read as
+  `list_entities/0` reads them.
+  """
+  @spec list_migrations() :: list(module)
+  def list_migrations do
+    apps_reaching_hologram()
+    |> list_modules_exporting_or_declared(:__hologram_migration__, 0)
+    |> Enum.sort()
+  end
+
+  @doc """
   Lists the Hologram global role modules of Hologram and of the loaded OTP applications that depend
   on it, directly or through other applications, sorted by name: the modules whose beam in an
   application's ebin directory exports
