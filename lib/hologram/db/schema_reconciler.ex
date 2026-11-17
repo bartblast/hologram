@@ -297,6 +297,10 @@ defmodule Hologram.DB.SchemaReconciler do
   # type change never fills (the default holds a new-type value, the column still has
   # the old type), so pre-flight lets only NULL-free combined changes through.
   defp apply_op(%{op: :alter_column} = op, mapping) do
+    # A type change can convert two values to one, so it asks about the unique indexes
+    # standing over the column right before it applies.
+    Preflight.check_cast!(op)
+
     fill =
       if op.before.null and not op.after.null and op.before.type == op.after.type do
         Preflight.fill_value(mapping, op.table, op.column)
@@ -305,9 +309,24 @@ defmodule Hologram.DB.SchemaReconciler do
       end
 
     case fill do
-      :none -> :ok
-      {:ok, encoded_value} -> fill_column(op.table, op.column, encoded_value)
+      :none ->
+        :ok
+
+      # Asked before the fill: under a unique index that stands, a fill making rows repeat a
+      # key would fail in PostgreSQL.
+      {:ok, encoded_value} ->
+        Preflight.check_fill!(mapping, op.table, op.column, encoded_value)
+        fill_column(op.table, op.column, encoded_value)
     end
+
+    execute_statements(DDL.statements(op))
+  end
+
+  # Asked again here, with the run's added columns in place: one filled with its default can
+  # make rows repeat a key the preflight could not ask about. A tightening fill is asked about
+  # before it runs (see Preflight.check_fill!/4).
+  defp apply_op(%{op: :create_index, unique: true} = op, _mapping) do
+    Preflight.check_unique_index!(op)
 
     execute_statements(DDL.statements(op))
   end

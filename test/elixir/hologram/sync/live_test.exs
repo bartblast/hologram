@@ -41,6 +41,17 @@ defmodule Hologram.Sync.LiveTest do
   # membership is readable when its seat is full. Module19 is a label, which no rule admits.
   @synced [PolicyModule17, PolicyModule18, PolicyModule19]
 
+  # The recheck asks whether the build has a client checking permissions before it works verdicts
+  # out (see `Hologram.Sync.Recheck.run/2`).
+  setup do
+    stub_with(QueryCacheMock, QueryCacheStub)
+    :persistent_term.put(QueryCacheStub.persistent_term_key(), %{permission_checking?: true})
+
+    on_exit(fn -> :persistent_term.erase(QueryCacheStub.persistent_term_key()) end)
+
+    :ok
+  end
+
   setup do
     alice = create!(Module14, email: "alice@example.com")
     bob = create!(Module14, email: "bob@example.com")
@@ -675,6 +686,7 @@ defmodule Hologram.Sync.LiveTest do
 
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        permission_checking?: true,
         synced_types: @synced,
         windows: %{@project_window => Stage.normalize(PolicyModule17)}
       })

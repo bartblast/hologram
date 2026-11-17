@@ -266,14 +266,37 @@ defmodule Hologram.Sync.SearchTest do
              }
     end
 
-    # Module12's delete rule reads parent.parent.priority, which no read rule reads.
-    test "follows only the read rules' edges" do
+    # Module12's delete rule reads parent.parent.priority, which no read rule or verdict reads.
+    test "follows no other operation's edges" do
       %{top: top} = seed_chain()
 
       edges = Edges.derive([PolicyModule1, PolicyModule5, PolicyModule12])
       effects = [effect(:patch_entity, PolicyModule1, top.id, %{"priority" => 3})]
 
       assert candidates(effects, edges) == %{rows: %{}, whole_types: %{}}
+    end
+
+    # Module17's archive rule reads none(label <- labels, label.name == "locked"), which no read
+    # rule reads - a none the server answers browsers with its verdict, which reads the labels'
+    # names and the pairs putting labels into the set.
+    test "follows the verdicts' edges the policies derive" do
+      project = create!(PolicyModule17)
+      other_project = create!(PolicyModule17)
+      label = create!(PolicyModule19)
+      link!(project, :labels, label)
+
+      edges = Edges.derive([PolicyModule17, PolicyModule18])
+      renamed = [effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"})]
+      linked = [pair_effect(:add_relationship, other_project, :labels, label)]
+
+      refute Enum.any?(edges[{PolicyModule17, :read}], &match?({_kind, [:labels | _], _, _}, &1))
+
+      assert candidates(renamed, edges) == %{
+               rows: %{PolicyModule17 => ids([project])},
+               whole_types: %{}
+             }
+
+      assert candidates(linked, edges).rows == %{PolicyModule17 => ids([other_project])}
     end
 
     # The row is created outside the set, so only what the put recorded names the project.
@@ -932,76 +955,6 @@ defmodule Hologram.Sync.SearchTest do
       assert_raise ArgumentError,
                    "no join table for Hologram.Test.Fixtures.Policy.Module17.nope in the mapping",
                    fn -> join_table(DB.mapping(), PolicyModule17, :nope) end
-    end
-  end
-
-  describe "candidates/3" do
-    # Module17's archive rule reads none(label <- labels, label.name == "locked"), which a browser
-    # can't decide, so its verdict reads the labels' names and the pairs putting labels in the set.
-    @labels_verdict_edges %{
-      {PolicyModule17, :verdicts} => [
-        {:set_attributes, [:labels], PolicyModule19, [:name]},
-        {:set_edges, [:labels], PolicyModule17, [:labels]}
-      ]
-    }
-
-    test "follows the verdict edges when asked for them" do
-      label = create!(PolicyModule19)
-      projects = [create!(PolicyModule17), create!(PolicyModule17)]
-
-      Enum.each(projects, &link!(&1, :labels, label))
-
-      effects = [effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"})]
-
-      assert candidates(effects, @labels_verdict_edges, :verdicts) == %{
-               rows: %{PolicyModule17 => ids(projects)},
-               whole_types: %{}
-             }
-    end
-
-    test "follows only the read rules' edges by default" do
-      label = create!(PolicyModule19)
-      project = create!(PolicyModule17)
-
-      link!(project, :labels, label)
-
-      effects = [effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"})]
-
-      assert candidates(effects, @labels_verdict_edges) == %{rows: %{}, whole_types: %{}}
-    end
-
-    test "follows only the verdict edges when asked for them" do
-      label = create!(PolicyModule19)
-      project = create!(PolicyModule17)
-
-      link!(project, :labels, label)
-
-      effects = [effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"})]
-
-      assert candidates(effects, @labels_edges, :verdicts) == %{rows: %{}, whole_types: %{}}
-    end
-
-    test "lists the source of a pair a verdict edge names" do
-      project = create!(PolicyModule17)
-      label = create!(PolicyModule19)
-
-      effects = [pair_effect(:add_relationship, project, :labels, label)]
-
-      assert candidates(effects, @labels_verdict_edges, :verdicts).rows == %{
-               PolicyModule17 => ids([project])
-             }
-    end
-
-    test "follows the verdict edges the policies derive" do
-      label = create!(PolicyModule19)
-      project = create!(PolicyModule17)
-
-      link!(project, :labels, label)
-
-      edges = Edges.derive([PolicyModule17, PolicyModule18, PolicyModule19])
-      effects = [effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"})]
-
-      assert candidates(effects, edges, :verdicts).rows == %{PolicyModule17 => ids([project])}
     end
   end
 end

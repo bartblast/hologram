@@ -21,6 +21,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
+  alias Hologram.Entity.Validator
   alias Hologram.Job
   alias Hologram.Policy
   alias Hologram.Policy.Edges
@@ -4651,25 +4652,38 @@ defmodule Hologram.Compiler do
   # The terms among them - a bound, a pattern's options - are written by the given function: as
   # JavaScript for the runtime script, and serialized for a sync frame, which carries JSON.
   defp render_constraints(entity_type, encode_term) do
+    max_bytes = Validator.unique_string_max_bytes(entity_type)
+
     entity_type.__attributes__()
-    |> Enum.filter(fn {_name, _type, opts} ->
-      Enum.any?(@baked_constraint_opts, &Keyword.has_key?(opts, &1))
+    |> Enum.filter(fn {name, _type, opts} ->
+      Map.has_key?(max_bytes, name) or
+        Enum.any?(@baked_constraint_opts, &Keyword.has_key?(opts, &1))
     end)
     |> Enum.map(fn {name, _type, opts} ->
-      {Atom.to_string(name), render_attribute_constraints(opts, encode_term)}
+      {Atom.to_string(name),
+       render_attribute_constraints(opts, Map.get(max_bytes, name), encode_term)}
     end)
     |> render_json_object()
   end
 
-  defp render_attribute_constraints(opts, encode_term) do
-    @baked_constraint_opts
-    |> Enum.flat_map(fn key ->
-      case Keyword.fetch(opts, key) do
-        {:ok, value} -> [{Atom.to_string(key), render_constraint_value(key, value, encode_term)}]
-        :error -> []
-      end
-    end)
-    |> render_json_object()
+  # max_bytes is no declaration option: it is the bound the attribute's unique indexes put on a
+  # string, which the server works out from the whole type - a key declared with unique shares
+  # one index entry among its fields - so the client is handed the answer, not the rule.
+  defp render_attribute_constraints(opts, max_bytes, encode_term) do
+    declared =
+      Enum.flat_map(@baked_constraint_opts, fn key ->
+        case Keyword.fetch(opts, key) do
+          {:ok, value} ->
+            [{Atom.to_string(key), render_constraint_value(key, value, encode_term)}]
+
+          :error ->
+            []
+        end
+      end)
+
+    derived = if max_bytes, do: [{"max_bytes", Integer.to_string(max_bytes)}], else: []
+
+    render_json_object(declared ++ derived)
   end
 
   # A bound travels as the ENCODED TERM its literal becomes, for the reason a default does: a

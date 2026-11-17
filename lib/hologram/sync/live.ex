@@ -74,8 +74,8 @@ defmodule Hologram.Sync.Live do
     the same way (see `pairs_touching/2`): what a row's sets are, whether a pair the batch moved is
     there now, and the pairs filed under other rows that a row arriving or leaving changes
   - `verdict_ids` - the checked rows whose verdicts the batch may have moved, per entity type of
-    deciding quantifiers, packed the same way: the rows it wrote, the ends of its pairs, and what
-    the verdicts' edges reach
+    deciding quantifiers, packed the same way: every checked row of such a type, since the search
+    finds the rows the verdicts' edges reach together with the ones the read rules' edges do
   - `own_seqs` - per replica, the highest sequence number among the batches of it the effects came
     from
   - `synced_types` - the given synced types, which decided what was asked about, so whoever reads
@@ -119,21 +119,19 @@ defmodule Hologram.Sync.Live do
       |> Enum.map(fn {_pid, user_id} -> user_id end)
       |> Enum.uniq()
 
-    {:ok, {searched, verdict_searched, checked, rechecked, pairs}} =
+    {:ok, {searched, checked, rechecked, pairs}} =
       Connection.snapshot(fn ->
         searched = Search.candidates(effects, synced_edges)
-        verdict_searched = Search.candidates(effects, synced_edges, :verdicts)
 
         checked =
           effects
           |> own_rows(pair_effects)
           |> merge_rows(searched.rows)
-          |> merge_rows(verdict_searched.rows)
           |> Map.filter(fn {entity_type, _ids} -> MapSet.member?(synced, entity_type) end)
 
         rechecked = recheck(checked, user_ids)
 
-        {searched, verdict_searched, checked, rechecked, pairs_touching(checked, synced_types)}
+        {searched, checked, rechecked, pairs_touching(checked, synced_types)}
       end)
 
     shared = %{
@@ -144,7 +142,7 @@ defmodule Hologram.Sync.Live do
       place: place,
       synced_types: synced_types,
       tx_range: tx_range(effects),
-      verdict_ids: verdict_ids(effects, pair_effects, verdict_searched.rows, synced)
+      verdict_ids: verdict_ids(checked)
     }
 
     written = written(effects)
@@ -346,7 +344,9 @@ defmodule Hologram.Sync.Live do
   defp readable_for(rechecked, user_id) do
     Map.new(rechecked, fn {entity_type, rows} ->
       readable =
-        for {id, {row, readers}} <- rows, Recheck.reads?(readers, user_id), into: %{} do
+        for {id, {row, readers, _verdicts}} <- rows,
+            Recheck.reads?(readers, user_id),
+            into: %{} do
           {id, row}
         end
 
@@ -374,10 +374,10 @@ defmodule Hologram.Sync.Live do
   end
 
   # Only types with a deciding quantifier send verdicts with their rows, so only their rows can
-  # have verdicts move.
-  defp verdict_ids(effects, pair_effects, verdict_rows, synced) do
-    for {entity_type, ids} <- merge_rows(own_rows(effects, pair_effects), verdict_rows),
-        MapSet.member?(synced, entity_type),
+  # have verdicts move. The search finds the rows whose verdicts may have moved together with the
+  # rows whose read access may have, so every checked row of such a type is asked about.
+  defp verdict_ids(checked) do
+    for {entity_type, ids} <- checked,
         Policy.deciding_quantifiers(entity_type) != [],
         into: %{},
         do: {entity_type, PackedIds.pack(ids)}
