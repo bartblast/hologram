@@ -1545,7 +1545,13 @@ function validateOperandValue(name, value, entityType) {
     const declared = subject(entityType, name);
     const values = enumValues(declared.entityType, declared.name);
 
-    if (!Type.isAtom(value) || !values.includes(Model.unbox(value, "enum"))) {
+    // Compared as atoms, as on the server: a label unboxes the module Status.Done and the plain
+    // atom :"Status.Done" alike.
+    const declaredValue =
+      Type.isAtom(value) &&
+      values.some((label) => Model.boxEnumValue(label).value === value.value);
+
+    if (!declaredValue) {
       Interpreter.raiseMisuseError(
         `${Interpreter.inspect(value)} is not a value of attribute ${inspectName(name)} in ${entityType} - the values are ${inspectEnumValues(values)}`,
       );

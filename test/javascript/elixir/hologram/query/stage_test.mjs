@@ -26,6 +26,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const ITEM = "MyApp.Item";
   const LABEL = "MyApp.Label";
   const MESSAGE = "MyApp.Message";
+  const ORDER = "MyApp.Order";
   const TOPIC = "MyApp.Topic";
   const GADGET = "MyApp.Gadget";
   const POST = "MyApp.Post";
@@ -339,6 +340,13 @@ describe("Elixir_Hologram_Query_Stage", () => {
         [GADGET]: {
           attributes: {id: "uuid", priority: "enum"},
           enumValues: {priority: ["low", "medium", "high"]},
+          relationships: {},
+          serverOnly: [],
+        },
+        // An enum declaring a module as a value, beside a plain atom.
+        [ORDER]: {
+          attributes: {id: "uuid", state: "enum"},
+          enumValues: {state: ["open", "Status.Done"]},
           relationships: {},
           serverOnly: [],
         },
@@ -3685,6 +3693,13 @@ describe("Elixir_Hologram_Query_Stage", () => {
         ":z is not a value of attribute :status in MyApp.Task - the values are [:open, :blocked, :done]",
       ],
       [
+        "a plain atom spelled like a module an enum declares",
+        ORDER,
+        "state",
+        Type.atom("Status.Done"),
+        ':"Status.Done" is not a value of attribute :state in MyApp.Order - the values are [:open, Status.Done]',
+      ],
+      [
         "a value that doesn't fit a derived field's type",
         ROOM,
         "message_count",
@@ -3773,6 +3788,15 @@ describe("Elixir_Hologram_Query_Stage", () => {
       const query = filter(task, predicates([["title", values]]));
 
       assert.deepStrictEqual(query.filter, [["title", "in", ["a", null]]]);
+    });
+
+    it("accepts a module an enum declares", () => {
+      const query = filter(
+        Type.alias(ORDER),
+        predicates([["state", Type.alias("Status.Done")]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [["state", "==", "Status.Done"]]);
     });
 
     it("accepts an integer for a float attribute", () => {
