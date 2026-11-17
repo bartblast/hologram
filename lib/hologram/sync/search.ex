@@ -4,7 +4,9 @@ defmodule Hologram.Sync.Search do
   # The backwards search: from the rows a batch of effects changed to the rows whose read access the
   # change may have moved, without those rows changing themselves. A read rule points forward, from
   # the row it decides about to the rows it reads, and `Hologram.Policy.Edges` names what it reads.
-  # The search follows those edges the other way.
+  # The search follows those edges the other way. The verdicts a row is sent with - the server's
+  # answers on conditions a browser can't decide - read other rows the same way, and the same walk
+  # along their edges finds the rows whose verdicts a change may have moved.
   #
   # It runs after commit, against the tables as they now stand. Running it inside the write misses
   # rows: one transaction moves a milestone into a project while another adds a member to it, and
@@ -33,27 +35,31 @@ defmodule Hologram.Sync.Search do
 
   @doc """
   Returns the rows whose read access the given effects may have moved, per entity type, and the
-  users for whom every row of a type may have.
+  users for whom every row of a type may have - or, given `:verdicts`, the rows whose server
+  verdicts they may have moved. A verdict reads no grants (see `Hologram.Auth.verdicts/2`), so no
+  user comes back for `:verdicts`.
 
   Effects come as `Hologram.DB.Oplog.read_window/2` reads them, flattened: data and old references
   keyed by strings, as stored. A put, a patch, a delete or a pair without its data - the shape
-  `read_after/3` returns the first three in - raises when a read edge leads to its type, since a
-  search without the values a write left misses rows. An effect of an entity type or an op this
-  node does not know is passed over, with or without data.
+  `read_after/3` returns the first three in - raises when an edge of the kind leads to its type,
+  since a search without the values a write left misses rows. An effect of an entity type or an op
+  this node does not know is passed over, with or without data.
 
   Edges are the policy dependency index (see `Hologram.Policy.Edges.index/0`), passed in rather
-  than read here. Only the read rules' edges are followed.
+  than read here. Only the edges of the given kind are followed: the read rules' (`:read`, the
+  default), or what the verdicts sent with a type's rows read (`:verdicts`), which move without the
+  row they are about moving - a card added to a board stops the board's tasks being deletable.
 
   The rows the effects wrote are not listed - they are rows to check whatever their rules read, and
-  the caller has them. So a change to a column no read rule reads lists nothing. A listed row may
-  be gone, which reading it again answers.
+  the caller has them. So a change to a column no rule of the kind reads lists nothing. A listed row
+  may be gone, which reading it again answers.
   """
-  @spec candidates(list(map), %{{module, atom} => list(tuple)}) :: %{
+  @spec candidates(list(map), %{{module, atom} => list(tuple)}, :read | :verdicts) :: %{
           rows: %{module => MapSet.t(String.t())},
           whole_types: %{module => MapSet.t(String.t())}
         }
-  def candidates(effects, edges) do
-    triggers = triggers(edges)
+  def candidates(effects, edges, kind \\ :read) when kind in [:read, :verdicts] do
+    triggers = triggers(edges, kind)
 
     mapping = DB.mapping()
 
@@ -446,11 +452,11 @@ defmodule Hologram.Sync.Search do
 
   defp trigger_type(_edge), do: nil
 
-  # The read edges, keyed by the entity type whose effects can start a walk along them.
-  defp triggers(edges) do
+  # The edges of the given kind, keyed by the entity type whose effects can start a walk along them.
+  defp triggers(edges, kind) do
     edges
     |> Enum.flat_map(fn
-      {{entity_type, :read}, read_edges} -> Enum.map(read_edges, &{entity_type, &1})
+      {{entity_type, ^kind}, kind_edges} -> Enum.map(kind_edges, &{entity_type, &1})
       {_pair, _edges} -> []
     end)
     |> Enum.flat_map(fn {entity_type, edge} ->

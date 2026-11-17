@@ -921,4 +921,78 @@ defmodule Hologram.Sync.SearchTest do
              }
     end
   end
+
+  describe "candidates/3" do
+    # Module17's archive rule reads none(label <- labels, label.name == "locked"), which a browser
+    # can't decide, so its verdict reads the labels' names and the pairs putting labels in the set.
+    @labels_verdict_edges %{
+      {PolicyModule17, :verdicts} => [
+        {:set_attributes, [:labels], PolicyModule19, [:name]},
+        {:set_edges, [:labels], PolicyModule17, [:labels]}
+      ]
+    }
+
+    test "follows the verdict edges when asked for them" do
+      label = create!(PolicyModule19)
+      projects = [create!(PolicyModule17), create!(PolicyModule17)]
+
+      Enum.each(projects, &link!(&1, :labels, label))
+
+      effects = [effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"})]
+
+      assert candidates(effects, @labels_verdict_edges, :verdicts) == %{
+               rows: %{PolicyModule17 => ids(projects)},
+               whole_types: %{}
+             }
+    end
+
+    test "follows only the read rules' edges by default" do
+      label = create!(PolicyModule19)
+      project = create!(PolicyModule17)
+
+      link!(project, :labels, label)
+
+      effects = [effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"})]
+
+      assert candidates(effects, @labels_verdict_edges) == %{rows: %{}, whole_types: %{}}
+    end
+
+    test "follows only the verdict edges when asked for them" do
+      label = create!(PolicyModule19)
+      project = create!(PolicyModule17)
+
+      link!(project, :labels, label)
+
+      effects = [effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"})]
+
+      assert candidates(effects, @labels_edges, :verdicts) == %{rows: %{}, whole_types: %{}}
+    end
+
+    test "lists the source of a pair a verdict edge names" do
+      project = create!(PolicyModule17)
+      label = create!(PolicyModule19)
+
+      effects = [pair_effect(:add_relationship, project, :labels, label)]
+
+      assert candidates(effects, @labels_verdict_edges, :verdicts).rows == %{
+               PolicyModule17 => ids([project])
+             }
+    end
+
+    test "follows the verdict edges the policies derive" do
+      label = create!(PolicyModule19)
+      project = create!(PolicyModule17)
+
+      link!(project, :labels, label)
+
+      edges = Edges.derive([PolicyModule17, PolicyModule18, PolicyModule19])
+      effects = [effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"})]
+
+      assert candidates(effects, edges, :verdicts).rows == %{PolicyModule17 => ids([project])}
+    end
+
+    test "raises for a kind it doesn't follow" do
+      assert_raise FunctionClauseError, fn -> candidates([], %{}, :update) end
+    end
+  end
 end
