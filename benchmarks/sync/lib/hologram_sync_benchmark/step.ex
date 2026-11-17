@@ -333,6 +333,17 @@ defmodule HologramSyncBenchmark.Step do
     }
   end
 
+  defp rate(writes) when map_size(writes) < 2, do: nil
+
+  defp rate(writes) do
+    {first, last} =
+      writes
+      |> Map.values()
+      |> Enum.min_max()
+
+    (map_size(writes) - 1) / ((last - first) / 1_000_000)
+  end
+
   defp per_write(db, writes) do
     Map.new(db, fn
       {:at_ms, value} -> {:at_ms, value}
@@ -359,8 +370,6 @@ defmodule HologramSyncBenchmark.Step do
         {first_marker + first + offset, spec.write.(peer, first + offset)}
       end)
 
-    written_ms = System.monotonic_time(:millisecond) - started_at
-
     Process.sleep(@drain_ms)
     cpu_after = Measure.cpu_sample(peer)
     stats_after = DB.settled_stats(spec.conn)
@@ -380,8 +389,8 @@ defmodule HologramSyncBenchmark.Step do
       p50_ms: Measure.percentile(times, 50),
       p95_ms: Measure.percentile(times, 95),
       p99_ms: Measure.percentile(times, 99),
-      # The writes span count - 1 gaps.
-      rate: if(count > 1, do: (count - 1) / (written_ms / 1_000)),
+      # Between the first commit and the last, which span count - 1 gaps.
+      rate: rate(writes),
       writes: count
     }
 
