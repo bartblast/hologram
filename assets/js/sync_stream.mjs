@@ -145,10 +145,13 @@ export default class SyncStream {
       // the server sends its own frame for that change.
       //
       // Not awaited. What is on screen is already correct, and what this buys is only whether it
-      // is still there after a reload.
-      Durability.persistFrame(LocalDatabase.records(written), frame.cursor);
+      // is still there after a reload. The other tabs are told once it has landed (see tell).
+      const stored = Durability.persistFrame(
+        LocalDatabase.records(written),
+        frame.cursor,
+      );
 
-      $.tell("sync_deltas", frame);
+      $.tell("sync_deltas", frame, stored);
     });
 
     eventSource.addEventListener("sync_reload", (event) => {
@@ -169,6 +172,12 @@ export default class SyncStream {
       // The stored rows go with the place that dated them, for the same reason the memory ones
       // do. What this browser DID - its identity, its counter, its clock - stays: a resync
       // replaces what the SERVER said, and none of those three are the server's to take away.
+      //
+      // Told without waiting for the clear, unlike a frame's rows. A resync heard and a clear lost
+      // mend themselves: every tab that heard it holds no place, so the next to lead starts over
+      // and clears again. A clear landed and a resync never heard do not - the next tab to lead
+      // puts its rows back (see Durability.repair), but a tab that read the emptied store
+      // meanwhile takes that tab's place and completeness over no rows.
       Durability.clear();
 
       $.tell("sync_resync", frame);
@@ -195,11 +204,11 @@ export default class SyncStream {
       // frame carries none - which also takes the clock down beside it. The same truthiness the
       // memory half tests, for the same reason: a marker naming no place says nothing about
       // where this client stands.
-      if (frame.cursor) {
-        Durability.persistFrame([], frame.cursor);
-      }
+      const stored = frame.cursor
+        ? Durability.persistFrame([], frame.cursor)
+        : null;
 
-      $.tell("synced", frame);
+      $.tell("synced", frame, stored);
     });
   }
 
@@ -414,13 +423,13 @@ export default class SyncStream {
   // The frame handed to the other tabs of this browser, which have no stream of their own: only
   // one tab is served sync, and what it receives is every tab's.
   //
-  // AFTER the frame has been written down, which is what a tab joining the group relies on. A write
-  // transaction is created before this returns, and IndexedDB orders what follows behind it. A
-  // starting tab reads the store only after it has joined the group (see DataLayer.boot), so a
-  // frame posted before it was listening is in the store it reads, and one posted after reaches it
-  // as this message.
-  static tell(event, frame) {
-    Tabs.post({event, frame, kind: "frame"});
+  // AFTER the frame has been written down, which is what a tab joining the group relies on: `after`
+  // is the write, and the frame goes out once it has landed (see Tabs.post). A starting tab reads
+  // the store only after it has joined the group (see DataLayer.boot), so a frame posted before it
+  // was listening is in the store it reads, and one posted after reaches it as this message. A
+  // frame the store lost, because this tab closed before the write landed, was posted to nobody.
+  static tell(event, frame, after = null) {
+    Tabs.post({event, frame, kind: "frame"}, after);
   }
 
   // Whether this tab has to hold its writes: the server would refuse them. That is a stop over the

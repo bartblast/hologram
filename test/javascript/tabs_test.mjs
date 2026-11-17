@@ -11,6 +11,7 @@ import {
 import Batches from "../../assets/js/batches.mjs";
 import Durability from "../../assets/js/durability.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
+import Logger from "../../assets/js/logger.mjs";
 import Model from "../../assets/js/model.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
@@ -335,10 +336,9 @@ describe("Tabs", () => {
       assert.isTrue(Tabs.postState.calledOnce);
     });
 
-    // The store is written without waiting, so the tab that was leading can have posted a frame and
-    // closed before its write landed - and carrying on would leave a place naming rows nothing
-    // holds.
-    it("brings the store up to what it holds, when it has a place", async () => {
+    // The tab that was leading can have written something down and closed before telling the group,
+    // and carrying on would leave the store naming a place this tab does not hold the rows for.
+    it("brings the store to what it holds, when it has a place", async () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "from the stream"});
 
       SyncStream.syncCursor = "place-1";
@@ -1469,6 +1469,289 @@ describe("Tabs", () => {
 
     it("says nothing outside a group", () => {
       assert.doesNotThrow(() => Tabs.post({kind: "joined"}));
+    });
+
+    describe("after a write", () => {
+      let finishWrite, write;
+
+      // What a sibling hears once it has heard `count` messages, posted by `post`.
+      const hear = (group, count, post) => {
+        const heard = [];
+
+        const hasHeard = new Promise((resolve) => {
+          sibling(group).onmessage = (event) => {
+            heard.push(event.data);
+
+            if (heard.length === count) {
+              resolve(heard);
+            }
+          };
+        });
+
+        post();
+
+        return hasHeard;
+      };
+
+      // What a sibling has heard, kept in the order it heard it.
+      const listen = (group) => {
+        const heard = [];
+
+        sibling(group).onmessage = (event) => heard.push(event.data);
+
+        return heard;
+      };
+
+      beforeEach(() => {
+        write = new Promise((resolve) => (finishWrite = resolve));
+      });
+
+      // A frame told before its write landed can be lost from the store by this tab closing, while
+      // the tabs that heard it go on holding it.
+      it("waits for the write before posting", async () => {
+        const group = nextGroup();
+
+        await Tabs.join(group, stubs());
+
+        const heard = listen(group);
+
+        Tabs.post({kind: "frame"}, write);
+
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(heard, []);
+
+        finishWrite();
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(heard, [{kind: "frame"}]);
+      });
+
+      // A state naming a place, or a marker, must not reach a tab ahead of the rows it vouches for.
+      it("keeps what follows behind a message still waiting for its write", async () => {
+        const group = nextGroup();
+
+        await Tabs.join(group, stubs());
+
+        const heard = listen(group);
+
+        Tabs.post({kind: "frame"}, write);
+        Tabs.post({kind: "state"});
+
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(heard, []);
+
+        finishWrite();
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(heard, [{kind: "frame"}, {kind: "state"}]);
+      });
+
+      it("posts at once again once nothing is waiting", async () => {
+        const group = nextGroup();
+
+        await Tabs.join(group, stubs());
+
+        const heard = listen(group);
+
+        Tabs.post({kind: "frame"}, write);
+
+        finishWrite();
+        await waitForEventLoop();
+
+        const posting = sinon.spy(BroadcastChannel.prototype, "postMessage");
+
+        Tabs.post({kind: "state"});
+
+        sinon.assert.calledOnceWithExactly(posting, {kind: "state"});
+
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(heard, [{kind: "frame"}, {kind: "state"}]);
+      });
+
+      // Its channel is closed by then, and posting on a closed channel throws.
+      it("posts nothing on the channel of a visit that has ended", async () => {
+        const debugging = sinon.spy(Logger, "debug");
+        const rejections = [];
+        const record = (reason) => rejections.push(reason);
+
+        process.on("unhandledRejection", record);
+
+        try {
+          await Tabs.join(nextGroup(), stubs());
+
+          Tabs.post({kind: "frame"}, write);
+
+          await Tabs.leave();
+
+          finishWrite();
+          await waitForEventLoop();
+          await waitForEventLoop();
+        } finally {
+          process.off("unhandledRejection", record);
+        }
+
+        assert.deepStrictEqual(rejections, []);
+        assert.isFalse(debugging.called);
+      });
+
+      // A visit that ended leaves nothing waiting in the next one.
+      it("posts at once in a group it joined again while a message waited", async () => {
+        const group = nextGroup();
+
+        await Tabs.join(group, stubs());
+
+        Tabs.post({kind: "frame"}, write);
+
+        await Tabs.leave();
+        await Tabs.join(group, stubs());
+
+        const posting = sinon.spy(BroadcastChannel.prototype, "postMessage");
+
+        Tabs.post({kind: "state"});
+
+        sinon.assert.calledOnceWithExactly(posting, {kind: "state"});
+      });
+
+      // The ended visit's write finishing must not count against what waits in the next one.
+      it("keeps waiting in the next visit when the ended one's write finishes", async () => {
+        const group = nextGroup();
+
+        await Tabs.join(group, stubs());
+
+        Tabs.post({kind: "frame"}, write);
+
+        await Tabs.leave();
+        await Tabs.join(group, stubs());
+
+        const heard = listen(group);
+
+        Tabs.post({kind: "frame"}, new Promise(() => {}));
+
+        finishWrite();
+        await waitForEventLoop();
+
+        Tabs.post({kind: "state"});
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(heard, []);
+      });
+
+      // A write that fails still lets its message go, and the ones behind it.
+      it("posts past a write that failed", async () => {
+        const group = nextGroup();
+
+        await Tabs.join(group, stubs());
+
+        const heard = await hear(group, 2, () => {
+          Tabs.post({kind: "frame"}, Promise.reject(new Error("refused")));
+          Tabs.post({kind: "state"});
+        });
+
+        assert.deepStrictEqual(heard, [{kind: "frame"}, {kind: "state"}]);
+      });
+
+      // Neither the post nor saying so may break the chain, or the next message would go out past
+      // the write it waits for.
+      it("keeps waiting for writes after a post that threw", async () => {
+        const group = nextGroup();
+
+        await Tabs.join(group, stubs());
+
+        const heard = listen(group);
+        const native = BroadcastChannel.prototype.postMessage;
+
+        const posting = sinon
+          .stub(BroadcastChannel.prototype, "postMessage")
+          .onFirstCall()
+          .throws(new DOMException("Could not be cloned.", "DataCloneError"))
+          .callsFake(function (message) {
+            return native.call(this, message);
+          });
+
+        sinon.stub(Logger, "debug").throws(new Error("storage full"));
+
+        Tabs.post({kind: "frame"}, Promise.resolve());
+        Tabs.post({kind: "frame", later: true}, write);
+
+        await waitForEventLoop();
+
+        sinon.assert.calledOnce(posting);
+        sinon.assert.calledOnce(Logger.debug);
+        assert.deepStrictEqual(heard, []);
+
+        finishWrite();
+        await waitForEventLoop();
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(heard, [{kind: "frame", later: true}]);
+      });
+
+      // A write that fails while an earlier message is still waiting is handled as it fails, not
+      // reported as a failure nothing saw.
+      it("handles a write that fails while it waits its turn", async () => {
+        const rejections = [];
+        const record = (reason) => rejections.push(reason);
+
+        process.on("unhandledRejection", record);
+
+        try {
+          await Tabs.join(nextGroup(), stubs());
+
+          Tabs.post({kind: "frame"}, write);
+          Tabs.post(
+            {kind: "frame", later: true},
+            Promise.reject(new Error("refused")),
+          );
+
+          await waitForEventLoop();
+          await waitForEventLoop();
+        } finally {
+          process.off("unhandledRejection", record);
+        }
+
+        assert.deepStrictEqual(rejections, []);
+      });
+
+      // An ended visit's chain is not the next one's.
+      it("posts a message whose write landed in a group it joined again", async () => {
+        const group = nextGroup();
+
+        await Tabs.join(group, stubs());
+
+        Tabs.post({kind: "frame"}, new Promise(() => {}));
+
+        await Tabs.leave();
+        await Tabs.join(group, stubs());
+
+        const heard = await hear(group, 1, () => {
+          Tabs.post({kind: "frame", later: true}, Promise.resolve());
+        });
+
+        assert.deepStrictEqual(heard, [{kind: "frame", later: true}]);
+      });
+
+      it("says nothing to a group it left while the message waited", async () => {
+        const group = nextGroup();
+
+        await Tabs.join(group, stubs());
+
+        const heard = listen(group);
+
+        Tabs.post({kind: "frame"}, write);
+
+        await Tabs.leave();
+
+        // Joined again, so a channel is there to post on - it is another visit's.
+        await Tabs.join(group, stubs());
+
+        finishWrite();
+        await waitForEventLoop();
+
+        assert.notDeepInclude(heard, {kind: "frame"});
+      });
     });
   });
 });

@@ -1290,16 +1290,55 @@ describe("SyncStream", () => {
       });
     });
 
-    // The order is the whole reason a tab joining the group cannot miss a frame: the write
-    // transaction is created before the message goes out, and IndexedDB orders what follows behind
-    // it - so a tab that reads the store on hearing this reads a store that already holds it.
-    it("writes the frame down before telling anyone about it", () => {
-      const persisting = sinon.stub(Durability, "persistFrame");
+    // The order is the whole reason a tab joining the group cannot miss a frame: the message goes
+    // out once the write has landed, so a tab that reads the store on hearing it reads a store
+    // that already holds it, and a frame the store lost was told to nobody.
+    it("tells the group of a frame once it is written down", () => {
+      const written = Promise.resolve();
+      const persisting = sinon
+        .stub(Durability, "persistFrame")
+        .returns(written);
       const posting = sinon.stub(Tabs, "post");
 
       eventSource.listeners.sync_deltas({data: frame()});
 
       assert.isTrue(persisting.calledBefore(posting));
+      assert.strictEqual(posting.firstCall.args[1], written);
+    });
+
+    it("tells the group of a completeness marker once its place is written down", () => {
+      const written = Promise.resolve();
+
+      sinon.stub(Durability, "persistFrame").returns(written);
+
+      const posting = sinon.stub(Tabs, "post");
+
+      eventSource.listeners.synced({
+        data: JSON.stringify({
+          cursor: "Nzc4LjA",
+          protocol_version: 1,
+          scope: "all",
+        }),
+      });
+
+      assert.strictEqual(posting.firstCall.args[1], written);
+    });
+
+    // A clear that landed and a resync nobody heard would leave a tab that read the emptied store
+    // taking the next leader's place over no rows; a resync heard and a clear lost mend themselves.
+    it("tells the group of a resync without waiting for the clear", () => {
+      sinon.stub(Durability, "clear").returns(new Promise(() => {}));
+
+      const posting = sinon.stub(Tabs, "post");
+
+      eventSource.listeners.sync_resync({
+        data: JSON.stringify({
+          protocol_version: 1,
+          reason: "cursor_unreadable",
+        }),
+      });
+
+      assert.isNull(posting.firstCall.args[1]);
     });
 
     it("hands over a completeness marker, a resync, a stale-bundle notice and the rules too", () => {
@@ -1342,6 +1381,13 @@ describe("SyncStream", () => {
         posting.args.map(([message]) => message.event),
         ["synced", "sync_resync", "sync_reload", "sync_rules"],
       );
+
+      // A marker naming no place writes nothing, and nor does a notice or the rules - so none of
+      // them waits for a write of its own.
+      assert.isNull(posting.args[0][1]);
+      assert.isNull(posting.args[1][1]);
+      assert.isNull(posting.args[2][1]);
+      assert.isNull(posting.args[3][1]);
     });
   });
 });

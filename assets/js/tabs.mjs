@@ -59,6 +59,12 @@ export default class Tabs {
 
   static #onMessage = null;
 
+  // The messages waiting their turn, as one chain - see post().
+  static #posting = Promise.resolve();
+
+  // How many messages are on that chain.
+  static #queued = 0;
+
   // Whether this tab has taken up what it holds and can be told what the server said.
   static #ready = false;
 
@@ -209,6 +215,8 @@ export default class Tabs {
     Tabs.#leadWhenReady = false;
     Tabs.#onLead = null;
     Tabs.#onMessage = null;
+    Tabs.#posting = Promise.resolve();
+    Tabs.#queued = 0;
     Tabs.#ready = false;
     Tabs.#release = null;
     Tabs.#token = null;
@@ -283,8 +291,63 @@ export default class Tabs {
 
   // Says something to every OTHER tab of the group: a channel never delivers to the tab that
   // posted, so nothing here needs to know which tab it is. Silent outside a group.
-  static post(message) {
-    Tabs.#channel?.postMessage(message);
+  //
+  // `after` is the store write the message is about - a frame's rows, a marker's place - and the
+  // message goes out only once that write has committed. Posted at once, a frame could reach the
+  // other tabs and then be lost from the store by this tab closing before the write landed: the
+  // tabs that heard it would hold it, a tab that started meanwhile and read the store would not,
+  // and nothing would ever send it that tab again. Posted after, a frame the store lost was heard
+  // by nobody either, so the tab that leads next greets the server from the place before it, and
+  // the server sends it again.
+  //
+  // Whatever follows a message that is waiting waits behind it, written or not, in the order it was
+  // posted: a state naming a place, or a marker saying a type is complete, must not reach a tab
+  // ahead of the rows it vouches for. With nothing waiting, a message goes out at once, as every
+  // message did before.
+  //
+  // A message waiting when this tab leaves the group goes nowhere - it was about a group this tab
+  // no longer speaks for.
+  static post(message, after = null) {
+    const channel = Tabs.#channel;
+
+    if (channel === null) {
+      return;
+    }
+
+    if (after === null && Tabs.#queued === 0) {
+      channel.postMessage(message);
+
+      return;
+    }
+
+    Tabs.#queued += 1;
+
+    // A write that fails still lets its message go, and nothing on the way may throw: the chain is
+    // every message this tab will post, and one that broke would silence it for good - or, broken
+    // at one link, let the next one past a write it was waiting for. The write is settled as it
+    // arrives rather than when its turn comes, so one that fails early is not reported as unseen.
+    const written = Promise.resolve(after).catch(() => {});
+
+    Tabs.#posting = Tabs.#posting
+      .then(() => written)
+      .then(() => {
+        if (channel !== Tabs.#channel) {
+          return;
+        }
+
+        Tabs.#queued -= 1;
+
+        try {
+          channel.postMessage(message);
+        } catch (error) {
+          try {
+            Logger.debug(
+              `Hologram: a message to the other tabs failed (${error})`,
+            );
+            // eslint-disable-next-line no-empty
+          } catch {}
+        }
+      });
   }
 
   // This tab has everything it starts with - the rows its own page carried, and what a previous
@@ -414,9 +477,9 @@ export default class Tabs {
         kind: "frame",
       });
     } else {
-      // The store can be BEHIND what this tab holds: a frame is written down without waiting, so
-      // the tab that was leading can have posted one and closed before its write landed. Carrying
-      // on from the next frame would leave the store naming a place it does not hold the rows for.
+      // The store can name another place than this tab holds: the tab that was leading can have
+      // written a frame down and closed before telling the group of it. Carrying on would leave the
+      // store naming a place this tab does not hold the rows for (see Durability.repair).
       await Durability.repair(
         LocalDatabase.records(LocalDatabase.vouchedRowKeys()),
         SyncStream.syncCursor,

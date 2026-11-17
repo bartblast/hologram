@@ -363,7 +363,8 @@ export default class Durability {
   // would tell it only what changed since.
   //
   // Not awaited by anything on the write path. The rows are already in memory and already on
-  // screen, and what this buys is only whether they are still there after a reload.
+  // screen, and what this buys is only whether they are still there after a reload. What waits for
+  // it is telling the other tabs (see Tabs.post).
   static persistFrame(records, cursor) {
     return Durability.#write([ENTITIES, META], (transaction) => {
       const entities = transaction.objectStore(ENTITIES);
@@ -419,17 +420,19 @@ export default class Durability {
     });
   }
 
-  // The store brought up to what this tab holds in memory, where it is behind - what a tab does
-  // on taking the lead of its group.
+  // The store brought to what this tab holds in memory, where the two name different places - what
+  // a tab does on taking the lead of its group.
   //
-  // Why it can be behind: the tab that led before wrote each frame down after applying it and
-  // without waiting, so a tab closed right after posting a frame leaves that frame in every other
-  // tab's memory and not on disk. Were the new leader simply to carry on from the next frame, the
-  // store would hold a place claiming rows it never received - a hole no page load could detect,
-  // since a resuming client is told only what moved after its place. So the rows memory holds are
-  // written whole, with the place they stand at, in one transaction.
+  // Why they can differ: the tab that led before wrote things down before telling the group of
+  // them, so a tab closed between the two leaves the store ahead of what every other tab heard. A
+  // frame ahead is harmless on its own - the rows are newer than the place this tab greets from,
+  // and the server sends them again. A clear ahead is not: it belongs to a resync told behind a
+  // frame still waiting for its write (see Tabs.post), and carrying on would write the next
+  // frame's place over an emptied store. The store can be behind too, for a tab that read it ahead
+  // and leads after another tab's repair. So the rows memory holds are written whole, with the
+  // place they stand at, in one transaction, and the server sends what follows that place again.
   //
-  // Only where it is behind. A place is a string, so equal places mean the store already holds
+  // Only where they differ. A place is a string, so equal places mean the store already holds
   // exactly what the memory does, and nothing is written - which is the usual case.
   //
   // The read and the write are ONE read-write transaction, created before this returns, and the
@@ -441,8 +444,8 @@ export default class Durability {
   // frame stored after it.
   //
   // So a read that fails is a write that fails, and stops the storage the way any failed write
-  // does (see #fail) - rather than skipping the repair, which would leave the store behind with
-  // nothing to say so.
+  // does (see #fail) - rather than skipping the repair, which would leave the store naming another
+  // place than this tab with nothing to say so.
   static repair(records, cursor) {
     return Durability.#write([ENTITIES, META], (transaction) => {
       const entities = transaction.objectStore(ENTITIES);

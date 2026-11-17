@@ -1171,7 +1171,7 @@ describe("Durability", () => {
       );
     });
 
-    it("rewrites the rows and the place when the store is behind", async () => {
+    it("rewrites the rows and the place when the store names another", async () => {
       await seedPreviousLoad();
       await Durability.open();
       await Durability.load();
@@ -1237,7 +1237,7 @@ describe("Durability", () => {
       assert.equal(await readMeta("cursor"), "place-3");
     });
 
-    // Skipped, the repair would leave the store behind with nothing to say so.
+    // Skipped, the repair would leave the store naming another place with nothing to say so.
     it("stops storing when the store cannot be read", async () => {
       const posting = sinon.stub(Tabs, "post");
 
