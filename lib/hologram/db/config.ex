@@ -1,13 +1,33 @@
 defmodule Hologram.DB.Config do
   @moduledoc false
 
+  require Logger
+
   alias Hologram.Reflection
 
   @default_pool_size 10
 
   @default_port 5432
 
+  # How long a held connection may sit idle before it pings the server - Postgrex.SimpleConnection's
+  # default, set explicitly so that the check in held_connection_opts/1 reads the value sent.
+  @idle_interval_ms :timer.seconds(5)
+
+  # How long a held connection waits between tries while the database refuses it. One log line per
+  # connection per try, so not much shorter; below the idle interval, see held_connection_opts/1.
+  @reconnect_backoff_ms :timer.seconds(2)
+
   @discrete_keys [:database, :host, :password, :pool_size, :port, :user]
+
+  @first_statement_timeout_ms :timer.seconds(150)
+
+  @keepalive_statement """
+  SELECT
+    set_config('tcp_keepalives_idle', '30', false),
+    set_config('tcp_keepalives_interval', '10', false),
+    set_config('tcp_keepalives_count', '3', false),
+    set_config('tcp_user_timeout', '60000', false)
+  """
 
   @required_keys [:database, :host, :password, :user]
 
@@ -38,29 +58,113 @@ defmodule Hologram.DB.Config do
   end
 
   @doc """
-  Returns the child spec of a connection that listens for announcements under the given name.
+  Logs that the calling connection lost its session to the database, then ends it with
+  `{:shutdown, :connection_lost}`.
 
-  A connection of its own, outside the pool: LISTEN belongs to one connection for as long as it
-  listens, which a pooled one cannot promise.
-
-  It connects AFTER booting rather than while booting, which is the difference between a database
-  that is away for a moment and a node that is gone. Connecting while booting means a database that
-  cannot be reached fails this child, and a child that fails fast enough often enough takes its
-  supervisor with it - then the database unit, then the node. Every other connection waits and
-  retries instead, and listening survives the wait: the channel is registered with the process and
-  sent to the server once it connects.
-
-  It does not reconnect on its own, which is what a unit holding one relies on: losing the
-  connection ends this process, and whatever listens through it is restarted beside it and listens
-  again as it starts. Reconnecting in place would leave that untouched, listening through a
-  connection it never re-registered on.
+  What a connection started with held_connection_opts/1 does when its session is lost - see there.
   """
-  @spec listener_child_spec(atom) :: Supervisor.child_spec()
-  def listener_child_spec(name) do
-    opts = connection_opts(name: name, auto_reconnect: false, sync_connect: false)
+  @spec end_lost_session!() :: no_return
+  def end_lost_session! do
+    name =
+      case Process.info(self(), :registered_name) do
+        {:registered_name, name} when is_atom(name) -> name
+        _no_name -> self()
+      end
 
-    %{id: name, start: {Postgrex.Notifications, :start_link, [opts]}}
+    Logger.error(
+      "#{inspect(name)} lost its connection to the database, ending so that whatever depends on it is restarted with it"
+    )
+
+    exit({:shutdown, :connection_lost})
   end
+
+  @doc """
+  Returns how long a held connection (see held_connection_opts/1) waits for the answer to its
+  session's first statement before it is killed: 150 seconds.
+
+  Postgrex puts no bound on the wait, so a link that went silent as the session opened would hold
+  the connection - for good once the server's side acknowledged the statement, about 15 minutes on
+  Linux otherwise.
+
+  Long, because a session-mode PgBouncer lets a client log in without a server connection and
+  assigns one at the first statement. With its pool full, that statement waits in a queue served
+  in order of arrival, and a connection killed while it waits rejoins at the back - a bound shorter
+  than the wait would keep it out for as long as others are queued. PgBouncer ends the wait itself
+  after its query_wait_timeout, 120 seconds by default, by closing the session, which the
+  connection logs as lost and ends on. This bound sits above that default, so the pooler's limit
+  comes first. Behind a pooler set to queue for longer, the kill comes first, and logs nothing.
+  """
+  @spec first_statement_timeout_ms() :: pos_integer
+  def first_statement_timeout_ms, do: @first_statement_timeout_ms
+
+  @doc """
+  Returns the Postgrex options of a connection held outside the pool for as long as its session
+  lasts, with the given overrides applied (see connection_opts/1).
+
+  For a Postgrex.SimpleConnection whose session is the point: a listener's channels are registered
+  on it, and the run lock connection's locks are held by it. Such a connection keeps trying its
+  FIRST connect, every 2 seconds, and ends once a session it had is lost - its handle_disconnect/1
+  calls end_lost_session!/0.
+
+  Trying again rather than failing is the difference between a database that is away for a moment
+  and a node that is gone. A connect that fails ends the process otherwise, and while the database
+  refuses connections every restart fails within milliseconds - a supervisor gives up on the fourth
+  restart within 5 seconds, then the one above it, up to the application. The connection waits
+  instead, the way the pool's connections do, and a call made to it meanwhile is answered between
+  two tries. A try against a host that drops packets rather than refusing them blocks the process
+  until the connect timeout, which can outlast a call's timeout.
+
+  Ending rather than reconnecting, because what was tied to the session is gone with it. A
+  listener's announcements sent while it was away are lost without whoever listens through it
+  knowing, and a run lock connection's locks are freed by the server. Its supervisor restarts it
+  and whatever depends on it, which start over from where they stand.
+
+  `auto_reconnect: true` is what has SimpleConnection try again after a failed connect - it would
+  reconnect a lost session too, but the process has ended by then. The backoff has to stay below
+  the connection's `:idle_interval`: a call arriving between two tries arms the idle ping, which
+  crashes on the missing socket if it fires before the next try. Raises ArgumentError when the
+  given overrides break that.
+  """
+  @spec held_connection_opts(keyword) :: keyword
+  def held_connection_opts(overrides \\ []) do
+    opts =
+      [
+        auto_reconnect: true,
+        idle_interval: @idle_interval_ms,
+        reconnect_backoff: @reconnect_backoff_ms,
+        sync_connect: false
+      ]
+      |> Keyword.merge(overrides)
+      |> connection_opts()
+
+    backoff = Keyword.fetch!(opts, :reconnect_backoff)
+    idle_interval = Keyword.fetch!(opts, :idle_interval)
+
+    if backoff >= idle_interval do
+      raise ArgumentError,
+            "the reconnect backoff of a held connection must be below its idle interval, got #{backoff} ms and #{idle_interval} ms"
+    end
+
+    opts
+  end
+
+  @doc """
+  Returns the statement that sets the server keepalives and user timeout of the session it runs
+  in - the same figures as the run lock connection's (see Hologram.Job.RunLock).
+
+  A node that vanishes leaves its sessions open on the server until the operating system there
+  notices. The keepalives bound that to about a minute when the server has nothing unacknowledged
+  on the link, rather than about two hours, and the user timeout when it has, rather than about 15
+  minutes. A server whose platform has no user timeout keeps it at 0, and logs that it is not
+  supported on each connect.
+
+  Run once the connection is up rather than sent as startup parameters, which PgBouncer refuses
+  unless told to ignore them. They bound only a direct connection: behind a pooler or a proxy the
+  server's peer is the pooler, and its own keepalives toward the node are what bound how long the
+  session lives.
+  """
+  @spec keepalive_statement() :: String.t()
+  def keepalive_statement, do: @keepalive_statement
 
   @doc """
   Resolves the database connection options for the given environment from the given
@@ -94,6 +198,20 @@ defmodule Hologram.DB.Config do
     validate_required!(resolved, env)
 
     Enum.sort(resolved)
+  end
+
+  @doc """
+  Logs that the database refused the keepalive settings (see keepalive_statement/0) with the given
+  error, and returns :ok.
+
+  What a connection does whose settings are best effort: they bound only how long the server keeps
+  the session of a node that vanished, which nothing needs for being correct.
+  """
+  @spec warn_keepalives_refused(Exception.t()) :: :ok
+  def warn_keepalives_refused(error) do
+    Logger.warning(
+      "the database refused the session's keepalive settings, a session of a node that vanished may stay open on the server for hours: #{Exception.message(error)}"
+    )
   end
 
   defp defaults(env) when env in [:dev, :test] do
