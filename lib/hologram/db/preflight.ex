@@ -20,7 +20,9 @@ defmodule Hologram.DB.Preflight do
   declared default where the op sits, as :backfill on an add and :fill on a tightening. A
   lookup in the mapping the file leaves would find the column under the name of whatever
   holds it at the end of the file: nothing, after a rename, or another column that took
-  the name over, and the check would pass a fill the migrator never runs.
+  the name over, and the check would pass a fill the migrator never runs. Whether a
+  tightening's fill makes rows repeat a unique key is asked when the fill runs (see
+  check_fill!/1).
 
   The schema is read only for an op the checks can refuse, so a file of renames, plain
   indexes or safe casts costs no catalog reads.
@@ -40,24 +42,24 @@ defmodule Hologram.DB.Preflight do
 
   Returns :ok, or raises naming the column, the key and how many keys would repeat. Two values
   can convert to one, as the texts '1' and '01' do to int8, and under a unique index the
-  change itself would then fail. Asked right before the change applies rather than with the
-  checks of run!/3: a migration file can rename or drop, on the way, what those checks would
-  look the indexes up by. An index the run builds later is not standing yet, and is asked
-  about when it is built. The query converts the rows as the change does, so a row the change
-  cannot take fails it as it would fail the change - run!/3 counts those rows first.
+  change itself would then fail. Asked right before the change applies, against the indexes
+  standing then: the mapping a run converges to names them as it ends, and a migration file
+  can rename or drop them on the way. An index the run builds later is not standing yet, and
+  is asked about when it is built. The query converts the rows as the change does, so a row
+  the change cannot take fails it as it would fail the change - the rows check of check!/1
+  and run!/3 counts those rows first.
 
   An index introspection marks as not plain is hand-made, and is skipped: its key may be an
   expression or cover part of the table, which this count cannot follow. The drift and alien
-  checks report it.
+  checks report it, but only on a run that gets past this change: until then the change
+  itself fails on the index, in PostgreSQL's words.
   """
   @spec check_cast!(%{atom => any}) :: :ok
   def check_cast!(%{before: %{type: type}, after: %{type: type}}), do: :ok
 
   def check_cast!(op) do
-    Introspection.schema().tables[op.table].indexes
-    |> Enum.sort_by(fn {name, _index} -> name end)
-    |> Enum.map(fn {_name, index} -> index end)
-    |> Enum.filter(&checked_cast_index?(&1, op.column))
+    op.table
+    |> standing_unique_indexes(op.column)
     |> Enum.each(fn index ->
       statement =
         DDL.cast_duplicate_check_statement(
@@ -87,19 +89,22 @@ defmodule Hologram.DB.Preflight do
     mapping
     |> unique_indexes(table)
     |> Enum.filter(&(column_name in &1.columns))
-    |> Enum.each(fn index ->
-      statement =
-        DDL.filled_duplicate_check_statement(
-          table,
-          index.columns,
-          column_name,
-          index.nulls_distinct
-        )
+    |> check_filled_keys!(table, column_name, encoded_value)
+  end
 
-      {:ok, %{rows: [[count]]}} = Connection.query(statement, [encoded_value])
+  @doc """
+  Validates the same for a migration's tightening that carries its fill, against the unique
+  indexes standing over its column at this moment.
 
-      raise_filled_duplicate_keys!(table, column_name, index.columns, count)
-    end)
+  The mapping the file leaves names the indexes as the file ends, and a rename later in the
+  file has not happened yet where the fill runs, so the catalog is read instead - as
+  check_cast!/1 does, and skipping the hand-made indexes it skips.
+  """
+  @spec check_fill!(%{atom => any}) :: :ok
+  def check_fill!(op) do
+    op.table
+    |> standing_unique_indexes(op.column)
+    |> check_filled_keys!(op.table, op.column, op.fill)
   end
 
   @doc """
@@ -148,9 +153,11 @@ defmodule Hologram.DB.Preflight do
 
   A check against a table the ops create, or a unique index over a column they add, answers
   zero without a query: the table holds no rows yet, and the column is not there to ask
-  about. A run that fills columns asks about its unique indexes again: before it fills the
-  NULLs of a column that stands (see check_fill!/4), and right before it builds an index (see
-  check_unique_index!/1).
+  about. A reconciliation that fills columns asks about its unique indexes again: before it
+  fills the NULLs of a column that stands (see check_fill!/4), and right before it builds an
+  index (see check_unique_index!/1). A migration asks before its fill (see check_fill!/1),
+  and checks its tail's index builds with this function after the file's ops, the added
+  columns filled.
 
   A type change asks once more right before it applies, about the unique indexes standing
   over its column then (see check_cast!/1).
@@ -223,9 +230,10 @@ defmodule Hologram.DB.Preflight do
 
   # The ops a check_op!/3 clause above can refuse - kept next to those clauses so the two
   # cannot drift. An add carrying its backfill, a tightening carrying its fill, a plain
-  # index and a safe cast never are. A migration's in-transaction unique index sits on a
-  # table the file creates, so its clause never counts a row there; it stays for parity
-  # with check_op!/3.
+  # index and a safe cast never are; the keys a fill or a cast could make repeat are asked
+  # about as it applies (check_fill!/1, check_cast!/1). A migration's in-transaction unique
+  # index sits on a table the file creates, so its clause never counts a row there; it stays
+  # for parity with check_op!/3.
   defp refusable?(%{op: :add_column} = op) do
     not op.definition.null and not Map.has_key?(op, :backfill)
   end
@@ -241,8 +249,20 @@ defmodule Hologram.DB.Preflight do
 
   defp refusable?(_op), do: false
 
-  defp checked_cast_index?(index, column) do
-    index.unique and not Map.has_key?(index, :non_plain) and column in index.columns
+  defp check_filled_keys!(indexes, table, column_name, encoded_value) do
+    Enum.each(indexes, fn index ->
+      statement =
+        DDL.filled_duplicate_check_statement(
+          table,
+          index.columns,
+          column_name,
+          index.nulls_distinct
+        )
+
+      {:ok, %{rows: [[count]]}} = Connection.query(statement, [encoded_value])
+
+      raise_filled_duplicate_keys!(table, column_name, index.columns, count)
+    end)
   end
 
   defp check_cast_rows!(op, actual) do
@@ -395,6 +415,13 @@ defmodule Hologram.DB.Preflight do
   defp pluralize_values([_value]), do: "value"
 
   defp pluralize_values(_values), do: "values"
+
+  defp standing_unique_indexes(table, column) do
+    Introspection.schema().tables[table].indexes
+    |> Enum.sort_by(fn {name, _index} -> name end)
+    |> Enum.map(fn {_name, index} -> index end)
+    |> Enum.filter(&(&1.unique and not Map.has_key?(&1, :non_plain) and column in &1.columns))
+  end
 
   # The column indexes a mapping derives are never unique, so the entity's own index entries
   # hold every unique index of its table.

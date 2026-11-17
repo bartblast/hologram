@@ -456,5 +456,51 @@ defmodule Hologram.Migration.BackfillTest do
         assert rows_of("my_app_task", ["title", "status"]) == [["one", "todo"]]
       end)
     end
+
+    # The key holds the title too, so the filled rows take one amount and still repeat no key.
+    test "fills the NULLs of a column under a key the fill makes no rows repeat", %{
+      chain: [create | _rest],
+      first_model: first_model,
+      scratch: scratch
+    } do
+      keyed =
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            type: :string,
+            opts: [optional: true],
+            line: 3
+          },
+          %{op: :add_unique, entity: MyApp.Task, fields: [:title, :amount], line: 4}
+        ])
+
+      tighten =
+        migration("20260813150000", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [optional: false, default: "0"],
+            line: 3
+          }
+        ])
+
+      keyed_model = Model.fold(first_model, keyed.ops)
+
+      route(scratch, fn ->
+        assert run([create, keyed], keyed_model, @context) == :ok
+
+        insert_task("one")
+        insert_task("two")
+
+        chain = [create, keyed, tighten]
+
+        assert run(chain, Model.fold(keyed_model, tighten.ops), @context) == :ok
+
+        assert rows_of("my_app_task", ["title", "amount"]) == [["one", "0"], ["two", "0"]]
+      end)
+    end
   end
 end

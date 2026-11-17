@@ -397,9 +397,11 @@ defmodule Hologram.Migrator do
 
   # The NULLs take the declared default before the column tightens over them. Only when
   # there are any: an enum value added in this transaction cannot be used in it, not even as
-  # the parameter of an UPDATE that matches no row.
+  # the parameter of an UPDATE that matches no row. Asked before the fill: under a unique
+  # index that stands, a fill making rows repeat a key would fail in PostgreSQL.
   defp apply_op(%{op: :alter_column, fill: value} = op) do
     if count_result(DDL.null_check_statement(op.table, op.column)) > 0 do
+      Preflight.check_fill!(op)
       fill_with_companions(op, value)
     end
 

@@ -344,7 +344,7 @@ defmodule Hologram.Migration.RefusalTest do
     end
 
     # Asked right before the type change applies, against the indexes standing then: the
-    # rename later in the file leaves the checks made before any DDL nothing to find the
+    # rename later in the file leaves the mapping the file ends with nothing to find the
     # index by.
     test "refuses a type change that makes rows repeat a unique value", %{
       create: create,
@@ -387,6 +387,55 @@ defmodule Hologram.Migration.RefusalTest do
           Connection.query(
             ~s(UPDATE "hologram_data"."my_app_task" SET "amount" = '010' WHERE "title" = 'two')
           )
+
+        :ok = run([create, unique], unique_model, @context)
+
+        rows_before = task_rows()
+
+        assert_error RuntimeError, expected_msg, fn ->
+          run([create, unique, refused], full_model, @context)
+        end
+
+        assert applied_versions_list() == ["20260813091522", "20260813142237"]
+        assert task_rows() == rows_before
+      end)
+    end
+
+    # The third row's NULL amount takes the default "10", which makes its key over amount and
+    # status the first row's. Asked about the index as it stands where the fill runs - the
+    # rename after it leaves the mapping the file ends with no index over amount.
+    test "refuses filling a column made required when the default makes rows repeat a key", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      unique =
+        migration("20260813142237", [
+          %{op: :add_unique, entity: MyApp.Task, fields: [:amount, :status], line: 3}
+        ])
+
+      refused =
+        migration("20260814101500", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [optional: false, default: "10"],
+            line: 3
+          },
+          %{op: :rename_attribute, entity: MyApp.Task, from: :amount, to: :cost, line: 4}
+        ])
+
+      unique_model = Model.fold(first_model, unique.ops)
+      full_model = Model.fold(unique_model, refused.ops)
+
+      expected_msg =
+        ~s(cannot make column "amount" on table "my_app_task" required - ) <>
+          ~s{filling its NULLs with the default would make 1 key repeat over ("amount", "status") - } <>
+          "fix the data, keep the attribute optional: true, or drop the unique declaration"
+
+      route(scratch, fn ->
+        insert_task("three", nil, "done")
 
         :ok = run([create, unique], unique_model, @context)
 

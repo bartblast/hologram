@@ -609,6 +609,29 @@ defmodule Hologram.Migration.RendererTest do
       refute Enum.any?(result.transactional, &(&1[:from] == "my_app_task_title_$uidx"))
     end
 
+    test "builds a compound key added before a rename of one of its attributes under the renamed names" do
+      pre = model(%{MyApp.Task => %{attributes: [{:kind, :string, []}, {:slug, :string, []}]}})
+
+      ops = [
+        %{op: :add_unique, entity: MyApp.Task, fields: [:kind, :slug], line: 3},
+        %{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 4}
+      ]
+
+      result = render(ops, pre)
+
+      assert [
+               %{
+                 op: :create_index,
+                 table: "my_app_task",
+                 index: "my_app_task_kind_handle_$uidx",
+                 columns: ["kind", "handle"],
+                 unique: true
+               }
+             ] = result.tail
+
+      refute Enum.any?(result.transactional, &(&1[:from] == "my_app_task_kind_slug_$uidx"))
+    end
+
     test "builds a unique index added before an entity rename on the renamed table" do
       pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
