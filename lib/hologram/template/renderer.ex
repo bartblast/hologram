@@ -1648,7 +1648,10 @@ defmodule Hologram.Template.Renderer do
   end
 
   # The row is handed over already carrying the sentinel, so the server-rendered HTML and the
-  # client re-render agree on framework-delivered rows.
+  # client re-render agree on framework-delivered rows. It was carried as stored, before the
+  # strip: the wire leaves server-only values out of what the client is told.
+  #
+  # WARNING: must match the client renderer's #putSessionUserContext (renderer.mjs).
   defp put_user_context(page_component_struct) do
     user =
       RoleGrant.user_entity()
@@ -1685,6 +1688,13 @@ defmodule Hologram.Template.Renderer do
   # read rules deny it (or none matches the own row), nil when anonymous, nil when no user
   # entity is designated. A session user id that is not a canonical entity id also yields
   # nil - the session's user_id keeps its wider latitude for apps not using the data layer.
+  #
+  # The row is carried with the page the way a derived field's rows are, so the client's database
+  # holds it from the first render. On a build checking permissions on the client it is read with
+  # the rows its type's rules read through relationships, so the client's checks on the context
+  # user read what the server's did, and it is handed back with only what was asked included.
+  #
+  # WARNING: must match the client's DataLayer.sessionUser (data_layer.mjs).
   defp read_session_user(nil, _user_id), do: nil
 
   defp read_session_user(user_entity, user_id) do
@@ -1695,7 +1705,13 @@ defmodule Hologram.Template.Renderer do
         |> Query.one()
         |> Stage.normalize()
 
-      QueryRunner.run_policied(term, DB.mapping(), user_id)
+      read_term = Window.embed(term, QueryCache.permission_checking?())
+
+      stored = QueryRunner.run_policied(read_term, DB.mapping(), user_id)
+
+      Carry.collect(stored)
+
+      if read_term == term, do: stored, else: included_as_asked(stored, term)
     end
   end
 

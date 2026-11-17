@@ -95,10 +95,21 @@ defmodule Hologram.Migrator do
 
   Pure - it needs no database access, so it runs before anything is touched: a deploy
   whose model changes never became migrations refuses here, whether generation was
-  skipped or CI was.
+  skipped or CI was. A history still holding unanswered resolve! ops refuses first, naming
+  each one's file and line - the build refuses drafts too, but an app can be built without
+  the Hologram compiler.
   """
   @spec check_covered!(list(%{atom => any}), %{atom => any}) :: :ok
   def check_covered!(migrations, current_model) do
+    unresolved = Loader.unresolved_entries(migrations)
+
+    if unresolved != [] do
+      raise "the migration draft is not resolved yet:\n" <>
+              Loader.unresolved_lines(unresolved) <>
+              "\nWrite the ops that express what happened, delete the resolve! lines, " <>
+              "then finalize with mix holo.gen.migration."
+    end
+
     replayed = Enum.reduce(migrations, Model.empty(), &Model.fold(&2, &1.ops))
 
     if replayed != current_model do
@@ -312,7 +323,7 @@ defmodule Hologram.Migrator do
   end
 
   @doc """
-  Applies the pending migrations of the project's migrations directory to the connected
+  Applies the pending migrations the project's migration modules define to the connected
   database as the current model's history.
 
   Idempotent, so it is safe to run ahead of boot as a release step (`bin/app eval
@@ -321,7 +332,7 @@ defmodule Hologram.Migrator do
   """
   @spec run() :: :ok
   def run do
-    migrations = Loader.load_dir!(Loader.migrations_dir())
+    migrations = Loader.list!()
     current_model = Model.from_modules(Reflection.list_entities(), Reflection.list_roles())
 
     run(migrations, current_model, run_context())
@@ -391,6 +402,15 @@ defmodule Hologram.Migrator do
       :none -> execute_statements(DDL.statements(op))
       {:ok, encoded_value} -> add_column_filled(op, encoded_value)
     end
+  end
+
+  # A type change asks about the unique indexes standing over its column right before it
+  # applies: two values can convert to one, and the names a file's earlier ops leave behind
+  # are the ones the database holds at this point.
+  defp apply_op(%{op: :alter_column} = op, _mapping) do
+    Preflight.check_cast!(op)
+
+    execute_statements(DDL.statements(op))
   end
 
   defp apply_op(op, _mapping), do: execute_statements(DDL.statements(op))

@@ -466,6 +466,41 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "sync_session_opts/5" do
+    @policy_hash "0123456789abcdef0123456789abcdef"
+    @types_hash "00112233445566778899aabbccddeeff"
+
+    defp sync_start(cursor) do
+      %{edges: nil, cursor: cursor, gap_end: nil, rules: nil, types_hash: @types_hash}
+    end
+
+    defp connection do
+      %{applied_seq: 3, fill_place: {200, 0}, replica_id: nil}
+    end
+
+    # What the places the session hands over are stamped with, beside the rules.
+    test "hands the session the types hash the start read decided" do
+      opts = sync_session_opts(nil, MyApp.Page, @policy_hash, sync_start(nil), connection())
+
+      assert opts[:types_hash] == @types_hash
+      assert opts[:policy_hash] == @policy_hash
+    end
+
+    test "hands no gap reader to a client arriving with nothing" do
+      opts = sync_session_opts(nil, MyApp.Page, @policy_hash, sync_start(nil), connection())
+
+      assert opts[:read_gap] == nil
+    end
+
+    test "hands the session what was read beside the connection's identity" do
+      opts = sync_session_opts(nil, MyApp.Page, @policy_hash, sync_start(nil), connection())
+
+      assert opts[:applied_seq] == 3
+      assert opts[:fill_place] == {200, 0}
+      assert opts[:replica_id] == nil
+    end
+  end
+
   describe "encode_reload_envelope/2" do
     test "wraps the JSON list of page module names in a reload SSE event envelope" do
       assert encode_reload_envelope(42, [Module2, Module3]) ==
@@ -536,8 +571,19 @@ defmodule Hologram.Realtime.SSETest do
 
       assert result.resp_headers == [
                {"cache-control", "no-cache"},
-               {"content-type", "text/event-stream"}
+               {"content-type", "text/event-stream"},
+               {"connection", "close"}
              ]
+    end
+
+    # HTTP/2 forbids connection-specific header fields, and WebKit drops a stream carrying one.
+    test "sends no connection header over HTTP/2" do
+      %{adapter: {adapter, payload}} = conn = Plug.Test.conn(:get, "/")
+      conn = %{conn | adapter: {adapter, %{payload | http_protocol: :"HTTP/2"}}}
+
+      result = prepare(conn)
+
+      refute List.keymember?(result.resp_headers, "connection", 0)
     end
 
     test "opens a chunked response with status 200" do
@@ -644,7 +690,7 @@ defmodule Hologram.Realtime.SSETest do
   describe "process_message/4 on {:sync_synced, scope, cursor}" do
     test "pushes a synced SSE event" do
       conn = prepared_test_conn()
-      send(self(), {:sync_synced, :page, nil})
+      send(self(), {:sync_synced, :all, nil})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
@@ -658,6 +704,15 @@ defmodule Hologram.Realtime.SSETest do
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
       assert updated_conn.resp_body =~ ~s["scope":"all"]
+    end
+
+    test "carries the entity types a marker names" do
+      conn = prepared_test_conn()
+      send(self(), {:sync_synced, {:types, [EntityModule2]}, nil})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ ~s("types":["Hologram.Test.Fixtures.Entity.Module2"])
     end
 
     # The one frame a client filled and then left alone ever receives, so the place has to be on
@@ -1090,6 +1145,27 @@ defmodule Hologram.Realtime.SSETest do
       send(self(), {:close, :superseded})
 
       assert {:halt, ^conn} = process_message(conn, nil, nil)
+    end
+  end
+
+  describe "process_message/4 on {:EXIT, ...}" do
+    # A cut session's client can only be caught up by coming back, which it does once the stream
+    # ends - left open, it would wait on a stream nothing writes to again.
+    test "halts when the sync session ended" do
+      conn = prepared_test_conn()
+      session = spawn(fn -> :ok end)
+      send(self(), {:EXIT, session, :behind_the_ring})
+
+      assert {:halt, ^conn} = process_message(conn, nil, nil, sync_session: session)
+    end
+
+    test "continues when a session the stream replaced ended" do
+      conn = prepared_test_conn()
+      replaced_session = spawn(fn -> :ok end)
+      session = spawn(fn -> :ok end)
+      send(self(), {:EXIT, replaced_session, :normal})
+
+      assert {:cont, ^conn} = process_message(conn, nil, nil, sync_session: session)
     end
   end
 

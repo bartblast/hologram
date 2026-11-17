@@ -170,7 +170,8 @@ export default class Hologram {
   static #awaitingTargets = new Map();
 
   // The first page's boot data as parsed from the block the server wrote, held for the mount, which
-  // reads its terms. Null in a document with no block.
+  // reads its terms, and for a restore from a snapshot, which reads its data-layer fields. Null in a
+  // document with no block.
   static #bootData = null;
 
   // The digests of the chunks this document was told of: the ones the document the server sent
@@ -1110,6 +1111,39 @@ export default class Hologram {
 
   // Made public to make tests easier
   //
+  // Restores the given snapshot into the document it was found for, before the document's mount.
+  static restoreDocumentSnapshot(pageSnapshot) {
+    $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
+    // The snapshot's tag matched the identity this document was rendered for (see
+    // isDocumentSnapshotRestorable), so its state belongs to this document's first period.
+    $.#restorePageSnapshot(pageSnapshot, IdentityTracker.documentPeriod);
+
+    // The mount after a restore reads no mount data, which is where a page's bundle digest is
+    // recorded, so this document's is recorded here: the snapshot it saves on leaving is stamped
+    // with it.
+    LiveReload.recordPageBundle(
+      pageSnapshot.pageModule,
+      globalThis.Hologram.initialPageDigest,
+    );
+
+    // Nor does it ingest the data layer's part of the mount data, which belongs to the document
+    // rather than to the state: who the document was rendered for and the rows its render read. A
+    // new document's database starts with neither, so without them the restored page would act
+    // as nobody - its queries and checks answered for an anonymous session, its writes made by
+    // nobody - and read none of the rows the server just sent.
+    Hologram.dataLayer?.ingestMountData({
+      actorUserId: $.#bootData.actorUserId,
+      syncCounts: $.#bootData.syncCounts,
+      syncRows: $.#bootData.syncRows,
+    });
+
+    // The data layer's boot may have read the actor through the whole mount data, which only a
+    // mount that reads it lets go of.
+    $.#mountData = null;
+  }
+
+  // Made public to make tests easier
+  //
   // Takes in the client ETS tables a document stored on leaving, when they were stored for the
   // identity this document was rendered for (see #adoptStoredEts).
   static async restoreEts() {
@@ -1163,18 +1197,7 @@ export default class Hologram {
       $.#documentSnapshot = null;
 
       if (isRestorable) {
-        $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
-        // The snapshot's tag matched the identity this document was rendered for (see
-        // isDocumentSnapshotRestorable), so its state belongs to this document's first period.
-        $.#restorePageSnapshot(pageSnapshot, IdentityTracker.documentPeriod);
-
-        // The mount after a restore reads no mount data, which is where a page's bundle digest is
-        // recorded, so this document's is recorded here: the snapshot it saves on leaving is
-        // stamped with it.
-        LiveReload.recordPageBundle(
-          pageSnapshot.pageModule,
-          globalThis.Hologram.initialPageDigest,
-        );
+        $.restoreDocumentSnapshot(pageSnapshot);
       }
 
       Hologram.#mountWhenReady(false);

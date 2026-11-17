@@ -2,11 +2,11 @@
 
 import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
+import Batch from "../../assets/js/batch.mjs";
 import Batches from "../../assets/js/batches.mjs";
 import DataLayer from "../../assets/js/data_layer.mjs";
 import Deltas from "../../assets/js/deltas.mjs";
 import Durability from "../../assets/js/durability.mjs";
-import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import ManuallyPortedElixirHologramAuth from "../../assets/js/elixir/hologram/auth.mjs";
 import ManuallyPortedElixirHologramDB from "../../assets/js/elixir/hologram/db.mjs";
@@ -14,6 +14,7 @@ import ManuallyPortedElixirHologramEntity from "../../assets/js/elixir/hologram/
 import ManuallyPortedElixirHologramJob from "../../assets/js/elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQueryStage from "../../assets/js/elixir/hologram/query/stage.mjs";
 import Model from "../../assets/js/model.mjs";
+import Overlay from "../../assets/js/overlay.mjs";
 import ReloadNotice from "../../assets/js/reload_notice.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
@@ -43,7 +44,6 @@ describe("DataLayer", () => {
 
       Model.reset();
       LocalDatabase.reset();
-      GlobalRegistry.set("connectPageModule", null);
 
       LocalDatabase.putRow(TASK, {
         done: false,
@@ -284,7 +284,7 @@ describe("DataLayer", () => {
 
     it("counts locally once the whole pot is complete", () => {
       LocalDatabase.syncCounts = {"MyApp.Complete/count/false": 42};
-      LocalDatabase.markSynced("all");
+      LocalDatabase.markAllSynced();
 
       const result = DataLayer.answerDerivedQuery(
         "MyApp.Complete",
@@ -296,15 +296,19 @@ describe("DataLayer", () => {
       assert.deepStrictEqual(result, Type.integer(1));
     });
 
-    // The page scope covers the page this client connected on, and nothing else - a component on
-    // any other page is only promised its rows at "all".
-    it("counts locally at the page marker on the page it connected with", () => {
-      GlobalRegistry.set("connectPageModule", "MyApp.ConnectPage");
-      LocalDatabase.syncCounts = {"MyApp.ConnectPage/count/false": 42};
-      LocalDatabase.markSynced("page");
+    const countReading = (module, types) => {
+      globalThis.Hologram.sync.countTypes = {[module]: {count: types}};
+    };
+
+    // Whichever page the component is on, and whether or not the stream connected on it: a type's
+    // marker is a claim about the rows the client holds.
+    it("counts locally once every type the count reads is complete", () => {
+      countReading("MyApp.NavigatedTo", [TASK, "MyApp.Project"]);
+      LocalDatabase.syncCounts = {"MyApp.NavigatedTo/count/false": 42};
+      LocalDatabase.markTypesSynced([TASK, "MyApp.Project"]);
 
       const result = DataLayer.answerDerivedQuery(
-        "MyApp.ConnectPage",
+        "MyApp.NavigatedTo",
         Type.atom("count"),
         [Type.boolean(false)],
         notDoneCount(),
@@ -313,13 +317,46 @@ describe("DataLayer", () => {
       assert.deepStrictEqual(result, Type.integer(1));
     });
 
-    it("keeps carrying at the page marker for a page reached since", () => {
-      GlobalRegistry.set("connectPageModule", "MyApp.SomeOtherPage");
+    it("keeps carrying while a type the count reads is not complete", () => {
+      countReading("MyApp.NavigatedTo", [TASK, "MyApp.Project"]);
       LocalDatabase.syncCounts = {"MyApp.NavigatedTo/count/false": 42};
-      LocalDatabase.markSynced("page");
+      LocalDatabase.markTypesSynced([TASK]);
 
       const result = DataLayer.answerDerivedQuery(
         "MyApp.NavigatedTo",
+        Type.atom("count"),
+        [Type.boolean(false)],
+        notDoneCount(),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    // A tab that took over the stream greets with the page it is on, which may not be the page the
+    // completeness it holds was told for (#1582). A type's marker is the same claim on every page,
+    // so the count waits for the types it reads, whatever page the stream was greeted with.
+    it("keeps carrying on a page reached by a tab that took over while a type the count reads is not complete", () => {
+      countReading("MyApp.TakenOverPage", ["MyApp.Project"]);
+      LocalDatabase.syncCounts = {"MyApp.TakenOverPage/count/false": 42};
+      LocalDatabase.markTypesSynced([TASK]);
+
+      const result = DataLayer.answerDerivedQuery(
+        "MyApp.TakenOverPage",
+        Type.atom("count"),
+        [Type.boolean(false)],
+        notDoneCount(),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    // A field the build listed no types for can only count on the whole pot.
+    it("keeps carrying until everything is complete for a count with no types listed", () => {
+      LocalDatabase.syncCounts = {"MyApp.Unlisted/count/false": 42};
+      LocalDatabase.markTypesSynced([TASK]);
+
+      const result = DataLayer.answerDerivedQuery(
+        "MyApp.Unlisted",
         Type.atom("count"),
         [Type.boolean(false)],
         notDoneCount(),
@@ -977,6 +1014,137 @@ describe("DataLayer", () => {
       await clock.tickAsync(1);
 
       assert.isTrue(settled);
+    });
+  });
+
+  describe("sessionUser()", () => {
+    const USER = "MyApp.User";
+
+    const field = (boxed, name) =>
+      boxed.data[Type.encodeMapKey(Type.atom(name))][1];
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [USER]: {
+            attributes: {email: "string", id: "uuid", password_hash: "string"},
+            relationships: {},
+            serverOnly: ["password_hash"],
+          },
+        },
+        userEntity: USER,
+      };
+
+      Model.reset();
+      LocalDatabase.reset();
+      LocalDatabase.actorUserId = "u1";
+
+      LocalDatabase.putRow(USER, {
+        email: "ann@example.com",
+        email$sort: "ann@example.com",
+        id: "u1",
+      });
+
+      LocalDatabase.putRow(USER, {
+        email: "bob@example.com",
+        email$sort: "bob@example.com",
+        id: "u2",
+      });
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+      LocalDatabase.actorUserId = null;
+      Overlay.reset();
+      delete globalThis.Hologram.sync;
+    });
+
+    it("answers the acting user's row", () => {
+      const user = DataLayer.sessionUser();
+
+      assert.deepStrictEqual(field(user, "id"), Type.bitstring("u1"));
+
+      assert.deepStrictEqual(
+        field(user, "email"),
+        Type.bitstring("ann@example.com"),
+      );
+    });
+
+    // What the server hands over for it in the context too.
+    it("answers an attribute the client may not have as the sentinel naming it", () => {
+      assert.deepStrictEqual(
+        field(DataLayer.sessionUser(), "password_hash"),
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Hologram.Entity.ServerOnly")],
+          [Type.atom("attribute"), Type.atom("password_hash")],
+        ]),
+      );
+    });
+
+    it("answers the row as it stands now", () => {
+      LocalDatabase.putRow(USER, {
+        email: "ann@example.org",
+        email$sort: "ann@example.org",
+        id: "u1",
+      });
+
+      assert.deepStrictEqual(
+        field(DataLayer.sessionUser(), "email"),
+        Type.bitstring("ann@example.org"),
+      );
+    });
+
+    // The server confirms a write within moments and syncs the row back, so a feature test can't
+    // tell the pending write from the synced row.
+    it("answers the row with this tab's pending writes applied", () => {
+      const batch = new Batch("users");
+
+      batch.append({
+        data: {email: "ann@example.org"},
+        id: "u1",
+        op: "update",
+        stamp: 1,
+        type: USER,
+      });
+
+      Overlay.push(batch);
+
+      assert.deepStrictEqual(
+        field(DataLayer.sessionUser(), "email"),
+        Type.bitstring("ann@example.org"),
+      );
+    });
+
+    it("answers nil when the acting user's row isn't held", () => {
+      LocalDatabase.actorUserId = "u3";
+
+      assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
+    });
+
+    it("answers nil for an anonymous session", () => {
+      LocalDatabase.actorUserId = null;
+
+      assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
+    });
+
+    // The server reads no row for a session user id that is not a canonical entity id.
+    it("answers nil for an actor id spelled like a member every object inherits", () => {
+      LocalDatabase.actorUserId = "constructor";
+
+      assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
+    });
+
+    // A table reads an undefined key as the string "undefined".
+    it("answers nil for an actor id the mount data left out", () => {
+      LocalDatabase.putRow(USER, {
+        email: "eve@example.com",
+        email$sort: "eve@example.com",
+        id: "undefined",
+      });
+
+      LocalDatabase.actorUserId = undefined;
+
+      assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
     });
   });
 

@@ -51,14 +51,18 @@ defmodule HologramClusterTests.SyncTest do
     rpc(peer, SyncHelpers, :hold_item_open, [slug, title, self()])
   end
 
+  # Every completeness marker of the fill, one per entity type and then the one for everything,
+  # handing back the client once the last has arrived.
   defp drain_initial_sync(client) do
-    {page_synced, filling_client} = SyncClient.await_frame(client, "synced")
-    assert page_synced["data"] =~ ~s["scope":"page"]
+    {synced, next_client} = SyncClient.await_frame(client, "synced")
 
-    {all_synced, filled_client} = SyncClient.await_frame(filling_client, "synced")
-    assert all_synced["data"] =~ ~s["scope":"all"]
+    if synced["data"] =~ ~s["scope":"all"] do
+      next_client
+    else
+      assert synced["data"] =~ ~s["scope":"types"]
 
-    filled_client
+      drain_initial_sync(next_client)
+    end
   end
 
   defp url(peer), do: "http://127.0.0.1:#{peer.port}"

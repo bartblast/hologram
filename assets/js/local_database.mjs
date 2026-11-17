@@ -38,9 +38,12 @@ export default class LocalDatabase {
   // and a connect, or a row deleted while the browser was away.
   static #carried = new Set();
 
-  // The scopes the server has declared complete ("page", "all") - until a scope arrives, the
-  // database answers with part of the truth and its readers must not treat it as the whole.
-  static #syncedScopes = new Set();
+  // Whether the server has declared everything complete, and the entity types it has declared
+  // complete before that - until a type is, the database answers a query over it with part of the
+  // truth and its readers must not treat it as the whole.
+  static #syncedAll = false;
+
+  static #syncedTypes = new Set();
 
   // type -> id -> row
   static #tables = {};
@@ -71,9 +74,9 @@ export default class LocalDatabase {
   // takes away whatever it never delivered, through the same sweep that takes away the rows a
   // page carried and the stream never vouched for.
   //
-  // The counts and the scope marks go, because neither is true of a database being filled: a
-  // count is answered from the rows as they stand once the client can count for itself, and no
-  // scope is complete again until a marker says so.
+  // The counts and the completeness marks go, because neither is true of a database being filled: a
+  // count is answered from the rows as they stand once the client can count for itself, and nothing
+  // is complete again until a marker says so.
   static beginRefill() {
     for (const [type, table] of Object.entries(LocalDatabase.#tables)) {
       for (const id of Object.keys(table)) {
@@ -82,7 +85,8 @@ export default class LocalDatabase {
     }
 
     LocalDatabase.syncCounts = {};
-    LocalDatabase.#syncedScopes = new Set();
+    LocalDatabase.#syncedAll = false;
+    LocalDatabase.#syncedTypes = new Set();
   }
 
   static deleteFact(type, relationship, sourceId, targetId) {
@@ -137,18 +141,25 @@ export default class LocalDatabase {
     return LocalDatabase.#facts[type]?.[relationship]?.[sourceId] !== undefined;
   }
 
-  static isSynced(scope) {
-    return LocalDatabase.#syncedScopes.has(scope);
+  static isAllSynced() {
+    return LocalDatabase.#syncedAll;
   }
 
-  // Every scope marked complete so far, as one value.
+  static isTypeSynced(type) {
+    return LocalDatabase.#syncedAll || LocalDatabase.#syncedTypes.has(type);
+  }
+
+  // Everything marked complete so far, as one value: whether all of it is, and which types are.
   //
-  // Nothing stores them: a scope is made complete by a marker on a STREAM, so a database read back
-  // at a page load has been told nothing about completeness and starts with none, however much it
-  // holds. Which is why they can be asked for whole - the answer is only ever what this run of the
-  // client has been told.
-  static syncedScopes() {
-    return Array.from(LocalDatabase.#syncedScopes);
+  // Nothing stores it: completeness is declared by a marker on a STREAM, so a database read back at
+  // a page load has been told nothing about it and starts with none, however much it holds. Which is
+  // why it can be asked for whole - the answer is only ever what this run of the client has been
+  // told.
+  static syncedState() {
+    return {
+      all: LocalDatabase.#syncedAll,
+      types: Array.from(LocalDatabase.#syncedTypes),
+    };
   }
 
   static carriedEntries() {
@@ -169,11 +180,38 @@ export default class LocalDatabase {
   // complete at "all" by definition, so a row still held only because a page carried it is one
   // the server never sent - a grant revoked between that render and this connect leaves exactly
   // that. Dropped here rather than left to be read, which is the discard the resync path makes.
-  static markSynced(scope) {
-    LocalDatabase.#syncedScopes.add(scope);
+  //
+  // Only the first time: a row a page carried since is one the stream has yet to deliver, or to be
+  // told about, and a mark told again - a tab of the group posting its state on every join - is no
+  // new word about it.
+  static markAllSynced() {
+    if (LocalDatabase.#syncedAll) {
+      return;
+    }
 
-    if (scope === "all") {
-      LocalDatabase.#sweepCarried();
+    LocalDatabase.#syncedAll = true;
+
+    LocalDatabase.#sweepCarried(() => true);
+  }
+
+  // A type's marker says the same of that type's rows: the fill sends every row of a type the
+  // client may see before it, so a row of the type still held only because a page carried it, or
+  // from before a refill, is one the server did not send. Swept here for the same reason, and
+  // before anything counts over the type: a count would otherwise include a row deleted while the
+  // browser was away.
+  //
+  // Only for a type marked for the first time, for the same reason the whole pot's is swept once.
+  static markTypesSynced(types) {
+    const marked = new Set(
+      types.filter((type) => !LocalDatabase.#syncedTypes.has(type)),
+    );
+
+    for (const type of marked) {
+      LocalDatabase.#syncedTypes.add(type);
+    }
+
+    if (!LocalDatabase.#syncedAll) {
+      LocalDatabase.#sweepCarried((type) => marked.has(type));
     }
   }
 
@@ -290,16 +328,19 @@ export default class LocalDatabase {
     LocalDatabase.syncCounts = {};
     LocalDatabase.#carried = new Set();
     LocalDatabase.#facts = {};
-    LocalDatabase.#syncedScopes = new Set();
+    LocalDatabase.#syncedAll = false;
+    LocalDatabase.#syncedTypes = new Set();
     LocalDatabase.#tables = {};
   }
 
-  static #sweepCarried() {
+  // The carried rows of the types the given test picks, taken away and unmarked.
+  static #sweepCarried(picks) {
     for (const [type, id] of LocalDatabase.carriedEntries()) {
-      LocalDatabase.deleteRow(type, id);
+      if (picks(type)) {
+        LocalDatabase.deleteRow(type, id);
+        LocalDatabase.unmarkCarried(type, id);
+      }
     }
-
-    LocalDatabase.#carried = new Set();
   }
 
   // The facts a row is filed with: its to-many relationships', and its inverses' of a to-many.
