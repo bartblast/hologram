@@ -156,10 +156,10 @@ defmodule HologramSyncBenchmark.Measure do
 
     spawn(fn ->
       # A caller gone without stopping it leaves nobody to answer, so the watcher goes too.
-      Process.monitor(caller)
+      caller_ref = Process.monitor(caller)
 
       guard = Node.spawn(peer.node, __MODULE__, :guard_memory, [self(), limit])
-      watch_memory(guard, Process.monitor(guard), nil)
+      watch_memory(guard, %{caller: caller_ref, guard: Process.monitor(guard)}, nil)
     end)
   end
 
@@ -218,16 +218,18 @@ defmodule HologramSyncBenchmark.Measure do
     end
   end
 
-  defp watch_memory(guard, ref, stopped_at) do
+  # Only the caller's monitor is matched here: the guard's going down is left for await_guard/2,
+  # which reports a node gone.
+  defp watch_memory(guard, refs, stopped_at) do
     receive do
       {:memory_limit, ^guard, total} ->
         send(guard, {:ack, self()})
-        watch_memory(guard, ref, total)
+        watch_memory(guard, refs, total)
 
       {:stop, caller} ->
-        send(caller, {:memory_guard, self(), stopped_at || await_guard(guard, ref)})
+        send(caller, {:memory_guard, self(), stopped_at || await_guard(guard, refs.guard)})
 
-      {:DOWN, _caller_ref, :process, _caller, _reason} when stopped_at == nil ->
+      {:DOWN, ref, :process, _caller, _reason} when ref == refs.caller and stopped_at == nil ->
         send(guard, {:stop, self()})
     end
   end
