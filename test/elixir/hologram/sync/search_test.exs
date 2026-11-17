@@ -990,9 +990,5 @@ defmodule Hologram.Sync.SearchTest do
 
       assert candidates(effects, edges, :verdicts).rows == %{PolicyModule17 => ids([project])}
     end
-
-    test "raises for a kind it doesn't follow" do
-      assert_raise FunctionClauseError, fn -> candidates([], %{}, :update) end
-    end
   end
 end

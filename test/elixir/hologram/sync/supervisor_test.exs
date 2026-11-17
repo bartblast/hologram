@@ -6,9 +6,10 @@ defmodule Hologram.Sync.SupervisorTest do
   alias Hologram.Sync.Dispatcher
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
-  alias Hologram.Sync.Fanout
+  alias Hologram.Sync.Live
   alias Hologram.Sync.ReadEdge
   alias Hologram.Sync.ResultStore
+  alias Hologram.Sync.Sessions
 
   defp child_ids do
     {:ok, {_flags, children}} = init([])
@@ -29,6 +30,7 @@ defmodule Hologram.Sync.SupervisorTest do
                ResultStore,
                Evaluators,
                ReadEdge,
+               Sessions.registry(),
                notifications(),
                Dispatcher
              ]
@@ -47,6 +49,25 @@ defmodule Hologram.Sync.SupervisorTest do
       assert {Registry, :start_link, [opts]} = spec.start
       assert opts[:keys] == :unique
       assert opts[:name] == Evaluator.registry()
+    end
+
+    # Each session is its own key, so one leaving is cleared without a scan of every other.
+    test "lists the sessions on the node, each under its own key" do
+      spec = child_spec_of(Sessions.registry())
+
+      assert {Registry, :start_link, [opts]} = spec.start
+      assert opts[:keys] == :unique
+      assert opts[:name] == Sessions.registry()
+    end
+
+    # A read edge replaced starts the dispatcher at the log's edge as it stands, and a session left
+    # running would claim a place past the batches in between. Coming after it is what has every
+    # session stopped along with it.
+    test "keeps the session list behind the read edge" do
+      ids = child_ids()
+
+      assert Enum.find_index(ids, &(&1 == Sessions.registry())) >
+               Enum.find_index(ids, &(&1 == ReadEdge))
     end
 
     test "hears about appends on a connection of its own, outside the pool" do
@@ -68,13 +89,14 @@ defmodule Hologram.Sync.SupervisorTest do
       assert opts[:auto_reconnect] == false
     end
 
-    # The dispatcher reads the log and has to hand what it reads somewhere - the fanout is what
-    # turns a batch of writes into the windows it could have changed.
-    test "reads the log into the fanout, listening on the connection beside it" do
+    # The dispatcher reads the log and has to hand what it reads somewhere - the live router is
+    # what turns a batch of writes into what it means for each session, and the windows it could
+    # have changed.
+    test "reads the log into the live router, listening on the connection beside it" do
       spec = child_spec_of(Dispatcher)
 
       assert {Dispatcher, :start_link, [opts]} = spec.start
-      assert opts[:handler] == (&Fanout.route/2)
+      assert opts[:handler] == (&Live.route/2)
       assert opts[:notifications] == notifications()
     end
 
@@ -97,6 +119,9 @@ defmodule Hologram.Sync.SupervisorTest do
 
       assert Enum.find_index(ids, &(&1 == Dispatcher)) >
                Enum.find_index(ids, &(&1 == Evaluator.registry()))
+
+      assert Enum.find_index(ids, &(&1 == Dispatcher)) >
+               Enum.find_index(ids, &(&1 == Sessions.registry()))
     end
 
     # A dispatcher restarting reads the edge to resume from, which it can only do if what keeps it
