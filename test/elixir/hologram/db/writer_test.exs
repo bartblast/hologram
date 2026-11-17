@@ -6,7 +6,6 @@ defmodule Hologram.DB.WriterTest do
   import Hologram.Query,
     only: [
       add_relationship: 3,
-      authorize: 2,
       decrement: 3,
       delete_relationship: 3,
       increment: 3,
@@ -105,50 +104,6 @@ defmodule Hologram.DB.WriterTest do
 
       assert {:ok, %Module40{}} = as_user(user, fn -> create(entity) end)
       assert DB.read(Module40, entity.id) != nil
-    end
-
-    test "evaluates an explicit claim without an acting user with the anonymous semantics" do
-      granted_entity =
-        %{public: true}
-        |> Module2.new()
-        |> authorize(:publish)
-
-      assert {:ok, %Module2{}} = create(granted_entity)
-
-      denied_entity =
-        %{public: true}
-        |> Module2.new()
-        |> authorize(:update)
-
-      expected_msg =
-        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module2 "#{denied_entity.id}")
-
-      assert_error AccessDeniedError, expected_msg, fn -> create(denied_entity) end
-    end
-
-    test "evaluates the operation the entity claims against the row being inserted" do
-      user = create_user("publisher@example.com")
-
-      granted_entity =
-        %{public: true}
-        |> Module2.new()
-        |> authorize(:publish)
-
-      assert {:ok, %Module2{}} = as_user(user, fn -> create(granted_entity) end)
-
-      denied_entity =
-        %{public: false}
-        |> Module2.new()
-        |> authorize(:publish)
-
-      expected_msg =
-        ~s(not allowed to publish Hologram.Test.Fixtures.Policy.Module2 "#{denied_entity.id}")
-
-      assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(user, fn -> create(denied_entity) end)
-      end
-
-      assert DB.read(Module2, denied_entity.id) == nil
     end
 
     # The related type's create rule is open, so a create asking it would pass - the delegation asks
@@ -283,7 +238,7 @@ defmodule Hologram.DB.WriterTest do
       assert DB.read(Module1, entity.id) == nil
     end
 
-    test "evaluates the claim against the row as it stands, not the struct in hand" do
+    test "evaluates the rules against the row as it stands, not the struct in hand" do
       user = create_user("mover@example.com")
 
       granting_parent = DB.create!(Module2.new())
@@ -308,20 +263,6 @@ defmodule Hologram.DB.WriterTest do
       end
 
       assert DB.read(Module1, entity.id) != nil
-    end
-
-    test "evaluates the operation the entity claims" do
-      user = create_user("archiver@example.com")
-
-      entity =
-        %{author_id: user.id}
-        |> Module1.new()
-        |> DB.create!()
-
-      claimed_entity = authorize(entity, :archive)
-
-      assert as_user(user, fn -> delete(claimed_entity) end) == :ok
-      assert DB.read(Module1, entity.id) == nil
     end
 
     test "skips evaluation for a trust claim" do
@@ -398,7 +339,7 @@ defmodule Hologram.DB.WriterTest do
   end
 
   describe "update/1" do
-    test "a denied claim rolls back the writes made before it" do
+    test "a denied write rolls back the writes made before it" do
       user = create_user("roller@example.com")
       earlier_entity = Module1.new()
 
@@ -511,36 +452,6 @@ defmodule Hologram.DB.WriterTest do
       end
 
       assert DB.read(Module1, entity.id).public == true
-    end
-
-    test "evaluates the operation the entity claims" do
-      user = create_user("archivist@example.com")
-
-      own_entity =
-        %{author_id: user.id}
-        |> Module1.new()
-        |> DB.create!()
-
-      assert as_user(user, fn ->
-               own_entity
-               |> put_attribute(:public, true)
-               |> authorize(:archive)
-               |> update()
-             end) == :ok
-
-      other_entity = DB.create!(Module1.new())
-
-      expected_msg =
-        ~s(not allowed to archive Hologram.Test.Fixtures.Policy.Module1 "#{other_entity.id}")
-
-      assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(user, fn ->
-          other_entity
-          |> put_attribute(:public, true)
-          |> authorize(:archive)
-          |> update()
-        end)
-      end
     end
 
     test "skips evaluation for a trust claim" do

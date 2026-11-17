@@ -69,7 +69,6 @@ describe("Elixir_Hologram_Job", () => {
             "create",
             "delete",
             "grant_role",
-            "notify",
             "read",
             "read_roles",
             "revoke_role",
@@ -133,30 +132,6 @@ describe("Elixir_Hologram_Job", () => {
       assert.notProperty(Batches.current().writes[0], "claim");
     });
 
-    // The server judges a write by what it does, so a claim could only ask for more.
-    it("sends no claim when an authorize option named an operation", () => {
-      createWithOpts(
-        notify,
-        values([["reason", Type.bitstring("x")]]),
-        opts([["authorize", Type.atom("notify")]]),
-      );
-
-      assert.notProperty(Batches.current().writes[0], "claim");
-    });
-
-    it("raises on an operation the job type never declared", () => {
-      assertBoxedError(
-        () =>
-          createWithOpts(
-            notify,
-            values([["reason", Type.bitstring("x")]]),
-            opts([["authorize", Type.atom("no_such")]]),
-          ),
-        "Hologram.MisuseError",
-        "unknown operation :no_such for MyApp.Jobs.Notify - its allow lines declare :notify, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
-      );
-    });
-
     it("answers the job as it now stands", () => {
       const job = create(notify, values([["reason", Type.bitstring("x")]]))
         .data[1];
@@ -211,23 +186,20 @@ describe("Elixir_Hologram_Job", () => {
             opts([["nope", Type.boolean(true)]]),
           ),
         "Hologram.MisuseError",
-        "Job.create takes authorize: operation or trust: true, got: [nope: true]",
+        "Job.create takes trust: true as its only option, got: [nope: true]",
       );
     });
 
-    it("raises for both options at once", () => {
+    it("raises for claiming an operation", () => {
       assertBoxedError(
         () =>
           createWithOpts(
             notify,
             Type.map([]),
-            opts([
-              ["authorize", Type.atom("notify")],
-              ["trust", Type.boolean(true)],
-            ]),
+            opts([["authorize", Type.atom("update")]]),
           ),
         "Hologram.MisuseError",
-        "Job.create takes authorize: operation or trust: true, got: [authorize: :notify, trust: true]",
+        "Job.create takes trust: true as its only option, got: [authorize: :update]",
       );
     });
 

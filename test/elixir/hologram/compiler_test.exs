@@ -1429,68 +1429,17 @@ defmodule Hologram.CompilerTest do
              ]
     end
 
-    test "reads the operation a claim stage names" do
-      plt =
-        asker_plt(~S"""
-        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
-          def f(entity), do: Hologram.Query.authorize(entity, :publsh)
-        end
-        """)
-
-      graph = asker_graph([{:f, 1, {Hologram.Query, :authorize, 2}}])
-
-      assert operation_asks(graph, plt) == [
-               %{line: 2, mfa: {@asker, :f, 1}, operation: :publsh}
-             ]
-    end
-
-    test "reads the authorize option of a job enqueue" do
+    test "no longer reads the options of a job enqueue" do
       plt =
         asker_plt(~S"""
         defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
           def f(values), do: Hologram.Job.create(Hologram.Test.Fixtures.Job.Module1, values, authorize: :genrate)
-          def g(values), do: Hologram.Job.create!(Hologram.Test.Fixtures.Job.Module1, values, authorize: :genrate)
-        end
-        """)
-
-      graph =
-        asker_graph([
-          {:f, 1, {Hologram.Job, :create, 3}},
-          {:g, 1, {Hologram.Job, :create!, 3}}
-        ])
-
-      assert operation_asks(graph, plt) == [
-               %{line: 2, mfa: {@asker, :f, 1}, operation: :genrate},
-               %{line: 3, mfa: {@asker, :g, 1}, operation: :genrate}
-             ]
-    end
-
-    test "passes over an enqueue claiming the server's authority" do
-      plt =
-        asker_plt(~S"""
-        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
-          def f(values), do: Hologram.Job.create(Hologram.Test.Fixtures.Job.Module1, values, trust: true)
         end
         """)
 
       graph = asker_graph([{:f, 1, {Hologram.Job, :create, 3}}])
 
       assert operation_asks(graph, plt) == []
-    end
-
-    test "marks an enqueue whose options are computed as dynamic" do
-      plt =
-        asker_plt(~S"""
-        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
-          def f(values, opts), do: Hologram.Job.create(Hologram.Test.Fixtures.Job.Module1, values, opts)
-        end
-        """)
-
-      graph = asker_graph([{:f, 2, {Hologram.Job, :create, 3}}])
-
-      assert operation_asks(graph, plt) == [
-               %{line: 2, mfa: {@asker, :f, 2}, operation: :dynamic}
-             ]
     end
 
     test "skips a caller absent from the IR PLT" do
@@ -1507,14 +1456,6 @@ defmodule Hologram.CompilerTest do
 
       assert Enum.any?(asks, &match?(%{mfa: {PageModule10, :template, 0}, operation: :read}, &1))
       assert Enum.any?(asks, &match?(%{mfa: {PageModule11, :command, 3}, operation: :read}, &1))
-
-      assert Enum.any?(
-               asks,
-               &match?(
-                 %{mfa: {Hologram.Job, :apply_claim, 2}, operation: :dynamic},
-                 &1
-               )
-             )
     end
   end
 
@@ -10058,9 +9999,9 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "validate_operations!/3" do
-    # Entity13 declares :publish, :triage and :unlink with roles :editor and :owner; PolicyEntity
-    # declares :archive and :publish with :editor, :maintainer, :owner and :viewer - so the build's
-    # vocabulary is the framework's seven plus four, and its roles four.
+    # Entity13's lines carry the names :publish, :triage and :unlink, with roles :editor and
+    # :owner; PolicyEntity's carry :archive and :publish, with :editor, :maintainer, :owner and
+    # :viewer - so the build's vocabulary is the framework's seven plus four, and its roles four.
     @declaring_model [Entity13, PolicyEntity]
 
     defp single_ask_plt(operation) do
@@ -10205,25 +10146,40 @@ defmodule Hologram.CompilerTest do
       end
     end
 
-    test "raises on an operation no entity type declares" do
+    test "raises on an atom that is neither a framework operation nor a name" do
       graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
 
       expected_msg =
-        "unknown operation :publsh in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - no entity type declares an allow line for it; the operations this build declares are :archive, :publish, :triage and :unlink, beside the framework's own"
+        "unknown operation :publsh in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - it is neither a framework operation nor a name an allow line carries; the names this build's allow lines carry are :archive, :publish, :triage and :unlink"
 
       assert_raise Hologram.CompileError, expected_msg, fn ->
         validate_operations!(@declaring_model, graph, single_ask_plt(":publsh"))
       end
     end
 
-    test "raises on an operation when the model declares none beside the framework's" do
+    test "raises on an operation when no allow line in the model carries a name" do
       graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
 
       expected_msg =
-        "unknown operation :publsh in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - no entity type declares an allow line for it; this build declares no operation beside the framework's own"
+        "unknown operation :publsh in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - it is neither a framework operation nor a name an allow line carries; no allow line in this build carries a name"
 
       assert_raise Hologram.CompileError, expected_msg, fn ->
         validate_operations!([Entity1], graph, single_ask_plt(":publsh"))
+      end
+    end
+
+    test "raises on an operation when the allow lines in the model carry one name" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      expected_msg =
+        "unknown operation :publsh in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - it is neither a framework operation nor a name an allow line carries; the name this build's allow lines carry is :archive"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_operations!(
+          [Hologram.Test.Fixtures.Policy.Module4],
+          graph,
+          single_ask_plt(":publsh")
+        )
       end
     end
 

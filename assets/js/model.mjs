@@ -37,7 +37,7 @@ export default class Model {
   // asks about, always askable on every type. Pinned on both tiers ("framework_operations/0" in
   // test/elixir/hologram/policy_test.exs, "frameworkOperations" in test/javascript/model_test.mjs).
   // Always update both together. A baked entry's operations list carries these too; this copy
-  // exists so a refusal can say which of a type's operations are its own.
+  // exists so a refusal can say which of a type's operations are the names its lines carry.
   static frameworkOperations = [
     "create",
     "delete",
@@ -350,15 +350,22 @@ export default class Model {
         return;
       }
 
-      const own = operations.filter(
+      const names = operations.filter(
         (candidate) => !Model.frameworkOperations.includes(candidate),
       );
 
-      const declared =
-        own.length === 0 ? "no operation of their own" : Model.#joinNames(own);
+      let carried;
+
+      if (names.length === 0) {
+        carried = "carry no name";
+      } else if (names.length === 1) {
+        carried = `carry the name :${names[0]}`;
+      } else {
+        carried = `carry the names ${Model.#joinNames(names)}`;
+      }
 
       Interpreter.raiseMisuseError(
-        `unknown operation ${Interpreter.inspect(operation)} for ${type} - its allow lines declare ${declared}, and the framework's own operations are ${Model.#joinNames(Model.frameworkOperations)}`,
+        `unknown operation ${Interpreter.inspect(operation)} for ${type} - the framework's operations are ${Model.#joinNames(Model.frameworkOperations)}, and its allow lines ${carried}`,
       );
     }
 

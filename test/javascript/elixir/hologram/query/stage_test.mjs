@@ -43,7 +43,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const user = Type.alias(USER);
 
   const addRelationship = Elixir_Hologram_Query_Stage["add_relationship/3"];
-  const authorize = Elixir_Hologram_Query_Stage["authorize/2"];
   const count = Elixir_Hologram_Query_Stage["count/1"];
   const deleteRelationship =
     Elixir_Hologram_Query_Stage["delete_relationship/3"];
@@ -1287,103 +1286,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
           ),
         "Hologram.MisuseError",
         ":message_count is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
-      );
-    });
-  });
-
-  describe("authorize/2", () => {
-    const claim = (struct) => field(field(struct, "__meta__"), "claim");
-
-    it("keeps the rest of the metadata", () => {
-      const result = authorize(
-        addRelationship(
-          putAttribute(
-            entity(PROJECT),
-            predicates([["name", Type.bitstring("x")]]),
-          ),
-          Type.atom("tasks"),
-          Type.bitstring("t1"),
-        ),
-        Type.atom("archive"),
-      );
-
-      assert.deepStrictEqual(
-        ops(result),
-        Type.map([
-          [
-            Type.atom("name"),
-            Type.tuple([Type.atom("put"), Type.bitstring("x")]),
-          ],
-        ]),
-      );
-
-      assert.deepStrictEqual(
-        edgeOps(result),
-        Type.map([
-          [
-            Type.tuple([Type.atom("tasks"), Type.bitstring("t1")]),
-            Type.atom("add"),
-          ],
-        ]),
-      );
-
-      assert.deepStrictEqual(
-        claim(result),
-        Type.tuple([Type.atom("authorize"), Type.atom("archive")]),
-      );
-    });
-
-    it("records the claim for the operation", () => {
-      const result = authorize(entity(TASK), Type.atom("update"));
-
-      assert.deepStrictEqual(
-        claim(result),
-        Type.tuple([Type.atom("authorize"), Type.atom("update")]),
-      );
-    });
-
-    it("records an operation an allow line on the entity type names", () => {
-      const result = authorize(entity(PROJECT), Type.atom("archive"));
-
-      assert.deepStrictEqual(
-        claim(result),
-        Type.tuple([Type.atom("authorize"), Type.atom("archive")]),
-      );
-    });
-
-    it("raises when the entity is not an entity struct", () => {
-      assertBoxedError(
-        () => authorize(Type.bitstring("x"), Type.atom("archive")),
-        "Hologram.MisuseError",
-        'authorize takes an entity struct, got: "x"',
-      );
-    });
-
-    it("raises when the operation is not an atom", () => {
-      assertBoxedError(
-        () => authorize(entity(TASK), Type.bitstring("archive")),
-        "Hologram.MisuseError",
-        'authorize takes an operation atom, got: "archive"',
-      );
-    });
-
-    it("raises when the struct already carries a claim", () => {
-      assertBoxedError(
-        () =>
-          authorize(
-            authorize(entity(TASK), Type.atom("update")),
-            Type.atom("delete"),
-          ),
-        "Hologram.MisuseError",
-        "MyApp.Task already carries a claim ({:authorize, :update}) - a write claims exactly one authority",
-      );
-    });
-
-    it("raises when the operation is one the entity type never declared", () => {
-      assertBoxedError(
-        () => authorize(entity(TASK), Type.atom("archive")),
-        "Hologram.MisuseError",
-        "unknown operation :archive for MyApp.Task - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
       );
     });
   });

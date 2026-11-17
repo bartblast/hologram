@@ -217,9 +217,22 @@ defmodule Hologram.PolicyTest do
              ]
     end
 
+    test "raises at the policy module's own compile for an operation that is not the framework's" do
+      expected_msg =
+        "unknown operation :archive used for allow in Hologram.PolicyTest.CustomOperationPolicyFixture - an allow line names one of the framework's operations, :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update. To keep :archive as a name can? and via: ask by, put it on a line of the operation the rule grants, like allow :update, as: :archive, only: [...] or allow :delete, as: :archive"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule CustomOperationPolicyFixture do
+          use Hologram.Policy
+
+          allow :archive
+        end
+      end
+    end
+
     test "raises at the policy module's own compile for an invalid declaration" do
       expected_msg =
-        "invalid operation 123 used for allow in Hologram.PolicyTest.InvalidAllowPolicyFixture - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+        "invalid operation 123 used for allow in Hologram.PolicyTest.InvalidAllowPolicyFixture - an allow line names a framework operation, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InvalidAllowPolicyFixture do
@@ -2093,25 +2106,25 @@ defmodule Hologram.PolicyTest do
 
     test "raises on an operation no allow line on the entity type names" do
       expected_msg =
-        "unknown operation :pin for Hologram.Test.Fixtures.Policy.Module1 - its allow lines declare :archive and :publish, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+        "unknown operation :pin for Hologram.Test.Fixtures.Policy.Module1 - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry the names :archive and :publish"
 
       assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module1, :pin)
       end
     end
 
-    test "raises on an operation for an entity type whose allow lines name none of their own" do
+    test "raises on an operation for an entity type whose allow lines carry no name" do
       expected_msg =
-        "unknown operation :archive for Hologram.Test.Fixtures.Entity.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+        "unknown operation :archive for Hologram.Test.Fixtures.Entity.Module1 - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry no name"
 
       assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Module1, :archive)
       end
     end
 
-    test "names a single declared operation without a conjunction" do
+    test "names a single name without a conjunction" do
       expected_msg =
-        "unknown operation :publish for Hologram.Test.Fixtures.Policy.Module4 - its allow lines declare :archive, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+        "unknown operation :publish for Hologram.Test.Fixtures.Policy.Module4 - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry the name :archive"
 
       assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module4, :publish)

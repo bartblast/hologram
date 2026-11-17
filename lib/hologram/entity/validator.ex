@@ -1559,7 +1559,27 @@ defmodule Hologram.Entity.Validator do
 
   # The shape is structural, so it is checked where it is written - whether the named roles are
   # declared is checked at the whole-model point, since roles are compiled after the policy lines.
-  defp validate_operation_shape!(_module, operation) when is_atom(operation), do: :ok
+  # An allow line grants one of the framework's operations; a rule an app asks about by its own
+  # word is a named line of the operation it grants. The hint is offered only for a word that
+  # could be a name, so it never suggests a line the next build refuses.
+  defp validate_operation_shape!(module, operation) when is_atom(operation) do
+    framework_operations = Policy.framework_operations()
+
+    if operation not in framework_operations do
+      hint =
+        if operation not in [nil, true, false] and plain_name?(operation) do
+          ". To keep #{inspect(operation)} as a name can? and via: ask by, put it on a line of the operation the rule grants, like allow :update, as: #{inspect(operation)}, only: [...] or allow :delete, as: #{inspect(operation)}"
+        else
+          ""
+        end
+
+      raise Hologram.CompileError,
+        message:
+          "unknown operation #{inspect(operation)} used for allow in #{inspect(module)} - an allow line names one of the framework's operations, #{join_operations(framework_operations)}#{hint}"
+    end
+
+    :ok
+  end
 
   defp validate_operation_shape!(module, {:read_roles, _roles} = operation) do
     raise Hologram.CompileError,
@@ -1571,10 +1591,28 @@ defmodule Hologram.Entity.Validator do
     if not role_operation_valid?(operation) do
       raise Hologram.CompileError,
         message:
-          "invalid operation #{inspect(operation)} used for allow in #{inspect(module)} - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+          "invalid operation #{inspect(operation)} used for allow in #{inspect(module)} - an allow line names a framework operation, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
     end
 
     :ok
+  end
+
+  # A line as written, a named one by its name - unless the name is no atom at all, which its own
+  # refusal says.
+  defp describe_allow(operation, spec) do
+    case Keyword.get(spec, :as) do
+      name when is_atom(name) and name not in [nil, true, false] ->
+        "allow #{inspect(operation)}, as: #{inspect(name)}"
+
+      _other ->
+        "allow #{inspect(operation)}"
+    end
+  end
+
+  defp join_operations(operations) do
+    {init, [last]} = Enum.split(operations, -1)
+
+    "#{Enum.map_join(init, ", ", &inspect/1)} and #{inspect(last)}"
   end
 
   defp validate_opts_shape!(module, kind, name, opts) do
@@ -1592,7 +1630,7 @@ defmodule Hologram.Entity.Validator do
     if Keyword.has_key?(spec, key) and is_nil(Keyword.fetch!(spec, key)) do
       raise Hologram.CompileError,
         message:
-          "invalid #{key} option nil for allow #{inspect(operation)} in #{inspect(module)} - omit the option instead"
+          "invalid #{key} option nil for #{describe_allow(operation, spec)} in #{inspect(module)} - omit the option instead"
     end
 
     :ok
@@ -1645,23 +1683,28 @@ defmodule Hologram.Entity.Validator do
       [_only, _except] ->
         raise Hologram.CompileError,
           message:
-            "invalid options for allow #{inspect(operation)} in #{inspect(module)} - a line takes only or except, not both"
+            "invalid options for #{describe_allow(operation, spec)} in #{inspect(module)} - a line takes only or except, not both"
 
       [key] when operation != :update ->
         raise Hologram.CompileError,
           message:
-            "invalid #{key} option for allow #{inspect(operation)} in #{inspect(module)} - only and except name the fields an update line covers, so they go on allow :update lines alone"
+            "invalid #{key} option for #{describe_allow(operation, spec)} in #{inspect(module)} - only and except name the fields an update line covers, so they go on allow :update lines alone"
 
       [key] ->
-        validate_fields_opt_value!(module, operation, key, Keyword.fetch!(spec, key))
+        validate_fields_opt_value!(
+          module,
+          describe_allow(operation, spec),
+          key,
+          Keyword.fetch!(spec, key)
+        )
     end
   end
 
-  defp validate_fields_opt_value!(module, operation, key, fields) do
+  defp validate_fields_opt_value!(module, line, key, fields) do
     if fields == [] or not is_list(fields) or not Enum.all?(fields, &is_atom/1) do
       raise Hologram.CompileError,
         message:
-          "invalid #{key} option #{inspect(fields)} for allow #{inspect(operation)} in #{inspect(module)} - the #{key} option must be a non-empty list of field names"
+          "invalid #{key} option #{inspect(fields)} for #{line} in #{inspect(module)} - the #{key} option must be a non-empty list of field names"
     end
 
     :ok
@@ -1681,7 +1724,7 @@ defmodule Hologram.Entity.Validator do
         if not to_value_valid?(to) do
           raise Hologram.CompileError,
             message:
-              "invalid to option #{inspect(to)} for allow #{inspect(operation)} in #{inspect(module)} - the to option must be a role name, a role module, a {role, entity type}, {role, relationship} or {role, path} tuple, or a non-empty list of them"
+              "invalid to option #{inspect(to)} for #{describe_allow(operation, spec)} in #{inspect(module)} - the to option must be a role name, a role module, a {role, entity type}, {role, relationship} or {role, path} tuple, or a non-empty list of them"
         end
 
       :error ->
@@ -1931,7 +1974,7 @@ defmodule Hologram.Entity.Validator do
         if not when_value_valid?(condition) do
           raise Hologram.CompileError,
             message:
-              "invalid when option #{inspect(condition)} for allow #{inspect(operation)} in #{inspect(module)} - a pinned condition must be a list of predicates, each pairing a name or a path with a value"
+              "invalid when option #{inspect(condition)} for #{describe_allow(operation, spec)} in #{inspect(module)} - a pinned condition must be a list of predicates, each pairing a name or a path with a value"
         end
 
       :error ->

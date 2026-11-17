@@ -3097,7 +3097,7 @@ describe("Elixir_Hologram_Auth", () => {
       assertBoxedError(
         () => can(Type.bitstring(ALICE), Type.atom("transfer"), document()),
         "Hologram.MisuseError",
-        "unknown operation :transfer for MyApp.Document - its allow lines declare :archive, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
+        "unknown operation :transfer for MyApp.Document - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry the name :archive",
       );
     });
 

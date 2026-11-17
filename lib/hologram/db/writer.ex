@@ -203,27 +203,21 @@ defmodule Hologram.DB.Writer do
     %{entity | __meta__: %Metadata{stamp: entity.__meta__.stamp}}
   end
 
-  # Which authority the write is on, and for which operation. A trust claim is the server's own
-  # and evaluates nothing. An authorize claim names an operation and is evaluated whether or not
-  # an actor is set - without one the evaluator's anonymous semantics apply, which is what a seed
-  # claiming a user's authority gets. A client claim is a write a browser sent, the verb's own
-  # operation evaluated whether or not an actor is set: a client is never the trusted tier, so an
-  # anonymous session's write is judged with the anonymous semantics. No claim under an actor is
-  # the verb's own operation on the acting user's authority, which is what keeps every write under
-  # an actor evaluated. No claim and no actor is the trusted tier, and writes raw.
-  defp evaluate!(%{__meta__: %Metadata{claim: :trust}}, _default_operation, _row), do: :ok
+  # Which authority the write is on. A trust claim is the server's own and evaluates nothing. A
+  # client claim is a write a browser sent, the verb's own operation evaluated whether or not an
+  # actor is set: a client is never the trusted tier, so an anonymous session's write is judged
+  # with the anonymous semantics. No claim under an actor is the verb's own operation on the acting
+  # user's authority, which is what keeps every write under an actor evaluated. No claim and no
+  # actor is the trusted tier, and writes raw.
+  defp evaluate!(%{__meta__: %Metadata{claim: :trust}}, _operation, _row), do: :ok
 
-  defp evaluate!(%{__meta__: %Metadata{claim: :client}}, default_operation, row) do
-    evaluate_operation!(default_operation, row)
-  end
-
-  defp evaluate!(%{__meta__: %Metadata{claim: {:authorize, operation}}}, _default_operation, row) do
+  defp evaluate!(%{__meta__: %Metadata{claim: :client}}, operation, row) do
     evaluate_operation!(operation, row)
   end
 
-  defp evaluate!(_entity, default_operation, row) do
+  defp evaluate!(_entity, operation, row) do
     if Context.actor_user_id() do
-      evaluate_operation!(default_operation, row)
+      evaluate_operation!(operation, row)
     else
       :ok
     end
@@ -270,13 +264,8 @@ defmodule Hologram.DB.Writer do
   end
 
   # An update is judged as any write is - by its claim, on the trusted tier not at all - but by
-  # the fields it changes rather than the operation alone. An authorize claim still names the one
-  # operation it is judged by.
+  # the fields it changes rather than the operation alone.
   defp evaluate_update!(%{__meta__: %Metadata{claim: :trust}}, _row, _fields), do: :ok
-
-  defp evaluate_update!(%{__meta__: %Metadata{claim: {:authorize, operation}}}, row, _fields) do
-    evaluate_operation!(operation, row)
-  end
 
   defp evaluate_update!(%{__meta__: %Metadata{claim: :client}}, row, fields) do
     check_fields!(row, fields)

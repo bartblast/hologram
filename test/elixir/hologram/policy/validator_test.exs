@@ -776,7 +776,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid via option {:udpate, :parent} for allow :create in Hologram.Policy.ValidatorTest.InlinePolicyFixture49 - unknown operation :udpate for Hologram.Test.Fixtures.Entity.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+        "invalid via option {:udpate, :parent} for allow :create in Hologram.Policy.ValidatorTest.InlinePolicyFixture49 - unknown operation :udpate for Hologram.Test.Fixtures.Entity.Module1 - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry no name"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture49], [])
@@ -833,7 +833,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid via option {:publish, item.parent} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture62 - unknown operation :publish for Hologram.Test.Fixtures.Entity.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+        "invalid via option {:publish, item.parent} for allow :update, as: :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture62 - unknown operation :publish for Hologram.Test.Fixtures.Entity.Module1 - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry no name"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture62], [])
@@ -1897,38 +1897,6 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
-    test "rejects a name spelling an operation another allow line declares" do
-      defmodule CustomOperationNameFixture do
-        use Hologram.Entity
-
-        allow :archive
-        allow :update, as: :archive
-      end
-
-      expected_msg =
-        "invalid as option :archive for allow :update in Hologram.Policy.ValidatorTest.CustomOperationNameFixture - an allow line of Hologram.Policy.ValidatorTest.CustomOperationNameFixture declares :archive as an operation, and a name can't spell one"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([CustomOperationNameFixture], [])
-      end
-    end
-
-    test "rejects a name spelling an operation a later allow line declares" do
-      defmodule LaterCustomOperationNameFixture do
-        use Hologram.Entity
-
-        allow :update, as: :archive
-        allow :archive
-      end
-
-      expected_msg =
-        "invalid as option :archive for allow :update in Hologram.Policy.ValidatorTest.LaterCustomOperationNameFixture - an allow line of Hologram.Policy.ValidatorTest.LaterCustomOperationNameFixture declares :archive as an operation, and a name can't spell one"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([LaterCustomOperationNameFixture], [])
-      end
-    end
-
     test "names both policies a name on two operations comes from" do
       defmodule UpdateNamePolicy do
         use Hologram.Policy
@@ -2111,6 +2079,23 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([ReferenceFieldFixture], [])
+      end
+    end
+
+    test "names a named field-limited line by its name" do
+      defmodule NamedUnknownFieldFixture do
+        use Hologram.Entity
+
+        relationship :tags, [Module2]
+
+        allow :update, as: :retag, only: [:tagz]
+      end
+
+      expected_msg =
+        "invalid only option [:tagz] for allow :update, as: :retag in Hologram.Policy.ValidatorTest.NamedUnknownFieldFixture - :tagz is no field of Hologram.Policy.ValidatorTest.NamedUnknownFieldFixture - the fields an update sets are :tags"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NamedUnknownFieldFixture], [])
       end
     end
 
@@ -2609,7 +2594,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid via option {:publish, :parent} for allow :update in Hologram.Policy.ValidatorTest.TakenUnaskableViaEntity, taken from Hologram.Policy.ValidatorTest.TakenUnaskableViaPolicy - unknown operation :publish for Hologram.Test.Fixtures.Entity.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+        "invalid via option {:publish, :parent} for allow :update, as: :publish in Hologram.Policy.ValidatorTest.TakenUnaskableViaEntity, taken from Hologram.Policy.ValidatorTest.TakenUnaskableViaPolicy - unknown operation :publish for Hologram.Test.Fixtures.Entity.Module1 - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry no name"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([TakenUnaskableViaEntity], [])
@@ -3032,6 +3017,24 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, PathDelegatedGateFixture], [])
+      end
+    end
+
+    test "names a named per-role line as written" do
+      defmodule NamedUndeclaredRoleGateFixture do
+        use Hologram.Entity
+
+        role :editor
+        role :owner
+
+        allow {:grant_role, :editr}, as: :invite, to: :owner
+      end
+
+      expected_msg =
+        "unknown role :editr in allow {:grant_role, :editr}, as: :invite in Hologram.Policy.ValidatorTest.NamedUndeclaredRoleGateFixture - declared roles are: :editor, :owner"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, NamedUndeclaredRoleGateFixture], [])
       end
     end
 

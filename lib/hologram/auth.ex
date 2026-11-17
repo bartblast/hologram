@@ -82,8 +82,8 @@ defmodule Hologram.Auth do
   Hologram generates names no user entity, so it is answered as an anonymous session too - as
   somebody holding nothing, an inequality on the acting user would grant it every row it doesn't
   own. A framework operation the entity type declares no rule for is
-  denied; an operation nothing on the entity type declares is refused with Hologram.MisuseError -
-  see Hologram.Policy.validate_operation!/2.
+  denied; an atom that is neither a framework operation nor a name an allow line on the entity type
+  carries is refused with Hologram.MisuseError - see Hologram.Policy.validate_operation!/2.
 
   The operation is an atom, or `{:grant_role, role}` / `{:revoke_role, role}` asking about one role -
   the bare `:grant_role` or `:revoke_role` asks whether the user may grant or revoke some role at all.

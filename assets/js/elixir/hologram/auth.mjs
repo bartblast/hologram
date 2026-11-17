@@ -1077,9 +1077,9 @@ const Elixir_Hologram_Auth = {
       return Type.boolean(false);
     }
 
-    // The server's own refusal for an operation nothing on the type declares - a typo or a renamed
-    // operation fails here, at the line that asks, rather than answering no as if the rules had
-    // been consulted.
+    // The server's own refusal for an atom that is neither a framework operation nor a name a line
+    // of the type carries - a typo or a renamed name fails here, at the line that asks, rather
+    // than answering no as if the rules had been consulted.
     Model.validateOperation(entityType, operation);
 
     if (fields !== null) {

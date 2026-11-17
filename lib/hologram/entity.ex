@@ -180,7 +180,10 @@ defmodule Hologram.Entity do
   @doc """
   Accumulates the given policy definition in __policies__ module attribute.
 
-  An allow line grants the given operation, and every key on it is an option:
+  An allow line grants the given operation, one of the framework's: `:create`, `:read`,
+  `:update`, `:delete`, `:grant_role`, `:revoke_role` or `:read_roles`. A word of the app's own,
+  like `:archive`, is a name on a line (`as:`), not an operation - any other atom fails the build.
+  Every key on the line is an option:
 
     * `as:` - a name for the line, an atom: `allow :update, as: :archive, to: :owner`. The line
       still grants its operation, and the name lets `can?` ask about it alone,

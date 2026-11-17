@@ -95,19 +95,18 @@ defmodule Hologram.JobCreateTest do
     end
 
     test "raises on an unknown option" do
-      expected_msg = "Job.create takes authorize: operation or trust: true, got: [retry: true]"
+      expected_msg = "Job.create takes trust: true as its only option, got: [retry: true]"
 
       assert_error MisuseError, expected_msg, fn ->
         create(Module1, %{}, computed_opts(retry: true))
       end
     end
 
-    test "raises on claiming both authorities" do
-      expected_msg =
-        "Job.create takes authorize: operation or trust: true, got: [authorize: :archive, trust: true]"
+    test "raises on claiming an operation" do
+      expected_msg = "Job.create takes trust: true as its only option, got: [authorize: :update]"
 
       assert_error MisuseError, expected_msg, fn ->
-        create(Module1, %{}, computed_opts(authorize: :archive, trust: true))
+        create(Module1, %{}, computed_opts(authorize: :update))
       end
     end
 
@@ -128,15 +127,6 @@ defmodule Hologram.JobCreateTest do
       end
 
       assert DB.read(Module2) == []
-    end
-
-    test "raises on an operation the job type never declared" do
-      expected_msg =
-        "unknown operation :no_such for Hologram.Test.Fixtures.Job.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
-
-      assert_error MisuseError, expected_msg, fn ->
-        create(Module1, %{}, authorize: :no_such)
-      end
     end
   end
 

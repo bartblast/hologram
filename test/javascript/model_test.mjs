@@ -1728,7 +1728,7 @@ describe("Model", () => {
       assertBoxedError(
         () => Model.validateOperation(PROJECT, Type.atom("pin")),
         "Hologram.MisuseError",
-        "unknown operation :pin for MyApp.Project - its allow lines declare :archive and :publish, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
+        "unknown operation :pin for MyApp.Project - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry the names :archive and :publish",
       );
     });
 
@@ -1736,7 +1736,7 @@ describe("Model", () => {
       assertBoxedError(
         () => Model.validateOperation(TASK, Type.atom("archive")),
         "Hologram.MisuseError",
-        "unknown operation :archive for MyApp.Task - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
+        "unknown operation :archive for MyApp.Task - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry no name",
       );
     });
 

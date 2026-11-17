@@ -538,17 +538,13 @@ defmodule Hologram.Policy do
   def operation_key({name, role_name}), do: "#{name}:#{role_name}"
 
   @doc """
-  Returns the operations the given entity type can be asked about, sorted: the framework's own seven, and every operation an allow line on the type names, and every name an allow line carries - its own lines and the ones taken from its policy modules alike, since both land in __policies__/0.
-
-  A per-role line (allow {:grant_role, role}) names the framework operation, which is already in the list.
+  Returns the operations the given entity type can be asked about, sorted: the framework's own seven, and every name an allow line carries - its own lines and the ones taken from its policy modules alike, since both land in __policies__/0.
   """
   @spec operations(module) :: list(atom)
   def operations(entity_type) do
     entity_type.__policies__()
-    |> Enum.flat_map(fn {operation, _to, _via, _predicates, name, _fields} ->
-      [operation, name]
-    end)
-    |> Enum.filter(&(is_atom(&1) and &1 != nil))
+    |> Enum.map(fn {_operation, _to, _via, _predicates, name, _fields} -> name end)
+    |> Enum.reject(&is_nil/1)
     |> Enum.concat(@framework_operations)
     |> Enum.uniq()
     |> Enum.sort()
@@ -692,7 +688,7 @@ defmodule Hologram.Policy do
   @doc """
   Refuses an operation the given entity type cannot be asked about, or returns :ok.
 
-  A framework operation always passes. An atom passes when an allow line on the entity type declares it as its operation or carries it as its name (`as:`). A {:grant_role, role} or {:revoke_role, role} tuple passes when the entity type declares the role, and an {:update, field} or {:update, fields} tuple when every field it names is one of `update_fields/1` - a list naming at least one. Anything else raises Hologram.MisuseError naming what the entity type does declare - so a typo or a renamed operation fails at the line that asks, on the tier asking, instead of being denied as if the rules had been consulted.
+  A framework operation always passes. An atom passes when an allow line on the entity type carries it as its name (`as:`). A {:grant_role, role} or {:revoke_role, role} tuple passes when the entity type declares the role, and an {:update, field} or {:update, fields} tuple when every field it names is one of `update_fields/1` - a list naming at least one. Anything else raises Hologram.MisuseError naming what the entity type does declare - so a typo or a renamed operation fails at the line that asks, on the tier asking, instead of being denied as if the rules had been consulted.
 
   The client mirrors the same refusals in validateOperation in assets/js/model.mjs - a hand-ported pair, so a change here is a change there.
   """
@@ -745,9 +741,9 @@ defmodule Hologram.Policy do
     raise MisuseError, message: unknown_tuple_message(entity_type, operation)
   end
 
-  # Nothing production reaches here - can?/3 refuses a shape this far off before asking, and
-  # authorize/2 and the wire only ever pass an atom - but this function is public, and its
-  # docstring promises a Hologram.MisuseError for anything else.
+  # Nothing production reaches here - can?/3 refuses a shape this far off before asking, and a
+  # via: option names an atom - but this function is public, and its docstring promises a
+  # Hologram.MisuseError for anything else.
   def validate_operation!(entity_type, operation) do
     raise MisuseError,
       message:
@@ -1501,15 +1497,16 @@ defmodule Hologram.Policy do
   end
 
   defp unknown_operation_message(entity_type, operation) do
-    own_operations = operations(entity_type) -- @framework_operations
+    names = operations(entity_type) -- @framework_operations
 
-    declared =
-      case own_operations do
-        [] -> "no operation of their own"
-        names -> join_names(names)
+    carried =
+      case names do
+        [] -> "carry no name"
+        [name] -> "carry the name #{inspect(name)}"
+        _names -> "carry the names #{join_names(names)}"
       end
 
-    "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - its allow lines declare #{declared}, and the framework's own operations are #{join_names(@framework_operations)}"
+    "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - the framework's operations are #{join_names(@framework_operations)}, and its allow lines #{carried}"
   end
 
   defp unknown_tuple_message(entity_type, operation) do

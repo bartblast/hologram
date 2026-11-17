@@ -608,9 +608,35 @@ defmodule Hologram.Entity.ValidatorTest do
              ]
     end
 
+    test "rejects an operation that is not one of the framework's, pointing at a named line" do
+      expected_msg =
+        "unknown operation :pin used for allow in Hologram.Entity.ValidatorTest.CustomOperationFixture - an allow line names one of the framework's operations, :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update. To keep :pin as a name can? and via: ask by, put it on a line of the operation the rule grants, like allow :update, as: :pin, only: [...] or allow :delete, as: :pin"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule CustomOperationFixture do
+          use Hologram.Entity
+
+          allow :pin
+        end
+      end
+    end
+
+    test "offers no name for an operation that couldn't be one" do
+      expected_msg =
+        "unknown operation nil used for allow in Hologram.Entity.ValidatorTest.NilOperationFixture - an allow line names one of the framework's operations, :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilOperationFixture do
+          use Hologram.Entity
+
+          allow nil
+        end
+      end
+    end
+
     test "rejects non-atom operation" do
       expected_msg =
-        "invalid operation \"read\" used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture73 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+        "invalid operation \"read\" used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture73 - an allow line names a framework operation, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture73 do
@@ -623,7 +649,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a grant lifecycle operation naming an empty role list" do
       expected_msg =
-        "invalid operation {:grant_role, []} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture98 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+        "invalid operation {:grant_role, []} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture98 - an allow line names a framework operation, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture98 do
@@ -638,7 +664,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a grant lifecycle operation naming a non-atom role" do
       expected_msg =
-        "invalid operation {:grant_role, \"viewer\"} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture99 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+        "invalid operation {:grant_role, \"viewer\"} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture99 - an allow line names a framework operation, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture99 do
@@ -833,6 +859,32 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           allow :update, except: []
+        end
+      end
+    end
+
+    test "names a named line by its name in a refusal" do
+      expected_msg =
+        "invalid only option [] for allow :update, as: :pin in Hologram.Entity.ValidatorTest.NamedEmptyOnlyFixture - the only option must be a non-empty list of field names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NamedEmptyOnlyFixture do
+          use Hologram.Entity
+
+          allow :update, as: :pin, only: []
+        end
+      end
+    end
+
+    test "describes a line by its operation alone when its name is what is wrong" do
+      expected_msg =
+        "invalid to option nil for allow :update in Hologram.Entity.ValidatorTest.InvalidNameNilToFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InvalidNameNilToFixture do
+          use Hologram.Entity
+
+          allow :update, as: "pin", to: nil
         end
       end
     end

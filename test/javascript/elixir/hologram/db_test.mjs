@@ -34,7 +34,6 @@ describe("Elixir_Hologram_DB", () => {
 
   const task = Type.alias(TASK);
 
-  const authorize = Elixir_Hologram_Query_Stage["authorize/2"];
   const count = Elixir_Hologram_Query_Stage["count/1"];
   const addRelationship = Elixir_Hologram_Query_Stage["add_relationship/3"];
   const create = Elixir_Hologram_DB["create/1"];
@@ -250,14 +249,9 @@ describe("Elixir_Hologram_DB", () => {
       ]);
     });
 
-    // The server judges a write by what it does, so a claim could only ask for more.
-    it("sends no claim, even for a struct a stage recorded one on", () => {
-      const claimed = authorize(
-        struct(TASK, {done: false, title: "alpha"}),
-        Type.atom("publish"),
-      );
-
-      create(claimed);
+    // The server judges a write by what it does, and refuses one carrying a claim.
+    it("sends no claim", () => {
+      create(struct(TASK, {done: false, title: "alpha"}));
 
       assert.notProperty(Batches.current().writes[0], "claim");
     });
@@ -370,12 +364,8 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("answers a row carrying nothing of what it was asked to do", () => {
-      const claimed = authorize(
-        struct(TASK, {done: false, title: "alpha"}),
-        Type.atom("publish"),
-      );
-
-      const metadata = field(create(claimed).data[1], "__meta__");
+      const created = create(struct(TASK, {done: false, title: "alpha"}));
+      const metadata = field(created.data[1], "__meta__");
 
       assert.deepStrictEqual(field(metadata, "claim"), Type.nil());
       assert.deepStrictEqual(field(metadata, "attribute_ops"), Type.map([]));
@@ -598,14 +588,11 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
-    it("sends no claim on any entry, even for a struct a stage recorded one on", () => {
-      const entity = authorize(
-        addRelationship(
-          putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
-          Type.atom("tags"),
-          Type.bitstring("g1"),
-        ),
-        Type.atom("publish"),
+    it("sends no claim on any entry", () => {
+      const entity = addRelationship(
+        putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
+        Type.atom("tags"),
+        Type.bitstring("g1"),
       );
 
       update(entity);
@@ -1022,8 +1009,8 @@ describe("Elixir_Hologram_DB", () => {
       });
     });
 
-    it("sends no claim, even for a struct a stage recorded one on", () => {
-      deleteEntity(authorize(held(), Type.atom("archive")));
+    it("sends no claim", () => {
+      deleteEntity(held());
 
       assert.notProperty(Batches.current().writes[0], "claim");
     });

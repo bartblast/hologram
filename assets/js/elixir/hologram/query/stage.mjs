@@ -1094,26 +1094,6 @@ function toTerm(query) {
   };
 }
 
-// A second claim is refused where it is written: a struct carrying two authorities would have to
-// pick one at the write, silently.
-function putClaim(entity, claim, stage) {
-  const entityType = entityTypeOf(entity, stage);
-  const metadata = field(entity, "__meta__");
-  const recorded = field(metadata, "claim");
-
-  if (!Type.isNil(recorded)) {
-    Interpreter.raiseMisuseError(
-      `${entityType} already carries a claim (${Interpreter.inspect(recorded)}) - a write claims exactly one authority`,
-    );
-  }
-
-  return putField(
-    entity,
-    Type.atom("__meta__"),
-    putField(metadata, Type.atom("claim"), claim),
-  );
-}
-
 // The two counter stages share everything but the sign they record. A sum that reaches zero is
 // dropped rather than recorded: a delta of nothing is not a change, and the wire refuses one.
 function putDelta(entity, name, amount, sign, stage) {
@@ -1871,25 +1851,6 @@ const Elixir_Hologram_Query_Stage = {
       "add",
       "add_relationship",
     ),
-
-  "authorize/2": (entity, operation) => {
-    if (!Type.isAtom(operation)) {
-      Interpreter.raiseMisuseError(
-        `authorize takes an operation atom, got: ${Interpreter.inspect(operation)}`,
-      );
-    }
-
-    // The entity refusal wins, then the operation's, then the double-claim's - the server's order.
-    // The claim stays on the struct only: a write sends none, since the server judges it by what
-    // it does.
-    Model.validateOperation(entityTypeOf(entity, "authorize"), operation);
-
-    return putClaim(
-      entity,
-      Type.tuple([Type.atom("authorize"), operation]),
-      "authorize",
-    );
-  },
 
   "count/1": (query) => setCardinality(query, "count"),
 

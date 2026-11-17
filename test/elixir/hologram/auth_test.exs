@@ -811,7 +811,7 @@ defmodule Hologram.AuthTest do
 
     test "raises on an operation the entity type declares no rule for" do
       expected_msg =
-        "unknown operation :transfer for Hologram.Test.Fixtures.Policy.Module1 - its allow lines declare :archive and :publish, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+        "unknown operation :transfer for Hologram.Test.Fixtures.Policy.Module1 - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry the names :archive and :publish"
 
       assert_error MisuseError, expected_msg, fn ->
         can?("018f4571-a1b2-7c3d-8e4f-000000000001", :transfer, %Module1{public: true})

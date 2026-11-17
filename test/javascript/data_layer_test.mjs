@@ -668,7 +668,6 @@ describe("DataLayer", () => {
         globalThis.Elixir_Hologram_Query_Stage.__exports__,
         new Set([
           "add_relationship/3",
-          "authorize/2",
           "count/1",
           "decrement/3",
           "delete_relationship/3",
