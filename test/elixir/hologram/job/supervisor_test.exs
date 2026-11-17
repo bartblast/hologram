@@ -4,6 +4,7 @@ defmodule Hologram.Job.SupervisorTest do
   import ExUnit.CaptureLog
   import Hologram.Job.Supervisor
 
+  alias Hologram.DB.Listener
   alias Hologram.Entity
   alias Hologram.Job.RunLock
   alias Hologram.Job.Worker
@@ -95,6 +96,62 @@ defmodule Hologram.Job.SupervisorTest do
         assert_receive {:pass, new_worker} when new_worker != worker, 5_000
 
         assert Process.whereis(run_lock) not in [nil, old_run_lock]
+        refute_received {:DOWN, ^supervisor_ref, :process, ^supervisor, _reason}
+
+        stop_supervised!(:job_tree)
+      end)
+    end
+  end
+
+  describe "a LISTEN the server leaves unanswered" do
+    # The listener as this supervisor starts it, through a proxy the test silences before the
+    # worker starts - a worker listens as it starts, which leaves no gap to silence the link in.
+    # Allowing a single restart is what shows the unanswered LISTEN counts once: the listener is
+    # killed before the worker's call gives up, and the worker is restarted with it rather than on
+    # its own first.
+    @tag :database
+    test "restarts the listener and the worker once, and the supervisor stays up" do
+      proxy = start_supervised!(TCPProxy)
+      TCPProxy.open(proxy)
+      notifications = __MODULE__.Notifications
+      test_pid = self()
+
+      pass = fn _job_types ->
+        send(test_pid, {:pass, self()})
+
+        0
+      end
+
+      children = [
+        {Listener, name: notifications, port: TCPProxy.port(proxy), sync_connect: true}
+      ]
+
+      supervisor =
+        start_supervised!(%{
+          id: :job_tree,
+          restart: :temporary,
+          start:
+            {Supervisor, :start_link, [children, [strategy: :rest_for_one, max_restarts: 1]]},
+          type: :supervisor
+        })
+
+      supervisor_ref = Process.monitor(supervisor)
+      old_listener = Process.whereis(notifications)
+      listener_ref = Process.monitor(old_listener)
+
+      capture_log(fn ->
+        TCPProxy.freeze(proxy)
+
+        {:ok, _worker} =
+          Supervisor.start_child(
+            supervisor,
+            {Worker, notifications: notifications, pass: pass, poll_interval_ms: 50}
+          )
+
+        assert_receive {:DOWN, ^listener_ref, :process, ^old_listener, :killed}, 6_000
+        assert_receive {:pass, _new_worker}, 5_000
+
+        assert Process.whereis(notifications) not in [nil, old_listener]
         refute_received {:DOWN, ^supervisor_ref, :process, ^supervisor, _reason}
 
         stop_supervised!(:job_tree)

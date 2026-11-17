@@ -10,12 +10,12 @@ defmodule Hologram.Sync.Supervisor do
   # from the cache that repopulates behind it.
   #
   # A database that is away takes down nothing here. The listener waits for it rather than failing
-  # (see Hologram.DB.Listener), and ends once when a session it had is lost, taking the dispatcher
-  # with it. The dispatcher crashes on each round it cannot read, which a pool checkout gives up on
-  # after about 4 seconds with DBConnection's default queue settings: once per poll and checkout,
-  # about 9 seconds, when it resumes from the read edge, and once per checkout when it has nothing
-  # to resume from and reads the log's edge as it starts. Either way it stays within 3 restarts in 5
-  # seconds, and only it restarts.
+  # (see Hologram.DB.Listener), and ends once when a session it had is lost or a LISTEN goes
+  # unanswered, taking the dispatcher with it. The dispatcher crashes on each round it cannot read,
+  # which a pool checkout gives up on after about 4 seconds with DBConnection's default queue
+  # settings: once per poll and checkout, about 9 seconds, when it resumes from the read edge, and
+  # once per checkout when it has nothing to resume from and reads the log's edge as it starts.
+  # Either way it stays within 3 restarts in 5 seconds, and only it restarts.
 
   use Supervisor
 

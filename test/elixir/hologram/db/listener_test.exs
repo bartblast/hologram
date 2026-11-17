@@ -314,4 +314,48 @@ defmodule Hologram.DB.ListenerTest do
       end)
     end
   end
+
+  # Postgrex waits for an answer with no bound of its own, and the connection does nothing else
+  # meanwhile - a silent link would hold it, and every process listening through it, for good.
+  describe "a LISTEN the server leaves unanswered" do
+    # Killed rather than the call timing out, which is what has a rest_for_one supervisor restart
+    # the caller with the connection, once, rather than on its own first.
+    test "ends the connection before the caller gives up, and the caller with it" do
+      proxy = start_proxy()
+      TCPProxy.open(proxy)
+      listener = start_connected_listener(port: TCPProxy.port(proxy))
+      listener_ref = Process.monitor(listener)
+
+      TCPProxy.freeze(proxy)
+
+      {caller, caller_ref} = spawn_monitor(fn -> Listener.listen(listener, channel()) end)
+
+      assert_receive {:DOWN, ^listener_ref, :process, ^listener, :killed}, 6_000
+      assert_receive {:DOWN, ^caller_ref, :process, ^caller, {:killed, _call}}, 1_000
+    end
+
+    # Nobody waits on the channels sent again as the session opens, so nothing else would notice.
+    test "ends the connection when it is the replay sent as the session opens" do
+      {:ok, initial_state} = Listener.init(nil)
+      state = %{initial_state | channels: %{channel() => %{make_ref() => self()}}}
+
+      {pid, ref} =
+        spawn_monitor(fn ->
+          {:query, _statement, _state} = Listener.handle_connect(state)
+
+          Process.sleep(:infinity)
+        end)
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 6_000
+    end
+
+    test "leaves the connection up once the server answers" do
+      listener = start_connected_listener([])
+      ref = Process.monitor(listener)
+
+      assert {:ok, _listen_ref} = Listener.listen(listener, channel())
+
+      refute_receive {:DOWN, ^ref, :process, ^listener, _reason}, 4_500
+    end
+  end
 end
