@@ -222,12 +222,25 @@ defmodule Hologram.Sync.Session do
     {:stop, reason, state}
   end
 
+  # The client went (see `Hologram.Sync.Outbox`), and there is no one left to tell anything.
+  def handle_info({:DOWN, ref, :process, _client, _reason}, state)
+      when ref == state.outbox.client_ref do
+    {:stop, :normal, state}
+  end
+
   # An evaluator this session was reading has stopped, and nothing else will arrive for its window
   # - the same cliff as a round falling out of the ring, and taken the same way. Cut rather than
   # repaired in place: what stopped it is not known here, and the reason that matters most - the
   # whole sync unit going down with the database - takes the registry and the stored rows too, so
   # there is nothing left to rejoin. The client comes back through the doors instead, where its
   # model, its place and the size of its gap are all read again rather than assumed.
+  #
+  # A session already cut ends for the reason it was cut, whatever stopped meanwhile.
+  def handle_info({:DOWN, _ref, :process, _evaluator, _reason}, %{cut: cut} = state)
+      when cut != nil do
+    {:stop, cut, state}
+  end
+
   def handle_info({:DOWN, _ref, :process, _evaluator, _reason}, state) do
     {:stop, :evaluator_gone, state}
   end
@@ -250,6 +263,18 @@ defmodule Hologram.Sync.Session do
       |> remember_applied(events)
 
     {:noreply, deliver(updated, window_id, version, transactions)}
+  end
+
+  # The stream serving this client replaced it on a change of identity. It asks rather than stops
+  # it, since this session may be waiting on that very stream (see `Hologram.Sync.Outbox.put/2`),
+  # and a session waiting there takes the ask itself.
+  def handle_info(:sync_stop, state) do
+    {:stop, :normal, state}
+  end
+
+  # The stream wrote a chunk while nothing here was waiting to hear it.
+  def handle_info(:sync_written, state) do
+    {:noreply, %{state | outbox: Outbox.written(state.outbox)}}
   end
 
   # A cut met while the windows are still being taken up leaves the rest of them to be subscribed
@@ -364,9 +389,14 @@ defmodule Hologram.Sync.Session do
       |> Map.values()
       |> Enum.reduce(MapSet.new(), &MapSet.union(&2, MapSet.new(Map.keys(&1))))
 
+    # A session cut while filling reads no further type: nothing it reads would reach the client.
     {filled, sent_ids} =
-      Enum.reduce(fill_order, {state, MapSet.new()}, fn entity_type, {acc, sent} ->
-        fill_type(acc, sent, held_ids, entity_type, synced_types)
+      Enum.reduce_while(fill_order, {state, MapSet.new()}, fn entity_type, {acc, sent} ->
+        if acc.cut do
+          {:halt, {acc, sent}}
+        else
+          {:cont, fill_type(acc, sent, held_ids, entity_type, synced_types)}
+        end
       end)
 
     held =
@@ -395,12 +425,15 @@ defmodule Hologram.Sync.Session do
     told =
       rows
       |> Enum.chunk_every(Catchup.rows_per_frame())
-      |> Enum.reduce(%{state | applied_seq: applied_seq}, fn chunk, acc ->
+      |> Enum.reduce_while(%{state | applied_seq: applied_seq}, fn chunk, acc ->
         deltas = Enum.map(chunk, &Frame.put_entity(&1, Frame.row_verdicts(acc.actor_user_id, &1)))
 
-        acc
-        |> tell_client({:sync_deltas, nil, deltas, applied_seq})
-        |> remember_verdicts(deltas)
+        told_chunk =
+          acc
+          |> tell_client({:sync_deltas, nil, deltas, applied_seq})
+          |> remember_verdicts(deltas)
+
+        if told_chunk.cut, do: {:halt, told_chunk}, else: {:cont, told_chunk}
       end)
 
     marked = tell_client(told, {:sync_synced, {:types, [entity_type]}, nil})
@@ -448,12 +481,21 @@ defmodule Hologram.Sync.Session do
     %{state | cut: reason}
   end
 
-  # Every frame and marker goes out through the outbox, which encodes it for the client's stream
-  # (see `Hologram.Sync.Outbox`).
-  defp tell_client(state, message) do
-    :ok = Outbox.put(state.outbox, message)
+  # Every frame and marker goes out through the outbox, which encodes it for the client's stream and
+  # waits while the client is behind (see `Hologram.Sync.Outbox`).
+  #
+  # A session cut tells nothing more: it stops once the cut message is read, and the client is told
+  # again, filled or caught up, when it comes back through the doors. A client that took nothing
+  # for as long as the outbox waits is cut, and a stream asking the session to stop has it end as
+  # it would have between messages.
+  defp tell_client(%{cut: cut} = state, _message) when cut != nil, do: state
 
-    state
+  defp tell_client(state, message) do
+    case Outbox.put(state.outbox, message) do
+      {:ok, outbox} -> %{state | outbox: outbox}
+      :stalled -> cut(state, :client_stalled)
+      :stopped -> cut(state, :normal)
+    end
   end
 
   # Judged against each window's last round, one window's rows read at a time: which of them the

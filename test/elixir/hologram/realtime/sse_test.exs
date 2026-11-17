@@ -172,6 +172,16 @@ defmodule Hologram.Realtime.SSETest do
     System.put_env("HOLOGRAM_ENV", env)
   end
 
+  # Stands in for a sync session as far as a stream sees one: it is linked, as the session a stream
+  # starts is, and stops when asked.
+  defp sync_session_stub do
+    spawn_link(fn ->
+      receive do
+        :sync_stop -> :ok
+      end
+    end)
+  end
+
   defp stream_with_identities(stash_identity, claimed_identity) do
     handshake_id = "test-handshake-#{:erlang.unique_integer([:positive])}"
 
@@ -616,6 +626,28 @@ defmodule Hologram.Realtime.SSETest do
 
       assert {:cont, updated_conn} = process_message(conn, nil, nil, sync_session: session)
       assert updated_conn.resp_body == "event: synced\nid: 1\ndata: {}\n\n"
+    end
+
+    # This process stands in for the session, so the answer arrives here.
+    test "tells the session it wrote the chunk" do
+      conn = prepared_test_conn()
+
+      send(self(), {:sync_frame, self(), "event: synced\nid: 1\ndata: {}\n\n"})
+
+      process_message(conn, nil, nil, sync_session: self())
+
+      assert_received :sync_written
+    end
+
+    test "tells a session it replaced nothing of a chunk it dropped" do
+      conn = prepared_test_conn()
+      session = spawn(fn -> :ok end)
+
+      send(self(), {:sync_frame, self(), "event: synced\nid: 1\ndata: {}\n\n"})
+
+      process_message(conn, nil, nil, sync_session: session)
+
+      refute_received :sync_written
     end
 
     # A session the stream replaced on a change of identity may still have frames on their way,
@@ -1349,7 +1381,7 @@ defmodule Hologram.Realtime.SSETest do
     # filtering rows as whoever was there before, and the client would go on holding them.
     test "sends the client through the resync door when its identity changes" do
       conn = Plug.Conn.fetch_query_params(prepared_test_conn())
-      old_session = start_supervised!({Agent, fn -> :sync_session end})
+      old_session = sync_session_stub()
 
       send(self(), {:identity_changed, "session-1", 8})
 
@@ -1361,7 +1393,7 @@ defmodule Hologram.Realtime.SSETest do
 
     test "stops the session that was serving the identity it replaced" do
       conn = Plug.Conn.fetch_query_params(prepared_test_conn())
-      old_session = start_supervised!({Agent, fn -> :sync_session end})
+      old_session = sync_session_stub()
       ref = Process.monitor(old_session)
 
       send(self(), {:identity_changed, "session-1", 8})
@@ -1369,6 +1401,31 @@ defmodule Hologram.Realtime.SSETest do
       process_message(conn, "session-1", 7, sync_session: old_session)
 
       assert_receive {:DOWN, ^ref, :process, ^old_session, :normal}
+    end
+
+    # A session waiting for this stream to say it wrote a chunk never answers a stop it is waited
+    # on for, so the stream asks and goes on.
+    @tag timeout: 5_000
+    test "goes on without waiting for the session it replaced to stop" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+
+      old_session =
+        spawn_link(fn ->
+          receive do
+            :never -> :ok
+          end
+        end)
+
+      on_exit(fn -> Process.exit(old_session, :kill) end)
+
+      send(self(), {:identity_changed, "session-1", 8})
+
+      assert {:cont, _conn, _session_id, _user_id, _sync_session} =
+               process_message(conn, "session-1", 7, sync_session: old_session)
+
+      # Unlinked as well: whatever it ends with is no longer this stream's to go down with.
+      {:links, links} = Process.info(self(), :links)
+      refute old_session in links
     end
 
     # The client may hold rows from before the hold, as who it was, and the session that starts

@@ -2691,11 +2691,13 @@ defmodule Hologram.Sync.SessionTest do
           end
         end)
 
-      # Started the way a stream starts it, with the outbox it gets by default.
+      # Started the way a stream starts it, with an outbox that encodes, and room for one chunk, so
+      # every chunk after the first waits for the pump to say it wrote the one before.
       session =
         start_supervised!(
           {Session,
            client: stream,
+           outbox: [max_unwritten: 1],
            page: @page,
            policy_hash: @policy_hash,
            read_fill: fn Module3, _actor_user_id, _replica_id, _synced_types -> {rows, nil} end,
@@ -2712,6 +2714,82 @@ defmodule Hologram.Sync.SessionTest do
           Process.exit(stream, :kill)
           flunk("the stream was never filled")
       end
+    end
+  end
+
+  describe "start_link/1 - a client that falls behind" do
+    # The fill's chunks go out only once all but a few of those before them are written - here all
+    # but none, with every type sending its marker alone. A type is read before its chunks wait.
+    defp start_paced_session!(outbox_opts) do
+      windows(%{})
+      test_pid = self()
+
+      read_fill = fn entity_type, _actor_user_id, _replica_id, _synced_types ->
+        send(test_pid, {:read, entity_type})
+        {[], nil}
+      end
+
+      session = start_session!(outbox: outbox_opts, read_fill: read_fill)
+
+      {session, Process.monitor(session)}
+    end
+
+    test "cuts a client that takes nothing for as long as the session waits" do
+      {session, ref} = start_paced_session!(max_unwritten: 1, stall_ms: 0)
+
+      assert_receive {:DOWN, ^ref, :process, ^session, :client_stalled}
+
+      assert_received {:read, Module2}
+      assert_received {:read, PolicyModule1}
+      refute_received {:read, PolicyModule5}
+    end
+
+    test "stops with nothing to report when the stream asks while it waits" do
+      {session, ref} = start_paced_session!(max_unwritten: 1, stall_ms: 5_000)
+
+      # The second type's marker is the one waiting for room.
+      assert_receive {:read, PolicyModule1}
+      send(session, :sync_stop)
+
+      assert_receive {:DOWN, ^ref, :process, ^session, :normal}
+      refute_received {:read, PolicyModule5}
+    end
+
+    test "stops with nothing to report when the stream asks while it is idle" do
+      {session, ref} = start_paced_session!(raw: true)
+      assert_receive {:sync_synced, :all, _cursor}
+
+      send(session, :sync_stop)
+
+      assert_receive {:DOWN, ^ref, :process, ^session, :normal}
+    end
+
+    # Over HTTP/2 the stream's process ends with a normal exit, which takes nothing linked to it
+    # down.
+    test "stops with nothing to report when its client goes" do
+      windows(%{})
+      client = spawn(fn -> receive(do: (:go -> :ok)) end)
+      read_fill = fn _entity_type, _actor_user_id, _replica_id, _synced_types -> {[], nil} end
+
+      session = start_session!(client: client, read_fill: read_fill)
+      ref = Process.monitor(session)
+
+      send(client, :go)
+
+      assert_receive {:DOWN, ^ref, :process, ^session, :normal}
+    end
+
+    test "takes an answer that arrives while it is idle" do
+      {session, ref} = start_paced_session!([])
+
+      # A marker for each of the three types, then the one saying the client holds everything: as
+      # many chunks as go out unanswered.
+      for _chunk <- 1..4, do: assert_receive({:sync_frame, ^session, _chunk_data})
+
+      send(session, :sync_written)
+
+      assert %{outbox: %{unwritten: 3}} = :sys.get_state(session)
+      refute_received {:DOWN, ^ref, :process, ^session, _reason}
     end
   end
 
@@ -3116,6 +3194,27 @@ defmodule Hologram.Sync.SessionTest do
       # holding the stream, so anything but a normal exit takes the stream down and the client
       # reconnects.
       assert_receive {:DOWN, ^ref, :process, ^session, :evaluator_gone}
+    end
+
+    # An evaluator stopping after the session was cut is not why the session ends.
+    test "ends a session already cut for the reason it was cut" do
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      session = start_session!([])
+      assert_receive {:sync_synced, :all, _cursor}
+
+      ref = Process.monitor(session)
+      :sys.suspend(session)
+
+      # A round the ring no longer holds cuts the session, and the evaluator's :DOWN is read before
+      # the cut message the round queued.
+      send(session, {:round, @board_window, 999, [], nil})
+      send(session, {:DOWN, make_ref(), :process, self(), :gone})
+
+      :sys.resume(session)
+
+      assert_receive {:DOWN, ^ref, :process, ^session, :behind_the_ring}
     end
   end
 

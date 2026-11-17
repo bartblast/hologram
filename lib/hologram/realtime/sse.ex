@@ -289,11 +289,16 @@ defmodule Hologram.Realtime.SSE do
         end
 
       # A frame or marker of the sync session, encoded by the session (see `Hologram.Sync.Outbox`)
-      # and written as it came.
+      # and written as it came. The session is told once it is written, since it sends no more than
+      # a few ahead of what this stream has written.
       {:sync_frame, ^sync_session, chunk_data} ->
         case Plug.Conn.chunk(conn, chunk_data) do
-          {:ok, conn} -> {:cont, conn}
-          {:error, _reason} -> {:halt, conn}
+          {:ok, conn} ->
+            send(sync_session, :sync_written)
+            {:cont, conn}
+
+          {:error, _reason} ->
+            {:halt, conn}
         end
 
       # One from a session this stream replaced on a change of identity, sent before it stopped,
@@ -1149,8 +1154,10 @@ defmodule Hologram.Realtime.SSE do
     {conn, session}
   end
 
-  # The session is linked, so it goes when the connection does - what a client holds is only
-  # worth keeping while there is a client to tell about it. Handed back so the connection can
+  # The session is linked, and it watches the stream as well, so it goes when the connection does -
+  # a link alone takes nothing down over HTTP/2, where the stream's process ends normally (see
+  # `Hologram.Sync.Outbox`). What a client holds is only worth keeping while there is a client to
+  # tell about it. Handed back so the connection can
   # reach it later: who the client IS can change while the stream stays open, and the session
   # decides what that client may see.
   #
@@ -1203,6 +1210,13 @@ defmodule Hologram.Realtime.SSE do
   # store is dropped through the door the client already has, and a session is started for who it
   # is now. Told to drop BEFORE the new one begins filling, since a self-send is ahead of anything
   # the new session will queue behind it.
+  #
+  # The old session is asked to stop rather than stopped. It may be waiting for this stream to say
+  # it wrote a chunk (see `Hologram.Sync.Outbox`), which a stream waiting for it to stop never
+  # would, and killing it could land in the middle of a read and take its database connection
+  # down. It ends after the read it is in, and what it sends until then is dropped, since it is no
+  # longer this stream's session. Unlinked first, so whatever it ends with is not this stream's
+  # business.
   defp restart_syncing(conn, nil, _new_user_id), do: {conn, nil}
 
   # Nothing to stop yet, but the client may hold rows from before the hold as who it was.
@@ -1215,7 +1229,8 @@ defmodule Hologram.Realtime.SSE do
   defp restart_syncing(conn, session, new_user_id) do
     send(self(), {:sync_resync, :identity})
 
-    :ok = GenServer.stop(session, :normal)
+    Process.unlink(session)
+    send(session, :sync_stop)
 
     start_syncing(conn, new_user_id, false)
   end
