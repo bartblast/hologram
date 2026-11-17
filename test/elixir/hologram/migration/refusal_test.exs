@@ -17,15 +17,16 @@ defmodule Hologram.Migration.RefusalTest do
   #     suite, whose "applies none of a file's ops when pre-flight refuses one of them" test
   #     uses that refusal as its lever and asserts the same three things.
   #   * a required attribute ADDED without a value for the existing rows - refused EARLIER
-  #     than the database, by `Model.fold/2` itself: `validate_filled_adds!/2` rejects an
+  #     than the database, by `Model.fold/2` itself: `validate_filled_adds!/1` rejects an
   #     add_attribute that is required and carries neither backfill: nor default:, exempting
-  #     only entities born in the same file. Its message ("declare backfill: for a one-time
-  #     value...") is the one a dev actually sees - covered by the model suite. A migration
-  #     reaches the database-level check only around that validation: an optional add the
-  #     same chunk tightens, whose default arrives after a rename - tested below - or a
-  #     required relationship, which declares no default at all. Schema reconciliation
-  #     folds a model from MODULES rather than ops, so a required attribute declared on a
-  #     populated dev database reaches it there too, where the reconciler suite covers it.
+  #     only entities the same file created before it. Its message ("declare backfill: for
+  #     a one-time value...") is the one a dev actually sees - covered by the model suite. A
+  #     migration reaches the database-level check only around that validation: an
+  #     optional add the same chunk tightens, whose default arrives after a rename - tested
+  #     below - or a required relationship, which declares no default at all. Schema
+  #     reconciliation folds a model from MODULES rather than ops, so a required attribute
+  #     declared on a populated dev database reaches it there too, where the reconciler
+  #     suite covers it.
   #   * a foreign key over orphaned rows - void by construction, since a relationship
   #     column is born together with its foreign key and no op adopts an existing column.
   #

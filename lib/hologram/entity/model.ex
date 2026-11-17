@@ -284,15 +284,27 @@ defmodule Hologram.Entity.Model do
   gone. An op that contradicts the model it is applied to raises - a delete of an entity
   type that is not there, a create of one that already is - and so does an unresolved
   draft op, which has no meaning to replay.
+
+  The given ops are also checked as one migration file: a relationship left pointing at a
+  deleted entity type, a designation change that leaves the role grants behind, and a
+  required attribute added without a value for its rows to an entity type the ops did not
+  create before it. `validate_filled_adds: false` skips that last check, for a caller
+  folding a file piece by piece after folding it whole - a piece cannot tell an entity type
+  an earlier piece created from one that predates the file. The other two hold for each
+  piece on its own: a piece is applied on its own, and one that deletes a target or moves
+  the designation without its cleanup would apply in the wrong order.
   """
-  @spec fold(%{atom => any}, list(%{atom => any})) :: %{atom => any}
-  def fold(model, ops) do
+  @spec fold(%{atom => any}, list(%{atom => any}), keyword) :: %{atom => any}
+  def fold(model, ops, opts \\ []) do
     folded = Enum.reduce(ops, model, &apply_op/2)
     deleted_types = for %{op: :delete_entity, entity: entity_type} <- ops, do: entity_type
-    created_types = for %{op: :create_entity, entity: entity_type} <- ops, do: entity_type
 
     validate_deleted_targets!(folded, deleted_types)
-    validate_filled_adds!(ops, created_types)
+
+    if Keyword.get(opts, :validate_filled_adds, true) do
+      validate_filled_adds!(ops)
+    end
+
     validate_grant_deletes!(model, ops)
 
     folded
@@ -1021,20 +1033,35 @@ defmodule Hologram.Entity.Model do
   # will meet is not the one it was generated against, so an empty table today proves
   # nothing about the one that runs it next.
   #
-  # Entities created by the same ops are exempt - their table is born here, holding nothing.
+  # Entities the same ops created before the add are exempt - their table is born here,
+  # holding nothing. Before the add, by its position: an entity type the ops create and then
+  # rename stays created under its new name, and one they rename away leaves its old name to
+  # whatever the ops create under it later - an add before that lands on the renamed table
+  # and its rows.
   #
   # A value is what fills the rows, so the options are read for one rather than for their
   # presence: nil is what every option means by its own absence, and normalization drops it,
   # so default: nil leaves exactly the attribute that was written without a default at all.
-  defp validate_filled_adds!(ops, created_types) do
-    unfilled =
-      for %{op: :add_attribute} = op <- ops,
-          op.entity not in created_types,
-          op.opts[:optional] != true,
-          is_nil(op.opts[:default]),
-          is_nil(op.opts[:backfill]) do
-        "#{inspect(op.name)} on #{inspect(op.entity)}"
-      end
+  defp validate_filled_adds!(ops) do
+    {unfilled, _created_types} =
+      Enum.reduce(ops, {[], MapSet.new()}, fn
+        %{op: :add_attribute} = op, {unfilled, created_types} ->
+          if MapSet.member?(created_types, op.entity) or filled?(op),
+            do: {unfilled, created_types},
+            else: {["#{inspect(op.name)} on #{inspect(op.entity)}" | unfilled], created_types}
+
+        %{op: :create_entity, entity: entity_type}, {unfilled, created_types} ->
+          {unfilled, MapSet.put(created_types, entity_type)}
+
+        %{op: :delete_entity, entity: entity_type}, {unfilled, created_types} ->
+          {unfilled, MapSet.delete(created_types, entity_type)}
+
+        %{op: :rename_entity} = op, {unfilled, created_types} ->
+          {unfilled, rename_created(created_types, op)}
+
+        _op, acc ->
+          acc
+      end)
 
     if unfilled != [] do
       raise Hologram.CompileError,
@@ -1043,6 +1070,21 @@ defmodule Hologram.Entity.Model do
             "#{Enum.join(Enum.sort(unfilled), ", ")} - declare backfill: <value> for a " <>
             "one-time value, default: <value> to give every row one, or optional: true " <>
             "to leave them empty"
+    end
+  end
+
+  defp filled?(op) do
+    op.opts[:optional] == true or not is_nil(op.opts[:default]) or
+      not is_nil(op.opts[:backfill])
+  end
+
+  defp rename_created(created_types, op) do
+    if MapSet.member?(created_types, op.from) do
+      created_types
+      |> MapSet.delete(op.from)
+      |> MapSet.put(op.to)
+    else
+      created_types
     end
   end
 

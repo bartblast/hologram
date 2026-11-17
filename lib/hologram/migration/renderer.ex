@@ -48,6 +48,11 @@ defmodule Hologram.Migration.Renderer do
   """
   @spec render(list(%{atom => any}), %{atom => any}) :: %{atom => any}
   def render(logical_ops, pre_model) do
+    # The file is checked whole here, once: whether a required attribute's entity type was
+    # created before it reads the whole file, and a chunk folded below cannot see the ones
+    # before it, so the chunks skip that check. They keep the others, which hold per chunk.
+    _validated_model = Model.fold(pre_model, logical_ops)
+
     {physical_ops, post_model} =
       logical_ops
       |> Enum.chunk_by(&segment_kind/1)
@@ -466,7 +471,7 @@ defmodule Hologram.Migration.Renderer do
   # turn a relationship deleted and another added in one plain chunk into a rename the file
   # never stated.
   defp render_plain_chunk(chunk, model) do
-    next_model = Model.fold(model, chunk)
+    next_model = Model.fold(model, chunk, validate_filled_adds: false)
     next_mapping = Mapper.derive_from_model!(next_model)
 
     physical_ops =

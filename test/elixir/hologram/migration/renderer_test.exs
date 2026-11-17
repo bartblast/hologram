@@ -1730,6 +1730,101 @@ defmodule Hologram.Migration.RendererTest do
       assert add_enum_value.value == "archived"
     end
 
+    # The born-here exemption is the file's: Job is created before the rename, and the
+    # required attribute added after it lands on Job's empty table.
+    test "renders a required attribute added to an entity the same file created before a rename" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Job, line: 3},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Job,
+          name: :title,
+          type: :string,
+          opts: [],
+          line: 4
+        },
+        %{op: :rename_attribute, entity: MyApp.Job, from: :title, to: :name, line: 6},
+        %{op: :add_attribute, entity: MyApp.Job, name: :code, type: :integer, opts: [], line: 8}
+      ]
+
+      result = render(ops, Model.empty())
+
+      assert %{table: "my_app_job", column: "code"} =
+               Enum.find(result.transactional, &(&1.op == :add_column))
+
+      assert result.post_model.entities[MyApp.Job].attributes == [
+               {:code, :integer, []},
+               {:name, :string, []}
+             ]
+    end
+
+    test "refuses a required attribute added to an entity that predates the file" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :name, line: 3},
+        %{op: :add_attribute, entity: MyApp.Task, name: :code, type: :integer, opts: [], line: 4}
+      ]
+
+      expected_msg =
+        "required attributes added without a value for existing rows - :code on MyApp.Task - " <>
+          "declare backfill: <value> for a one-time value, default: <value> to give every row " <>
+          "one, or optional: true to leave them empty"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> render(ops, pre) end
+    end
+
+    # Each chunk applies on its own, so a grant delete in a later chunk would render after
+    # the store's references had already moved onto the new designation.
+    test "refuses a designation move whose grant delete the file puts after a rename" do
+      pre =
+        model(%{
+          MyApp.Member => %{},
+          MyApp.Task => %{attributes: [{:title, :string, []}]},
+          UserEntity => %{}
+        })
+
+      ops = [
+        %{op: :designate_user_entity, entity: MyApp.Member, line: 3},
+        %{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :name, line: 4},
+        %{op: :delete_role_grants, line: 5}
+      ]
+
+      expected_msg =
+        "the user entity designation moves from #{inspect(UserEntity)} to MyApp.Member, " <>
+          "and role grants reference #{inspect(UserEntity)} rows - add " <>
+          "`delete_role_grants()` above it, which empties the role grant store in the " <>
+          "same migration"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> render(ops, pre) end
+    end
+
+    # The same for a target deleted in one chunk and its inbound relationship in a later
+    # one: the table would drop while the foreign key onto it still stands.
+    test "refuses a deleted target whose inbound relationship the file deletes after a rename" do
+      pre =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:title, :string, []}],
+            relationships: [{:author, MyApp.User, []}]
+          },
+          MyApp.User => %{}
+        })
+
+      ops = [
+        %{op: :delete_entity, entity: MyApp.User, line: 3},
+        %{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :name, line: 4},
+        %{op: :delete_relationship, entity: MyApp.Task, name: :author, line: 5}
+      ]
+
+      expected_msg =
+        "relationship targets deleted at this point in migration history - " <>
+          ":author on MyApp.Task targets MyApp.User - delete the relationship in the " <>
+          "migration that deletes its target, or an earlier one"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> render(ops, pre) end
+    end
+
     test "returns an empty render for ops with no physical shadow" do
       pre = model(%{MyApp.Task => %{roles: [{:editor, []}]}})
 
