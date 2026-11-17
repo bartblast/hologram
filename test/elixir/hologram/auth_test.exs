@@ -2851,10 +2851,10 @@ defmodule Hologram.AuthTest do
   end
 
   describe "verdicts/2 for stored rows" do
-    defp policy_verdict_key(name, key \\ nil) do
+    defp policy_verdict_key(name, key) do
       [%{predicates: [clause]}] = Policy.build(PolicyProject)[name]
 
-      Policy.verdict_key(PolicyProject, key || name, clause)
+      Policy.verdict_key(PolicyProject, key, clause)
     end
 
     # The fixture's named lines are limited to :name, so each deciding quantifier is answered under

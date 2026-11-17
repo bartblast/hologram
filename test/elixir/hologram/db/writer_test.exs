@@ -38,6 +38,7 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.Test.Fixtures.Policy.Module36
   alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
   alias Hologram.Test.Fixtures.Policy.Module39, as: ChannelMessage
+  alias Hologram.Test.Fixtures.Policy.Module40
 
   defp create_user(email) do
     %{email: email}
@@ -97,13 +98,13 @@ defmodule Hologram.DB.WriterTest do
     end
 
     test "evaluates a type-wide role's rule for the acting user" do
-      user = create_user("admin@example.com")
-      Auth.grant_role(user, :admin, Module2)
+      user = create_user("editor@example.com")
+      Auth.grant_role(user, :editor, Module40)
 
-      entity = authorize(Module2.new(), :update)
+      entity = Module40.new()
 
-      assert {:ok, %Module2{}} = as_user(user, fn -> create(entity) end)
-      assert DB.read(Module2, entity.id) != nil
+      assert {:ok, %Module40{}} = as_user(user, fn -> create(entity) end)
+      assert DB.read(Module40, entity.id) != nil
     end
 
     test "evaluates an explicit claim without an acting user with the anonymous semantics" do

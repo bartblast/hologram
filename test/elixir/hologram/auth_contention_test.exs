@@ -44,7 +44,7 @@ defmodule Hologram.AuthContentionTest do
   use Hologram.Test.ScratchDatabaseCase, async: false
 
   import Hologram.Auth
-  import Hologram.Query, only: [authorize: 2, put_attribute: 3]
+  import Hologram.Query, only: [put_attribute: 3]
 
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
@@ -69,8 +69,9 @@ defmodule Hologram.AuthContentionTest do
   alias Hologram.Test.Fixtures.Policy.Module30
   alias Hologram.Test.Fixtures.Policy.Module31
   alias Hologram.Test.Fixtures.Policy.Module32
+  alias Hologram.Test.Fixtures.Policy.Module40
+  alias Hologram.Test.Fixtures.Policy.Module41
   alias Hologram.Test.Fixtures.Policy.Module5
-  alias Hologram.Test.Fixtures.Policy.Module8
 
   @key_range 4_294_967_296
 
@@ -148,7 +149,7 @@ defmodule Hologram.AuthContentionTest do
 
     route(scratch, fn -> grant_role(bob, :owner, resource) end)
 
-    alice_grant_id = RoleGrant.derive_id(alice.id, Module1, resource.id, :owner)
+    alice_grant_id = RoleGrant.derive_id(alice.id, resource.__struct__, resource.id, :owner)
     alice_grant = route(scratch, fn -> EntityOperations.get(RoleGrant, alice_grant_id) end)
 
     holder = start_share_holder(scratch_opts, resource, self())
@@ -250,7 +251,6 @@ defmodule Hologram.AuthContentionTest do
   defp revocation_write(user_id, role, resource, row) do
     %{
       "based_on" => stringify_keys(row.__meta__.revisions),
-      "claim" => nil,
       "data" => %{
         "entity_id" => resource.id,
         "entity_type" => Codec.encode_enum_value(resource.__struct__),
@@ -425,7 +425,6 @@ defmodule Hologram.AuthContentionTest do
 
     %{
       "based_on" => based_on,
-      "claim" => nil,
       "data" => values,
       "id" => row.id,
       "op" => "update",
@@ -638,13 +637,11 @@ defmodule Hologram.AuthContentionTest do
     scratch: scratch,
     scratch_opts: scratch_opts
   } do
-    route(scratch, fn -> grant_role(alice, :editor, Module1) end)
+    route(scratch, fn -> grant_role(alice, :editor, Module40) end)
     parent = route(scratch, fn -> DB.create!(Module2.new()) end)
 
-    entity =
-      %{parent_id: parent.id, priority: 5}
-      |> Module1.new()
-      |> authorize(:update)
+    # Module40's :create is granted by :editor on the whole type.
+    entity = Module40.new(%{parent_id: parent.id})
 
     holder = start_row_holder(scratch_opts, parent, self())
     assert_receive :holding, 5_000
@@ -653,17 +650,17 @@ defmodule Hologram.AuthContentionTest do
     wait_for_blocked_sessions(scratch_opts, 1)
 
     # The revocation of alice's type-wide :editor queues behind the evaluation's hold on that row.
-    revoker = start_revoker(scratch_opts, alice, :editor, Module1)
+    revoker = start_revoker(scratch_opts, alice, :editor, Module40)
     wait_for_blocked_sessions(scratch_opts, 2)
 
     send(holder.pid, :release)
     assert {:ok, :ok} = Task.await(holder)
     entity_id = entity.id
-    assert {:ok, %Module1{id: ^entity_id}} = Task.await(gated)
+    assert {:ok, %Module40{id: ^entity_id}} = Task.await(gated)
     assert Task.await(revoker) == :ok
 
-    assert route(scratch, fn -> DB.read(Module1, entity.id) end).parent_id == parent.id
-    refute route(scratch, fn -> has_role?(alice, :editor, Module1) end)
+    assert route(scratch, fn -> DB.read(Module40, entity.id) end).parent_id == parent.id
+    refute route(scratch, fn -> has_role?(alice, :editor, Module40) end)
   end
 
   test "an update holds the grant rows its evaluation read until its write lands", %{
@@ -707,12 +704,9 @@ defmodule Hologram.AuthContentionTest do
     parent = route(scratch, fn -> DB.create!(Module2.new()) end)
     route(scratch, fn -> grant_role(alice, :admin, parent) end)
 
-    # Module1's :delete is granted by :admin on the PARENT row - a grant on another resource,
-    # which no gate reads.
-    entity =
-      %{parent_id: parent.id, priority: 5}
-      |> Module1.new()
-      |> authorize(:delete)
+    # Module40's :create is also granted by :admin on the PARENT row - a grant on another
+    # resource, which no gate reads.
+    entity = Module40.new(%{parent_id: parent.id})
 
     holder = start_row_holder(scratch_opts, parent, self())
     assert_receive :holding, 5_000
@@ -727,10 +721,10 @@ defmodule Hologram.AuthContentionTest do
     send(holder.pid, :release)
     assert {:ok, :ok} = Task.await(holder)
     entity_id = entity.id
-    assert {:ok, %Module1{id: ^entity_id}} = Task.await(gated)
+    assert {:ok, %Module40{id: ^entity_id}} = Task.await(gated)
     assert Task.await(revoker) == :ok
 
-    assert route(scratch, fn -> DB.read(Module1, entity.id) end).parent_id == parent.id
+    assert route(scratch, fn -> DB.read(Module40, entity.id) end).parent_id == parent.id
     refute route(scratch, fn -> has_role?(alice, :admin, parent) end)
   end
 
@@ -748,8 +742,9 @@ defmodule Hologram.AuthContentionTest do
 
     new_parent = route(scratch, fn -> DB.create!(Module2.new()) end)
 
-    # Module1's :publish is `via: parent`, and Module2's :publish holds while the parent is public -
-    # so alice may publish the row while its old parent stays public, with no role of her own.
+    # Module1's :publish line covers :parent `via: {:publish, parent}`, and Module2's :publish holds
+    # while the parent is public - so alice may move the row while its old parent stays public, with
+    # no role of her own.
     entity =
       route(scratch, fn ->
         %{parent_id: old_parent.id}
@@ -763,7 +758,6 @@ defmodule Hologram.AuthContentionTest do
     update = fn ->
       entity
       |> put_attribute(:parent_id, new_parent.id)
-      |> authorize(:publish)
       |> DB.update()
     end
 
@@ -788,8 +782,9 @@ defmodule Hologram.AuthContentionTest do
     scratch: scratch,
     scratch_opts: scratch_opts
   } do
-    # Module8's :read is `via: parent` at Module5, whose :read is `via: parent` at Module1, whose
-    # :read holds while the row is public - so alice may read the row through both hops.
+    # Module41's :update is `via: {:read, parent}` at Module5, whose :read is `via: parent` at
+    # Module1, whose :read holds while the row is public - so alice may update the row through both
+    # hops.
     chain_end =
       route(scratch, fn ->
         %{public: true}
@@ -809,7 +804,7 @@ defmodule Hologram.AuthContentionTest do
     entity =
       route(scratch, fn ->
         %{parent_id: old_middle.id}
-        |> Module8.new()
+        |> Module41.new()
         |> DB.create!()
       end)
 
@@ -819,7 +814,6 @@ defmodule Hologram.AuthContentionTest do
     update = fn ->
       entity
       |> put_attribute(:parent_id, new_middle.id)
-      |> authorize(:read)
       |> DB.update()
     end
 
@@ -835,7 +829,7 @@ defmodule Hologram.AuthContentionTest do
     assert Task.await(gated) == :ok
     assert Task.await(changer) == :ok
 
-    assert route(scratch, fn -> DB.read(Module8, entity.id) end).parent_id == new_middle.id
+    assert route(scratch, fn -> DB.read(Module41, entity.id) end).parent_id == new_middle.id
     assert route(scratch, fn -> DB.read(Module1, chain_end.id) end).public == false
   end
 
@@ -876,24 +870,29 @@ defmodule Hologram.AuthContentionTest do
   end
 
   test "a delete aborted as a deadlock victim is run again and refused once its actor's role is gone",
-       %{resource: resource, scratch: scratch} = context do
-    # The delete claims the :update rule, which alice's :owner grants on the row itself - Module1's
-    # own :delete rests on a role on its parent, which this cycle has no use for.
-    delete = fn ->
-      resource
-      |> authorize(:update)
-      |> DB.delete()
-    end
+       %{alice: alice, scratch: scratch} = context do
+    # Module1's :delete rests on a role on its parent, which this cycle has no use for - Module40's
+    # rests on alice's :owner on the row itself.
+    resource =
+      route(scratch, fn ->
+        %{priority: 5}
+        |> Module40.new()
+        |> DB.create!()
+      end)
 
-    assert cross_with_revoking_batch(context, delete) == {
+    route(scratch, fn -> grant_role(alice, :owner, resource) end)
+
+    delete = fn -> DB.delete(resource) end
+
+    assert cross_with_revoking_batch(%{context | resource: resource}, delete) == {
              %Hologram.AccessDeniedError{
                message:
-                 "not allowed to update Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)}"
+                 "not allowed to delete Hologram.Test.Fixtures.Policy.Module40 #{inspect(resource.id)}"
              },
              {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
            }
 
-    assert route(scratch, fn -> DB.read(Module1, resource.id) end).priority == 9
+    assert route(scratch, fn -> DB.read(Module40, resource.id) end).priority == 9
     assert owner_ids(scratch, resource) == [context.bob.id]
   end
 
@@ -911,11 +910,8 @@ defmodule Hologram.AuthContentionTest do
     alice_grant_id = RoleGrant.derive_id(alice.id, Module2, parent.id, :admin)
     alice_grant = route(scratch, fn -> EntityOperations.get(RoleGrant, alice_grant_id) end)
 
-    # Module1's :delete is granted by :admin on the parent row, a grant a batch can revoke.
-    entity =
-      %{parent_id: parent.id, priority: 5}
-      |> Module1.new()
-      |> authorize(:delete)
+    # Module40's :create is granted by :admin on the parent row, a grant a batch can revoke.
+    entity = Module40.new(%{parent_id: parent.id})
 
     # A create's first lock is its evaluation's share lock on alice's grant row, and its second the
     # foreign key check's on the parent. The batch takes them the other way round: it updates the
@@ -944,13 +940,13 @@ defmodule Hologram.AuthContentionTest do
 
     assert Task.await(gated) == %Hologram.AccessDeniedError{
              message:
-               "not allowed to delete Hologram.Test.Fixtures.Policy.Module1 #{inspect(entity.id)}"
+               "not allowed to create Hologram.Test.Fixtures.Policy.Module40 #{inspect(entity.id)}"
            }
 
     assert Task.await(by_bob) ==
              {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
 
-    assert route(scratch, fn -> DB.read(Module1, entity.id) end) == nil
+    assert route(scratch, fn -> DB.read(Module40, entity.id) end) == nil
     assert route(scratch, fn -> DB.read(Module2, parent.id) end).public == true
     refute route(scratch, fn -> has_role?(alice, :admin, parent) end)
   end
@@ -971,16 +967,16 @@ defmodule Hologram.AuthContentionTest do
     entity =
       route(scratch, fn ->
         %{parent_id: parent.id}
-        |> Module1.new()
+        |> Module40.new()
         |> DB.create!()
       end)
 
-    # Module1's :publish is `via: parent`, and Module2's :publish holds while the parent is public -
-    # so alice may publish the row with no role of her own, reading the parent FOR SHARE.
+    # Module40's :publish line covers :priority `via: {:publish, parent}`, and Module2's :publish
+    # holds while the parent is public - so alice may change it with no role of her own, reading the
+    # parent FOR SHARE.
     update = fn ->
       entity
       |> put_attribute(:priority, 7)
-      |> authorize(:publish)
       |> DB.update()
     end
 
@@ -1002,9 +998,9 @@ defmodule Hologram.AuthContentionTest do
     assert {:ok, :ok} = Task.await(holder)
 
     assert Task.await(gated) == :ok
-    assert Task.await(trusted) == {:error, %{referenced_by: Module1, relationship: :parent}}
+    assert Task.await(trusted) == {:error, %{referenced_by: Module40, relationship: :parent}}
 
-    assert route(scratch, fn -> DB.read(Module1, entity.id) end).priority == 7
+    assert route(scratch, fn -> DB.read(Module40, entity.id) end).priority == 7
     assert route(scratch, fn -> DB.read(Module2, parent.id) end).public == true
   end
 
@@ -1246,12 +1242,14 @@ defmodule Hologram.AuthContentionTest do
     ticket = create_ticket(scratch, space)
     create_comment(scratch, %{flagged: true, space_id: space.id})
 
-    # Module28's :close holds while some comment in the ticket's space is flagged - a comment
-    # joining the space can't turn that answer around.
+    # Module28's :close line covers :space and holds while some comment in the ticket's space is
+    # flagged - a comment joining the space can't turn that answer around. The write repeats the
+    # ticket's space on purpose: that is judged by the :close line alone, and an update repeating
+    # a reference enters no set. A change to :subject would be judged by the none line, which
+    # holds the set.
     close = fn ->
       ticket
-      |> put_attribute(:subject, "closed")
-      |> authorize(:close)
+      |> put_attribute(:space_id, space.id)
       |> DB.update()
     end
 

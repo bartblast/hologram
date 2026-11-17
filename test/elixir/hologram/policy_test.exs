@@ -845,6 +845,11 @@ defmodule Hologram.PolicyTest do
                      {:global, [Role.Module1, Role.Module2]}
                    ],
                    via: nil
+                 },
+                 %{
+                   predicates: [{:entity_type, :==, Policy.Module40}],
+                   to: [{:named, Policy.Module40, [:owner]}],
+                   via: nil
                  }
                ]
              }
@@ -2055,7 +2060,7 @@ defmodule Hologram.PolicyTest do
         "unknown operation {:update, [:public | :parent]} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
 
       assert_error MisuseError, expected_msg, fn ->
-        validate_operation!(Policy.Module1, {:update, [:public | :parent]})
+        validate_operation!(Policy.Module1, wrap_term({:update, [:public | :parent]}))
       end
     end
 

@@ -1,7 +1,7 @@
 defmodule Hologram.JobCreateTest do
   use Hologram.Test.DatabaseCase, async: true
 
-  import Hologram.Job, only: [create: 1, create: 2, create: 3, create!: 1, create!: 2, create!: 3]
+  import Hologram.Job, only: [create: 1, create: 2, create: 3, create!: 1, create!: 2]
   import Hologram.Test, only: [as_user: 2]
 
   alias Hologram.AccessDeniedError
@@ -56,15 +56,15 @@ defmodule Hologram.JobCreateTest do
     end
 
     test "evaluates the write as create for the acting user" do
-      user = create_user("claimer@example.com")
+      user = create_user("refused@example.com")
 
-      expected_msg = ~r/^not allowed to update Hologram.Test.Fixtures.Job.Module1 "/
+      expected_msg = ~r/^not allowed to create Hologram.Test.Fixtures.Job.Module3 "/
 
       assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(user, fn -> create(Module1, %{}, authorize: :update) end)
+        as_user(user, fn -> create(Module3, outcome: :ok) end)
       end
 
-      assert DB.read(Module1) == []
+      assert DB.read(Module3) == []
     end
 
     test "claims the server's authority with the trust option" do
@@ -161,10 +161,10 @@ defmodule Hologram.JobCreateTest do
     test "raises on a denial" do
       user = create_user("banged@example.com")
 
-      expected_msg = ~r/^not allowed to update Hologram.Test.Fixtures.Job.Module1 "/
+      expected_msg = ~r/^not allowed to create Hologram.Test.Fixtures.Job.Module3 "/
 
       assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(user, fn -> create!(Module1, %{}, authorize: :update) end)
+        as_user(user, fn -> create!(Module3, outcome: :ok) end)
       end
     end
   end
