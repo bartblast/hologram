@@ -368,23 +368,36 @@ defmodule HologramSyncBenchmark.Cases.Lock do
 
   # A sampler on a connection of its own, reading the lock while the given function runs, then
   # the shares of samples it was held in and held by another database, and the writers waiting
-  # for it on average.
+  # for it on average. The function starts once the sampler is connected, so its first writes are
+  # sampled too, and a run with no samples raises, since its shares would read as a lock never
+  # held.
   defp with_sampler(fun) do
     owner = self()
     totals = %{foreign: 0, held: 0, queued: 0, samples: 0}
-    sampler = spawn_link(fn -> sample(owner, DB.connect!(), totals) end)
+
+    sampler =
+      spawn_link(fn ->
+        conn = DB.connect!()
+        send(owner, {:sampling, self()})
+        sample(owner, conn, totals)
+      end)
+
+    receive do
+      {:sampling, ^sampler} -> :ok
+    end
 
     result = fun.()
     send(sampler, {:stop, owner})
 
     receive do
-      {:lock, ^sampler, totals} ->
-        samples = max(totals.samples, 1)
+      {:lock, ^sampler, %{samples: 0}} ->
+        raise "the lock was never sampled, so a run needs more than #{@sample_ms} ms"
 
+      {:lock, ^sampler, totals} ->
         lock = %{
-          foreign: totals.foreign / samples,
-          held: totals.held / samples,
-          queued: totals.queued / samples
+          foreign: totals.foreign / totals.samples,
+          held: totals.held / totals.samples,
+          queued: totals.queued / totals.samples
         }
 
         {result, lock}
