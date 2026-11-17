@@ -279,6 +279,13 @@ defmodule Hologram.DB.ListenerTest do
     end
   end
 
+  describe "init/1" do
+    test "bounds the session's first statement by the first statement timeout" do
+      assert {:ok, %{setup_timeout_ms: timeout_ms}} = Listener.init(nil)
+      assert timeout_ms == Config.first_statement_timeout_ms()
+    end
+  end
+
   describe "handle_info/2" do
     test "listens on the channels a replay names" do
       {:ok, state} = Listener.init(nil)
@@ -401,12 +408,28 @@ defmodule Hologram.DB.ListenerTest do
 
       {pid, ref} =
         spawn_monitor(fn ->
-          {:query, _statement, _state} = Listener.handle_connect(state)
+          {:query, _statement, _state} = Listener.handle_connect(%{state | setup_timeout_ms: 100})
 
           Process.sleep(:infinity)
         end)
 
-      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 6_000
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 2_000
+    end
+
+    test "leaves the connection up once the keepalive settings are answered" do
+      {:ok, state} = Listener.init(nil)
+
+      {pid, ref} =
+        spawn_monitor(fn ->
+          {:query, _statement, state} = Listener.handle_connect(%{state | setup_timeout_ms: 100})
+          {:noreply, _state} = Listener.handle_result([], state)
+
+          Process.sleep(:infinity)
+        end)
+
+      refute_receive {:DOWN, ^ref, :process, ^pid, _reason}, 300
+
+      Process.exit(pid, :kill)
     end
 
     test "ends the connection when it is the channels registered before the session opened" do

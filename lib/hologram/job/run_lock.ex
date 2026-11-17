@@ -16,9 +16,10 @@ defmodule Hologram.Job.RunLock do
   # trying, and the worker waits for it in await_connected/1 before anything else. It does not
   # reconnect a session it had, because a session that ended took its locks with it, and a worker
   # carrying on would be running a job that looks abandoned to every other node. Losing the session
-  # ends this process, and the worker is restarted beside it. It pings the server while idle, and a
-  # caller ends it when the server leaves a call unanswered, which is how a link that went dead is
-  # noticed rather than waited on.
+  # ends this process, and the worker is restarted beside it. It pings the server while idle, a
+  # caller ends it when the server leaves a call unanswered, and it ends itself when the server
+  # leaves the session settings unanswered, which is how a link that went dead is noticed rather
+  # than waited on.
 
   @behaviour Postgrex.SimpleConnection
 
@@ -36,8 +37,8 @@ defmodule Hologram.Job.RunLock do
   # with nothing in flight, so the bound is what notices it.
   #
   # Ending the connection rather than only giving up the call, because the session's state is
-  # unknown once its answer is missing: a lock may have been taken or given up after all. Killed, the
-  # connection takes the worker with it, a new one replaces both, and the server frees the old
+  # unknown once its answer is missing: a lock may have been taken or given up after all. Killed,
+  # the connection takes the worker with it, a new one replaces both, and the server frees the old
   # session's locks once it finds the peer gone - within about a minute (see @session_settings).
   #
   # The bound assumes calls are made one at a time, as one worker running one job makes them. A
@@ -98,7 +99,8 @@ defmodule Hologram.Job.RunLock do
 
   Waits as long as the database refuses connections. Every other call made before then fails, so
   the worker makes this one first. Exits if the connection ends first - when the server refuses
-  the session settings, or the session is lost before they are applied.
+  the session settings, leaves them unanswered for 150 seconds, or the session is lost before they
+  are applied.
   """
   @spec await_connected(pid | atom) :: :ok
   def await_connected(connection) do
@@ -197,16 +199,26 @@ defmodule Hologram.Job.RunLock do
 
   # SimpleConnection keeps the idle ping off after a connect (it drops what handle_connect/1
   # returns), so without the message below a session nobody calls would never be pinged.
+  #
+  # The settings are bounded by a kill (see Hologram.DB.Config.first_statement_timeout_ms/0), since
+  # nobody waiting on the session gives up (see await_connected/1): a link that went silent as the
+  # session opened would leave the worker waiting. Killed, the connection takes the worker with it,
+  # and a new one replaces both. The waits while the database refuses connections stay unbounded.
   @impl SimpleConnection
   def handle_connect(state) do
     send(self(), :arm_ping)
 
-    {:query, @session_settings, %{state | from: nil}}
+    {:ok, timer} = :timer.kill_after(state.setup_timeout_ms)
+
+    {:query, @session_settings, %{state | from: nil, timer: timer}}
   end
 
   @impl SimpleConnection
   @spec handle_disconnect(map) :: no_return
-  def handle_disconnect(_state), do: Config.end_lost_session!()
+  def handle_disconnect(state) do
+    disarm(state)
+    Config.end_lost_session!()
+  end
 
   # :arm_ping, and anything else - the connection traps exits.
   @impl SimpleConnection
@@ -215,10 +227,15 @@ defmodule Hologram.Job.RunLock do
   # The session settings are the only statement nobody waits on. Refused, they end the connection:
   # a session without them is the one a server can end under a run still going.
   @impl SimpleConnection
-  def handle_result(%Postgrex.Error{} = error, %{from: nil}), do: raise(error)
+  def handle_result(%Postgrex.Error{} = error, %{from: nil} = state) do
+    disarm(state)
+    raise error
+  end
 
   # The session is usable once its settings are applied, not as soon as it opens.
   def handle_result(_results, %{from: nil} = state) do
+    state = disarm(state)
+
     state.waiting
     |> Enum.reverse()
     |> Enum.each(&SimpleConnection.reply(&1, :ok))
@@ -232,11 +249,31 @@ defmodule Hologram.Job.RunLock do
     {:noreply, %{state | from: nil}}
   end
 
+  # The setup timeout lives in the state so that a test can shorten it.
   @impl SimpleConnection
-  def init(_args), do: {:ok, %{connected: false, from: nil, waiting: []}}
+  def init(_args) do
+    {:ok,
+     %{
+       connected: false,
+       from: nil,
+       setup_timeout_ms: Config.first_statement_timeout_ms(),
+       timer: nil,
+       waiting: []
+     }}
+  end
 
   @impl SimpleConnection
   def notify(_channel, _payload, _state), do: :ok
+
+  # A kill that fired just before the cancel reaches this process before the cancel returns, since
+  # the timer server sends it, so this process never carries on with one pending.
+  defp disarm(%{timer: nil} = state), do: state
+
+  defp disarm(state) do
+    :timer.cancel(state.timer)
+
+    %{state | timer: nil}
+  end
 
   # A kill can't be trapped, so the DOWN of a local process comes at once.
   defp kill_and_await(pid) do

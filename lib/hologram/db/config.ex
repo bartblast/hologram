@@ -19,6 +19,8 @@ defmodule Hologram.DB.Config do
 
   @discrete_keys [:database, :host, :password, :pool_size, :port, :user]
 
+  @first_statement_timeout_ms :timer.seconds(150)
+
   @keepalive_statement """
   SELECT
     set_config('tcp_keepalives_idle', '30', false),
@@ -75,6 +77,25 @@ defmodule Hologram.DB.Config do
 
     exit({:shutdown, :connection_lost})
   end
+
+  @doc """
+  Returns how long a held connection (see held_connection_opts/1) waits for the answer to its
+  session's first statement before it is killed: 150 seconds.
+
+  Postgrex puts no bound on the wait, so a link that went silent as the session opened would hold
+  the connection - for good once the server's side acknowledged the statement, about 15 minutes on
+  Linux otherwise.
+
+  Long, because a session-mode PgBouncer lets a client log in without a server connection and
+  assigns one at the first statement. With its pool full, that statement waits in a queue served
+  in order of arrival, and a connection killed while it waits rejoins at the back - a bound shorter
+  than the wait would keep it out for as long as others are queued. PgBouncer ends the wait itself
+  after its query_wait_timeout, 120 seconds by default, by closing the session, which the
+  connection logs as lost and ends on. This bound sits above that default, so the pooler's limit
+  comes first. Behind a pooler set to queue for longer, the kill comes first, and logs nothing.
+  """
+  @spec first_statement_timeout_ms() :: pos_integer
+  def first_statement_timeout_ms, do: @first_statement_timeout_ms
 
   @doc """
   Returns the Postgrex options of a connection held outside the pool for as long as its session

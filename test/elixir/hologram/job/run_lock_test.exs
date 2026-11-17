@@ -4,6 +4,7 @@ defmodule Hologram.Job.RunLockTest do
   import ExUnit.CaptureLog
   import Hologram.Job.RunLock
 
+  alias Hologram.DB.Config
   alias Hologram.Entity
   alias Hologram.Job.RunLock
   alias Hologram.Test.TCPProxy
@@ -179,11 +180,53 @@ defmodule Hologram.Job.RunLockTest do
     end
   end
 
+  describe "init/1" do
+    test "bounds the session settings by the first statement timeout" do
+      assert {:ok, %{setup_timeout_ms: timeout_ms}} = init(nil)
+      assert timeout_ms == Config.first_statement_timeout_ms()
+    end
+  end
+
+  describe "handle_connect/1" do
+    # Nobody waiting on the session gives up, so nothing else would notice a link that went silent
+    # as it opened - the worker would wait for as long as the operating system keeps the socket.
+    test "ends the connection when the server leaves the session settings unanswered" do
+      {:ok, state} = init(nil)
+
+      {pid, ref} =
+        spawn_monitor(fn ->
+          {:query, _statement, _state} = handle_connect(%{state | setup_timeout_ms: 100})
+
+          Process.sleep(:infinity)
+        end)
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 2_000
+    end
+
+    test "leaves the connection up once the session settings are applied" do
+      {:ok, state} = init(nil)
+
+      {pid, ref} =
+        spawn_monitor(fn ->
+          {:query, _statement, state} = handle_connect(%{state | setup_timeout_ms: 100})
+          {:noreply, _state} = handle_result([], state)
+
+          Process.sleep(:infinity)
+        end)
+
+      refute_receive {:DOWN, ^ref, :process, ^pid, _reason}, 300
+
+      Process.exit(pid, :kill)
+    end
+  end
+
   describe "handle_result/2" do
     # A session without the settings is the one a server can end under a run still going.
     test "ends the connection when the session settings are refused" do
+      {:ok, state} = init(nil)
+
       assert_raise Postgrex.Error, fn ->
-        handle_result(%Postgrex.Error{message: "refused"}, %{from: nil})
+        handle_result(%Postgrex.Error{message: "refused"}, state)
       end
     end
   end

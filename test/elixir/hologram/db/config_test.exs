@@ -19,6 +19,15 @@ defmodule Hologram.DB.ConfigTest do
     end
   end
 
+  describe "first_statement_timeout_ms/0" do
+    # A session-mode PgBouncer queues a session's first statement until a server connection frees,
+    # and ends the wait itself after query_wait_timeout by closing the session - the connection logs
+    # that as lost, where the kill logs nothing.
+    test "outlasts PgBouncer's default query_wait_timeout of 120 seconds" do
+      assert first_statement_timeout_ms() > :timer.seconds(120)
+    end
+  end
+
   describe "held_connection_opts/1" do
     test "returns the configured database's options for a connection that waits for it" do
       opts = held_connection_opts()

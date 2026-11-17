@@ -9,8 +9,9 @@ defmodule Hologram.DB.Listener do
   # answered :eventually between two tries - its channel is registered here and sent to the server
   # once the session opens. A try against a host that drops packets rather than refusing them
   # blocks this process until the connect timeout, and a listen call made meanwhile exits after its
-  # 5 seconds. A session that is lost ends this process, and so does a statement the server leaves
-  # unanswered for 4 seconds (see @query_timeout_ms). Whatever listens through it is restarted
+  # 5 seconds. A session that is lost ends this process, and so does a LISTEN the server leaves
+  # unanswered for 4 seconds (see @query_timeout_ms), or the session's first statement for 150
+  # (see Hologram.DB.Config.first_statement_timeout_ms/0). Whatever listens through it is restarted
   # beside it and listens again as it starts. Reconnecting in place would leave that process
   # waiting on announcements sent while the session was gone, which nothing would tell it about.
   #
@@ -46,9 +47,10 @@ defmodule Hologram.DB.Listener do
   # a link that went silent with a statement in flight would hold it, and every process listening
   # through it: the idle ping cannot run. Once the server's side acknowledged the statement,
   # nothing is left for the operating system to resend and it never gives up on the socket - held
-  # for good. Otherwise it gives up only after resending for about 15 minutes on Linux. The
-  # keepalives and the replay sent as the session opens are bounded too, though nobody waits on
-  # them.
+  # for good. Otherwise it gives up only after resending for about 15 minutes on Linux. The replay
+  # of the channels registered before the session opened is bounded by it too, though nobody waits
+  # on it. The keepalives, the session's first statement, have the longer bound such a statement
+  # needs behind a pooler (see Hologram.DB.Config.first_statement_timeout_ms/0).
   #
   # A healthy server answers well within it. A session's first LISTEN also reads through the
   # notifications still queued, which is slow only when the queue is huge.
@@ -58,8 +60,10 @@ defmodule Hologram.DB.Listener do
   # caller's and restarts both once, rather than the caller on its own and then both again. This
   # bound starts once the call is picked up, a moment after the caller's, which keeps the order
   # while calls come one at a time - each process listening through it makes one as it starts - and
-  # this process is free when one comes. A call that waited on the session being set up has less
-  # left, and may give up first, which costs one restart more, still within the limit.
+  # this process is free when one comes. A call made while the session is being set up waits
+  # behind it. When setup outlasts the call's 5 seconds, as the first statement can behind a
+  # pooler, the caller exits alone, about once per 5 seconds for as long as it lasts, still within
+  # the limit.
   @query_timeout_ms @listen_timeout_ms - :timer.seconds(1)
 
   @doc """
@@ -125,7 +129,7 @@ defmodule Hologram.DB.Listener do
     if state.connected do
       # Sent again when the server already listens on the channel, which is harmless and happens
       # once per process starting to listen.
-      query(listen_statement([channel]), %{state | from: from, ref: ref})
+      query(listen_statement([channel]), @query_timeout_ms, %{state | from: from, ref: ref})
     else
       SimpleConnection.reply(from, {:eventually, ref})
 
@@ -140,7 +144,9 @@ defmodule Hologram.DB.Listener do
   def handle_connect(state) do
     send(self(), :arm_ping)
 
-    query(Config.keepalive_statement(), %{state | connected: true, setting_keepalives: true})
+    state = %{state | connected: true, setting_keepalives: true}
+
+    query(Config.keepalive_statement(), state.setup_timeout_ms, state)
   end
 
   @impl SimpleConnection
@@ -174,7 +180,7 @@ defmodule Hologram.DB.Listener do
   def handle_info({:replay, []}, state), do: {:noreply, state}
 
   def handle_info({:replay, channels}, state) do
-    query(listen_statement(channels), state)
+    query(listen_statement(channels), @query_timeout_ms, state)
   end
 
   # :arm_ping, and anything else - the connection traps exits.
@@ -185,6 +191,7 @@ defmodule Hologram.DB.Listener do
     handle_answer(results_or_error, disarm(state))
   end
 
+  # The setup timeout lives in the state so that a test can shorten it.
   @impl SimpleConnection
   def init(nil) do
     {:ok,
@@ -195,6 +202,7 @@ defmodule Hologram.DB.Listener do
        ref: nil,
        refs: %{},
        setting_keepalives: false,
+       setup_timeout_ms: Config.first_statement_timeout_ms(),
        timer: nil
      }}
   end
@@ -244,10 +252,10 @@ defmodule Hologram.DB.Listener do
     Enum.map_join(channels, "; ", &~s(LISTEN "#{String.replace(&1, ~s("), ~s(""))}"))
   end
 
-  # Sends the statement with the kill armed against an answer that never comes (see
-  # @query_timeout_ms). Every query this process sends goes through here.
-  defp query(statement, state) do
-    {:ok, timer} = :timer.kill_after(@query_timeout_ms)
+  # Sends the statement with the kill armed against an answer that does not come within the given
+  # time (see @query_timeout_ms). Every query this process sends goes through here.
+  defp query(statement, timeout_ms, state) do
+    {:ok, timer} = :timer.kill_after(timeout_ms)
 
     {:query, statement, %{state | timer: timer}}
   end
