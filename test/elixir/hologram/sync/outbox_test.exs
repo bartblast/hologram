@@ -27,6 +27,27 @@ defmodule Hologram.Sync.OutboxTest do
     end
   end
 
+  # Runs the given function once the given process is blocked in a receive, so what it sends reaches
+  # a wait rather than the mailbox before it. Taking answers already waiting never blocks, so only
+  # the wait for room shows the process waiting. A process never seen waiting is sent nothing, and
+  # the wait it never reached times out, failing the test rather than passing it the other way.
+  defp when_waiting(pid, fun) do
+    spawn(fn ->
+      if await_waiting(pid, 1_000) == :ok, do: fun.()
+    end)
+  end
+
+  defp await_waiting(_pid, 0), do: :timeout
+
+  defp await_waiting(pid, tries) do
+    if Process.info(pid, :status) == {:status, :waiting} do
+      :ok
+    else
+      Process.sleep(1)
+      await_waiting(pid, tries - 1)
+    end
+  end
+
   describe "put/2" do
     test "sends a deltas message as the chunk the frame encodes, beside the session sending it" do
       deltas = [Frame.unsync_entity("abc", Module2)]
@@ -81,10 +102,7 @@ defmodule Hologram.Sync.OutboxTest do
       {:ok, outbox} = put(new(session, max_unwritten: 1, stall_ms: 1_000), @marker)
       assert_received {:sync_frame, ^session, _first}
 
-      spawn(fn ->
-        Process.sleep(50)
-        send(session, :sync_written)
-      end)
+      when_waiting(session, fn -> send(session, :sync_written) end)
 
       assert {:ok, waited} = put(outbox, @marker)
 
@@ -114,10 +132,7 @@ defmodule Hologram.Sync.OutboxTest do
       {:ok, outbox} = put(new(session, max_unwritten: 1, stall_ms: 1_000), @marker)
       assert_received {:sync_frame, ^session, _first}
 
-      spawn(fn ->
-        Process.sleep(50)
-        send(session, :sync_stop)
-      end)
+      when_waiting(session, fn -> send(session, :sync_stop) end)
 
       assert put(outbox, @marker) == :stopped
       refute_received {:sync_frame, ^session, _second}
@@ -131,10 +146,11 @@ defmodule Hologram.Sync.OutboxTest do
     end
 
     test "stops while it waits, when the client goes" do
+      session = self()
       client = spawn(fn -> receive(do: (:go -> :ok)) end)
       {:ok, outbox} = put(new(client, max_unwritten: 1, stall_ms: 1_000), @marker)
 
-      send(client, :go)
+      when_waiting(session, fn -> send(client, :go) end)
 
       assert put(outbox, @marker) == :stopped
     end
