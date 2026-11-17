@@ -42,6 +42,9 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module130
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module131
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module132
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module133
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module134
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module135
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module55
@@ -1932,6 +1935,54 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_derived_queries(Module121, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a mistyped value beside an argument the build cannot enumerate", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_133.ex:10: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module133 builds an invalid query - 5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_133.ex:10: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module133.__derived_rows__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module133, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on an unknown attribute beside an argument the build cannot enumerate", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_134.ex:10: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module134 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_134.ex:10: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module134.__derived_rows__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module134, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on an include name the build cannot enumerate", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_135.ex:11: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module135 passes an argument to include/2 in a position the build cannot enumerate - the rows to download cannot be worked out without its value
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_135.ex:11: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module135.__derived_rows__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module135, entity_types, ir_plt)
       end
     end
 
