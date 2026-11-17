@@ -3,14 +3,16 @@ defmodule Hologram.Sync.Live do
 
   # What the dispatcher hands each batch of changes it reads: which rows the batch may have changed
   # for anyone - the rows it wrote, both ends of every pair it added or removed, and the rows whose
-  # read access or verdicts it moved without writing them (see `Hologram.Sync.Search`) - and who of
-  # the users with a sync session on this node may read each of them now (see
-  # `Hologram.Sync.Recheck`). Asked once per batch for every user at once, whatever the number of
-  # sessions, and handed to each session as the part that is its user's.
+  # read access or verdicts it moved without writing them (see `Hologram.Sync.Search`) - who of the
+  # users with a sync session on this node may read each of them now (see
+  # `Hologram.Sync.Recheck`), and the pairs those rows are at an end of, which state their sets.
+  # Asked once per batch for every user at once, whatever the number of sessions, and handed to
+  # each session as the part that is its user's.
   #
   # What a session makes of its part - which rows its client is sent, changed or told to drop - is
   # the session's, since only it knows what its client holds.
 
+  alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.QueryCache
@@ -39,6 +41,7 @@ defmodule Hologram.Sync.Live do
           checked: %{module => binary},
           own_seqs: %{String.t() => non_neg_integer},
           pair_effects: %{{module, atom, module} => binary},
+          pairs: %{{module, atom, module} => binary},
           place: {non_neg_integer, non_neg_integer},
           readable: %{module => %{String.t() => struct}},
           tx_range: {non_neg_integer, non_neg_integer},
@@ -49,8 +52,8 @@ defmodule Hologram.Sync.Live do
 
   @doc """
   Returns, for each user of the given sessions, what the given effects of one batch, read from the
-  given place, mean for that user - a batch holds at least one effect: keyed by the user as `Hologram.Sync.Sessions.list/0` names
-  them, nil for an anonymous one.
+  given place, mean for that user: keyed by the user as `Hologram.Sync.Sessions.list/0` names them,
+  nil for an anonymous one. A batch holds at least one effect.
 
   Every part shares what the batch is about, whoever reads it:
 
@@ -66,6 +69,9 @@ defmodule Hologram.Sync.Live do
   - `pair_effects` - the pairs the batch added or removed, once however many times it moved each,
     keyed by `{source type, relationship name, target type}`, the name an atom, each pair packed as
     its source id and its target id (see `Hologram.Sync.PackedIds.pack_pairs/1`)
+  - `pairs` - every pair as it stands now that has a checked row at either end, keyed and packed
+    the same way (see `pairs_touching/2`): what a row's sets are, whether a pair the batch moved is
+    there now, and the pairs filed under other rows that a row arriving or leaving changes
   - `verdict_ids` - the checked rows whose verdicts the batch may have moved, per entity type of
     deciding quantifiers, packed the same way: the rows it wrote, the ends of its pairs, and what
     the verdicts' edges reach
@@ -84,8 +90,8 @@ defmodule Hologram.Sync.Live do
   Only the given synced types are asked about: a row of another type is never sent, and the
   backwards search follows only the edges of synced types. An effect of an entity type this node
   does not know is passed over, as the search passes it over - bar the batch it came from, which
-  still counts towards its replica's number. The search and the recheck read in one snapshot, so
-  they agree on what the tables hold.
+  still counts towards its replica's number. The search, the recheck and the pairs read in one
+  snapshot, so they agree on what the tables hold.
   """
   @spec parts(
           list(map),
@@ -110,7 +116,7 @@ defmodule Hologram.Sync.Live do
       |> Enum.map(fn {_pid, user_id} -> user_id end)
       |> Enum.uniq()
 
-    {:ok, {searched, verdict_searched, checked, rechecked}} =
+    {:ok, {searched, verdict_searched, checked, rechecked, pairs}} =
       Connection.snapshot(fn ->
         searched = Search.candidates(effects, synced_edges)
         verdict_searched = Search.candidates(effects, synced_edges, :verdicts)
@@ -122,13 +128,16 @@ defmodule Hologram.Sync.Live do
           |> merge_rows(verdict_searched.rows)
           |> Map.filter(fn {entity_type, _ids} -> MapSet.member?(synced, entity_type) end)
 
-        {searched, verdict_searched, checked, recheck(checked, user_ids)}
+        rechecked = recheck(checked, user_ids)
+
+        {searched, verdict_searched, checked, rechecked, pairs_touching(checked, synced_types)}
       end)
 
     shared = %{
       checked: Map.new(checked, fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end),
       own_seqs: own_seqs(effects),
       pair_effects: pack_pair_effects(pair_effects),
+      pairs: pairs,
       place: place,
       tx_range: tx_range(effects),
       verdict_ids: verdict_ids(effects, pair_effects, verdict_searched.rows, synced)
@@ -148,6 +157,51 @@ defmodule Hologram.Sync.Live do
 
       {user_id, part}
     end)
+  end
+
+  @doc """
+  Returns the pairs, as they stand now, of every to-many whose source type and target type are both
+  among the given synced types, that have one of the given rows at either end - per entity type, the
+  ids of the rows. Keyed by `{source type, relationship name, target type}`, each relationship's
+  pairs packed as their source id and their target id (see
+  `Hologram.Sync.PackedIds.pack_pairs/1`). A relationship with no such pair is left out.
+
+  Every pair a set of a synced type states is among them: a to-many is stated on its source, and
+  the inverse of a to-many on its target, only when the other end's type is synced too (see
+  `Hologram.Sync.Fill.term/2`). Read in whatever transaction the caller is in, one statement per
+  relationship that a given row can be at an end of, whoever may read those rows.
+  """
+  @spec pairs_touching(%{module => Enumerable.t()}, list(module)) ::
+          %{{module, atom, module} => binary}
+  def pairs_touching(ids_by_type, synced_types) do
+    synced = MapSet.new(synced_types)
+    mapping = DB.mapping()
+
+    relationships =
+      for source_type <- synced_types,
+          {name, [target_type], _opts} <- source_type.__relationships__(),
+          MapSet.member?(synced, target_type),
+          do: {source_type, name, target_type}
+
+    # Encoded once per type rather than once per relationship it is an end of, and only for a type
+    # at an end of one.
+    encoded =
+      ids_by_type
+      |> Map.take(
+        Enum.flat_map(relationships, fn {source, _name, target} -> [source, target] end)
+      )
+      |> Map.new(fn {entity_type, ids} ->
+        {entity_type, Enum.map(ids, &Codec.encode(&1, :uuid))}
+      end)
+
+    for {source_type, name, target_type} <- relationships,
+        source_ids = Map.get(encoded, source_type, []),
+        target_ids = Map.get(encoded, target_type, []),
+        source_ids != [] or target_ids != [],
+        packed = read_pairs(mapping, source_type, name, source_ids, target_ids),
+        packed != "",
+        into: %{},
+        do: {{source_type, name, target_type}, packed}
   end
 
   @doc """
@@ -264,6 +318,25 @@ defmodule Hologram.Sync.Live do
       fn {_source_type, source_id, _name, _target_type, target_id} -> {source_id, target_id} end
     )
     |> Map.new(fn {key, pairs} -> {key, PackedIds.pack_pairs(pairs)} end)
+  end
+
+  # The store is read raw: which of these pairs a user may be told about is what the rows at their
+  # ends decide. The given ids come encoded.
+  # sobelow_skip ["SQL.Query"]
+  defp read_pairs(mapping, source_type, name, source_ids, target_ids) do
+    table =
+      mapping
+      |> Search.join_table(source_type, name)
+      |> Search.qualified_table()
+
+    statement =
+      ~s|SELECT #{PackedIds.pairs_sql(~s|"source_id"|, ~s|"target_id"|)} FROM #{table} | <>
+        ~s|WHERE "source_id" = ANY($1::uuid[]) OR "target_id" = ANY($2::uuid[])|
+
+    {:ok, %Postgrex.Result{rows: [[packed]]}} =
+      Connection.query(statement, [source_ids, target_ids])
+
+    packed
   end
 
   defp readable_for(rechecked, user_id) do

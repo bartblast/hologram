@@ -227,12 +227,24 @@ defmodule Hologram.Sync.Search do
     grant["entity_type"] == type and grant["role"] in roles
   end
 
-  defp join_table(mapping, entity_type, relationship_name) do
-    mapping
-    |> Map.fetch!(entity_type)
-    |> Map.fetch!(:join_tables)
-    |> Enum.find(&(&1.relationship == relationship_name))
-    |> Map.fetch!(:name)
+  @doc false
+  # The join table storing the pairs of the given to-many of the given entity type - a to-many the
+  # model declares, so one the mapping has no table for is this build being wrong about itself.
+  @spec join_table(%{module => map}, module, atom) :: String.t()
+  def join_table(mapping, entity_type, relationship_name) do
+    join_tables =
+      mapping
+      |> Map.fetch!(entity_type)
+      |> Map.fetch!(:join_tables)
+
+    case Enum.find(join_tables, &(&1.relationship == relationship_name)) do
+      %{name: name} ->
+        name
+
+      nil ->
+        raise ArgumentError,
+              "no join table for #{inspect(entity_type)}.#{relationship_name} in the mapping"
+    end
   end
 
   # What the walk's last step needs from an effect, resolved once per edge.
@@ -328,7 +340,10 @@ defmodule Hologram.Sync.Search do
     end
   end
 
-  defp qualified_table(table) do
+  @doc false
+  # The given table of the data schema, quoted the way every statement spells it.
+  @spec qualified_table(String.t()) :: String.t()
+  def qualified_table(table) do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"
   end
 

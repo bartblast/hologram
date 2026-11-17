@@ -21,10 +21,13 @@ defmodule Hologram.Sync.LiveTest do
   alias Hologram.Sync.ResultStore
   alias Hologram.Sync.Sessions
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyModule17
   alias Hologram.Test.Fixtures.Policy.Module18, as: PolicyModule18
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
+  alias Hologram.Test.Fixtures.Policy.Module20, as: PolicyModule20
+  alias Hologram.Test.Fixtures.Policy.Module21, as: PolicyModule21
 
   use_module_stub :query_cache
 
@@ -108,6 +111,16 @@ defmodule Hologram.Sync.LiveTest do
         send(test_pid, {:forwarded, message})
         forward(test_pid)
     end
+  end
+
+  defp link!(source, relationship_name, target) do
+    :ok =
+      EntityOperations.add_relationship(
+        source.__struct__,
+        source.id,
+        relationship_name,
+        target.id
+      )
   end
 
   defp readable_ids(part, entity_type) do
@@ -205,6 +218,27 @@ defmodule Hologram.Sync.LiveTest do
       assert unpacked_pairs(part.pair_effects) == %{
                {PolicyModule17, :labels, PolicyModule19} => [{project.id, label.id}]
              }
+    end
+
+    test "gives every part the pairs touching the checked rows as they stand now", context do
+      project = create!(PolicyModule17, public: true)
+      kept_label = create!(PolicyModule19)
+      removed_label = create!(PolicyModule19)
+
+      link!(project, :labels, kept_label)
+
+      effects = [
+        effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"}),
+        pair_effect(:del_relationship, project, :labels, removed_label)
+      ]
+
+      parts = parts(effects, context.sessions, context.edges, @synced, @place)
+
+      for part <- Map.values(parts) do
+        assert unpacked_pairs(part.pairs) == %{
+                 {PolicyModule17, :labels, PolicyModule19} => [{project.id, kept_label.id}]
+               }
+      end
     end
 
     test "names a pair's target in the form every listed id takes", context do
@@ -323,7 +357,7 @@ defmodule Hologram.Sync.LiveTest do
       other_project = create!(PolicyModule17, public: true)
       label = create!(PolicyModule19)
 
-      :ok = EntityOperations.add_relationship(PolicyModule17, project.id, :labels, label.id)
+      link!(project, :labels, label)
 
       effects = [
         effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"}),
@@ -484,6 +518,153 @@ defmodule Hologram.Sync.LiveTest do
         )
 
       assert together[context.alice] == alone[context.alice]
+    end
+  end
+
+  describe "pairs_touching/2" do
+    test "returns the pairs a given row is the source of" do
+      project = create!(PolicyModule17)
+      other_project = create!(PolicyModule17)
+      labels = [create!(PolicyModule19), create!(PolicyModule19)]
+
+      Enum.each(labels, &link!(project, :labels, &1))
+      link!(other_project, :labels, create!(PolicyModule19))
+
+      pairs = pairs_touching(%{PolicyModule17 => [project.id]}, @synced)
+
+      expected =
+        labels
+        |> Enum.map(&{project.id, &1.id})
+        |> Enum.sort()
+
+      assert unpacked_pairs(pairs) == %{{PolicyModule17, :labels, PolicyModule19} => expected}
+    end
+
+    test "returns the pairs a given row is the target of" do
+      label = create!(PolicyModule19)
+      projects = [create!(PolicyModule17), create!(PolicyModule17)]
+
+      Enum.each(projects, &link!(&1, :labels, label))
+      link!(create!(PolicyModule17), :labels, create!(PolicyModule19))
+
+      pairs = pairs_touching(%{PolicyModule19 => MapSet.new([label.id])}, @synced)
+
+      expected =
+        projects
+        |> Enum.map(&{&1.id, label.id})
+        |> Enum.sort()
+
+      assert unpacked_pairs(pairs) == %{{PolicyModule17, :labels, PolicyModule19} => expected}
+    end
+
+    test "returns the pairs of a to-many whose target files an inverse of it" do
+      task = create!(PolicyModule20)
+      tag = create!(PolicyModule21)
+
+      link!(task, :tags, tag)
+
+      pairs = pairs_touching(%{PolicyModule21 => [tag.id]}, [PolicyModule20, PolicyModule21])
+
+      assert unpacked_pairs(pairs) == %{
+               {PolicyModule20, :tags, PolicyModule21} => [{task.id, tag.id}]
+             }
+    end
+
+    test "leaves out the pairs of a to-many whose target type sync doesn't send" do
+      project = create!(PolicyModule17)
+      link!(project, :labels, create!(PolicyModule19))
+
+      assert pairs_touching(%{PolicyModule17 => [project.id]}, [PolicyModule17]) == %{}
+    end
+
+    test "leaves out the pairs of a to-many whose source type sync doesn't send" do
+      label = create!(PolicyModule19)
+      link!(create!(PolicyModule17), :labels, label)
+
+      assert pairs_touching(%{PolicyModule19 => [label.id]}, [PolicyModule19]) == %{}
+    end
+
+    test "leaves out a relationship no given row has a pair of" do
+      project = create!(PolicyModule17)
+
+      assert pairs_touching(%{PolicyModule17 => [project.id]}, @synced) == %{}
+    end
+
+    # The rows are linked out of their id order, so a pair read in any order but by source and then
+    # target packs to other bytes. Two ids made in one millisecond can come out either way round,
+    # hence the sort.
+    test "returns the pairs in the order pack_pairs/1 packs them" do
+      [first_project, second_project] =
+        Enum.sort_by([create!(PolicyModule17), create!(PolicyModule17)], & &1.id)
+
+      [first_label, second_label] =
+        Enum.sort_by([create!(PolicyModule19), create!(PolicyModule19)], & &1.id)
+
+      link!(second_project, :labels, first_label)
+      link!(first_project, :labels, second_label)
+      link!(first_project, :labels, first_label)
+
+      ids_by_type = %{PolicyModule17 => [first_project.id, second_project.id]}
+
+      expected =
+        PackedIds.pack_pairs([
+          {second_project.id, first_label.id},
+          {first_project.id, second_label.id},
+          {first_project.id, first_label.id}
+        ])
+
+      assert pairs_touching(ids_by_type, @synced) == %{
+               {PolicyModule17, :labels, PolicyModule19} => expected
+             }
+    end
+
+    test "returns nothing for no rows" do
+      assert pairs_touching(%{}, @synced) == %{}
+    end
+
+    test "returns a pair with both ends among the given rows once" do
+      project = create!(PolicyModule17)
+      label = create!(PolicyModule19)
+
+      link!(project, :labels, label)
+
+      ids_by_type = %{PolicyModule17 => [project.id], PolicyModule19 => [label.id]}
+
+      assert unpacked_pairs(pairs_touching(ids_by_type, @synced)) == %{
+               {PolicyModule17, :labels, PolicyModule19} => [{project.id, label.id}]
+             }
+    end
+
+    test "returns the pairs of every relationship a given row is at an end of, each its own" do
+      project = create!(PolicyModule17)
+      label = create!(PolicyModule19)
+      task = create!(PolicyModule20)
+      tag = create!(PolicyModule21)
+
+      link!(project, :labels, label)
+      link!(task, :tags, tag)
+
+      ids_by_type = %{PolicyModule17 => [project.id], PolicyModule20 => [task.id]}
+      synced = [PolicyModule17, PolicyModule19, PolicyModule20, PolicyModule21]
+
+      assert unpacked_pairs(pairs_touching(ids_by_type, synced)) == %{
+               {PolicyModule17, :labels, PolicyModule19} => [{project.id, label.id}],
+               {PolicyModule20, :tags, PolicyModule21} => [{task.id, tag.id}]
+             }
+    end
+
+    test "returns the pairs of a to-many of a type onto itself, from either end" do
+      [first, second, third] = for body <- ["a", "b", "c"], do: create!(Module30, body: body)
+
+      link!(first, :follows, second)
+      link!(second, :follows, third)
+      link!(third, :follows, third)
+
+      pairs = pairs_touching(%{Module30 => [second.id, third.id]}, [Module30])
+
+      expected = Enum.sort([{first.id, second.id}, {second.id, third.id}, {third.id, third.id}])
+
+      assert unpacked_pairs(pairs) == %{{Module30, :follows, Module30} => expected}
     end
   end
 

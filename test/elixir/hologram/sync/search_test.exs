@@ -922,6 +922,19 @@ defmodule Hologram.Sync.SearchTest do
     end
   end
 
+  describe "join_table/3" do
+    test "returns the join table of a to-many" do
+      assert join_table(DB.mapping(), PolicyModule17, :labels) ==
+               "test_fixtures_policy_module17_labels_$join"
+    end
+
+    test "raises for a relationship the mapping has no join table for" do
+      assert_raise ArgumentError,
+                   "no join table for Hologram.Test.Fixtures.Policy.Module17.nope in the mapping",
+                   fn -> join_table(DB.mapping(), PolicyModule17, :nope) end
+    end
+  end
+
   describe "candidates/3" do
     # Module17's archive rule reads none(label <- labels, label.name == "locked"), which a browser
     # can't decide, so its verdict reads the labels' names and the pairs putting labels in the set.
