@@ -59,6 +59,8 @@ Hologram.Test.Helpers.put_derived_definitions([
   Hologram.Test.Fixtures.Policy.Module22,
   Hologram.Test.Fixtures.Policy.Module30,
   Hologram.Test.Fixtures.Policy.Module31,
+  Hologram.Test.Fixtures.Policy.Readers.Module15,
+  Hologram.Test.Fixtures.Policy.Readers.Module17,
   Hologram.Test.Fixtures.Policy.Readers.Module9
 ])
 

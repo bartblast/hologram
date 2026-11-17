@@ -289,6 +289,36 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects an operation named :verdicts" do
+      defmodule InlinePolicyFixture127 do
+        use Hologram.Entity
+
+        allow :verdicts
+      end
+
+      expected_msg =
+        "invalid operation :verdicts used for allow in Hologram.Policy.ValidatorTest.InlinePolicyFixture127 - the name is reserved for the server's verdicts, name the operation something else"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture127], [])
+      end
+    end
+
+    test "rejects an operation named :verdicts before anything else its line gets wrong" do
+      defmodule InlinePolicyFixture128 do
+        use Hologram.Entity
+
+        allow :verdicts, via: nope
+      end
+
+      expected_msg =
+        "invalid operation :verdicts used for allow in Hologram.Policy.ValidatorTest.InlinePolicyFixture128 - the name is reserved for the server's verdicts, name the operation something else"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture128], [])
+      end
+    end
+
     test "rejects an actor leaf on a non-uuid attribute" do
       defmodule InlinePolicyFixture8 do
         use Hologram.Entity
@@ -1907,6 +1937,27 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, TakenOwnReferenceEntity], [])
+      end
+    end
+
+    test "rejects an operation named :verdicts" do
+      defmodule TakenVerdictsPolicy do
+        use Hologram.Policy
+
+        allow :verdicts
+      end
+
+      defmodule TakenVerdictsEntity do
+        use Hologram.Entity
+
+        policy TakenVerdictsPolicy
+      end
+
+      expected_msg =
+        "invalid operation :verdicts used for allow in Hologram.Policy.ValidatorTest.TakenVerdictsEntity, taken from Hologram.Policy.ValidatorTest.TakenVerdictsPolicy - the name is reserved for the server's verdicts, name the operation something else"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([TakenVerdictsEntity], [])
       end
     end
 
