@@ -42,7 +42,17 @@ defmodule HologramSyncBenchmark.Client do
 
   @marker_digits 7
 
-  @patterns [@marker_prefix, @rules_pattern, @synced_all_pattern | Map.keys(@failure_patterns)]
+  # The blank line ending every frame. A browser only takes a frame whole, so what's matched inside
+  # one is recorded once its end arrives, at that chunk's time. JSON escapes newlines, so no row
+  # value can spell it.
+  @frame_end "\n\n"
+
+  @patterns [
+    @frame_end,
+    @marker_prefix,
+    @rules_pattern,
+    @synced_all_pattern | Map.keys(@failure_patterns)
+  ]
 
   # What of the previous chunk is kept, so a pattern split across two reads is still found: one
   # byte short of the longest thing matched, a marker counted whole. A shorter one can lie wholly
@@ -195,6 +205,7 @@ defmodule HologramSyncBenchmark.Client do
       greeting: greeting(opts),
       host: uri.host,
       markers: %{},
+      pending: [],
       port: uri.port,
       reconnect_attempt: 0,
       request_ref: nil,
@@ -310,6 +321,7 @@ defmodule HologramSyncBenchmark.Client do
       | carry: "",
         conn: nil,
         frames: "",
+        pending: [],
         reconnect_attempt: attempt,
         request_ref: nil,
         restarts: state.restarts + 1
@@ -353,7 +365,7 @@ defmodule HologramSyncBenchmark.Client do
         start + size > old_carry_size and start + size <= byte_size(joined)
       end)
       |> Enum.reduce(state, fn {start, size}, acc ->
-        take_match(acc, binary_part(joined, start, size), received_at)
+        hold_match(acc, binary_part(joined, start, size), received_at)
       end)
 
     state
@@ -422,6 +434,19 @@ defmodule HologramSyncBenchmark.Client do
       length
     end
   end
+
+  # Matches wait for their frame's end, in the order they came. A failure is taken at once: it's
+  # what the server said, whether or not the frame ever completes.
+  defp hold_match(state, @frame_end, received_at) do
+    state.pending
+    |> Enum.reverse()
+    |> Enum.reduce(%{state | pending: []}, &take_match(&2, &1, received_at))
+  end
+
+  defp hold_match(state, match, received_at) when is_map_key(@failure_patterns, match),
+    do: take_match(state, match, received_at)
+
+  defp hold_match(state, match, _received_at), do: %{state | pending: [match | state.pending]}
 
   defp take_match(state, @marker_prefix <> digits, received_at) do
     case Integer.parse(digits) do
