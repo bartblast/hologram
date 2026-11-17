@@ -430,41 +430,39 @@ export default class Durability {
   // written whole, with the place they stand at, in one transaction.
   //
   // Only where it is behind. A place is a string, so equal places mean the store already holds
-  // exactly what the memory does, and nothing is written - which is the usual case, and the reason
-  // this costs a read rather than a rewrite on every succession.
-  static async repair(records, cursor) {
-    if (Durability.mode === "memory") {
-      return;
-    }
-
-    let stored;
-
-    try {
-      const transaction = Durability.#db.transaction([META], "readonly");
-
-      stored = await Durability.#request(
-        transaction.objectStore(META).get("cursor"),
-      );
-    } catch {
-      return;
-    }
-
-    if ((stored ?? null) === cursor) {
-      return;
-    }
-
+  // exactly what the memory does, and nothing is written - which is the usual case.
+  //
+  // The read and the write are ONE read-write transaction, created before this returns, and the
+  // write is chained onto the read's own callback the way fileBatch chains its counter. A tab
+  // handed the lead while it was starting asks for this from its restore, and its page opens the
+  // stream right after (see Tabs.#lead), so the stream's first frame can be stored while this is
+  // still deciding: read in a transaction of its own, the write after it would land on top of that
+  // frame and put the store back behind what this tab holds. Created here, it is ahead of every
+  // frame stored after it.
+  //
+  // So a read that fails is a write that fails, and stops the storage the way any failed write
+  // does (see #fail) - rather than skipping the repair, which would leave the store behind with
+  // nothing to say so.
+  static repair(records, cursor) {
     return Durability.#write([ENTITIES, META], (transaction) => {
       const entities = transaction.objectStore(ENTITIES);
       const meta = transaction.objectStore(META);
+      const stored = meta.get("cursor");
 
-      entities.clear();
+      stored.onsuccess = () => {
+        if ((stored.result ?? null) === cursor) {
+          return;
+        }
 
-      for (const record of records) {
-        entities.put(record);
-      }
+        entities.clear();
 
-      meta.put(cursor, "cursor");
-      meta.put(Clock.last(), "clock");
+        for (const record of records) {
+          entities.put(record);
+        }
+
+        meta.put(cursor, "cursor");
+        meta.put(Clock.last(), "clock");
+      };
     });
   }
 

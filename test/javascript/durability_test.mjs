@@ -1209,6 +1209,52 @@ describe("Durability", () => {
       assert.equal(await readMeta("cursor"), "place-2");
     });
 
+    // A tab handed the lead while starting asks for the repair from its restore, and its page opens
+    // the stream right after - so the stream's first frame can be stored while the repair is still
+    // deciding, and has to land on top of it rather than under it.
+    it("keeps a frame stored while it runs", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const repairing = Durability.repair(
+        [taskRecord("t2", "in memory")],
+        "place-2",
+      );
+
+      const persisting = Durability.persistFrame(
+        [taskRecord("t3", "from the new stream")],
+        "place-3",
+      );
+
+      await Promise.all([repairing, persisting]);
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t2", "t3"],
+      );
+
+      assert.equal(await readMeta("cursor"), "place-3");
+    });
+
+    // Skipped, the repair would leave the store behind with nothing to say so.
+    it("stops storing when the store cannot be read", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      sinon
+        .stub(FDBDatabase.prototype, "transaction")
+        .throws(new DOMException("The read was refused.", "UnknownError"));
+
+      await Durability.repair([taskRecord("t2", "second")], "place-2");
+
+      assert.equal(Durability.mode, "memory");
+      sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
+    });
+
     it("does nothing in memory mode", async () => {
       await Durability.repair([taskRecord("t2", "second")], "place-2");
 

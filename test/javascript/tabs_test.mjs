@@ -257,14 +257,28 @@ describe("Tabs", () => {
   // What a tab does the moment the group becomes its to lead, with nothing handed over by the tab
   // that was leading - which may have closed without warning.
   describe("taking the lead", () => {
-    let clearing, flushing, reconnecting, repairing;
+    let clearing, flushing, reconnecting, repairing, wasStarted;
 
     // Takes the group's lock, hands this tab the follower's place in the queue behind it, and
     // answers what makes the tab lead. Waits for the lead to be taken, so what follows is settled.
+    // The tab is ready first, as one that has been open a while is.
     const succeed = async (group) => {
       const release = await holdLeaderLock(group);
 
       await Tabs.join(group, {});
+
+      Tabs.ready();
+
+      release();
+
+      await waitForEventLoop();
+    };
+
+    // The same, for a tab still starting up when the lead is handed to it: granted, and not ready.
+    const handOverWhileStarting = async (group, handlers = {}) => {
+      const release = await holdLeaderLock(group);
+
+      await Tabs.join(group, handlers);
 
       release();
 
@@ -293,13 +307,19 @@ describe("Tabs", () => {
       repairing = sinon.stub(Durability, "repair").resolves();
 
       sinon.stub(Tabs, "postState");
+
+      wasStarted = Sse.isStarted;
+      Sse.isStarted = true;
     });
 
     afterEach(() => {
+      Sse.isStarted = wasStarted;
+
       delete globalThis.Hologram.sync;
 
       LocalDatabase.reset();
       Model.reset();
+      Replica.reset();
 
       SyncStream.syncCursor = null;
     });
@@ -371,6 +391,291 @@ describe("Tabs", () => {
         event: "sync_resync",
         frame: {reason: "no place to resume from"},
         kind: "frame",
+      });
+    });
+
+    // The page opens its stream right after the restore, and that one greets the server as the
+    // leader by itself - a reconnect would open a second one beside it.
+    it("opens no stream of its own when the page has not started one", async () => {
+      SyncStream.syncCursor = "place-1";
+      Sse.isStarted = false;
+
+      await succeed(nextGroup());
+
+      assert.isFalse(reconnecting.called);
+      assert.isTrue(flushing.calledOnce);
+      assert.isTrue(Tabs.postState.calledOnce);
+    });
+
+    // Until its restore a starting tab holds no place, and taking the lead without one is asking for
+    // everything again over a store that has one.
+    it("waits until it is ready to take the lead it was handed while starting", async () => {
+      const led = sinon.spy();
+
+      await handOverWhileStarting(nextGroup(), {onLead: led});
+
+      assert.isTrue(Tabs.leader);
+      assert.isFalse(led.called);
+
+      Tabs.ready();
+
+      assert.isTrue(led.calledOnce);
+    });
+
+    it("takes the lead from the place its restore handed it", async () => {
+      await handOverWhileStarting(nextGroup());
+
+      // What the restore does, from the place the store held.
+      SyncStream.syncCursor = "place-1";
+
+      Tabs.ready();
+      await waitForEventLoop();
+
+      assert.isTrue(repairing.calledOnce);
+      assert.equal(repairing.firstCall.args[1], "place-1");
+      assert.isFalse(clearing.called);
+    });
+
+    // Read before the repair is awaited: by the time it answers, the page has started its stream.
+    it("leaves the stream the page starts alone while the repair runs", async () => {
+      let repaired;
+
+      repairing.returns(new Promise((resolve) => (repaired = resolve)));
+      Sse.isStarted = false;
+
+      await handOverWhileStarting(nextGroup());
+
+      SyncStream.syncCursor = "place-1";
+      Tabs.ready();
+
+      // What the page does right after the restore.
+      Sse.isStarted = true;
+
+      repaired();
+      await waitForEventLoop();
+
+      assert.isFalse(reconnecting.called);
+      assert.isTrue(flushing.calledOnce);
+    });
+
+    it("asks for everything when its restore left it no place", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      Sse.isStarted = false;
+
+      await handOverWhileStarting(nextGroup());
+
+      assert.isFalse(clearing.called);
+
+      Tabs.ready();
+      await waitForEventLoop();
+
+      assert.isTrue(clearing.calledOnce);
+      assert.isFalse(repairing.called);
+      assert.isFalse(reconnecting.called);
+
+      sinon.assert.calledWith(posting, {
+        event: "sync_resync",
+        frame: {reason: "no place to resume from"},
+        kind: "frame",
+      });
+    });
+
+    it("takes no lead it was handed once it has left the group", async () => {
+      const led = sinon.spy();
+
+      await handOverWhileStarting(nextGroup(), {onLead: led});
+
+      await Tabs.leave();
+
+      Tabs.ready();
+
+      assert.isFalse(led.called);
+    });
+
+    describe("what it held while starting", () => {
+      const answered = {answer: "ok", kind: "answered", seq: 3};
+      const frame = {
+        event: "synced",
+        frame: {cursor: "place-9", scope: "all"},
+        kind: "frame",
+      };
+      const state = {
+        completeness: {all: true, types: []},
+        cursor: "place-9",
+        kind: "state",
+        replica: {id: "r-group", token: "statement-group"},
+      };
+
+      // Delivered behind a lock someone else holds, so the tab follows and holds them, and then the
+      // lock goes to it. A barrier that is not held says they have all arrived.
+      const holdThenHandOver = async (
+        seen,
+        {messages = [frame, state, answered], onLead = () => {}} = {},
+      ) => {
+        const group = nextGroup();
+        const release = await holdLeaderLock(group);
+
+        let arrived;
+
+        const hasArrived = new Promise((resolve) => {
+          arrived = resolve;
+        });
+
+        await Tabs.join(group, {
+          onLead,
+          onMessage: (message) => {
+            seen.push(message);
+
+            if (message.kind === "sealed") {
+              arrived();
+            }
+          },
+        });
+
+        const other = sibling(group);
+
+        for (const message of messages) {
+          other.postMessage(message);
+        }
+
+        other.postMessage({kind: "sealed"});
+
+        await hasArrived;
+
+        release();
+        await waitForEventLoop();
+      };
+
+      // It asks for everything, and what it held is the tail of a fill that began before it was
+      // listening: replayed, the marker would call the pot complete over the tail's rows alone.
+      it("drops the fill and the group's state when it leads with no place, and keeps the answers", async () => {
+        const seen = [];
+
+        await holdThenHandOver(seen);
+
+        Tabs.ready();
+
+        assert.deepStrictEqual(seen, [{kind: "sealed"}, answered]);
+      });
+
+      // Read before the leader wrote it, the store can lack the identity the queue was numbered
+      // under - and this tab sends the queue now.
+      it("takes and writes down the identity the group's state names when it leads with no place", async () => {
+        const persisting = sinon.stub(Durability, "persistReplica");
+
+        await holdThenHandOver([]);
+
+        Tabs.ready();
+
+        assert.equal(Replica.id, "r-group");
+
+        sinon.assert.calledOnceWithExactly(persisting, {
+          id: "r-group",
+          token: "statement-group",
+        });
+      });
+
+      // A start over held behind it is what the lead has to take, from the place the replay leaves.
+      it("takes the lead after replaying what it held", async () => {
+        const group = nextGroup();
+        const release = await holdLeaderLock(group);
+
+        await Tabs.join(group, {});
+
+        let arrived;
+
+        const hasArrived = new Promise((resolve) => {
+          arrived = resolve;
+        });
+
+        sinon.stub(Batches, "adopt").callsFake(() => arrived());
+
+        const other = sibling(group);
+
+        other.postMessage({
+          event: "sync_resync",
+          frame: {reason: "rules"},
+          kind: "frame",
+        });
+
+        other.postMessage({kind: "sealed", record: {}});
+
+        await hasArrived;
+
+        release();
+        await waitForEventLoop();
+
+        SyncStream.syncCursor = "place-1";
+
+        Tabs.ready();
+        await waitForEventLoop();
+
+        assert.isTrue(clearing.calledOnce);
+        assert.isFalse(repairing.called);
+      });
+
+      it("takes the identity the last state names", async () => {
+        const earlier = {
+          ...state,
+          replica: {id: "r-old", token: "statement-old"},
+        };
+
+        await holdThenHandOver([], {messages: [earlier, state]});
+
+        Tabs.ready();
+
+        assert.equal(Replica.id, "r-group");
+      });
+
+      it("keeps the identity it has when the state names none", async () => {
+        Replica.offer({id: "r-page", token: "statement-page"});
+
+        const persisting = sinon.stub(Durability, "persistReplica");
+        const anonymous = {...state, replica: {id: null, token: null}};
+
+        await holdThenHandOver([], {messages: [anonymous]});
+
+        Tabs.ready();
+
+        assert.equal(Replica.id, "r-page");
+        assert.isFalse(persisting.called);
+      });
+
+      // The lead says what this tab holds to the group, and that has to name the identity it now
+      // sends under.
+      it("takes the identity before taking the lead", async () => {
+        let posted;
+
+        Tabs.postState.callsFake(() => (posted = Replica.id));
+
+        // Null takes the real lead, where an absent one takes none.
+        await holdThenHandOver([], {onLead: null});
+
+        Tabs.ready();
+        await waitForEventLoop();
+
+        assert.equal(posted, "r-group");
+      });
+
+      it("replays everything when it leads from a place", async () => {
+        const seen = [];
+        const persisting = sinon.stub(Durability, "persistReplica");
+
+        await holdThenHandOver(seen);
+
+        SyncStream.syncCursor = "place-1";
+
+        Tabs.ready();
+
+        assert.isFalse(persisting.called);
+
+        assert.deepStrictEqual(seen, [
+          {kind: "sealed"},
+          frame,
+          state,
+          answered,
+        ]);
       });
     });
   });
@@ -816,6 +1121,8 @@ describe("Tabs", () => {
       });
 
       await Tabs.join(group, {onLead: led, onMessage: () => {}});
+
+      Tabs.ready();
 
       release();
       await hasLed;
