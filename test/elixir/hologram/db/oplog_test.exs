@@ -102,6 +102,32 @@ defmodule Hologram.DB.OplogTest do
     end
   end
 
+  describe "current_xmax/0" do
+    test "returns an id past a transaction that finished, even one begun after one still open" do
+      {:ok, %Postgrex.Result{rows: [[open_tx]]}} =
+        Connection.query("SELECT pg_current_xact_id()")
+
+      test_pid = self()
+
+      # On a connection of its own, outside the test's transaction, so it commits.
+      spawn_link(fn ->
+        :ok = DBConnection.Ownership.ownership_checkout(DB.pool_name(), [])
+
+        %Postgrex.Result{rows: [[finished_tx]]} =
+          Postgrex.query!(DB.pool_name(), "SELECT pg_current_xact_id()", [])
+
+        :ok = DBConnection.Ownership.ownership_checkin(DB.pool_name(), [])
+        send(test_pid, {:finished_tx, finished_tx})
+      end)
+
+      assert_receive {:finished_tx, finished_tx}, 1_000
+
+      assert finished_tx > open_tx
+      assert current_xmax() > finished_tx
+      assert current_xmin() <= open_tx
+    end
+  end
+
   describe "entity_from_data/2" do
     test "rebuilds the entity a put recorded" do
       created =

@@ -61,12 +61,18 @@ defmodule Hologram.Sync.Pot do
 
   The same part decided twice - the dispatcher reads a batch again after a crash - tells again what
   it told, changing nothing the client holds.
-  """
-  @spec decide(t, map) :: {news, t}
-  def decide(pot, part) do
-    synced = MapSet.new(part.synced_types)
 
-    judged = Enum.map(part.checked, &judge_type(&1, pot.held, part))
+  Given `trust_held?: false`, every row the user may read is handed over whole, held or not, and
+  none patched: for a batch that may already be in some of what the client holds and not in the
+  rest, so what it holds of a row can be right while the pairs filed under other rows naming it are
+  not. Handing the row over states its sets and tells those pairs.
+  """
+  @spec decide(t, map, keyword) :: {news, t}
+  def decide(pot, part, opts \\ []) do
+    synced = MapSet.new(part.synced_types)
+    trust_held? = Keyword.get(opts, :trust_held?, true)
+
+    judged = Enum.map(part.checked, &judge_type(&1, pot.held, part, trust_held?))
 
     appeared =
       Enum.flat_map(judged, fn {_entity_type, appeared, _patched, _unsynced} -> appeared end)
@@ -109,10 +115,38 @@ defmodule Hologram.Sync.Pot do
   end
 
   @doc """
+  Returns what a session knows of a client once it is told to drop the given rows of the given
+  entity type: they are no longer held, and are among the dropped (see the comment above) until they
+  are handed over again. Also for rows the client may hold pairs naming without holding the rows -
+  a set it was sent can name a row it was never given - so a removal of such a pair is told.
+  """
+  @spec drop(t, module, list(String.t())) :: t
+  def drop(pot, entity_type, ids) do
+    %{
+      pot
+      | dropped: Held.add(pot.dropped, entity_type, ids),
+        held: Held.remove(pot.held, entity_type, ids)
+    }
+  end
+
+  @doc """
   Returns what a session knows of a client holding the given ids, which it has told to drop none.
   """
   @spec from_held(Held.t()) :: t
   def from_held(held), do: %{dropped: Held.new(), held: held}
+
+  @doc """
+  Returns what a session knows of a client once it is handed the given rows of the given entity
+  type: they are held, and no longer among the dropped.
+  """
+  @spec hand_over(t, module, list(String.t())) :: t
+  def hand_over(pot, entity_type, ids) do
+    %{
+      pot
+      | dropped: Held.remove(pot.dropped, entity_type, ids),
+        held: Held.add(pot.held, entity_type, ids)
+    }
+  end
 
   @doc """
   Returns what a session knows of a client holding nothing.
@@ -129,18 +163,22 @@ defmodule Hologram.Sync.Pot do
   The pairs filed under the rows it already holds are read with the given function, handed the
   ids of every row handed over or dropped, per entity type - the rows only this diff names (see
   `Hologram.Sync.Live.pairs_touching/2`). A handed-over row's sets keep only the rows the client
-  holds once told, as `decide/2`'s do.
+  holds once told, as `decide/3`'s do.
 
   What a row it holds now holds is not told: a type read again because a grant moved changed who
-  may read its rows, not the rows.
+  may read its rows, not the rows - unless given `trust_held?: false`, as `decide/3` is, when every
+  row read is handed over.
   """
   @spec reread(
           t,
           module,
           list(struct),
-          (%{module => list(String.t())} -> %{{module, atom, module} => binary})
+          (%{module => list(String.t())} -> %{{module, atom, module} => binary}),
+          keyword
         ) :: {news, t}
-  def reread(pot, entity_type, rows, read_pairs) do
+  def reread(pot, entity_type, rows, read_pairs, opts \\ []) do
+    trust_held? = Keyword.get(opts, :trust_held?, true)
+
     held_ids =
       pot.held
       |> Held.ids(entity_type)
@@ -150,7 +188,7 @@ defmodule Hologram.Sync.Pot do
 
     appeared =
       rows
-      |> Enum.reject(&MapSet.member?(held_ids, &1.id))
+      |> Enum.reject(&(trust_held? and MapSet.member?(held_ids, &1.id)))
       |> Enum.sort_by(& &1.id)
 
     unsynced_ids =
@@ -282,7 +320,7 @@ defmodule Hologram.Sync.Pot do
 
   # How each checked row of one type is judged: the rows handed over whole, the patches, and the
   # ids dropped.
-  defp judge_type({entity_type, packed_ids}, held, part) do
+  defp judge_type({entity_type, packed_ids}, held, part, trust_held?) do
     {held_packed, _not_held} = Held.split(held, entity_type, packed_ids)
 
     held_ids =
@@ -294,22 +332,11 @@ defmodule Hologram.Sync.Pot do
 
     appeared =
       readable
-      |> Enum.reject(fn {id, _row} -> MapSet.member?(held_ids, id) end)
+      |> Enum.reject(fn {id, _row} -> trust_held? and MapSet.member?(held_ids, id) end)
       |> Enum.sort_by(fn {id, _row} -> id end)
       |> Enum.map(fn {_id, row} -> row end)
 
-    patched =
-      held_ids
-      |> Enum.sort()
-      |> Enum.flat_map(fn id ->
-        with {:ok, row} <- Map.fetch(readable, id),
-             {:ok, names} <- Map.fetch(part.written, id),
-             changes when changes != %{} <- patch(row, names) do
-          [{row, changes}]
-        else
-          _nothing_to_patch -> []
-        end
-      end)
+    patched = if trust_held?, do: patches(held_ids, readable, part.written), else: []
 
     unsynced =
       held_ids
@@ -374,6 +401,21 @@ defmodule Hologram.Sync.Pot do
     end
   end
 
+  # The held rows the batch wrote that the user may still read, each with what it wrote of them.
+  defp patches(held_ids, readable, written) do
+    held_ids
+    |> Enum.sort()
+    |> Enum.flat_map(fn id ->
+      with {:ok, row} <- Map.fetch(readable, id),
+           {:ok, names} <- Map.fetch(written, id),
+           changes when changes != %{} <- patch(row, names) do
+        [{row, changes}]
+      else
+        _nothing_to_patch -> []
+      end
+    end)
+  end
+
   # Names arrive as the log spells them rather than as atoms, so they are matched against the row's
   # own fields - which never invents an atom for something this node has never compiled.
   defp patch(row, names) do
@@ -411,25 +453,14 @@ defmodule Hologram.Sync.Pot do
   # What the client is told moves the session's knowledge of it: a row handed over is held and no
   # longer dropped, and a row dropped is no longer held, and is kept among the dropped.
   defp tell(pot, appeared, unsynced) do
-    appeared_by_type = Enum.group_by(appeared, & &1.__struct__, & &1.id)
-    unsynced_by_type = Enum.group_by(unsynced, &elem(&1, 1), &elem(&1, 0))
-
     handed_over =
-      Enum.reduce(appeared_by_type, pot, fn {entity_type, ids}, acc ->
-        %{
-          acc
-          | dropped: Held.remove(acc.dropped, entity_type, ids),
-            held: Held.add(acc.held, entity_type, ids)
-        }
-      end)
+      appeared
+      |> Enum.group_by(& &1.__struct__, & &1.id)
+      |> Enum.reduce(pot, fn {entity_type, ids}, acc -> hand_over(acc, entity_type, ids) end)
 
-    Enum.reduce(unsynced_by_type, handed_over, fn {entity_type, ids}, acc ->
-      %{
-        acc
-        | dropped: Held.add(acc.dropped, entity_type, ids),
-          held: Held.remove(acc.held, entity_type, ids)
-      }
-    end)
+    unsynced
+    |> Enum.group_by(&elem(&1, 1), &elem(&1, 0))
+    |> Enum.reduce(handed_over, fn {entity_type, ids}, acc -> drop(acc, entity_type, ids) end)
   end
 
   # A fact goes to the client under a holder it holds once told, unless the holder is handed over

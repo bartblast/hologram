@@ -114,6 +114,19 @@ defmodule Hologram.DB.Oplog do
   end
 
   @doc """
+  Returns one past the highest transaction id that had finished when this is read: a transaction at
+  or above it had not finished, so nothing read before saw what it wrote. Below it a transaction
+  may or may not have been seen - the opposite bound to `current_xmin/0`'s.
+  """
+  @spec current_xmax() :: non_neg_integer
+  def current_xmax do
+    {:ok, %Postgrex.Result{rows: [[xmax]]}} =
+      Connection.query("SELECT pg_snapshot_xmax(pg_current_snapshot())")
+
+    xmax
+  end
+
+  @doc """
   Returns the place of the oldest effect the log still holds, or nil when it holds none.
 
   What it answers is whether a returning client's place is one the log can speak for. Every effect

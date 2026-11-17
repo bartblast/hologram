@@ -486,6 +486,65 @@ defmodule Hologram.Sync.PotTest do
     end
   end
 
+  describe "decide/3" do
+    test "hands every row the user may read over whole when held isn't trusted, filed under held rows" do
+      project = %Project{id: @id_1, name: "renamed", public: true}
+
+      part =
+        part(
+          readable: [project, %Label{id: @id_2}],
+          written: %{@id_1 => MapSet.new(["name"])},
+          pairs: %{@labels => [{@id_1, @id_2}]}
+        )
+
+      {news, told} =
+        decide(pot(%{Label => [@id_2], Project => [@id_1]}), part, trust_held?: false)
+
+      # Rows go out in id order within each type, the types in no order.
+      appeared_ids =
+        news.appeared
+        |> Enum.map(& &1.id)
+        |> Enum.sort()
+
+      assert appeared_ids == [@id_1, @id_2]
+      assert news.patched == []
+      assert news.edges == []
+      assert %Project{labels: [%Label{id: @id_2}]} = Enum.find(news.appeared, &(&1.id == @id_1))
+      assert Held.ids(told.held, Project) == [@id_1]
+    end
+
+    test "files a row handed over whole when held isn't trusted under the held rows naming it" do
+      part = part(readable: [%Label{id: @id_2}], pairs: %{@labels => [{@id_1, @id_2}]})
+
+      {news, _told} =
+        decide(pot(%{Label => [@id_2], Project => [@id_1]}), part, trust_held?: false)
+
+      assert news.edges == [edge(:add_relationship, Project, @id_1, "labels", @id_2)]
+    end
+
+    test "still drops a held row the user may no longer read when held isn't trusted" do
+      part = part(unreadable: %{Project => [@id_1]})
+
+      {news, _told} = decide(pot(%{Project => [@id_1]}), part, trust_held?: false)
+
+      assert news.unsynced == [{@id_1, Project}]
+    end
+  end
+
+  describe "drop/3 and hand_over/3" do
+    test "move rows between held and dropped" do
+      dropped = drop(pot(%{Project => [@id_1, @id_2]}), Project, [@id_1, @id_3])
+
+      assert Held.ids(dropped.held, Project) == [@id_2]
+      assert Held.ids(dropped.dropped, Project) == [@id_1, @id_3]
+
+      handed_over = hand_over(dropped, Project, [@id_3])
+
+      assert Held.ids(handed_over.held, Project) == [@id_2, @id_3]
+      assert Held.ids(handed_over.dropped, Project) == [@id_1]
+    end
+  end
+
   describe "reread/4" do
     test "hands over the rows read that the client doesn't hold, and drops the held ones left out" do
       rows = [%Project{id: @id_1, public: true}, %Project{id: @id_2, public: true}]
@@ -548,6 +607,17 @@ defmodule Hologram.Sync.PotTest do
       {news, _told} = reread(pot(%{Label => [@id_3]}), Project, rows, fn _ids -> %{} end)
 
       assert [%Project{labels: [%Label{id: @id_3}]}] = news.appeared
+    end
+  end
+
+  describe "reread/5" do
+    test "hands every row read over when held isn't trusted" do
+      rows = [%Label{id: @id_2}]
+
+      {news, _told} =
+        reread(pot(%{Label => [@id_2]}), Label, rows, fn _ids -> %{} end, trust_held?: false)
+
+      assert Enum.map(news.appeared, & &1.id) == [@id_2]
     end
   end
 
