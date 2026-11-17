@@ -31,6 +31,27 @@ defmodule Hologram.Sync.PackedIdsTest do
     end
   end
 
+  describe "index_lefts_by_right/2 and lefts_in/2" do
+    test "find the left ids of the pairs with a given right id, in order" do
+      packed = pack_pairs([{@id_3, @id_1}, {@id_2, @id_4}, {@id_1, @id_1}])
+      index = index_lefts_by_right(packed, [@id_1, @id_4, @id_5])
+
+      assert lefts_in(index, @id_1) == [@id_1, @id_3]
+      assert lefts_in(index, @id_4) == [@id_2]
+      assert lefts_in(index, @id_5) == []
+    end
+
+    test "index only the pairs with one of the given right ids" do
+      packed = pack_pairs([{@id_3, @id_1}, {@id_2, @id_4}])
+
+      assert lefts_in(index_lefts_by_right(packed, [@id_1]), @id_4) == []
+    end
+
+    test "index nothing of no pairs" do
+      assert index_lefts_by_right("", [@id_1]) == %{}
+    end
+  end
+
   describe "insert/2" do
     test "adds the given ids in order, wherever they fall" do
       packed = pack([@id_2, @id_4])
@@ -50,15 +71,6 @@ defmodule Hologram.Sync.PackedIdsTest do
 
     test "adds to nothing" do
       assert unpack(insert("", [@id_2, @id_1])) == [@id_1, @id_2]
-    end
-  end
-
-  describe "lefts_of/2" do
-    test "returns the left ids of the pairs with the given right id" do
-      packed = pack_pairs([{@id_1, @id_3}, {@id_2, @id_4}, {@id_5, @id_3}, {@id_3, @id_1}])
-
-      assert lefts_of(packed, @id_3) == [@id_1, @id_5]
-      assert lefts_of(packed, @id_2) == []
     end
   end
 
@@ -186,7 +198,7 @@ defmodule Hologram.Sync.PackedIdsTest do
       assert_raise FunctionClauseError, fn -> member?(ids, @id_1) end
       assert_raise FunctionClauseError, fn -> split(ids, pack([@id_1])) end
       assert_raise FunctionClauseError, fn -> split(pack([@id_1]), ids) end
-      assert_raise FunctionClauseError, fn -> lefts_of(pairs, @id_1) end
+      assert_raise FunctionClauseError, fn -> index_lefts_by_right(pairs, [@id_1]) end
       assert_raise FunctionClauseError, fn -> pair_member?(pairs, @id_1, @id_2) end
       assert_raise FunctionClauseError, fn -> rights_of(pairs, @id_1) end
     end

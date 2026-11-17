@@ -28,6 +28,12 @@ defmodule Hologram.Sync.Held do
   end
 
   @doc """
+  Returns whether any row of the given entity type is held.
+  """
+  @spec any?(t, module) :: boolean
+  def any?(held, entity_type), do: Map.has_key?(held, entity_type)
+
+  @doc """
   Returns the given held ids of the given entity type, in order.
   """
   @spec ids(t, module) :: list(String.t())

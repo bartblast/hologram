@@ -44,6 +44,7 @@ defmodule Hologram.Sync.Live do
           pairs: %{{module, atom, module} => binary},
           place: {non_neg_integer, non_neg_integer},
           readable: %{module => %{String.t() => struct}},
+          synced_types: list(module),
           tx_range: {non_neg_integer, non_neg_integer},
           verdict_ids: %{module => binary},
           whole_types: list(module),
@@ -77,6 +78,8 @@ defmodule Hologram.Sync.Live do
     the verdicts' edges reach
   - `own_seqs` - per replica, the highest sequence number among the batches of it the effects came
     from
+  - `synced_types` - the given synced types, which decided what was asked about, so whoever reads
+    the part judges it by the same ones
 
   And what is the user's own:
 
@@ -139,6 +142,7 @@ defmodule Hologram.Sync.Live do
       pair_effects: pack_pair_effects(pair_effects),
       pairs: pairs,
       place: place,
+      synced_types: synced_types,
       tx_range: tx_range(effects),
       verdict_ids: verdict_ids(effects, pair_effects, verdict_searched.rows, synced)
     }

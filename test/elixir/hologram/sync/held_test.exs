@@ -33,6 +33,16 @@ defmodule Hologram.Sync.HeldTest do
     end
   end
 
+  describe "any?/2" do
+    test "answers whether any row of a type is held" do
+      held = add(new(), Module1, [@id_1])
+
+      assert any?(held, Module1)
+      refute any?(held, Module2)
+      refute any?(remove(held, Module1, [@id_1]), Module1)
+    end
+  end
+
   describe "member?/3" do
     test "answers per type" do
       held = add(new(), Module1, [@id_1])

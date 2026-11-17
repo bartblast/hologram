@@ -45,6 +45,23 @@ defmodule Hologram.Sync.PackedIds do
   end
 
   @doc """
+  Returns the given pairs whose right id is one of the given ids, indexed by right id, each with
+  its left ids in order - for whoever looks up by right id, which on the packed pairs reads every
+  pair, more than once. Read in one pass, and kept packed until a lookup asks (see `lefts_in/2`).
+  """
+  @spec index_lefts_by_right(binary, Enumerable.t()) :: %{binary => list(binary)}
+  def index_lefts_by_right(packed_pairs, right_ids) when pairs?(packed_pairs) do
+    wanted = Map.new(right_ids, &{encode(&1), true})
+
+    pairs =
+      for <<left::binary-size(16), right::binary-size(16) <- packed_pairs>>,
+          is_map_key(wanted, right),
+          do: {right, left}
+
+    Enum.group_by(pairs, &elem(&1, 0), &elem(&1, 1))
+  end
+
+  @doc """
   Returns the given packed ids with the given ids added, still in order, an id already there kept
   once.
 
@@ -71,15 +88,14 @@ defmodule Hologram.Sync.PackedIds do
   end
 
   @doc """
-  Returns the left ids of the given pairs whose right id is the given one, in order. The pairs are
-  ordered by their left id, so finding these reads every pair.
+  Returns the left ids of the given pairs whose right id is the given one, from an index of them
+  by right id (see `index_lefts_by_right/2`), in order.
   """
-  @spec lefts_of(binary, String.t()) :: list(String.t())
-  def lefts_of(packed_pairs, right_id) when pairs?(packed_pairs) do
-    right = encode(right_id)
-
-    for <<left::binary-size(16), ^right::binary-size(16) <- packed_pairs>>,
-      do: Codec.decode(left, :uuid)
+  @spec lefts_in(%{binary => list(binary)}, String.t()) :: list(String.t())
+  def lefts_in(index, right_id) do
+    index
+    |> Map.get(encode(right_id), [])
+    |> Enum.map(&Codec.decode(&1, :uuid))
   end
 
   @doc """

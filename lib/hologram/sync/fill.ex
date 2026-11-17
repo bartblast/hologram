@@ -112,21 +112,11 @@ defmodule Hologram.Sync.Fill do
     {rows, applied_seq}
   end
 
-  @doc """
-  Returns the query term the fill reads the given entity type with: every row of it, with every
-  to-many relationship and every inverse of a to-many whose target is one of the given synced
-  types included.
-  """
-  @spec term(module, list(module)) :: Query.t()
-  def term(entity_type, synced_types) do
-    synced = MapSet.new(synced_types)
-
-    entity_type
-    |> set_names(synced)
-    |> Enum.reduce(Stage.normalize(entity_type), &Stage.include(&2, &1))
-  end
-
-  defp set_names(entity_type, synced) do
+  @doc false
+  # The sets a row of the given entity type is sent with: its to-many relationships and its inverses
+  # of a to-many whose other end is of one of the given synced types - the ones `term/2` includes.
+  @spec set_names(module, MapSet.t(module)) :: list(atom)
+  def set_names(entity_type, synced) do
     to_many =
       for {name, [target], _opts} <- entity_type.__relationships__(),
           MapSet.member?(synced, target),
@@ -140,5 +130,19 @@ defmodule Hologram.Sync.Fill do
           do: name
 
     Enum.sort(to_many ++ to_many_inverses)
+  end
+
+  @doc """
+  Returns the query term the fill reads the given entity type with: every row of it, with every
+  to-many relationship and every inverse of a to-many whose target is one of the given synced
+  types included.
+  """
+  @spec term(module, list(module)) :: Query.t()
+  def term(entity_type, synced_types) do
+    synced = MapSet.new(synced_types)
+
+    entity_type
+    |> set_names(synced)
+    |> Enum.reduce(Stage.normalize(entity_type), &Stage.include(&2, &1))
   end
 end

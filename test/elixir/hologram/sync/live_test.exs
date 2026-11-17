@@ -323,6 +323,7 @@ defmodule Hologram.Sync.LiveTest do
 
       for part <- Map.values(parts) do
         assert part.place == @place
+        assert part.synced_types == @synced
         assert part.tx_range == {100, 101}
         assert part.written == %{project.id => MapSet.new(["name", "public"])}
       end
