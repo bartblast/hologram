@@ -61,6 +61,11 @@ defmodule Hologram.Policy.EdgesTest do
                {Policy.Module1, :update} => [
                  {:attributes, [:priority]},
                  {:own_grants, [:editor, :owner]}
+               ],
+               {Policy.Module1, {:update, :author}} => [{:attributes, [:author_id]}],
+               {Policy.Module1, {:update, :parent}} => [
+                 {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module2, [:public]}
                ]
              }
     end
@@ -149,7 +154,7 @@ defmodule Hologram.Policy.EdgesTest do
 
         role :moderator
 
-        allow :publish, to: :moderator, when: approved == true
+        allow :update, as: :publish, to: :moderator, when: approved == true
       end
 
       defmodule ChainFixture2 do
@@ -157,7 +162,7 @@ defmodule Hologram.Policy.EdgesTest do
 
         relationship :c, ChainFixture3
 
-        allow :publish, via: c
+        allow :update, as: :publish, via: {:publish, c}
       end
 
       defmodule ChainFixture1 do
@@ -165,16 +170,20 @@ defmodule Hologram.Policy.EdgesTest do
 
         relationship :b, ChainFixture2
 
-        allow :publish, via: b
+        allow :update, as: :publish, via: {:publish, b}
       end
 
+      # The named line lands under :update as well, so both keys lean on the same chain.
+      chain_edges = [
+        {:attributes, [:b_id]},
+        {:relationship_attributes, [:b], ChainFixture2, [:c_id]},
+        {:relationship_attributes, [:b, :c], ChainFixture3, [:approved]},
+        {:relationship_grants, [:b, :c], ChainFixture3, [:moderator]}
+      ]
+
       assert derive([ChainFixture1]) == %{
-               {ChainFixture1, :publish} => [
-                 {:attributes, [:b_id]},
-                 {:relationship_attributes, [:b], ChainFixture2, [:c_id]},
-                 {:relationship_attributes, [:b, :c], ChainFixture3, [:approved]},
-                 {:relationship_grants, [:b, :c], ChainFixture3, [:moderator]}
-               ]
+               {ChainFixture1, :publish} => chain_edges,
+               {ChainFixture1, :update} => chain_edges
              }
     end
 
@@ -224,6 +233,19 @@ defmodule Hologram.Policy.EdgesTest do
                  {:attributes, [:parent_id]},
                  {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
                  {:relationship_grants, [:parent, :parent], Policy.Module1, [:viewer]}
+               ],
+               {Policy.Module12, {:update, :level}} => [
+                 {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1, [:created_at]}
+               ],
+               {Policy.Module12, {:update, :link}} => [
+                 {:attributes, [:link_id, :parent_id]},
+                 {:relationship_attributes, [:link], Module17, [:priority]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent, :parent], Policy.Module2,
+                  [:public]}
                ]
              }
     end
@@ -282,7 +304,7 @@ defmodule Hologram.Policy.EdgesTest do
       allow :read, when: any(member <- members, member.seat == "full")
       allow :update, when: any(members)
       allow :delete, when: none(label <- labels, label.name == "x")
-      allow :archive, when: any(labels)
+      allow :update, as: :archive, only: [:name], when: any(labels)
     end
 
     defmodule EdgeMember do

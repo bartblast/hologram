@@ -129,9 +129,9 @@ defmodule Hologram.EntityTest do
       assert Module13.__policies__() == [
                {:read, nil, nil, [public: {:==, true}], nil, nil},
                {:read, [:editor, :owner], nil, [], nil, nil},
-               {:publish, nil, nil, [public: {:==, true}], nil, nil},
-               {:triage, nil, nil, [priority: {:>=, 3}], nil, nil},
-               {:unlink, nil, nil, [parent_id: {:==, nil}], nil, nil}
+               {:update, nil, nil, [public: {:==, true}], :publish, {:only, [:title]}},
+               {:update, nil, nil, [priority: {:>=, 3}], :triage, {:only, [:title]}},
+               {:update, nil, nil, [parent_id: {:==, nil}], :unlink, {:only, [:parent]}}
              ]
     end
 

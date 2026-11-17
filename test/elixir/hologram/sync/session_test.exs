@@ -3666,12 +3666,17 @@ defmodule Hologram.Sync.SessionTest do
     ]
   end
 
+  # The fixture's named lines are limited to :name, so each deciding quantifier is answered under
+  # the field's key as well as under the line's name.
   defp project_verdicts(archivable?) do
-    Map.new([:archive, :feature, :publish], fn operation ->
-      [%{predicates: [clause]}] = Policy.build(PolicyProject)[operation]
+    Map.new(
+      for name <- [:archive, :feature, :publish],
+          key <- [name, {:update, :name}] do
+        [%{predicates: [clause]}] = Policy.build(PolicyProject)[name]
 
-      {Policy.verdict_key(PolicyProject, operation, clause), operation != :archive or archivable?}
-    end)
+        {Policy.verdict_key(PolicyProject, key, clause), name != :archive or archivable?}
+      end
+    )
   end
 
   # Waits until each given window's evaluator has handled what it was sent, and the session what

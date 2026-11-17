@@ -3339,14 +3339,18 @@ defmodule Hologram.CompilerTest do
       allow :read, when: any(member <- members, member.user_id == user_id())
       allow :update, when: any(member <- members, any(label <- member.labels, label.name == name))
 
-      allow :archive,
+      allow :update,
+        as: :archive,
+        only: [:name],
         when:
           none(
             member <- members,
             member.seat == :full and member.joined_at > ^~U[2026-01-01 00:00:00Z]
           )
 
-      allow :publish,
+      allow :update,
+        as: :publish,
+        only: [:name],
         when:
           any(
             member <- members,
@@ -3354,7 +3358,9 @@ defmodule Hologram.CompilerTest do
               member.user.created_at > ^~U[2026-01-01 00:00:00Z]
           )
 
-      allow :close,
+      allow :update,
+        as: :close,
+        only: [:name],
         when:
           any(
             member <- members,
@@ -3362,7 +3368,11 @@ defmodule Hologram.CompilerTest do
           )
 
       allow :delete, when: name == "draft" or none(members)
-      allow :share, when: any(member <- members, none(label <- member.labels, label.name == "x"))
+
+      allow :update,
+        as: :share,
+        only: [:name],
+        when: any(member <- members, none(label <- member.labels, label.name == "x"))
     end
 
     defmodule BakedMember do

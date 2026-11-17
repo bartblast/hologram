@@ -143,13 +143,13 @@ defmodule Hologram.PolicyTest do
 
         role :editor
 
-        allow :publish
+        allow :update, as: :publish
       end
 
       assert AllowEntityFixture.__policies__() == [
                {:read, nil, nil, [], nil, nil},
                {:update, :editor, nil, [], nil, nil},
-               {:publish, nil, nil, [], nil, nil}
+               {:update, nil, nil, [], :publish, nil}
              ]
     end
 
@@ -157,7 +157,7 @@ defmodule Hologram.PolicyTest do
       defmodule ActorPolicyFixture do
         use Hologram.Policy
 
-        allow :archive, when: id == user_id()
+        allow :update, as: :archive, when: id == user_id()
       end
 
       defmodule ActorEntityFixture do
@@ -401,18 +401,16 @@ defmodule Hologram.PolicyTest do
 
     test "builds rules per operation, keeping declaration order" do
       owner_rule = %{predicates: [], to: [{:own, [:owner]}], via: nil}
+      archive_rule = %{predicates: [{:author_id, :==, {:actor}}], to: nil, via: nil}
+      publish_rule = %{predicates: [], to: nil, via: {:publish, [:parent]}}
 
       assert build(Policy.Module1) == %{
-               :archive => [
-                 %{predicates: [{:author_id, :==, {:actor}}], to: nil, via: nil}
-               ],
+               :archive => [archive_rule],
                :delete => [
                  %{predicates: [], to: [{:rel, [:parent], [:admin]}], via: nil}
                ],
                :grant_role => [owner_rule, owner_rule],
-               :publish => [
-                 %{predicates: [], to: nil, via: {:publish, [:parent]}}
-               ],
+               :publish => [publish_rule],
                :read => [
                  %{predicates: [{:public, :==, true}], to: nil, via: nil},
                  %{
@@ -428,7 +426,9 @@ defmodule Hologram.PolicyTest do
                {:grant_role, :editor} => [owner_rule],
                {:grant_role, :owner} => [owner_rule],
                {:revoke_role, :editor} => [owner_rule],
-               {:revoke_role, :owner} => [owner_rule]
+               {:revoke_role, :owner} => [owner_rule],
+               {:update, :author} => [archive_rule],
+               {:update, :parent} => [publish_rule]
              }
     end
 
@@ -439,27 +439,34 @@ defmodule Hologram.PolicyTest do
     end
 
     test "follows a path in a condition, a delegation and a grant reference" do
+      archive_rule = %{predicates: [{[:link, :priority], :==, :high}], to: nil, via: nil}
+      publish_rule = %{predicates: [], to: nil, via: {:publish, [:parent, :parent]}}
+
+      triage_rule = %{
+        predicates: [{[:parent, :parent, :created_at], :>=, ~U[2026-01-01 00:00:00Z]}],
+        to: nil,
+        via: nil
+      }
+
       assert build(Policy.Module12) == %{
-               archive: [%{predicates: [{[:link, :priority], :==, :high}], to: nil, via: nil}],
-               delete: [
+               :archive => [archive_rule],
+               :delete => [
                  %{
                    predicates: [{:level, :<=, {:attribute, [:parent, :parent, :priority]}}],
                    to: nil,
                    via: nil
                  }
                ],
-               publish: [%{predicates: [], to: nil, via: {:publish, [:parent, :parent]}}],
-               read: [
+               :publish => [publish_rule],
+               :read => [
                  %{predicates: [{[:parent, :parent, :public], :==, true}], to: nil, via: nil}
                ],
-               triage: [
-                 %{
-                   predicates: [{[:parent, :parent, :created_at], :>=, ~U[2026-01-01 00:00:00Z]}],
-                   to: nil,
-                   via: nil
-                 }
+               :triage => [triage_rule],
+               :update => [
+                 %{predicates: [], to: [{:rel, [:parent, :parent], [:viewer]}], via: nil}
                ],
-               update: [%{predicates: [], to: [{:rel, [:parent, :parent], [:viewer]}], via: nil}]
+               {:update, :level} => [triage_rule],
+               {:update, :link} => [archive_rule, publish_rule]
              }
     end
   end
@@ -790,7 +797,7 @@ defmodule Hologram.PolicyTest do
       defmodule GlobalReferenceFixture do
         use Hologram.Entity
 
-        allow :archive, to: Hologram.Test.Fixtures.Role.Module1
+        allow :update, as: :archive, to: Hologram.Test.Fixtures.Role.Module1
       end
 
       assert build(GlobalReferenceFixture)[:archive] == [
@@ -938,9 +945,11 @@ defmodule Hologram.PolicyTest do
       allow :read, when: any(member <- members, member.user_id == user_id())
       allow :update, when: name == "open" or all(member <- members, member.seat == "full")
       allow :delete, when: none(labels)
-      allow :archive, when: none(labels)
+      allow :update, as: :archive, only: [:name], when: none(labels)
 
-      allow :close,
+      allow :update,
+        as: :close,
+        only: [:name],
         when: any(member <- members, none(label <- member.project.labels, label.name == "x"))
     end
 
@@ -977,7 +986,9 @@ defmodule Hologram.PolicyTest do
                  {verdict_key(VerdictProject, :archive, none_clause), none_clause},
                  {verdict_key(VerdictProject, :close, close_clause), close_clause},
                  {verdict_key(VerdictProject, :delete, none_clause), none_clause},
-                 {verdict_key(VerdictProject, :update, update_clause), update_clause}
+                 {verdict_key(VerdictProject, :update, update_clause), update_clause},
+                 {verdict_key(VerdictProject, {:update, :name}, none_clause), none_clause},
+                 {verdict_key(VerdictProject, {:update, :name}, close_clause), close_clause}
                ])
     end
   end
@@ -1359,7 +1370,10 @@ defmodule Hologram.PolicyTest do
       allow :delete,
         when: none(seat <- seats, seat.taken == true) and any(seat <- seats, seat.taken == false)
 
-      allow :archive, when: any(seat <- seats, none(tag <- seat.tags, tag.name == "x"))
+      allow :update,
+        as: :archive,
+        only: [:name],
+        when: any(seat <- seats, none(tag <- seat.tags, tag.name == "x"))
     end
 
     defmodule HeldRoom do
@@ -1719,20 +1733,6 @@ defmodule Hologram.PolicyTest do
              ]
     end
 
-    test "returns the framework's operations and the ones the allow lines name, sorted" do
-      assert operations(Policy.Module1) == [
-               :archive,
-               :create,
-               :delete,
-               :grant_role,
-               :publish,
-               :read,
-               :read_roles,
-               :revoke_role,
-               :update
-             ]
-    end
-
     test "returns the framework's operations alone for an entity type declaring nothing" do
       assert operations(Module1) == framework_operations()
     end
@@ -1741,11 +1741,11 @@ defmodule Hologram.PolicyTest do
       assert operations(RoleGrant) == framework_operations()
     end
 
-    test "includes an operation named by a line taken from a policy module" do
+    test "includes a name carried by a line taken from a policy module" do
       defmodule TakenOperationPolicyFixture do
         use Hologram.Policy
 
-        allow :publish, when: public == true
+        allow :update, as: :publish, when: public == true
       end
 
       defmodule TakenOperationEntityFixture do
@@ -1858,7 +1858,11 @@ defmodule Hologram.PolicyTest do
 
       allow :read, when: any(member <- members, member.seat == "full")
       allow :update, when: any(labels)
-      allow :archive, when: any(member <- first_members, member.seat == "full")
+
+      allow :update,
+        as: :archive,
+        only: [:labels],
+        when: any(member <- first_members, member.seat == "full")
     end
 
     defmodule ChainBoard do
@@ -1993,10 +1997,6 @@ defmodule Hologram.PolicyTest do
       Enum.each(framework_operations(), fn operation ->
         assert validate_operation!(Module1, operation) == :ok
       end)
-    end
-
-    test "passes an operation an allow line on the entity type names" do
-      assert validate_operation!(Policy.Module1, :archive) == :ok
     end
 
     test "passes a name an allow line on the entity type carries" do

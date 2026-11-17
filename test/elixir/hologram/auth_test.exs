@@ -2793,7 +2793,7 @@ defmodule Hologram.AuthTest do
 
       allow :read
       allow :delete, when: none(cards)
-      allow :archive, when: none(card <- cards, card.author_id == user_id())
+      allow :update, as: :archive, when: none(card <- cards, card.author_id == user_id())
       allow :update, when: any(card <- cards, card.author_id == user_id())
     end
 
@@ -2808,8 +2808,12 @@ defmodule Hologram.AuthTest do
 
     defp verdict_key(operation, clause), do: Policy.verdict_key(VerdictBoard, operation, clause)
 
-    defp archive_key,
-      do: verdict_key(:archive, {:none, {[:cards], [{:author_id, :==, {:actor}}]}})
+    defp archive_key, do: verdict_key(:archive, archive_clause())
+
+    defp archive_clause, do: {:none, {[:cards], [{:author_id, :==, {:actor}}]}}
+
+    # The archive line is a named update line, so its quantifier is answered under :update too.
+    defp archive_update_key, do: verdict_key(:update, archive_clause())
 
     defp delete_key, do: verdict_key(:delete, {:none, {[:cards], []}})
 
@@ -2818,6 +2822,7 @@ defmodule Hologram.AuthTest do
 
       assert verdicts(user_id, %VerdictBoard{}) == %{
                archive_key() => true,
+               archive_update_key() => true,
                delete_key() => true
              }
     end
@@ -2827,6 +2832,7 @@ defmodule Hologram.AuthTest do
     test "answers a visitor's none naming the actor false" do
       assert verdicts(nil, %VerdictBoard{}) == %{
                archive_key() => false,
+               archive_update_key() => false,
                delete_key() => true
              }
     end
@@ -2845,10 +2851,20 @@ defmodule Hologram.AuthTest do
   end
 
   describe "verdicts/2 for stored rows" do
-    defp policy_verdict_key(operation) do
-      [%{predicates: [clause]}] = Policy.build(PolicyProject)[operation]
+    defp policy_verdict_key(name, key \\ nil) do
+      [%{predicates: [clause]}] = Policy.build(PolicyProject)[name]
 
-      Policy.verdict_key(PolicyProject, operation, clause)
+      Policy.verdict_key(PolicyProject, key || name, clause)
+    end
+
+    # The fixture's named lines are limited to :name, so each deciding quantifier is answered under
+    # the field's key as well as under the line's name.
+    defp policy_verdicts(answers) do
+      Map.new(
+        for {name, answer} <- answers,
+            key <- [name, {:update, :name}],
+            do: {policy_verdict_key(name, key), answer}
+      )
     end
 
     test "answers each deciding quantifier over the rows as stored" do
@@ -2859,19 +2875,13 @@ defmodule Hologram.AuthTest do
         |> PolicyLabel.new()
         |> DB.create!()
 
-      assert verdicts(nil, project) == %{
-               policy_verdict_key(:archive) => true,
-               policy_verdict_key(:feature) => true,
-               policy_verdict_key(:publish) => true
-             }
+      assert verdicts(nil, project) ==
+               policy_verdicts(archive: true, feature: true, publish: true)
 
       :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
 
-      assert verdicts(nil, project) == %{
-               policy_verdict_key(:archive) => false,
-               policy_verdict_key(:feature) => true,
-               policy_verdict_key(:publish) => true
-             }
+      assert verdicts(nil, project) ==
+               policy_verdicts(archive: false, feature: true, publish: true)
     end
   end
 end
