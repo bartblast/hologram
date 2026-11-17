@@ -1,13 +1,46 @@
 defmodule Hologram.Migration do
   @moduledoc """
-  The migration file vocabulary.
+  The migration vocabulary.
 
-  A migration file is an Elixir script starting with `use Hologram.Migration`, followed
-  by statement-style migration ops, one per line. Evaluating the file produces a plain
-  list of op maps: each flat op produces one map, and each entity block produces a list
-  of maps that the loader flattens. Every op map carries :op, :line, and the op's payload.
-  Entity types are referenced by fully-qualified module name as spelled at that point in
-  history - the name stays a valid reference after the module is renamed or deleted.
+  A migration is a module that uses `Hologram.Migration`, compiled with the app, with
+  statement-style migration ops in its body, one per line:
+
+      defmodule MyApp.Migrations.V20260813091500 do
+        @moduledoc false
+
+        use Hologram.Migration
+
+        change_entity MyApp.Trip do
+          add_attribute :city, :string
+        end
+      end
+
+  Its file lives in the app's `app/migrations/` directory and is named after its version,
+  14 UTC timestamp digits like `20260813091500.ex`, and the module name ends in `V` followed
+  by the same digits. The build refuses a migration module that breaks any of these.
+
+  The module's `__hologram_migration__/0` returns the version, the file path, and the ops
+  as a plain list of op maps: each flat op produces one map, and each entity block one map
+  per member op. Every op map carries :op, :line, and the op's payload. Entity types are
+  referenced by fully-qualified module name as spelled at that point in history - the name
+  stays a valid reference after the module is renamed or deleted.
+
+  Ops are declarations, recorded where they are written: aliases in an op resolve at that
+  line, and an op inside an `if`, a comprehension or other module-body code is recorded
+  regardless of it, and cannot read the module body's variables. Op arguments may call the
+  module's own functions and read its attributes, an attribute read giving the value it holds
+  at the op's line.
+
+  A migration's functions and ops may call only its own functions and the standard
+  library's functions that compute on the values they are given - most of Kernel, String,
+  Enum, Map, Date and their like - so what it does to rows never changes once it is
+  applied. The build refuses a call to any other function, the app's and those reading the
+  clock, the environment, a random source or the time zone database among them, and a call
+  to a module chosen at runtime, like `apply/3` or `mod.fun()`. Field access on a value,
+  like `row.name`, reads only a map or struct: given a module, it raises rather than calling
+  the module's function. The module body, which runs once per build, is checked by the
+  modules it uses: the build refuses one outside the standard libraries, and the standard
+  ones that read the environment, like System, File and Application.
 
   One op declares nothing an entity type declares of itself: `designate_user_entity`
   records which entity type is the app's user, the designation `use Hologram.Entity,
@@ -37,6 +70,17 @@ defmodule Hologram.Migration do
   and `delete_unique` take the key's fields in declared order. A key follows a rename of a
   field it names, and stands in the way of deleting one - the file deletes the key first.
   """
+
+  alias Hologram.Migration.CallCheck
+  alias Hologram.Migration.FieldAccess
+  alias Hologram.Migration.Loader
+
+  # A migration module's file name is its version - 14 UTC timestamp digits, nothing else.
+  @file_name_regex ~r/^\d{14}\.ex$/
+
+  @ops_attribute :__hologram_migration_ops__
+
+  @snapshots_attribute :__hologram_migration_snapshots__
 
   @locals_without_parens [
     add_attribute: 2,
@@ -71,13 +115,29 @@ defmodule Hologram.Migration do
 
   @doc """
   Returns the vocabulary's parens-free calls, as the formatter's locals_without_parens
-  option takes them - the generator formats migration files with it, and the framework
-  exports the same list so a project's mix format leaves those files alone.
+  option takes them - the generator's default formatting uses it, and the framework
+  exports the same list so a project importing Hologram's formatter config writes migration
+  files parens-free too.
   """
   @spec locals_without_parens() :: keyword(pos_integer)
   def locals_without_parens, do: @locals_without_parens
 
   defmacro __using__(_opts) do
+    if __CALLER__.module == nil do
+      raise Hologram.CompileError,
+        message:
+          "use Hologram.Migration goes in a migration module - " <>
+            "#{Path.relative_to_cwd(__CALLER__.file)}:#{__CALLER__.line}"
+    end
+
+    validate_location!(__CALLER__)
+
+    # Registered here, at expansion time, rather than in the quote below: the whole module
+    # body expands before any of it runs, so the op macros store their ops before a
+    # registration in the quote would run.
+    Module.register_attribute(__CALLER__.module, @ops_attribute, accumulate: true)
+    Module.register_attribute(__CALLER__.module, @snapshots_attribute, accumulate: true)
+
     quote do
       import Hologram.Migration,
         only: [
@@ -96,67 +156,156 @@ defmodule Hologram.Migration do
           resolve!: 1,
           resolve!: 2
         ]
+
+      # Field access on a value compiles into a strict map read (see
+      # Hologram.Migration.FieldAccess.Definitions).
+      import Kernel,
+        except: [
+          def: 1,
+          def: 2,
+          defguard: 1,
+          defguardp: 1,
+          defmacro: 1,
+          defmacro: 2,
+          defmacrop: 1,
+          defmacrop: 2,
+          defp: 1,
+          defp: 2
+        ]
+
+      import Hologram.Migration.FieldAccess.Definitions,
+        only: [
+          def: 1,
+          def: 2,
+          defguard: 1,
+          defguardp: 1,
+          defmacro: 1,
+          defmacro: 2,
+          defmacrop: 1,
+          defmacrop: 2,
+          defp: 1,
+          defp: 2
+        ]
+
+      # The call check reads the module's debug info - kept for migration modules even where
+      # the project compiles without it, as a test run does.
+      @compile {:debug_info, true}
+
+      @before_compile Hologram.Migration
+      @after_compile Hologram.Migration
     end
   end
 
+  @doc false
+  defmacro __before_compile__(env) do
+    validate_snapshots_taken!(env)
+
+    ops =
+      env.module
+      |> Module.get_attribute(@ops_attribute)
+      |> Enum.reverse()
+      |> FieldAccess.rewrite()
+
+    version = Path.basename(env.file, ".ex")
+    path = Path.relative_to_cwd(env.file)
+
+    quote do
+      @doc false
+      def __hologram_migration__ do
+        %{version: unquote(version), path: unquote(path), ops: List.flatten(unquote(ops))}
+      end
+    end
+  end
+
+  # Runs once the module is compiled and callable, so a migration whose ops cannot be
+  # evaluated, or that breaks a rule of the format, fails the build rather than the boot.
+  # The calls are checked first: evaluating the ops runs the code they call.
+  @doc false
+  @spec __after_compile__(Macro.Env.t(), binary) :: :ok
+  def __after_compile__(env, bytecode) do
+    CallCheck.validate!(env, bytecode)
+
+    migration = env.module.__hologram_migration__()
+
+    Loader.verify_rename_order!(migration.ops, migration.path)
+    Loader.validate_resolved!([migration], build_env())
+  end
+
   @doc """
-  Returns the op recording that the given global role module came into existence.
+  Records that the given global role module came into existence.
 
   Entity roles are declared inside entity blocks - this flat form takes a role module.
   """
   defmacro add_role(role, opts \\ []) do
+    validate_placement!(__CALLER__)
     validate_global_role_args!([role], :add_role, __CALLER__)
     line = __CALLER__.line
 
-    quote do
-      %{op: :add_role, role: unquote(role), opts: unquote(opts), line: unquote(line)}
-    end
+    op =
+      quote do
+        %{op: :add_role, role: unquote(role), opts: unquote(opts), line: unquote(line)}
+      end
+
+    register(op, __CALLER__)
   end
 
   @doc """
-  Returns the list of member ops from the given do-block, each op recording a change
-  scoped to the given existing entity type.
+  Records the member ops of the given do-block, each op recording a change scoped to
+  the given existing entity type.
 
   Member ops are legal only inside entity blocks - the block injects its entity type
   into each of them.
   """
   defmacro change_entity(entity_type, do: block) do
+    validate_placement!(__CALLER__)
+
     block
     |> block_statements()
     |> Enum.map(&member_op(&1, entity_type, __CALLER__))
+    |> register(__CALLER__)
   end
 
   @doc """
-  Returns the op recording that the given global role module's options changed, the
-  changes as deltas.
+  Records that the given global role module's options changed, the changes as deltas.
 
   Entity roles change inside entity blocks - this flat form takes a role module.
   """
   defmacro change_role(role, changes) do
+    validate_placement!(__CALLER__)
     validate_global_role_args!([role], :change_role, __CALLER__)
     line = __CALLER__.line
 
-    quote do
-      %{op: :change_role, role: unquote(role), changes: unquote(changes), line: unquote(line)}
-    end
+    op =
+      quote do
+        %{op: :change_role, role: unquote(role), changes: unquote(changes), line: unquote(line)}
+      end
+
+    register(op, __CALLER__)
   end
 
   @doc """
-  Returns the op recording that the given entity type came into existence.
+  Records that the given entity type came into existence.
   """
   defmacro create_entity(entity_type) do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
-    quote do
-      %{op: :create_entity, entity: unquote(entity_type), line: unquote(line)}
-    end
+    op =
+      quote do
+        %{op: :create_entity, entity: unquote(entity_type), line: unquote(line)}
+      end
+
+    register(op, __CALLER__)
   end
 
   @doc """
-  Returns the op recording that the given entity type came into existence, followed by
-  the member ops from the given do-block, each scoped to it.
+  Records that the given entity type came into existence, followed by the member ops of
+  the given do-block, each scoped to it.
   """
   defmacro create_entity(entity_type, do: block) do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
     create_op =
@@ -169,89 +318,115 @@ defmodule Hologram.Migration do
       |> block_statements()
       |> Enum.map(&member_op(&1, entity_type, __CALLER__))
 
-    [create_op | member_ops]
+    register([create_op | member_ops], __CALLER__)
   end
 
   @doc """
-  Returns the op recording that the given entity type was deleted, its table dropped
-  with its data.
+  Records that the given entity type was deleted, its table dropped with its data.
   """
   defmacro delete_entity(entity_type) do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
-    quote do
-      %{op: :delete_entity, entity: unquote(entity_type), line: unquote(line)}
-    end
+    op =
+      quote do
+        %{op: :delete_entity, entity: unquote(entity_type), line: unquote(line)}
+      end
+
+    register(op, __CALLER__)
   end
 
   @doc """
-  Returns the op recording that the given global role module was deleted, its grants
-  dying with it.
+  Records that the given global role module was deleted, its grants dying with it.
   """
   defmacro delete_role(role) do
+    validate_placement!(__CALLER__)
     validate_global_role_args!([role], :delete_role, __CALLER__)
     line = __CALLER__.line
 
-    quote do
-      %{op: :delete_role, role: unquote(role), line: unquote(line)}
-    end
+    op =
+      quote do
+        %{op: :delete_role, role: unquote(role), line: unquote(line)}
+      end
+
+    register(op, __CALLER__)
   end
 
   @doc """
-  Returns the op deleting every grant in the role grant store.
+  Records the op deleting every grant in the role grant store.
 
   Required in a migration whose user entity designation moves to another entity type or
   is removed: grants reference the designated type's rows, so they cannot follow the
   designation. The deletion runs in the same transaction as the change it accompanies.
   """
   defmacro delete_role_grants do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
-    quote do
-      %{op: :delete_role_grants, line: unquote(line)}
-    end
+    op =
+      quote do
+        %{op: :delete_role_grants, line: unquote(line)}
+      end
+
+    register(op, __CALLER__)
   end
 
   @doc """
-  Returns the op recording that the given entity type became the designated user entity
-  type - the one the role grant store references and the policy layer resolves the acting
-  user against. `nil` records that the designation was removed.
+  Records that the given entity type became the designated user entity type - the one
+  the role grant store references and the policy layer resolves the acting user against.
+  `nil` records that the designation was removed.
   """
   defmacro designate_user_entity(entity_type) do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
-    quote do
-      %{op: :designate_user_entity, entity: unquote(entity_type), line: unquote(line)}
-    end
+    op =
+      quote do
+        %{op: :designate_user_entity, entity: unquote(entity_type), line: unquote(line)}
+      end
+
+    register(op, __CALLER__)
   end
 
   @doc """
-  Returns the op recording that the first given entity type was renamed to the second,
-  its table and every derived physical name following, existing data preserved.
+  Records that the first given entity type was renamed to the second, its table and every
+  derived physical name following, existing data preserved.
   """
   defmacro rename_entity(old, new) do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
-    quote do
-      %{op: :rename_entity, from: unquote(old), to: unquote(new), line: unquote(line)}
-    end
+    op =
+      quote do
+        %{op: :rename_entity, from: unquote(old), to: unquote(new), line: unquote(line)}
+      end
+
+    register(op, __CALLER__)
   end
 
   @doc """
-  Returns the op recording that the first given global role module was renamed to the
-  second, existing grants following the label.
+  Records that the first given global role module was renamed to the second, existing
+  grants following the label.
   """
   defmacro rename_role(old, new) do
+    validate_placement!(__CALLER__)
     validate_global_role_args!([old, new], :rename_role, __CALLER__)
     line = __CALLER__.line
 
-    quote do
-      %{op: :rename_role, from: unquote(old), to: unquote(new), line: unquote(line)}
-    end
+    op =
+      quote do
+        %{op: :rename_role, from: unquote(old), to: unquote(new), line: unquote(line)}
+      end
+
+    register(op, __CALLER__)
   end
 
   @doc """
-  Returns the placeholder op demanding human resolution of the given kind of detected
+  Records the placeholder op demanding human resolution of the given kind of detected
   change, with the detected facts as its payload.
 
   A migration file containing a resolve! op is a draft - verification, the check task,
@@ -259,11 +434,16 @@ defmodule Hologram.Migration do
   what happened.
   """
   defmacro resolve!(kind, payload \\ []) do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
-    quote do
-      %{op: :resolve!, kind: unquote(kind), payload: unquote(payload), line: unquote(line)}
-    end
+    op =
+      quote do
+        %{op: :resolve!, kind: unquote(kind), payload: unquote(payload), line: unquote(line)}
+      end
+
+    register(op, __CALLER__)
   end
 
   defp block_statements(nil), do: []
@@ -271,6 +451,33 @@ defmodule Hologram.Migration do
   defp block_statements({:__block__, _meta, statements}), do: statements
 
   defp block_statements(single_statement), do: [single_statement]
+
+  # The environment the build is for. Mix knows it during compilation; HOLOGRAM_ENV may name
+  # a different one, so it is the fallback only, and an exported HOLOGRAM_ENV=dev cannot let
+  # a MIX_ENV=prod build through.
+  defp build_env do
+    if Code.ensure_loaded?(Mix) and Process.whereis(Mix.State) do
+      # credo:disable-for-next-line Credo.Check.Warning.MixEnv
+      Mix.env()
+    else
+      Hologram.env()
+    end
+  end
+
+  # Aliases are expanded where the op is written: the op's code is placed in a function
+  # defined at the end of the module, where an alias the module defines later would
+  # otherwise change what an earlier op names. The expansion runs as though inside that
+  # function, so naming an entity type is a runtime reference, as it would be written there,
+  # rather than a compile-time dependency that recompiles the migration whenever the entity
+  # module changes.
+  defp expand_aliases(quoted, caller) do
+    function_env = %{caller | function: {:__hologram_migration__, 0}}
+
+    Macro.prewalk(quoted, fn
+      {:__aliases__, _meta, _segments} = alias_ast -> Macro.expand(alias_ast, function_env)
+      node -> node
+    end)
+  end
 
   # Role ops with module args are global - pattern-specific, so it must precede the
   # generic role clauses below (a module arg would otherwise build an entity-role op).
@@ -585,8 +792,101 @@ defmodule Hologram.Migration do
           "entity blocks contain only member ops"
   end
 
+  defp module_body?(caller) do
+    caller.module != nil and caller.function == nil
+  end
+
+  # An op is stored in the migration module's body, and the module's __hologram_migration__/0
+  # returns the stored ops (see validate_placement!/1). What the op leaves in the body are the
+  # snapshots of the attributes it reads (see snapshot_attribute_reads/3).
+  defp register(quoted, caller) do
+    {quoted, snapshots} = snapshot_attribute_reads(quoted, caller.module, [])
+
+    Module.put_attribute(caller.module, @ops_attribute, expand_aliases(quoted, caller))
+
+    case Enum.reverse(snapshots) do
+      [] -> nil
+      assignments -> {:__block__, [], assignments}
+    end
+  end
+
+  # An attribute an op reads is read where the op is written: the op's code is placed in a
+  # function defined at the end of the module, where @name would read the value the body
+  # assigned last. Each read becomes a read of a snapshot attribute of its own, set at the
+  # op's line by an assignment the op leaves in the body. Snapshots are numbered per module,
+  # so a recompile names them alike, and carry the attribute's name, which an error about
+  # the value then shows. A quote is left alone - its @name is code, not a read.
+  defp snapshot_attribute_reads({:quote, _meta, _args} = node, _module, snapshots) do
+    {node, snapshots}
+  end
+
+  # The atom is built at compile time from an attribute name the migration's source spells and a
+  # per-module counter - bounded by the source, never by anything a request carries.
+  # sobelow_skip ["DOS.BinToAtom"]
+  defp snapshot_attribute_reads(
+         {:@, meta, [{name, _name_meta, context}]} = read,
+         module,
+         snapshots
+       )
+       when is_atom(name) and (is_atom(context) or context == []) do
+    taken = Module.get_attribute(module, @snapshots_attribute)
+
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    snapshot = :"__hologram_migration_#{name}_#{length(taken)}__"
+
+    Module.put_attribute(module, @snapshots_attribute, {snapshot, name, meta[:line]})
+
+    assignment = {:@, meta, [{snapshot, meta, [read]}]}
+
+    {{:@, meta, [{snapshot, meta, nil}]}, [assignment | snapshots]}
+  end
+
+  defp snapshot_attribute_reads({form, meta, args}, module, snapshots) do
+    {[form, args], all_snapshots} = snapshot_attribute_reads([form, args], module, snapshots)
+
+    {{form, meta, args}, all_snapshots}
+  end
+
+  defp snapshot_attribute_reads({left, right}, module, snapshots) do
+    {[left, right], all_snapshots} = snapshot_attribute_reads([left, right], module, snapshots)
+
+    {{left, right}, all_snapshots}
+  end
+
+  defp snapshot_attribute_reads(list, module, snapshots) when is_list(list) do
+    Enum.map_reduce(list, snapshots, &snapshot_attribute_reads(&1, module, &2))
+  end
+
+  defp snapshot_attribute_reads(other, _module, snapshots), do: {other, snapshots}
+
   defp statement_line(meta, caller) do
     Keyword.get(meta, :line, caller.line)
+  end
+
+  defp validate_directory!(abs_file, file) do
+    dir = Path.dirname(abs_file)
+
+    parent_dir_name =
+      dir
+      |> Path.dirname()
+      |> Path.basename()
+
+    if Path.basename(dir) != "migrations" or parent_dir_name != "app" do
+      raise Hologram.CompileError,
+        message:
+          "#{file} uses Hologram.Migration - migration files live in the app/migrations/ " <>
+            "directory"
+    end
+  end
+
+  defp validate_file_name!(abs_file, file) do
+    if not Regex.match?(@file_name_regex, Path.basename(abs_file)) do
+      raise Hologram.CompileError,
+        message:
+          "invalid migration file name #{file} - a migration file is named after its " <>
+            "version: 14 timestamp digits with the \".ex\" extension, e.g. " <>
+            "\"20260813091500.ex\""
+    end
   end
 
   # Expansion-time check: global role ops take role modules - a literal atom arg is an
@@ -601,5 +901,77 @@ defmodule Hologram.Migration do
               "it lives inside a change_entity or create_entity block (line #{caller.line})"
       end
     end)
+  end
+
+  # A migration's file is named after its version, and its module after the file - the
+  # version is read from the file name, and the module name only restates it, so a reader
+  # never meets two versions that disagree. One directory holds every migration, so the
+  # filesystem keeps versions unique.
+  defp validate_location!(caller) do
+    file = Path.relative_to_cwd(caller.file)
+
+    validate_directory!(caller.file, file)
+    validate_file_name!(caller.file, file)
+    validate_module_name!(caller, file)
+  end
+
+  defp validate_module_name!(caller, file) do
+    expected_segment = "V" <> Path.basename(caller.file, ".ex")
+
+    # Split from the inspected name rather than with Module.split/1, which raises on a
+    # module named by a bare atom - that name is refused like any other mismatch.
+    module_segment =
+      caller.module
+      |> inspect()
+      |> String.split(".")
+      |> List.last()
+
+    if module_segment != expected_segment do
+      raise Hologram.CompileError,
+        message:
+          "#{file} defines #{inspect(caller.module)} - the module name must end in " <>
+            expected_segment
+    end
+  end
+
+  # Checked before anything else an op macro does, so an op in the wrong place is told so
+  # first, whatever else is wrong with it. Anywhere but a migration module's body - a function,
+  # a module nested in a migration or one that only imports the vocabulary, a script - the op
+  # has nowhere to go, so it is refused rather than dropped.
+  defp validate_placement!(caller) do
+    if not (module_body?(caller) and Module.has_attribute?(caller.module, @ops_attribute)) do
+      raise Hologram.CompileError,
+        message:
+          "migration ops go in the body of a module that uses Hologram.Migration - " <>
+            "#{Path.relative_to_cwd(caller.file)}:#{caller.line}"
+    end
+  end
+
+  # An op is recorded however the module body runs around it, but its attribute snapshots are
+  # taken only where the body runs: one left unset means the op sits in a branch that never
+  # runs, and its value would silently be nil.
+  defp validate_snapshots_taken!(env) do
+    set_attributes = Module.attributes_in(env.module)
+
+    untaken =
+      env.module
+      |> Module.get_attribute(@snapshots_attribute)
+      |> Enum.reject(fn {snapshot, _name, _line} -> snapshot in set_attributes end)
+      |> Enum.reverse()
+
+    if untaken != [] do
+      file = Path.relative_to_cwd(env.file)
+
+      lines =
+        Enum.map_join(untaken, "\n", fn {_snapshot, name, line} ->
+          "  #{file}:#{line} - reads @#{name}"
+        end)
+
+      raise Hologram.CompileError,
+        message:
+          "a migration op reads an attribute in module-body code that never runs, so the " <>
+            "op would record nil for it - ops are recorded wherever they are written, so " <>
+            "write them outside if, case and the like:\n" <> lines
+    end
   end
 end

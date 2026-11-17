@@ -3,96 +3,137 @@ defmodule Hologram.Migration.Loader do
 
   alias Hologram.Reflection
 
-  # A migration file name is its version - 14 UTC timestamp digits, nothing else. The
-  # filesystem then enforces version uniqueness, and a directory listing is the ordered
-  # history.
-  @file_name_regex ~r/^\d{14}\.exs$/
+  @doc """
+  Returns the migrations the given migration modules define, ordered by version.
 
-  # The top-level vocabulary, as imported by the header - a migration file holds these
-  # statements and nothing else, so imperative code cannot enter the format.
-  #
-  # TODO: only the statement HEADS are checked, so an argument could still carry an
-  # expression that runs at load. Walking the argument AST for literals closes the gap
-  # in the "migration files hold no imperative code" claim - the trust class is the same
-  # as any source file meanwhile, which is why evaluating them is sound.
-  @flat_ops [
-    :add_role,
-    :change_entity,
-    :change_role,
-    :create_entity,
-    :delete_entity,
-    :delete_role,
-    :delete_role_grants,
-    :designate_user_entity,
-    :rename_entity,
-    :rename_role,
-    :resolve!
-  ]
+  Each migration is a map with :version, :path, :ops and :module. Raises naming both files
+  when two modules define the same version - one directory holds every migration of an app,
+  but an umbrella's apps each have their own.
+  """
+  @spec from_modules!(list(module)) :: list(%{atom => any})
+  def from_modules!(modules) do
+    migrations =
+      modules
+      |> Enum.map(&Map.put(&1.__hologram_migration__(), :module, &1))
+      |> Enum.sort_by(& &1.version)
+
+    migrations
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.each(&validate_distinct_versions!/1)
+
+    migrations
+  end
 
   @doc """
-  Returns the migrations of the given directory, ordered by version.
-
-  Each migration is a map with :version (the file name without the extension), :path,
-  and :ops. A directory that does not exist holds no migrations, and a directory that
-  cannot be read raises naming it.
-
-  Every `.exs` entry raises unless its name is a 14-digit timestamp - a misnamed
-  migration is never skipped quietly, because skipping one silently is how a database
-  ends up a file behind. Dotfiles and other extensions are left alone: `.gitkeep` keeps
-  the directory in version control before the first migration exists, and editors and
-  operating systems leave their own droppings.
+  Returns the migrations the project's migration modules define, ordered by version (see
+  `from_modules!/1`).
   """
-  @spec load_dir!(String.t()) :: list(%{atom => any})
-  def load_dir!(dir) do
-    case File.ls(dir) do
-      {:ok, file_names} ->
-        file_names
-        |> Enum.sort()
-        |> Enum.filter(&migration_file?/1)
-        |> Enum.map(&load_file!(&1, dir))
+  @spec list!() :: list(%{atom => any})
+  def list! do
+    from_modules!(Reflection.list_migrations())
+  end
 
-      {:error, :enoent} ->
-        []
+  @doc """
+  Returns the absolute path of the project's migrations directory, `app/migrations/` in the
+  OTP app's directory.
 
-      {:error, reason} ->
-        raise "cannot read the migrations directory #{dir} - " <>
-                "#{:file.format_error(reason)}"
+  Raises unless the project compiles `app/migrations/`, through it or a directory holding
+  it, like `app/`: the migration modules there would be left out of the build without a
+  word, the history would read as empty, and the generator would write the whole of it
+  again. Requires a Mix project context.
+  """
+  @spec migrations_dir!() :: String.t()
+  def migrations_dir! do
+    app_dir = Reflection.otp_app_dir()
+
+    if not compiles_migrations_dir?(app_dir, project_elixirc_paths(app_dir)) do
+      raise "the project does not compile app/migrations/, where migration modules live - " <>
+              "add \"app\" to elixirc_paths in mix.exs"
+    end
+
+    migrations_dir(app_dir)
+  end
+
+  @doc """
+  Validates that the project compiles the migration files the given app directory's
+  `app/migrations/` holds - by default, the OTP app's. Returns :ok when it does, or when
+  the directory holds no migration file.
+
+  Run by the Hologram compiler on every build, a release's included: a build whose
+  elixirc_paths leave the directory out, perhaps for one environment only, would ship
+  without its migrations, and the app would then refuse to boot with its model uncovered,
+  naming no cause. Raises Hologram.CompileError naming the directory instead. Requires a
+  Mix project context.
+
+  Only the OTP app's directory is checked - where the generator writes. An umbrella sibling
+  or a dependency holding migrations of its own is checked when its own build runs this.
+  """
+  @spec validate_migrations_compiled!(String.t()) :: :ok
+  def validate_migrations_compiled!(app_dir \\ Reflection.otp_app_dir()) do
+    # Read only when there is something to check: in an umbrella, reading the paths enters
+    # the app's project, and live reload runs this check on every reload.
+    if migration_files?(app_dir) do
+      validate_migrations_compiled!(app_dir, project_elixirc_paths(app_dir))
+    else
+      :ok
     end
   end
 
   @doc """
-  Returns the absolute path of the project's migrations directory.
+  Validates that the given elixirc_paths compile the migration files of the given app
+  directory's `app/migrations/` (see `validate_migrations_compiled!/1`).
   """
-  @spec migrations_dir() :: String.t()
-  def migrations_dir do
-    Path.join([Reflection.otp_app_priv_dir(), "hologram", "migrations"])
+  @spec validate_migrations_compiled!(String.t(), list(String.t())) :: :ok
+  def validate_migrations_compiled!(app_dir, elixirc_paths) do
+    if migration_files?(app_dir) and not compiles_migrations_dir?(app_dir, elixirc_paths) do
+      raise Hologram.CompileError,
+        message:
+          "app/migrations/ holds migration files, but this build does not compile the " <>
+            "directory, so the app would ship without its migrations - add \"app\" to " <>
+            "elixirc_paths in mix.exs, for every environment"
+    end
+
+    :ok
   end
 
   @doc """
-  Returns the ops of the migration file with the given contents, in file order.
+  Validates that none of the given migrations is a draft, in a build of the given
+  environment.
 
-  The file must start with the `use Hologram.Migration` header, and every statement
-  after it must be a migration op - anything else raises, naming the file and the line.
+  A draft compiles in dev and test, so the generator, which compiles the app before it
+  reads the history, can still read it and ask for its answers. Any other build is headed
+  for a deployment, and an unanswered question must not reach one. Returns :ok, or raises
+  Hologram.CompileError naming each resolve! op's file and line.
   """
-  @spec load_string!(String.t(), String.t()) :: list(%{atom => any})
-  # Migration files are the app's own code artifacts - generated into priv/, reviewed
-  # in PRs, and shipped with the release like any source file. Evaluating them is the
-  # format's designed behavior, and whoever could plant a malicious migration could
-  # plant a malicious module instead.
-  # sobelow_skip ["RCE.CodeModule"]
-  def load_string!(contents, path) do
-    [header | op_statements] =
-      contents
-      |> Code.string_to_quoted!(file: path)
-      |> statements()
-      |> validate_header!(path)
+  @spec validate_resolved!(list(%{atom => any}), atom) :: :ok
+  def validate_resolved!(migrations, env) do
+    unresolved = unresolved_entries(migrations)
 
-    Enum.each(op_statements, &validate_op_statement!(&1, path))
+    if unresolved != [] and env not in [:dev, :test] do
+      raise Hologram.CompileError,
+        message:
+          "the migration draft is not resolved yet, and a #{env} build refuses it:\n" <>
+            unresolved_lines(unresolved) <>
+            "\nWrite the ops that express what happened, delete the resolve! lines, " <>
+            "then finalize with mix holo.gen.migration."
+    end
 
-    {ops, _binding} = Code.eval_quoted({:__block__, [], [header, op_statements]}, [], file: path)
-
-    List.flatten(ops)
+    :ok
   end
+
+  @doc """
+  Validates that none of the project's migrations is a draft, in a build of the given
+  environment (see `validate_resolved!/2`).
+
+  Reads the compiled migration modules, so it covers a beam the build reuses from another
+  environment, whose compile never refused it: under `build_per_environment: false` one
+  build directory serves every environment. Lists the modules only in a build that refuses
+  drafts.
+  """
+  @spec validate_project_resolved!(atom) :: :ok
+  def validate_project_resolved!(env) when env in [:dev, :test], do: :ok
+
+  def validate_project_resolved!(env), do: validate_resolved!(list!(), env)
 
   @doc """
   Returns the resolve! ops of the given op list - the unresolved questions that make a
@@ -101,6 +142,26 @@ defmodule Hologram.Migration.Loader do
   @spec unresolved(list(%{atom => any})) :: list(%{atom => any})
   def unresolved(ops) do
     Enum.filter(ops, &(&1.op == :resolve!))
+  end
+
+  @doc """
+  Returns the lines listing the given unresolved entries (see `unresolved_entries/1`), one
+  per op with its location and kind, as the refusals of a draft print them.
+  """
+  @spec unresolved_lines(list({String.t(), %{atom => any}})) :: String.t()
+  def unresolved_lines(entries) do
+    Enum.map_join(entries, "\n", fn {path, op} -> "  #{path}:#{op.line} - #{inspect(op.kind)}" end)
+  end
+
+  @doc """
+  Returns the resolve! ops of the given migrations, each with the path of its migration,
+  in history order.
+  """
+  @spec unresolved_entries(list(%{atom => any})) :: list({String.t(), %{atom => any}})
+  def unresolved_entries(migrations) do
+    Enum.flat_map(migrations, fn migration ->
+      Enum.map(unresolved(migration.ops), &{migration.path, &1})
+    end)
   end
 
   @doc """
@@ -123,23 +184,41 @@ defmodule Hologram.Migration.Loader do
     :ok
   end
 
-  defp load_file!(file_name, dir) do
-    validate_file_name!(file_name, dir)
+  # Any compiled directory that is app/migrations or holds it compiles the migrations.
+  defp compiles_migrations_dir?(app_dir, elixirc_paths) do
+    migrations_dir = migrations_dir(app_dir)
 
-    path = Path.join(dir, file_name)
-
-    ops =
-      path
-      |> File.read!()
-      |> load_string!(path)
-
-    verify_rename_order!(ops, path)
-
-    %{version: Path.rootname(file_name), path: path, ops: ops}
+    elixirc_paths
+    |> Enum.map(&Path.expand(&1, app_dir))
+    |> Enum.any?(&(migrations_dir == &1 or String.starts_with?(migrations_dir, &1 <> "/")))
   end
 
-  defp migration_file?(file_name) do
-    not String.starts_with?(file_name, ".") and String.ends_with?(file_name, ".exs")
+  defp migrations_dir(app_dir), do: Path.join([app_dir, "app", "migrations"])
+
+  defp migration_files?(app_dir) do
+    dir = migrations_dir(app_dir)
+
+    case File.ls(dir) do
+      {:ok, file_names} -> Enum.any?(file_names, &String.ends_with?(&1, ".ex"))
+      {:error, _reason} -> false
+    end
+  end
+
+  # Mix's own default when a project sets no elixirc_paths. An umbrella's app is read
+  # from its own project, the one its config lives in.
+  defp project_elixirc_paths(app_dir) do
+    config =
+      case Mix.Project.apps_paths() do
+        nil ->
+          Mix.Project.config()
+
+        _apps_paths ->
+          Mix.Project.in_project(Reflection.otp_app(), app_dir, fn _module ->
+            Mix.Project.config()
+          end)
+      end
+
+    Keyword.get(config, :elixirc_paths, ["lib"])
   end
 
   defp references_entity?(op, module) do
@@ -156,48 +235,15 @@ defmodule Hologram.Migration.Loader do
     type == module or type == [module]
   end
 
-  defp statements({:__block__, _meta, statements}), do: statements
-
-  defp statements(single_statement), do: [single_statement]
-
-  defp validate_file_name!(file_name, dir) do
-    if not Regex.match?(@file_name_regex, file_name) do
-      raise Hologram.CompileError,
-        message:
-          "invalid migration file name #{Path.join(dir, file_name)} - " <>
-            "a migration file is named after its version: 14 timestamp digits with the " <>
-            "\".exs\" extension, e.g. \"20260813091500.exs\""
-    end
-  end
-
-  defp validate_header!(
-         [{:use, _meta, [{:__aliases__, _alias_meta, [:Hologram, :Migration]}]} | _rest] =
-           statements,
-         _path
-       ) do
-    statements
-  end
-
-  defp validate_header!(_statements, path) do
+  defp validate_distinct_versions!([%{version: version} = first, %{version: version} = second]) do
     raise Hologram.CompileError,
-      message: "migration file #{path} must start with the use Hologram.Migration header"
+      message:
+        "migration version #{version} is defined twice - " <>
+          "#{inspect(first.module)} (#{first.path}) and " <>
+          "#{inspect(second.module)} (#{second.path})"
   end
 
-  defp validate_op_statement!({name, _meta, args}, _path)
-       when name in @flat_ops and is_list(args) do
-    :ok
-  end
-
-  defp validate_op_statement!(statement, path) do
-    line =
-      case statement do
-        {_name, meta, _args} when is_list(meta) -> Keyword.get(meta, :line, 0)
-        _other -> 0
-      end
-
-    raise Hologram.CompileError,
-      message: "migration files contain only migration ops - #{path}:#{line}"
-  end
+  defp validate_distinct_versions!(_pair), do: :ok
 
   defp verify_rename_reference!(op, rename, path) do
     if op != rename and references_entity?(op, rename.from) do

@@ -63,6 +63,33 @@ defmodule Hologram.Test.FeatureHelpers do
   end
 
   @doc """
+  Blocks until the gate `hold_sync_frames/2` armed is holding at least one frame.
+
+  With `only: :all` that is the moment the fill has delivered everything before the marker saying
+  the client holds everything - the marker comes last - so a test can act on what the narrower
+  markers alone made true.
+  """
+  @spec await_held_sync_frame(struct, non_neg_integer) :: struct
+  def await_held_sync_frame(session, attempts_left \\ 100)
+
+  def await_held_sync_frame(_session, 0) do
+    raise Wallaby.ExpectationNotMetError, "Timed out waiting for the sync gate to hold a frame"
+  end
+
+  def await_held_sync_frame(session, attempts_left) do
+    script = "return globalThis.__hologramSyncGate?.parked.length ?? 0;"
+
+    Browser.execute_script(session, script, [], fn held ->
+      if held > 0 do
+        :ok
+      else
+        Process.sleep(50)
+        await_held_sync_frame(session, attempts_left - 1)
+      end
+    end)
+  end
+
+  @doc """
   Blocks until the client holds the given number of write batches waiting to ship.
 
   The point a test can act on after releasing held mutation traffic: zero pending batches means
@@ -149,24 +176,43 @@ defmodule Hologram.Test.FeatureHelpers do
   The starting-over frame itself is NOT held, so a test can wait for the client to report that it
   holds no place any more and know it is inside the window.
 
+  With `only: :all`, only the marker saying the client holds everything is held, and every row and
+  every narrower marker before it goes through. What that buys a test: a fill that has delivered all
+  it will, with the client still told nothing is complete beyond what the narrower markers said.
+  The server sends that marker last, so once it is held (see `await_held_sync_frame/1`) everything
+  before it has been applied. Rows and markers arriving after it are held behind it, in order: a
+  frame carrying a later place would otherwise be overwritten by the marker's older one on release.
+
+  Only the tab leading its group has a stream of its own to hold - the others are handed frames by
+  the leader - so a test with several tabs arms and awaits in the leading one.
+
   Wraps the `EventSource` constructor, so it must be called BEFORE the stream it means to hold is
   opened. A client opens a fresh one whenever it reconnects, which is what makes this usable in
-  the middle of a test: hold, then provoke the disconnect.
+  the middle of a test: hold, then provoke the disconnect. Calling it again arms the gate again,
+  with the options of the new call, and drops whatever it still holds - release first to keep it.
   """
-  @spec hold_sync_frames(struct) :: struct
-  def hold_sync_frames(session) do
+  @spec hold_sync_frames(struct, keyword) :: struct
+  def hold_sync_frames(session, opts \\ []) do
+    only =
+      case Keyword.get(opts, :only) do
+        nil -> nil
+        :all -> "all"
+      end
+
     script = """
     (() => {
+      const only = arguments[0];
       const held = globalThis.__hologramSyncGate;
 
       if (held) {
+        held.only = only;
         held.open = false;
         held.parked = [];
 
         return;
       }
 
-      const gate = {native: globalThis.EventSource, open: false, parked: []};
+      const gate = {native: globalThis.EventSource, only, open: false, parked: []};
 
       globalThis.__hologramSyncGate = gate;
 
@@ -181,13 +227,23 @@ defmodule Hologram.Test.FeatureHelpers do
         }
       };
 
+      // Read per event rather than when the listener is wrapped, so arming the gate again changes
+      // what an open stream's listeners hold.
+      const holds = (type, event) => {
+        if (gate.only === "all" && gate.parked.length === 0) {
+          return type === "synced" && JSON.parse(event.data).scope === "all";
+        }
+
+        return type === "sync_deltas" || type === "synced";
+      };
+
       globalThis.EventSource = class extends gate.native {
         addEventListener(type, listener, ...rest) {
           const holdable = type === "sync_deltas" || type === "synced";
 
           const wrapped = holdable
             ? (event) => {
-                if (gate.open) {
+                if (gate.open || !holds(type, event)) {
                   listener(event);
                 } else {
                   gate.parked.push([listener, event]);
@@ -201,7 +257,7 @@ defmodule Hologram.Test.FeatureHelpers do
     })();\
     """
 
-    Browser.execute_script(session, script)
+    Browser.execute_script(session, script, [only])
   end
 
   @doc """

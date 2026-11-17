@@ -20,58 +20,74 @@ defmodule Hologram.Migration.Generator do
   @flat_entity_ops [:delete_entity, :designate_user_entity, :rename_entity]
 
   @doc """
-  Writes the migration file taking the given directory's history to the given model,
-  and returns what happened: :nothing_to_do when the history already produces the model,
+  Writes the migration module taking the given migration history to the given model, and
+  returns what happened: :nothing_to_do when the history already produces the model,
   {:ok, path, question_count} when a file was written, or {:error, {:unresolved, entries}}
   when a draft is still waiting for its answers.
 
+  Options:
+    * `:dir` - the directory the file is written to (required)
+    * `:namespace` - the namespace of the module, unless a migration in `:dir` already has
+      one - the newest of those is followed, so a project that renamed it keeps the new one.
+      Required while `:dir` holds no migration
+    * `:format` - formats the module text, by default with the vocabulary's
+      locals_without_parens alone; the generate task passes the project's formatter
+
   An unresolved draft blocks generation - its questions are answered while the change is
   fresh, never stacked behind newer diffs that might change their meaning. The file is
-  named after the given timestamp, bumped by a second while that name is taken.
+  named after the given timestamp, bumped by a second while that version is taken.
 
-  A resolve!-free outcome is a finalized history, and finalization is passing shadow
-  verification - the full chain, a freshly written file included, is applied to a
-  scratch database and must produce the model's schema, raising otherwise. A draft
-  still holding questions is not verified: its marker ops carry no physical form yet.
+  A resolve!-free file is compiled at once, so one the build would refuse never stays
+  behind, and finalization is passing shadow verification - the full chain, the fresh
+  migration included, is applied to a scratch database and must produce the model's schema,
+  raising otherwise. A file that fails to compile or to verify is removed and its module
+  unloaded. A draft still holding questions is neither compiled nor verified: its marker ops
+  carry no physical form yet, and the developer edits it next.
   """
-  @spec generate(String.t(), %{atom => any}, DateTime.t()) ::
+  @spec generate(list(%{atom => any}), %{atom => any}, DateTime.t(), keyword) ::
           :nothing_to_do | {:ok, String.t(), non_neg_integer} | {:error, {:unresolved, list}}
-  def generate(dir, current_model, timestamp) do
-    migrations = Loader.load_dir!(dir)
-
-    unresolved =
-      Enum.flat_map(migrations, fn migration ->
-        Enum.map(Loader.unresolved(migration.ops), &{migration.path, &1})
-      end)
+  def generate(migrations, current_model, timestamp, opts) do
+    unresolved = Loader.unresolved_entries(migrations)
 
     if unresolved == [] do
-      dir
-      |> generate_file(migrations, current_model, timestamp)
-      |> verify_finalized(dir, current_model)
+      migrations
+      |> generate_file(current_model, timestamp, opts)
+      |> verify_finalized(migrations, current_model)
     else
       {:error, {:unresolved, unresolved}}
     end
   end
 
   @doc """
-  Returns the text of the migration file expressing the given plan.
+  Returns the text of the migration module with the given name expressing the given plan,
+  formatted with the given function.
 
   Entity renames come first, so every later line names the entity as the current model
-  does - then the entity blocks in alphabetical order, then the flat ops. The rendered
-  text is formatter-stable: the vocabulary is exported as parens-free, so a project's
-  mix format leaves generated files alone.
+  does - then the entity blocks in alphabetical order, then the flat ops. The default
+  formatting writes the vocabulary parens-free, as a project importing Hologram's formatter
+  config formats it; the generate task formats with the project's own config, so a fresh
+  file is what the project's mix format would write.
   """
-  @spec render(%{atom => any}) :: String.t()
-  def render(plan) do
+  @spec render(%{atom => any}, module, (String.t() -> String.t())) :: String.t()
+  def render(plan, module, format \\ &format/1) do
     sections =
       plan
       |> group_sections()
       |> Enum.map(&render_section/1)
 
     body = Enum.join(sections, "\n\n")
-    text = "use Hologram.Migration\n\n" <> body <> "\n"
 
-    format(text)
+    # @moduledoc false because Credo's strict checks read the source, where the module
+    # the generator writes would otherwise have none.
+    format.("""
+    defmodule #{inspect(module)} do
+    @moduledoc false
+
+    use Hologram.Migration
+
+    #{body}
+    end
+    """)
   end
 
   # The ops that can express each ambiguity, with what each one does to existing data.
@@ -177,19 +193,39 @@ defmodule Hologram.Migration.Generator do
     IO.iodata_to_binary([formatted, "\n"])
   end
 
-  defp generate_file(dir, migrations, current_model, timestamp) do
+  # A module that compiled but failed verification is unloaded with its file, so a retry in
+  # the same VM compiles it afresh. One that failed to compile was never left loaded, and the
+  # unload is then a no-op.
+  defp discard_file(path, module) do
+    File.rm(path)
+    :code.delete(module)
+    :code.purge(module)
+  end
+
+  defp generate_file(migrations, current_model, timestamp, opts) do
     replayed = Enum.reduce(migrations, Model.empty(), &Model.fold(&2, &1.ops))
     plan = Diff.diff(replayed, current_model)
 
     if plan.ops == [] and plan.questions == [] do
       :nothing_to_do
     else
-      path = Path.join(dir, "#{next_version(dir, timestamp)}.exs")
+      dir = Keyword.fetch!(opts, :dir)
+      format = Keyword.get(opts, :format, &format/1)
+
+      version = next_version(dir, timestamp, migrations)
+      module = module_name(migrations, version, opts)
+      path = Path.join(dir, "#{version}.ex")
 
       File.mkdir_p!(dir)
-      File.write!(path, render(plan))
+      File.write!(path, render(plan, module, format))
 
-      {:ok, path, length(plan.questions)}
+      question_count = length(plan.questions)
+
+      # A draft is left uncompiled: it is not verified, and a build outside dev and test
+      # refuses it by design, which would read as the file being broken.
+      migration = if question_count == 0, do: load_written!(path, module)
+
+      {:ok, path, question_count, migration}
     end
   end
 
@@ -251,16 +287,75 @@ defmodule Hologram.Migration.Generator do
     Enum.map_join(names, ", ", &inspect/1)
   end
 
-  # Two generations within one second on one machine would mint the same name - the
-  # version bumps until free, so the collision closes where names are minted rather
-  # than by widening every file name.
-  defp next_version(dir, timestamp) do
+  # The file compiled is the one this run just wrote into the app's own migrations directory -
+  # the same code the next mix compile builds.
+  # sobelow_skip ["RCE.Compile"]
+  defp load_written!(path, module) do
+    Code.compile_file(path)
+
+    [migration] = Loader.from_modules!([module])
+
+    migration
+  rescue
+    error ->
+      discard_file(path, module)
+
+      reraise error, __STACKTRACE__
+  end
+
+  # The module name is new by construction - it holds the version just minted - and is made
+  # once per generated file, by a developer's task run, never from a request.
+  # sobelow_skip ["DOS.ModuleConcat"]
+  defp module_name(migrations, version, opts) do
+    migrations
+    |> namespace(opts)
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    |> Module.concat("V#{version}")
+  end
+
+  # The history spans every app reaching Hologram - an umbrella sibling's or a dependency's
+  # migrations among them - so only the migrations in the target directory say which
+  # namespace this app's migrations use. The namespace is an existing module's, minus its
+  # last segment.
+  # sobelow_skip ["DOS.ModuleConcat"]
+  defp namespace(migrations, opts) do
+    dir =
+      opts
+      |> Keyword.fetch!(:dir)
+      |> Path.expand()
+
+    newest_here =
+      migrations
+      |> Enum.filter(&(source_dir(&1.module) == dir))
+      |> List.last()
+
+    if newest_here do
+      segments =
+        newest_here.module
+        |> Module.split()
+        |> Enum.drop(-1)
+
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      Module.concat(segments)
+    else
+      Keyword.fetch!(opts, :namespace)
+    end
+  end
+
+  # Two generations within one second on one machine would mint the same version - it
+  # bumps until free, so the collision closes where versions are minted rather than by
+  # widening every file name.
+  defp next_version(dir, timestamp, migrations) do
     version = Calendar.strftime(timestamp, "%Y%m%d%H%M%S")
 
-    path = Path.join(dir, "#{version}.exs")
+    taken? =
+      Enum.any?(migrations, &(&1.version == version)) or
+        dir
+        |> Path.join("#{version}.ex")
+        |> File.exists?()
 
-    if File.exists?(path) do
-      next_version(dir, DateTime.add(timestamp, 1, :second))
+    if taken? do
+      next_version(dir, DateTime.add(timestamp, 1, :second), migrations)
     else
       version
     end
@@ -545,6 +640,20 @@ defmodule Hologram.Migration.Generator do
 
   defp rename_verb(:roles), do: "rename_role"
 
+  # A beam stripped of its compile info names no source, and no directory holds it.
+  defp source_dir(module) do
+    source =
+      :compile
+      |> module.module_info()
+      |> Keyword.get(:source)
+
+    if source do
+      source
+      |> to_string()
+      |> Path.dirname()
+    end
+  end
+
   defp subject(%{kind: :attributes}), do: "the attributes"
 
   defp subject(%{kind: :entities}), do: "the entity types"
@@ -578,31 +687,33 @@ defmodule Hologram.Migration.Generator do
 
   defp takes_key_field?(_op), do: false
 
-  defp verify_finalized(:nothing_to_do, dir, current_model) do
-    migrations = Loader.load_dir!(dir)
+  defp verify_finalized(:nothing_to_do, migrations, current_model) do
     ShadowVerifier.verify!(migrations, current_model)
 
     :nothing_to_do
   end
 
-  defp verify_finalized({:ok, path, 0} = outcome, dir, current_model) do
-    try do
-      migrations = Loader.load_dir!(dir)
+  defp verify_finalized({:ok, path, 0, migration}, migrations, current_model) do
+    # Replayed at its place in version order, as every later load replays it - a migration
+    # already holding a later version sorts after it.
+    history = Enum.sort_by([migration | migrations], & &1.version)
 
-      ShadowVerifier.verify!(migrations, current_model)
+    try do
+      ShadowVerifier.verify!(history, current_model)
     rescue
       error ->
-        # A file that cannot be read back, or cannot build the model, is not history - left
-        # on disk it becomes the history of the next run, which then replays the rejected
-        # ops and reports the same failure forever, with nothing to say the file is the
-        # cause. The load reads the file just written, so it fails the same way.
-        File.rm(path)
+        # A migration that cannot build the model is not history - left on disk it becomes
+        # the history of the next run, which then replays the rejected ops and reports the
+        # same failure forever, with nothing to say the file is the cause.
+        discard_file(path, migration.module)
 
         reraise error, __STACKTRACE__
     end
 
-    outcome
+    {:ok, path, 0}
   end
 
-  defp verify_finalized(outcome, _dir, _current_model), do: outcome
+  defp verify_finalized({:ok, path, question_count, _migration}, _migrations, _current_model) do
+    {:ok, path, question_count}
+  end
 end

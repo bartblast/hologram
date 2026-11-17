@@ -56,7 +56,7 @@ defmodule Hologram.MigratorTest do
   end
 
   defp migration(version, ops) do
-    %{version: version, path: "#{version}.exs", ops: ops}
+    %{version: version, path: "app/migrations/#{version}.ex", ops: ops}
   end
 
   defp table_columns(table) do
@@ -708,6 +708,38 @@ defmodule Hologram.MigratorTest do
       assert check_covered!(migrations, model) == :ok
     end
 
+    test "raises naming each unanswered resolve! op of the history" do
+      migrations = [
+        migration("20260813091522", [%{op: :create_entity, entity: MyApp.Task, line: 4}]),
+        migration("20260813142237", [
+          %{
+            op: :resolve!,
+            entity: MyApp.Task,
+            kind: :fill,
+            payload: [attributes: [:title]],
+            line: 5
+          }
+        ])
+      ]
+
+      model = %{
+        entities: %{
+          MyApp.Task => %{attributes: [{:title, :string, []}], relationships: [], roles: []}
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      expected_msg =
+        normalize_newlines("""
+        the migration draft is not resolved yet:
+          app/migrations/20260813142237.ex:5 - :fill
+        Write the ops that express what happened, delete the resolve! lines, then finalize with mix holo.gen.migration.\
+        """)
+
+      assert_error RuntimeError, expected_msg, fn -> check_covered!(migrations, model) end
+    end
+
     test "raises when model changes have no migration" do
       migrations = [
         migration("20260813091522", [%{op: :create_entity, entity: MyApp.Task, line: 3}])
@@ -952,21 +984,23 @@ defmodule Hologram.MigratorTest do
   describe "pending/2" do
     test "returns the migrations the database has not applied, in their order" do
       migrations = [
-        %{version: "20260813091522", path: "a.exs", ops: []},
-        %{version: "20260813142237", path: "b.exs", ops: []},
-        %{version: "20260814080000", path: "c.exs", ops: []}
+        %{version: "20260813091522", path: "app/migrations/20260813091522.ex", ops: []},
+        %{version: "20260813142237", path: "app/migrations/20260813142237.ex", ops: []},
+        %{version: "20260814080000", path: "app/migrations/20260814080000.ex", ops: []}
       ]
 
       applied = MapSet.new(["20260813091522"])
 
       assert pending(migrations, applied) == [
-               %{version: "20260813142237", path: "b.exs", ops: []},
-               %{version: "20260814080000", path: "c.exs", ops: []}
+               %{version: "20260813142237", path: "app/migrations/20260813142237.ex", ops: []},
+               %{version: "20260814080000", path: "app/migrations/20260814080000.ex", ops: []}
              ]
     end
 
     test "returns an empty list when every migration is applied" do
-      migrations = [%{version: "20260813091522", path: "a.exs", ops: []}]
+      migrations = [
+        %{version: "20260813091522", path: "app/migrations/20260813091522.ex", ops: []}
+      ]
 
       assert pending(migrations, MapSet.new(["20260813091522"])) == []
     end

@@ -25,8 +25,7 @@ defmodule Hologram.Realtime.SSE.Adapters.Bandit do
 
   # Anything else from the socket ends the stream too. An SSE client sends nothing once
   # the stream is open, so bytes or an error here mean the connection is no longer one.
-  # Handed back for the same reason, and so that bytes start the connection's next
-  # request rather than being lost.
+  # Handed back for the same reason.
   def handle_message({event, _socket, _payload} = message)
       when event in [:ssl, :ssl_error, :tcp, :tcp_error] do
     send(self(), message)
