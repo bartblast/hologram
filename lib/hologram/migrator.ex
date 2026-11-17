@@ -427,12 +427,17 @@ defmodule Hologram.Migrator do
     end
   end
 
+  # Each op is checked right before it applies, against the database the ops before it
+  # left: a check read once for the whole file would look for a renamed attribute or entity
+  # under its new name in a database that still has the old one. A refusal takes back the
+  # ops before it with the transaction.
   defp apply_transactional(render, version, context) do
-    actual = Introspection.schema()
     mapping = Mapper.derive_from_model!(render.post_model)
 
-    Preflight.run!(render.transactional, actual, mapping)
-    Enum.each(render.transactional, &apply_op(&1, mapping))
+    Enum.each(render.transactional, fn op ->
+      Preflight.check!(op, mapping)
+      apply_op(op, mapping)
+    end)
 
     # A companion this file adds is filled AFTER every op has applied, not at its own add:
     # the diff applies add_column before alter_column, so a source column being cast to
@@ -441,8 +446,8 @@ defmodule Hologram.Migrator do
 
     # The tail's checks run here, against the schema the statements above just produced and
     # before anything commits: a file whose index cannot be built does not apply at all,
-    # rather than committing and failing afterwards. The schema is read again on purpose - a
-    # column this file adds and fills is absent from the one the file started from, and a
+    # rather than committing and failing afterwards. They read the schema after every op,
+    # companions filled, so a column this file adds and fills is counted like any other - a
     # check against an absent column answers zero, which a backfilled unique column must not
     # get.
     Preflight.run!(render.tail, Introspection.schema(), mapping)

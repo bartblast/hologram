@@ -3,6 +3,7 @@ defmodule Hologram.DB.PreflightTest do
 
   import Hologram.DB.Preflight
 
+  alias Hologram.DB.Connection
   alias Hologram.Test.Fixtures.Entity.Module1
 
   defp alter_column_op(before_type, after_type) do
@@ -22,6 +23,48 @@ defmodule Hologram.DB.PreflightTest do
         columns: [%{name: "estimate", type: :integer, default: default}]
       }
     }
+  end
+
+  describe "check!/2" do
+    # Reads the catalog before it raises, which is why it needs the database.
+    @tag :database
+    test "raises on a cast with no supported conversion" do
+      expected_msg =
+        ~s(changing column "estimate" on table "task" from uuid to int8 is not supported - ) <>
+          "remove the attribute and re-add it with the new type"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        check!(alter_column_op("uuid", "int8"), mapping(nil))
+      end
+    end
+
+    # Run against a connection that does not exist, so an op that read the schema would exit
+    # here rather than pass.
+    test "passes ops the checks cannot refuse without reading the schema" do
+      ops = [
+        %{op: :rename_column, table: "task", from: "estimate", to: "effort"},
+        %{
+          op: :create_index,
+          table: "task",
+          index: "task_estimate_$idx",
+          columns: ["estimate"],
+          nulls_distinct: true,
+          unique: false
+        },
+        %{
+          op: :add_column,
+          table: "task",
+          column: "estimate",
+          definition: %{type: "int8", null: false, collation: nil},
+          backfill: 7
+        },
+        alter_column_op("int8", "float8")
+      ]
+
+      Connection.with_connection(:no_connection, fn ->
+        Enum.each(ops, &assert(check!(&1, mapping(nil)) == :ok))
+      end)
+    end
   end
 
   describe "fill_value/3" do

@@ -4,6 +4,29 @@ defmodule Hologram.DB.Preflight do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
+  alias Hologram.DB.Introspection
+
+  @doc """
+  Validates that the existing rows can follow the given op, against the database as it
+  stands now, the way run!/3 does for a list of ops.
+
+  A migration file checks each op right before applying it, so the check sees the names
+  and the schema the file's earlier ops left - a rename included. A refusal still comes
+  before the refused op's own DDL, and the file's transaction takes back the ops before
+  it. The trade is that the check runs while those earlier ops hold their locks, after
+  their work - which a file that applies pays anyway.
+
+  The schema is read only for an op the checks can refuse, so a file of renames, plain
+  indexes or safe casts costs no catalog reads.
+  """
+  @spec check!(%{atom => any}, %{module => %{atom => any}}) :: :ok
+  def check!(op, mapping) do
+    if refusable?(op) do
+      check_op!(op, Introspection.schema(), mapping)
+    end
+
+    :ok
+  end
 
   @doc """
   Returns the encoded fill value for the given table's column, or :none when the column
@@ -34,8 +57,8 @@ defmodule Hologram.DB.Preflight do
   introspected schema and mapping.
 
   Returns :ok, or raises naming the obstacle and the ways out - the transformations rows
-  cannot follow fail before any DDL runs, so PostgreSQL never arbitrates: an error
-  surfacing from an apply is by definition a Hologram bug.
+  cannot follow fail before the DDL that would apply them runs, so PostgreSQL never
+  arbitrates: an error surfacing from an apply is by definition a Hologram bug.
 
   A check against a table the ops create, or a unique index over a column they add, answers
   zero without a query: the table holds no rows yet, and the column no value a row could
@@ -94,10 +117,11 @@ defmodule Hologram.DB.Preflight do
     end
   end
 
-  # An enum type this run creates has no values to lose - it reaches the database with
-  # exactly the ones being rebuilt. One file can hold both: a rendering chunk creates the
-  # type, and a later chunk of the same file reorders or drops values in it, while the
-  # schema this checks against is the one from before the file ran.
+  # An enum type absent from the schema has no values to lose. A migration file checks
+  # against the schema its earlier ops left, so a type an earlier chunk of the file created
+  # is there with the values it was created with, and only its rows are counted. Schema
+  # reconciliation checks a whole diff against one read, where a type the diff creates is
+  # absent.
   defp check_op!(%{op: :rebuild_enum_type} = op, actual, _mapping) do
     existing_values = Map.get(actual.enum_types, op.enum_type, [])
     removed_values = (existing_values -- op.values) -- carried_values(op)
@@ -110,6 +134,25 @@ defmodule Hologram.DB.Preflight do
   end
 
   defp check_op!(_op, _actual, _mapping), do: :ok
+
+  # The ops a check_op!/3 clause above can refuse - kept next to those clauses so the two
+  # cannot drift. An add carrying its backfill, a plain index and a safe cast never are. A
+  # migration's in-transaction unique index sits on a table the file creates, so its clause
+  # never counts a row there; it stays for parity with check_op!/3.
+  defp refusable?(%{op: :add_column} = op) do
+    not op.definition.null and not Map.has_key?(op, :backfill)
+  end
+
+  defp refusable?(%{op: :alter_column} = op) do
+    DDL.cast_class(op.before.type, op.after.type) != :safe or
+      (op.before.null and not op.after.null)
+  end
+
+  defp refusable?(%{op: :create_index, unique: true}), do: true
+
+  defp refusable?(%{op: :rebuild_enum_type}), do: true
+
+  defp refusable?(_op), do: false
 
   defp check_cast_rows!(op, actual) do
     statement = DDL.cast_check_statement(op.table, op.column, op.before.type, op.after.type)
@@ -179,11 +222,12 @@ defmodule Hologram.DB.Preflight do
     end
   end
 
-  # Every check here counts the rows that cannot follow a change, and a table this file
-  # creates has none to count - it does not exist in the schema this runs against, so the
-  # query would raise undefined_table instead of answering zero. The renderer can put the
-  # create and a later change to the same table in different chunks, which is how an op
-  # naming a table absent from the introspected schema reaches this at all.
+  # Every check here counts the rows that cannot follow a change, and a table the ops
+  # create has none to count - absent from the schema this runs against, the query would
+  # raise undefined_table instead of answering zero. Schema reconciliation reaches it: it
+  # checks a whole diff against one read, a create_table and the index on it included. A
+  # migration file checks each op against the schema its earlier ops left, where the table
+  # already stands.
   defp count_existing(actual, table, statement) do
     if Map.has_key?(actual.tables, table), do: count_result(statement), else: 0
   end

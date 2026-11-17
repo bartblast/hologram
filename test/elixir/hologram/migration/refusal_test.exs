@@ -1,6 +1,7 @@
 defmodule Hologram.Migration.RefusalTest do
   # The refusals, each against committed rows: a migration the existing data cannot follow
-  # is refused before any DDL runs, and the database is left exactly as it was.
+  # is refused before the DDL it cannot follow runs, and the database is left exactly as it
+  # was.
   #
   # Three things are asserted for every one of them, because a refusal that raised while
   # leaving something behind would satisfy the first alone: the apply raises with the
@@ -13,8 +14,8 @@ defmodule Hologram.Migration.RefusalTest do
   #
   # Not here, and each for its own reason:
   #   * tightening a column while a row holds NULL - covered in full by the atomicity
-  #     suite, whose file-wide-gate test uses that refusal as its lever and asserts the
-  #     same three things.
+  #     suite, whose "applies none of a file's ops when pre-flight refuses one of them" test
+  #     uses that refusal as its lever and asserts the same three things.
   #   * a required attribute the existing rows have no value for - refused EARLIER than
   #     the database, by `Model.fold/2` itself: `validate_filled_adds!/2` rejects an
   #     add_attribute that is required and carries neither backfill: nor default:, exempting
@@ -191,6 +192,104 @@ defmodule Hologram.Migration.RefusalTest do
 
       expected_msg =
         ~s(found 1 row in "my_app_task"."status" holding removed enum value 'todo' - ) <>
+          "update the rows or re-add the value"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    test "refuses a type change to an attribute the same file renamed", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      refused =
+        migration("20260813142237", [
+          %{op: :rename_attribute, entity: MyApp.Task, from: :amount, to: :cost, line: 3},
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :cost,
+            changes: [type: :integer],
+            line: 4
+          }
+        ])
+
+      expected_msg =
+        ~s(1 row in "my_app_task"."cost" cannot convert from text to int8 - ) <>
+          "fix the data or remove the attribute and re-add it with the new type"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    # The one refusal that raises without counting rows, so nothing but the check reading
+    # the op stands between it and PostgreSQL's own cast error.
+    test "refuses an unsupported type change to an attribute the same file renamed", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      refused =
+        migration("20260813142237", [
+          %{op: :rename_attribute, entity: MyApp.Task, from: :amount, to: :cost, line: 3},
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :cost,
+            changes: [type: :boolean],
+            line: 4
+          }
+        ])
+
+      expected_msg =
+        ~s(changing column "cost" on table "my_app_task" from text to boolean is not supported - ) <>
+          "remove the attribute and re-add it with the new type"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    test "refuses a type change on an entity the same file renamed", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      refused =
+        migration("20260813142237", [
+          %{op: :rename_entity, from: MyApp.Task, to: MyApp.Job, line: 3},
+          %{
+            op: :change_attribute,
+            entity: MyApp.Job,
+            name: :amount,
+            changes: [type: :integer],
+            line: 4
+          }
+        ])
+
+      expected_msg =
+        ~s(1 row in "my_app_job"."amount" cannot convert from text to int8 - ) <>
+          "fix the data or remove the attribute and re-add it with the new type"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    test "refuses removing an enum value from an attribute the same file renamed", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      refused =
+        migration("20260813142237", [
+          %{op: :rename_attribute, entity: MyApp.Task, from: :status, to: :state, line: 3},
+          %{
+            op: :delete_enum_value,
+            entity: MyApp.Task,
+            attribute: :state,
+            value: :todo,
+            line: 4
+          }
+        ])
+
+      expected_msg =
+        ~s(found 1 row in "my_app_task"."state" holding removed enum value 'todo' - ) <>
           "update the rows or re-add the value"
 
       assert_refused(scratch, create, first_model, refused, expected_msg)
