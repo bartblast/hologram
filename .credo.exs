@@ -10,6 +10,7 @@
           ~r"/_build/",
           ~r"/deps/",
           ~r"/node_modules/",
+          "benchmarks/sync/",
           "test/cluster/",
           "test/cowboy/",
           "test/ecosystem/",
