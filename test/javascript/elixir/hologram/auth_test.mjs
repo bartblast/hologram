@@ -2770,6 +2770,281 @@ describe("Elixir_Hologram_Auth", () => {
     });
   });
 
+  // Cases this side alone has: no client holds a server-only attribute's value - a struct holds its
+  // sentinel and a held row nothing at all - so a rule reading one never decides on it, wherever the
+  // rule reads it, and only the server's verdict answers a predicate the build sends as one.
+  describe("server-only attributes", () => {
+    const KEY = "read:00112233aabbccdd";
+
+    const defineServerOnlyModel = (policy, folderPolicy) => {
+      defineModel(policy, folderPolicy);
+
+      const model = globalThis.Hologram.sync.model;
+
+      Object.assign(model[FOLDER].attributes, {
+        secret: "boolean",
+        secret_on: "date",
+      });
+
+      model[FOLDER].serverOnly = ["secret", "secret_on"];
+
+      model[DOCUMENT].attributes.code = "string";
+      model[DOCUMENT].serverOnly = ["code"];
+
+      Model.reset();
+    };
+
+    const putFolder = (overrides = {}) =>
+      LocalDatabase.putRow(FOLDER, {
+        archived: false,
+        id: FOLDER_ID,
+        kind: null,
+        name: null,
+        parent_id: null,
+        ...overrides,
+      });
+
+    const putDocument = (overrides = {}) =>
+      LocalDatabase.putRow(DOCUMENT, {
+        author_id: null,
+        folder_id: FOLDER_ID,
+        id: DOC,
+        public: false,
+        title: null,
+        ...overrides,
+      });
+
+    // The held folder, boxed the way a page holds a synced row - with the sentinel in place of each
+    // server-only attribute.
+    const heldFolder = () =>
+      Model.box(FOLDER, LocalDatabase.getRow(FOLDER, FOLDER_ID));
+
+    const folderReads = (predicates, folderRow = {}) => {
+      defineServerOnlyModel({}, {read: [rule({predicates})]});
+      putFolder(folderRow);
+
+      return can(Type.nil(), Type.atom("read"), heldFolder());
+    };
+
+    const documentReads = (predicates) => {
+      defineServerOnlyModel({read: [rule({predicates})]});
+      putFolder();
+
+      return can(
+        Type.nil(),
+        Type.atom("read"),
+        document({folder_id: FOLDER_ID}),
+      );
+    };
+
+    const decidedByVerdict = {reads: [FOLDER], verdict: KEY};
+
+    afterEach(() => {
+      LocalDatabase.actorUserId = null;
+    });
+
+    it("grants nothing on a comparison with a server-only attribute", () => {
+      assert.deepStrictEqual(
+        folderReads([["secret", "!=", true]]),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        folderReads([["secret", "==", true]]),
+        Type.boolean(false),
+      );
+    });
+
+    it("grants nothing on a server-only date, and doesn't raise", () => {
+      assert.deepStrictEqual(
+        folderReads([["secret_on", "!=", null]]),
+        Type.boolean(false),
+      );
+    });
+
+    it("grants through an alternative that reads no server-only attribute", () => {
+      const predicates = [
+        {or: [[["secret", "!=", true]], [["name", "==", "Plans"]]]},
+      ];
+
+      assert.deepStrictEqual(
+        folderReads(predicates, {name: "Notes"}),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        folderReads(predicates, {name: "Plans"}),
+        Type.boolean(true),
+      );
+    });
+
+    it("grants nothing on a path to a server-only attribute of a held row", () => {
+      assert.deepStrictEqual(
+        documentReads([[["folder", "secret"], "!=", true]]),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        documentReads([[["folder", "secret"], "==", null]]),
+        Type.boolean(false),
+      );
+    });
+
+    // A path through an empty reference reads nil on both tiers, whatever the attribute it ends at.
+    it("decides a path to a server-only attribute through an empty reference", () => {
+      defineServerOnlyModel({
+        read: [rule({predicates: [[["folder", "secret"], "==", null]]})],
+      });
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document({folder_id: null})),
+        Type.boolean(true),
+      );
+    });
+
+    it("grants nothing on an operand naming a server-only attribute", () => {
+      assert.deepStrictEqual(
+        folderReads([["name", "==", {attribute: "secret"}]], {name: "Plans"}),
+        Type.boolean(false),
+      );
+    });
+
+    describe("in a quantifier's condition", () => {
+      const anyCode = {
+        filter: [["code", "==", "draft"]],
+        quantifier: "any",
+        source: ["documents"],
+      };
+
+      it("grants nothing on a held row's server-only attribute", () => {
+        putDocument();
+
+        assert.deepStrictEqual(folderReads([anyCode]), Type.boolean(false));
+      });
+
+      it("grants nothing on the server-only attribute of the row above", () => {
+        const predicates = [
+          {
+            filter: [["title", "==", {attribute: {name: "secret", outer: 1}}]],
+            quantifier: "any",
+            source: ["documents"],
+          },
+        ];
+
+        putDocument({title: "Plans"});
+
+        assert.deepStrictEqual(folderReads(predicates), Type.boolean(false));
+      });
+
+      // The held rows leave it open, so the server's verdict answers.
+      it("answers from the verdict", () => {
+        const verdictReads = (verdict) => {
+          putDocument();
+
+          return folderReads([{...anyCode, ...decidedByVerdict}], {
+            $verdicts: {[KEY]: verdict},
+          });
+        };
+
+        assert.deepStrictEqual(verdictReads(true), Type.boolean(true));
+        assert.deepStrictEqual(verdictReads(false), Type.boolean(false));
+      });
+    });
+
+    describe("in a predicate the build sends as its verdict", () => {
+      it("grants on a true verdict", () => {
+        assert.deepStrictEqual(
+          folderReads([decidedByVerdict], {$verdicts: {[KEY]: true}}),
+          Type.boolean(true),
+        );
+      });
+
+      it("grants nothing on a false verdict", () => {
+        assert.deepStrictEqual(
+          folderReads([decidedByVerdict], {$verdicts: {[KEY]: false}}),
+          Type.boolean(false),
+        );
+      });
+
+      it("grants nothing on a row the server sent with no verdicts", () => {
+        assert.deepStrictEqual(
+          folderReads([decidedByVerdict]),
+          Type.boolean(false),
+        );
+      });
+
+      // The server worked the verdict out for the session's user.
+      it("grants nothing on the session user's verdict asked about another user", () => {
+        LocalDatabase.actorUserId = ALICE;
+
+        defineServerOnlyModel(
+          {},
+          {read: [rule({predicates: [decidedByVerdict]})]},
+        );
+        putFolder({$verdicts: {[KEY]: true}});
+
+        assert.deepStrictEqual(
+          can(Type.bitstring(BOB), Type.atom("read"), heldFolder()),
+          Type.boolean(false),
+        );
+      });
+
+      // The server worked the verdict out over the row as stored, and a struct changed in an action
+      // may not be that row - a server-only attribute holding a value in its sentinel's place
+      // included.
+      it("grants nothing on a struct whose stored fields differ from the row's", () => {
+        const changedReads = (name, value) => {
+          defineServerOnlyModel(
+            {},
+            {read: [rule({predicates: [decidedByVerdict]})]},
+          );
+
+          putFolder({$verdicts: {[KEY]: true}});
+
+          const entity = heldFolder();
+          entity.data[Type.encodeMapKey(Type.atom(name))] = [
+            Type.atom(name),
+            value,
+          ];
+
+          return can(Type.nil(), Type.atom("read"), entity);
+        };
+
+        assert.deepStrictEqual(
+          changedReads("name", Type.bitstring("Renamed")),
+          Type.boolean(false),
+        );
+
+        assert.deepStrictEqual(
+          changedReads("secret", Type.boolean(true)),
+          Type.boolean(false),
+        );
+      });
+
+      // A rule delegating to the folder's read rule asks it about the held folder, whose own
+      // verdict answers.
+      it("answers a delegation to it from the related row's verdict", () => {
+        const delegates = (verdict) => {
+          defineServerOnlyModel(
+            {update: [rule({via: ["read", ["folder"]]})]},
+            {read: [rule({predicates: [decidedByVerdict]})]},
+          );
+
+          putFolder({$verdicts: {[KEY]: verdict}});
+
+          return can(
+            Type.nil(),
+            Type.atom("update"),
+            document({folder_id: FOLDER_ID}),
+          );
+        };
+
+        assert.deepStrictEqual(delegates(true), Type.boolean(true));
+        assert.deepStrictEqual(delegates(false), Type.boolean(false));
+      });
+    });
+  });
+
   // Cases this side alone has: the server orders a string by its sort key wherever it compares one,
   // and a client orders a row's string by the key filed beside it.
   describe("derived fields over the entity's own fields", () => {

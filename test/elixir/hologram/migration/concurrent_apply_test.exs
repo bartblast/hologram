@@ -46,7 +46,7 @@ defmodule Hologram.Migration.ConcurrentApplyTest do
   end
 
   defp migration(version, ops) do
-    %{version: version, path: "#{version}.exs", ops: ops}
+    %{version: version, path: "app/migrations/#{version}.ex", ops: ops}
   end
 
   # An applier on a session of its own, held at the gate until every one of them is

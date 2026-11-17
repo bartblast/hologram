@@ -28,6 +28,8 @@ defmodule Hologram.DBTest do
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module32
+  alias Hologram.Test.Fixtures.Entity.Module53
+  alias Hologram.Test.Fixtures.Entity.Module54
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.WriteError
 
@@ -310,6 +312,20 @@ defmodule Hologram.DBTest do
       assert error.reason == %{slug: [:unique]}
     end
 
+    test "raises a write error naming a taken key once, with the values given" do
+      create!(Module53.new(a: "bang_key_a", b: "bang_key_b"))
+
+      expected_msg =
+        normalize_newlines("""
+        cannot create Hologram.Test.Fixtures.Entity.Module53:
+          * key [:a, :b] is already taken (a "bang_key_a", b "bang_key_b")\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn ->
+        create!(Module53.new(a: "bang_key_a", b: "bang_key_b"))
+      end
+    end
+
     test "raises a write error naming a taken unique reference" do
       channel =
         %{name: "general"}
@@ -526,6 +542,40 @@ defmodule Hologram.DBTest do
           "type and the name of one of its to-many relationships"
 
       assert_error MisuseError, expected_msg, fn -> join_table_name(Reflection, :a) end
+    end
+  end
+
+  describe "refusal_lines/3" do
+    # One line per key, in the place of the first of its fields, then the field's own lines.
+    test "writes a taken key once, beside the other reasons its fields carry" do
+      violations = %{
+        a: [unique: [:a, :b]],
+        b: [unique: [:a, :b], unique: [:b, :d]],
+        d: [unique: [:b, :d]],
+        kind: [unique: [:kind, :slug]],
+        slug: [:unique, {:unique, [:kind, :slug]}]
+      }
+
+      values = %{a: "x", b: "y", d: "z", kind: :y, slug: "s"}
+
+      assert refusal_lines(Module53, violations, values) ==
+               normalize_newlines("""
+                 * key [:a, :b] is already taken (a "x", b "y")
+                 * key [:b, :d] is already taken (b "y", d "z")
+                 * key [:kind, :slug] is already taken (kind :y, slug "s")
+                 * attribute :slug "s" is already taken\
+               """)
+    end
+
+    # An update moving a field by an amount names no value for it.
+    test "leaves out the values the write did not give" do
+      assert refusal_lines(Module19, %{code: [:unique]}, %{}) ==
+               "  * attribute :code is already taken"
+
+      violations = %{count: [unique: [:name, :count]], name: [unique: [:name, :count]]}
+
+      assert refusal_lines(Module54, violations, %{}) ==
+               "  * key [:name, :count] is already taken"
     end
   end
 
@@ -906,6 +956,39 @@ defmodule Hologram.DBTest do
       end
 
       assert read(Module19, entity.id).slug == "taken"
+    end
+
+    # An update gives only its changes, so the key's line spells out the changed field and
+    # names the rest by the key.
+    test "raises naming a taken key with the changed values" do
+      create!(Module53.new(a: "update_key_a", b: "update_key_b"))
+      entity = create!(Module53.new(a: "update_key_a", b: "update_key_free"))
+
+      expected_msg =
+        "cannot update Hologram.Test.Fixtures.Entity.Module53 #{inspect(entity.id)}:\n" <>
+          ~s|  * key [:a, :b] is already taken (b "update_key_b")|
+
+      assert_error WriteError, expected_msg, fn ->
+        entity
+        |> put_attribute(:b, "update_key_b")
+        |> update!()
+      end
+    end
+
+    # A move names no value, so the key's line gives none.
+    test "raises naming a key a counter's move repeats" do
+      create!(Module54.new(count: 3, name: "moved_bang"))
+      entity = create!(Module54.new(count: 4, name: "moved_bang"))
+
+      expected_msg =
+        "cannot update Hologram.Test.Fixtures.Entity.Module54 #{inspect(entity.id)}:\n" <>
+          "  * key [:name, :count] is already taken"
+
+      assert_error WriteError, expected_msg, fn ->
+        entity
+        |> decrement(:count, 1)
+        |> update!()
+      end
     end
 
     test "raises naming a moved attribute's refused result" do

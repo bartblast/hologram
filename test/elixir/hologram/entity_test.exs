@@ -344,6 +344,31 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "__uniques__/0" do
+    test "returns empty list for entity type with no unique declarations" do
+      assert Module1.__uniques__() == []
+    end
+
+    test "returns the declared keys sorted, each in the order it names its fields" do
+      defmodule InlineEntityFixture174 do
+        use Hologram.Entity
+
+        unique [:workspace, :slug]
+        unique [:position, :workspace]
+
+        attribute :position, :integer
+        attribute :slug, :string
+
+        relationship :workspace, Module1
+      end
+
+      assert InlineEntityFixture174.__uniques__() == [
+               [:position, :workspace],
+               [:workspace, :slug]
+             ]
+    end
+  end
+
   describe "allow/2" do
     test "raises the lowering's compile error" do
       code = """

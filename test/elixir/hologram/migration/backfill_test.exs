@@ -47,7 +47,7 @@ defmodule Hologram.Migration.BackfillTest do
   end
 
   defp migration(version, ops) do
-    %{version: version, path: "#{version}.exs", ops: ops}
+    %{version: version, path: "app/migrations/#{version}.ex", ops: ops}
   end
 
   # What the column itself carries afterwards: whether it is required, and whether the

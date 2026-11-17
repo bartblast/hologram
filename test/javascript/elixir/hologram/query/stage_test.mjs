@@ -896,6 +896,16 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    it("prints a query term passed where an entity struct goes", () => {
+      const term = take(task, Type.integer(10));
+
+      assertBoxedError(
+        () => increment(term, Type.atom("count"), Type.integer(1)),
+        "Hologram.MisuseError",
+        `increment takes an entity struct, got: ${JSON.stringify(term)}`,
+      );
+    });
+
     it("raises when the struct's field holds nil", () => {
       assertBoxedError(
         () =>
@@ -1216,6 +1226,16 @@ describe("Elixir_Hologram_Query_Stage", () => {
         () => putAttribute(task, predicates([])),
         "Hologram.MisuseError",
         "put_attribute takes an entity struct, got: MyApp.Task",
+      );
+    });
+
+    it("prints a query term passed where an entity struct goes", () => {
+      const term = take(task, Type.integer(10));
+
+      assertBoxedError(
+        () => putAttribute(term, predicates([])),
+        "Hologram.MisuseError",
+        `put_attribute takes an entity struct, got: ${JSON.stringify(term)}`,
       );
     });
 

@@ -25,6 +25,7 @@ defmodule Hologram.MutationTest do
   alias Hologram.Test.Fixtures.Entity.Module26
   alias Hologram.Test.Fixtures.Entity.Module27
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module53
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Mutation.Module1, as: MutationModule1
   alias Hologram.Test.Fixtures.Mutation.Module2, as: MutationModule2
@@ -1287,6 +1288,45 @@ defmodule Hologram.MutationTest do
       write = create_write(Module19, Entity.generate_id(), %{"slug" => "taken"})
 
       assert run(envelope([write]), server()) == rejected(0, %{slug: [:unique]})
+    end
+
+    # The batch is refused whole, naming the write and the key on each of its fields.
+    test "refuses a duplicate of a key" do
+      %{a: "taken_a", b: "taken_b"}
+      |> Module53.new()
+      |> DB.create!()
+
+      writes = [
+        readable_write(Module53, Entity.generate_id(), %{"a" => "free_a", "b" => "free_b"}),
+        readable_write(Module53, Entity.generate_id(), %{"a" => "taken_a", "b" => "taken_b"})
+      ]
+
+      assert run(envelope(writes), server()) ==
+               rejected(1, %{a: [unique: [:a, :b]], b: [unique: [:a, :b]]})
+
+      assert length(DB.read(Module53)) == 1
+    end
+
+    test "refuses an update that leaves a row repeating a key" do
+      %{a: "held_a", b: "held_b"}
+      |> Module53.new()
+      |> DB.create!()
+
+      row =
+        %{a: "held_a", b: "spare_b"}
+        |> Module53.new()
+        |> DB.create!()
+
+      write =
+        update_write(Module53, row.id, %{"b" => "held_b"},
+          claim: ["authorize", "update"],
+          stamp: stamp_above(row)
+        )
+
+      assert run(envelope([write]), server()) ==
+               rejected(0, %{a: [unique: [:a, :b]], b: [unique: [:a, :b]]})
+
+      assert EntityOperations.get(Module53, row.id).b == "spare_b"
     end
 
     test "refuses a second reference to the target of a unique to-one" do

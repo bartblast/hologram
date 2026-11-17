@@ -2612,6 +2612,14 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    test "prints a query term passed where an entity struct goes" do
+      term = wrap_term(take(Module10, 10))
+
+      assert_error MisuseError,
+                   "increment takes an entity struct, got: #{inspect(term)}",
+                   fn -> increment(term, :count, 1) end
+    end
+
     test "raises when the struct's field holds nil" do
       entity = Module10.new()
 
@@ -3364,6 +3372,20 @@ defmodule Hologram.Query.StageTest do
       assert_error MisuseError,
                    "put_attribute takes an entity struct, got: Hologram.Test.Fixtures.Entity.Module2",
                    fn -> put_attribute(wrap_term(Module2), a: true) end
+    end
+
+    test "prints a query term passed where an entity struct goes" do
+      term = wrap_term(take(Module2, 10))
+
+      assert_error MisuseError,
+                   "put_attribute takes an entity struct, got: #{inspect(term)}",
+                   fn -> put_attribute(term, a: true) end
+    end
+
+    test "prints a struct of another kind as the struct" do
+      assert_error MisuseError,
+                   "put_attribute takes an entity struct, got: ~D[2026-11-15]",
+                   fn -> put_attribute(wrap_term(~D[2026-11-15]), a: true) end
     end
 
     test "raises when the values are neither a keyword list nor a map" do

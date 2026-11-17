@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.Helpers do
-  import ExUnit.Assertions, only: [assert: 2, assert_raise: 3]
+  import ExUnit.Assertions, only: [assert: 2, assert_raise: 3, flunk: 1]
   import Hologram.Commons.Guards, only: [is_regex: 1]
   import Hologram.Test.FeatureHelpers, only: [visit: 2, visit: 3]
 
@@ -16,10 +16,12 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.Sync.Session
   alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Booking
+  alias HologramFeatureTests.Entities.Bookmark
   alias HologramFeatureTests.Entities.Cabin
   alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
+  alias HologramFeatureTests.Entities.Inspection
   alias HologramFeatureTests.Entities.Item
   alias HologramFeatureTests.Entities.Label
   alias HologramFeatureTests.Entities.Leg
@@ -32,6 +34,9 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Project
   alias HologramFeatureTests.Entities.ProjectMember
+  alias HologramFeatureTests.Entities.Reaction
+  alias HologramFeatureTests.Entities.Report
+  alias HologramFeatureTests.Entities.ReportNote
   alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Shop
@@ -62,36 +67,52 @@ defmodule HologramFeatureTests.Helpers do
   @sync_session_initial_call {Session, :init, 1}
 
   def assert_client_error(session, expected_module, expected_msg, fun) do
-    fun.()
-    wait_for_js_error(session)
-  rescue
-    Wallaby.JSError ->
-      script = "return globalThis.Hologram?.['lastBoxedError'];"
+    # The page keeps the last Hologram error it raised, so one an earlier step raised would answer
+    # for a plain JavaScript error fun raises - it's cleared first. A JavaScript error already
+    # logged fails the test here, before fun runs, rather than counting as fun's.
+    Browser.execute_script(session, "delete globalThis.Hologram?.['lastBoxedError'];")
 
-      Browser.execute_script(session, script, [], fn result ->
-        assert result["module"] == inspect(expected_module),
-               "Expected exception #{inspect(expected_module)} but got #{result["module"]} (#{result["message"]})"
+    try do
+      fun.()
+      wait_for_js_error(session)
 
-        message = fn expected_display, actual_msg ->
-          """
-          Wrong message for #{inspect(expected_module)}
-          expected:
-            "#{expected_display}"
-          actual:
-            "#{actual_msg}"\
-          """
-        end
+      # An error the browser raises comes out of fun or the wait as Wallaby.JSError, and the wait
+      # otherwise only times out - so getting here means nothing was raised.
+      flunk(
+        "Expected #{inspect(expected_module)} to be raised in the browser, but nothing was raised"
+      )
+    rescue
+      Wallaby.JSError ->
+        script = "return globalThis.Hologram?.['lastBoxedError'];"
 
-        # A regex is matched rather than compared, and shows as its source - it has no
-        # string form to interpolate.
-        if is_regex(expected_msg) do
-          assert result["message"] =~ expected_msg,
-                 message.(Regex.source(expected_msg), result["message"])
-        else
-          assert result["message"] == expected_msg,
-                 message.(expected_msg, result["message"])
-        end
-      end)
+        Browser.execute_script(session, script, [], fn result ->
+          assert result,
+                 "Expected exception #{inspect(expected_module)} but the page holds no Elixir exception for the JavaScript error it raised"
+
+          assert result["module"] == inspect(expected_module),
+                 "Expected exception #{inspect(expected_module)} but got #{result["module"]} (#{result["message"]})"
+
+          message = fn expected_display, actual_msg ->
+            """
+            Wrong message for #{inspect(expected_module)}
+            expected:
+              "#{expected_display}"
+            actual:
+              "#{actual_msg}"\
+            """
+          end
+
+          # A regex is matched rather than compared, and shows as its source - it has no
+          # string form to interpolate.
+          if is_regex(expected_msg) do
+            assert result["message"] =~ expected_msg,
+                   message.(Regex.source(expected_msg), result["message"])
+          else
+            assert result["message"] == expected_msg,
+                   message.(expected_msg, result["message"])
+          end
+        end)
+    end
   end
 
   def assert_count(session, css_selector, count) do
@@ -154,6 +175,14 @@ defmodule HologramFeatureTests.Helpers do
     end
 
     Browser.execute_script(session, script, [], callback)
+  end
+
+  @doc """
+  Asserts the browser holds no place to resume its stream from, and returns the `session` - what a
+  client told to start over holds until the marker ending its refill hands it a new one.
+  """
+  def assert_no_place(session) do
+    assert_script_result(session, @place_script, nil)
   end
 
   @doc """
@@ -901,6 +930,16 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Empties the operations log, so a returning client names a place the log can no longer speak for
+  and is told to start over - the same answer a client away past the log's reach gets.
+  """
+  def truncate_oplog do
+    {:ok, _result} = Connection.query(~s(TRUNCATE "hologram_system"."oplog"), [])
+
+    :ok
+  end
+
+  @doc """
   Truncates the tables of the given entity types in one statement - PostgreSQL refuses to truncate a
   table another one references without it.
   """
@@ -927,10 +966,12 @@ defmodule HologramFeatureTests.Helpers do
       [
         Account,
         Booking,
+        Bookmark,
         Cabin,
         Channel,
         Document,
         Folder,
+        Inspection,
         Item,
         KillWorker,
         Label,
@@ -944,6 +985,9 @@ defmodule HologramFeatureTests.Helpers do
         Product,
         Project,
         ProjectMember,
+        Reaction,
+        Report,
+        ReportNote,
         RestockItem,
         Review,
         RoleGrant,

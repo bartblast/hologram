@@ -21,6 +21,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
+  alias Hologram.Entity.Validator
   alias Hologram.Job
   alias Hologram.Policy
   alias Hologram.Policy.Edges
@@ -129,20 +130,27 @@ defmodule Hologram.Compiler do
 
   @typedoc """
   The registered queries of one component or page: the normalized terms its derived fields build
-  (see `Hologram.Compiler.QueryExtractor.extract_derived_queries/3`) and the names of the derived
-  fields that build one.
+  (see `Hologram.Compiler.QueryExtractor.extract_derived_queries/3`), the names of the derived
+  fields that build one, and the entity types each derived field building a count reads, sorted
+  (see `extract_component_queries/3`).
   """
-  @type component_queries :: %{derived_queries: [atom], terms: [Query.t()]}
+  @type component_queries :: %{
+          count_types: %{atom => [module]},
+          derived_queries: [atom],
+          terms: [Query.t()]
+        }
 
   @typedoc """
   What the data layer keeps of a page's reach between compiles: whether the page's client code
   reaches a permission check (see `pages_checking_permissions/1`), the components among the modules
-  it reaches, sorted, and those modules, the struct types it names included.
+  it reaches, sorted, those modules, the struct types it names included, and whether one of those
+  components reads the session user from the context.
   """
   @type kept_page_reach :: %{
           checks_permissions?: boolean,
           components: [module],
-          modules: MapSet.t(module)
+          modules: MapSet.t(module),
+          reads_session_user?: boolean
         }
 
   @typedoc """
@@ -155,12 +163,14 @@ defmodule Hologram.Compiler do
   What the client's data layer is compiled with (see `build_sync_constants/3`).
   """
   @type sync_constants :: %{
+          derived_count_types: %{module => %{atom => [module]}},
           derived_queries: %{module => [atom]},
           entity_types: MapSet.t(module),
           model_hash: String.t() | nil,
           policy_hash: String.t() | nil,
           role_modules: list(module),
-          synced_types: list(module)
+          synced_types: list(module),
+          user_entity: module | nil
         }
 
   @type js_input_fingerprint ::
@@ -357,6 +367,11 @@ defmodule Hologram.Compiler do
   other rows it reads. Only when the given module info PLT records a user entity type: a data model
   without one has no grant store, so no page checks permissions against anything.
 
+  A page reading the session user from the context downloads the user window (see
+  `Hologram.Auth.user_window/2`): the client answers the context from its database on every render,
+  so the session user's row has to be held there, and kept current, like any row a query reads. Only
+  when the given module info PLT records a user entity type, for the same reason.
+
   The window ids are derived with whether the build checks permissions on the client (see
   `permission_checking?/2`), since a checking build's windows download the related rows the rules
   read, and a page has to name the windows the registered queries hold.
@@ -366,7 +381,8 @@ defmodule Hologram.Compiler do
   @spec build_page_windows(%{module => kept_page_reach}, %{module => component_queries}, PLT.t()) ::
           %{module => list(String.t())}
   def build_page_windows(reach_by_page, component_queries, module_info_plt) do
-    grant_store? = Reflection.user_entity(module_info_plt) != nil
+    user_entity = Reflection.user_entity(module_info_plt)
+    grant_store? = user_entity != nil
     permission_checking? = permission_checking?(reach_by_page, module_info_plt)
 
     # Each component's window ids are derived once, however many pages reach it.
@@ -399,6 +415,15 @@ defmodule Hologram.Compiler do
           [grants_window_id() | window_ids]
         else
           window_ids
+        end
+
+      # Deduplicated for the same reason: a page querying the user entity whole reaches the user
+      # window by two routes.
+      page_window_ids =
+        if grant_store? and reach.reads_session_user? do
+          [user_window_id(user_entity, permission_checking?) | page_window_ids]
+        else
+          page_window_ids
         end
 
       sorted_window_ids =
@@ -735,9 +760,10 @@ defmodule Hologram.Compiler do
   Folds what each page's client code reaches, as `list_reach_by_page/2` lists it, into what the data
   layer keeps of it (see `kept_page_reach`), keyed by page module. The components among the reached
   modules are told by the given module info PLT, and the page is one of them: a page declares derived
-  fields as a component does, and their queries are its own. The pages checking permissions are given as
-  `pages_checking_permissions/1` lists them, from the pages' reach on the call graph BEFORE manually
-  ported MFAs are removed.
+  fields as a component does, and their queries are its own. A page reads the session user when one
+  of its components declares a prop taking it from the context (`from_context: {Hologram, :user}`).
+  The pages checking permissions are given as `pages_checking_permissions/1` lists them, from the
+  pages' reach on the call graph BEFORE manually ported MFAs are removed.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_kept_page_reach_3/README.md
   """
@@ -760,7 +786,8 @@ defmodule Hologram.Compiler do
       kept_reach = %{
         checks_permissions?: MapSet.member?(checking_pages, page_module),
         components: components,
-        modules: MapSet.new(modules)
+        modules: MapSet.new(modules),
+        reads_session_user?: Enum.any?(components, &reads_session_user?/1)
       }
 
       {page_module, kept_reach}
@@ -885,9 +912,10 @@ defmodule Hologram.Compiler do
   query has no authority to claim on either tier.
 
   The grants window is among the windows when the given entity types hold the role grant store,
-  which a data model does exactly when it designates a user entity type. Whether the build has a page
-  checking permissions on the client is given (see `permission_checking?/2`): such a client's
-  windows also download the related rows its types' rules read.
+  which a data model does exactly when it designates a user entity type. So is the user window (see
+  `Hologram.Auth.user_window/2`). Whether the build has a page checking permissions on the client is
+  given (see `permission_checking?/2`): such a client's windows also download the related rows its
+  types' rules read, the user window's among them.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_3/README.md
   """
@@ -915,6 +943,7 @@ defmodule Hologram.Compiler do
       entries
       |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
       |> put_grants_window(entity_types)
+      |> put_user_window(entity_types, permission_checking?)
 
     %{
       derived_queries: derived_queries_index(component_queries),
@@ -1645,6 +1674,12 @@ defmodule Hologram.Compiler do
   `component_queries`). The entity types are the ones of the build, over which a query whose entity
   type is an argument is replayed.
 
+  A derived field building a count gets the entity types its count terms read (see
+  `Hologram.Query.Registry.entity_types/1`), the union over its branches: the client answers the
+  count from the server's number until it holds every row of those types, then counts its own. The
+  types a branch building rows reads are not among them - rows are answered from what the client
+  holds from the start.
+
   The IR the derived fields' functions are walked over is read from the given IR PLT, the
   compile's, and the components it lacks are built into it first, in one go.
 
@@ -1667,6 +1702,7 @@ defmodule Hologram.Compiler do
       terms = Enum.flat_map(derived_queries, fn {_name, derived_terms} -> derived_terms end)
 
       queries = %{
+        count_types: count_types(derived_queries),
         derived_queries: Enum.map(derived_queries, fn {name, _terms} -> name end),
         terms: terms
       }
@@ -2314,6 +2350,11 @@ defmodule Hologram.Compiler do
   keyed by component - the fields the client answers from its database rather than computing a
   value of.
 
+  `:derived_count_types` are the entity types each of those fields building a count reads, keyed
+  by component and then by field (see `extract_component_queries/3`) - what the client waits to
+  hold every row of before it counts for itself rather than showing the server's number. A
+  component with no such field is left out.
+
   When the given module info PLT records a user entity type, the grant type joins the entity
   types: a client holds grant rows, and a row of a type the model does not name cannot be read back
   at all. No query names that type - the grants window is registered rather than extracted - so it
@@ -2333,6 +2374,12 @@ defmodule Hologram.Compiler do
 
   `:role_modules` are the project's global role modules: a client asking whether a user holds a
   global role needs every one of them to refuse an unknown one and to expand the one asked about.
+
+  `:user_entity` is the project's user entity type, which a client answers the session user's
+  row from (see `Hologram.Template.Renderer`'s `{Hologram, :user}` context), or nil when the model
+  designates none or the client doesn't hold the type. A user entity type declaring no rule is
+  one nobody may read, so no row of it ever reaches a client, and the model leaves it out unless a
+  page reaches it.
 
   `:model_hash` is the hash of the project's data model, of every entity type and global role the
   module info PLT records, whatever the pages reach. It is nil when the PLT records no entity type:
@@ -2412,23 +2459,28 @@ defmodule Hologram.Compiler do
       |> put_grant_type(all_entity_types)
       |> rules_entity_types()
 
+    user_entity = Reflection.user_entity(module_info_plt)
+
     %{
+      derived_count_types: derived_count_types(component_modules, component_queries),
       derived_queries: derived_queries(component_modules, component_queries),
       entity_types: entity_types,
       model_hash: model_hash(all_entity_types, role_modules),
       policy_hash: policy_hash(all_entity_types),
       role_modules: role_modules,
       synced_types:
-        synced_types(reached_entity_types, entity_types, reach_by_page, module_info_plt)
+        synced_types(reached_entity_types, entity_types, reach_by_page, module_info_plt),
+      user_entity: if(MapSet.member?(entity_types, user_entity), do: user_entity)
     }
   end
 
   @doc """
   Builds the JavaScript statement that sets the client's data layer constants,
   `globalThis.Hologram.sync`, from the given sync constants (see `build_sync_constants/3`): the
-  derived fields whose function builds a query, the global roles with the role modules carrying
-  each, the model of the entity types the client holds, the hash of the project's data model, the
-  hash of the rules it was rendered with, and the sync protocol version.
+  entity types each derived field building a count reads, the derived fields whose function builds
+  a query, the global roles with the role modules carrying each, the model of the entity types the
+  client holds, the hash of the project's data model, the hash of the rules it was rendered with,
+  the sync protocol version, and the user entity type.
 
   What the runtime bundle was built against, said by the bundle itself. It has to be baked in
   rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
@@ -2462,12 +2514,14 @@ defmodule Hologram.Compiler do
     else
       model = render_entity_model(sync_constants.entity_types)
 
+      count_types = render_derived_count_types(sync_constants.derived_count_types)
       derived_queries = render_derived_queries(sync_constants.derived_queries)
       expanded_roles = render_global_expanded_roles(sync_constants.role_modules)
 
       policy_hash = Jason.encode!(sync_constants.policy_hash)
+      user_entity = render_user_entity(sync_constants.user_entity)
 
-      ~s/globalThis.Hologram.sync = {derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}};/
+      ~s/globalThis.Hologram.sync = {countTypes: #{count_types}, derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}, userEntity: #{user_entity}};/
     end
   end
 
@@ -2983,7 +3037,7 @@ defmodule Hologram.Compiler do
   defp quantified_type(hops, [entity_type | _types_above]),
     do: Derived.path_target(entity_type, hops)
 
-  # The verdict key and the read types of a deciding quantifier standing in a rule's predicates, as
+  # The verdict key and the read types of a deciding clause standing in a rule's predicates, as
   # members of its object - none for any other clause.
   defp render_verdict_members(clause, {entity_type, operation}) do
     if Policy.deciding_quantifier?(entity_type, clause) do
@@ -3971,6 +4025,32 @@ defmodule Hologram.Compiler do
     Reflection.has_function?(module, :__derived__, 0) and module.__derived__() != []
   end
 
+  # The entity types each derived field building a count reads, over every branch building one. A
+  # field with no count branch is left out.
+  defp count_types(derived_queries) do
+    derived_queries
+    |> Enum.map(fn {name, terms} ->
+      types =
+        terms
+        |> Enum.filter(&(&1.cardinality == :count))
+        |> Enum.reduce(MapSet.new(), &MapSet.union(&2, Registry.entity_types(&1)))
+        |> Enum.sort()
+
+      {name, types}
+    end)
+    |> Enum.reject(fn {_name, types} -> types == [] end)
+    |> Map.new()
+  end
+
+  # The count types of each component, keyed by component. A component with none is left out, which
+  # the client reads as none - and a count it finds no types for waits for the whole pot.
+  defp derived_count_types(component_modules, component_queries) do
+    component_modules
+    |> Enum.map(&{&1, Map.fetch!(component_queries, &1).count_types})
+    |> Enum.reject(fn {_module, count_types} -> count_types == %{} end)
+    |> Map.new()
+  end
+
   # The derived fields of each component whose function builds a query, which the renderers run
   # as one. A component with none is left out, which the client reads as none.
   defp derived_queries(component_modules, component_queries) do
@@ -4561,25 +4641,38 @@ defmodule Hologram.Compiler do
   # The terms among them - a bound, a pattern's options - are written by the given function: as
   # JavaScript for the runtime script, and serialized for a sync frame, which carries JSON.
   defp render_constraints(entity_type, encode_term) do
+    max_bytes = Validator.unique_string_max_bytes(entity_type)
+
     entity_type.__attributes__()
-    |> Enum.filter(fn {_name, _type, opts} ->
-      Enum.any?(@baked_constraint_opts, &Keyword.has_key?(opts, &1))
+    |> Enum.filter(fn {name, _type, opts} ->
+      Map.has_key?(max_bytes, name) or
+        Enum.any?(@baked_constraint_opts, &Keyword.has_key?(opts, &1))
     end)
     |> Enum.map(fn {name, _type, opts} ->
-      {Atom.to_string(name), render_attribute_constraints(opts, encode_term)}
+      {Atom.to_string(name),
+       render_attribute_constraints(opts, Map.get(max_bytes, name), encode_term)}
     end)
     |> render_json_object()
   end
 
-  defp render_attribute_constraints(opts, encode_term) do
-    @baked_constraint_opts
-    |> Enum.flat_map(fn key ->
-      case Keyword.fetch(opts, key) do
-        {:ok, value} -> [{Atom.to_string(key), render_constraint_value(key, value, encode_term)}]
-        :error -> []
-      end
-    end)
-    |> render_json_object()
+  # max_bytes is no declaration option: it is the bound the attribute's unique indexes put on a
+  # string, which the server works out from the whole type - a key declared with unique shares
+  # one index entry among its fields - so the client is handed the answer, not the rule.
+  defp render_attribute_constraints(opts, max_bytes, encode_term) do
+    declared =
+      Enum.flat_map(@baked_constraint_opts, fn key ->
+        case Keyword.fetch(opts, key) do
+          {:ok, value} ->
+            [{Atom.to_string(key), render_constraint_value(key, value, encode_term)}]
+
+          :error ->
+            []
+        end
+      end)
+
+    derived = if max_bytes, do: [{"max_bytes", Integer.to_string(max_bytes)}], else: []
+
+    render_json_object(declared ++ derived)
   end
 
   # A bound travels as the ENCODED TERM its literal becomes, for the reason a default does: a
@@ -5162,7 +5255,17 @@ defmodule Hologram.Compiler do
     render_json_object(members ++ render_verdict_members(clause, verdict_context))
   end
 
-  defp render_policy_clause(types, {name, operator, value}, _verdict_context) do
+  # A deciding predicate standing in a rule's predicates - one reading a server-only attribute,
+  # whose value no client holds - is the key the server's verdict on it is sent under and the types it
+  # reads alone, since the client answers it from the verdict and nothing else.
+  defp render_policy_clause(types, {_name, _operator, _value} = clause, verdict_context) do
+    case render_verdict_members(clause, verdict_context) do
+      [] -> render_policy_triple(types, clause)
+      members -> render_json_object(members)
+    end
+  end
+
+  defp render_policy_triple(types, {name, operator, value}) do
     name_js = render_derived_name(name)
 
     operator_js =
@@ -5340,6 +5443,35 @@ defmodule Hologram.Compiler do
     Enum.filter(modules, fn module ->
       match?({:ok, %{component?: true}}, PLT.get(module_info_plt, module))
     end)
+  end
+
+  defp render_derived_count_types(derived_count_types) do
+    derived_count_types
+    |> Enum.map(fn {module, count_types} ->
+      spelled_fields =
+        count_types
+        |> Enum.map(fn {name, types} ->
+          spelled_types =
+            types
+            |> Enum.map(&Codec.encode_enum_value/1)
+            |> Jason.encode!()
+
+          {Atom.to_string(name), spelled_types}
+        end)
+        |> render_json_object()
+
+      {Codec.encode_enum_value(module), spelled_fields}
+    end)
+    |> render_json_object()
+  end
+
+  # A page module defines no props, so it never reads anything from the context through one.
+  # TODO: what this decides has to outlive the windows, see the TODO on Auth.user_window/2.
+  defp reads_session_user?(module) do
+    Reflection.has_function?(module, :__props__, 0) and
+      Enum.any?(module.__props__(), fn {_name, _type, opts} ->
+        opts[:from_context] == {Hologram, :user}
+      end)
   end
 
   defp render_derived_queries(derived_queries) do
@@ -5546,6 +5678,15 @@ defmodule Hologram.Compiler do
           js_bindings_registration_call <> erlang_function_defs <> elixir_function_defs,
       import_statements: import_statements
     }
+  end
+
+  # Spelled as the model's keys are, the way a query term names its entity type.
+  defp render_user_entity(nil), do: "null"
+
+  defp render_user_entity(user_entity) do
+    user_entity
+    |> Codec.encode_enum_value()
+    |> Jason.encode!()
   end
 
   defp render_erlang_function_defs(mfas, ir_plt, erlang_js_dir) do
@@ -5767,6 +5908,28 @@ defmodule Hologram.Compiler do
     end
   end
 
+  # Registered whenever the data model designates a user entity type, for the reason the grants
+  # window is: the build decides whether any client subscribes, and an entry nothing asks for costs
+  # one map key.
+  defp put_user_window(windows, entity_types, permission_checking?) do
+    # The first by name, as Reflection.user_entity/1 picks it for the page windows.
+    user_entity =
+      entity_types
+      |> Enum.filter(&Reflection.user_entity?/1)
+      |> Enum.sort()
+      |> List.first()
+
+    case user_entity do
+      nil ->
+        windows
+
+      user_entity ->
+        window = Auth.user_window(user_entity, permission_checking?)
+
+        Map.put_new(windows, Registry.id(window), window)
+    end
+  end
+
   defp queried_entity_types(term) do
     nested_types =
       term.include
@@ -5985,6 +6148,12 @@ defmodule Hologram.Compiler do
 
   defp grants_window_id do
     Registry.id(Auth.grants_window())
+  end
+
+  defp user_window_id(user_entity, permission_checking?) do
+    user_entity
+    |> Auth.user_window(permission_checking?)
+    |> Registry.id()
   end
 
   defp window_id(term, permission_checking?) do

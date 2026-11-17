@@ -1088,6 +1088,39 @@ defmodule Hologram.Policy.ValidatorTest do
       assert validate_model!([InlinePolicyFixture112, InlinePolicyFixture107], []) == :ok
     end
 
+    # The delegated read rule's server-only path is answered from the server's verdict on the
+    # related row, which a browser holds as it was sent, so no browser reads the row beyond it.
+    test "accepts a delegation to a read rule whose server-only path runs through a type nobody may read" do
+      defmodule InlinePolicyFixture124 do
+        use Hologram.Entity
+
+        attribute :secret, :boolean, server_only: true
+
+        allow :create
+      end
+
+      defmodule InlinePolicyFixture125 do
+        use Hologram.Entity
+
+        relationship :owner, Hologram.Policy.ValidatorTest.InlinePolicyFixture124
+
+        allow :read, when: owner.secret == true
+      end
+
+      defmodule InlinePolicyFixture126 do
+        use Hologram.Entity
+
+        relationship :report, Hologram.Policy.ValidatorTest.InlinePolicyFixture125
+
+        allow :read
+        allow :update, via: {:read, report}
+      end
+
+      types = [InlinePolicyFixture124, InlinePolicyFixture125, InlinePolicyFixture126]
+
+      assert validate_model!(types, []) == :ok
+    end
+
     test "accepts a non-read rule's none through a row of a type nobody may read" do
       defmodule InlinePolicyFixture113 do
         use Hologram.Entity
@@ -1567,7 +1600,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate members.pending for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture123 - members.pending reads members.muted, which is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
+        "invalid predicate members.pending for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture123 - members.pending reads members.muted, which is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, which a client answers from the server's verdict on the row it was sent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture123, InlinePolicyFixture123Member], [])
@@ -1605,7 +1638,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate :masked for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture103 - :masked reads :token, which is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
+        "invalid predicate :masked for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture103 - :masked reads :token, which is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, which a client answers from the server's verdict on the row it was sent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture103], [])
@@ -1753,7 +1786,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate :token for allow :update, as: :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture33 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
+        "invalid predicate :token for allow :update, as: :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture33 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, which a client answers from the server's verdict on the row it was sent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture33], [])
@@ -1778,7 +1811,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate seats.code for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture110 - seats.code is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
+        "invalid predicate seats.code for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture110 - seats.code is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, which a client answers from the server's verdict on the row it was sent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture109, InlinePolicyFixture110], [])
@@ -1805,7 +1838,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate seats.code for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture118 - seats.code is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
+        "invalid predicate seats.code for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture118 - seats.code is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, which a client answers from the server's verdict on the row it was sent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture117, InlinePolicyFixture118], [])
@@ -1822,7 +1855,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate author.password_hash for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture51 - author.password_hash is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
+        "invalid predicate author.password_hash for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture51 - author.password_hash is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, which a client answers from the server's verdict on the row it was sent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, InlinePolicyFixture51], [])
@@ -1840,7 +1873,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate :token for allow :update, as: :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture36 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
+        "invalid predicate :token for allow :update, as: :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture36 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, which a client answers from the server's verdict on the row it was sent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture36], [])
@@ -1859,7 +1892,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate :token for allow :update, as: :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture39 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
+        "invalid predicate :token for allow :update, as: :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture39 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, which a client answers from the server's verdict on the row it was sent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture39], [])
@@ -1971,9 +2004,9 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
-    # The browser decides a named read line through can?, over values it holds - a server-only
-    # attribute isn't one.
-    test "rejects a named read line testing a server-only attribute" do
+    # The server sends its verdict on a server-only condition under every key a line lands under,
+    # a name included, so the browser answers can?(user, :peek, row) from it.
+    test "accepts a named read line testing a server-only attribute" do
       defmodule NamedServerOnlyReadFixture do
         use Hologram.Entity
 
@@ -1983,12 +2016,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :read, as: :peek, when: secret == true
       end
 
-      expected_msg =
-        "invalid predicate :secret for allow :read, as: :peek in Hologram.Policy.ValidatorTest.NamedServerOnlyReadFixture - :secret is server_only, and the client cannot decide :peek locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([NamedServerOnlyReadFixture], [])
-      end
+      assert validate_model!([NamedServerOnlyReadFixture], []) == :ok
     end
 
     # The line's chain sits under its name and under :update alike, and the name is reported
@@ -2686,7 +2714,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate :token for allow :update, as: :publish in Hologram.Policy.ValidatorTest.TakenServerOnlyEntity, taken from Hologram.Policy.ValidatorTest.TakenServerOnlyPolicy - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
+        "invalid predicate :token for allow :update, as: :publish in Hologram.Policy.ValidatorTest.TakenServerOnlyEntity, taken from Hologram.Policy.ValidatorTest.TakenServerOnlyPolicy - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, which a client answers from the server's verdict on the row it was sent"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([TakenServerOnlyEntity], [])

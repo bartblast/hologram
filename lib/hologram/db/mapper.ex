@@ -84,8 +84,9 @@ defmodule Hologram.DB.Mapper do
   name), :pk_constraint (the derived `<table>_$pk` constraint name), :columns (as returned
   by columns/1), :indexes (index name to %{columns:, nulls_distinct:, unique:} - a
   `<table>_<attribute>_$uidx` entry per `unique: true` attribute, a `<table>_<column>_$uidx`
-  entry per `unique: true` to-one over its reference column, plus the role grant store's
-  two framework-owned ones), and :join_tables (as returned by join_tables/1).
+  entry per `unique: true` to-one over its reference column, a `<table>_<columns>_$uidx` entry
+  per key declared with unique over its fields' columns in declared order, plus the role grant
+  store's two framework-owned ones), and :join_tables (as returned by join_tables/1).
   """
   @spec derive!(list(module), list(module)) :: %{module => %{atom => any}}
   def derive!(entity_types, role_modules) do
@@ -403,6 +404,29 @@ defmodule Hologram.DB.Mapper do
     columns
   end
 
+  defp key_column(field, relationship_names) do
+    if field in relationship_names,
+      do: reference_column_name(field),
+      else: Atom.to_string(field)
+  end
+
+  # One entry per key declared with unique, over its fields' columns in the order the declaration
+  # names them - an attribute's own column, a to-one's reference column. Nulls stay distinct, as
+  # for a unique attribute: a row holding nil in a field of the key repeats no other row. A to-one
+  # in a key keeps its plain index, since this one serves a lookup by the reference only when the
+  # reference leads it.
+  defp key_entries(entity_type, entry, segments) do
+    relationship_names = Enum.map(entry.relationships, fn {name, _type, _opts} -> name end)
+
+    Enum.map(entry.uniques, fn fields ->
+      columns = Enum.map(fields, &key_column(&1, relationship_names))
+
+      {fit_identifier(segments, columns, "$uidx"),
+       %{columns: columns, nulls_distinct: true, unique: true},
+       "unique #{inspect(fields)} in #{inspect(entity_type)}"}
+    end)
+  end
+
   # One step at a time, re-measuring after each, so a name only loses what it has to.
   defp cut_parts(table_segments, columns, budget) do
     kept = Enum.join(table_segments ++ columns, "_")
@@ -510,7 +534,9 @@ defmodule Hologram.DB.Mapper do
          "relationship #{inspect(name)} in #{inspect(entity_type)}"}
       end)
 
-    attribute_entries ++ reference_entries ++ framework_index_entries(entity_type)
+    attribute_entries ++
+      reference_entries ++
+      key_entries(entity_type, entry, segments) ++ framework_index_entries(entity_type)
   end
 
   defp enum_values(:enum, opts) do
@@ -729,7 +755,8 @@ defmodule Hologram.DB.Mapper do
         {:role, :enum, [values: role_values]}
       ],
       relationships: [{:granted_by, user_entity, [optional: true]}, {:user, user_entity, []}],
-      roles: []
+      roles: [],
+      uniques: []
     }
   end
 

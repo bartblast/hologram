@@ -33,9 +33,10 @@ const CANONICAL_ID =
 
 // What a condition holds as when this client cannot tell: a related row it would read is one it
 // does not hold - the server reads the row as stored, so taking it for a missing one could grant
-// what the server refuses (`project.status != :archived` over a project nobody synced). A rule
-// grants only on a definite yes, and `and` and `or` keep what they can still decide: false and
-// unknown are false, true or unknown is true.
+// what the server refuses (`project.status != :archived` over a project nobody synced) - or the
+// value it would read is a server-only attribute's, which no client ever holds. A rule grants only
+// on a definite yes, and `and` and `or` keep what they can still decide: false and unknown are
+// false, true or unknown is true.
 const UNKNOWN = Symbol("unknown");
 
 // The sixteen bytes Hologram.Auth.RoleGrant derives every grant id under - drawn once, on
@@ -239,6 +240,9 @@ function alternativesHold(
   return result;
 }
 
+// A clause is a triple, a disjunction, a quantifier, or a predicate the build sends as its verdict
+// key and the types it reads alone - one reading a server-only attribute, which only the server's
+// verdict answers, since no client holds the value it compares.
 function clauseHolds(entityType, entity, clause, actorUserId, outer) {
   if (Array.isArray(clause)) {
     return predicateHolds(entityType, entity, clause, actorUserId, outer);
@@ -248,7 +252,11 @@ function clauseHolds(entityType, entity, clause, actorUserId, outer) {
     return alternativesHold(entityType, entity, clause.or, actorUserId, outer);
   }
 
-  return quantifierHolds(entityType, entity, clause, actorUserId, outer);
+  if (Object.hasOwn(clause, "quantifier")) {
+    return quantifierHolds(entityType, entity, clause, actorUserId, outer);
+  }
+
+  return verdictHolds(entityType, entity, clause, actorUserId);
 }
 
 // The row a chain of to-one relationships leads to, with its type, null at the first reference
@@ -300,8 +308,14 @@ function declaredType(entityType, name) {
 // The value a rule compares against, read off the boxed entity in the spelling the rules were
 // baked in - the rules travel wire-spelled, so what they are compared with must be too. A derived
 // field is computed from its definition over the row the entity holds, the way the query kernel
-// computes it, whatever the struct carries under its name - the reference computes it too.
+// computes it, whatever the struct carries under its name - the reference computes it too. A
+// server-only attribute is UNKNOWN: no client is ever sent its value, so whatever a struct holds
+// there - the sentinel, or a value an action put in - is not the stored one.
 function entityValue(entityType, entity, name) {
+  if (Model.entry(entityType).serverOnly.has(name)) {
+    return UNKNOWN;
+  }
+
   const derived = Model.derivedField(entityType, name);
 
   if (derived) {
@@ -370,8 +384,12 @@ function evaluatedDefinition(entityType, entity, definition) {
 }
 
 // A field's value off a held row as the wire spells it - a derived field computed on the row, as a
-// boxed entity of it.
+// boxed entity of it. A server-only attribute is UNKNOWN: a held row carries no value for it.
 function fieldValue(entityType, row, name) {
+  if (Model.entry(entityType).serverOnly.has(name)) {
+    return UNKNOWN;
+  }
+
   const derived = Model.derivedField(entityType, name);
 
   if (derived === null) {
@@ -502,7 +520,8 @@ function operandValue(entityType, entity, value, actorUserId, outer) {
 }
 
 // A clause is a triple array, a disjunction object holding alternatives that are clause lists
-// themselves, or a quantifier object - every clause has to hold, a disjunction holds when one of
+// themselves, a quantifier object, or a predicate sent as its verdict alone (see clauseHolds/5) -
+// every clause has to hold, a disjunction holds when one of
 // its alternatives does. False when a clause does not hold, UNKNOWN when none fails but one may,
 // true when all hold. The outer rows are the rows above the entity inside a quantifier, nearest
 // first, each with its type - none at the top of a rule.
@@ -740,12 +759,13 @@ function canonicalId(value) {
   return typeof value === "string" && CANONICAL_ID.test(value) ? value : null;
 }
 
-// The server's verdict on a quantifier the held rows leave open, as the row's last frame carried
-// it. The server works verdicts out for the session's user over the row as stored, so any other
-// question is UNKNOWN: one about another user or a visitor, one about a struct whose stored fields
-// differ from the row's - changed in an action and not written yet - and one asked while a write of
-// this client's that the server has not answered names a type the quantifier reads, since that
-// write may have moved the answer. So is one about a row that came with no verdict.
+// The server's verdict on a clause this client can't decide - a quantifier the held rows leave
+// open, or a predicate reading a server-only attribute - as the row's last frame carried it. The
+// server works verdicts out for the session's user over the row as stored, so any other question
+// is UNKNOWN: one about another user or a visitor, one about a struct whose stored fields differ
+// from the row's - changed in an action and not written yet - and one asked while a write of this
+// client's that the server has not answered names a type the clause reads, since that write may
+// have moved the answer. So is one about a row that came with no verdict.
 //
 // An answer can settle a batch before the frame carrying its round arrives, and between the two
 // the verdict predates the write again. The window closes itself: a write moving a verdict re-runs

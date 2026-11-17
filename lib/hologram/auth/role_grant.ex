@@ -199,6 +199,13 @@ defmodule Hologram.Auth.RoleGrant do
     [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
   end
 
+  @doc """
+  Returns the keys declared with unique for the role grant entity type.
+  Empty - the store's own unique index is the framework's, derived beside its table rather than declared.
+  """
+  @spec __uniques__() :: list(list(atom))
+  def __uniques__, do: []
+
   @doc false
   @spec derive_id(String.t(), atom | nil, String.t() | nil, atom) :: String.t()
   # A grant's identity is the FACT it states - this user, this entity, this role - which is what

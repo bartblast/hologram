@@ -753,19 +753,17 @@ defmodule Hologram.Query.Stage do
     {:or, Enum.map(alternatives, &scoped_triples!(scope, &1))}
   end
 
-  # A stage on an entity struct: the struct's type, or a refusal naming the stage.
-  defp entity_type!(%{__struct__: entity_type}, stage) do
+  # A stage on an entity struct: the struct's type, or a refusal naming the stage and printing what
+  # it was handed - a query term passed where its rows belong prints as the term.
+  defp entity_type!(%{__struct__: entity_type} = subject, stage) do
     if Reflection.entity?(entity_type) do
       entity_type
     else
-      raise MisuseError,
-        message: "#{stage} takes an entity struct, got: #{inspect(%{__struct__: entity_type})}"
+      raise_not_entity_struct!(subject, stage)
     end
   end
 
-  defp entity_type!(subject, stage) do
-    raise MisuseError, message: "#{stage} takes an entity struct, got: #{inspect(subject)}"
-  end
+  defp entity_type!(subject, stage), do: raise_not_entity_struct!(subject, stage)
 
   defp enum_values(entity_type, name) do
     {_name, :enum, opts} = attribute_definition(entity_type, name)
@@ -1373,6 +1371,11 @@ defmodule Hologram.Query.Stage do
   end
 
   defp quantifier_value?(_value), do: false
+
+  @spec raise_not_entity_struct!(any, String.t()) :: no_return
+  defp raise_not_entity_struct!(subject, stage) do
+    raise MisuseError, message: "#{stage} takes an entity struct, got: #{inspect(subject)}"
+  end
 
   @spec raise_unknown_included_name!(atom, module) :: no_return
   defp raise_unknown_included_name!(name, entity_type) do

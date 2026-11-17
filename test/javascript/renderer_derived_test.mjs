@@ -11,7 +11,6 @@ import {
 
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
-import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
@@ -242,7 +241,6 @@ describe("Renderer derived fields", () => {
     ComponentRegistry.clear();
     Model.reset();
     LocalDatabase.reset();
-    GlobalRegistry.set("connectPageModule", null);
     SyncStream.rowsChangedSinceRender = false;
 
     LocalDatabase.putRow(ROW, rowNamed("r1", true, "banana"));
@@ -916,35 +914,44 @@ describe("Renderer derived fields", () => {
         defineCounting("MyApp.DerivedComplete");
 
         LocalDatabase.syncCounts = {"MyApp.DerivedComplete/total/false": 42};
-        LocalDatabase.markSynced("all");
+        LocalDatabase.markAllSynced();
 
         renderCounting("MyApp.DerivedComplete");
 
         assert.deepStrictEqual(renderedVar("total"), Type.integer(1));
       });
 
-      // The page scope covers the page this client connected on, and nothing else - a component
-      // on any other page is only promised its rows at "all".
-      it("counts locally at the page marker on the page it connected with", () => {
-        defineCounting("MyApp.DerivedConnectPage");
+      // On whichever page the component is: a type's marker is a claim about the rows the client
+      // holds.
+      it("counts locally once every type the count reads is complete", () => {
+        defineCounting("MyApp.DerivedTypesComplete");
 
-        GlobalRegistry.set("connectPageModule", "MyApp.DerivedConnectPage");
-        LocalDatabase.syncCounts = {"MyApp.DerivedConnectPage/total/false": 42};
-        LocalDatabase.markSynced("page");
+        globalThis.Hologram.sync.countTypes = {
+          "MyApp.DerivedTypesComplete": {total: [ROW]},
+        };
 
-        renderCounting("MyApp.DerivedConnectPage");
+        LocalDatabase.syncCounts = {
+          "MyApp.DerivedTypesComplete/total/false": 42,
+        };
+        LocalDatabase.markTypesSynced([ROW]);
+
+        renderCounting("MyApp.DerivedTypesComplete");
 
         assert.deepStrictEqual(renderedVar("total"), Type.integer(1));
       });
 
-      it("keeps carrying at the page marker for a page reached since", () => {
-        defineCounting("MyApp.DerivedNavigatedTo");
+      it("keeps carrying while a type the count reads is not complete", () => {
+        defineCounting("MyApp.DerivedTypesFilling");
 
-        GlobalRegistry.set("connectPageModule", "MyApp.SomeOtherPage");
-        LocalDatabase.syncCounts = {"MyApp.DerivedNavigatedTo/total/false": 42};
-        LocalDatabase.markSynced("page");
+        globalThis.Hologram.sync.countTypes = {
+          "MyApp.DerivedTypesFilling": {total: [ROW]},
+        };
 
-        renderCounting("MyApp.DerivedNavigatedTo");
+        LocalDatabase.syncCounts = {
+          "MyApp.DerivedTypesFilling/total/false": 42,
+        };
+
+        renderCounting("MyApp.DerivedTypesFilling");
 
         assert.deepStrictEqual(renderedVar("total"), Type.integer(42));
       });
@@ -1478,6 +1485,173 @@ describe("Renderer derived fields", () => {
           "derived",
         ),
         Type.map([[Type.atom("label"), Type.bitstring("ada!")]]),
+      );
+    });
+  });
+
+  // The client answers the context from its own database on every render, the way it answers a
+  // derived field holding a query.
+  describe("the session user context", () => {
+    const USER = "MyApp.User";
+    const PAGE_CID = Type.bitstring("page");
+    const userKey = Type.tuple([Type.alias("Hologram"), Type.atom("user")]);
+
+    const serverUser = Type.struct(USER, [
+      [Type.atom("email"), Type.bitstring("server@example.com")],
+    ]);
+
+    const putUserRow = (email) =>
+      LocalDatabase.putRow(USER, {email, email$sort: email, id: "u1"});
+
+    const renderedUserEmail = () =>
+      fieldOf(
+        fieldOf(renderedVarsByModule["MyApp.UserLayout"], "current_user"),
+        "email",
+      );
+
+    const renderUserPage = () =>
+      Renderer.renderPage(Type.alias("MyApp.UserPage"), Type.map());
+
+    beforeEach(() => {
+      globalThis.Hologram.sync.model[USER] = {
+        attributes: {email: "string", id: "uuid"},
+        relationships: {},
+        serverOnly: [],
+      };
+
+      globalThis.Hologram.sync.userEntity = USER;
+      LocalDatabase.actorUserId = "u1";
+      putUserRow("ann@example.com");
+
+      defineComponent("MyApp.UserPage", {});
+
+      defineFunction("MyApp.UserPage", "__layout_module__", 0, () =>
+        Type.alias("MyApp.UserLayout"),
+      );
+
+      defineFunction("MyApp.UserPage", "__layout_props__", 0, () =>
+        Type.list(),
+      );
+
+      defineFunction("MyApp.UserPage", "__params__", 0, () => Type.list());
+
+      defineComponent("MyApp.UserLayout", {
+        props: [
+          declaration("current_user", [[Type.atom("from_context"), userKey]]),
+        ],
+      });
+
+      ComponentRegistry.putEntry(
+        PAGE_CID,
+        Type.map([
+          [Type.atom("module"), Type.alias("MyApp.UserPage")],
+          [
+            Type.atom("struct"),
+            Type.componentStruct({
+              emittedContext: Type.map([
+                [userKey, serverUser],
+                [Type.atom("theme"), Type.bitstring("dark")],
+              ]),
+            }),
+          ],
+        ]),
+      );
+    });
+
+    it("hands a from_context prop the session user's row as the database holds it", () => {
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        renderedUserEmail(),
+        Type.bitstring("ann@example.com"),
+      );
+    });
+
+    it("hands it the row as it stands at each render", () => {
+      renderUserPage();
+      putUserRow("ann@example.org");
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        renderedUserEmail(),
+        Type.bitstring("ann@example.org"),
+      );
+    });
+
+    it("holds the answer in the page's emitted context", () => {
+      renderUserPage();
+
+      const user = Erlang_Maps["get/2"](
+        userKey,
+        fieldOf(
+          ComponentRegistry.getComponentStruct(PAGE_CID),
+          "emitted_context",
+        ),
+      );
+
+      assert.deepStrictEqual(
+        fieldOf(user, "email"),
+        Type.bitstring("ann@example.com"),
+      );
+    });
+
+    it("leaves the page's other context values alone", () => {
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](
+          Type.atom("theme"),
+          fieldOf(
+            ComponentRegistry.getComponentStruct(PAGE_CID),
+            "emitted_context",
+          ),
+        ),
+        Type.bitstring("dark"),
+      );
+    });
+
+    // The server's value is the row as the page was rendered, and the database says it is gone.
+    it("hands nil when the database holds no row of the session user", () => {
+      LocalDatabase.actorUserId = "u2";
+
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        fieldOf(renderedVarsByModule["MyApp.UserLayout"], "current_user"),
+        Type.nil(),
+      );
+    });
+
+    it("hands nil for an anonymous session", () => {
+      LocalDatabase.actorUserId = null;
+
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        fieldOf(renderedVarsByModule["MyApp.UserLayout"], "current_user"),
+        Type.nil(),
+      );
+    });
+
+    it("keeps the server's value when the build's model holds no user entity type", () => {
+      globalThis.Hologram.sync.userEntity = null;
+
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        renderedUserEmail(),
+        Type.bitstring("server@example.com"),
+      );
+    });
+
+    it("keeps the server's value in a build with no data layer", () => {
+      Hologram.dataLayer = null;
+
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        renderedUserEmail(),
+        Type.bitstring("server@example.com"),
       );
     });
   });

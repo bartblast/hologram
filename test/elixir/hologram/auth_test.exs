@@ -17,6 +17,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Stage
+  alias Hologram.Query.Window
   alias Hologram.Sync.Carry
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
@@ -2783,6 +2784,25 @@ defmodule Hologram.AuthTest do
     end
   end
 
+  describe "user_window/2" do
+    test "downloads every row of the given user entity type" do
+      assert user_window(Module14, false) == %Query{entity: Module14}
+    end
+
+    # The user fixture's rule reads no relationship, so a type whose rule delegates through one
+    # stands in for a user type that does.
+    test "embeds the rows the type's rules read when a client checks permissions" do
+      checking_window = user_window(Module8, true)
+
+      assert checking_window ==
+               Module8
+               |> Stage.normalize()
+               |> Window.derive(true)
+
+      assert checking_window != user_window(Module8, false)
+    end
+  end
+
   # A row not created yet has nothing in any set of its, so its verdicts are answered without a
   # read - the sets of a row as stored are read through the same checker can?/3 uses.
   describe "verdicts/2" do
@@ -2804,6 +2824,14 @@ defmodule Hologram.AuthTest do
       relationship :board, VerdictBoard, optional: true
 
       allow :read
+    end
+
+    defmodule VerdictReport do
+      use Hologram.Entity
+
+      attribute :reviewed, :boolean, server_only: true
+
+      allow :read, when: reviewed == true
     end
 
     defp verdict_key(operation, clause), do: Policy.verdict_key(VerdictBoard, operation, clause)
@@ -2843,6 +2871,14 @@ defmodule Hologram.AuthTest do
       for other_spelling <- [String.upcase(user_id), 7, false] do
         assert verdicts(other_spelling, %VerdictBoard{}) == verdicts(nil, %VerdictBoard{})
       end
+    end
+
+    # The row as stored holds the value no client is sent.
+    test "answers a predicate on a server-only attribute over the row's value" do
+      key = Policy.verdict_key(VerdictReport, :read, {:reviewed, :==, true})
+
+      assert verdicts(nil, %VerdictReport{reviewed: true}) == %{key => true}
+      assert verdicts(nil, %VerdictReport{reviewed: false}) == %{key => false}
     end
 
     test "answers nothing for a type with no deciding quantifier" do

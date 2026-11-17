@@ -323,6 +323,14 @@ defmodule Hologram.Policy.EdgesTest do
       allow :read
     end
 
+    defmodule EdgeReport do
+      use Hologram.Entity
+
+      attribute :reviewed, :boolean, server_only: true
+
+      allow :read, when: reviewed == true
+    end
+
     defmodule EdgeLabel do
       use Hologram.Entity
 
@@ -542,6 +550,11 @@ defmodule Hologram.Policy.EdgesTest do
                {:set_attributes, [:labels], EdgeLabel, [:name]},
                {:set_edges, [:labels], EdgeProject, [:labels]}
              ]
+    end
+
+    # No client holds a server-only value, so the read rule's predicate on one is a verdict too.
+    test "names what a predicate on a server-only attribute reads under {:verdicts}" do
+      assert derive([EdgeReport])[{EdgeReport, {:verdicts}}] == [{:attributes, [:reviewed]}]
     end
 
     test "names no {:verdicts} edges for a type with no deciding quantifier" do

@@ -38,7 +38,7 @@ defmodule Hologram.Compiler.Cache do
 
   # Bumped when the compile state's shape changes: a dump of another version is not loaded. A field
   # added to a part forget_bundles/0 forgets (the runtime state, the chunk state, the page states,
-  # the template modules and refs, the encoding inputs) needs no bump: the compile state holds the
+  # the template modules and refs, the encoding inputs, the data layer state) needs no bump: the compile state holds the
   # bundle inputs it was written with, which include the digests of Hologram's own modules, so the
   # compile task forgets those parts of a compile state another Hologram build wrote before it reads
   # them (see keep_bundle_inputs/2 there).

@@ -11,6 +11,12 @@
     Hologram.Layout,
     Hologram.Middleware,
     Hologram.Middleware.Builder,
+    # Counts __hologram_migration__/0, which __before_compile__ generates into each migration
+    # module, as Hologram.Migration's own def - the reason Hologram.Policy is on this list.
+    Hologram.Migration,
+    # Reads the macros named def it defines, which a migration imports in place of Kernel's, as a
+    # def of a function.
+    Hologram.Migration.FieldAccess.Definitions,
     Hologram.Page,
     # Doctor harvests a generated function's @doc and @spec from a __using__ block only, while
     # counting every def it finds in the file - and __declarations__/0 is generated in
