@@ -81,8 +81,8 @@ defmodule HologramSyncBenchmark.Measure do
   @doc """
   Counts the sync sessions the given log says were cut for falling behind their windows' rounds.
 
-  Counted from the log rather than from the clients, since the stream outlives its session: the
-  client is never told and only stops getting changes.
+  Counted from the log rather than from the clients: the server ends a cut session's stream, so
+  the client sees a stream end like any other, and only the log says why.
   """
   @spec session_cuts(String.t()) :: non_neg_integer
   def session_cuts(log_path) do

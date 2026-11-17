@@ -321,10 +321,11 @@ defmodule HologramSyncBenchmark.Step do
       idle: idle,
       isolated: finish_isolated(isolated, idle),
       memory_per_client: memory_per_client,
-      # Streams that ended after their fill, like one the server killed. The client doesn't come
-      # back for those, so their writes count as missing, and the per-write figures cover sessions
-      # that stopped working partway. A session the server cuts leaves its stream open, so those
-      # are counted from the server's log instead (see HologramSyncBenchmark.Sweep).
+      # Streams that ended after their fill, like one the server killed or one whose session it
+      # cut. The client doesn't come back for those, so their writes count as missing, and the
+      # per-write figures cover sessions that stopped working partway. Which of them were cuts
+      # only the server's log says, so those are counted from it too (see
+      # HologramSyncBenchmark.Sweep).
       steady:
         steady
         |> finish_steady(idle)
