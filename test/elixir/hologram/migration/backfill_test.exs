@@ -18,6 +18,7 @@ defmodule Hologram.Migration.BackfillTest do
   import Hologram.Migrator
 
   alias Hologram.DB.Connection
+  alias Hologram.DB.SortKey
   alias Hologram.Entity.Model
 
   @context %{
@@ -25,6 +26,20 @@ defmodule Hologram.Migration.BackfillTest do
     env: "test",
     hologram_version: "0.5.0",
     timestamp: ~U[2026-08-13 09:15:22.000000Z]
+  }
+
+  # A string attribute arriving on a populated table: its sort and search key companions
+  # are computed from the value the backfill gives the existing rows. Past 64 bytes, so the
+  # search key is a value rather than NULL.
+  @note String.duplicate("Zed ", 20)
+
+  @add_note %{
+    op: :add_attribute,
+    entity: MyApp.Task,
+    name: :note,
+    type: :string,
+    opts: [optional: true, backfill: @note],
+    line: 3
   }
 
   defp insert_task(title) do
@@ -66,6 +81,17 @@ defmodule Hologram.Migration.BackfillTest do
     {:ok, %{rows: [[not_null, default]]}} = Connection.query(statement)
 
     %{default: default, not_null: not_null}
+  end
+
+  defp rows_of(table, columns) do
+    select_list = Enum.map_join(columns, ", ", &~s("#{&1}"))
+
+    statement =
+      ~s(SELECT #{select_list} FROM "hologram_data"."#{table}" ORDER BY "title")
+
+    {:ok, %{rows: rows}} = Connection.query(statement)
+
+    rows
   end
 
   defp task_rows do
@@ -156,6 +182,80 @@ defmodule Hologram.Migration.BackfillTest do
                  insert_task("three", nil)
 
         assert task_rows() == [["one", 7], ["two", 99]]
+      end)
+    end
+
+    # The companions fill after every op of the file has run, so they are found under the
+    # name the rename gives the attribute - under the one it was added with, nothing stands.
+    test "fills the companions of an attribute the same file renames", %{
+      chain: [create | _rest],
+      first_model: first_model,
+      scratch: scratch
+    } do
+      rename_op = %{op: :rename_attribute, entity: MyApp.Task, from: :note, to: :remark, line: 4}
+      renamed = migration("20260813142237", [@add_note, rename_op])
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_task("one")
+
+        assert run([create, renamed], Model.fold(first_model, renamed.ops), @context) == :ok
+
+        assert rows_of("my_app_task", ["remark", "remark_$sort", "remark_$search"]) == [
+                 [@note, SortKey.compute(@note), SortKey.search_key(@note)]
+               ]
+      end)
+    end
+
+    test "fills the companions of an attribute whose entity the same file renames", %{
+      chain: [create | _rest],
+      first_model: first_model,
+      scratch: scratch
+    } do
+      rename_op = %{op: :rename_entity, from: MyApp.Task, to: MyApp.Job, line: 4}
+      renamed = migration("20260813142237", [@add_note, rename_op])
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_task("one")
+
+        assert run([create, renamed], Model.fold(first_model, renamed.ops), @context) == :ok
+
+        assert rows_of("my_app_job", ["note", "note_$sort", "note_$search"]) == [
+                 [@note, SortKey.compute(@note), SortKey.search_key(@note)]
+               ]
+      end)
+    end
+
+    test "fills a required attribute's declared default before the same file renames it", %{
+      chain: [create | _rest],
+      first_model: first_model,
+      scratch: scratch
+    } do
+      renamed =
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :code,
+            type: :integer,
+            opts: [default: 5],
+            line: 3
+          },
+          %{op: :rename_attribute, entity: MyApp.Task, from: :code, to: :num, line: 4}
+        ])
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_task("one")
+        insert_task("two")
+
+        assert run([create, renamed], Model.fold(first_model, renamed.ops), @context) == :ok
+
+        assert rows_of("my_app_task", ["title", "num"]) == [["one", 5], ["two", 5]]
       end)
     end
   end

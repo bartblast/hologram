@@ -16,13 +16,19 @@ defmodule Hologram.DB.Preflight do
   it. The trade is that the check runs while those earlier ops hold their locks, after
   their work - which a file that applies pays anyway.
 
+  A column counts as filled only when the op carries its fill - the renderer stamps a
+  declared default where the op sits. A lookup in the mapping the file leaves would find
+  the column under the name of whatever holds it at the end of the file: nothing, after a
+  rename, or another column that took the name over, and the check would pass a fill the
+  migrator never runs.
+
   The schema is read only for an op the checks can refuse, so a file of renames, plain
   indexes or safe casts costs no catalog reads.
   """
-  @spec check!(%{atom => any}, %{module => %{atom => any}}) :: :ok
-  def check!(op, mapping) do
+  @spec check!(%{atom => any}) :: :ok
+  def check!(op) do
     if refusable?(op) do
-      check_op!(op, Introspection.schema(), mapping)
+      check_op!(op, Introspection.schema(), %{})
     end
 
     :ok

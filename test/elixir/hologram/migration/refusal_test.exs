@@ -16,15 +16,16 @@ defmodule Hologram.Migration.RefusalTest do
   #   * tightening a column while a row holds NULL - covered in full by the atomicity
   #     suite, whose "applies none of a file's ops when pre-flight refuses one of them" test
   #     uses that refusal as its lever and asserts the same three things.
-  #   * a required attribute the existing rows have no value for - refused EARLIER than
-  #     the database, by `Model.fold/2` itself: `validate_filled_adds!/2` rejects an
+  #   * a required attribute ADDED without a value for the existing rows - refused EARLIER
+  #     than the database, by `Model.fold/2` itself: `validate_filled_adds!/2` rejects an
   #     add_attribute that is required and carries neither backfill: nor default:, exempting
-  #     only entities born in the same file. A migration therefore never reaches the
-  #     database-level check, and its message ("declare backfill: for a one-time value...")
-  #     is the one a dev actually sees - covered by the model suite. The database-level
-  #     twin in Preflight is not dead code: schema reconciliation folds a model from
-  #     MODULES rather than ops, so a required attribute declared on a populated dev
-  #     database reaches it there, where the reconciler suite covers it.
+  #     only entities born in the same file. Its message ("declare backfill: for a one-time
+  #     value...") is the one a dev actually sees - covered by the model suite. A migration
+  #     reaches the database-level check only around that validation: an optional add the
+  #     same chunk tightens, whose default arrives after a rename - tested below - or a
+  #     required relationship, which declares no default at all. Schema reconciliation
+  #     folds a model from MODULES rather than ops, so a required attribute declared on a
+  #     populated dev database reaches it there too, where the reconciler suite covers it.
   #   * a foreign key over orphaned rows - void by construction, since a relationship
   #     column is born together with its foreign key and no op adopts an existing column.
   #
@@ -204,6 +205,81 @@ defmodule Hologram.Migration.RefusalTest do
         ~s{found 1 duplicate key in "my_app_job" over ("amount") - } <>
           "a unique index cannot be built while rows repeat a key - " <>
           "update the rows or drop the unique declaration"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    # The column turns required in its first chunk, with no default to fill the rows - the
+    # one declared after the rename fills nothing that predates it.
+    test "refuses a required attribute whose default the same file declares only after a rename",
+         %{create: create, first_model: first_model, scratch: scratch} do
+      refused =
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :code,
+            type: :integer,
+            opts: [optional: true],
+            line: 3
+          },
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :code,
+            changes: [optional: false],
+            line: 4
+          },
+          %{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :name, line: 5},
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :code,
+            changes: [default: 5],
+            line: 6
+          }
+        ])
+
+      expected_msg =
+        ~s(cannot add required column "code" to table "my_app_task" - ) <>
+          "2 existing rows would have no value - " <>
+          "declare default: <value>, make the attribute optional: true, or clear the rows"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    # A relationship declares no default, so the rows refusal is all that stands between the
+    # add and a NOT NULL column over rows without a value - checked where the add sits, under
+    # the name the rename takes away afterwards, and not satisfied by the attribute that takes
+    # the name over and declares a default of its own.
+    test "refuses a required relationship added to a populated table before the same file renames it",
+         %{create: create, first_model: first_model, scratch: scratch} do
+      refused =
+        migration("20260813142237", [
+          %{op: :create_entity, entity: MyApp.User, line: 3},
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :author,
+            type: MyApp.User,
+            opts: [],
+            line: 5
+          },
+          %{op: :rename_relationship, entity: MyApp.Task, from: :author, to: :creator, line: 7},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :author_id,
+            type: :integer,
+            opts: [default: 5],
+            line: 9
+          }
+        ])
+
+      expected_msg =
+        ~s(cannot add required column "author_id" to table "my_app_task" - ) <>
+          "2 existing rows would have no value - " <>
+          "declare default: <value>, make the attribute optional: true, or clear the rows"
 
       assert_refused(scratch, create, first_model, refused, expected_msg)
     end

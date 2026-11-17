@@ -4,6 +4,7 @@ defmodule Hologram.Migration.Renderer do
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
+  alias Hologram.DB.Preflight
   alias Hologram.DB.Schema
   alias Hologram.Entity.Model
 
@@ -26,7 +27,16 @@ defmodule Hologram.Migration.Renderer do
 
   The ops are split by how they execute: :transactional runs inside the migration file's
   transaction, :tail after it commits - index builds on tables that already carry rows
-  go concurrently, which PostgreSQL forbids inside a transaction.
+  go concurrently, which PostgreSQL forbids inside a transaction. :added_columns names
+  each column the transactional ops add, as the file leaves it, for the companion fill
+  that runs after them.
+
+  A required column added without a backfill carries its declared default as one, so
+  what the rows that predate it receive is settled where the op sits rather than looked
+  up after the file's later ops have renamed it. The ops render in chunks, a rename
+  starting a chunk of its own, and the default is the one the op's chunk leaves: a default
+  declared or changed in the same chunk counts, one declared after a later rename fills
+  nothing - the column is required, and refused over rows, before it arrives.
 
   The ops render through the mapping: the model before and after them project to physical
   schema terms, and their difference is what the database must do. Physical names
@@ -46,9 +56,9 @@ defmodule Hologram.Migration.Renderer do
         {acc ++ ops, next_model}
       end)
 
-    {transactional, tail} = split_tail(physical_ops)
-
-    %{transactional: transactional, tail: tail, post_model: post_model}
+    physical_ops
+    |> walk_ops()
+    |> Map.put(:post_model, post_model)
   end
 
   # A backfill rides its logical op, never the model - the physical column it fills is
@@ -296,6 +306,20 @@ defmodule Hologram.Migration.Renderer do
 
   defp put_backfill(op, _backfills), do: op
 
+  # Looked up in the mapping the op's own chunk leaves, where the column still has the name
+  # the op adds it under - a default changed in the same chunk counts, one changed after a
+  # later rename does not. An explicit backfill wins: it says what the rows that predate the
+  # column receive, the default what every row receives when the app supplies nothing.
+  defp put_declared_default(%{op: :add_column, definition: %{null: false}} = op, mapping)
+       when not is_map_key(op, :backfill) do
+    case Preflight.fill_value(mapping, op.table, op.column) do
+      {:ok, value} -> Map.put(op, :backfill, value)
+      :none -> op
+    end
+  end
+
+  defp put_declared_default(op, _mapping), do: op
+
   # Both of the grant store's enums derive their values SORTED, and PostgreSQL orders a type by
   # the POSITION of a value rather than by its label - while ALTER TYPE ... RENAME VALUE moves the
   # label and leaves the position alone. So a rename whose new label sorts elsewhere leaves the
@@ -412,12 +436,14 @@ defmodule Hologram.Migration.Renderer do
   # never stated.
   defp render_plain_chunk(chunk, model) do
     next_model = Model.fold(model, chunk)
+    next_mapping = Mapper.derive_from_model!(next_model)
 
     physical_ops =
       model
       |> term()
-      |> Schema.diff(term(next_model), renames: false)
+      |> Schema.diff(Schema.from_mapping(next_mapping), renames: false)
       |> attach_backfills(chunk)
+      |> Enum.map(&put_declared_default(&1, next_mapping))
       |> prepend_grant_deletes(chunk)
 
     {physical_ops, next_model}
@@ -527,6 +553,9 @@ defmodule Hologram.Migration.Renderer do
     entity_ops ++ enum_value_ops(op, pre_mapping, post_mapping)
   end
 
+  # One forward walk over the file's physical ops, following each to where the rest of the
+  # file leaves it.
+  #
   # An index on a table born in this file builds inside the transaction - the table is
   # empty, so the build is instant and the file keeps its all-or-nothing shape. Born means
   # born by the index's position in the file: a table renamed away and recreated under its
@@ -535,46 +564,66 @@ defmodule Hologram.Migration.Renderer do
   # Any other index builds in the tail, after every op of the file has run, so it has to be
   # the index those ops leave: a rename after it renames the build itself - nothing stands
   # under the old name to rename yet - and a drop after it takes the build back.
-  defp split_tail(physical_ops) do
-    {transactional, _born, pending} =
-      Enum.reduce(physical_ops, {[], MapSet.new(), []}, &walk_tail_op/2)
+  #
+  # The added columns are the same: their companions fill after every op has run, so each
+  # is named as the file leaves it, and one the file drops again has nothing to fill.
+  defp walk_ops(physical_ops) do
+    initial = %{added: [], born: MapSet.new(), pending: [], transactional: []}
+    walked = Enum.reduce(physical_ops, initial, &walk_op/2)
 
     tail =
-      pending
+      walked.pending
       |> Enum.reverse()
       |> Enum.map(&Map.put(&1, :concurrently, true))
 
-    {Enum.reverse(transactional), tail}
-  end
-
-  defp walk_tail_op(%{op: :create_index} = op, {transactional, born, pending}) do
-    if MapSet.member?(born, op.table),
-      do: {[op | transactional], born, pending},
-      else: {transactional, born, [op | pending]}
-  end
-
-  defp walk_tail_op(%{op: :create_table} = op, {transactional, born, pending}) do
-    {[op | transactional], MapSet.put(born, op.table), pending}
-  end
-
-  defp walk_tail_op(%{op: :drop_index} = op, {transactional, born, pending}) do
-    if Enum.any?(pending, &(&1.index == op.index)),
-      do: {transactional, born, Enum.reject(pending, &(&1.index == op.index))},
-      else: {[op | transactional], born, pending}
-  end
-
-  # A dropped table takes its indexes with it, and the diff emits no drop for them.
-  defp walk_tail_op(%{op: :drop_table} = op, {transactional, born, pending}) do
-    {
-      [op | transactional],
-      MapSet.delete(born, op.table),
-      Enum.reject(pending, &(&1.table == op.table))
+    %{
+      added_columns: Enum.reverse(walked.added),
+      tail: tail,
+      transactional: Enum.reverse(walked.transactional)
     }
   end
 
-  defp walk_tail_op(%{op: :rename_column} = op, {transactional, born, pending}) do
+  defp walk_op(%{op: :add_column} = op, walked) do
+    added = %{op: :add_column, table: op.table, column: op.column}
+
+    %{keep_op(op, walked) | added: [added | walked.added]}
+  end
+
+  defp walk_op(%{op: :create_index} = op, walked) do
+    if MapSet.member?(walked.born, op.table),
+      do: keep_op(op, walked),
+      else: %{walked | pending: [op | walked.pending]}
+  end
+
+  defp walk_op(%{op: :create_table} = op, walked) do
+    %{keep_op(op, walked) | born: MapSet.put(walked.born, op.table)}
+  end
+
+  defp walk_op(%{op: :drop_column} = op, walked) do
+    added = Enum.reject(walked.added, &(&1.table == op.table and &1.column == op.column))
+
+    %{keep_op(op, walked) | added: added}
+  end
+
+  defp walk_op(%{op: :drop_index} = op, walked) do
+    if Enum.any?(walked.pending, &(&1.index == op.index)),
+      do: %{walked | pending: Enum.reject(walked.pending, &(&1.index == op.index))},
+      else: keep_op(op, walked)
+  end
+
+  # A dropped table takes its indexes with it, and the diff emits no drop for them.
+  defp walk_op(%{op: :drop_table} = op, walked) do
+    %{
+      keep_op(op, walked)
+      | added: Enum.reject(walked.added, &(&1.table == op.table)),
+        born: MapSet.delete(walked.born, op.table),
+        pending: Enum.reject(walked.pending, &(&1.table == op.table))
+    }
+  end
+
+  defp walk_op(%{op: :rename_column} = op, walked) do
     pending =
-      Enum.map(pending, fn
+      Enum.map(walked.pending, fn
         %{table: table} = build when table == op.table ->
           %{build | columns: Enum.map(build.columns, &if(&1 == op.from, do: op.to, else: &1))}
 
@@ -582,38 +631,52 @@ defmodule Hologram.Migration.Renderer do
           build
       end)
 
-    {[op | transactional], born, pending}
+    added =
+      Enum.map(walked.added, fn
+        %{table: table, column: column} = added when table == op.table and column == op.from ->
+          %{added | column: op.to}
+
+        added ->
+          added
+      end)
+
+    %{keep_op(op, walked) | added: added, pending: pending}
   end
 
-  defp walk_tail_op(%{op: :rename_index} = op, {transactional, born, pending}) do
-    if Enum.any?(pending, &(&1.index == op.from)) do
+  defp walk_op(%{op: :rename_index} = op, walked) do
+    if Enum.any?(walked.pending, &(&1.index == op.from)) do
       pending =
-        Enum.map(pending, &if(&1.index == op.from, do: %{&1 | index: op.to}, else: &1))
+        Enum.map(walked.pending, &if(&1.index == op.from, do: %{&1 | index: op.to}, else: &1))
 
-      {transactional, born, pending}
+      %{walked | pending: pending}
     else
-      {[op | transactional], born, pending}
+      keep_op(op, walked)
     end
   end
 
-  defp walk_tail_op(%{op: :rename_table} = op, {transactional, born, pending}) do
+  defp walk_op(%{op: :rename_table} = op, walked) do
     born =
-      if MapSet.member?(born, op.from) do
-        born
+      if MapSet.member?(walked.born, op.from) do
+        walked.born
         |> MapSet.delete(op.from)
         |> MapSet.put(op.to)
       else
-        born
+        walked.born
       end
 
-    pending = Enum.map(pending, &if(&1.table == op.from, do: %{&1 | table: op.to}, else: &1))
+    rename = &if(&1.table == op.from, do: %{&1 | table: op.to}, else: &1)
 
-    {[op | transactional], born, pending}
+    %{
+      keep_op(op, walked)
+      | added: Enum.map(walked.added, rename),
+        born: born,
+        pending: Enum.map(walked.pending, rename)
+    }
   end
 
-  defp walk_tail_op(op, {transactional, born, pending}) do
-    {[op | transactional], born, pending}
-  end
+  defp walk_op(op, walked), do: keep_op(op, walked)
+
+  defp keep_op(op, walked), do: %{walked | transactional: [op | walked.transactional]}
 
   defp term(model) do
     model

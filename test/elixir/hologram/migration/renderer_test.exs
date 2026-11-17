@@ -84,6 +84,186 @@ defmodule Hologram.Migration.RendererTest do
       assert add_column.definition.null == false
     end
 
+    test "carries a required attribute's declared default as its backfill" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :priority,
+          type: :integer,
+          opts: [default: 5],
+          line: 3
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :priority, to: :rank, line: 4}
+      ]
+
+      result = render(ops, pre)
+
+      assert %{column: "priority", backfill: 5} =
+               Enum.find(result.transactional, &(&1.op == :add_column))
+    end
+
+    test "carries the declared default the add's chunk leaves" do
+      pre =
+        model(%{MyApp.Task => %{attributes: [{:amount, :string, []}, {:title, :string, []}]}})
+
+      add_op = %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :priority,
+        type: :integer,
+        opts: [default: 5],
+        line: 3
+      }
+
+      change_op = %{
+        op: :change_attribute,
+        entity: MyApp.Task,
+        name: :priority,
+        changes: [default: 7],
+        line: 5
+      }
+
+      rename_op = %{op: :rename_attribute, entity: MyApp.Task, from: :amount, to: :cost, line: 4}
+
+      same_chunk = render([add_op, change_op], pre)
+      later_chunk = render([add_op, rename_op, change_op], pre)
+
+      assert %{backfill: 7} = Enum.find(same_chunk.transactional, &(&1.op == :add_column))
+      assert %{backfill: 5} = Enum.find(later_chunk.transactional, &(&1.op == :add_column))
+    end
+
+    test "keeps an explicit backfill over the declared default" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :priority,
+          type: :integer,
+          opts: [default: 5, backfill: 0],
+          line: 3
+        }
+      ]
+
+      result = render(ops, pre)
+
+      assert [%{op: :add_column, backfill: 0}] = result.transactional
+    end
+
+    test "returns the added columns under the names the file leaves them with" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :note,
+          type: :string,
+          opts: [optional: true],
+          line: 3
+        },
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :legacy,
+          type: :integer,
+          opts: [optional: true],
+          line: 4
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :note, to: :remark, line: 5},
+        %{op: :rename_entity, from: MyApp.Task, to: MyApp.Job, line: 6},
+        %{op: :delete_attribute, entity: MyApp.Job, name: :legacy, line: 7}
+      ]
+
+      result = render(ops, pre)
+
+      assert Enum.sort_by(result.added_columns, & &1.column) == [
+               %{op: :add_column, table: "my_app_job", column: "remark"},
+               %{op: :add_column, table: "my_app_job", column: "remark_$search"},
+               %{op: :add_column, table: "my_app_job", column: "remark_$sort"}
+             ]
+    end
+
+    test "leaves an optional attribute's declared default out of its backfill" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :priority,
+          type: :integer,
+          opts: [optional: true, default: 5],
+          line: 3
+        }
+      ]
+
+      result = render(ops, pre)
+
+      assert [add_column] = result.transactional
+      refute Map.has_key?(add_column, :backfill)
+    end
+
+    test "renames an added column only on its own table" do
+      pre =
+        model(%{
+          MyApp.Job => %{attributes: [{:title, :string, []}]},
+          MyApp.Task => %{attributes: [{:title, :string, []}]}
+        })
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Job,
+          name: :code,
+          type: :integer,
+          opts: [optional: true],
+          line: 3
+        },
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :code,
+          type: :integer,
+          opts: [optional: true],
+          line: 4
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :code, to: :number, line: 5}
+      ]
+
+      result = render(ops, pre)
+
+      assert Enum.sort_by(result.added_columns, & &1.table) == [
+               %{op: :add_column, table: "my_app_job", column: "code"},
+               %{op: :add_column, table: "my_app_task", column: "number"}
+             ]
+    end
+
+    test "leaves the columns of a table the same file drops out of the added columns" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :code,
+          type: :integer,
+          opts: [optional: true],
+          line: 3
+        },
+        %{op: :rename_entity, from: MyApp.Task, to: MyApp.Job, line: 4},
+        %{op: :delete_entity, entity: MyApp.Job, line: 5}
+      ]
+
+      result = render(ops, pre)
+
+      assert result.added_columns == []
+    end
+
     test "leaves the backfill out of the model it produces" do
       pre = model(%{MyApp.Task => %{attributes: []}})
 

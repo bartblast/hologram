@@ -385,26 +385,16 @@ defmodule Hologram.Migrator do
     end
   end
 
-  defp apply_op(%{op: :add_column, backfill: value} = op, _mapping) do
+  # A required column with no explicit backfill carries its declared default as one - the
+  # renderer stamps it, which is what schema reconciliation does for the same declaration in
+  # dev: the two mechanisms have to leave the same rows behind, not merely the same columns.
+  # The default is the one the add's chunk leaves, which reconciliation's one diff also uses
+  # when the declaration arrives in one go.
+  defp apply_op(%{op: :add_column, backfill: value} = op) do
     add_column_filled(op, value)
   end
 
-  # A required column with no backfill takes its declared default, which is what schema
-  # reconciliation does for the same declaration in dev - the two mechanisms have to leave
-  # the same rows behind, not merely the same columns.
-  defp apply_op(%{op: :add_column} = op, mapping) do
-    fill =
-      if op.definition.null,
-        do: :none,
-        else: Preflight.fill_value(mapping, op.table, op.column)
-
-    case fill do
-      :none -> execute_statements(DDL.statements(op))
-      {:ok, encoded_value} -> add_column_filled(op, encoded_value)
-    end
-  end
-
-  defp apply_op(op, _mapping), do: execute_statements(DDL.statements(op))
+  defp apply_op(op), do: execute_statements(DDL.statements(op))
 
   # Added nullable, filled, then tightened - the value never travels in the DDL, and the
   # rows that predate the column receive it.
@@ -432,17 +422,18 @@ defmodule Hologram.Migrator do
   # under its new name in a database that still has the old one. A refusal takes back the
   # ops before it with the transaction.
   defp apply_transactional(render, version, context) do
-    mapping = Mapper.derive_from_model!(render.post_model)
-
     Enum.each(render.transactional, fn op ->
-      Preflight.check!(op, mapping)
-      apply_op(op, mapping)
+      Preflight.check!(op)
+      apply_op(op)
     end)
+
+    mapping = Mapper.derive_from_model!(render.post_model)
 
     # A companion this file adds is filled AFTER every op has applied, not at its own add:
     # the diff applies add_column before alter_column, so a source column being cast to
-    # text in the same file still holds its old type when its companion lands.
-    SchemaReconciler.backfill_companions!(render.transactional, mapping)
+    # text in the same file still holds its old type when its companion lands. The renderer
+    # names the added columns as the file leaves them, so a rename after the add is followed.
+    SchemaReconciler.backfill_companions!(render.added_columns, mapping)
 
     # The tail's checks run here, against the schema the statements above just produced and
     # before anything commits: a file whose index cannot be built does not apply at all,

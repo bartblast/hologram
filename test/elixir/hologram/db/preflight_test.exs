@@ -25,7 +25,7 @@ defmodule Hologram.DB.PreflightTest do
     }
   end
 
-  describe "check!/2" do
+  describe "check!/1" do
     # Reads the catalog before it raises, which is why it needs the database.
     @tag :database
     test "raises on a cast with no supported conversion" do
@@ -34,7 +34,7 @@ defmodule Hologram.DB.PreflightTest do
           "remove the attribute and re-add it with the new type"
 
       assert_error RuntimeError, expected_msg, fn ->
-        check!(alter_column_op("uuid", "int8"), mapping(nil))
+        check!(alter_column_op("uuid", "int8"))
       end
     end
 
@@ -62,7 +62,7 @@ defmodule Hologram.DB.PreflightTest do
       ]
 
       Connection.with_connection(:no_connection, fn ->
-        Enum.each(ops, &assert(check!(&1, mapping(nil)) == :ok))
+        Enum.each(ops, &assert(check!(&1) == :ok))
       end)
     end
   end
