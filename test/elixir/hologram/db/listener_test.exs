@@ -418,16 +418,20 @@ defmodule Hologram.DB.ListenerTest do
 
     test "leaves the connection up once the keepalive settings are answered" do
       {:ok, state} = Listener.init(nil)
+      test_pid = self()
 
       {pid, ref} =
         spawn_monitor(fn ->
           {:query, _statement, state} = Listener.handle_connect(%{state | setup_timeout_ms: 100})
           {:noreply, _state} = Listener.handle_result([], state)
+          send(test_pid, :answered)
 
           Process.sleep(:infinity)
         end)
 
-      refute_receive {:DOWN, ^ref, :process, ^pid, _reason}, 300
+      # Armed before the answer, so a kill left armed would land inside the window.
+      assert_receive :answered, 2_000
+      refute_receive {:DOWN, ^ref, :process, ^pid, _reason}, 200
 
       Process.exit(pid, :kill)
     end
