@@ -17,10 +17,10 @@ defmodule Hologram.DB.Preflight do
   their work - which a file that applies pays anyway.
 
   A column counts as filled only when the op carries its fill - the renderer stamps a
-  declared default where the op sits. A lookup in the mapping the file leaves would find
-  the column under the name of whatever holds it at the end of the file: nothing, after a
-  rename, or another column that took the name over, and the check would pass a fill the
-  migrator never runs.
+  declared default where the op sits, as :backfill on an add and :fill on a tightening. A
+  lookup in the mapping the file leaves would find the column under the name of whatever
+  holds it at the end of the file: nothing, after a rename, or another column that took
+  the name over, and the check would pass a fill the migrator never runs.
 
   The schema is read only for an op the checks can refuse, so a file of renames, plain
   indexes or safe casts costs no catalog reads.
@@ -142,16 +142,17 @@ defmodule Hologram.DB.Preflight do
   defp check_op!(_op, _actual, _mapping), do: :ok
 
   # The ops a check_op!/3 clause above can refuse - kept next to those clauses so the two
-  # cannot drift. An add carrying its backfill, a plain index and a safe cast never are. A
-  # migration's in-transaction unique index sits on a table the file creates, so its clause
-  # never counts a row there; it stays for parity with check_op!/3.
+  # cannot drift. An add carrying its backfill, a tightening carrying its fill, a plain
+  # index and a safe cast never are. A migration's in-transaction unique index sits on a
+  # table the file creates, so its clause never counts a row there; it stays for parity
+  # with check_op!/3.
   defp refusable?(%{op: :add_column} = op) do
     not op.definition.null and not Map.has_key?(op, :backfill)
   end
 
   defp refusable?(%{op: :alter_column} = op) do
     DDL.cast_class(op.before.type, op.after.type) != :safe or
-      (op.before.null and not op.after.null)
+      (op.before.null and not op.after.null and not Map.has_key?(op, :fill))
   end
 
   defp refusable?(%{op: :create_index, unique: true}), do: true
@@ -183,9 +184,12 @@ defmodule Hologram.DB.Preflight do
   end
 
   defp check_null_tightening!(op, actual, mapping) do
+    # A migration's tightening carries its fill, stamped by the renderer; schema
+    # reconciliation's is looked up in the mapping.
     fillable? =
       op.before.type == op.after.type and
-        match?({:ok, _value}, fill_value(mapping, op.table, op.column))
+        (Map.has_key?(op, :fill) or
+           match?({:ok, _value}, fill_value(mapping, op.table, op.column)))
 
     checked? = op.before.null and not op.after.null and not fillable?
     statement = DDL.null_check_statement(op.table, op.column)

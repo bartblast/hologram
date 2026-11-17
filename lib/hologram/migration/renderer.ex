@@ -31,12 +31,13 @@ defmodule Hologram.Migration.Renderer do
   each column the transactional ops add, as the file leaves it, for the companion fill
   that runs after them.
 
-  A required column added without a backfill carries its declared default as one, so
-  what the rows that predate it receive is settled where the op sits rather than looked
-  up after the file's later ops have renamed it. The ops render in chunks, a rename
-  starting a chunk of its own, and the default is the one the op's chunk leaves: a default
-  declared or changed in the same chunk counts, one declared after a later rename fills
-  nothing - the column is required, and refused over rows, before it arrives.
+  A required column added without a backfill carries its declared default as one, and a
+  column turning required carries it as its :fill, so what the rows that predate it
+  receive is settled where the op sits rather than looked up after the file's later ops
+  have renamed it. The ops render in chunks, a rename starting a chunk of its own, and the
+  default is the one the op's chunk leaves: a default declared or changed in the same
+  chunk counts, one declared after a later rename fills nothing - the column is required,
+  and refused over rows, before it arrives.
 
   The ops render through the mapping: the model before and after them project to physical
   schema terms, and their difference is what the database must do. Physical names
@@ -72,6 +73,17 @@ defmodule Hologram.Migration.Renderer do
       end
 
     Enum.map(physical_ops, &put_backfill(&1, backfills))
+  end
+
+  defp companions(mapping, op) do
+    {_entity_type, entity_mapping} =
+      Enum.find(mapping, fn {_entity_type, entry} -> entry.table == op.table end)
+
+    {:attribute, name} = Enum.find(entity_mapping.columns, &(&1.name == op.column)).source
+
+    for %{source: {kind, ^name}} = column <- entity_mapping.columns,
+        kind in [:search_key, :sort_key],
+        do: {kind, column.name}
   end
 
   # The renamed member's derivations live under its new name afterwards, so the pairing
@@ -314,6 +326,25 @@ defmodule Hologram.Migration.Renderer do
        when not is_map_key(op, :backfill) do
     case Preflight.fill_value(mapping, op.table, op.column) do
       {:ok, value} -> Map.put(op, :backfill, value)
+      :none -> op
+    end
+  end
+
+  # A column turning required the same way: its NULLs take the declared default before it
+  # tightens. Not with a type change in the same op - the default holds a new-type value
+  # while the column still has the old type, so such a change meets its NULLs unfilled.
+  # The op also names the column's companions as they stand here, which the filled rows'
+  # keys go into.
+  defp put_declared_default(
+         %{
+           op: :alter_column,
+           before: %{null: true, type: type},
+           after: %{null: false, type: type}
+         } = op,
+         mapping
+       ) do
+    case Preflight.fill_value(mapping, op.table, op.column) do
+      {:ok, value} -> Map.merge(op, %{fill: value, fill_companions: companions(mapping, op)})
       :none -> op
     end
   end

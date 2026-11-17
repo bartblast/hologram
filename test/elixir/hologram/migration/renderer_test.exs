@@ -1385,6 +1385,70 @@ defmodule Hologram.Migration.RendererTest do
       assert alter_column.after.null == true
     end
 
+    test "carries a tightening's declared default as its fill" do
+      pre = model(%{MyApp.Task => %{attributes: [{:amount, :integer, [optional: true]}]}})
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :amount,
+          changes: [optional: false, default: 5],
+          line: 3
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :amount, to: :cost, line: 4}
+      ]
+
+      result = render(ops, pre)
+
+      assert %{column: "amount", fill: 5, fill_companions: []} =
+               Enum.find(result.transactional, &(&1.op == :alter_column))
+    end
+
+    test "names a tightened string column's companions with its fill" do
+      pre = model(%{MyApp.Task => %{attributes: [{:note, :string, [optional: true]}]}})
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :note,
+          changes: [optional: false, default: "Zed"],
+          line: 3
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :note, to: :remark, line: 4}
+      ]
+
+      result = render(ops, pre)
+
+      assert %{
+               column: "note",
+               fill: "Zed",
+               fill_companions: [sort_key: "note_$sort", search_key: "note_$search"]
+             } = Enum.find(result.transactional, &(&1.op == :alter_column))
+    end
+
+    test "leaves a tightening that also changes the type without a fill" do
+      pre = model(%{MyApp.Task => %{attributes: [{:amount, :string, [optional: true]}]}})
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :amount,
+          changes: [type: :integer, optional: false, default: 5],
+          line: 3
+        }
+      ]
+
+      result = render(ops, pre)
+
+      alter_column = Enum.find(result.transactional, &(&1.op == :alter_column))
+
+      assert alter_column.after.null == false
+      refute Map.has_key?(alter_column, :fill)
+    end
+
     test "renders nothing for changes the physical schema does not carry" do
       pre =
         model(%{

@@ -67,18 +67,17 @@ defmodule Hologram.Migration.BackfillTest do
 
   # What the column itself carries afterwards: whether it is required, and whether the
   # database holds a default for it.
-  defp priority_column do
+  defp column_flags(table, column) do
     statement = """
     SELECT a.attnotnull, pg_catalog.pg_get_expr(d.adbin, d.adrelid)
     FROM pg_catalog.pg_attribute a
     JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
     LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-    WHERE n.nspname = 'hologram_data' AND c.relname = 'my_app_task'
-      AND a.attname = 'priority'
+    WHERE n.nspname = 'hologram_data' AND c.relname = $1 AND a.attname = $2
     """
 
-    {:ok, %{rows: [[not_null, default]]}} = Connection.query(statement)
+    {:ok, %{rows: [[not_null, default]]}} = Connection.query(statement, [table, column])
 
     %{default: default, not_null: not_null}
   end
@@ -92,6 +91,41 @@ defmodule Hologram.Migration.BackfillTest do
     {:ok, %{rows: rows}} = Connection.query(statement)
 
     rows
+  end
+
+  defp status_migrations do
+    add_status =
+      migration("20260813142237", [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :status,
+          type: :enum,
+          opts: [values: [:done, :todo], optional: true],
+          line: 3
+        }
+      ])
+
+    tighten =
+      migration("20260813150000", [
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :status,
+          value: :unknown,
+          opts: [after: :todo],
+          line: 3
+        },
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :status,
+          changes: [optional: false, default: :unknown],
+          line: 4
+        }
+      ])
+
+    {add_status, tighten}
   end
 
   defp task_rows do
@@ -171,7 +205,7 @@ defmodule Hologram.Migration.BackfillTest do
 
         # The fill ran once, as a statement. The column is left required and bare - a
         # DEFAULT would have made the backfill a standing rule for every later row.
-        assert priority_column() == %{default: nil, not_null: true}
+        assert column_flags("my_app_task", "priority") == %{default: nil, not_null: true}
 
         # A row arriving with its own value keeps it, rather than being backfilled again.
         assert {:ok, _result} = insert_task("two", 99)
@@ -256,6 +290,170 @@ defmodule Hologram.Migration.BackfillTest do
         assert run([create, renamed], Model.fold(first_model, renamed.ops), @context) == :ok
 
         assert rows_of("my_app_task", ["title", "num"]) == [["one", 5], ["two", 5]]
+      end)
+    end
+
+    # The NULLs take the declared default before the column tightens over them, as schema
+    # reconciliation fills them in dev.
+    test "fills the NULLs of a column turning required with its declared default", %{
+      chain: [create | _rest],
+      first_model: first_model,
+      scratch: scratch
+    } do
+      add_amount =
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            type: :string,
+            opts: [optional: true],
+            line: 3
+          }
+        ])
+
+      tighten =
+        migration("20260813150000", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [optional: false, default: @note],
+            line: 3
+          }
+        ])
+
+      added_model = Model.fold(first_model, add_amount.ops)
+
+      route(scratch, fn ->
+        assert run([create, add_amount], added_model, @context) == :ok
+
+        insert_task("one")
+        insert_task("two")
+
+        # Written past the app, so its companions stay NULL - a fill reaching beyond the
+        # NULL rows would show here.
+        {:ok, _result} =
+          Connection.query(
+            ~s(UPDATE "hologram_data"."my_app_task" SET "amount" = 'kept' WHERE "title" = 'two')
+          )
+
+        chain = [create, add_amount, tighten]
+
+        assert run(chain, Model.fold(added_model, tighten.ops), @context) == :ok
+
+        assert rows_of("my_app_task", ["title", "amount", "amount_$sort", "amount_$search"]) ==
+                 [
+                   ["one", @note, SortKey.compute(@note), SortKey.search_key(@note)],
+                   ["two", "kept", nil, nil]
+                 ]
+
+        assert column_flags("my_app_task", "amount").not_null
+      end)
+    end
+
+    test "fills the NULLs of a column turning required with the default its add declared before a rename",
+         %{chain: [create | _rest], first_model: first_model, scratch: scratch} do
+      tighten =
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :code,
+            type: :integer,
+            opts: [optional: true, default: 5],
+            line: 3
+          },
+          %{op: :rename_attribute, entity: MyApp.Task, from: :code, to: :num, line: 4},
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :num,
+            changes: [optional: false],
+            line: 5
+          }
+        ])
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_task("one")
+
+        assert run([create, tighten], Model.fold(first_model, tighten.ops), @context) == :ok
+
+        assert rows_of("my_app_task", ["title", "num"]) == [["one", 5]]
+        assert column_flags("my_app_task", "num").not_null
+      end)
+    end
+
+    # PostgreSQL refuses a value ALTER TYPE added in the same transaction, even as the
+    # parameter of an UPDATE that matches no row - so a tightening with nothing to fill runs
+    # no fill at all.
+    test "makes a column required with a default the same file adds to its enum, on an empty table",
+         %{chain: [create | _rest], first_model: first_model, scratch: scratch} do
+      {add_status, tighten} = status_migrations()
+      added_model = Model.fold(first_model, add_status.ops)
+
+      route(scratch, fn ->
+        chain = [create, add_status, tighten]
+
+        assert run(chain, Model.fold(added_model, tighten.ops), @context) == :ok
+
+        assert column_flags("my_app_task", "status").not_null
+      end)
+    end
+
+    test "makes a column required with a default the same file adds to its enum, over rows with no NULL",
+         %{chain: [create | _rest], first_model: first_model, scratch: scratch} do
+      {add_status, tighten} = status_migrations()
+      added_model = Model.fold(first_model, add_status.ops)
+
+      route(scratch, fn ->
+        assert run([create, add_status], added_model, @context) == :ok
+
+        insert_task("one")
+
+        {:ok, _result} =
+          Connection.query(~s(UPDATE "hologram_data"."my_app_task" SET "status" = 'done'))
+
+        chain = [create, add_status, tighten]
+
+        assert run(chain, Model.fold(added_model, tighten.ops), @context) == :ok
+
+        assert rows_of("my_app_task", ["title", "status"]) == [["one", "done"]]
+        assert column_flags("my_app_task", "status").not_null
+      end)
+    end
+
+    test "fills the NULLs of an enum column turning required with its declared default", %{
+      chain: [create | _rest],
+      first_model: first_model,
+      scratch: scratch
+    } do
+      {add_status, _tighten} = status_migrations()
+      added_model = Model.fold(first_model, add_status.ops)
+
+      tighten =
+        migration("20260813150000", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :status,
+            changes: [optional: false, default: :todo],
+            line: 3
+          }
+        ])
+
+      route(scratch, fn ->
+        assert run([create, add_status], added_model, @context) == :ok
+
+        insert_task("one")
+
+        chain = [create, add_status, tighten]
+
+        assert run(chain, Model.fold(added_model, tighten.ops), @context) == :ok
+
+        assert rows_of("my_app_task", ["title", "status"]) == [["one", "todo"]]
       end)
     end
   end

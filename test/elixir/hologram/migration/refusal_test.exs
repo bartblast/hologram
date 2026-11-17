@@ -248,6 +248,42 @@ defmodule Hologram.Migration.RefusalTest do
       assert_refused(scratch, create, first_model, refused, expected_msg)
     end
 
+    # The column turns required in its own chunk, where it declares no default - the one
+    # declared after the rename fills nothing that predates it.
+    test "refuses tightening when the default arrives after a rename", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn -> insert_task("three", nil, "done") end)
+
+      refused =
+        migration("20260813142237", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [optional: false],
+            line: 3
+          },
+          %{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :name, line: 4},
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [default: "0"],
+            line: 5
+          }
+        ])
+
+      expected_msg =
+        ~s(cannot make column "amount" on table "my_app_task" required - ) <>
+          "found 1 row with NULL - " <>
+          "declare default: <value>, keep the attribute optional: true, or fix the data"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
     # A relationship declares no default, so the rows refusal is all that stands between the
     # add and a NOT NULL column over rows without a value - checked where the add sits, under
     # the name the rename takes away afterwards, and not satisfied by the attribute that takes

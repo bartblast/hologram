@@ -11,6 +11,7 @@ defmodule Hologram.Migrator do
   alias Hologram.DB.Preflight
   alias Hologram.DB.Schema
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.DB.SortKey
   alias Hologram.Entity.Model
   alias Hologram.Migration.Loader
   alias Hologram.Migration.Renderer
@@ -394,6 +395,17 @@ defmodule Hologram.Migrator do
     add_column_filled(op, value)
   end
 
+  # The NULLs take the declared default before the column tightens over them. Only when
+  # there are any: an enum value added in this transaction cannot be used in it, not even as
+  # the parameter of an UPDATE that matches no row.
+  defp apply_op(%{op: :alter_column, fill: value} = op) do
+    if count_result(DDL.null_check_statement(op.table, op.column)) > 0 do
+      fill_with_companions(op, value)
+    end
+
+    execute_statements(DDL.statements(op))
+  end
+
   defp apply_op(op), do: execute_statements(DDL.statements(op))
 
   # Added nullable, filled, then tightened - the value never travels in the DDL, and the
@@ -532,6 +544,10 @@ defmodule Hologram.Migrator do
     :claimed
   end
 
+  defp companion_key(:search_key, value), do: SortKey.search_key(value)
+
+  defp companion_key(:sort_key, value), do: SortKey.compute(value)
+
   defp count_result(statement) do
     {:ok, %{rows: [[count]]}} = Connection.query(statement)
 
@@ -638,6 +654,32 @@ defmodule Hologram.Migrator do
     fill_statement = DDL.fill_statement(table, column)
 
     {:ok, _result} = Connection.query(fill_statement, [encoded_value])
+  end
+
+  # Every filled row takes the one value, so its companions take one key each, set in the
+  # same statement - on the rows the fill reaches only, where the companion fill after the
+  # ops would recompute every row of the table.
+  # sobelow_skip ["SQL.Query"]
+  defp fill_with_companions(op, encoded_value) do
+    assignments = [
+      {op.column, encoded_value}
+      | Enum.map(op.fill_companions, fn {kind, name} ->
+          {name, companion_key(kind, encoded_value)}
+        end)
+    ]
+
+    set_sql =
+      assignments
+      |> Enum.with_index(1)
+      |> Enum.map_join(", ", fn {{name, _value}, position} ->
+        "#{Mapper.quote_identifier(name)} = $#{position}"
+      end)
+
+    table = ~s("#{Mapper.data_schema()}".#{Mapper.quote_identifier(op.table)})
+    column = Mapper.quote_identifier(op.column)
+    statement = "UPDATE #{table} SET #{set_sql} WHERE #{column} IS NULL"
+
+    {:ok, _result} = Connection.query(statement, Enum.map(assignments, &elem(&1, 1)))
   end
 
   # A database holding an object under a name the current naming rule no longer derives - one
