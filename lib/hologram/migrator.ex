@@ -404,6 +404,15 @@ defmodule Hologram.Migrator do
     end
   end
 
+  # A type change asks about the unique indexes standing over its column right before it
+  # applies: two values can convert to one, and the names a file's earlier ops leave behind
+  # are the ones the database holds at this point.
+  defp apply_op(%{op: :alter_column} = op, _mapping) do
+    Preflight.check_cast!(op)
+
+    execute_statements(DDL.statements(op))
+  end
+
   defp apply_op(op, _mapping), do: execute_statements(DDL.statements(op))
 
   # Added nullable, filled, then tightened - the value never travels in the DDL, and the

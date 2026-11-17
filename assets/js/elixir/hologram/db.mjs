@@ -237,9 +237,9 @@ function heldRow(entityType, id, verb) {
 // reason, over the boxed pair, so the ordering follows Elixir's own term order rather than a rule
 // written twice.
 //
-// The :unique and :not_found lines the server also formats are NOT here: neither reason can be
-// produced on this tier, because both are questions about OTHER rows. They arrive as the batch's
-// rejection instead.
+// The :unique and :not_found lines the server also formats, and the line of a taken key, are NOT
+// here: none of those reasons can be produced on this tier, because they are questions about
+// OTHER rows. They arrive as the batch's rejection instead.
 function refusalLines(entityType, violations, values) {
   const pairs = Object.values(violations.data).flatMap(([name, reasons]) =>
     reasons.data.map((reason) => Type.tuple([name, reason])),

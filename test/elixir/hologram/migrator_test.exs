@@ -694,7 +694,12 @@ defmodule Hologram.MigratorTest do
 
       model = %{
         entities: %{
-          MyApp.Task => %{attributes: [{:title, :string, []}], relationships: [], roles: []}
+          MyApp.Task => %{
+            attributes: [{:title, :string, []}],
+            relationships: [],
+            roles: [],
+            uniques: []
+          }
         },
         roles: %{},
         user_entity: nil
@@ -742,8 +747,8 @@ defmodule Hologram.MigratorTest do
 
       model = %{
         entities: %{
-          MyApp.Comment => %{attributes: [], relationships: [], roles: []},
-          MyApp.Task => %{attributes: [], relationships: [], roles: []}
+          MyApp.Comment => %{attributes: [], relationships: [], roles: [], uniques: []},
+          MyApp.Task => %{attributes: [], relationships: [], roles: [], uniques: []}
         },
         roles: %{MyApp.Roles.Admin => %{extends: []}},
         user_entity: nil
@@ -765,7 +770,7 @@ defmodule Hologram.MigratorTest do
       # Adding user: true to an entity and not generating the migration leaves every
       # entity and role covered, so the designation is the whole of what is missing.
       model = %{
-        entities: %{MyApp.Task => %{attributes: [], relationships: [], roles: []}},
+        entities: %{MyApp.Task => %{attributes: [], relationships: [], roles: [], uniques: []}},
         roles: %{},
         user_entity: MyApp.Task
       }
@@ -785,8 +790,8 @@ defmodule Hologram.MigratorTest do
 
       model = %{
         entities: %{
-          MyApp.Comment => %{attributes: [], relationships: [], roles: []},
-          MyApp.Task => %{attributes: [], relationships: [], roles: []}
+          MyApp.Comment => %{attributes: [], relationships: [], roles: [], uniques: []},
+          MyApp.Task => %{attributes: [], relationships: [], roles: [], uniques: []}
         },
         roles: %{},
         user_entity: MyApp.Task
@@ -1043,7 +1048,7 @@ defmodule Hologram.MigratorTest do
       migrations = []
 
       model = %{
-        entities: %{MyApp.Task => %{attributes: [], relationships: [], roles: []}},
+        entities: %{MyApp.Task => %{attributes: [], relationships: [], roles: [], uniques: []}},
         roles: %{},
         user_entity: nil
       }

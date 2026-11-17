@@ -53,7 +53,8 @@ defmodule Hologram.Entity do
             relationship: 2,
             relationship: 3,
             role: 1,
-            role: 2
+            role: 2,
+            unique: 1
           ]
 
         import Hologram.Policy, only: [policy: 1]
@@ -89,13 +90,15 @@ defmodule Hologram.Entity do
       register_relationships_accumulator(),
       register_inverse_relationships_accumulator(),
       register_relationship_locations_accumulator(),
-      register_roles_attribute()
+      register_roles_attribute(),
+      register_uniques_accumulator()
     ] ++ user_entity_marker(opts)
   end
 
   defmacro __before_compile__(env) do
     Validator.validate_roles!(env.module)
     Validator.validate_derived_heads!(env.module)
+    Validator.validate_uniques!(env.module)
     DerivedExpression.validate_own_builders!(env.module)
 
     system_attributes =
@@ -168,7 +171,7 @@ defmodule Hologram.Entity do
         @spec __system_attributes__() :: list({atom, atom, keyword})
         def __system_attributes__, do: unquote(system_attributes)
       end,
-      relationship_reflection(),
+      relationship_reflection(env.module),
       derived_reflection(env.module)
     ]
   end
@@ -360,6 +363,43 @@ defmodule Hologram.Entity do
   defmacro role(name, opts \\ []) do
     quote do
       Entity.__put_role__(__MODULE__, unquote(name), unquote(opts), __MODULE__)
+    end
+  end
+
+  @doc """
+  Declares a key: a set of fields whose values, taken together, no two rows of the entity type
+  share.
+
+      unique [:workspace, :slug]
+
+  The fields are attributes and to-one relationships, two or more, named as they are declared,
+  and an entity type takes any number of keys. A single field is unique through its own option,
+  `attribute :slug, :string, unique: true`.
+
+  A create or an update that would leave a row sharing a key with another row is refused, and
+  every field of the key carries the reason, `{:unique, fields}`, a to-one named by its
+  reference field:
+
+      {:error,
+       %{
+         slug: [unique: [:workspace_id, :slug]],
+         workspace_id: [unique: [:workspace_id, :slug]]
+       }}
+
+  A row holding nil in a field of the key repeats nothing. The strings of a key share one index
+  entry, so each takes a `{:max_bytes, max_bytes}` bound smaller than a unique string's own.
+
+  The refusal comes from the server, where the other rows are. A client writes the row to its
+  own store first, online or not, and the server refuses the whole batch the write arrived in
+  when the key is taken by then: on the client a row the batch created goes away and one it
+  updated goes back to what it held, and the app is told the reason. Two devices creating the same key offline have the second one's batch refused.
+  """
+  @spec unique(list(atom)) :: Macro.t()
+  defmacro unique(fields) do
+    location = {__CALLER__.file, __CALLER__.line}
+
+    quote do
+      Module.put_attribute(__MODULE__, :__uniques__, {unquote(fields), unquote(location)})
     end
   end
 
@@ -693,6 +733,14 @@ defmodule Hologram.Entity do
   def register_roles_attribute do
     quote do
       @__roles__ []
+    end
+  end
+
+  @doc false
+  @spec register_uniques_accumulator() :: AST.t()
+  def register_uniques_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__uniques__, accumulate: true)
     end
   end
 
@@ -1115,7 +1163,15 @@ defmodule Hologram.Entity do
   # relationship was declared - generated beside the rest of __before_compile__, in a quote of its
   # own so the one __before_compile__ builds stays within the complexity the project's linter
   # allows.
-  defp relationship_reflection do
+  defp relationship_reflection(module) do
+    # Read here rather than in the generated body: the declarations carry where each was written,
+    # which the validation has already spent.
+    uniques =
+      module
+      |> Module.get_attribute(:__uniques__)
+      |> Enum.map(fn {fields, _location} -> fields end)
+      |> Enum.sort()
+
     quote do
       @doc """
       Returns the list of inverse relationship definitions for the compiled entity type, sorted by relationship name - relationships declared with the inverse option, which store nothing of their own and read the relationship they reverse on the related type.
@@ -1126,6 +1182,12 @@ defmodule Hologram.Entity do
       @doc false
       @spec __relationship_locations__() :: %{atom => {String.t(), pos_integer}}
       def __relationship_locations__, do: Map.new(@__relationship_locations__)
+
+      @doc """
+      Returns the keys declared with unique for the compiled entity type, sorted - each the list of its field names, attributes and to-one relationships, in the order the declaration names them.
+      """
+      @spec __uniques__() :: list(list(atom))
+      def __uniques__, do: unquote(uniques)
     end
   end
 
