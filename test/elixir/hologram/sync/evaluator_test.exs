@@ -263,6 +263,49 @@ defmodule Hologram.Sync.EvaluatorTest do
     end
   end
 
+  describe "unsubscribe/2" do
+    test "tells a subscriber taken off about no more rounds" do
+      create("first")
+
+      staying = spawn(fn -> Process.sleep(:infinity) end)
+      start_evaluator!(subscribers: [self(), staying])
+
+      assert unsubscribe(@window_id, self()) == :ok
+
+      round(@window_id, transactions())
+      wait_for_result_store_write()
+
+      refute_received {:round, @window_id, _version, _transactions, _place}
+    end
+
+    test "stops once its last subscriber is taken off, forgetting what it held" do
+      create("first")
+
+      evaluator = start_evaluator!(subscribers: [self()])
+      evaluator_ref = Process.monitor(evaluator)
+
+      round(@window_id, transactions())
+      assert_receive {:round, @window_id, 1, _transactions, _place}
+
+      assert unsubscribe(@window_id, self()) == :ok
+
+      assert_receive {:DOWN, ^evaluator_ref, :process, ^evaluator, :normal}
+      assert ResultStore.versions(@window_id) == []
+    end
+
+    test "answers the same for a subscriber that isn't on it" do
+      evaluator = start_evaluator!(subscribers: [self()])
+      stranger = spawn(fn -> Process.sleep(:infinity) end)
+
+      assert unsubscribe(@window_id, stranger) == :ok
+      assert Process.alive?(evaluator)
+    end
+
+    test "answers the same for a window nobody holds" do
+      assert unsubscribe("w_nobody", self()) == :ok
+    end
+  end
+
   describe "handle :DOWN" do
     test "stops once its last subscriber goes away, forgetting what it held" do
       create("first")

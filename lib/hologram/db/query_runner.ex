@@ -60,20 +60,25 @@ defmodule Hologram.DB.QueryRunner do
   @spec run_policied(Query.t(), %{module => %{atom => any}}, any, %{atom => any}) ::
           list(struct) | struct | integer | nil
   def run_policied(term, mapping, session_user_id, bindings \\ %{}) do
-    validate_bindings!(term, bindings)
-
-    actor_user_id = Auth.canonical_id(session_user_id)
-
-    policy = %{
-      anonymous?: is_nil(actor_user_id),
-      rules: read_rules(term.entity)
-    }
-
-    compiled = QueryCompiler.compile(term, mapping, policy)
-    values = Enum.map(compiled.params, &resolve_param!(&1, bindings, actor_user_id))
+    {compiled, values} = compile_policied(term, mapping, session_user_id, bindings)
 
     case Connection.query(compiled.sql, values) do
       {:ok, result} -> decode_result(result, term, mapping)
+      {:error, error} -> raise error
+    end
+  end
+
+  # One value worked out by Postgres over the rows a query takes and the given session's user may
+  # read: the given aggregate expression, over the query's rows as `"$rows"` - for whoever needs
+  # less than the rows, where decoding every column of every row costs several times as much.
+  @doc false
+  @spec run_policied_aggregate(Query.t(), %{module => %{atom => any}}, any, String.t()) :: any
+  def run_policied_aggregate(term, mapping, session_user_id, aggregate_sql) do
+    {compiled, values} = compile_policied(term, mapping, session_user_id, %{})
+    sql = ~s|SELECT #{aggregate_sql} FROM (#{compiled.sql}) AS "$rows"|
+
+    case Connection.query(sql, values) do
+      {:ok, %{rows: [[value]]}} -> value
       {:error, error} -> raise error
     end
   end
@@ -412,6 +417,22 @@ defmodule Hologram.DB.QueryRunner do
     readers = MapSet.new(reader_ids, &Codec.decode(&1, :uuid))
 
     if anonymous, do: MapSet.put(readers, nil), else: readers
+  end
+
+  defp compile_policied(term, mapping, session_user_id, bindings) do
+    validate_bindings!(term, bindings)
+
+    actor_user_id = Auth.canonical_id(session_user_id)
+
+    policy = %{
+      anonymous?: is_nil(actor_user_id),
+      rules: read_rules(term.entity)
+    }
+
+    compiled = QueryCompiler.compile(term, mapping, policy)
+    values = Enum.map(compiled.params, &resolve_param!(&1, bindings, actor_user_id))
+
+    {compiled, values}
   end
 
   defp read_rules(entity_type) do

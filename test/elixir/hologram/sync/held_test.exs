@@ -53,6 +53,26 @@ defmodule Hologram.Sync.HeldTest do
     end
   end
 
+  describe "put/3" do
+    test "holds the given packed ids of the given type in place of what it held" do
+      held =
+        new()
+        |> add(Module1, [@id_1])
+        |> put(Module1, PackedIds.pack([@id_2, @id_3]))
+
+      assert ids(held, Module1) == [@id_2, @id_3]
+    end
+
+    test "holds nothing of the type given nothing packed" do
+      held =
+        new()
+        |> add(Module1, [@id_1])
+        |> put(Module1, "")
+
+      refute any?(held, Module1)
+    end
+  end
+
   describe "remove/3" do
     test "takes the given ids out" do
       held =

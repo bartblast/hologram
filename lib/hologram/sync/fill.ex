@@ -27,6 +27,7 @@ defmodule Hologram.Sync.Fill do
   alias Hologram.Mutation.Record
   alias Hologram.Query
   alias Hologram.Query.Stage
+  alias Hologram.Sync.PackedIds
 
   @doc """
   Returns the rows of the given entity type the given user may read, as the fill sends them (see
@@ -62,6 +63,24 @@ defmodule Hologram.Sync.Fill do
       |> QueryRunner.run_policied(DB.mapping(), actor_user_id)
 
     {rows, applied_seq}
+  end
+
+  @doc """
+  Returns the ids of the rows of the given entity type the given user may read, packed (see
+  `Hologram.Sync.PackedIds.pack/1`) - read through the type's read rules as `read/4` reads its rows,
+  but without their sets: what a returning client is taken to hold of the type. A nil user reads as
+  a visitor.
+
+  Packed by Postgres: a client may hold every row of a big type, and decoding each row to keep its
+  id costs several times what reading it does.
+  """
+  @spec read_ids(module, String.t() | nil) :: binary
+  def read_ids(entity_type, actor_user_id) do
+    packed_ids_sql = PackedIds.ids_sql(~s|"$rows"."id"|)
+
+    entity_type
+    |> Stage.normalize()
+    |> QueryRunner.run_policied_aggregate(DB.mapping(), actor_user_id, packed_ids_sql)
   end
 
   @doc """

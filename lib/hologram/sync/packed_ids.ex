@@ -123,6 +123,17 @@ defmodule Hologram.Sync.PackedIds do
   end
 
   @doc """
+  Returns the SQL expression packing the given uuid column of the rows a statement selects, the
+  way `pack/1` packs ids - one value, empty when no row is selected. The column holds each id once.
+  Postgres orders uuids by their bytes, so its order is the order `pack/1` sorts into. Packed where
+  the rows are, as `pairs_sql/2` packs pairs.
+  """
+  @spec ids_sql(String.t()) :: String.t()
+  def ids_sql(column) do
+    ~s|COALESCE(string_agg(uuid_send(#{column}), ''::bytea ORDER BY #{column}), ''::bytea)|
+  end
+
+  @doc """
   Returns the given pairs of ids packed: each pair's two ids, 32 bytes, in order, a pair given twice
   packed once.
   """

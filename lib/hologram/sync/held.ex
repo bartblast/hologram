@@ -60,6 +60,13 @@ defmodule Hologram.Sync.Held do
   def new, do: %{}
 
   @doc """
+  Returns the given held ids with the given entity type's set to the given packed ids (see
+  `Hologram.Sync.PackedIds.pack/1`), whatever it held before.
+  """
+  @spec put(t, module, binary) :: t
+  def put(held, entity_type, packed), do: put_packed(held, entity_type, packed)
+
+  @doc """
   Returns the given held ids with the given ids of the given entity type taken out, an id not held
   passed over.
   """

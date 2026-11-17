@@ -71,6 +71,22 @@ defmodule Hologram.Sync.Evaluator do
     end
   end
 
+  @doc """
+  Takes the given subscriber off the evaluator of the given window, which stops once nobody is
+  left, as it does when its last subscriber dies. A window nothing holds, or one the subscriber
+  isn't on, is left as it is.
+
+  Asked without waiting for an answer: an evaluator busy with a round would hold the caller up,
+  and a subscriber leaving reads no round of it from then on anyway.
+  """
+  @spec unsubscribe(String.t(), pid) :: :ok
+  def unsubscribe(window_id, subscriber) do
+    case Registry.lookup(@registry, window_id) do
+      [{pid, _value}] -> GenServer.cast(pid, {:unsubscribe, subscriber})
+      [] -> :ok
+    end
+  end
+
   @impl GenServer
   def init(opts) do
     # A round runs the window's query on a borrowed connection, and an exit signal reaching a
@@ -137,6 +153,26 @@ defmodule Hologram.Sync.Evaluator do
     {merged, merged_place} = drain_rounds(transactions, place)
 
     {:noreply, run(state, merged, merged_place)}
+  end
+
+  def handle_cast({:unsubscribe, subscriber}, state) do
+    case Map.pop(state.subscribers, subscriber) do
+      {nil, _subscribers} ->
+        {:noreply, state}
+
+      {ref, subscribers} ->
+        Process.demonitor(ref, [:flush])
+
+        left = %{state | subscribers: subscribers}
+
+        if Enum.empty?(subscribers) do
+          ResultStore.forget(state.window_id)
+
+          {:stop, :normal, left}
+        else
+          {:noreply, left}
+        end
+    end
   end
 
   @impl GenServer

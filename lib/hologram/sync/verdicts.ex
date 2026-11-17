@@ -1,18 +1,18 @@
 defmodule Hologram.Sync.Verdicts do
   @moduledoc false
 
-  # What a session has told its client of the server's verdicts, and which of them a round makes
+  # What a session has told its client of the server's verdicts, and which of them a batch makes
   # out of date.
   #
   # A verdict is the server's answer on a policy condition a browser cannot decide over the rows it
   # holds (see Hologram.Auth.verdicts/2). Every row a client is put carries its verdicts, so a row
   # that arrives is current. A row the client already holds can have its verdicts move without the
   # row moving at all - a task deletable while its board has no cards stops being so the moment a
-  # card is added - so the session keeps what it last told, and a round that touched a type a
-  # verdict reads works the row's verdicts out again and tells only what changed.
+  # card is added - so the session keeps what it last told, and the rows a batch may have moved the
+  # verdicts of (see `Hologram.Sync.Live.parts/5`) are worked out again, telling only what changed.
   #
   # The bookkeeping is kept here, apart from the session that holds it, so what is told when can be
-  # judged without a running window.
+  # judged without a running session.
 
   alias Hologram.Policy
   alias Hologram.Sync.Frame
@@ -67,60 +67,18 @@ defmodule Hologram.Sync.Verdicts do
 
   @doc """
   Returns the rows among the given ones whose verdicts for the given user differ from what was
-  told, each with its verdicts now, in the order given.
+  told, each with its verdicts now, in the order given. Only rows of a type with a deciding
+  quantifier are worked out: the rest are sent with none.
 
-  Only rows of a type with a deciding quantifier are worked out again: every one of them when the
-  given changed types meet a type such a quantifier reads through a relationship (see
-  `Hologram.Policy.verdict_related_reads/2`), and otherwise only the rows among the given moved
-  ids - those whose own values or pairs moved - since a quantifier may read the row it decides
-  about, and the pairs of a to-many stored on it. Given `:all`, every row of such a type is worked
-  out - what a client resuming with verdicts it was told before this session is owed.
+  Which rows to ask about is the caller's: the rows a batch may have moved the verdicts of (see
+  `Hologram.Sync.Live.parts/5`), or every row a returning client may hold verdicts of from before
+  this session.
   """
-  @spec stale(
-          list(struct),
-          %{String.t() => map},
-          String.t() | nil,
-          MapSet.t(module) | :all,
-          MapSet.t(String.t())
-        ) :: list({struct, map})
-  def stale(rows, told, actor_user_id, changed_types, moved_ids \\ MapSet.new()) do
-    worked_out =
-      rows
-      |> MapSet.new(& &1.__struct__)
-      |> Map.new(&{&1, scope(&1, changed_types)})
-
+  @spec stale(list(struct), %{String.t() => map}, String.t() | nil) :: list({struct, map})
+  def stale(rows, told, actor_user_id) do
     rows
-    |> Enum.filter(fn row ->
-      case Map.fetch!(worked_out, row.__struct__) do
-        :every_row -> true
-        :moved_rows -> MapSet.member?(moved_ids, row.id)
-        :none -> false
-      end
-    end)
+    |> Enum.filter(&(Policy.deciding_quantifiers(&1.__struct__) != []))
     |> Enum.map(&{&1, Frame.row_verdicts(actor_user_id, &1)})
     |> Enum.reject(fn {row, verdicts} -> verdicts == Map.get(told, row.id, %{}) end)
-  end
-
-  # Which rows of the type a round makes worth working out again.
-  defp scope(entity_type, changed_types) do
-    deciding = Policy.deciding_quantifiers(entity_type)
-
-    cond do
-      deciding == [] ->
-        :none
-
-      changed_types == :all ->
-        :every_row
-
-      Enum.any?(deciding, fn {_key, clause} ->
-        entity_type
-        |> Policy.verdict_related_reads(clause)
-        |> Enum.any?(&MapSet.member?(changed_types, &1))
-      end) ->
-        :every_row
-
-      true ->
-        :moved_rows
-    end
   end
 end

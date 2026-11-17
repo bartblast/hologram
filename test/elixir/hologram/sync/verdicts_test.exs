@@ -117,63 +117,40 @@ defmodule Hologram.Sync.VerdictsTest do
     end
   end
 
-  describe "stale/5" do
-    test "returns a row whose verdicts differ from what was told when the round touched what they read" do
+  describe "stale/3" do
+    test "returns a row whose verdicts differ from what was told" do
       row = task()
-      user_id = Entity.generate_id()
-      changed_types = MapSet.new([VerdictBoard.Card])
 
-      assert stale([row], %{}, user_id, changed_types) == [{row, %{delete_key() => true}}]
+      assert stale([row], %{}, Entity.generate_id()) == [{row, %{delete_key() => true}}]
     end
 
     test "returns the rows in the order given" do
       first = task()
       last = task()
-      changed_types = MapSet.new([VerdictBoard.Card])
 
-      assert stale([last, first], %{}, Entity.generate_id(), changed_types) == [
+      assert stale([last, first], %{}, Entity.generate_id()) == [
                {last, %{delete_key() => true}},
                {first, %{delete_key() => true}}
              ]
-    end
-
-    test "returns a moved row when the round touched only the rule's own type" do
-      row = task()
-      changed_types = MapSet.new([VerdictTask])
-      moved_ids = MapSet.new([row.id])
-
-      assert stale([row], %{}, Entity.generate_id(), changed_types, moved_ids) == [
-               {row, %{delete_key() => true}}
-             ]
-    end
-
-    test "returns nothing for a row the round left alone when it touched only the rule's own type" do
-      changed_types = MapSet.new([VerdictTask])
-
-      assert stale([task()], %{}, Entity.generate_id(), changed_types, MapSet.new()) == []
     end
 
     test "returns nothing for a row whose verdicts are what was told" do
       row = task()
       told = %{row.id => %{delete_key() => true}}
 
-      assert stale([row], told, Entity.generate_id(), MapSet.new([VerdictBoard.Card])) == []
+      assert stale([row], told, Entity.generate_id()) == []
     end
 
-    test "returns nothing when the round touched nothing the verdicts read" do
-      assert stale([task()], %{}, Entity.generate_id(), MapSet.new([Module2])) == []
-    end
-
-    test "returns every row whose verdicts differ when asked for all" do
+    test "returns a row whose verdicts moved from what was told" do
       row = task()
 
-      assert stale([row], %{row.id => %{delete_key() => true}}, nil, :all) == [
+      assert stale([row], %{row.id => %{delete_key() => true}}, nil) == [
                {row, %{delete_key() => false}}
              ]
     end
 
     test "returns nothing for a row of a type with no deciding quantifier" do
-      assert stale([Module2.new(a: true)], %{}, nil, :all) == []
+      assert stale([Module2.new(a: true)], %{}, nil) == []
     end
   end
 end

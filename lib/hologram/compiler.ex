@@ -2839,7 +2839,7 @@ defmodule Hologram.Compiler do
   def validate_operations!(entity_types, call_graph, ir_plt, opts \\ []) do
     # Seeded with the framework's own rather than left to the types to carry: every type's
     # operations include them, but an app with NO entity type contributes nothing at all, and the
-    # framework's own asks (Diff.deltas/4 asks :read) are in every build's call graph.
+    # framework's own asks (Diff.carried/2 asks :read) are in every build's call graph.
     vocabulary =
       entity_types
       |> Enum.flat_map(&Policy.operations/1)
