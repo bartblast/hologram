@@ -809,6 +809,14 @@ describe("RegexEngine", () => {
       });
     });
 
+    it("matches a colon-separated property escape with the unicode option", () => {
+      assert.deepEqual(match("\\p{sc:Greek}+", "aαβ1", {unicode: true}), {
+        start: 1,
+        end: 3,
+        captures: [null],
+      });
+    });
+
     it("matches a property escape after a literal with the unicode option", () => {
       assert.deepEqual(match("a\\p{Lu}", "abaB", {unicode: true}), {
         start: 2,

@@ -57,6 +57,12 @@ describe("unicodePropertyAtoms()", () => {
     ]);
   });
 
+  it("keeps a name:value property in the name=value form", () => {
+    assert.deepEqual(unicodePropertyAtoms("sc:Greek", false), [
+      "\\p{sc=Greek}",
+    ]);
+  });
+
   it("matches a bare Inherited name by script", () => {
     assert.deepEqual(unicodePropertyAtoms("Inherited", false), [
       "\\p{Script=Inherited}",
@@ -101,6 +107,12 @@ describe("unicodePropertyAtoms()", () => {
 
   it("matches a Common script extension by script", () => {
     assert.deepEqual(unicodePropertyAtoms("scx=Common", false), [
+      "\\p{Script=Common}",
+    ]);
+  });
+
+  it("matches a Common script by script under a colon separator", () => {
+    assert.deepEqual(unicodePropertyAtoms("scx:Common", false), [
       "\\p{Script=Common}",
     ]);
   });

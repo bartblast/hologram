@@ -61,7 +61,8 @@ export function unicodePropertyAtoms(name, caseless) {
 }
 
 function resolveJsPropertyName(name) {
-  const separatorIndex = name.indexOf("=");
+  // PCRE2 takes a colon as well as an equals sign between key and value
+  const separatorIndex = name.search(/[:=]/);
 
   const [key, value] =
     separatorIndex === -1
@@ -75,7 +76,7 @@ function resolveJsPropertyName(name) {
   // TODO: resolve names with PCRE2 rules instead of JS ones (loose matching,
   // L&, Bidi_Class, rejecting JS-only names like Letter or gc=Lu)
   const candidates =
-    key !== null ? [name] : [name, `Script_Extensions=${name}`];
+    key !== null ? [`${key}=${value}`] : [name, `Script_Extensions=${name}`];
 
   for (const candidate of candidates) {
     try {
