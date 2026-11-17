@@ -19,6 +19,7 @@ defmodule Hologram.DB.IndexPlanTest do
   alias Hologram.Test.Fixtures.Entity.Module34
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module52
+  alias Hologram.Test.Fixtures.Entity.Module54
 
   @mapping Mapper.derive!(
              [
@@ -32,7 +33,8 @@ defmodule Hologram.DB.IndexPlanTest do
                Module29,
                Module3,
                Module4,
-               Module52
+               Module52,
+               Module54
              ],
              []
            )
@@ -43,6 +45,7 @@ defmodule Hologram.DB.IndexPlanTest do
   @module26 "test_fixtures_entity_module26"
   @module3 "test_fixtures_entity_module3"
   @module4 "test_fixtures_entity_module4"
+  @module54 "test_fixtures_entity_module54"
 
   defp need(table, eq, range \\ nil, order \\ []) do
     %{table: table, eq: MapSet.new(eq), range: range, order: order}
@@ -100,10 +103,45 @@ defmodule Hologram.DB.IndexPlanTest do
              ]
     end
 
-    test "drops a raw string's IS NULL from a need beside other columns" do
+    test "leaves a raw string's IS NULL out of a need a unique index serves without it" do
       assert term_needs(filter(Module19, code == nil and slug in ["x"])) == [
-               need(@module19, ["slug_$sort"])
+               need(@module19, ["slug"])
              ]
+    end
+
+    test "drops a raw string's IS NULL from a need no unique index serves" do
+      assert term_needs(filter(Module54, name == nil and n2 == 1)) == [need(@module54, ["n2"])]
+    end
+
+    test "needs nothing for an IS NULL on a string a unique index holds but doesn't lead with" do
+      assert term_needs(filter(Module54, s2 == nil or n4 == 1)) == []
+    end
+
+    test "keeps a raw string out of a need ordering, ranging or past a unique index's lead" do
+      ordered =
+        Module54
+        |> filter(name == "x")
+        |> sort(n1)
+        |> take(5)
+
+      assert term_needs(ordered) == [need(@module54, ["name_$sort"], nil, ["n1"])]
+
+      assert term_needs(filter(Module19, code in ["x"] and code > "a")) == [
+               need(@module19, ["code_$sort"])
+             ]
+
+      assert term_needs(filter(Module52, slug in ["x"])) == [
+               need("test_fixtures_entity_module52", ["slug_$sort"])
+             ]
+    end
+
+    test "keeps a raw string a unique index serves when the need orders nothing after it" do
+      query =
+        Module19
+        |> filter(slug in ["x", "y"])
+        |> take(5)
+
+      assert term_needs(query) == [need(@module19, ["slug"])]
     end
 
     test "needs nothing for equalities fixing every column of a unique index" do

@@ -83,6 +83,7 @@ defmodule Hologram.DB.IndexPlan do
 
     scope = %{
       entity_mapping: entity_mapping,
+      leading_unique_columns: leading_unique_columns(entity_mapping),
       raw_keys: raw_keys(entity_mapping, unique_columns),
       unique_columns: unique_columns
     }
@@ -199,35 +200,45 @@ defmodule Hologram.DB.IndexPlan do
   defp spell_out_membership(clause, _scope), do: clause
 
   defp path_need(path, order, scope) do
-    path = hold_raw_strings(path, order, scope)
-
-    eq = for {kind, column} <- path, kind in [:eq, :set, :null], into: MapSet.new(), do: column
-    ranges = for {:range, column} <- path, not MapSet.member?(eq, column), uniq: true, do: column
-
+    # A membership or an IS NULL returns the rows of each value apart, so nothing after it is in
+    # order.
     ordered_order =
       if Enum.any?(path, &match?({kind, _column} when kind in [:null, :set], &1)),
         do: [],
         else: order
 
-    range = path_range(ranges, ordered_order)
+    {_eq, _range, kept_order} = need_shape(path, ordered_order)
+    held_path = hold_raw_strings(path, kept_order, scope)
+    {eq, range, need_order} = need_shape(held_path, ordered_order)
+
+    %{table: scope.entity_mapping.table, eq: eq, range: range, order: need_order}
+  end
+
+  defp need_shape(path, order) do
+    eq = for {kind, column} <- path, kind in [:eq, :set, :null], into: MapSet.new(), do: column
+    ranges = for {:range, column} <- path, not MapSet.member?(eq, column), uniq: true, do: column
+    range = path_range(ranges, order)
 
     need_order =
-      case {range, ordered_order} do
+      case {range, order} do
         {nil, columns} -> columns
         {range, [range | rest]} -> rest
         {_range, _columns} -> []
       end
 
-    %{table: scope.entity_mapping.table, eq: eq, range: range, order: need_order}
+    {eq, range, need_order}
   end
 
   # A unique index holds a string raw, bounded to what fits that index alone, so the raw column
   # never joins other columns in an index of the plan's: a long value would fail to be written.
-  # A need that is exactly a unique index's leading columns keeps it, since that index serves it.
-  # Any other compares the sort key beside the raw value, as the compiler does, and drops a raw
-  # IS NULL, which no other column answers.
+  # A need that is exactly a unique index's leading columns keeps it, since that index serves it -
+  # leaving out a raw IS NULL if it has to, which the rows that index finds are then checked for.
+  # Any other compares the sort key beside the raw value, as the compiler does, and drops the
+  # IS NULL, which no other column answers. An IS NULL is only ever on a column leading a unique
+  # index, so dropping it leaves its OR's arm served by that index.
   defp hold_raw_strings(path, order, scope) do
     raw? = Enum.any?(path, fn {_kind, column} -> Map.has_key?(scope.raw_keys, column) end)
+    without_null = Enum.reject(path, &match?({:null, _column}, &1))
 
     cond do
       not raw? ->
@@ -236,10 +247,12 @@ defmodule Hologram.DB.IndexPlan do
       order == [] and unique_prefix?(path, scope.entity_mapping) ->
         path
 
+      order == [] and without_null != [] and unique_prefix?(without_null, scope.entity_mapping) ->
+        without_null
+
       true ->
-        Enum.flat_map(path, fn
-          {:null, _raw_column} -> []
-          {kind, column} -> [{kind, Map.get(scope.raw_keys, column, column)}]
+        Enum.map(without_null, fn {kind, column} ->
+          {kind, Map.get(scope.raw_keys, column, column)}
         end)
     end
   end
@@ -273,9 +286,10 @@ defmodule Hologram.DB.IndexPlan do
 
   defp column_conjunct(_column, _operator, {:attribute, _other}, _scope), do: nil
 
-  # A string's IS NULL reads its raw column, which only a unique index holds.
+  # A string's IS NULL reads its raw column, which only a unique index holds, and which that index
+  # finds only when it leads with the column.
   defp column_conjunct(%{type: :string} = column, :==, nil, scope) do
-    if MapSet.member?(scope.unique_columns, column.name), do: {:null, column.name}
+    if MapSet.member?(scope.leading_unique_columns, column.name), do: {:null, column.name}
   end
 
   defp column_conjunct(column, :==, nil, _scope), do: {:set, column.name}
@@ -383,6 +397,12 @@ defmodule Hologram.DB.IndexPlan do
         MapSet.member?(unique_columns, name),
         into: %{},
         do: {name, ordering_column(column, entity_mapping)}
+  end
+
+  defp leading_unique_columns(entity_mapping) do
+    for {_name, %{unique: true, columns: [column | _rest]}} <- entity_mapping.indexes,
+        into: MapSet.new(),
+        do: column
   end
 
   defp unique_columns(entity_mapping) do
