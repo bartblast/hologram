@@ -415,12 +415,10 @@ export default class SyncStream {
   // one tab is served sync, and what it receives is every tab's.
   //
   // AFTER the frame has been written down, which is what a tab joining the group relies on. A write
-  // transaction is created before this returns, and IndexedDB orders what follows behind it - so a
-  // tab that reads the store on hearing this reads a store that already holds the frame, and a tab
-  // that was too late to read it is told by the message.
-  //
-  // TODO(#1653): a starting tab reads the store before it joins the group, so a frame stored and
-  // posted in between reaches it neither way.
+  // transaction is created before this returns, and IndexedDB orders what follows behind it. A
+  // starting tab reads the store only after it has joined the group (see DataLayer.boot), so a
+  // frame posted before it was listening is in the store it reads, and one posted after reaches it
+  // as this message.
   static tell(event, frame) {
     Tabs.post({event, frame, kind: "frame"});
   }

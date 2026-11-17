@@ -76,6 +76,10 @@ export default class Tabs {
   //
   // Every other tab takes the fresh identity its own page was minted, lets the batches go, and
   // opens a stream of its own - which it needs, because the frames it was being handed stop here.
+  // A tab still starting up has no stream to replace: the one its page opens after the mount
+  // greets the server as the replica of its own it now is, and opening one before the mount would
+  // greet it with none of the page's subscriptions (see where the page starts it, in hologram.mjs).
+  //
   // Answers once the lock is really gone, the way leaving does - which is what lets anything
   // waiting on this tab's place in the group wait for it rather than for a moment.
   static dissolve() {
@@ -85,7 +89,10 @@ export default class Tabs {
     if (followed) {
       Batches.disown();
       Replica.refresh();
-      Sse.reconnect();
+
+      if (Sse.isStarted) {
+        Sse.reconnect();
+      }
     }
 
     return released;
@@ -93,11 +100,12 @@ export default class Tabs {
 
   // Joins the group, answering whether this tab leads it.
   //
-  // Awaited at startup, before the mount and before the stream opens, which is what `ifAvailable`
-  // buys: it asks whether the lock is free and answers at once either way, rather than waiting for
-  // one somebody else holds for as long as their tab is open. So the first tab of a group greets
-  // the server with sync on its first connect, and a follower never opens a sync session it would
-  // have to drop a moment later.
+  // Awaited at startup, before the store is read, so nothing the group says in between is missed
+  // (see DataLayer.boot). And before the mount and before the stream opens, which is what
+  // `ifAvailable` buys: it asks whether the lock is free and answers at once either way, rather
+  // than waiting for one somebody else holds for as long as their tab is open. So the first tab of
+  // a group greets the server with sync on its first connect, and a follower never opens a sync
+  // session it would have to drop a moment later.
   static async join(name, {onLead, onMessage}) {
     // A browser that cannot hold a lock, or cannot carry a message between tabs, has no group to
     // join: this tab leads itself and speaks for nobody, which is what every tab there does. Its
@@ -124,6 +132,11 @@ export default class Tabs {
     Tabs.#token = token;
     Tabs.name = name;
 
+    // Leading nothing until the lock says otherwise: a tab in no group leads itself, but one asking
+    // to join speaks for nobody yet. A batch another tab seals during the ask is not this one to
+    // send, and a group that dissolves during it takes back what it handed this tab.
+    Tabs.leader = false;
+
     Tabs.#onMessage = onMessage ?? Tabs.receive;
 
     Tabs.#channel = new BroadcastChannel(name);
@@ -144,7 +157,9 @@ export default class Tabs {
       (lock) => {
         answer(lock !== null);
 
-        if (lock === null) {
+        // Not held for a visit that has ended: a lock nothing will ever let go of would leave the
+        // group with no tab that can lead it.
+        if (lock === null || Tabs.#token !== token) {
           return;
         }
 
@@ -152,7 +167,15 @@ export default class Tabs {
       },
     );
 
-    Tabs.leader = await granted;
+    const leads = await granted;
+
+    // Left while asking - the group dissolved under it, a store failure another tab reported - so
+    // this tab leads itself, which is what leaving made it.
+    if (Tabs.#token !== token) {
+      return Tabs.leader;
+    }
+
+    Tabs.leader = leads;
 
     if (Tabs.leader) {
       // For the tab that joins while this one is still asking for the lock: it finds the lock

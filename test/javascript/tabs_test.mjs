@@ -158,16 +158,20 @@ describe("Tabs", () => {
   // What a tab does when the store it was sharing is gone: the group is over, and every tab goes
   // back to being a replica of its own.
   describe("dissolve()", () => {
-    let disowning, reconnecting;
+    let disowning, reconnecting, wasStarted;
 
     beforeEach(() => {
       disowning = sinon.stub(Batches, "disown");
       reconnecting = sinon.stub(Sse, "reconnect");
 
+      wasStarted = Sse.isStarted;
+      Sse.isStarted = true;
+
       Replica.offer({id: "r-fresh", token: "statement-fresh"});
     });
 
     afterEach(() => {
+      Sse.isStarted = wasStarted;
       Replica.reset();
     });
 
@@ -220,6 +224,33 @@ describe("Tabs", () => {
       Tabs.dissolve();
 
       assert.isTrue(reconnecting.calledOnce);
+    });
+
+    // The stream its page opens after the mount is its own already, and one opened before it would
+    // carry none of the page's subscriptions.
+    it("opens no stream in a tab that was following and has not started one", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      Sse.isStarted = false;
+
+      Tabs.dissolve();
+
+      assert.isFalse(reconnecting.called);
+      assert.isTrue(disowning.calledOnce);
+    });
+
+    // Asking for the lock speaks for nobody yet, so what the group handed it goes back.
+    it("lets the batches go in a tab that was still asking for the lock", async () => {
+      sinon.stub(navigator.locks, "request").resolves();
+
+      Tabs.join(nextGroup(), stubs());
+
+      Tabs.dissolve();
+
+      assert.isTrue(disowning.calledOnce);
     });
   });
 
@@ -790,6 +821,52 @@ describe("Tabs", () => {
       await hasLed;
 
       assert.isTrue(Tabs.leader);
+    });
+
+    // A store failure another tab reports can end the group while this tab is still asking for the
+    // lock, and what the tab is from then on is what leaving made it.
+    it("leads itself when it left the group while asking to follow", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+
+      const joining = Tabs.join(group, stubs());
+
+      await Tabs.leave();
+
+      assert.isTrue(await joining);
+      assert.isTrue(Tabs.leader);
+      assert.isNull(Tabs.name);
+    });
+
+    // Granted after the visit ended, a lock kept would be one nothing ever lets go of, and no tab
+    // of the group could lead it again. The grant is driven by hand: here a free lock is granted
+    // inside the request itself, before anything could leave.
+    it("keeps no lock it was granted after it left the group", async () => {
+      let grant;
+
+      sinon
+        .stub(navigator.locks, "request")
+        .callsFake((_name, _options, callback) => {
+          grant = callback;
+
+          return new Promise(() => {});
+        });
+
+      Tabs.join(nextGroup(), stubs());
+
+      await Tabs.leave();
+
+      assert.isUndefined(grant({}));
+    });
+
+    // A batch another tab seals during the ask is not this tab's to send.
+    it("leads nothing while it asks for the lock", async () => {
+      sinon.stub(navigator.locks, "request").resolves();
+
+      Tabs.join(nextGroup(), stubs());
+
+      assert.isFalse(Tabs.leader);
     });
 
     // Where the browser cannot lock, its database is in memory mode for the same reason - so there

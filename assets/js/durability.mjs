@@ -79,16 +79,16 @@ export default class Durability {
   // in the framework reads it.
   static persisted = null;
 
-  // How many batch records the open found, of every owner - not only the ones this page may take
+  // How many batch records the load found, of every owner - not only the ones this page may take
   // up. Taken once and not kept current: a test and a devtools panel read it to tell "this page
   // is not sending them" apart from "there are none", and nothing in the framework reads it.
   static storedBatches = 0;
 
   static #db = null;
 
-  // What open() read, held until restore() consumes it. Read at open so that restore has nothing
-  // to await: it runs after the page has mounted, and everything after the mount happens in one
-  // continuation, before an action could dispatch and write.
+  // What load() read, held until restore() consumes it. Read before the mount so that restore has
+  // nothing to await: it runs after the page has mounted, and everything after the mount happens
+  // in one continuation, before an action could dispatch and write.
   static #loaded = null;
 
   // Whether this page load has already put the question to the browser. Flipped BEFORE the asking
@@ -162,7 +162,15 @@ export default class Durability {
   // group could not write: that tab wiped what had to be wiped and closed, and this one has to stop
   // writing too - a leader that went on storing frames would be dating rows the store no longer
   // holds - but has nothing of its own to answer for.
+  //
+  // What load() read goes too, when this comes before the restore. The group ends with this (see
+  // Tabs.dissolve): a follower takes a fresh identity and lets its batches go, and taking up the
+  // stored identity and queue afterwards would make it a second sender under the group's replica.
+  // The leader keeps what it already holds, and a queue it never took up stays in the store for the
+  // next page load rather than going out twice.
   static detach() {
+    Durability.#loaded = null;
+
     Durability.#close();
   }
 
@@ -253,6 +261,41 @@ export default class Durability {
     );
   }
 
+  // Everything the previous page load left, read in one go and held for restore() - apart from
+  // open() because the tab joins its group between the two. A tab that read first and joined
+  // after would miss a frame the leading tab stored after the read and posted before the join:
+  // in neither the store it read nor any message it heard.
+  //
+  // Answers nothing, and never throws, the same as open(): a store that cannot be read is a page
+  // that carries on from memory.
+  static async load() {
+    if (Durability.mode === "memory") {
+      return;
+    }
+
+    let loaded;
+
+    try {
+      loaded = await Durability.#read();
+    } catch (error) {
+      return Durability.#memoryMode(`read failed (${error})`);
+    }
+
+    // Let go of while it was being read - another tab could not write, or needs a new version.
+    // Closing a database lets a transaction already running finish, so the read still answers,
+    // and taking up what it found would hand this tab, which now leads itself, the identity and the
+    // queue the group's leader is still sending: two senders under one replica.
+    if (Durability.mode !== "indexeddb") {
+      return;
+    }
+
+    Durability.#loaded = loaded;
+    Durability.storedBatches = loaded.queue.length;
+  }
+
+  // Opens the database and reads nothing from it - load() does that, once the tab has joined the
+  // group sharing it (see DataLayer.boot).
+  //
   // Answers nothing, and never throws: a browser that cannot store is a browser that carries on
   // from memory. Every way that can happen is named, because the reason is what a developer needs
   // when a page is unexpectedly re-downloading everything.
@@ -312,13 +355,6 @@ export default class Durability {
     };
 
     Durability.mode = "indexeddb";
-
-    try {
-      Durability.#loaded = await Durability.#load();
-      Durability.storedBatches = Durability.#loaded.queue.length;
-    } catch (error) {
-      return Durability.#memoryMode(`read failed (${error})`);
-    }
   }
 
   // One frame, one transaction: the rows it wrote, the place those rows are dated at, and where
@@ -567,6 +603,7 @@ export default class Durability {
     Durability.persisted = null;
     Durability.storedBatches = 0;
 
+    Durability.#loaded = null;
     Durability.#persistenceAsked = false;
   }
 
@@ -641,41 +678,6 @@ export default class Durability {
     Tabs.post({kind: "storage_failed"});
   }
 
-  // Everything the previous page load left, in one read - the six things `meta` holds and every
-  // row record. Absences are normalized here rather than at every reader: a key nothing was ever
-  // written under reads as undefined, and "nothing stored" is a state restore has to reason about.
-  static async #load() {
-    const transaction = Durability.#db.transaction(
-      [ENTITIES, META, QUEUE],
-      "readonly",
-    );
-
-    const entities = transaction.objectStore(ENTITIES);
-    const meta = transaction.objectStore(META);
-    const queue = transaction.objectStore(QUEUE);
-
-    const [actorUserId, clock, cursor, queued, records, replica, seq] =
-      await Promise.all([
-        Durability.#request(meta.get("actorUserId")),
-        Durability.#request(meta.get("clock")),
-        Durability.#request(meta.get("cursor")),
-        Durability.#request(queue.getAll()),
-        Durability.#request(entities.getAll()),
-        Durability.#request(meta.get("replica")),
-        Durability.#request(meta.get("seq")),
-      ]);
-
-    return {
-      actorUserId: actorUserId ?? null,
-      clock: clock ?? 0,
-      cursor: cursor ?? null,
-      queue: queued ?? [],
-      records: records ?? [],
-      replica: replica ?? null,
-      seq: seq ?? 0,
-    };
-  }
-
   static #memoryMode(reason) {
     Logger.debug(
       `Hologram: no durable storage (${reason}), the database lives in memory for this page`,
@@ -733,6 +735,41 @@ export default class Durability {
         "Hologram: the browser did not agree to keep this site's data, storage here may be evicted",
       );
     }
+  }
+
+  // Everything the previous page load left, in one read - the six things `meta` holds and every
+  // row record. Absences are normalized here rather than at every reader: a key nothing was ever
+  // written under reads as undefined, and "nothing stored" is a state restore has to reason about.
+  static async #read() {
+    const transaction = Durability.#db.transaction(
+      [ENTITIES, META, QUEUE],
+      "readonly",
+    );
+
+    const entities = transaction.objectStore(ENTITIES);
+    const meta = transaction.objectStore(META);
+    const queue = transaction.objectStore(QUEUE);
+
+    const [actorUserId, clock, cursor, queued, records, replica, seq] =
+      await Promise.all([
+        Durability.#request(meta.get("actorUserId")),
+        Durability.#request(meta.get("clock")),
+        Durability.#request(meta.get("cursor")),
+        Durability.#request(queue.getAll()),
+        Durability.#request(entities.getAll()),
+        Durability.#request(meta.get("replica")),
+        Durability.#request(meta.get("seq")),
+      ]);
+
+    return {
+      actorUserId: actorUserId ?? null,
+      clock: clock ?? 0,
+      cursor: cursor ?? null,
+      queue: queued ?? [],
+      records: records ?? [],
+      replica: replica ?? null,
+      seq: seq ?? 0,
+    };
   }
 
   // Why the stored rows cannot be used, or nothing when they can.
