@@ -604,12 +604,17 @@ defmodule Hologram.Policy.Validator do
          entity_type,
          {{operation, to, via, predicates, name, fields}, source}
        ) do
-    # Every refusal below names the line as written and where it lives, a named line by its name:
-    # allow :update, as: :publish in MyApp.Post.
+    # Every refusal below names the line as written and where it lives, a named line by its name and
+    # a field-limited one with its fields, so two lines of one operation can be told apart:
+    # allow :update, as: :publish, only: [:published] in MyApp.Post. The refusals of the fields
+    # themselves leave the fields out, since they name them.
     named = if name, do: ", as: #{inspect(name)}", else: ""
-    where = "allow #{inspect(operation)}#{named} in #{location(entity_type, source)}"
+    limited = if fields, do: ", #{elem(fields, 0)}: #{inspect(elem(fields, 1))}", else: ""
+    line = "allow #{inspect(operation)}#{named}"
+    place = location(entity_type, source)
+    where = "#{line}#{limited} in #{place}"
 
-    validate_fields!(entity_type, fields, where)
+    validate_fields!(entity_type, fields, "#{line} in #{place}")
 
     validate_to!(entity_type, to, where)
     validate_via!(entity_type, operation, via, where)

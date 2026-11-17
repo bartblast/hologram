@@ -876,6 +876,19 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "names a field-limited line with its fields in a refusal" do
+      expected_msg =
+        "invalid to option nil for allow :update, as: :retitle, except: [:owner] in Hologram.Entity.ValidatorTest.LimitedNilToFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule LimitedNilToFixture do
+          use Hologram.Entity
+
+          allow :update, as: :retitle, except: [:owner], to: nil
+        end
+      end
+    end
+
     test "describes a line by its operation alone when its name is what is wrong" do
       expected_msg =
         "invalid to option nil for allow :update in Hologram.Entity.ValidatorTest.InvalidNameNilToFixture - omit the option instead"

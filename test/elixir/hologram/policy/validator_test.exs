@@ -306,6 +306,52 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "names a field-limited line with its fields" do
+      defmodule LimitedUndeclaredRoleFixture do
+        use Hologram.Entity
+
+        attribute :title, :string, optional: true
+        attribute :topic, :string, optional: true
+
+        role :owner
+
+        allow :update, only: [:title], to: :owner
+        allow :update, only: [:topic], to: :ownr
+      end
+
+      expected_msg =
+        "unknown role :ownr in the to option of allow :update, only: [:topic] in Hologram.Policy.ValidatorTest.LimitedUndeclaredRoleFixture - declared roles are: :owner"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, LimitedUndeclaredRoleFixture], [])
+      end
+    end
+
+    test "names a named field-limited line taken from a policy by its name, then its fields" do
+      defmodule LimitedNamedUndeclaredRolePolicy do
+        use Hologram.Policy
+
+        allow :update, as: :retitle, only: [:title], to: :ownr
+      end
+
+      defmodule LimitedNamedUndeclaredRoleFixture do
+        use Hologram.Entity
+
+        attribute :title, :string, optional: true
+
+        role :owner
+
+        policy LimitedNamedUndeclaredRolePolicy
+      end
+
+      expected_msg =
+        "unknown role :ownr in the to option of allow :update, as: :retitle, only: [:title] in Hologram.Policy.ValidatorTest.LimitedNamedUndeclaredRoleFixture, taken from Hologram.Policy.ValidatorTest.LimitedNamedUndeclaredRolePolicy - declared roles are: :owner"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, LimitedNamedUndeclaredRoleFixture], [])
+      end
+    end
+
     test "rejects a to option naming an undeclared role" do
       defmodule InlinePolicyFixture11 do
         use Hologram.Entity

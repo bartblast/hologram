@@ -1597,15 +1597,31 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
-  # A line as written, a named one by its name - unless the name is no atom at all, which its own
-  # refusal says.
+  # A line as written: a named one by its name, a field-limited one with its fields, so two lines of
+  # one operation can be told apart - unless the name or the fields are no name or field list at
+  # all, which their own refusal says.
   defp describe_allow(operation, spec) do
+    describe_named_allow(operation, spec) <> fields_suffix(spec)
+  end
+
+  # The line without its fields, for the refusals of the fields option itself, which name it.
+  defp describe_named_allow(operation, spec) do
     case Keyword.get(spec, :as) do
       name when is_atom(name) and name not in [nil, true, false] ->
         "allow #{inspect(operation)}, as: #{inspect(name)}"
 
       _other ->
         "allow #{inspect(operation)}"
+    end
+  end
+
+  defp fields_suffix(spec) do
+    with [key] <- Enum.filter([:only, :except], &Keyword.has_key?(spec, &1)),
+         [_first | _rest] = fields <- Keyword.fetch!(spec, key),
+         true <- Enum.all?(fields, &is_atom/1) do
+      ", #{key}: #{inspect(fields)}"
+    else
+      _other -> ""
     end
   end
 
@@ -1683,17 +1699,17 @@ defmodule Hologram.Entity.Validator do
       [_only, _except] ->
         raise Hologram.CompileError,
           message:
-            "invalid options for #{describe_allow(operation, spec)} in #{inspect(module)} - a line takes only or except, not both"
+            "invalid options for #{describe_named_allow(operation, spec)} in #{inspect(module)} - a line takes only or except, not both"
 
       [key] when operation != :update ->
         raise Hologram.CompileError,
           message:
-            "invalid #{key} option for #{describe_allow(operation, spec)} in #{inspect(module)} - only and except name the fields an update line covers, so they go on allow :update lines alone"
+            "invalid #{key} option for #{describe_named_allow(operation, spec)} in #{inspect(module)} - only and except name the fields an update line covers, so they go on allow :update lines alone"
 
       [key] ->
         validate_fields_opt_value!(
           module,
-          describe_allow(operation, spec),
+          describe_named_allow(operation, spec),
           key,
           Keyword.fetch!(spec, key)
         )
