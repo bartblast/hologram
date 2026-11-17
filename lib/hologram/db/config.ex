@@ -19,6 +19,14 @@ defmodule Hologram.DB.Config do
 
   @discrete_keys [:database, :host, :password, :pool_size, :port, :user]
 
+  @keepalive_statement """
+  SELECT
+    set_config('tcp_keepalives_idle', '30', false),
+    set_config('tcp_keepalives_interval', '10', false),
+    set_config('tcp_keepalives_count', '3', false),
+    set_config('tcp_user_timeout', '60000', false)
+  """
+
   @required_keys [:database, :host, :password, :user]
 
   @doc """
@@ -120,6 +128,24 @@ defmodule Hologram.DB.Config do
   end
 
   @doc """
+  Returns the statement that sets the server keepalives and user timeout of the session it runs
+  in - the same figures as the run lock connection's (see Hologram.Job.RunLock).
+
+  A node that vanishes leaves its sessions open on the server until the operating system there
+  notices. The keepalives bound that to about a minute when the server has nothing unacknowledged
+  on the link, rather than about two hours, and the user timeout when it has, rather than about 15
+  minutes. A server whose platform has no user timeout keeps it at 0, and logs that it is not
+  supported on each connect.
+
+  Run once the connection is up rather than sent as startup parameters, which PgBouncer refuses
+  unless told to ignore them. They bound only a direct connection: behind a pooler or a proxy the
+  server's peer is the pooler, and its own keepalives toward the node are what bound how long the
+  session lives.
+  """
+  @spec keepalive_statement() :: String.t()
+  def keepalive_statement, do: @keepalive_statement
+
+  @doc """
   Resolves the database connection options for the given environment from the given
   config keyword list (the value of `config :hologram, :database`).
 
@@ -151,6 +177,20 @@ defmodule Hologram.DB.Config do
     validate_required!(resolved, env)
 
     Enum.sort(resolved)
+  end
+
+  @doc """
+  Logs that the database refused the keepalive settings (see keepalive_statement/0) with the given
+  error, and returns :ok.
+
+  What a connection does whose settings are best effort: they bound only how long the server keeps
+  the session of a node that vanished, which nothing needs for being correct.
+  """
+  @spec warn_keepalives_refused(Exception.t()) :: :ok
+  def warn_keepalives_refused(error) do
+    Logger.warning(
+      "the database refused the session's keepalive settings, a session of a node that vanished may stay open on the server for hours: #{Exception.message(error)}"
+    )
   end
 
   defp defaults(env) when env in [:dev, :test] do

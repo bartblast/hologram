@@ -38,26 +38,6 @@ defmodule Hologram.DB do
 
   @pool_name Hologram.DB.Pool
 
-  # Run on each pool connection as it connects (see apply_session_settings/1). A node that vanishes
-  # leaves its sessions open on the server until the operating system there notices, and a session
-  # caught claiming a job holds that job's row locked meanwhile, so no other node can claim it. The
-  # keepalives bound that to about a minute when the server has nothing unacknowledged on the link,
-  # rather than about two hours, and the user timeout when it has, rather than about 15 minutes -
-  # the same figures as the run lock connection's (see Hologram.Job.RunLock). A server whose
-  # platform has no user timeout keeps it at 0, and logs that it is not supported on each connect.
-  #
-  # Set once the connection is up rather than sent as startup parameters, which PgBouncer refuses
-  # unless told to ignore them. They bound only a direct connection: behind a
-  # pooler or a proxy the server's peer is the pooler, and its own keepalives toward the node are
-  # what bound how long the session lives.
-  @session_settings_statement """
-  SELECT
-    set_config('tcp_keepalives_idle', '30', false),
-    set_config('tcp_keepalives_interval', '10', false),
-    set_config('tcp_keepalives_count', '3', false),
-    set_config('tcp_user_timeout', '60000', false)
-  """
-
   # What a server starting up or shutting down answers with - one that is away for a moment rather
   # than one the settings are wrong for. Not a connection limit: a role's or a database's limit
   # answers the same way as the server's, and would hold the boot for good.
@@ -651,14 +631,18 @@ defmodule Hologram.DB do
   Applies the session settings every pool connection runs with to the given connection, and
   returns :ok - the pool's after_connect.
 
-  Best effort: they bound how long the server keeps the session of a node that vanished, which
-  nothing needs for being correct, so a server refusing them - one compatible with PostgreSQL that
-  lacks a setting - is warned about and the connection used as it is. Raising would leave the pool
-  without a connection it could use, for good.
+  The server keepalives and user timeout (see Hologram.DB.Config.keepalive_statement/0). A node
+  that vanishes leaves its sessions open on the server until the operating system there notices,
+  and a session caught claiming a job holds that job's row locked meanwhile, so no other node can
+  claim it.
+
+  Best effort: a server refusing them - one compatible with PostgreSQL that lacks a setting - is
+  warned about (see Hologram.DB.Config.warn_keepalives_refused/1) and the connection used as it
+  is. Raising would leave the pool without a connection it could use, for good.
   """
   @spec apply_session_settings(DBConnection.conn()) :: :ok
   def apply_session_settings(connection) do
-    case Postgrex.query(connection, @session_settings_statement, []) do
+    case Postgrex.query(connection, Config.keepalive_statement(), []) do
       {:ok, _result} ->
         :ok
 
@@ -667,9 +651,7 @@ defmodule Hologram.DB do
         :ok
 
       {:error, error} ->
-        Logger.warning(
-          "the database refused the session's keepalive settings, a session of a node that vanished may stay open on the server for hours: #{Exception.message(error)}"
-        )
+        Config.warn_keepalives_refused(error)
     end
   end
 

@@ -266,7 +266,68 @@ defmodule Hologram.DB.ListenerTest do
     end
   end
 
+  describe "handle_connect/1" do
+    # A node that vanishes would leave the session on the server for hours otherwise.
+    test "sets the session's keepalives before anything else" do
+      {:ok, initial_state} = Listener.init(nil)
+      state = %{initial_state | channels: %{channel() => %{make_ref() => self()}}}
+
+      assert {:query, statement, state} = Listener.handle_connect(state)
+      :timer.cancel(state.timer)
+
+      assert statement == Config.keepalive_statement()
+    end
+  end
+
+  describe "handle_info/2" do
+    test "listens on the channels a replay names" do
+      {:ok, state} = Listener.init(nil)
+
+      assert {:query, ~s(LISTEN "a"; LISTEN "b"), state} =
+               Listener.handle_info({:replay, ["a", "b"]}, state)
+
+      :timer.cancel(state.timer)
+    end
+
+    test "sends nothing for a replay that names no channels" do
+      {:ok, state} = Listener.init(nil)
+
+      assert Listener.handle_info({:replay, []}, state) == {:noreply, state}
+    end
+  end
+
   describe "handle_result/2" do
+    test "asks for the channels registered before the session opened once its keepalives are set" do
+      channel = channel()
+      {:ok, initial_state} = Listener.init(nil)
+
+      state = %{
+        initial_state
+        | channels: %{channel => %{make_ref() => self()}},
+          setting_keepalives: true
+      }
+
+      assert {:noreply, %{setting_keepalives: false}} = Listener.handle_result([], state)
+
+      assert_received {:replay, [^channel]}
+    end
+
+    # They bound only how long the server keeps the session of a node that vanished, and a server
+    # compatible with PostgreSQL may lack one of them.
+    test "warns of keepalive settings the server refused, and goes on to the channels" do
+      error = %Postgrex.Error{message: "unrecognized configuration parameter"}
+      {:ok, state} = Listener.init(nil)
+
+      log =
+        capture_log(fn ->
+          assert {:noreply, %{setting_keepalives: false}} =
+                   Listener.handle_result(error, %{state | setting_keepalives: true})
+        end)
+
+      assert log =~ "the database refused the session's keepalive settings"
+      assert_received {:replay, []}
+    end
+
     # A LISTEN the server refused would leave the connection up and deaf to that channel.
     test "raises the error of a statement the server refused" do
       error = %Postgrex.Error{message: "refused"}
@@ -317,7 +378,7 @@ defmodule Hologram.DB.ListenerTest do
 
   # Postgrex waits for an answer with no bound of its own, and the connection does nothing else
   # meanwhile - a silent link would hold it, and every process listening through it, for good.
-  describe "a LISTEN the server leaves unanswered" do
+  describe "a statement the server leaves unanswered" do
     # Killed rather than the call timing out, which is what has a rest_for_one supervisor restart
     # the caller with the connection, once, rather than on its own first.
     test "ends the connection before the caller gives up, and the caller with it" do
@@ -334,14 +395,26 @@ defmodule Hologram.DB.ListenerTest do
       assert_receive {:DOWN, ^caller_ref, :process, ^caller, {:killed, _call}}, 1_000
     end
 
-    # Nobody waits on the channels sent again as the session opens, so nothing else would notice.
-    test "ends the connection when it is the replay sent as the session opens" do
-      {:ok, initial_state} = Listener.init(nil)
-      state = %{initial_state | channels: %{channel() => %{make_ref() => self()}}}
+    # Nobody waits on what the connection sends as its session opens, so nothing else would notice.
+    test "ends the connection when it is the keepalive settings sent as the session opens" do
+      {:ok, state} = Listener.init(nil)
 
       {pid, ref} =
         spawn_monitor(fn ->
           {:query, _statement, _state} = Listener.handle_connect(state)
+
+          Process.sleep(:infinity)
+        end)
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 6_000
+    end
+
+    test "ends the connection when it is the channels registered before the session opened" do
+      {:ok, state} = Listener.init(nil)
+
+      {pid, ref} =
+        spawn_monitor(fn ->
+          {:query, _statement, _state} = Listener.handle_info({:replay, [channel()]}, state)
 
           Process.sleep(:infinity)
         end)

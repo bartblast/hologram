@@ -14,10 +14,10 @@ defmodule Hologram.Job.Supervisor do
   # once, and each counts as a restart: both connections, and the worker too when it was inside a
   # transaction on the pool - three at most, within the limit of 3 in 5 seconds, and the worker
   # that replaces them waits rather than crashing again. A lock call the server leaves unanswered
-  # for 5 seconds kills the lock connection, which counts once: the worker goes with it. A LISTEN
-  # left unanswered for 4 seconds kills the listener the same way, taking both others. A worker
-  # whose lock connection is up but whose pool is not yet crashes on each pass, once per poll and
-  # checkout, about 9 seconds.
+  # for 5 seconds kills the lock connection, which counts once: the worker goes with it. A
+  # statement the server leaves the listener waiting on for 4 seconds kills it the same way,
+  # taking both others. A worker whose lock connection is up but whose pool is not yet crashes on
+  # each pass, once per poll and checkout, about 9 seconds.
 
   use Supervisor
 

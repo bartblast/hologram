@@ -9,10 +9,15 @@ defmodule Hologram.DB.Listener do
   # answered :eventually between two tries - its channel is registered here and sent to the server
   # once the session opens. A try against a host that drops packets rather than refusing them
   # blocks this process until the connect timeout, and a listen call made meanwhile exits after its
-  # 5 seconds. A session that is lost ends this process, and so does a LISTEN the server leaves
+  # 5 seconds. A session that is lost ends this process, and so does a statement the server leaves
   # unanswered for 4 seconds (see @query_timeout_ms). Whatever listens through it is restarted
   # beside it and listens again as it starts. Reconnecting in place would leave that process
   # waiting on announcements sent while the session was gone, which nothing would tell it about.
+  #
+  # As the session opens it sets the server keepalives first (see
+  # Hologram.DB.Config.keepalive_statement/0), so the server lets go of the session of a node that
+  # vanished within about a minute rather than hours. Best effort, like the pool's: a server that
+  # refuses them is warned about, and the session listens all the same.
   #
   # Its own module rather than Postgrex.Notifications started to reconnect. That one sends UNLISTEN
   # when the last process listening on a channel exits, without checking for a session - and with
@@ -33,16 +38,17 @@ defmodule Hologram.DB.Listener do
   @max_channel_bytes 63
 
   # How long a listen call may wait for this process to answer - longer than a LISTEN may take
-  # only while it is busy connecting or pinging.
+  # only while it is busy connecting, pinging or setting up a session that just opened.
   @listen_timeout_ms :timer.seconds(5)
 
-  # How long the server may take to answer a LISTEN before this process is killed. Postgrex waits
-  # for an answer with no bound of its own, and this process does nothing else meanwhile, so a link
-  # that went silent with a LISTEN in flight would hold it, and every process listening through it:
-  # the idle ping cannot run. Once the server's side acknowledged the LISTEN, nothing is left for
-  # the operating system to resend and it never gives up on the socket - held for good. Otherwise
-  # it gives up only after resending for about 15 minutes on Linux. The replay sent as the session
-  # opens is bounded too, though nobody waits on it.
+  # How long the server may take to answer a statement before this process is killed. Postgrex
+  # waits for an answer with no bound of its own, and this process does nothing else meanwhile, so
+  # a link that went silent with a statement in flight would hold it, and every process listening
+  # through it: the idle ping cannot run. Once the server's side acknowledged the statement,
+  # nothing is left for the operating system to resend and it never gives up on the socket - held
+  # for good. Otherwise it gives up only after resending for about 15 minutes on Linux. The
+  # keepalives and the replay sent as the session opens are bounded too, though nobody waits on
+  # them.
   #
   # A healthy server answers well within it. A session's first LISTEN also reads through the
   # notifications still queued, which is slow only when the queue is huge.
@@ -51,7 +57,9 @@ defmodule Hologram.DB.Listener do
   # than giving up first. A rest_for_one supervisor then gets this process's exit before the
   # caller's and restarts both once, rather than the caller on its own and then both again. This
   # bound starts once the call is picked up, a moment after the caller's, which keeps the order
-  # while calls come one at a time - each process listening through it makes one as it starts.
+  # while calls come one at a time - each process listening through it makes one as it starts - and
+  # this process is free when one comes. A call that waited on the session being set up has less
+  # left, and may give up first, which costs one restart more, still within the limit.
   @query_timeout_ms @listen_timeout_ms - :timer.seconds(1)
 
   @doc """
@@ -132,12 +140,7 @@ defmodule Hologram.DB.Listener do
   def handle_connect(state) do
     send(self(), :arm_ping)
 
-    state = %{state | connected: true}
-
-    case Map.keys(state.channels) do
-      [] -> {:noreply, state}
-      channels -> query(listen_statement(channels), state)
-    end
+    query(Config.keepalive_statement(), %{state | connected: true, setting_keepalives: true})
   end
 
   @impl SimpleConnection
@@ -165,6 +168,15 @@ defmodule Hologram.DB.Listener do
     end
   end
 
+  # The channels registered before the session opened, sent once its keepalives are set - the
+  # callback a result goes to may not return another query. Named in the message rather than read
+  # from the state, which by now may hold channels a call since listened on itself.
+  def handle_info({:replay, []}, state), do: {:noreply, state}
+
+  def handle_info({:replay, channels}, state) do
+    query(listen_statement(channels), state)
+  end
+
   # :arm_ping, and anything else - the connection traps exits.
   def handle_info(_message, state), do: {:noreply, state}
 
@@ -175,7 +187,16 @@ defmodule Hologram.DB.Listener do
 
   @impl SimpleConnection
   def init(nil) do
-    {:ok, %{channels: %{}, connected: false, from: nil, ref: nil, refs: %{}, timer: nil}}
+    {:ok,
+     %{
+       channels: %{},
+       connected: false,
+       from: nil,
+       ref: nil,
+       refs: %{},
+       setting_keepalives: false,
+       timer: nil
+     }}
   end
 
   @impl SimpleConnection
@@ -195,6 +216,16 @@ defmodule Hologram.DB.Listener do
     :timer.cancel(state.timer)
 
     %{state | timer: nil}
+  end
+
+  defp handle_answer(results_or_error, %{setting_keepalives: true} = state) do
+    with %Postgrex.Error{} = error <- results_or_error do
+      Config.warn_keepalives_refused(error)
+    end
+
+    send(self(), {:replay, Map.keys(state.channels)})
+
+    {:noreply, %{state | setting_keepalives: false}}
   end
 
   # A LISTEN the server refused leaves this connection deaf to that channel, which is what it must
