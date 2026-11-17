@@ -1,8 +1,10 @@
 "use strict";
 
+import Bitstring from "../../../bitstring.mjs";
 import Interpreter from "../../../interpreter.mjs";
 import Model from "../../../model.mjs";
 import Type from "../../../type.mjs";
+import {typeValid} from "../entity.mjs";
 
 // The query stages, hand-written for the client the way the low-level Erlang functions are.
 //
@@ -36,6 +38,18 @@ const SEARCH_OPERATORS = [
   "starts_with",
   "starts_with_exact",
 ];
+
+// What a value of each type is, as the refusal of a value that doesn't fit it says.
+const TYPE_VALUES = {
+  boolean: "true or false",
+  date: "a Date",
+  datetime: "a DateTime",
+  float: "a float, or an integer that fits in 64 bits",
+  integer: "an integer that fits in 64 bits",
+  string: "a UTF-8 string",
+  time: "a Time",
+  uuid: 'a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001"',
+};
 
 // The type pairs whose attributes compare though their types differ, compared on the wider type -
 // Hologram.Query.Stage's @widenings, and the two must agree.
@@ -599,6 +613,8 @@ function localName(name) {
 }
 
 function membershipValues(values, name, entityType) {
+  values.forEach((value) => validateOperandValue(name, value, entityType));
+
   return values.map((value) =>
     isStruct(value, "Hologram.Query.Placeholder")
       ? placeholderLeaf(value)
@@ -737,6 +753,7 @@ function operatorTriples(name, tuple, entityType, scope) {
 
   if (EQUALITY_OPERATORS.includes(operator)) {
     validateScalarOperand(name, operator, operand);
+    validateOperandValue(name, operand, entityType);
 
     return [
       [
@@ -762,7 +779,7 @@ function operatorTriples(name, tuple, entityType, scope) {
   if (ORDERING_OPERATORS.includes(operator)) {
     validateOrderableAttribute(name, entityType, operator);
     validateScalarOperand(name, operator, operand, true);
-    validateEnumOperand(name, operand, entityType);
+    validateOperandValue(name, operand, entityType);
 
     return [
       [
@@ -813,6 +830,8 @@ function predicateTriples(name, value, entityType, scope) {
   if (Type.isList(value)) {
     return listTriples(name, value, entityType, scope);
   }
+
+  validateOperandValue(name, value, entityType);
 
   return [
     [nameValue(name), "==", Model.unbox(value, nameType(entityType, name))],
@@ -930,7 +949,7 @@ function relationshipNames(entityType) {
 function searchTriple(name, operator, operand, entityType) {
   validateSearchableAttribute(name, entityType, operator);
 
-  if (!Type.isBinary(operand)) {
+  if (!Type.isBinary(operand) || !Bitstring.isText(operand)) {
     Interpreter.raiseMisuseError(
       `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${inspectName(name)} - a search term is a string`,
     );
@@ -1388,24 +1407,6 @@ function validateFilteredName(name, entityType) {
   );
 }
 
-// A comparison operand on an enum is one of the values it declares, refused where it is written
-// rather than where it is run: the database refuses an undeclared label too, but only once the
-// statement reaches it, and by then nothing can name the values there were to choose from.
-function validateEnumOperand(name, operand, entityType) {
-  if (nameType(entityType, name) !== "enum") {
-    return;
-  }
-
-  const declared = subject(entityType, name);
-  const values = enumValues(declared.entityType, declared.name);
-
-  if (!values.includes(Model.unbox(operand, "enum"))) {
-    Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(operand)} is not a value of attribute ${inspectName(name)} in ${entityType} - the values are ${inspectEnumValues(values)}`,
-    );
-  }
-}
-
 // A stored relationship or an inverse - a set of either is included as a to-many, a single
 // inverse as a to-one - or a derived field: one holding rows is included as its rows' type, one
 // holding a value as its type.
@@ -1492,6 +1493,9 @@ function validateMembershipRange(range, name, entityType) {
       `range ${Interpreter.inspect(range)} for attribute ${inspectName(name)} is empty - it would match nothing`,
     );
   }
+
+  validateOperandValue(name, field(range, "first"), entityType);
+  validateOperandValue(name, field(range, "last"), entityType);
 }
 
 // A derived field holds no reference, so no relationship goes through it - a related row it holds
@@ -1522,6 +1526,44 @@ function validateOperandName(operandName, entityType) {
   }
 
   validatePath(name, entityType);
+}
+
+// A value compared with a name fits the type of what the name reads, refused where it is written
+// rather than where it is run, as on the server: the browser would otherwise unbox it into a value
+// that compares as something else, like "yes" against a boolean matching the false rows. An enum's
+// value is one of the values it declares, which the refusal lists. Nil and a placeholder's value
+// are judged elsewhere, nil by the operator taking it and a placeholder's when the query is built
+// with real values. A float takes an integer too, the same number when compared.
+function validateOperandValue(name, value, entityType) {
+  if (Type.isNil(value) || isStruct(value, "Hologram.Query.Placeholder")) {
+    return;
+  }
+
+  const type = nameType(entityType, name);
+
+  if (type === "enum") {
+    const declared = subject(entityType, name);
+    const values = enumValues(declared.entityType, declared.name);
+
+    if (!Type.isAtom(value) || !values.includes(Model.unbox(value, "enum"))) {
+      Interpreter.raiseMisuseError(
+        `${Interpreter.inspect(value)} is not a value of attribute ${inspectName(name)} in ${entityType} - the values are ${inspectEnumValues(values)}`,
+      );
+    }
+
+    return;
+  }
+
+  const fits =
+    type === "float"
+      ? Type.isFloat(value) || typeValid(value, "integer")
+      : typeValid(value, type);
+
+  if (!fits) {
+    Interpreter.raiseMisuseError(
+      `${Interpreter.inspect(value)} is not a value of attribute ${inspectName(name)} in ${entityType} - the attribute has type :${type}, which takes ${TYPE_VALUES[type]}`,
+    );
+  }
 }
 
 // The types an ordering line can be drawn through: every type but boolean and uuid has an order

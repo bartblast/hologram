@@ -687,8 +687,7 @@ function enumErrors(entry, name, value) {
   ];
 }
 
-// Postgres int8 bounds, which is what an integer attribute is stored in.
-function typeValid(value, attributeType) {
+export function typeValid(value, attributeType) {
   switch (attributeType) {
     case "boolean":
       return Type.isBoolean(value);
@@ -708,6 +707,7 @@ function typeValid(value, attributeType) {
     case "float":
       return Type.isFloat(value);
 
+    // Postgres int8 bounds, which is what an integer attribute is stored in.
     case "integer":
       return (
         Type.isInteger(value) &&
