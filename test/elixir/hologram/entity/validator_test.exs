@@ -188,6 +188,10 @@ defmodule Hologram.Entity.ValidatorTest do
       refute attribute_value_valid?(5, :uuid)
     end
 
+    test "refuses a :uuid value followed by a newline" do
+      refute attribute_value_valid?("018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f\n", :uuid)
+    end
+
     test "accepts nil only when the optional option is true" do
       assert attribute_value_valid?(nil, :string, optional: true)
       refute attribute_value_valid?(nil, :string)

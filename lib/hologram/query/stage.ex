@@ -553,16 +553,11 @@ defmodule Hologram.Query.Stage do
   # a value a query compares the attribute with - what a write stores, as the entity validator
   # judges it, except that a float takes an integer too, the same number as a float when compared.
   # An integer is bounded as an integer attribute's value is: a bigger one is a driver error on the
-  # server and no exact number in the browser. The validator's uuid pattern also takes a canonical
-  # id followed by a newline, which the uuid encoder refuses - hence the size.
+  # server and no exact number in the browser.
   @doc false
   @spec value_fits?(any, atom, keyword) :: boolean
   def value_fits?(value, :float, _opts) do
     is_float(value) or Validator.attribute_value_valid?(value, :integer)
-  end
-
-  def value_fits?(value, :uuid, _opts) do
-    is_binary(value) and byte_size(value) == 36 and Validator.attribute_value_valid?(value, :uuid)
   end
 
   def value_fits?(value, type, opts), do: Validator.attribute_value_valid?(value, type, opts)
