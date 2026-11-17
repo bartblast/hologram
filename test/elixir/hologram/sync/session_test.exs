@@ -2726,12 +2726,23 @@ defmodule Hologram.Sync.SessionTest do
 
       read_fill = fn entity_type, _actor_user_id, _replica_id, _synced_types ->
         send(test_pid, {:read, entity_type})
+
+        # The first read waits for the test's monitor: a session that gives up at once could
+        # otherwise be gone before it is watched.
+        if entity_type == Module2 do
+          receive do
+            :release_read -> :ok
+          end
+        end
+
         {[], nil}
       end
 
       session = start_session!(outbox: outbox_opts, read_fill: read_fill)
+      ref = Process.monitor(session)
+      send(session, :release_read)
 
-      {session, Process.monitor(session)}
+      {session, ref}
     end
 
     test "cuts a client that takes nothing for as long as the session waits" do
