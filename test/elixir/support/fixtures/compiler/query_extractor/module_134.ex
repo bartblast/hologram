@@ -7,7 +7,7 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module134 do
 
   prop :row, Entity2
 
-  derived :rows, [Entity2], fn row -> filter(Entity2, nonexistent: 1, b: ^row.b) end
+  derived :rows, [Entity2], fn row -> filter(Entity2, c: 5, b: ^row.b) end
 
   @impl Component
   def template do

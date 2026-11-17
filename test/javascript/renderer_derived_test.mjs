@@ -11,7 +11,6 @@ import {
 
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
-import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
@@ -242,7 +241,6 @@ describe("Renderer derived fields", () => {
     ComponentRegistry.clear();
     Model.reset();
     LocalDatabase.reset();
-    GlobalRegistry.set("connectPageModule", null);
     SyncStream.rowsChangedSinceRender = false;
 
     LocalDatabase.putRow(ROW, rowNamed("r1", true, "banana"));
@@ -919,35 +917,44 @@ describe("Renderer derived fields", () => {
         defineCounting("MyApp.DerivedComplete");
 
         LocalDatabase.syncCounts = {"MyApp.DerivedComplete/total/false": 42};
-        LocalDatabase.markSynced("all");
+        LocalDatabase.markAllSynced();
 
         renderCounting("MyApp.DerivedComplete");
 
         assert.deepStrictEqual(renderedVar("total"), Type.integer(1));
       });
 
-      // The page scope covers the page this client connected on, and nothing else - a component
-      // on any other page is only promised its rows at "all".
-      it("counts locally at the page marker on the page it connected with", () => {
-        defineCounting("MyApp.DerivedConnectPage");
+      // On whichever page the component is: a type's marker is a claim about the rows the client
+      // holds.
+      it("counts locally once every type the count reads is complete", () => {
+        defineCounting("MyApp.DerivedTypesComplete");
 
-        GlobalRegistry.set("connectPageModule", "MyApp.DerivedConnectPage");
-        LocalDatabase.syncCounts = {"MyApp.DerivedConnectPage/total/false": 42};
-        LocalDatabase.markSynced("page");
+        globalThis.Hologram.sync.countTypes = {
+          "MyApp.DerivedTypesComplete": {total: [ROW]},
+        };
 
-        renderCounting("MyApp.DerivedConnectPage");
+        LocalDatabase.syncCounts = {
+          "MyApp.DerivedTypesComplete/total/false": 42,
+        };
+        LocalDatabase.markTypesSynced([ROW]);
+
+        renderCounting("MyApp.DerivedTypesComplete");
 
         assert.deepStrictEqual(renderedVar("total"), Type.integer(1));
       });
 
-      it("keeps carrying at the page marker for a page reached since", () => {
-        defineCounting("MyApp.DerivedNavigatedTo");
+      it("keeps carrying while a type the count reads is not complete", () => {
+        defineCounting("MyApp.DerivedTypesFilling");
 
-        GlobalRegistry.set("connectPageModule", "MyApp.SomeOtherPage");
-        LocalDatabase.syncCounts = {"MyApp.DerivedNavigatedTo/total/false": 42};
-        LocalDatabase.markSynced("page");
+        globalThis.Hologram.sync.countTypes = {
+          "MyApp.DerivedTypesFilling": {total: [ROW]},
+        };
 
-        renderCounting("MyApp.DerivedNavigatedTo");
+        LocalDatabase.syncCounts = {
+          "MyApp.DerivedTypesFilling/total/false": 42,
+        };
+
+        renderCounting("MyApp.DerivedTypesFilling");
 
         assert.deepStrictEqual(renderedVar("total"), Type.integer(42));
       });

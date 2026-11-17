@@ -241,10 +241,6 @@ function declaredAttributes(entry) {
   );
 }
 
-// The most bytes a unique string may hold, which is what its btree index entry can carry - the
-// Elixir side measures and explains it as @unique_string_max_bytes.
-const UNIQUE_STRING_MAX_BYTES = 2692;
-
 function constraintErrors(entry, name, value, attributeType) {
   const constraints = entry.constraints[name] ?? {};
 
@@ -493,22 +489,24 @@ function structField(struct, name) {
   return struct.data[Type.encodeMapKey(Type.atom(name))][1];
 }
 
-// The bound belongs to the INDEX rather than to the type, so only a unique string carries it, and
-// it is counted in bytes rather than in characters because that is what the index stores.
+// The bound belongs to the INDEX rather than to the type, so only a string under a unique index
+// carries it, and it is counted in bytes rather than in characters because that is what the index
+// stores. The server works the bound out - a unique string has a whole index entry, the strings of
+// a compound key share one - and bakes it into the constraints as max_bytes.
 function uniqueBytesErrors(name, value, attributeType, constraints) {
-  if (attributeType !== "string" || constraints.unique !== true) {
+  if (attributeType !== "string" || constraints.max_bytes === undefined) {
     return [];
   }
 
   Bitstring.maybeSetBytesFromText(value);
 
-  return value.bytes.length > UNIQUE_STRING_MAX_BYTES
+  return value.bytes.length > constraints.max_bytes
     ? [
         errorTuple(
           name,
           Type.tuple([
             Type.atom("max_bytes"),
-            Type.integer(UNIQUE_STRING_MAX_BYTES),
+            Type.integer(constraints.max_bytes),
           ]),
         ),
       ]

@@ -63,7 +63,7 @@ defmodule Hologram.Migration.RefusalTest do
   end
 
   defp migration(version, ops) do
-    %{version: version, path: "#{version}.exs", ops: ops}
+    %{version: version, path: "app/migrations/#{version}.ex", ops: ops}
   end
 
   defp task_rows do
@@ -171,6 +171,86 @@ defmodule Hologram.Migration.RefusalTest do
           "update the rows or drop the unique declaration"
 
       assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    # The third row repeats the first one's amount and status under a title of its own, so
+    # only the key over both is repeated.
+    test "refuses a key over rows that repeat it", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn -> insert_task("three", "10", "done") end)
+
+      refused =
+        migration("20260813142237", [
+          %{op: :add_unique, entity: MyApp.Task, fields: [:amount, :status], line: 3}
+        ])
+
+      expected_msg =
+        ~s{found 1 duplicate key in "my_app_task" over ("amount", "status") - } <>
+          "a unique index cannot be built while rows repeat a key - " <>
+          "update the rows or drop the unique declaration"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    # Asked right before the type change applies, against the indexes standing then: the
+    # rename later in the file leaves the checks made before any DDL nothing to find the
+    # index by.
+    test "refuses a type change that makes rows repeat a unique value", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      unique =
+        migration("20260813142237", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [unique: true],
+            line: 3
+          }
+        ])
+
+      refused =
+        migration("20260814101500", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [type: :integer],
+            line: 3
+          },
+          %{op: :rename_attribute, entity: MyApp.Task, from: :amount, to: :total, line: 4}
+        ])
+
+      unique_model = Model.fold(first_model, unique.ops)
+      full_model = Model.fold(unique_model, refused.ops)
+
+      expected_msg =
+        ~s(cannot change column "amount" on table "my_app_task" from text to int8 - ) <>
+          ~s{1 key over ("amount") would repeat once converted - } <>
+          "fix the data, or drop the unique declaration before changing the type"
+
+      route(scratch, fn ->
+        {:ok, _result} =
+          Connection.query(
+            ~s(UPDATE "hologram_data"."my_app_task" SET "amount" = '010' WHERE "title" = 'two')
+          )
+
+        :ok = run([create, unique], unique_model, @context)
+
+        rows_before = task_rows()
+
+        assert_error RuntimeError, expected_msg, fn ->
+          run([create, unique, refused], full_model, @context)
+        end
+
+        assert applied_versions_list() == ["20260813091522", "20260813142237"]
+        assert task_rows() == rows_before
+      end)
     end
 
     test "refuses removing an enum value the existing rows still hold", %{

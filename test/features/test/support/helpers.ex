@@ -16,6 +16,7 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.Sync.Session
   alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Booking
+  alias HologramFeatureTests.Entities.Bookmark
   alias HologramFeatureTests.Entities.Cabin
   alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Document
@@ -33,6 +34,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Project
   alias HologramFeatureTests.Entities.ProjectMember
+  alias HologramFeatureTests.Entities.Reaction
   alias HologramFeatureTests.Entities.Report
   alias HologramFeatureTests.Entities.ReportNote
   alias HologramFeatureTests.Entities.Review
@@ -173,6 +175,14 @@ defmodule HologramFeatureTests.Helpers do
     end
 
     Browser.execute_script(session, script, [], callback)
+  end
+
+  @doc """
+  Asserts the browser holds no place to resume its stream from, and returns the `session` - what a
+  client told to start over holds until the marker ending its refill hands it a new one.
+  """
+  def assert_no_place(session) do
+    assert_script_result(session, @place_script, nil)
   end
 
   @doc """
@@ -920,6 +930,16 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Empties the operations log, so a returning client names a place the log can no longer speak for
+  and is told to start over - the same answer a client away past the log's reach gets.
+  """
+  def truncate_oplog do
+    {:ok, _result} = Connection.query(~s(TRUNCATE "hologram_system"."oplog"), [])
+
+    :ok
+  end
+
+  @doc """
   Truncates the tables of the given entity types in one statement - PostgreSQL refuses to truncate a
   table another one references without it.
   """
@@ -946,6 +966,7 @@ defmodule HologramFeatureTests.Helpers do
       [
         Account,
         Booking,
+        Bookmark,
         Cabin,
         Channel,
         Document,
@@ -964,6 +985,7 @@ defmodule HologramFeatureTests.Helpers do
         Product,
         Project,
         ProjectMember,
+        Reaction,
         Report,
         ReportNote,
         RestockItem,

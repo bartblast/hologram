@@ -10,7 +10,6 @@ import {
 import Batches from "../../assets/js/batches.mjs";
 import Deltas from "../../assets/js/deltas.mjs";
 import Durability from "../../assets/js/durability.mjs";
-import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
@@ -79,7 +78,6 @@ describe("SyncStream", () => {
 
     globalThis.window = originalWindow;
 
-    GlobalRegistry.set("connectPageModule", null);
     SyncStream.renderScheduled = false;
     SyncStream.rowsChangedSinceRender = false;
     SyncStream.rules = null;
@@ -354,6 +352,74 @@ describe("SyncStream", () => {
       assert.notProperty(SyncStream.buildGreeting(pageModule), "cursor");
     });
 
+    // The group's other tabs hold the same rows out of the same store, and the fill that follows
+    // is the whole of what this browser may see - so they go back to awaiting it too, or the new
+    // fill's markers would sweep nothing there.
+    it("tells the group it starts over when it names no place", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      const posting = sinon.stub(Tabs, "post");
+      sinon.stub(Durability, "clear");
+
+      SyncStream.buildGreeting(pageModule);
+
+      sinon.assert.calledOnceWithExactly(posting, {
+        event: "sync_resync",
+        frame: {reason: "no place to resume from"},
+        kind: "frame",
+      });
+    });
+
+    // A row the cut fill stored and the new one no longer sends would otherwise be read back on
+    // the next page load as one the stream vouched for.
+    it("drops the stored rows when it names no place", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      const clearing = sinon.stub(Durability, "clear");
+
+      SyncStream.buildGreeting(pageModule);
+
+      sinon.assert.calledOnce(clearing);
+    });
+
+    it("keeps the stored rows when it names a place", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      const clearing = sinon.stub(Durability, "clear");
+
+      SyncStream.syncCursor = "Nzc4LjA";
+      SyncStream.buildGreeting(pageModule);
+
+      sinon.assert.notCalled(clearing);
+    });
+
+    it("tells the group nothing when it names a place", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      const posting = sinon.stub(Tabs, "post");
+
+      SyncStream.syncCursor = "Nzc4LjA";
+      SyncStream.buildGreeting(pageModule);
+
+      sinon.assert.notCalled(posting);
+    });
+
     // The pair the browser is presenting, unchanged - what earns this client frames that say how
     // far its own writes are in.
     it("presents the replica identity the browser holds", () => {
@@ -440,7 +506,7 @@ describe("SyncStream", () => {
     it("marks the scope a synced marker names and takes its place", () => {
       SyncStream.receiveFrame("synced", {cursor: "Nzc4LjA", scope: "all"});
 
-      assert.isTrue(LocalDatabase.isSynced("all"));
+      assert.isTrue(LocalDatabase.isAllSynced());
       assert.equal(SyncStream.syncCursor, "Nzc4LjA");
       assert.equal(animationFrames.length, 1);
     });
@@ -511,7 +577,7 @@ describe("SyncStream", () => {
         data: JSON.stringify({
           cursor: null,
           protocol_version: 1,
-          scope: "page",
+          scope: "all",
         }),
       });
 
@@ -524,7 +590,7 @@ describe("SyncStream", () => {
         data: JSON.stringify({
           cursor: null,
           protocol_version: 1,
-          scope: "page",
+          scope: "all",
         }),
       };
 
@@ -545,7 +611,7 @@ describe("SyncStream", () => {
         data: JSON.stringify({
           cursor: null,
           protocol_version: 1,
-          scope: "page",
+          scope: "all",
         }),
       });
 
@@ -924,7 +990,7 @@ describe("SyncStream", () => {
       };
 
       LocalDatabase.putRow(TASK, {id: "t1", title: "held before the resync"});
-      LocalDatabase.markSynced("all");
+      LocalDatabase.markAllSynced();
     });
 
     afterEach(() => {
@@ -1006,7 +1072,7 @@ describe("SyncStream", () => {
     it("drops the completeness it had, since the refill has not finished", () => {
       eventSource.listeners.sync_resync({data: envelope()});
 
-      assert.isFalse(LocalDatabase.isSynced("all"));
+      assert.isFalse(LocalDatabase.isAllSynced());
     });
 
     // The place described the rows, so it goes with them - a client cut off before the refill
@@ -1117,17 +1183,42 @@ describe("SyncStream", () => {
   });
 
   describe("synced event", () => {
-    const envelope = (scope, cursor = null) =>
-      JSON.stringify({cursor: cursor, protocol_version: 1, scope: scope});
+    const envelope = (scope, cursor = null, types = undefined) =>
+      JSON.stringify({
+        cursor: cursor,
+        protocol_version: 1,
+        scope: scope,
+        types,
+      });
 
-    it("records the scope the client may now answer for itself", () => {
-      eventSource.listeners.synced({data: envelope("page")});
+    it("records the types the client may now answer for itself", () => {
+      eventSource.listeners.synced({
+        data: envelope("types", null, ["MyApp.Task"]),
+      });
 
-      assert.isTrue(LocalDatabase.isSynced("page"));
-      assert.isFalse(LocalDatabase.isSynced("all"));
+      assert.isTrue(LocalDatabase.isTypeSynced("MyApp.Task"));
+      assert.isFalse(LocalDatabase.isTypeSynced("MyApp.Project"));
+      assert.isFalse(LocalDatabase.isAllSynced());
     });
 
-    // What a query answers can change the moment a scope is complete - a count that was reading
+    it("records that the client may answer everything for itself", () => {
+      eventSource.listeners.synced({data: envelope("all")});
+
+      assert.isTrue(LocalDatabase.isAllSynced());
+    });
+
+    // A node of an older build speaks of the page the stream connected on, which is no claim about
+    // any type.
+    it("records nothing for a scope it does not know", () => {
+      eventSource.listeners.synced({data: envelope("page")});
+
+      assert.deepStrictEqual(LocalDatabase.syncedState(), {
+        all: false,
+        types: [],
+      });
+    });
+
+    // What a query answers can change the moment a type is complete - a count that was reading
     // the server's number starts counting rows.
     it("schedules a repaint", () => {
       eventSource.listeners.synced({data: envelope("all")});
@@ -1152,8 +1243,8 @@ describe("SyncStream", () => {
       assert.deepStrictEqual(persisting.firstCall.args, [[], "Nzc4LjA"]);
     });
 
-    // The page scope is narrower than the claim a place makes, so its marker names none - and a
-    // server built before this frame carried one names nothing at all.
+    // A first arrival's types markers are narrower than the claim a place makes, so they name
+    // none - and a server built before this frame carried one names nothing at all.
     it("leaves the place alone for a marker naming none", () => {
       const persisting = sinon.stub(Durability, "persistFrame");
 
@@ -1165,7 +1256,9 @@ describe("SyncStream", () => {
         }),
       });
 
-      eventSource.listeners.synced({data: envelope("page")});
+      eventSource.listeners.synced({
+        data: envelope("types", null, ["MyApp.Task"]),
+      });
 
       assert.equal(SyncStream.syncCursor, "Nzc4LjA");
       assert.isTrue(persisting.calledOnce);
@@ -1183,10 +1276,8 @@ describe("SyncStream", () => {
         protocol_version: 1,
       });
 
-    it("hands each frame to the group, naming the page the stream was greeted with", () => {
+    it("hands each frame to the group", () => {
       const posting = sinon.stub(Tabs, "post");
-
-      GlobalRegistry.set("connectPageModule", "MyApp.TodosPage");
 
       eventSource.listeners.sync_deltas({data: frame()});
 
@@ -1196,7 +1287,6 @@ describe("SyncStream", () => {
         event: "sync_deltas",
         frame: JSON.parse(frame()),
         kind: "frame",
-        page: "MyApp.TodosPage",
       });
     });
 

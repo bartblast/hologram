@@ -34,7 +34,7 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module106 do
 
   derived :one_admitting_count, :integer, fn entity_type ->
     entity_type
-    |> filter(d: 1)
+    |> filter(views: 1)
     |> count()
   end
 

@@ -102,14 +102,18 @@ defmodule HologramFeatureTests.SyncTest do
     |> Map.fetch!("cursor")
   end
 
+  # Every completeness marker of the fill, one per entity type and then the one for everything,
+  # handing back the client once the last has arrived.
   defp drain_initial_sync(client) do
-    {page_synced, filling_client} = SyncClient.await_frame(client, "synced")
-    assert page_synced["data"] =~ ~s["scope":"page"]
+    {synced, next_client} = SyncClient.await_frame(client, "synced")
 
-    {all_synced, filled_client} = SyncClient.await_frame(filling_client, "synced")
-    assert all_synced["data"] =~ ~s["scope":"all"]
+    if synced["data"] =~ ~s["scope":"all"] do
+      next_client
+    else
+      assert synced["data"] =~ ~s["scope":"types"]
 
-    filled_client
+      drain_initial_sync(next_client)
+    end
   end
 
   defp local_folder(session) do
@@ -129,14 +133,15 @@ defmodule HologramFeatureTests.SyncTest do
     assert data =~ ~s["put_entity":]
   end
 
-  feature "says the store is complete for the page and then for the app", %{session: _session} do
+  feature "says the store is complete for each entity type and then for the app",
+          %{session: _session} do
     client = connect()
 
-    {page_synced, filling_client} = SyncClient.await_frame(client, "synced")
-    assert page_synced["data"] =~ ~s["scope":"page"]
+    {types_synced, filling_client} = SyncClient.await_frame(client, "synced")
+    assert types_synced["data"] =~ ~s["scope":"types"]
+    assert types_synced["data"] =~ ~s["types":["]
 
-    {all_synced, _filled_client} = SyncClient.await_frame(filling_client, "synced")
-    assert all_synced["data"] =~ ~s["scope":"all"]
+    drain_initial_sync(filling_client)
   end
 
   feature "delivers a change as a patch carrying the fresh value", %{session: _session} do

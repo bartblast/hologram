@@ -313,7 +313,8 @@ defmodule Hologram.RouterTest do
 
       assert result_conn.resp_headers == [
                {"cache-control", "no-cache"},
-               {"content-type", "text/event-stream"}
+               {"content-type", "text/event-stream"},
+               {"connection", "close"}
              ]
     end
   end
