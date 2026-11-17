@@ -46,14 +46,9 @@ defmodule Hologram.Migration.Renderer do
         {acc ++ ops, next_model}
       end)
 
-    born_here = born_here(physical_ops)
-    {transactional, tail} = Enum.split_with(physical_ops, &(not concurrent?(&1, born_here)))
+    {transactional, tail} = split_tail(physical_ops)
 
-    %{
-      transactional: transactional,
-      tail: Enum.map(tail, &Map.put(&1, :concurrently, true)),
-      post_model: post_model
-    }
+    %{transactional: transactional, tail: tail, post_model: post_model}
   end
 
   # A backfill rides its logical op, never the model - the physical column it fills is
@@ -68,18 +63,6 @@ defmodule Hologram.Migration.Renderer do
 
     Enum.map(physical_ops, &put_backfill(&1, backfills))
   end
-
-  defp born_here(ops) do
-    for %{op: :create_table, table: table} <- ops, into: MapSet.new(), do: table
-  end
-
-  # An index on a table born in this file builds inside the transaction - the table is
-  # empty, so the build is instant and the file keeps its all-or-nothing shape.
-  defp concurrent?(%{op: :create_index} = op, born_here) do
-    op.table not in born_here
-  end
-
-  defp concurrent?(_op, _born_here), do: false
 
   # The renamed member's derivations live under its new name afterwards, so the pairing
   # follows the rename rather than the name - on the entity type the op names only, since
@@ -542,6 +525,94 @@ defmodule Hologram.Migration.Renderer do
       end)
 
     entity_ops ++ enum_value_ops(op, pre_mapping, post_mapping)
+  end
+
+  # An index on a table born in this file builds inside the transaction - the table is
+  # empty, so the build is instant and the file keeps its all-or-nothing shape. Born means
+  # born by the index's position in the file: a table renamed away and recreated under its
+  # old name later in the file still holds its rows where the index meets it.
+  #
+  # Any other index builds in the tail, after every op of the file has run, so it has to be
+  # the index those ops leave: a rename after it renames the build itself - nothing stands
+  # under the old name to rename yet - and a drop after it takes the build back.
+  defp split_tail(physical_ops) do
+    {transactional, _born, pending} =
+      Enum.reduce(physical_ops, {[], MapSet.new(), []}, &walk_tail_op/2)
+
+    tail =
+      pending
+      |> Enum.reverse()
+      |> Enum.map(&Map.put(&1, :concurrently, true))
+
+    {Enum.reverse(transactional), tail}
+  end
+
+  defp walk_tail_op(%{op: :create_index} = op, {transactional, born, pending}) do
+    if MapSet.member?(born, op.table),
+      do: {[op | transactional], born, pending},
+      else: {transactional, born, [op | pending]}
+  end
+
+  defp walk_tail_op(%{op: :create_table} = op, {transactional, born, pending}) do
+    {[op | transactional], MapSet.put(born, op.table), pending}
+  end
+
+  defp walk_tail_op(%{op: :drop_index} = op, {transactional, born, pending}) do
+    if Enum.any?(pending, &(&1.index == op.index)),
+      do: {transactional, born, Enum.reject(pending, &(&1.index == op.index))},
+      else: {[op | transactional], born, pending}
+  end
+
+  # A dropped table takes its indexes with it, and the diff emits no drop for them.
+  defp walk_tail_op(%{op: :drop_table} = op, {transactional, born, pending}) do
+    {
+      [op | transactional],
+      MapSet.delete(born, op.table),
+      Enum.reject(pending, &(&1.table == op.table))
+    }
+  end
+
+  defp walk_tail_op(%{op: :rename_column} = op, {transactional, born, pending}) do
+    pending =
+      Enum.map(pending, fn
+        %{table: table} = build when table == op.table ->
+          %{build | columns: Enum.map(build.columns, &if(&1 == op.from, do: op.to, else: &1))}
+
+        build ->
+          build
+      end)
+
+    {[op | transactional], born, pending}
+  end
+
+  defp walk_tail_op(%{op: :rename_index} = op, {transactional, born, pending}) do
+    if Enum.any?(pending, &(&1.index == op.from)) do
+      pending =
+        Enum.map(pending, &if(&1.index == op.from, do: %{&1 | index: op.to}, else: &1))
+
+      {transactional, born, pending}
+    else
+      {[op | transactional], born, pending}
+    end
+  end
+
+  defp walk_tail_op(%{op: :rename_table} = op, {transactional, born, pending}) do
+    born =
+      if MapSet.member?(born, op.from) do
+        born
+        |> MapSet.delete(op.from)
+        |> MapSet.put(op.to)
+      else
+        born
+      end
+
+    pending = Enum.map(pending, &if(&1.table == op.from, do: %{&1 | table: op.to}, else: &1))
+
+    {[op | transactional], born, pending}
+  end
+
+  defp walk_tail_op(op, {transactional, born, pending}) do
+    {[op | transactional], born, pending}
   end
 
   defp term(model) do

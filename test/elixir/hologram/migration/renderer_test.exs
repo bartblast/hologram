@@ -308,6 +308,281 @@ defmodule Hologram.Migration.RendererTest do
                Enum.find(result.transactional, &(&1.op == :drop_index))
     end
 
+    test "builds a unique index added before an attribute rename under the renamed names" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :title,
+          changes: [unique: true],
+          line: 3
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :handle, line: 4}
+      ]
+
+      result = render(ops, pre)
+
+      assert [
+               %{
+                 op: :create_index,
+                 table: "my_app_task",
+                 index: "my_app_task_handle_$uidx",
+                 columns: ["handle"],
+                 unique: true,
+                 concurrently: true
+               }
+             ] = result.tail
+
+      refute Enum.any?(result.transactional, &(&1[:from] == "my_app_task_title_$uidx"))
+    end
+
+    test "builds a unique index added before an entity rename on the renamed table" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :title,
+          changes: [unique: true],
+          line: 3
+        },
+        %{op: :rename_entity, from: MyApp.Task, to: MyApp.Job, line: 4}
+      ]
+
+      result = render(ops, pre)
+
+      assert [
+               %{
+                 op: :create_index,
+                 table: "my_app_job",
+                 index: "my_app_job_title_$uidx",
+                 columns: ["title"]
+               }
+             ] = result.tail
+
+      refute Enum.any?(result.transactional, &(&1[:from] == "my_app_task_title_$uidx"))
+    end
+
+    test "builds an added attribute's sort key index under the name a later rename gives it" do
+      pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :note,
+          type: :string,
+          opts: [optional: true],
+          line: 3
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :note, to: :remark, line: 4}
+      ]
+
+      result = render(ops, pre)
+
+      assert [
+               %{
+                 op: :create_index,
+                 table: "my_app_task",
+                 index: "my_app_task_remark_$sort_$idx",
+                 columns: ["remark_$sort"]
+               }
+             ] = result.tail
+
+      refute Enum.any?(result.transactional, &(&1[:from] == "my_app_task_note_$sort_$idx"))
+    end
+
+    test "drops nothing and builds nothing for a unique index the same file takes back" do
+      pre =
+        model(%{MyApp.Task => %{attributes: [{:amount, :string, []}, {:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :title,
+          changes: [unique: true],
+          line: 3
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :amount, to: :cost, line: 4},
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :title,
+          changes: [unique: false],
+          line: 5
+        }
+      ]
+
+      result = render(ops, pre)
+
+      assert result.tail == []
+      refute Enum.any?(result.transactional, &(&1[:index] == "my_app_task_title_$uidx"))
+    end
+
+    test "drops nothing for a unique index the same file renames and then deletes with its attribute" do
+      pre =
+        model(%{MyApp.Task => %{attributes: [{:amount, :string, []}, {:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :title,
+          changes: [unique: true],
+          line: 3
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :handle, line: 4},
+        %{op: :delete_attribute, entity: MyApp.Task, name: :handle, line: 5}
+      ]
+
+      result = render(ops, pre)
+
+      assert result.tail == []
+
+      refute Enum.any?(
+               result.transactional,
+               &(&1.op in [:drop_index, :rename_index] and
+                   String.ends_with?(&1[:index] || &1.from, "_$uidx"))
+             )
+    end
+
+    test "builds nothing for an index on a table the same file deletes" do
+      pre =
+        model(%{MyApp.Task => %{attributes: [{:amount, :string, []}, {:title, :string, []}]}})
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :title,
+          changes: [unique: true],
+          line: 3
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :amount, to: :cost, line: 4},
+        %{op: :delete_entity, entity: MyApp.Task, line: 5}
+      ]
+
+      result = render(ops, pre)
+
+      assert result.tail == []
+      assert :drop_table in op_kinds(result.transactional)
+    end
+
+    test "builds indexes of a table born in the file inside the transaction, before and after the file renames it" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Task, line: 3},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :slug,
+          type: :string,
+          opts: [unique: true],
+          line: 4
+        },
+        %{op: :rename_entity, from: MyApp.Task, to: MyApp.Job, line: 5},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Job,
+          name: :code,
+          type: :string,
+          opts: [optional: true, unique: true],
+          line: 6
+        }
+      ]
+
+      result = render(ops, Model.empty())
+
+      assert result.tail == []
+
+      assert %{table: "my_app_task"} =
+               Enum.find(result.transactional, &(&1[:index] == "my_app_task_slug_$uidx"))
+
+      assert %{op: :rename_index, to: "my_app_job_slug_$uidx"} =
+               Enum.find(result.transactional, &(&1[:from] == "my_app_task_slug_$uidx"))
+
+      assert %{table: "my_app_job"} =
+               Enum.find(result.transactional, &(&1[:index] == "my_app_job_code_$uidx"))
+    end
+
+    test "builds in the tail an index on a table renamed onto the name of a table the file created and deleted" do
+      pre = model(%{MyApp.Job => %{attributes: [{:title, :string, []}]}})
+
+      ops = [
+        %{op: :create_entity, entity: MyApp.Tag, line: 3},
+        %{op: :rename_attribute, entity: MyApp.Job, from: :title, to: :slug, line: 4},
+        %{op: :delete_entity, entity: MyApp.Tag, line: 5},
+        %{op: :rename_entity, from: MyApp.Job, to: MyApp.Tag, line: 6},
+        %{op: :change_attribute, entity: MyApp.Tag, name: :slug, changes: [unique: true], line: 7}
+      ]
+
+      result = render(ops, pre)
+
+      assert [%{op: :create_index, table: "my_app_tag", index: "my_app_tag_slug_$uidx"}] =
+               result.tail
+    end
+
+    test "renames a column only in the tail builds of its own table, keeping their order" do
+      pre =
+        model(%{
+          MyApp.Job => %{attributes: [{:title, :string, []}]},
+          MyApp.Task => %{attributes: [{:amount, :string, []}, {:title, :string, []}]}
+        })
+
+      # The unrelated rename splits the file, so Task's build is emitted before Job's.
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :title,
+          changes: [unique: true],
+          line: 3
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :amount, to: :cost, line: 4},
+        %{
+          op: :change_attribute,
+          entity: MyApp.Job,
+          name: :title,
+          changes: [unique: true],
+          line: 5
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :handle, line: 6}
+      ]
+
+      result = render(ops, pre)
+
+      assert [
+               %{table: "my_app_task", index: "my_app_task_handle_$uidx", columns: ["handle"]},
+               %{table: "my_app_job", index: "my_app_job_title_$uidx", columns: ["title"]}
+             ] = result.tail
+    end
+
+    test "builds in the tail an index on a table renamed away before the file creates another under its name" do
+      pre = model(%{MyApp.Task => %{attributes: [{:amount, :string, []}]}})
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :amount,
+          changes: [unique: true],
+          line: 3
+        },
+        %{op: :rename_entity, from: MyApp.Task, to: MyApp.Job, line: 4},
+        %{op: :create_entity, entity: MyApp.Task, line: 5}
+      ]
+
+      result = render(ops, pre)
+
+      assert [%{op: :create_index, table: "my_app_job", index: "my_app_job_amount_$uidx"}] =
+               result.tail
+
+      refute Enum.any?(result.transactional, &(&1.op == :create_index and &1.unique))
+    end
+
     test "defers the referencing ops past the objects they name" do
       ops = [
         %{op: :create_entity, entity: MyApp.Task, line: 3},

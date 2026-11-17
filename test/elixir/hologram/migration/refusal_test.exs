@@ -174,6 +174,40 @@ defmodule Hologram.Migration.RefusalTest do
       assert_refused(scratch, create, first_model, refused, expected_msg)
     end
 
+    # The type change makes "10" and "010" one key, so only a check of the rows as the file
+    # leaves them finds the repeat. The index meets Task's table before the rename moves it,
+    # so it builds in the tail on my_app_job - the my_app_task the file creates afterwards is
+    # a new, empty table that shares only the name.
+    test "refuses a unique index over keys a type change in the same file makes repeat, under an entity name the file reuses",
+         %{create: create, first_model: first_model, scratch: scratch} do
+      route(scratch, fn ->
+        statement =
+          ~s{UPDATE "hologram_data"."my_app_task" SET "amount" = '010' WHERE "title" = 'two'}
+
+        {:ok, _result} = Connection.query(statement)
+      end)
+
+      refused =
+        migration("20260813142237", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [type: :integer, unique: true],
+            line: 3
+          },
+          %{op: :rename_entity, from: MyApp.Task, to: MyApp.Job, line: 6},
+          %{op: :create_entity, entity: MyApp.Task, line: 8}
+        ])
+
+      expected_msg =
+        ~s{found 1 duplicate key in "my_app_job" over ("amount") - } <>
+          "a unique index cannot be built while rows repeat a key - " <>
+          "update the rows or drop the unique declaration"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
     test "refuses removing an enum value the existing rows still hold", %{
       create: create,
       first_model: first_model,

@@ -182,6 +182,63 @@ defmodule Hologram.Migration.TailBuildTest do
       assert index_flags(observer, "my_app_task_slug_$uidx") == %{unique: true, valid: true}
     end
 
+    # The build runs after the whole file, so it is built under the names the file leaves -
+    # under the old ones it would meet a column the rename took away, and the rename of its
+    # index would find nothing built yet to rename.
+    test "builds a unique index added before a rename over the renamed column", %{
+      observer: observer,
+      scratch: scratch
+    } do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            type: :string,
+            opts: [optional: true],
+            line: 4
+          }
+        ])
+
+      unique =
+        migration("20260813142237", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [unique: true],
+            line: 3
+          },
+          %{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 4}
+        ])
+
+      first_model = Model.fold(Model.empty(), create.ops)
+      full_model = Model.fold(first_model, unique.ops)
+
+      route(scratch, fn ->
+        :ok = run([create], first_model, @context)
+
+        insert_task("alpha")
+        insert_task("beta")
+
+        :ok = run([create, unique], full_model, @context)
+      end)
+
+      assert applied_versions_of(observer) == ["20260813091522", "20260813142237"]
+
+      assert index_flags(observer, "my_app_task_handle_$uidx") == %{unique: true, valid: true}
+
+      statement = """
+      SELECT "indexdef" FROM pg_catalog.pg_indexes
+      WHERE "schemaname" = 'hologram_data' AND "indexname" = 'my_app_task_handle_$uidx'
+      """
+
+      assert %{rows: [[indexdef]]} = Postgrex.query!(observer, statement, [])
+      assert indexdef =~ ~s{(handle)}
+    end
+
     test "waits for the migration lock before applying anything", %{
       chain: chain,
       full_model: full_model,
