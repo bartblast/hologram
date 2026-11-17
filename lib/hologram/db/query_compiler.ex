@@ -7,6 +7,7 @@ defmodule Hologram.DB.QueryCompiler do
   alias Hologram.DB.SortKey
   alias Hologram.Entity
   alias Hologram.Entity.Derived
+  alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Policy.Readers
   alias Hologram.Query
@@ -36,7 +37,11 @@ defmodule Hologram.DB.QueryCompiler do
   slot), placeholder leaves become `{:placeholder, name, type}` slots carrying the attribute's
   logical type for runtime encoding (`{:list, type}` for membership operands). A
   membership list holding placeholder elements binds one slot per element inside a cast
-  ARRAY constructor instead - each element placeholder is a scalar slot. Nil
+  ARRAY constructor instead - each element placeholder is a scalar slot. Equality and
+  membership on a string of the row also compare its sort key, so the key's index serves them:
+  the key binds first, as `{:value, key}` for a literal and a `:sort_key` slot for a placeholder
+  (`{:list, :sort_key}` for a membership operand, an ARRAY of key slots for a list holding
+  placeholders), and the value right after it. Nil
   equality compiles to `IS NULL` and nil inequality to `IS NOT NULL`, with no bind
   slot. Column selection follows the mapping's physical column order, leaving out the derived
   sort-key and search-key companions, which a reader never reads back.
@@ -672,11 +677,26 @@ defmodule Hologram.DB.QueryCompiler do
     {"#{subject_sql} IS NULL", new_params}
   end
 
+  # A string of the row compares its sort key beside its value, so the key's index serves the
+  # equality - the raw column is unbounded and has none. The value still decides it, since two
+  # values can share a key.
   defp condition({name, :==, value}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
-    {placeholder, new_params} = value_slot(value, scope, column, params_after_subject)
 
-    {"#{subject_sql} = #{placeholder}", new_params}
+    case own_sort_key_column(scope, name) do
+      nil ->
+        {placeholder, new_params} = value_slot(value, scope, column, params_after_subject)
+
+        {"#{subject_sql} = #{placeholder}", new_params}
+
+      key_column ->
+        {key_slot, raw_slot, new_params} = sort_key_slots(value, params_after_subject)
+
+        condition_sql =
+          "(#{column_sql(scope, key_column)} = #{key_slot} AND #{subject_sql} = #{raw_slot})"
+
+        {condition_sql, new_params}
+    end
   end
 
   defp condition({name, :!=, nil}, scope, reversed_params) do
@@ -702,14 +722,17 @@ defmodule Hologram.DB.QueryCompiler do
         {"#{subject_sql} IS NULL", params_after_subject}
 
       ^values ->
-        {placeholder, new_params} = membership_slot(values, column, params_after_subject)
-
-        {"#{subject_sql} = ANY(#{placeholder})", new_params}
+        membership_sql(scope, name, {subject_sql, column}, values, params_after_subject)
 
       stripped_values ->
-        {placeholder, new_params} = membership_slot(stripped_values, column, params_after_subject)
-
-        condition_sql = "#{subject_sql} = ANY(#{placeholder})"
+        {condition_sql, new_params} =
+          membership_sql(
+            scope,
+            name,
+            {subject_sql, column},
+            stripped_values,
+            params_after_subject
+          )
 
         {null_inclusive(condition_sql, subject_sql, column), new_params}
     end
@@ -717,9 +740,8 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp condition({name, :in, operand}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
-    {placeholder, new_params} = membership_slot(operand, column, params_after_subject)
 
-    {"#{subject_sql} = ANY(#{placeholder})", new_params}
+    membership_sql(scope, name, {subject_sql, column}, operand, params_after_subject)
   end
 
   defp condition({name, :not_in, values}, scope, reversed_params) when is_list(values) do
@@ -1699,6 +1721,66 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
+  # The sort key of the string a condition names on its own row - nil for a value of another type,
+  # a derived value, a path or a name of a row above, none of which an index on the row's key
+  # could serve.
+  defp own_sort_key_column(scope, name) when is_atom(name) do
+    if Derived.declared?(scope.entity_type, name) do
+      nil
+    else
+      companion_column(scope.entity_mapping, name)
+    end
+  end
+
+  defp own_sort_key_column(_scope, _name), do: nil
+
+  defp sort_key_membership_slot({:placeholder, placeholder_name}, reversed_params) do
+    bind_placeholder_slot(placeholder_name, {:list, :sort_key}, reversed_params)
+  end
+
+  defp sort_key_membership_slot(values, reversed_params) do
+    if Enum.any?(values, &match?({:placeholder, _placeholder_name}, &1)) do
+      {reversed_slots, new_params} =
+        Enum.reduce(values, {[], reversed_params}, fn value, {acc_slots, acc_params} ->
+          {slot, next_params} = sort_key_slot(value, acc_params)
+
+          {[slot | acc_slots], next_params}
+        end)
+
+      slots =
+        reversed_slots
+        |> Enum.reverse()
+        |> Enum.join(", ")
+
+      {"ARRAY[#{slots}]::text[]", new_params}
+    else
+      values
+      |> Enum.map(&literal_sort_key/1)
+      |> bind_slot_value(reversed_params)
+    end
+  end
+
+  defp sort_key_slot({:placeholder, placeholder_name}, reversed_params) do
+    bind_placeholder_slot(placeholder_name, :sort_key, reversed_params)
+  end
+
+  defp sort_key_slot(literal, reversed_params) do
+    literal
+    |> literal_sort_key()
+    |> bind_slot_value(reversed_params)
+  end
+
+  defp literal_sort_key(literal) when is_binary(literal) do
+    literal
+    |> Codec.encode(:string)
+    |> SortKey.compute()
+  end
+
+  defp literal_sort_key(literal) do
+    raise MisuseError,
+      message: "a string attribute compares with a string, got: #{inspect(literal)}"
+  end
+
   # The bound binds twice: once folded the way the column's key is, once raw. The key slot is
   # pushed first, so the pair reads left to right in the statement.
   defp sort_key_slots({:placeholder, placeholder_name}, reversed_params) do
@@ -1711,12 +1793,8 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp sort_key_slots(literal, reversed_params) do
-    encoded_value = Codec.encode(literal, :string)
-
-    {key_slot, params_with_key} =
-      bind_slot_value(SortKey.compute(encoded_value), reversed_params)
-
-    {raw_slot, new_params} = bind_slot_value(encoded_value, params_with_key)
+    {key_slot, params_with_key} = bind_slot_value(literal_sort_key(literal), reversed_params)
+    {raw_slot, new_params} = bind_slot_value(Codec.encode(literal, :string), params_with_key)
 
     {key_slot, raw_slot, new_params}
   end
@@ -1969,6 +2047,27 @@ defmodule Hologram.DB.QueryCompiler do
         _other_source -> false
       end
     end)
+  end
+
+  # Membership of a string of the row asks its sort key too, the way equality does - each value's
+  # key in a list of its own, bound before the values.
+  defp membership_sql(scope, name, {subject_sql, column}, operand, reversed_params) do
+    case own_sort_key_column(scope, name) do
+      nil ->
+        {placeholder, new_params} = membership_slot(operand, column, reversed_params)
+
+        {"#{subject_sql} = ANY(#{placeholder})", new_params}
+
+      key_column ->
+        {key_placeholder, params_after_keys} = sort_key_membership_slot(operand, reversed_params)
+        {placeholder, new_params} = membership_slot(operand, column, params_after_keys)
+
+        condition_sql =
+          "(#{column_sql(scope, key_column)} = ANY(#{key_placeholder}) AND " <>
+            "#{subject_sql} = ANY(#{placeholder}))"
+
+        {condition_sql, new_params}
+    end
   end
 
   defp membership_slot({:placeholder, placeholder_name}, column, reversed_params) do

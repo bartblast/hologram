@@ -317,6 +317,10 @@ defmodule Hologram.DB.SchemaReconciler do
       {:ok, encoded_value} ->
         Preflight.check_fill!(mapping, op.table, op.column, encoded_value)
         fill_column(op.table, op.column, encoded_value)
+
+        # The filled rows held no value, so their companions are NULL too - and a string's
+        # equality reads its sort key, so a row left without one would match no `==`.
+        backfill_companions_of!(mapping, op.table, op.column)
     end
 
     execute_statements(DDL.statements(op))
@@ -356,6 +360,22 @@ defmodule Hologram.DB.SchemaReconciler do
 
       [id, value] ->
         {:ok, _result} = Connection.query(update_sql, [derive.(value), id])
+    end)
+  end
+
+  defp backfill_companions_of!(mapping, table, source_name) do
+    {_entity_type, entity_mapping} =
+      Enum.find(mapping, fn {_entity_type, table_mapping} -> table_mapping.table == table end)
+
+    entity_mapping.columns
+    |> Enum.filter(&Mapper.derived?/1)
+    |> Enum.each(fn %{source: {_kind, attribute_name}} = companion ->
+      if Enum.any?(
+           entity_mapping.columns,
+           &(&1.name == source_name and &1.source == {:attribute, attribute_name})
+         ) do
+        backfill_op!(%{table: table, column: companion.name}, mapping)
+      end
     end)
   end
 

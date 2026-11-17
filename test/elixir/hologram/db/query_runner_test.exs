@@ -90,6 +90,8 @@ defmodule Hologram.DB.QueryRunnerTest do
 
   @quantifier_mapping Mapper.derive!([Module26, Module27, Module28, Module29], [])
 
+  @seat_mapping Mapper.derive!([Module14, PolicyModule17, PolicyModule18], [])
+
   @time_mapping Mapper.derive!([Module22, Module23], [])
 
   defp create_module_2_entities do
@@ -109,6 +111,34 @@ defmodule Hologram.DB.QueryRunnerTest do
       |> create()
 
     {first, second, third}
+  end
+
+  # Pairs of values sharing a sort key: two that fold to one key, and two whose keys stop before
+  # the bytes they differ in when the prefix passes the key's cap.
+  defp create_shared_key_entities(long_prefix) do
+    Enum.map(["apple", "Apple", long_prefix <> "a", long_prefix <> "b"], fn value ->
+      {:ok, entity} =
+        %{c: value}
+        |> Module2.new()
+        |> create()
+
+      entity
+    end)
+  end
+
+  # The seats the type's read rule admits and two it doesn't: one sharing its sort key, one nil.
+  defp create_seat_entities do
+    Enum.map(["full", "Full", nil], fn seat ->
+      %{seat: seat}
+      |> PolicyModule18.new()
+      |> DB.create!()
+    end)
+  end
+
+  defp sorted_ids(rows) do
+    rows
+    |> Enum.map(& &1.id)
+    |> Enum.sort()
   end
 
   defp create_module_3_entity do
@@ -569,6 +599,17 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
   end
 
+  describe "recheck/4" do
+    test "decides a rule comparing a string by the row's value, not by its sort key" do
+      [full, capitalized, missing] = create_seat_entities()
+      ids = [full.id, capitalized.id, missing.id]
+
+      assert %{} = rows = recheck(PolicyModule18, @seat_mapping, ids, [nil])
+      assert [full.id] == Map.keys(rows)
+      assert {%PolicyModule18{seat: "full"}, :all} = rows[full.id]
+    end
+  end
+
   describe "run/3" do
     test "binds a placeholder inside a disjunction" do
       {_first, second, third} = create_module_2_entities()
@@ -882,6 +923,80 @@ defmodule Hologram.DB.QueryRunnerTest do
         |> Stage.normalize()
 
       assert [%Module9{a: [%Module8{source_id: 5}]}] = run(term, mapping)
+    end
+
+    test "matches a string by its value, not by the sort key another value shares" do
+      long_prefix = String.duplicate("x", 70)
+      [_apple, capitalized, _first_long, second_long] = create_shared_key_entities(long_prefix)
+
+      capitalized_term =
+        Module2
+        |> filter(c == "Apple")
+        |> Stage.normalize()
+
+      long_term =
+        Module2
+        |> filter(c == ^(long_prefix <> "b"))
+        |> Stage.normalize()
+
+      assert [%Module2{id: capitalized_id}] = run(capitalized_term, @mapping)
+      assert capitalized_id == capitalized.id
+
+      assert [%Module2{id: long_id}] = run(long_term, @mapping)
+      assert long_id == second_long.id
+    end
+
+    test "matches a string bound as a placeholder by its value" do
+      [apple, _capitalized, _first_long, _second_long] = create_shared_key_entities("x")
+
+      term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :name}}]}
+
+      assert [%Module2{id: id}] = run(term, @mapping, %{name: "apple"})
+      assert id == apple.id
+    end
+
+    test "matches strings in a membership list by their values" do
+      long_prefix = String.duplicate("x", 70)
+      [apple, _capitalized, first_long, _second_long] = create_shared_key_entities(long_prefix)
+
+      literal_term =
+        Module2
+        |> filter(c in ["apple", ^(long_prefix <> "a"), nil])
+        |> Stage.normalize()
+
+      element_term = %{
+        Stage.normalize(Module2)
+        | filter: [{:c, :in, [{:placeholder, :name}, "apple"]}]
+      }
+
+      list_term = %{Stage.normalize(Module2) | filter: [{:c, :in, {:placeholder, :names}}]}
+
+      expected_ids = Enum.sort([apple.id, first_long.id])
+
+      assert literal_term
+             |> run(@mapping)
+             |> sorted_ids() == expected_ids
+
+      assert element_term
+             |> run(@mapping, %{name: long_prefix <> "a"})
+             |> sorted_ids() == expected_ids
+
+      assert list_term
+             |> run(@mapping, %{names: ["apple", long_prefix <> "a"]})
+             |> sorted_ids() == expected_ids
+    end
+
+    test "matches the rows a nil-holding string membership names, the ones holding nil included" do
+      [full, _capitalized, missing] = create_seat_entities()
+
+      term =
+        PolicyModule18
+        |> filter(seat in [nil, "full"])
+        |> Stage.normalize()
+
+      assert term
+             |> run(@seat_mapping)
+             |> sorted_ids() == Enum.sort([full.id, missing.id])
     end
 
     test "matches nothing for an empty membership list binding" do

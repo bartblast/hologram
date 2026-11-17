@@ -13,6 +13,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Schema
+  alias Hologram.DB.SortKey
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -1007,6 +1008,34 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       assert rows == [[42]]
       assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "fills the sort and search keys of a string it fills when making the string required" do
+      optional_context =
+        [Module2]
+        |> reconcile_context()
+        |> update_mapping_column(Module2, "c", &%{&1 | null: true})
+
+      reconcile(optional_context)
+      insert_module2_row("NULL", "NULL")
+
+      long_default = "Abc" <> String.duplicate("x", 70)
+
+      context =
+        [Module2]
+        |> reconcile_context()
+        |> update_mapping_column(Module2, "c", &%{&1 | default: long_default})
+
+      reconcile(context)
+
+      select_statement =
+        ~s(SELECT "c", "c_$sort", "c_$search" FROM "hologram_data"."test_fixtures_entity_module2")
+
+      {:ok, %{rows: rows}} = Connection.query(select_statement)
+
+      assert rows == [
+               [long_default, SortKey.compute(long_default), SortKey.search_key(long_default)]
+             ]
     end
 
     test "fills existing rows with the declared default when adding a required column" do
