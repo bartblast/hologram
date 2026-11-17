@@ -78,11 +78,13 @@ defmodule Hologram.DB do
   Entity.validate/1 returns, naming each field that broke its declaration: the declared
   constraints its value breaks (type, enum values, required presence, the constraint
   options), :unique for a unique attribute whose value another row already holds or a unique
-  to-one reference whose target another row already references, and :not_found for a to-one
+  to-one reference whose target another row already references, {:unique, fields} on every
+  field of a key declared with unique whose values another row already holds together (fields
+  being the key's, a to-one named by its reference field), and :not_found for a to-one
   reference whose target row does not exist. Values are judged before any SQL runs, and a
   write is attempted only once they pass. Uniqueness and reference existence are reported by
   the write itself for the constraint it refuses, and asked advisorily for every unique
-  attribute and to-one reference the write did not answer for - an advisory answer describes
+  attribute, key and to-one reference the write did not answer for - an advisory answer describes
   the moment it was asked, and a value free then can be taken by the next attempt. A write
   refuses at the first violated database constraint and reports no other of its own.
 
@@ -476,17 +478,21 @@ defmodule Hologram.DB do
   id that names no entity.
 
   Returns :ok, or {:error, violations} - the map Entity.validate/2 returns, naming each
-  changed field that broke its declaration: the declared constraints its value breaks (type,
-  enum values, the required-nil rule, the constraint options), :unique for a changed unique
+  field the changes leave breaking a declaration: the declared constraints a changed value
+  breaks (type, enum values, the required-nil rule, the constraint options), :unique for a
+  changed unique
   attribute whose new value another row already holds or a changed unique to-one reference
-  whose new target another row already references, and :not_found for a changed to-one
-  reference whose target row does not exist. A row's own current value never conflicts with
-  itself. Values are judged before any SQL runs, and a write is attempted only once they pass.
-  Uniqueness and reference existence are reported by the write itself for the constraint it
-  refuses, and asked advisorily for every changed unique attribute and changed to-one reference
-  the write did not answer for - an advisory answer describes the moment it was asked, and a
-  value free then can be taken by the next attempt. A write refuses at the first violated
-  database constraint and reports no other of its own.
+  whose new target another row already references, {:unique, fields} for a key declared with
+  unique that the changes leave the row sharing with another row, and :not_found for a changed
+  to-one reference whose target row does not exist. A key's reason sits on every field of the
+  key, the ones the update left alone among them, since the key is the changed values beside
+  the ones the row keeps. A row's own current value never conflicts with itself. Values are
+  judged before any SQL runs, and a write is attempted only once they pass. Uniqueness and
+  reference existence are reported by the write itself for the constraint it refuses, and
+  asked advisorily for every changed unique attribute, every key a change touches and every
+  changed to-one reference the write did not answer for - an advisory answer describes the
+  moment it was asked, and a value free then can be taken by the next attempt. A write refuses
+  at the first violated database constraint and reports no other of its own.
 
   The misuses named above raise rather than returning, as does a constraint violation the
   mapping does not explain.
@@ -685,16 +691,26 @@ defmodule Hologram.DB do
     violations
     |> Enum.flat_map(fn {field, reasons} -> Enum.map(reasons, &{field, &1}) end)
     |> Enum.sort()
-    |> Enum.map_join("\n", fn
+    |> Enum.flat_map(fn
       {field, :unique} ->
-        "  * #{unique_kind(entity_type, field)} #{inspect(field)} #{inspect(Map.fetch!(values, field))} is already taken"
+        [
+          "  * #{unique_kind(entity_type, field)} #{inspect(field)}#{given_value(values, field)} is already taken"
+        ]
+
+      # Every field of a taken key carries the reason, and the key is one thing to say: its line
+      # is written once, in the place of the first of its fields.
+      {field, {:unique, fields}} ->
+        if field == Enum.min(fields), do: [key_refusal_line(fields, values)], else: []
 
       {field, :not_found} ->
-        "  * reference #{inspect(field)} #{inspect(Map.fetch!(values, field))} names no existing entity"
+        [
+          "  * reference #{inspect(field)} #{inspect(Map.fetch!(values, field))} names no existing entity"
+        ]
 
       violation ->
-        Validator.violation_description(entity_type, values, violation)
+        [Validator.violation_description(entity_type, values, violation)]
     end)
+    |> Enum.join("\n")
   end
 
   # A by-id read is indexed by the entity type, the way delete/2 and update/3 are - a query
@@ -839,6 +855,28 @@ defmodule Hologram.DB do
   # received value.
   defp put_values(attribute_ops) do
     for {name, {:put, value}} <- attribute_ops, into: %{}, do: {name, value}
+  end
+
+  # The value the write gave the field, ahead of which it is spelled - or nothing, for a field
+  # an update moved by an amount: the write names no value for it, the row does.
+  defp given_value(values, field) do
+    case Map.fetch(values, field) do
+      {:ok, value} -> " #{inspect(value)}"
+      :error -> ""
+    end
+  end
+
+  # The values are the ones the write gave: an update gives only its changes, so the fields of
+  # the key it left alone or moved by an amount are named by the key and not spelled out.
+  defp key_refusal_line(fields, values) do
+    given =
+      fields
+      |> Enum.filter(&Map.has_key?(values, &1))
+      |> Enum.map_join(", ", &"#{&1} #{inspect(Map.fetch!(values, &1))}")
+
+    given_part = if given == "", do: "", else: " (#{given})"
+
+    "  * key #{inspect(fields)} is already taken#{given_part}"
   end
 
   # A unique field is a declared attribute or the reference field of a unique to-one, and the line

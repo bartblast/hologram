@@ -80,23 +80,40 @@ defmodule Hologram.DB.QueryRunner do
 
   @doc """
   Decides which of the given users may read each of the rows of the given entity type with the
-  given ids, in one statement (see `Hologram.DB.QueryCompiler.recheck/3`), and reads each readable
-  row's current values.
+  given ids, in one statement (see `Hologram.DB.QueryCompiler.recheck/4`), and reads each readable
+  row's current values - and, when the given flag asks for them, the server's verdicts on the type's
+  deciding clauses for the users who may read it (see `Hologram.Auth.verdicts/2`).
 
   Takes the row ids as canonical entity ids, and the users as ids, nil for an anonymous one. A user
   id in any other spelling names no user entity, so it reads as an anonymous one, the way
   `Hologram.Auth.can?/3` answers it.
+
   Returns a map from the id of every row one of them may read to the row, decoded as `run/3`
-  decodes it with no includes, and its readers: `:all` when a rule answering the same for every
-  user admits it, and otherwise the set of the given users who may read it, nil among them when an
-  anonymous user may. An id is left out when its row is gone or none of the given users may read
-  it.
+  decodes it with no includes, its readers and its verdicts. The readers are `:all` when a rule
+  answering the same for every user admits it, and otherwise the set of the given users who may
+  read it, nil among them when an anonymous user may. An id is left out when its row is gone or
+  none of the given users may read it.
+
+  The verdicts hold, each keyed by verdict key:
+
+    * `:users` - the answers of each signed-in reader tested on the row, by canonical id.
+    * `:others` - the answers of every other signed-in reader: what a clause answering the same
+      for every user answers, and the default of a clause depending on the user (see
+      `Hologram.Policy.Readers.classify_verdicts/1`). Nil when a clause has no default, since every
+      reader is tested then.
+    * `:anonymous` - the answers of an anonymous reader, nil when no anonymous user was given.
+
+  With no verdicts asked for, or a type with no deciding clause, every answer set is empty.
   """
-  @spec recheck(module, %{module => %{atom => any}}, Enumerable.t(), list(any)) ::
-          %{String.t() => {struct, :all | MapSet.t()}}
-  def recheck(entity_type, mapping, ids, user_ids) do
+  @spec recheck(module, %{module => %{atom => any}}, Enumerable.t(), list(any), boolean) ::
+          %{String.t() => {struct, :all | MapSet.t(), map}}
+  def recheck(entity_type, mapping, ids, user_ids, verdicts? \\ false) do
     canonical_user_ids = Enum.map(user_ids, &Auth.canonical_id/1)
-    compiled = QueryCompiler.recheck(entity_type, mapping, nil in canonical_user_ids)
+    anonymous? = nil in canonical_user_ids
+    compiled = QueryCompiler.recheck(entity_type, mapping, anonymous?, verdicts?)
+    verdict_clauses = Map.get(compiled, :verdict_clauses, [])
+    verdict_layout = verdict_layout(verdict_clauses)
+    flag_count = if verdict_clauses == [], do: 3, else: 7
 
     signed_in_user_ids =
       canonical_user_ids
@@ -125,10 +142,13 @@ defmodule Hologram.DB.QueryRunner do
         term = Stage.normalize(entity_type)
 
         Map.new(rows, fn row ->
-          {column_values, [everyone, anonymous, reader_ids]} = Enum.split(row, -3)
-          entity = decode_row(column_values, term, mapping)
+          {column_values, [everyone, anonymous, reader_ids | verdict_columns]} =
+            Enum.split(row, -flag_count)
 
-          {entity.id, {entity, readers(everyone, anonymous, reader_ids)}}
+          entity = decode_row(column_values, term, mapping)
+          readers = readers(everyone, anonymous, reader_ids)
+
+          {entity.id, {entity, readers, verdicts(verdict_layout, verdict_columns, anonymous?)}}
         end)
 
       {:error, error} ->
@@ -527,5 +547,55 @@ defmodule Hologram.DB.QueryRunner do
     end
 
     :ok
+  end
+
+  # Each clause's answer under every key it answers.
+  defp verdict_answers(verdict_clauses, answers) do
+    verdict_clauses
+    |> Enum.zip(answers)
+    |> Enum.flat_map(fn {{keys, _class}, answer} -> Enum.map(keys, &{&1, answer}) end)
+    |> Map.new()
+  end
+
+  # What every row of the statement reads its verdicts by: the clauses answering the same for every
+  # user, the others, and those others' defaults - nil when one has none.
+  defp verdict_layout([]), do: nil
+
+  defp verdict_layout(verdict_clauses) do
+    {independent, dependent} =
+      Enum.split_with(verdict_clauses, &match?({_keys, :independent}, &1))
+
+    defaults =
+      if Enum.all?(dependent, &match?({_keys, {:listed, _anchor, _default}}, &1)) do
+        Enum.map(dependent, fn {_keys, {:listed, _anchor, default}} -> default end)
+      end
+
+    %{defaults: defaults, dependent: dependent, independent: independent}
+  end
+
+  defp verdicts(nil, [], anonymous?) do
+    %{anonymous: if(anonymous?, do: %{}), others: %{}, users: %{}}
+  end
+
+  # A clause answering the same for every user is answered once, and every reader's answers
+  # start from it. A reader the statement didn't test answers each other clause's default.
+  defp verdicts(layout, verdict_columns, anonymous?) do
+    [everyone_answers, anonymous_answers, tested_user_ids, user_answers] = verdict_columns
+
+    shared = verdict_answers(layout.independent, everyone_answers)
+    reader_answers = &Map.merge(shared, verdict_answers(layout.dependent, &1))
+
+    users =
+      tested_user_ids
+      |> Enum.zip(user_answers)
+      |> Map.new(fn {user_id, answers} ->
+        {Codec.decode(user_id, :uuid), reader_answers.(answers)}
+      end)
+
+    %{
+      anonymous: if(anonymous?, do: reader_answers.(anonymous_answers)),
+      others: if(layout.defaults, do: reader_answers.(layout.defaults)),
+      users: users
+    }
   end
 end

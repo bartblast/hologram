@@ -21,6 +21,7 @@ defmodule Hologram.Entity.ModelTest do
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module32
+  alias Hologram.Test.Fixtures.Entity.Module52
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
@@ -32,7 +33,7 @@ defmodule Hologram.Entity.ModelTest do
   defp task_model(entry_overrides) do
     entry =
       Map.merge(
-        %{attributes: [], relationships: [], roles: []},
+        %{attributes: [], relationships: [], roles: [], uniques: []},
         entry_overrides
       )
 
@@ -608,6 +609,79 @@ defmodule Hologram.Entity.ModelTest do
       assert fold(model, ops) == task_model(%{attributes: [{:title, :string, []}]})
     end
 
+    test "adds keys to their entity type, sorted, each in its given order" do
+      model =
+        task_model(%{
+          attributes: [{:kind, :string, []}, {:slug, :string, []}],
+          relationships: [{:owner, MyApp.User, []}]
+        })
+
+      ops = [
+        %{op: :add_unique, entity: MyApp.Task, fields: [:slug, :owner], line: 3},
+        %{op: :add_unique, entity: MyApp.Task, fields: [:kind, :slug], line: 4}
+      ]
+
+      assert fold(model, ops).entities[MyApp.Task].uniques == [[:kind, :slug], [:slug, :owner]]
+    end
+
+    test "deletes a key" do
+      model =
+        task_model(%{
+          attributes: [{:kind, :string, []}, {:slug, :string, []}, {:title, :string, []}],
+          uniques: [[:kind, :slug], [:slug, :title]]
+        })
+
+      ops = [%{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :slug], line: 3}]
+
+      assert fold(model, ops).entities[MyApp.Task].uniques == [[:slug, :title]]
+    end
+
+    test "a key follows the rename of an attribute and of a to-one relationship it names" do
+      model =
+        task_model(%{
+          attributes: [{:kind, :string, []}, {:slug, :string, []}],
+          relationships: [{:owner, MyApp.User, []}],
+          uniques: [[:kind, :slug], [:slug, :owner]]
+        })
+
+      ops = [
+        %{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 3},
+        %{op: :rename_relationship, entity: MyApp.Task, from: :owner, to: :author, line: 4}
+      ]
+
+      assert fold(model, ops).entities[MyApp.Task].uniques == [
+               [:handle, :author],
+               [:kind, :handle]
+             ]
+    end
+
+    test "a key stays with its entity type through a rename of the type" do
+      model =
+        task_model(%{
+          attributes: [{:kind, :string, []}, {:slug, :string, []}],
+          uniques: [[:kind, :slug]]
+        })
+
+      ops = [%{op: :rename_entity, from: MyApp.Task, to: MyApp.Chore, line: 3}]
+
+      assert fold(model, ops).entities[MyApp.Chore].uniques == [[:kind, :slug]]
+    end
+
+    test "deletes a field once the key naming it is deleted" do
+      model =
+        task_model(%{
+          attributes: [{:kind, :string, []}, {:slug, :string, []}],
+          uniques: [[:kind, :slug]]
+        })
+
+      ops = [
+        %{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :slug], line: 3},
+        %{op: :delete_attribute, entity: MyApp.Task, name: :kind, line: 4}
+      ]
+
+      assert fold(model, ops) == task_model(%{attributes: [{:slug, :string, []}]})
+    end
+
     test "applies the ops in order" do
       ops = [
         %{op: :create_entity, entity: MyApp.Draft, line: 3},
@@ -617,8 +691,8 @@ defmodule Hologram.Entity.ModelTest do
 
       assert fold(empty(), ops) == %{
                entities: %{
-                 MyApp.Draft => %{attributes: [], relationships: [], roles: []},
-                 MyApp.Sketch => %{attributes: [], relationships: [], roles: []}
+                 MyApp.Draft => %{attributes: [], relationships: [], roles: [], uniques: []},
+                 MyApp.Sketch => %{attributes: [], relationships: [], roles: [], uniques: []}
                },
                roles: %{},
                user_entity: nil
@@ -670,7 +744,9 @@ defmodule Hologram.Entity.ModelTest do
       ops = [%{op: :create_entity, entity: MyApp.Task, line: 3}]
 
       assert fold(empty(), ops) == %{
-               entities: %{MyApp.Task => %{attributes: [], relationships: [], roles: []}},
+               entities: %{
+                 MyApp.Task => %{attributes: [], relationships: [], roles: [], uniques: []}
+               },
                roles: %{},
                user_entity: nil
              }
@@ -688,7 +764,9 @@ defmodule Hologram.Entity.ModelTest do
       ops = [%{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch, line: 4}]
 
       assert fold(model, ops) == %{
-               entities: %{MyApp.Sketch => %{attributes: [], relationships: [], roles: []}},
+               entities: %{
+                 MyApp.Sketch => %{attributes: [], relationships: [], roles: [], uniques: []}
+               },
                roles: %{},
                user_entity: nil
              }
@@ -852,7 +930,7 @@ defmodule Hologram.Entity.ModelTest do
     test "points the relationships targeting a renamed entity type at its new name" do
       model = %{
         entities: %{
-          MyApp.Draft => %{attributes: [], relationships: [], roles: []},
+          MyApp.Draft => %{attributes: [], relationships: [], roles: [], uniques: []},
           MyApp.Task => %{
             attributes: [],
             relationships: [
@@ -860,7 +938,8 @@ defmodule Hologram.Entity.ModelTest do
               {:drafts, [MyApp.Draft], []},
               {:other, MyApp.Other, []}
             ],
-            roles: []
+            roles: [],
+            uniques: []
           }
         },
         roles: %{},
@@ -871,7 +950,7 @@ defmodule Hologram.Entity.ModelTest do
 
       assert fold(model, ops) == %{
                entities: %{
-                 MyApp.Sketch => %{attributes: [], relationships: [], roles: []},
+                 MyApp.Sketch => %{attributes: [], relationships: [], roles: [], uniques: []},
                  MyApp.Task => %{
                    attributes: [],
                    relationships: [
@@ -879,7 +958,8 @@ defmodule Hologram.Entity.ModelTest do
                      {:drafts, [MyApp.Sketch], []},
                      {:other, MyApp.Other, []}
                    ],
-                   roles: []
+                   roles: [],
+                   uniques: []
                  }
                },
                roles: %{},
@@ -964,6 +1044,336 @@ defmodule Hologram.Entity.ModelTest do
         "unique relationship :owner on MyApp.Task is to-many at this point in migration history - unique applies to a to-one relationship, and a to-many holds no reference to repeat"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when adding a key that is not a list of 2 to 32 distinct field names" do
+      model = task_model(%{attributes: [{:kind, :string, []}, {:slug, :string, []}]})
+
+      too_many =
+        ~w(f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 f28 f29 f30 f31 f32 f33)a
+
+      Enum.each(
+        [[:slug], [:slug, :slug], :slug, [:kind, "slug"], [:kind | :slug], too_many],
+        fn fields ->
+          ops = [%{op: :add_unique, entity: MyApp.Task, fields: fields, line: 3}]
+
+          expected_msg =
+            "invalid key #{inspect(fields)} on MyApp.Task - a key is a list of 2 to 32 distinct field names"
+
+          assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+        end
+      )
+    end
+
+    test "adds a key of 32 fields" do
+      names =
+        ~w(f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 f28 f29 f30 f31 f32)a
+
+      model = task_model(%{attributes: Enum.map(names, &{&1, :integer, []})})
+
+      ops = [%{op: :add_unique, entity: MyApp.Task, fields: names, line: 3}]
+
+      assert fold(model, ops).entities[MyApp.Task].uniques == [names]
+    end
+
+    test "raises when adding a key naming a field its entity type does not hold" do
+      model = task_model(%{attributes: [{:slug, :string, []}]})
+
+      ops = [%{op: :add_unique, entity: MyApp.Task, fields: [:kind, :slug], line: 3}]
+
+      expected_msg =
+        "key [:kind, :slug] on MyApp.Task names :kind, which is not an attribute or a to-one relationship of it at this point in migration history"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when adding a key naming a to-many relationship" do
+      model =
+        task_model(%{
+          attributes: [{:slug, :string, []}],
+          relationships: [{:tags, [MyApp.Tag], []}]
+        })
+
+      ops = [%{op: :add_unique, entity: MyApp.Task, fields: [:slug, :tags], line: 3}]
+
+      expected_msg =
+        "key [:slug, :tags] on MyApp.Task names :tags, a to-many relationship at this point in migration history - a to-many holds no reference a row could repeat"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when adding a key over the fields of an existing one, in any order" do
+      model =
+        task_model(%{
+          attributes: [{:kind, :string, []}, {:slug, :string, []}],
+          uniques: [[:kind, :slug]]
+        })
+
+      Enum.each([[:kind, :slug], [:slug, :kind]], fn fields ->
+        ops = [%{op: :add_unique, entity: MyApp.Task, fields: fields, line: 3}]
+
+        expected_msg =
+          "key [:kind, :slug] already exists on MyApp.Task at this point in migration history"
+
+        assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+      end)
+    end
+
+    test "raises when adding a key to an entity type that does not exist" do
+      ops = [%{op: :add_unique, entity: MyApp.Task, fields: [:kind, :slug], line: 3}]
+
+      expected_msg = "no such entity MyApp.Task at this point in migration history"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(empty(), ops) end
+    end
+
+    test "raises when deleting a key that does not exist, naming the keys that do" do
+      model =
+        task_model(%{
+          attributes: [{:kind, :string, []}, {:slug, :string, []}, {:title, :string, []}],
+          uniques: [[:kind, :slug], [:kind, :title]]
+        })
+
+      Enum.each([[:slug, :title], [:slug | :title], :slug], fn fields ->
+        ops = [%{op: :delete_unique, entity: MyApp.Task, fields: fields, line: 3}]
+
+        expected_msg =
+          "no such key #{inspect(fields)} on MyApp.Task at this point in migration history - its keys are: [:kind, :slug], [:kind, :title]"
+
+        assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+      end)
+    end
+
+    test "raises when deleting a key from an entity type that has none" do
+      model = task_model(%{attributes: [{:kind, :string, []}, {:slug, :string, []}]})
+
+      ops = [%{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :slug], line: 3}]
+
+      expected_msg = "no such key [:kind, :slug] on MyApp.Task at this point in migration history"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when deleting a key spelled in another order, naming its spelling" do
+      model =
+        task_model(%{
+          attributes: [{:kind, :string, []}, {:slug, :string, []}],
+          uniques: [[:kind, :slug]]
+        })
+
+      ops = [%{op: :delete_unique, entity: MyApp.Task, fields: [:slug, :kind], line: 3}]
+
+      expected_msg =
+        "no such key [:slug, :kind] on MyApp.Task at this point in migration history - the key over these fields is [:kind, :slug]"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when a member is added under the name of another kind's member a key names" do
+      model =
+        task_model(%{
+          attributes: [{:kind, :string, []}, {:slug, :string, []}],
+          relationships: [{:owner, MyApp.User, []}],
+          uniques: [[:kind, :slug], [:owner, :slug]]
+        })
+
+      attribute_op = %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :owner,
+        type: :string,
+        opts: [optional: true],
+        line: 3
+      }
+
+      relationship_op = %{
+        op: :add_relationship,
+        entity: MyApp.Task,
+        name: :kind,
+        type: MyApp.User,
+        opts: [],
+        line: 3
+      }
+
+      assert_error Hologram.CompileError,
+                   "attribute :owner on MyApp.Task would share its name with a field of key [:owner, :slug] at this point in migration history - delete the key first with `delete_unique [:owner, :slug]`",
+                   fn -> fold(model, [attribute_op]) end
+
+      assert_error Hologram.CompileError,
+                   "relationship :kind on MyApp.Task would share its name with a field of key [:kind, :slug] at this point in migration history - delete the key first with `delete_unique [:kind, :slug]`",
+                   fn -> fold(model, [relationship_op]) end
+    end
+
+    test "raises when a member is renamed to the name of another kind's member a key names" do
+      model =
+        task_model(%{
+          attributes: [{:kind, :string, []}, {:slug, :string, []}],
+          relationships: [{:author, MyApp.User, []}, {:owner, MyApp.User, []}],
+          uniques: [[:kind, :slug], [:owner, :slug]]
+        })
+
+      attribute_op = %{
+        op: :rename_attribute,
+        entity: MyApp.Task,
+        from: :kind,
+        to: :owner,
+        line: 3
+      }
+
+      relationship_op = %{
+        op: :rename_relationship,
+        entity: MyApp.Task,
+        from: :author,
+        to: :kind,
+        line: 3
+      }
+
+      assert_error Hologram.CompileError,
+                   "attribute :owner on MyApp.Task would share its name with a field of key [:owner, :slug] at this point in migration history - delete the key first with `delete_unique [:owner, :slug]`",
+                   fn -> fold(model, [attribute_op]) end
+
+      assert_error Hologram.CompileError,
+                   "relationship :kind on MyApp.Task would share its name with a field of key [:kind, :slug] at this point in migration history - delete the key first with `delete_unique [:kind, :slug]`",
+                   fn -> fold(model, [relationship_op]) end
+    end
+
+    test "raises when a key's field is renamed to the name of another kind's member" do
+      model =
+        task_model(%{
+          attributes: [{:kind, :string, []}, {:slug, :string, []}],
+          relationships: [{:owner, MyApp.User, []}, {:team, MyApp.Group, []}],
+          uniques: [[:kind, :slug], [:team, :slug]]
+        })
+
+      attribute_op = %{
+        op: :rename_attribute,
+        entity: MyApp.Task,
+        from: :kind,
+        to: :owner,
+        line: 3
+      }
+
+      relationship_op = %{
+        op: :rename_relationship,
+        entity: MyApp.Task,
+        from: :team,
+        to: :kind,
+        line: 3
+      }
+
+      assert_error Hologram.CompileError,
+                   "attribute :kind on MyApp.Task is named by key [:kind, :slug], and the name :owner is taken by another member at this point in migration history - delete the key first with `delete_unique [:kind, :slug]`",
+                   fn -> fold(model, [attribute_op]) end
+
+      free_model = put_in(model, [:entities, MyApp.Task, :uniques], [[:team, :slug]])
+
+      assert_error Hologram.CompileError,
+                   "relationship :team on MyApp.Task is named by key [:team, :slug], and the name :kind is taken by another member at this point in migration history - delete the key first with `delete_unique [:team, :slug]`",
+                   fn -> fold(free_model, [relationship_op]) end
+    end
+
+    test "renames a member no key names to the name of another kind's member no key names" do
+      model =
+        task_model(%{
+          attributes: [{:kind, :string, []}, {:size, :string, []}, {:slug, :string, []}],
+          relationships: [{:owner, MyApp.User, []}],
+          uniques: [[:size, :slug]]
+        })
+
+      ops = [%{op: :rename_attribute, entity: MyApp.Task, from: :kind, to: :owner, line: 3}]
+
+      assert fold(model, ops).entities[MyApp.Task].uniques == [[:size, :slug]]
+    end
+
+    test "raises when adding a key naming a name an attribute and a relationship share" do
+      model =
+        task_model(%{
+          attributes: [{:owner, :string, []}, {:slug, :string, []}],
+          relationships: [{:owner, MyApp.User, []}]
+        })
+
+      ops = [%{op: :add_unique, entity: MyApp.Task, fields: [:owner, :slug], line: 3}]
+
+      expected_msg =
+        "key [:owner, :slug] on MyApp.Task names :owner, which is both an attribute and a relationship at this point in migration history - a key names one field"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when deleting an attribute a key names" do
+      model =
+        task_model(%{
+          attributes: [{:kind, :string, []}, {:slug, :string, []}],
+          uniques: [[:kind, :slug]]
+        })
+
+      ops = [%{op: :delete_attribute, entity: MyApp.Task, name: :slug, line: 3}]
+
+      expected_msg =
+        "attribute :slug on MyApp.Task is named by key [:kind, :slug] at this point in migration history - delete the key first with `delete_unique [:kind, :slug]`"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when deleting a relationship a key names" do
+      model =
+        task_model(%{
+          attributes: [{:slug, :string, []}],
+          relationships: [{:owner, MyApp.User, []}],
+          uniques: [[:owner, :slug]]
+        })
+
+      ops = [%{op: :delete_relationship, entity: MyApp.Task, name: :owner, line: 3}]
+
+      expected_msg =
+        "relationship :owner on MyApp.Task is named by key [:owner, :slug] at this point in migration history - delete the key first with `delete_unique [:owner, :slug]`"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when a to-one relationship a key names becomes to-many" do
+      model =
+        task_model(%{
+          attributes: [{:slug, :string, []}],
+          relationships: [{:owner, MyApp.User, []}],
+          uniques: [[:owner, :slug]]
+        })
+
+      ops = [
+        %{
+          op: :change_relationship,
+          entity: MyApp.Task,
+          name: :owner,
+          changes: [type: [MyApp.User]],
+          line: 3
+        }
+      ]
+
+      expected_msg =
+        "relationship :owner on MyApp.Task becomes to-many, and key [:owner, :slug] names it at this point in migration history - a to-many holds no reference a row could repeat - delete the key first with `delete_unique [:owner, :slug]`"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "changes a to-one relationship a key names while it stays to-one" do
+      model =
+        task_model(%{
+          attributes: [{:slug, :string, []}],
+          relationships: [{:owner, MyApp.User, []}],
+          uniques: [[:owner, :slug]]
+        })
+
+      ops = [
+        %{
+          op: :change_relationship,
+          entity: MyApp.Task,
+          name: :owner,
+          changes: [type: MyApp.Account],
+          line: 3
+        }
+      ]
+
+      assert fold(model, ops).entities[MyApp.Task].relationships == [{:owner, MyApp.Account, []}]
     end
 
     test "raises on an unresolved draft op" do
@@ -1687,7 +2097,9 @@ defmodule Hologram.Entity.ModelTest do
 
     test "derives an entry for an entity type without declarations" do
       assert from_modules([Module1]) == %{
-               entities: %{Module1 => %{attributes: [], relationships: [], roles: []}},
+               entities: %{
+                 Module1 => %{attributes: [], relationships: [], roles: [], uniques: []}
+               },
                roles: %{},
                user_entity: nil
              }
@@ -1697,8 +2109,16 @@ defmodule Hologram.Entity.ModelTest do
       assert from_modules([Module32]).entities[Module32] == %{
                attributes: [{:name, :string, []}],
                relationships: [],
-               roles: []
+               roles: [],
+               uniques: []
              }
+    end
+
+    test "records the keys declared with unique, sorted, each in its declared order" do
+      assert from_modules([Module52]).entities[Module52].uniques == [
+               [:position, :workspace],
+               [:workspace, :slug]
+             ]
     end
 
     test "derives attributes sorted by name" do
@@ -1711,7 +2131,8 @@ defmodule Hologram.Entity.ModelTest do
                      {:c, :string, []}
                    ],
                    relationships: [],
-                   roles: []
+                   roles: [],
+                   uniques: []
                  }
                },
                roles: %{},
@@ -1729,7 +2150,8 @@ defmodule Hologram.Entity.ModelTest do
                      {:title, :string, []}
                    ],
                    relationships: [{:parent, Module1, [optional: true]}],
-                   roles: [{:editor, []}, {:owner, [extends: [:editor], granted_to: :creator]}]
+                   roles: [{:editor, []}, {:owner, [extends: [:editor], granted_to: :creator]}],
+                   uniques: []
                  }
                },
                roles: %{},
@@ -1758,7 +2180,8 @@ defmodule Hologram.Entity.ModelTest do
       assert model.entities[Module26] == %{
                attributes: [{:name, :string, []}],
                relationships: [],
-               roles: []
+               roles: [],
+               uniques: []
              }
 
       assert model.entities[Module29].relationships == []
@@ -1807,7 +2230,8 @@ defmodule Hologram.Entity.ModelTest do
                  InlineExtendsListFixture => %{
                    attributes: [],
                    relationships: [],
-                   roles: [{:editor, []}, {:owner, [extends: [:editor, :viewer]]}, {:viewer, []}]
+                   roles: [{:editor, []}, {:owner, [extends: [:editor, :viewer]]}, {:viewer, []}],
+                   uniques: []
                  }
                },
                roles: %{},
@@ -1871,7 +2295,8 @@ defmodule Hologram.Entity.ModelTest do
                      {:c, :string, []}
                    ],
                    relationships: [],
-                   roles: []
+                   roles: [],
+                   uniques: []
                  }
                },
                roles: %{},
@@ -1891,7 +2316,8 @@ defmodule Hologram.Entity.ModelTest do
                  InlineRegexOptsFixture => %{
                    attributes: [{:email, :string, [format: {:regex, "@", [:caseless]}]}],
                    relationships: [],
-                   roles: []
+                   roles: [],
+                   uniques: []
                  }
                },
                roles: %{},
@@ -2166,7 +2592,16 @@ defmodule Hologram.Entity.ModelTest do
         |> task_model()
         |> hash()
 
-      assert model_hash == "b92542b48351dc50db3c1b9f2e0066e3"
+      assert model_hash == "df00ed75d925722e7a17f2d5bd17262f"
+    end
+
+    test "tells apart two terms differing only in their keys" do
+      attributes = [{:slug, :string, []}, {:title, :string, []}]
+
+      without_key = task_model(%{attributes: attributes})
+      with_key = task_model(%{attributes: attributes, uniques: [[:slug, :title]]})
+
+      assert hash(without_key) != hash(with_key)
     end
 
     test "terms describing the same model share a hash" do
@@ -2246,7 +2681,12 @@ defmodule Hologram.Entity.ModelTest do
       one_entity = task_model(%{attributes: [{:title, :string, []}]})
 
       two_entities =
-        put_in(one_entity, [:entities, Module1], %{attributes: [], relationships: [], roles: []})
+        put_in(one_entity, [:entities, Module1], %{
+          attributes: [],
+          relationships: [],
+          roles: [],
+          uniques: []
+        })
 
       refute hash(two_entities) == hash(one_entity)
     end

@@ -11,6 +11,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.DB.SetLock
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
+  alias Hologram.Entity.Validator
   alias Hologram.MisuseError
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -27,6 +28,8 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
+  alias Hologram.Test.Fixtures.Entity.Module53
+  alias Hologram.Test.Fixtures.Entity.Module54
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyModule17
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
@@ -71,6 +74,18 @@ defmodule Hologram.DB.EntityOperationsTest do
       |> create()
 
     channel
+  end
+
+  # Text PostgreSQL's compression finds nothing to shorten in, and the same on every run: hash
+  # digests of a counter, spelled in base64.
+  defp incompressible_string(byte_count) do
+    1..(div(byte_count, 44) + 1)
+    |> Enum.map_join(fn counter ->
+      :sha256
+      |> :crypto.hash(<<counter::32>>)
+      |> Base.encode64()
+    end)
+    |> binary_part(0, byte_count)
   end
 
   defp oplog_effects do
@@ -521,6 +536,71 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert create(entity) == {:error, %{slug: [max_bytes: 2692]}}
     end
 
+    # The strings of a key share one index entry, and the share is conservative: values that
+    # hold exactly their bound fit the entry whatever the key is made of. Incompressible on
+    # purpose - the engine compresses an entry, and a repetitive value would prove nothing.
+    test "stores the strings of a key that hold exactly their share of the index entry" do
+      {:ok, owner} = create(Module1.new())
+
+      two_strings = Module53.new(a: incompressible_string(1335), b: incompressible_string(1335))
+
+      string_enum_reference =
+        Module53.new(c: incompressible_string(2657), kind: :x, owner_id: owner.id)
+
+      three_strings =
+        Module53.new(
+          d: incompressible_string(886),
+          e: incompressible_string(886),
+          f: incompressible_string(886)
+        )
+
+      enum_string = Module53.new(kind: :y, slug: incompressible_string(2673))
+
+      assert {:ok, _entity} = create(two_strings)
+      assert {:ok, _entity} = create(string_enum_reference)
+      assert {:ok, _entity} = create(three_strings)
+      assert {:ok, _entity} = create(enum_string)
+    end
+
+    # A string ahead of an integer is padded out to the integer's alignment, up to 7 bytes on
+    # top of its 4-byte header, and four of them in one key overflow the entry when a string is
+    # charged less. The lengths are the bounds themselves, read from the validator, so a bound
+    # the index cannot carry fails here whatever number it is.
+    test "stores the strings of a long key that hold exactly their share of the index entry" do
+      max_bytes = Validator.unique_string_max_bytes(Module54)
+
+      four_padded_strings =
+        Module54.new(
+          n1: 1,
+          n2: 2,
+          n3: 3,
+          n4: 4,
+          s1: incompressible_string(max_bytes.s1),
+          s2: incompressible_string(max_bytes.s2),
+          s3: incompressible_string(max_bytes.s3),
+          s4: incompressible_string(max_bytes.s4),
+          u: Entity.generate_id()
+        )
+
+      two_padded_strings =
+        Module54.new(
+          n1: 5,
+          n2: 6,
+          n3: 7,
+          s5: incompressible_string(max_bytes.s5),
+          s6: incompressible_string(max_bytes.s6)
+        )
+
+      assert {:ok, _entity} = create(four_padded_strings)
+      assert {:ok, _entity} = create(two_padded_strings)
+    end
+
+    test "returns the byte-bound violation for a key's string over its share" do
+      entity = Module53.new(a: String.duplicate("a", 1336), b: "b")
+
+      assert create(entity) == {:error, %{a: [max_bytes: 1335]}}
+    end
+
     test "returns reference violations" do
       assert create(Module3.new()) == {:error, %{c_id: [:required]}}
 
@@ -593,6 +673,128 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert create(Module19.new(code: "both_code", slug: "both_slug")) ==
                {:error, %{code: [:unique], slug: [:unique]}}
+    end
+
+    test "returns the violation from the write itself on every field of a taken key" do
+      {:ok, _entity} = create(Module53.new(a: "key_a", b: "key_b"))
+
+      assert create(Module53.new(a: "key_a", b: "key_b")) ==
+               {:error, %{a: [unique: [:a, :b]], b: [unique: [:a, :b]]}}
+    end
+
+    test "names a key's to-one by its reference field" do
+      {:ok, owner} = create(Module1.new())
+      {:ok, _entity} = create(Module53.new(c: "key_c", kind: :x, owner_id: owner.id))
+
+      key = [:c, :kind, :owner_id]
+
+      assert create(Module53.new(c: "key_c", kind: :x, owner_id: owner.id)) ==
+               {:error, %{c: [unique: key], kind: [unique: key], owner_id: [unique: key]}}
+    end
+
+    test "stores rows sharing all but one field of a key" do
+      {:ok, _entity} = create(Module53.new(a: "shared_a", b: "one"))
+
+      assert {:ok, _entity} = create(Module53.new(a: "shared_a", b: "other"))
+    end
+
+    # Nil is the absence of a value, so a row holding it in a key repeats nothing.
+    test "admits any number of rows holding nil in a field of a key" do
+      {:ok, _entity} = create(Module53.new(a: "nil_key"))
+
+      assert {:ok, _entity} = create(Module53.new(a: "nil_key"))
+    end
+
+    # Whichever of the two indexes PostgreSQL refuses first, the other key is asked about after
+    # the fact - and b, which both keys hold, carries both reasons.
+    test "reports a second taken key the write did not reach" do
+      {:ok, _entity} = create(Module53.new(a: "two_a", b: "two_b", d: "two_d"))
+
+      assert create(Module53.new(a: "two_a", b: "two_b", d: "two_d")) ==
+               {:error,
+                %{
+                  a: [unique: [:a, :b]],
+                  b: [unique: [:a, :b], unique: [:b, :d]],
+                  d: [unique: [:b, :d]]
+                }}
+    end
+
+    test "reports a taken unique value and a taken key holding it together" do
+      {:ok, _entity} = create(Module53.new(kind: :y, slug: "both_taken"))
+
+      assert create(Module53.new(kind: :y, slug: "both_taken")) ==
+               {:error,
+                %{kind: [unique: [:kind, :slug]], slug: [:unique, {:unique, [:kind, :slug]}]}}
+    end
+
+    # No write is attempted for values the declarations refuse, so the key is asked about.
+    test "reports a taken key beside a value violation of another field" do
+      {:ok, _entity} = create(Module53.new(a: "beside_a", b: "beside_b"))
+
+      assert create(Module53.new(a: "beside_a", b: "beside_b", title: 123)) ==
+               {:error, %{a: [unique: [:a, :b]], b: [unique: [:a, :b]], title: [type: :string]}}
+    end
+
+    # Asked advisorily, since the bad title stops the write: every value of the key is bound by
+    # its own type - a boolean, a datetime, an enum and a reference.
+    test "reports a taken key over fields that are not strings" do
+      {:ok, owner} = create(Module1.new())
+
+      values = [
+        flag: true,
+        held_at: ~U[2026-03-01 10:00:00.000000Z],
+        kind: :x,
+        owner_id: owner.id
+      ]
+
+      key = [:flag, :held_at, :kind, :owner_id]
+
+      {:ok, _entity} = create(Module53.new(values))
+
+      assert create(Module53.new([title: 123] ++ values)) ==
+               {:error,
+                %{
+                  flag: [unique: key],
+                  held_at: [unique: key],
+                  kind: [unique: key],
+                  owner_id: [unique: key],
+                  title: [type: :string]
+                }}
+    end
+
+    # A reference naming no row is a value nothing can be compared against.
+    test "leaves a key alone when its to-one names no row" do
+      missing_id = Entity.generate_id()
+
+      assert create(Module53.new(c: "missing_owner", kind: :x, owner_id: missing_id, title: 123)) ==
+               {:error, %{owner_id: [:not_found], title: [type: :string]}}
+    end
+
+    # The grant store's own unique index derives from no declared key, so a duplicate under
+    # another id is not a caller's to hear about as a violation.
+    test "raises on a duplicate the grant store's unique index refuses" do
+      {:ok, user} =
+        %{email: "grant_duplicate@example.com"}
+        |> Module14.new()
+        |> create()
+
+      {:ok, _grant} = create(role_grant(user, :owner))
+
+      error =
+        try do
+          create(role_grant(user, :owner))
+        rescue
+          error in Postgrex.Error -> error
+        end
+
+      assert error.postgres.code == :unique_violation
+    end
+
+    # A value that broke its declaration cannot be compared with another row's.
+    test "leaves a key alone when one of its fields carries a value violation" do
+      {:ok, _entity} = create(Module53.new(a: "broken_a", b: "broken_b"))
+
+      assert create(Module53.new(a: "broken_a", b: 123)) == {:error, %{b: [type: :string]}}
     end
 
     test "returns the violation from the write itself when a unique reference's target is taken" do
@@ -1855,6 +2057,120 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert update(Module19, entity.id, %{code: entity.code, slug: 123}) ==
                {:error, %{slug: [type: :string]}}
+    end
+
+    # The key's fields the update leaves alone carry the reason too: the key is what is taken.
+    test "returns the violation from the write itself on every field of a taken key" do
+      {:ok, _first} = create(Module53.new(a: "update_a", b: "update_b"))
+      {:ok, second} = create(Module53.new(a: "update_a", b: "update_free"))
+
+      assert update(Module53, second.id, b: "update_b") ==
+               {:error, %{a: [unique: [:a, :b]], b: [unique: [:a, :b]]}}
+    end
+
+    test "updates a field of a key to a value that leaves the key free" do
+      {:ok, _first} = create(Module53.new(a: "free_a", b: "free_b"))
+      {:ok, second} = create(Module53.new(a: "free_a", b: "free_c"))
+
+      assert update(Module53, second.id, b: "free_d") == :ok
+    end
+
+    # The index excludes the row from its own comparison, and so does the advisory question.
+    test "updates a field of a key to its own current value" do
+      {:ok, entity} = create(Module53.new(a: "own_a", b: "own_b"))
+
+      assert update(Module53, entity.id, %{b: "own_b", title: "renamed"}) == :ok
+
+      assert update(Module53, entity.id, %{b: "own_b", title: 123}) ==
+               {:error, %{title: [type: :string]}}
+    end
+
+    # No write is attempted, so the key is asked about - with the changed value beside the one
+    # the stored row keeps.
+    test "reports a taken key beside a value violation of another field" do
+      {:ok, _first} = create(Module53.new(a: "stored_a", b: "stored_b"))
+      {:ok, second} = create(Module53.new(a: "stored_a", b: "stored_free"))
+
+      assert update(Module53, second.id, %{b: "stored_b", title: 123}) ==
+               {:error, %{a: [unique: [:a, :b]], b: [unique: [:a, :b]], title: [type: :string]}}
+    end
+
+    # Each of these stops at the bad title, so the key is asked about advisorily - and is free:
+    # a stored nil, a field set to nil and a row that is not there all repeat nothing.
+    test "admits a key whose stored field holds nil, asked beside a value violation" do
+      {:ok, _first} = create(Module53.new(b: "advisory_nil_b"))
+      {:ok, second} = create(Module53.new(b: "advisory_nil_free"))
+
+      assert update(Module53, second.id, %{b: "advisory_nil_b", title: 123}) ==
+               {:error, %{title: [type: :string]}}
+    end
+
+    test "admits a key one of whose fields is set to nil, asked beside a value violation" do
+      {:ok, _first} = create(Module53.new(a: "set_nil_a"))
+      {:ok, second} = create(Module53.new(a: "set_nil_a", b: "set_nil_b"))
+
+      assert update(Module53, second.id, %{b: nil, title: 123}) ==
+               {:error, %{title: [type: :string]}}
+    end
+
+    test "admits a key for a row that is not there, asked beside a value violation" do
+      {:ok, _first} = create(Module53.new(a: "no_row_a", b: "no_row_b"))
+
+      assert update(Module53, Entity.generate_id(), %{b: "no_row_b", title: 123}) ==
+               {:error, %{title: [type: :string]}}
+    end
+
+    # A moved field of a key is compared at the value the move leaves it with, not the one stored.
+    test "reports a key a counter's move would repeat, asked beside a value violation" do
+      {:ok, _first} = create(Module54.new(count: 3, name: "moved"))
+      {:ok, second} = create(Module54.new(count: 2, name: "moved"))
+
+      assert update(Module54, second.id, %{s1: 123}, deltas: %{count: 1}) ==
+               {:error,
+                %{
+                  count: [unique: [:name, :count]],
+                  name: [unique: [:name, :count]],
+                  s1: [type: :string]
+                }}
+    end
+
+    test "admits a key a counter's move leaves free, asked beside a value violation" do
+      {:ok, _first} = create(Module54.new(count: 2, name: "moved_free"))
+      {:ok, second} = create(Module54.new(count: 2, name: "other"))
+
+      assert update(Module54, second.id, %{name: "moved_free", s1: 123}, deltas: %{count: 1}) ==
+               {:error, %{s1: [type: :string]}}
+    end
+
+    # The moved value is added up where it cannot overflow, so a move past what the column holds
+    # is a key nothing repeats, not an error of the question's own.
+    test "admits a key a counter's move takes past what the column holds" do
+      {:ok, entity} = create(Module54.new(count: 9_223_372_036_854_775_807, name: "past"))
+
+      assert update(Module54, entity.id, %{s1: 123}, deltas: %{count: 1}) ==
+               {:error, %{s1: [type: :string]}}
+    end
+
+    test "returns the violation from the write itself for a key a counter's move repeats" do
+      {:ok, _first} = create(Module54.new(count: 3, name: "moved_write"))
+      {:ok, second} = create(Module54.new(count: 2, name: "moved_write"))
+
+      assert update(Module54, second.id, %{}, deltas: %{count: 1}) ==
+               {:error, %{count: [unique: [:name, :count]], name: [unique: [:name, :count]]}}
+    end
+
+    test "asks about no key the changes leave alone" do
+      {:ok, _first} = create(Module53.new(a: "alone_a", b: "alone_b"))
+      {:ok, second} = create(Module53.new(a: "alone_a", b: "alone_free"))
+
+      assert update(Module53, second.id, %{title: 123}) == {:error, %{title: [type: :string]}}
+    end
+
+    test "admits a key whose stored field holds nil" do
+      {:ok, _first} = create(Module53.new(b: "nil_stored_b"))
+      {:ok, second} = create(Module53.new(b: "nil_stored_free"))
+
+      assert update(Module53, second.id, b: "nil_stored_b") == :ok
     end
 
     test "returns the violation from the write itself when a unique reference's new target is taken" do
