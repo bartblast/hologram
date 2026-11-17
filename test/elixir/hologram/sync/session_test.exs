@@ -31,6 +31,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Sync.Fill
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Live
+  alias Hologram.Sync.PackedIds
   alias Hologram.Sync.PageWindows
   alias Hologram.Sync.ResultStore
   alias Hologram.Sync.Session
@@ -3176,7 +3177,7 @@ defmodule Hologram.Sync.SessionTest do
         readable: %{},
         synced_types: [PolicyModule1],
         tx_range: {Oplog.current_xmax() + 1, Oplog.current_xmax() + 1},
-        verdict_ids: %{},
+        verdicts: %{},
         whole_types: [PolicyModule1],
         written: %{}
       }
@@ -3598,6 +3599,38 @@ defmodule Hologram.Sync.SessionTest do
       route([live_effect(:patch_entity, PolicyLabel, loose.id, %{"name" => "still loose"})])
 
       refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
+    # The part says the project can't be archived while the database says it can, so what goes out
+    # is the part's - read in the batch's recheck - and nothing the session worked out.
+    test "sends a held row the verdicts its part carries", %{project: project} do
+      windows(%{})
+
+      session = start_session!([])
+      await_fill()
+
+      send(session, {:live, verdicts_part(project, project_verdicts(false))})
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert deltas == [verdicts_patch(project, false)]
+    end
+
+    test "hands a row over with the verdicts its part carries" do
+      windows(%{})
+
+      session = start_session!([])
+      await_fill()
+
+      arrived =
+        %{public: true}
+        |> PolicyProject.new()
+        |> DB.create!()
+
+      send(session, {:live, verdicts_part(arrived, project_verdicts(false))})
+
+      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert id == arrived.id
+      assert data[:"$verdicts"] == project_verdicts(false)
     end
   end
 
@@ -4091,6 +4124,27 @@ defmodule Hologram.Sync.SessionTest do
       |> DB.create!()
 
     %{locked: verdict_label("locked"), project: project}
+  end
+
+  # A batch's part for the given project alone, carrying the given verdicts for it, read past the
+  # session's edge.
+  defp verdicts_part(project, verdicts) do
+    place = {Oplog.current_xmax() + 1, 0}
+    row = DB.read(PolicyProject, project.id)
+
+    %{
+      checked: %{PolicyProject => PackedIds.pack([project.id])},
+      own_seqs: %{},
+      pair_effects: %{},
+      pairs: %{},
+      place: place,
+      readable: %{PolicyProject => %{project.id => row}},
+      synced_types: [PolicyModule1, PolicyProject],
+      tx_range: {elem(place, 0), elem(place, 0)},
+      verdicts: %{PolicyProject => %{project.id => verdicts}},
+      whole_types: [],
+      written: %{}
+    }
   end
 
   defp verdicts_patch(project, archivable?) do

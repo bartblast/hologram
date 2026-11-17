@@ -117,6 +117,28 @@ defmodule Hologram.Sync.VerdictsTest do
     end
   end
 
+  describe "moved/2" do
+    test "returns the verdicts that differ from what was told, in the order given" do
+      first = task()
+      last = task()
+      told = %{first.id => %{delete_key() => true}, last.id => %{delete_key() => true}}
+
+      row_verdicts = [
+        {last, %{delete_key() => false}},
+        {first, %{delete_key() => true}}
+      ]
+
+      assert moved(row_verdicts, told) == [{last, %{delete_key() => false}}]
+    end
+
+    test "takes a row nothing was told of as told no verdicts" do
+      row = task()
+
+      assert moved([{row, %{}}], %{}) == []
+      assert moved([{row, %{delete_key() => true}}], %{}) == [{row, %{delete_key() => true}}]
+    end
+  end
+
   describe "stale/3" do
     test "returns a row whose verdicts differ from what was told" do
       row = task()

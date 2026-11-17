@@ -72,10 +72,7 @@ defmodule Hologram.Sync.PotTest do
       pairs: pack_pairs(Keyword.get(opts, :pairs, %{})),
       readable: readable,
       synced_types: Keyword.get(opts, :synced_types, @synced),
-      verdict_ids:
-        opts
-        |> Keyword.get(:verdict_ids, %{})
-        |> Map.new(fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end),
+      verdicts: Keyword.get(opts, :verdicts, %{}),
       written: Keyword.get(opts, :written, %{})
     }
   end
@@ -622,7 +619,7 @@ defmodule Hologram.Sync.PotTest do
   end
 
   describe "verdict_rows/2" do
-    test "returns the held rows the user may still read among those whose verdicts may move" do
+    test "returns the held rows the part carries verdicts of, each with them" do
       held_project = %Project{id: @id_1, public: true}
       new_project = %Project{id: @id_2, public: true}
 
@@ -630,10 +627,12 @@ defmodule Hologram.Sync.PotTest do
         part(
           readable: [held_project, new_project],
           unreadable: %{Project => [@id_3]},
-          verdict_ids: %{Project => [@id_1, @id_2, @id_3]}
+          verdicts: %{Project => %{@id_1 => %{"archive" => true}, @id_2 => %{"archive" => false}}}
         )
 
-      assert verdict_rows(pot(%{Project => [@id_1, @id_3]}), part) == [held_project]
+      assert verdict_rows(pot(%{Project => [@id_1, @id_3]}), part) == [
+               {held_project, %{"archive" => true}}
+             ]
     end
   end
 end

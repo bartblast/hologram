@@ -17,6 +17,7 @@ defmodule Hologram.Sync.LiveTest do
   alias Hologram.Query.Stage
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
+  alias Hologram.Sync.Frame
   alias Hologram.Sync.PackedIds
   alias Hologram.Sync.ResultStore
   alias Hologram.Sync.Sessions
@@ -28,6 +29,8 @@ defmodule Hologram.Sync.LiveTest do
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
   alias Hologram.Test.Fixtures.Policy.Module20, as: PolicyModule20
   alias Hologram.Test.Fixtures.Policy.Module21, as: PolicyModule21
+  alias Hologram.Test.Fixtures.Policy.Readers.Module15, as: ReadersModule15
+  alias Hologram.Test.Fixtures.Policy.Readers.Module16, as: ReadersModule16
 
   use_module_stub :query_cache
 
@@ -89,6 +92,11 @@ defmodule Hologram.Sync.LiveTest do
 
   defp unpacked_pairs(packed_by_key) do
     Map.new(packed_by_key, fn {key, packed} -> {key, PackedIds.unpack_pairs(packed)} end)
+  end
+
+  # What a session would work out for the given user on the row as it stands now.
+  defp worked_out_verdicts(user_id, row) do
+    Frame.row_verdicts(user_id, DB.read(row.__struct__, row.id))
   end
 
   defp ids(rows) do
@@ -364,12 +372,14 @@ defmodule Hologram.Sync.LiveTest do
 
     # Module17's archive rule reads none(label <- labels, label.name == "locked"), which a browser
     # can't decide, so a renamed label moves the verdicts of the projects holding it.
-    test "names the rows whose verdicts the batch may have moved", context do
+    test "gives the verdicts of the rows the batch may have moved them of, as they stand now",
+         context do
       project = create!(PolicyModule17, public: true)
       other_project = create!(PolicyModule17, public: true)
       label = create!(PolicyModule19)
 
       link!(project, :labels, label)
+      DB.update!(PolicyModule19, label.id, name: "locked")
 
       effects = [
         effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"}),
@@ -379,8 +389,67 @@ defmodule Hologram.Sync.LiveTest do
       parts = parts(effects, context.sessions, context.edges, @synced, @place)
       part = Map.fetch!(parts, nil)
 
-      assert unpacked(part.verdict_ids) == %{PolicyModule17 => ids([project, other_project])}
-      assert unpacked(part.checked)[PolicyModule17] == ids([project, other_project])
+      assert part.verdicts == %{
+               PolicyModule17 => %{
+                 project.id => worked_out_verdicts(nil, project),
+                 other_project.id => worked_out_verdicts(nil, other_project)
+               }
+             }
+
+      refute part.verdicts[PolicyModule17][project.id] ==
+               part.verdicts[PolicyModule17][other_project.id]
+    end
+
+    # The board's verdicts depend on who asks: Alice wrote a card on it, so she can't archive it,
+    # while Bob, whom no card names, answers what a reader no clause anchors on does.
+    test "gives each reader the verdicts that reader has", context do
+      synced = [ReadersModule15, ReadersModule16]
+      board = create!(ReadersModule15)
+      create!(ReadersModule16, author_id: context.alice, board_id: board.id)
+
+      effects = [effect(:patch_entity, ReadersModule15, board.id, %{"name" => "renamed"})]
+      parts = parts(effects, context.sessions, Edges.derive(synced), synced, @place)
+
+      for user_id <- [context.alice, context.bob, nil] do
+        assert parts[user_id].verdicts[ReadersModule15][board.id] ==
+                 worked_out_verdicts(user_id, board)
+      end
+
+      refute parts[context.alice].verdicts[ReadersModule15][board.id] ==
+               parts[context.bob].verdicts[ReadersModule15][board.id]
+    end
+
+    # A user id in any spelling but the one Hologram generates names no user entity, so it reads -
+    # and gets the verdicts of - an anonymous user, not those of a reader no card names.
+    test "gives a user id in another spelling the verdicts of an anonymous user", context do
+      synced = [ReadersModule15, ReadersModule16]
+      board = create!(ReadersModule15)
+      create!(ReadersModule16, author_id: context.alice, board_id: board.id)
+
+      shouted = String.upcase(context.alice)
+      effects = [effect(:patch_entity, ReadersModule15, board.id, %{"name" => "renamed"})]
+
+      parts =
+        parts(effects, [{self(), shouted}, {self(), 42}], Edges.derive(synced), synced, @place)
+
+      anonymous = worked_out_verdicts(nil, board)
+
+      assert parts[shouted].verdicts[ReadersModule15][board.id] == anonymous
+      assert parts[42].verdicts[ReadersModule15][board.id] == anonymous
+      refute worked_out_verdicts(context.bob, board) == anonymous
+    end
+
+    test "gives verdicts of the rows its user may read alone", context do
+      project = create!(PolicyModule17, public: false)
+      effects = [effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"})]
+
+      create!(PolicyModule18, project_id: project.id, seat: "full", user_id: context.alice)
+
+      parts = parts(effects, context.sessions, context.edges, @synced, @place)
+
+      assert Map.keys(parts[context.alice].verdicts[PolicyModule17]) == [project.id]
+      assert parts[context.bob].verdicts[PolicyModule17] == %{}
+      assert parts[nil].verdicts[PolicyModule17] == %{}
     end
 
     test "names the types a grant moved every row of, for its holder alone", context do
@@ -420,7 +489,7 @@ defmodule Hologram.Sync.LiveTest do
       assert parts[context.alice].whole_types == []
     end
 
-    test "names a pair's ends among the rows whose verdicts the batch may have moved", context do
+    test "gives the verdicts of a pair's ends", context do
       project = create!(PolicyModule17, public: true)
       label = create!(PolicyModule19)
 
@@ -429,7 +498,9 @@ defmodule Hologram.Sync.LiveTest do
       parts = parts(effects, context.sessions, context.edges, @synced, @place)
       part = Map.fetch!(parts, nil)
 
-      assert unpacked(part.verdict_ids) == %{PolicyModule17 => ids([project])}
+      assert part.verdicts == %{
+               PolicyModule17 => %{project.id => worked_out_verdicts(nil, project)}
+             }
     end
 
     test "leaves out of the verdicts a type sync doesn't send", context do
@@ -439,7 +510,7 @@ defmodule Hologram.Sync.LiveTest do
       parts = parts(effects, context.sessions, context.edges, [PolicyModule18], @place)
       part = Map.fetch!(parts, nil)
 
-      assert part.verdict_ids == %{}
+      assert part.verdicts == %{}
     end
 
     test "passes over an effect whose type names a module that is no entity", context do
@@ -450,7 +521,7 @@ defmodule Hologram.Sync.LiveTest do
 
       assert part.checked == %{}
       assert part.pair_effects == %{}
-      assert part.verdict_ids == %{}
+      assert part.verdicts == %{}
     end
 
     test "names what a patch or a put wrote, and nothing for a delete", context do
@@ -509,6 +580,13 @@ defmodule Hologram.Sync.LiveTest do
       part = Map.fetch!(parts, nil)
 
       assert readable_ids(part, PolicyModule17) == ids(projects)
+
+      verdict_ids =
+        part.verdicts[PolicyModule17]
+        |> Map.keys()
+        |> MapSet.new()
+
+      assert verdict_ids == ids(projects)
       assert MapSet.size(unpacked(part.checked)[PolicyModule17]) == 5_203
     end
 

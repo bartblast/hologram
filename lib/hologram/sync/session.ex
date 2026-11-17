@@ -1366,12 +1366,14 @@ defmodule Hologram.Sync.Session do
   end
 
   # Frames carrying the given news, the rows handed over split across them by the frame size and
-  # everything else riding the first (see `split_news/1`).
-  defp send_news(state, news) do
+  # everything else riding the first (see `split_news/1`). A row handed over carries the given
+  # verdicts for it, or has them worked out when none are given - a reread type's rows, read
+  # after the batch.
+  defp send_news(state, news, verdicts \\ %{}) do
     news
     |> split_news()
     |> Enum.reduce(state, fn frame_news, acc ->
-      frame_deltas = Frame.deltas(frame_news, acc.actor_user_id)
+      frame_deltas = Frame.deltas(frame_news, acc.actor_user_id, verdicts)
 
       send(acc.client, {:sync_deltas, cursor(acc), frame_deltas, acc.applied_seq})
 
@@ -1395,18 +1397,20 @@ defmodule Hologram.Sync.Session do
     {news, pot} = Pot.decide(placed.pot, part, trust_held?: trust_held?)
 
     # A row handed over whole travels with its verdicts, and none held is patched when held isn't
-    # trusted.
+    # trusted. The verdicts are the part's, read in the batch's recheck.
     stale =
       if trust_held? do
         placed.pot
         |> Pot.verdict_rows(part)
-        |> Verdicts.stale(placed.told_verdicts, placed.actor_user_id)
+        |> Verdicts.moved(placed.told_verdicts)
       else
         []
       end
 
     decided = %{placed | pot: pot}
-    told = send_news(decided, %{news | patched: Verdicts.patches(news.patched, stale)})
+
+    told =
+      send_news(decided, %{news | patched: Verdicts.patches(news.patched, stale)}, part.verdicts)
 
     Enum.reduce(part.whole_types, told, &reread_type(&1, &2, part.synced_types, trust_held?))
   end

@@ -225,20 +225,19 @@ defmodule Hologram.Sync.Pot do
   end
 
   @doc """
-  Returns the rows whose verdicts the given part of a batch may have moved that the client holds,
-  as the session knew it before the batch, and that its user may still read - the rows whose
-  verdicts are worth working out again. A row the batch hands over whole is not among them: it
-  travels with its verdicts.
+  Returns the rows the given part of a batch carries verdicts of that the client holds, as the
+  session knew it before the batch, each with those verdicts (`{row, verdicts}`) - the rows whose
+  verdicts may have moved without the row being handed over. A row the batch hands over whole is
+  not among them: it travels with its verdicts.
   """
-  @spec verdict_rows(t, map) :: list(struct)
+  @spec verdict_rows(t, map) :: list({struct, map})
   def verdict_rows(pot, part) do
-    Enum.flat_map(part.verdict_ids, fn {entity_type, packed_ids} ->
-      {held_packed, _not_held} = Held.split(pot.held, entity_type, packed_ids)
-      readable = Map.get(part.readable, entity_type, %{})
+    Enum.flat_map(part.verdicts, fn {entity_type, verdicts_by_id} ->
+      readable = Map.fetch!(part.readable, entity_type)
 
-      for id <- PackedIds.unpack(held_packed),
-          Map.has_key?(readable, id),
-          do: Map.fetch!(readable, id)
+      for {id, verdicts} <- verdicts_by_id,
+          Held.member?(pot.held, entity_type, id),
+          do: {Map.fetch!(readable, id), verdicts}
     end)
   end
 

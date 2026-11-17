@@ -8,14 +8,25 @@ defmodule Hologram.Sync.Verdicts do
   # holds (see Hologram.Auth.verdicts/2). Every row a client is put carries its verdicts, so a row
   # that arrives is current. A row the client already holds can have its verdicts move without the
   # row moving at all - a task deletable while its board has no cards stops being so the moment a
-  # card is added - so the session keeps what it last told, and the rows a batch may have moved the
-  # verdicts of (see `Hologram.Sync.Live.parts/5`) are worked out again, telling only what changed.
+  # card is added - so the session keeps what it last told, and tells only what changed: of the
+  # verdicts a batch's recheck read for the rows it may have moved them of (see
+  # `Hologram.Sync.Live.parts/5`), and of the ones worked out for a returning client's rows.
   #
   # The bookkeeping is kept here, apart from the session that holds it, so what is told when can be
   # judged without a running session.
 
   alias Hologram.Policy
   alias Hologram.Sync.Frame
+
+  @doc """
+  Returns the given rows' verdicts, `{row, verdicts}`, that differ from what was told, in the order
+  given - for verdicts already worked out, as a batch's recheck works them out (see
+  `Hologram.Sync.Live.parts/5`).
+  """
+  @spec moved(list({struct, map}), %{String.t() => map}) :: list({struct, map})
+  def moved(row_verdicts, told) do
+    Enum.reject(row_verdicts, fn {row, verdicts} -> verdicts == Map.get(told, row.id, %{}) end)
+  end
 
   @doc """
   Returns the given round's patches, `{row, changes}`, as a frame carries them -
@@ -70,15 +81,14 @@ defmodule Hologram.Sync.Verdicts do
   told, each with its verdicts now, in the order given. Only rows of a type with a deciding
   quantifier are worked out: the rest are sent with none.
 
-  Which rows to ask about is the caller's: the rows a batch may have moved the verdicts of (see
-  `Hologram.Sync.Live.parts/5`), or every row a returning client may hold verdicts of from before
-  this session.
+  For the rows a returning client may hold verdicts of from before this session - a batch's rows
+  come with theirs worked out (see `moved/2`).
   """
   @spec stale(list(struct), %{String.t() => map}, String.t() | nil) :: list({struct, map})
   def stale(rows, told, actor_user_id) do
     rows
     |> Enum.filter(&(Policy.deciding_quantifiers(&1.__struct__) != []))
     |> Enum.map(&{&1, Frame.row_verdicts(actor_user_id, &1)})
-    |> Enum.reject(fn {row, verdicts} -> verdicts == Map.get(told, row.id, %{}) end)
+    |> moved(told)
   end
 end

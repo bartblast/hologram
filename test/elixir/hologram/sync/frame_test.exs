@@ -64,7 +64,7 @@ defmodule Hologram.Sync.FrameTest do
     on_exit(fn -> :persistent_term.erase(QueryCacheStub.persistent_term_key()) end)
   end
 
-  describe "deltas/2" do
+  describe "deltas/3" do
     defp news(overrides) do
       Map.merge(%{appeared: [], edges: [], patched: [], unsynced: []}, overrides)
     end
@@ -105,6 +105,30 @@ defmodule Hologram.Sync.FrameTest do
 
       assert [%{data: %{"$verdicts": verdicts}, op: :put_entity}] =
                deltas(news(%{appeared: [row]}), Entity.generate_id())
+
+      assert verdicts == %{delete_key() => true}
+    end
+
+    test "sends a row that appeared with the verdicts given for it" do
+      check_permissions()
+
+      row = VerdictTask.new()
+      given = %{VerdictTask => %{row.id => %{delete_key() => false}}}
+
+      assert [%{data: %{"$verdicts": verdicts}, op: :put_entity}] =
+               deltas(news(%{appeared: [row]}), Entity.generate_id(), given)
+
+      assert verdicts == %{delete_key() => false}
+    end
+
+    test "works out the verdicts of a row that appeared with none given for it" do
+      check_permissions()
+
+      row = VerdictTask.new()
+      given = %{VerdictTask => %{Entity.generate_id() => %{delete_key() => false}}}
+
+      assert [%{data: %{"$verdicts": verdicts}, op: :put_entity}] =
+               deltas(news(%{appeared: [row]}), Entity.generate_id(), given)
 
       assert verdicts == %{delete_key() => true}
     end

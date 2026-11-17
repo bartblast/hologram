@@ -12,6 +12,7 @@ defmodule Hologram.Sync.Live do
   # What a session makes of its part - which rows its client is sent, changed or told to drop - is
   # the session's, since only it knows what its client holds.
 
+  alias Hologram.Auth
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -46,7 +47,7 @@ defmodule Hologram.Sync.Live do
           readable: %{module => %{String.t() => struct}},
           synced_types: list(module),
           tx_range: {non_neg_integer, non_neg_integer},
-          verdict_ids: %{module => binary},
+          verdicts: %{module => %{String.t() => %{String.t() => boolean}}},
           whole_types: list(module),
           written: %{String.t() => MapSet.t(String.t())}
         }
@@ -73,9 +74,6 @@ defmodule Hologram.Sync.Live do
   - `pairs` - every pair as it stands now that has a checked row at either end, keyed and packed
     the same way (see `pairs_touching/2`): what a row's sets are, whether a pair the batch moved is
     there now, and the pairs filed under other rows that a row arriving or leaving changes
-  - `verdict_ids` - the checked rows whose verdicts the batch may have moved, per entity type of
-    deciding quantifiers, packed the same way: every checked row of such a type, since the search
-    finds the rows the verdicts' edges reach together with the ones the read rules' edges do
   - `own_seqs` - per replica, the highest sequence number among the batches of it the effects came
     from
   - `synced_types` - the given synced types, which decided what was asked about, so whoever reads
@@ -85,6 +83,12 @@ defmodule Hologram.Sync.Live do
 
   - `readable` - the checked rows the user may read, as they stand now, keyed by id per entity type,
     with an empty map for a checked type the user may read none of
+  - `verdicts` - the server's verdicts for the user on the readable rows of each type with a
+    deciding quantifier, keyed by id per entity type - what `Hologram.Sync.Frame.row_verdicts/2`
+    answers for the user and the row, read in the batch's recheck (see `Hologram.Sync.Recheck`), so
+    no session works one out for a batch's rows - with an empty map for such a type the user may
+    read none of. Every readable checked row of such a type has them: the backwards search finds the
+    rows whose verdicts the batch may have moved together with those whose read access it may have
   - `written` - per readable row, the names of the attributes the batch's puts and patches wrote, as
     the log spells them - all a patch needs, and only for a row a patch can go out for
   - `whole_types` - the entity types a grant change in the batch may have moved every row of for
@@ -141,18 +145,20 @@ defmodule Hologram.Sync.Live do
       pairs: pairs,
       place: place,
       synced_types: synced_types,
-      tx_range: tx_range(effects),
-      verdict_ids: verdict_ids(checked)
+      tx_range: tx_range(effects)
     }
 
     written = written(effects)
 
     Map.new(user_ids, fn user_id ->
-      readable = readable_for(rechecked, user_id)
+      # Read once for the user rather than once for each row the batch checked.
+      canonical_user_id = Auth.canonical_id(user_id)
+      readable = readable_for(rechecked, canonical_user_id)
 
       part =
         Map.merge(shared, %{
           readable: readable,
+          verdicts: verdicts_for(rechecked, readable, canonical_user_id),
           whole_types: whole_types_for(searched.whole_types, user_id),
           written: written_for(written, readable)
         })
@@ -341,11 +347,11 @@ defmodule Hologram.Sync.Live do
     packed
   end
 
-  defp readable_for(rechecked, user_id) do
+  defp readable_for(rechecked, canonical_user_id) do
     Map.new(rechecked, fn {entity_type, rows} ->
       readable =
         for {id, {row, readers, _verdicts}} <- rows,
-            Recheck.reads?(readers, user_id),
+            Recheck.reads_as_canonical?(readers, canonical_user_id),
             into: %{} do
           {id, row}
         end
@@ -373,14 +379,23 @@ defmodule Hologram.Sync.Live do
     {Enum.min(txs), Enum.max(txs)}
   end
 
-  # Only types with a deciding quantifier send verdicts with their rows, so only their rows can
-  # have verdicts move. The search finds the rows whose verdicts may have moved together with the
-  # rows whose read access may have, so every checked row of such a type is asked about.
-  defp verdict_ids(checked) do
-    for {entity_type, ids} <- checked,
+  # Only types with a deciding quantifier send verdicts with their rows - every other row's are
+  # none, which nothing has to read. Asked of the rows the user may read alone.
+  defp verdicts_for(rechecked, readable, canonical_user_id) do
+    for {entity_type, rows} <- rechecked,
         Policy.deciding_quantifiers(entity_type) != [],
-        into: %{},
-        do: {entity_type, PackedIds.pack(ids)}
+        into: %{} do
+      verdicts =
+        readable
+        |> Map.fetch!(entity_type)
+        |> Map.new(fn {id, _row} ->
+          {_row, _readers, row_verdicts} = Map.fetch!(rows, id)
+
+          {id, Recheck.verdicts_as_canonical(row_verdicts, canonical_user_id)}
+        end)
+
+      {entity_type, verdicts}
+    end
   end
 
   # A grant's holder is stored as the canonical id every write is validated to, the spelling the
