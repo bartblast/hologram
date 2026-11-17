@@ -17,7 +17,10 @@ defmodule Hologram.DB.IndexPlan do
   # arms of another beside it - so each OR gives its arms as needs of their own, each with what
   # stands beside it, and two ORs beside each other are never crossed.
 
+  alias Hologram.Entity
+  alias Hologram.Entity.Derived
   alias Hologram.Query
+  alias Hologram.Query.Stage
 
   # The most needs the ORs of one clause list may add between them. An OR that would take them
   # past it adds nothing, and is left to the conditions beside it: an index per arm costs every
@@ -75,20 +78,51 @@ defmodule Hologram.DB.IndexPlan do
 
   A need the primary key serves is left out, and so is one whose equalities fix every column of a
   unique index, which serves it, a need with no column and a repeat.
+
+  The related tables the statement's subqueries read give needs of their own, by the same rules,
+  at every depth: a quantifier's set, the rows or the count of a derived field the statement reads,
+  sorts by or includes, and an included set. Each probe of such a subquery matches the related
+  rows to the row above it, so a set matched by its reference column - an inverse of a to-one -
+  needs that column first, fixed like an equality, then its own conditions, and a bounded derived
+  set its ordering after them. A range comparing a column with the row above is an index condition
+  there too, each probe binding it. Its read rules add nothing there. Under an `any` ANDed at the top
+  of the filter, Postgres may read the related rows first, so their own conditions are a need
+  without the reference column as well. A set matched through a join table needs nothing - the join
+  table's primary key and reverse index serve the link, and the related rows are then read by their
+  ids. A set before a source's last link is read through a correlated subquery of its own, which
+  needs its reference column when it is an inverse of a to-one. A path or a to-one reads its row by
+  its id.
   """
   @spec needs(Query.t(), %{module => %{atom => any}}) :: list(need)
   def needs(term, mapping) do
+    term
+    |> level_needs(nil, mapping)
+    |> Enum.concat(deeper_needs(term, mapping))
+    |> Enum.uniq()
+  end
+
+  # The needs of one level of a statement - the queried row's, or a related table's a subquery
+  # reads, matched to the row above by the given reference column (nil at the top), which an index
+  # holds as a column an equality fixes: each probe of the subquery compares it with the row above's
+  # id.
+  defp level_needs(term, link, mapping) do
     entity_mapping = Map.fetch!(mapping, term.entity)
     unique_columns = unique_columns(entity_mapping)
 
     scope = %{
       entity_mapping: entity_mapping,
       leading_unique_columns: leading_unique_columns(entity_mapping),
+      linked?: link != nil,
       raw_keys: raw_keys(entity_mapping, unique_columns),
       unique_columns: unique_columns
     }
 
-    [plain | or_paths] = paths(term.filter, scope)
+    linked = fn path -> if link, do: [{:eq, link} | path], else: path end
+
+    [plain | or_paths] =
+      term.filter
+      |> paths(scope)
+      |> Enum.map(linked)
 
     plain_order =
       if or_paths == [] and bounded?(term) do
@@ -101,10 +135,265 @@ defmodule Hologram.DB.IndexPlan do
     |> Enum.reject(fn {path, _order} -> key_served?(path, entity_mapping) end)
     |> Enum.map(fn {path, order} -> path_need(path, order, scope) end)
     |> Enum.reject(&empty_need?/1)
-    |> Enum.uniq()
   end
 
-  defp bounded?(term), do: term.cardinality == :one or term.take != nil
+  # The needs of the related tables a statement's subqueries read: its quantifiers', the counts and
+  # sets of the derived fields it reads or includes, and its includes', at every depth. The types
+  # of the rows above a level are passed along, nearest first, for the names and sources reaching
+  # them. Derived fields never read each other in a cycle - the build refuses one - so following
+  # their definitions ends.
+  defp deeper_needs(term, mapping) do
+    context = %{mapping: mapping, outer: []}
+
+    clause_level_needs(term.filter, term.entity, true, context) ++
+      sort_level_needs(term.sort, term.entity, context) ++
+      if(term.cardinality == :count,
+        do: [],
+        else: include_level_needs(term.include, term.entity, context)
+      )
+  end
+
+  defp clause_level_needs(clauses, entity_type, top?, context) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} ->
+        Enum.flat_map(alternatives, &clause_level_needs(&1, entity_type, false, context))
+
+      {quantifier, {source, inner}} when quantifier in [:all, :any, :none] ->
+        quantifier_needs(quantifier, source, inner, entity_type, top?, context)
+
+      {name, _operator, operand} ->
+        name_level_needs(name, entity_type, context) ++
+          operand_level_needs(operand, entity_type, context)
+    end)
+  end
+
+  defp operand_level_needs({:attribute, name}, entity_type, context),
+    do: name_level_needs(name, entity_type, context)
+
+  defp operand_level_needs(_operand, _entity_type, _context), do: []
+
+  # A name reading a derived field - of the row, of a row above or at the end of a path - reads what
+  # its definition reads, on the row it is read on.
+  defp name_level_needs(name, entity_type, context) do
+    case derived_name(name, entity_type, context) do
+      {owner_type, field_name, field_context} ->
+        derived_needs(owner_type, field_name, field_context)
+
+      nil ->
+        []
+    end
+  end
+
+  defp derived_name({:outer, levels, name}, _entity_type, context) do
+    {outer_type, outer_context} = outer_row(context, levels)
+
+    derived_name(name, outer_type, outer_context)
+  end
+
+  defp derived_name(name, entity_type, context) when is_atom(name) do
+    if Derived.declared?(entity_type, name), do: {entity_type, name, context}
+  end
+
+  defp derived_name(path, entity_type, context) when is_list(path) do
+    {hops, [name]} = Enum.split(path, -1)
+    end_type = Entity.path_target(entity_type, hops)
+
+    if Derived.declared?(end_type, name), do: {end_type, name, %{context | outer: []}}
+  end
+
+  defp derived_name(_name, _entity_type, _context), do: nil
+
+  # The type of the row the given number of levels up, and the context its own level sees.
+  defp outer_row(context, levels) do
+    outer_type = Enum.at(context.outer, levels - 1)
+
+    {outer_type, %{context | outer: Enum.drop(context.outer, levels)}}
+  end
+
+  # A quantifier reads the related rows its source leads to, matched to the row the source starts
+  # at by the source's last link: an inverse of a to-one by its reference column, so the level needs
+  # that column with the quantifier's conditions - except `all`'s, which it asks of every row as one
+  # IS NOT TRUE no index serves - and an `any` ANDed at the top of the statement may be read the
+  # other way round, starting from the related rows its conditions find, so those conditions are a
+  # need of their own as well. A stored to-many or an inverse of one pairs them through a join table,
+  # whose primary key and reverse index serve the link, so the related rows are read by their ids. A
+  # derived set reads its rows through its definition's, and each link before the last through a
+  # subquery of its own.
+  defp quantifier_needs(quantifier, source, inner, entity_type, top?, context) do
+    {source_type, source_context, chain} = quantifier_source(source, entity_type, context)
+    {owner_hops, [set_name]} = Enum.split(chain, -1)
+    owner_type = Derived.path_target(source_type, owner_hops)
+    target_type = Derived.related_type(owner_type, set_name)
+    asked = if quantifier == :all, do: [], else: inner
+
+    set_needs =
+      if Derived.declared?(owner_type, set_name) do
+        derived_needs(owner_type, set_name, source_context)
+      else
+        level_term = inner_term(target_type, asked)
+        read_first? = top? and quantifier == :any
+
+        linked_level_needs(owner_type, set_name, level_term, read_first?, context.mapping)
+      end
+
+    inner_context = %{context | outer: [entity_type | context.outer]}
+
+    earlier_link_needs(source_type, owner_hops, source_context) ++
+      set_needs ++ clause_level_needs(inner, target_type, false, inner_context)
+  end
+
+  # The links of a source before its last - a derived set only ever ends a source: a to-one reads
+  # its row by its id, and a set its rows in a correlated subquery matching them to the rows before,
+  # by the reference column for an inverse of a to-one, which the subquery then needs, and through a
+  # join table for a to-many.
+  defp earlier_link_needs(start_type, links, context) do
+    links
+    |> Enum.reduce({start_type, []}, fn link, {link_type, acc} ->
+      target_type = Entity.related_type(link_type, link)
+      target_term = inner_term(target_type, [])
+
+      {target_type,
+       acc ++ linked_level_needs(link_type, link, target_term, false, context.mapping)}
+    end)
+    |> elem(1)
+  end
+
+  defp quantifier_source({:outer, levels, chain}, _entity_type, context) do
+    {outer_type, outer_context} = outer_row(context, levels)
+
+    {outer_type, outer_context, chain}
+  end
+
+  defp quantifier_source(chain, entity_type, context), do: {entity_type, context, chain}
+
+  defp inner_term(entity_type, clauses) do
+    %{Stage.normalize(entity_type) | filter: clauses, sort: []}
+  end
+
+  # The needs of a level read through the given relationship of the row above. An inverse of a
+  # to-one matches its rows by their reference column, which each probe compares with the row
+  # above's id - so it leads the level's needs, fixed like an equality - and a level Postgres may
+  # read first, before the rows above, needs its own conditions alone too. A join table needs
+  # nothing.
+  defp linked_level_needs(owner_type, set_name, term, read_first?, mapping) do
+    case Entity.inverse_relationship(owner_type, set_name) do
+      %{reference?: true} = inverse ->
+        first_needs = if read_first?, do: level_needs(term, nil, mapping), else: []
+
+        level_needs(term, reference_column(inverse, mapping), mapping) ++ first_needs
+
+      _join ->
+        []
+    end
+  end
+
+  defp reference_column(inverse, mapping) do
+    mapping
+    |> Map.fetch!(inverse.target)
+    |> Map.fetch!(:columns)
+    |> Enum.find(&(&1.source == {:relationship, inverse.forward}))
+    |> Map.fetch!(:name)
+  end
+
+  defp sort_level_needs(sort, entity_type, context) do
+    Enum.flat_map(sort, fn {name, _direction} -> name_level_needs(name, entity_type, context) end)
+  end
+
+  # An include reads its rows in a subquery: a to-many's or an inverse's matched to the row the way
+  # a quantifier's set is, a to-one's by its id, and a derived field's through its definition,
+  # embedding what that includes - and each included level's own includes and fields in turn.
+  defp include_level_needs(include, entity_type, context) do
+    Enum.flat_map(include, fn {name, sub_term} ->
+      own_needs =
+        cond do
+          Derived.declared?(entity_type, name) ->
+            derived_needs(entity_type, name, %{context | outer: []}, true)
+
+          Entity.inverse_relationship(entity_type, name) != nil or to_many?(entity_type, name) ->
+            linked_level_needs(entity_type, name, sub_term, false, context.mapping)
+
+          true ->
+            []
+        end
+
+      own_needs ++ sub_term_needs(sub_term, context)
+    end)
+  end
+
+  defp sub_term_needs(nil, _context), do: []
+
+  defp sub_term_needs(sub_term, context) do
+    sub_context = %{context | outer: []}
+
+    clause_level_needs(sub_term.filter, sub_term.entity, false, sub_context) ++
+      sort_level_needs(sub_term.sort, sub_term.entity, sub_context) ++
+      include_level_needs(sub_term.include, sub_term.entity, sub_context)
+  end
+
+  defp to_many?(entity_type, name) do
+    match?({_name, [_target], _opts}, List.keyfind(entity_type.__relationships__(), name, 0))
+  end
+
+  # A derived field reads what its definition reads: a query's rows or count, matched to the row
+  # through its source's last link, and the conditions and fields it computes from. A query's rows
+  # embed what it includes, and are read in its order, only when the field is included - as a
+  # quantifier's set or a count's source they are matched by id, in order only when bounded.
+  defp derived_needs(entity_type, name, context, included? \\ false) do
+    entity_type
+    |> Derived.definition(name)
+    |> definition_needs(entity_type, context, included?)
+  end
+
+  defp definition_needs(
+         {:query, %{source: {owner_type, chain}} = term},
+         _entity_type,
+         context,
+         included?
+       ) do
+    {earlier_links, [last_link]} = Enum.split(chain, -1)
+    link_type = Derived.path_target(owner_type, earlier_links)
+    owner_context = %{context | outer: []}
+
+    rows_needs =
+      if Derived.declared?(link_type, last_link) do
+        derived_needs(link_type, last_link, owner_context)
+      else
+        linked_level_needs(link_type, last_link, term, false, context.mapping)
+      end
+
+    term_context = %{context | outer: [owner_type]}
+
+    ordered? =
+      included? or
+        (term.cardinality != :count and
+           (term.take != nil or term.skip != nil or term.cardinality == :one))
+
+    earlier_link_needs(owner_type, earlier_links, owner_context) ++
+      rows_needs ++
+      clause_level_needs(term.filter, term.entity, false, term_context) ++
+      if(ordered?, do: sort_level_needs(term.sort, term.entity, term_context), else: []) ++
+      if(included?, do: include_level_needs(term.include, term.entity, term_context), else: [])
+  end
+
+  defp definition_needs({:if, clauses, then_value, else_value}, entity_type, context, included?) do
+    clause_level_needs(clauses, entity_type, false, context) ++
+      definition_needs(then_value, entity_type, context, included?) ++
+      definition_needs(else_value, entity_type, context, included?)
+  end
+
+  defp definition_needs({:condition, clauses}, entity_type, context, _included?),
+    do: clause_level_needs(clauses, entity_type, false, context)
+
+  defp definition_needs({:concat, operands}, entity_type, context, _included?),
+    do: Enum.flat_map(operands, &definition_needs(&1, entity_type, context, false))
+
+  defp definition_needs({:name, name}, entity_type, context, _included?),
+    do: name_level_needs(name, entity_type, context)
+
+  defp definition_needs(_definition, _entity_type, _context, _included?), do: []
+
+  defp bounded?(term),
+    do: term.cardinality == :one or (term.cardinality == :set and term.take != nil)
 
   defp empty_need?(need), do: MapSet.size(need.eq) == 0 and need.range == nil and need.order == []
 
@@ -283,6 +572,16 @@ defmodule Hologram.DB.IndexPlan do
   end
 
   defp conjunct(_clause, _scope), do: nil
+
+  # A range against a column of the row above is an index condition each probe of the subquery
+  # binds, the way a value is - equality against one compiles to IS NOT DISTINCT FROM, which no
+  # index serves.
+  # Only a level matched to the row above binds it per probe - read first, before that row, the
+  # range has nothing to compare with yet.
+  defp column_conjunct(column, operator, {:attribute, {:outer, _levels, _name}}, scope)
+       when operator in @range_operators do
+    if scope.linked?, do: {:range, ordering_column(column, scope.entity_mapping)}
+  end
 
   defp column_conjunct(_column, _operator, {:attribute, _other}, _scope), do: nil
 

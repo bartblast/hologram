@@ -16,10 +16,19 @@ defmodule Hologram.DB.IndexPlanTest do
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module32
+  alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module34
+  alias Hologram.Test.Fixtures.Entity.Module37
+  alias Hologram.Test.Fixtures.Entity.Module38
+  alias Hologram.Test.Fixtures.Entity.Module39
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Entity.Module40
+  alias Hologram.Test.Fixtures.Entity.Module41
   alias Hologram.Test.Fixtures.Entity.Module52
   alias Hologram.Test.Fixtures.Entity.Module54
+  alias Hologram.Test.Fixtures.Entity.Module55
+  alias Hologram.Test.Fixtures.Entity.Module56
+  alias Hologram.Test.Fixtures.Entity.Module57
 
   @mapping Mapper.derive!(
              [
@@ -43,7 +52,11 @@ defmodule Hologram.DB.IndexPlanTest do
   @module19 "test_fixtures_entity_module19"
   @module2 "test_fixtures_entity_module2"
   @module26 "test_fixtures_entity_module26"
+  @module28 "test_fixtures_entity_module28"
+  @module29 "test_fixtures_entity_module29"
   @module3 "test_fixtures_entity_module3"
+  @module33 "test_fixtures_entity_module33"
+  @module38 "test_fixtures_entity_module38"
   @module4 "test_fixtures_entity_module4"
   @module54 "test_fixtures_entity_module54"
 
@@ -247,8 +260,13 @@ defmodule Hologram.DB.IndexPlanTest do
     end
 
     test "needs nothing at the row's level for a quantifier beside a condition" do
-      assert term_needs(filter(Module26, name == "x" and any(m <- messages, m.body == "y"))) ==
-               [need(@module26, ["name_$sort"])]
+      query = filter(Module26, name == "x" and any(m <- messages, m.body == "y"))
+
+      assert term_needs(query) == [
+               need(@module26, ["name_$sort"]),
+               need(@module28, ["body_$sort", "channel_id"]),
+               need(@module28, ["body_$sort"])
+             ]
     end
 
     test "needs nothing for the primary key, which serves an equality on the id" do
@@ -296,8 +314,9 @@ defmodule Hologram.DB.IndexPlanTest do
                need(@module2, ["a"])
              ]
 
-      assert term_needs(filter(Module26, name == "x" or any(m <- messages, m.body == "y"))) ==
-               []
+      query = filter(Module26, name == "x" or any(m <- messages, m.body == "y"))
+
+      assert term_needs(query) == [need(@module28, ["body_$sort", "channel_id"])]
     end
 
     test "leaves out a repeated need" do
@@ -527,6 +546,285 @@ defmodule Hologram.DB.IndexPlanTest do
         |> take(5)
 
       assert term_needs(query) == [need(@module4, ["c"], nil, ["b"])]
+    end
+  end
+
+  describe "needs/2 for the levels below the queried row" do
+    setup do
+      put_derived_definitions([Module32, Module33, Module37, Module38, Module55])
+
+      %{
+        derived_mapping:
+          Mapper.derive!([Module1, Module2, Module32, Module33, Module37, Module38, Module55], [])
+      }
+    end
+
+    test "needs an inverse of a to-one's reference column with the quantifier's conditions" do
+      query = filter(Module26, none(m <- messages, m.body == "y" and m.position > 1))
+
+      assert term_needs(query) == [need(@module28, ["body_$sort", "channel_id"], "position")]
+    end
+
+    test "needs the conditions of a top-level any over an inverse of a to-one alone as well" do
+      query = filter(Module26, any(m <- messages, m.body == "y"))
+
+      assert term_needs(query) == [
+               need(@module28, ["body_$sort", "channel_id"]),
+               need(@module28, ["body_$sort"])
+             ]
+    end
+
+    test "needs only the reference column for an all, whose conditions no index serves" do
+      query = filter(Module26, all(m <- messages, m.position == 1 or m.body == "y"))
+
+      assert term_needs(query) == [need(@module28, ["channel_id"])]
+    end
+
+    test "needs each arm of an OR in a quantifier's condition with the reference column" do
+      query = filter(Module26, none(m <- messages, m.body == "y" or m.position == 1))
+
+      assert term_needs(query) == [
+               need(@module28, ["channel_id"]),
+               need(@module28, ["body_$sort", "channel_id"]),
+               need(@module28, ["channel_id", "position"])
+             ]
+    end
+
+    test "needs the reference column of the last link of a source" do
+      through_to_one = filter(Module28, none(m <- channel.messages, m.position == 1))
+      flattened = filter(Module29, none(m <- messages.channel.messages, m.position == 1))
+
+      assert term_needs(through_to_one) == [need(@module28, ["channel_id", "position"])]
+      assert term_needs(flattened) == [need(@module28, ["channel_id", "position"])]
+    end
+
+    test "needs the reference column of a set before the last link of a source" do
+      assert term_needs(filter(Module26, none(l <- messages.labels, l.name == "x"))) == [
+               need(@module28, ["channel_id"])
+             ]
+    end
+
+    test "needs no range against the row above for a level read before that row", %{
+      derived_mapping: mapping
+    } do
+      term =
+        Module37
+        |> filter(any(m <- messages, m.created_at > last_read_at))
+        |> Stage.normalize()
+
+      assert needs(term, mapping) == [need(@module38, ["channel_id"], "created_at")]
+    end
+
+    test "needs the reference column of a set before a derived count's last link" do
+      put_derived_definitions([Module34, Module39, Module40])
+
+      mapping =
+        Mapper.derive!(
+          [Module1, Module2, Module32, Module33, Module34, Module39, Module40, Module41],
+          []
+        )
+
+      term =
+        Module40
+        |> filter(note_tag_count > 0)
+        |> Stage.normalize()
+
+      assert needs(term, mapping) == [need("test_fixtures_entity_module41", ["team_id"])]
+    end
+
+    test "needs what the sort of a derived set bounded by a skip reads" do
+      put_derived_definitions([Module56, Module57])
+      mapping = Mapper.derive!([Module56, Module57], [])
+
+      term =
+        Module56
+        |> filter(any(i <- rest, i.position == 1))
+        |> Stage.normalize()
+
+      assert needs(term, mapping) == [
+               need("test_fixtures_entity_module57", ["owner_id"]),
+               need("test_fixtures_entity_module57", ["owner_id"], "position")
+             ]
+    end
+
+    test "needs nothing for a set read through a join table" do
+      assert term_needs(filter(Module28, any(l <- labels, l.name == "x"))) == []
+      assert term_needs(filter(Module28, none(l <- labels, l.name == "x"))) == []
+    end
+
+    test "needs the levels of a quantifier nested in a quantifier's condition" do
+      query = filter(Module29, any(m <- messages, any(n <- m.channel.messages, n.position == 1)))
+
+      assert term_needs(query) == [need(@module28, ["channel_id", "position"])]
+    end
+
+    test "needs the set of a quantifier whose source starts at the row above" do
+      term =
+        Module26
+        |> Stage.filter(any: {[:messages], [any: {{:outer, 1, [:messages]}, [position: 1]}]})
+        |> Stage.normalize()
+
+      assert needs(term, @mapping) == [
+               need(@module28, ["channel_id"]),
+               need(@module28, ["channel_id", "position"])
+             ]
+    end
+
+    test "needs a counted set's reference column with its conditions", %{derived_mapping: mapping} do
+      term =
+        Module37
+        |> filter(pinned_count > 3)
+        |> Stage.normalize()
+
+      assert needs(term, mapping) == [need(@module38, ["channel_id", "pinned"])]
+    end
+
+    test "needs a range a counted set compares with the row it is counted for", %{
+      derived_mapping: mapping
+    } do
+      term =
+        Module37
+        |> filter(unread_count > 0)
+        |> Stage.normalize()
+
+      assert needs(term, mapping) == [need(@module38, ["channel_id"], "created_at")]
+    end
+
+    test "needs the count an attribute operand or a path reads", %{derived_mapping: mapping} do
+      operand =
+        Module33
+        |> filter(position < later_count)
+        |> Stage.normalize()
+
+      path =
+        Module38
+        |> filter(channel.pinned_count > 3)
+        |> Stage.normalize()
+
+      assert needs(operand, mapping) == [need(@module33, ["channel_id"], "position")]
+      assert needs(path, mapping) == [need(@module38, ["channel_id", "pinned"])]
+    end
+
+    test "needs the count the last link of a longer source reads", %{derived_mapping: mapping} do
+      term =
+        Module38
+        |> filter(sibling_count > 1)
+        |> Stage.normalize()
+
+      assert needs(term, mapping) == [need(@module38, ["channel_id"])]
+    end
+
+    test "needs the count a derived condition reads", %{derived_mapping: mapping} do
+      term =
+        Module37
+        |> filter(busy == true)
+        |> Stage.normalize()
+
+      assert needs(term, mapping) == [need(@module38, ["channel_id", "pinned"])]
+    end
+
+    test "needs the count a field reads through a related row, a condition or a join", %{
+      derived_mapping: mapping
+    } do
+      pinned = need(@module38, ["channel_id", "pinned"])
+
+      for query <- [
+            filter(Module55, channel_pinned > 1),
+            filter(Module55, status == "busy"),
+            filter(Module55, tag == "busy!")
+          ] do
+        assert query
+               |> Stage.normalize()
+               |> needs(mapping) == [pinned]
+      end
+    end
+
+    test "needs the count a sort reads", %{derived_mapping: mapping} do
+      term =
+        Module37
+        |> sort(pinned_count)
+        |> Stage.normalize()
+
+      assert needs(term, mapping) == [need(@module38, ["channel_id", "pinned"])]
+    end
+
+    test "needs the count an include of a derived value reads", %{derived_mapping: mapping} do
+      term =
+        Module37
+        |> include(pinned_count)
+        |> Stage.normalize()
+
+      assert needs(term, mapping) == [need(@module38, ["channel_id", "pinned"])]
+    end
+
+    test "orders a bounded derived set from the index after its reference column", %{
+      derived_mapping: mapping
+    } do
+      channel_term =
+        Module37
+        |> include(recent_messages)
+        |> Stage.normalize()
+
+      board_term =
+        Module32
+        |> filter(any(m <- recent_messages, m.body == "x"))
+        |> Stage.normalize()
+
+      assert needs(channel_term, mapping) == [
+               need(@module38, ["channel_id"], nil, ["created_at"])
+             ]
+
+      assert needs(board_term, mapping) == [need(@module33, ["channel_id"], nil, ["position"])]
+    end
+
+    test "needs every set a derived field may choose, and those of a set it reads", %{
+      derived_mapping: mapping
+    } do
+      included =
+        Module37
+        |> include(picked)
+        |> Stage.normalize()
+
+      counted =
+        Module37
+        |> filter(picked_count > 0)
+        |> Stage.normalize()
+
+      expected = [need(@module38, ["channel_id"], nil, ["id"]), need(@module38, ["channel_id"])]
+
+      assert included
+             |> needs(mapping)
+             |> Enum.sort() == Enum.sort(expected)
+
+      assert counted
+             |> needs(mapping)
+             |> Enum.sort() == Enum.sort(expected)
+    end
+
+    test "needs an included inverse of a to-one's reference column, at every depth" do
+      term =
+        Module29
+        |> include(messages.channel.messages)
+        |> Stage.normalize()
+
+      assert term_needs(term) == [need(@module28, ["channel_id"])]
+    end
+
+    test "needs nothing for an include through a join table or a to-one" do
+      assert term_needs(include(Module28, [channel, labels])) == []
+    end
+
+    test "needs nothing for a reference column a unique index serves" do
+      assert term_needs(include(Module26, topic)) == []
+    end
+
+    test "needs nothing for the includes of a count, which reads none" do
+      term =
+        Module26
+        |> include(messages)
+        |> count()
+
+      assert term_needs(term) == []
     end
   end
 end
