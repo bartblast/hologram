@@ -43,7 +43,7 @@ defmodule Hologram.Sync.Search do
   type or an op this node does not know is passed over, with or without data.
 
   Edges are the policy dependency index (see `Hologram.Policy.Edges.index/0`), passed in rather
-  than read here. The read rules' edges are followed, and the verdicts' (`{type, :verdicts}`): a
+  than read here. The read rules' edges are followed, and the verdicts' (`{type, {:verdicts}}`): a
   row whose verdicts may have moved is checked again like one whose access may have, and a check
   gives its verdicts beside its readers (see `Hologram.Sync.Recheck.run/2`). The other operations'
   edges aren't followed: a browser answers the rest of their rules from the rows it holds.
@@ -456,7 +456,7 @@ defmodule Hologram.Sync.Search do
   defp triggers(edges) do
     edges
     |> Enum.flat_map(fn
-      {{entity_type, key}, key_edges} when key in [:read, :verdicts] ->
+      {{entity_type, key}, key_edges} when key in [:read, {:verdicts}] ->
         Enum.map(key_edges, &{entity_type, &1})
 
       {_pair, _edges} ->
