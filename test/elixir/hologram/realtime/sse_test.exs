@@ -16,7 +16,6 @@ defmodule Hologram.Realtime.SSETest do
   alias Hologram.Runtime.Serializer
   alias Hologram.Sync.Frame
   alias Hologram.Test.Fixtures.Entity.Module15
-  alias Hologram.Test.Fixtures.Entity.Module2, as: EntityModule2
   alias Hologram.Test.Fixtures.Realtime.SSE.Module1
 
   use_module_stub :asset_path_registry
@@ -608,46 +607,48 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
-  describe "process_message/4 on {:sync_deltas, ...}" do
-    test "pushes a sync_deltas SSE event carrying the deltas" do
+  describe "process_message/4 on {:sync_frame, ...}" do
+    test "writes a chunk from the stream's sync session as it came" do
       conn = prepared_test_conn()
-      row = EntityModule2.new(a: true, c: "first")
+      session = spawn(fn -> :ok end)
 
-      # Built through the frame rather than by hand: a delta holds a row already written the way
-      # the wire carries it, and JSON refuses to guess at a struct rather than encoding one badly.
-      deltas = [Frame.put_entity(row, %{})]
+      send(self(), {:sync_frame, session, "event: synced\nid: 1\ndata: {}\n\n"})
 
-      send(self(), {:sync_deltas, "g8uxAAAAZQ", deltas, nil})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ "event: sync_deltas\nid: "
-      assert updated_conn.resp_body =~ ~s["c":"first"]
-
-      # The place the client hands back on reconnect.
-      assert updated_conn.resp_body =~ ~s["cursor":"g8uxAAAAZQ"]
+      assert {:cont, updated_conn} = process_message(conn, nil, nil, sync_session: session)
+      assert updated_conn.resp_body == "event: synced\nid: 1\ndata: {}\n\n"
     end
 
-    test "pushes a frame naming how far the receiving replica's batches are applied" do
+    # A session the stream replaced on a change of identity may still have frames on their way,
+    # some sent after the stream told the client to drop what it holds.
+    test "drops a chunk from a session other than the stream's" do
       conn = prepared_test_conn()
+      session = spawn(fn -> :ok end)
+      replaced = spawn(fn -> :ok end)
 
-      send(self(), {:sync_deltas, "g8uxAAAAZQ", [], 7})
+      send(self(), {:sync_frame, replaced, "event: synced\nid: 1\ndata: {}\n\n"})
 
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ ~s["applied_seq":7]
+      assert {:cont, updated_conn} = process_message(conn, nil, nil, sync_session: session)
+      assert updated_conn.resp_body == ""
     end
 
-    # A stream serving no replica has no number to give, and the client must read that as nothing
-    # said rather than as nothing applied.
-    test "pushes a frame naming no applied batch of the receiving replica" do
+    test "drops a chunk while the stream has no sync session" do
       conn = prepared_test_conn()
+      replaced = spawn(fn -> :ok end)
 
-      send(self(), {:sync_deltas, "g8uxAAAAZQ", [], nil})
+      send(self(), {:sync_frame, replaced, "event: synced\nid: 1\ndata: {}\n\n"})
 
-      {:cont, updated_conn} = process_message(conn, nil, nil)
+      assert {:cont, updated_conn} = process_message(conn, nil, nil, sync_session: nil)
+      assert updated_conn.resp_body == ""
+    end
 
-      assert updated_conn.resp_body =~ ~s["applied_seq":null]
+    test "drops a chunk while the stream waits for a held data model" do
+      conn = prepared_test_conn()
+      replaced = spawn(fn -> :ok end)
+
+      send(self(), {:sync_frame, replaced, "event: synced\nid: 1\ndata: {}\n\n"})
+
+      assert {:cont, updated_conn} = process_message(conn, nil, nil, sync_session: {:held, true})
+      assert updated_conn.resp_body == ""
     end
   end
 
@@ -684,46 +685,6 @@ defmodule Hologram.Realtime.SSETest do
 
       assert updated_conn.resp_body =~ "event: sync_rules\nid: "
       assert updated_conn.resp_body =~ ~s("rules":{"policies":{}})
-    end
-  end
-
-  describe "process_message/4 on {:sync_synced, scope, cursor}" do
-    test "pushes a synced SSE event" do
-      conn = prepared_test_conn()
-      send(self(), {:sync_synced, :all, nil})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ "event: synced\nid: "
-    end
-
-    test "carries the scope the client may now answer from its own store" do
-      conn = prepared_test_conn()
-      send(self(), {:sync_synced, :all, "Nzc4LjA"})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ ~s["scope":"all"]
-    end
-
-    test "carries the entity types a marker names" do
-      conn = prepared_test_conn()
-      send(self(), {:sync_synced, {:types, [EntityModule2]}, nil})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ ~s("types":["Hologram.Test.Fixtures.Entity.Module2"])
-    end
-
-    # The one frame a client filled and then left alone ever receives, so the place has to be on
-    # it or that client has nowhere to come back from.
-    test "carries the place the client may come back from" do
-      conn = prepared_test_conn()
-      send(self(), {:sync_synced, :all, "Nzc4LjA"})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ ~s["cursor":"Nzc4LjA"]
     end
   end
 

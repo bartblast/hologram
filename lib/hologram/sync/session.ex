@@ -36,6 +36,7 @@ defmodule Hologram.Sync.Session do
   alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Fill
   alias Hologram.Sync.Frame
+  alias Hologram.Sync.Outbox
   alias Hologram.Sync.PageWindows
   alias Hologram.Sync.ResultStore
   alias Hologram.Sync.Verdicts
@@ -113,6 +114,9 @@ defmodule Hologram.Sync.Session do
   name effects whose rounds have not reached it yet, and a frame dating those would let a client
   cut off right then come back past changes it never held.
 
+  `:outbox` holds the options of the outbox frames go out through, none by default (see
+  `Hologram.Sync.Outbox.new/2`).
+
   `:edges` is the policy dependency index, given to a returning client alone - what each rule
   reads besides the row it judges, so a row the gap never names can be judged again when the row
   DECIDING it moved. A rule saying `via:` reads a related row, and that row going private hides
@@ -135,6 +139,7 @@ defmodule Hologram.Sync.Session do
     # gap to read, and two reads of the same option are two chances for them to say different
     # things.
     read_gap = Keyword.get(opts, :read_gap)
+    client = Keyword.fetch!(opts, :client)
 
     state = %{
       actor_user_id: Keyword.get(opts, :actor_user_id),
@@ -142,7 +147,6 @@ defmodule Hologram.Sync.Session do
       applied_seq: Keyword.get(opts, :applied_seq),
       arrived: MapSet.new(),
       catching_up: read_gap != nil,
-      client: Keyword.fetch!(opts, :client),
       cut: nil,
       departed: %{},
       edges: Keyword.get(opts, :edges),
@@ -150,6 +154,7 @@ defmodule Hologram.Sync.Session do
       filling: read_gap == nil,
       gap_end: Keyword.get(opts, :gap_end),
       held: %{},
+      outbox: Outbox.new(client, Keyword.get(opts, :outbox, [])),
       page: Keyword.fetch!(opts, :page),
       page_types: MapSet.new(),
       page_windows: MapSet.new(),
@@ -328,9 +333,7 @@ defmodule Hologram.Sync.Session do
     if Enum.empty?(state.pending) and not MapSet.member?(state.announced, :all) do
       announced = %{state | announced: MapSet.put(state.announced, :all)}
 
-      send(announced.client, {:sync_synced, :all, cursor(announced)})
-
-      announced
+      tell_client(announced, {:sync_synced, :all, cursor(announced)})
     else
       state
     end
@@ -395,19 +398,19 @@ defmodule Hologram.Sync.Session do
       |> Enum.reduce(%{state | applied_seq: applied_seq}, fn chunk, acc ->
         deltas = Enum.map(chunk, &Frame.put_entity(&1, Frame.row_verdicts(acc.actor_user_id, &1)))
 
-        send(acc.client, {:sync_deltas, nil, deltas, applied_seq})
-
-        remember_verdicts(acc, deltas)
+        acc
+        |> tell_client({:sync_deltas, nil, deltas, applied_seq})
+        |> remember_verdicts(deltas)
       end)
 
-    send(told.client, {:sync_synced, {:types, [entity_type]}, nil})
+    marked = tell_client(told, {:sync_synced, {:types, [entity_type]}, nil})
 
     held_sent =
       rows
       |> Enum.map(& &1.id)
       |> Enum.filter(&MapSet.member?(held_ids, &1))
 
-    {told, Enum.reduce(held_sent, sent_ids, &MapSet.put(&2, &1))}
+    {marked, Enum.reduce(held_sent, sent_ids, &MapSet.put(&2, &1))}
   end
 
   # The gap is read only now, once every window has filled, rather than when the session began.
@@ -443,6 +446,14 @@ defmodule Hologram.Sync.Session do
     send(self(), {:cut, reason})
 
     %{state | cut: reason}
+  end
+
+  # Every frame and marker goes out through the outbox, which encodes it for the client's stream
+  # (see `Hologram.Sync.Outbox`).
+  defp tell_client(state, message) do
+    :ok = Outbox.put(state.outbox, message)
+
+    state
   end
 
   # Judged against each window's last round, one window's rows read at a time: which of them the
@@ -603,6 +614,10 @@ defmodule Hologram.Sync.Session do
       |> tell_shift(judged)
       |> tell_verdicts(judged)
 
+    # The rows read and the frames encoded from them are garbage now, the way a fill's are, and a
+    # session caught up can sit idle for as long as its client stays.
+    :erlang.garbage_collect()
+
     %{
       caught_up
       | arrived: MapSet.new(),
@@ -662,9 +677,8 @@ defmodule Hologram.Sync.Session do
     |> Enum.concat(unsyncs)
     |> Enum.chunk_every(Catchup.rows_per_frame())
     |> Enum.reduce(state, fn deltas, acc ->
-      send(acc.client, {:sync_deltas, nil, deltas, acc.applied_seq})
-
       acc
+      |> tell_client({:sync_deltas, nil, deltas, acc.applied_seq})
       |> remember_verdicts(deltas)
       |> forget_unsynced(deltas)
     end)
@@ -772,9 +786,8 @@ defmodule Hologram.Sync.Session do
     |> Enum.concat(unsyncs)
     |> Enum.chunk_every(Catchup.rows_per_frame())
     |> Enum.reduce(state, fn deltas, acc ->
-      send(acc.client, {:sync_deltas, batch_cursor(acc, judged.gap), deltas, acc.applied_seq})
-
       acc
+      |> tell_client({:sync_deltas, batch_cursor(acc, judged.gap), deltas, acc.applied_seq})
       |> remember_verdicts(deltas)
       |> forget_unsynced(deltas)
     end)
@@ -800,9 +813,9 @@ defmodule Hologram.Sync.Session do
       news = %{appeared: [], edges: [], patched: patched, unsynced: []}
       deltas = Frame.deltas(news, acc.actor_user_id)
 
-      send(acc.client, {:sync_deltas, batch_cursor(acc, judged.gap), deltas, acc.applied_seq})
-
-      remember_verdicts(acc, deltas)
+      acc
+      |> tell_client({:sync_deltas, batch_cursor(acc, judged.gap), deltas, acc.applied_seq})
+      |> remember_verdicts(deltas)
     end)
   end
 
@@ -852,11 +865,17 @@ defmodule Hologram.Sync.Session do
   defp tell_batch(state, judged, effects) do
     deltas = Catchup.deltas(effects, judged.touched, state.actor_user_id)
 
-    if deltas != [] do
-      send(state.client, {:sync_deltas, batch_cursor(state, effects), deltas, state.applied_seq})
-    end
+    told =
+      if deltas == [] do
+        state
+      else
+        tell_client(
+          state,
+          {:sync_deltas, batch_cursor(state, effects), deltas, state.applied_seq}
+        )
+      end
 
-    state
+    told
     |> remember_verdicts(deltas)
     |> forget_unsynced(deltas)
   end
@@ -1207,9 +1226,9 @@ defmodule Hologram.Sync.Session do
     |> Enum.reduce(checked_state, fn part, acc ->
       frame_deltas = Frame.deltas(part, acc.actor_user_id)
 
-      send(acc.client, {:sync_deltas, cursor(acc), frame_deltas, acc.applied_seq})
-
-      remember_verdicts(acc, frame_deltas)
+      acc
+      |> tell_client({:sync_deltas, cursor(acc), frame_deltas, acc.applied_seq})
+      |> remember_verdicts(frame_deltas)
     end)
   end
 

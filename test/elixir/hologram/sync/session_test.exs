@@ -24,6 +24,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Policy.Edges
   alias Hologram.Query
   alias Hologram.Query.Stage
+  alias Hologram.Realtime.SSE
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Evaluator
@@ -175,6 +176,7 @@ defmodule Hologram.Sync.SessionTest do
       opts
       |> resume_opts()
       |> Keyword.put_new(:client, self())
+      |> Keyword.put_new(:outbox, raw: true)
       |> Keyword.put_new(:page, @page)
       |> Keyword.put_new(:policy_hash, @policy_hash)
       |> Keyword.put_new(:types_hash, @types_hash)
@@ -274,6 +276,18 @@ defmodule Hologram.Sync.SessionTest do
       {:sync_synced, {:types, _types}, _cursor} -> await_fill(acc)
     after
       1_000 -> flunk("the client was never told it holds everything")
+    end
+  end
+
+  # Runs the stream's pump over what the session sends until the marker saying the client holds
+  # everything is written.
+  defp pump_until_filled(conn, session, test_pid) do
+    {:cont, conn} = SSE.process_message(conn, nil, nil, sync_session: session)
+
+    if conn.resp_body =~ ~s("scope":"all") do
+      send(test_pid, :filled)
+    else
+      pump_until_filled(conn, session, test_pid)
     end
   end
 
@@ -738,6 +752,7 @@ defmodule Hologram.Sync.SessionTest do
         {Session,
          client: self(),
          gap_end: gap_end,
+         outbox: [raw: true],
          page: @page,
          policy_hash: @policy_hash,
          read_gap: read_gap_from(cursor),
@@ -779,6 +794,7 @@ defmodule Hologram.Sync.SessionTest do
         spawn_monitor(fn ->
           Session.start_link(
             client: test_pid,
+            outbox: [raw: true],
             page: @page,
             policy_hash: @policy_hash,
             read_gap: read_gap,
@@ -2640,6 +2656,65 @@ defmodule Hologram.Sync.SessionTest do
     end
   end
 
+  describe "start_link/1 - a stream under the heap cap" do
+    # The stream's process runs under a heap cap meant for broadcasts piling up behind a slow
+    # consumer, and a frame takes many times its own size on the heap while it is encoded. One
+    # frame of rows carrying big sets passes the cap on its own if the stream encodes it, so it
+    # reaches the stream encoded.
+    test "fills a stream running under the heap cap" do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        synced_types: [Module3],
+        windows: %{}
+      })
+
+      windows(%{})
+
+      targets = Enum.map(1..100, fn _index -> Module2.new() end)
+
+      rows =
+        Enum.map(1..500, fn _index -> %{Module3.new(c_id: Entity.generate_id()) | a: targets} end)
+
+      test_pid = self()
+
+      {stream, ref} =
+        spawn_monitor(fn ->
+          :ok = SSE.configure_backpressure_safety_net()
+
+          conn =
+            :get
+            |> Plug.Test.conn("/")
+            |> SSE.prepare()
+
+          receive do
+            {:session, session} -> pump_until_filled(conn, session, test_pid)
+          end
+        end)
+
+      # Started the way a stream starts it, with the outbox it gets by default.
+      session =
+        start_supervised!(
+          {Session,
+           client: stream,
+           page: @page,
+           policy_hash: @policy_hash,
+           read_fill: fn Module3, _actor_user_id, _replica_id, _synced_types -> {rows, nil} end,
+           types_hash: @types_hash}
+        )
+
+      send(stream, {:session, session})
+
+      receive do
+        :filled -> :ok
+        {:DOWN, ^ref, :process, ^stream, reason} -> flunk("the stream ended: #{inspect(reason)}")
+      after
+        5_000 ->
+          Process.exit(stream, :kill)
+          flunk("the stream was never filled")
+      end
+    end
+  end
+
   describe "start_link/1 - completeness" do
     test "takes up the windows of pages the client is not on" do
       windows(%{@page => [@board_window], @other_page => [@other_window]})
@@ -3504,6 +3579,7 @@ defmodule Hologram.Sync.SessionTest do
           {:ok, session} =
             Session.start_link(
               client: test_pid,
+              outbox: [raw: true],
               page: @page,
               policy_hash: @policy_hash,
               types_hash: @types_hash
