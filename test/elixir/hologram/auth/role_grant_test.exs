@@ -73,6 +73,9 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Entity.Module5,
                     Entity.Module50,
                     Entity.Module51,
+                    Entity.Module52,
+                    Entity.Module53,
+                    Entity.Module54,
                     Entity.Module6,
                     Entity.Module7,
                     Entity.Module8,
@@ -181,6 +184,10 @@ defmodule Hologram.Auth.RoleGrantTest do
 
   test "__roles__/0" do
     assert RoleGrant.__roles__() == []
+  end
+
+  test "__uniques__/0" do
+    assert RoleGrant.__uniques__() == []
   end
 
   describe "__struct__/0" do

@@ -779,6 +779,21 @@ defmodule Hologram.MigrationTest do
              }
     end
 
+    test "records key member ops with the entity type injected" do
+      result =
+        ops("""
+        change_entity MyApp.Task do
+          add_unique([:workspace, :slug])
+          delete_unique([:kind, :slug])
+        end
+        """)
+
+      assert result == [
+               %{op: :add_unique, entity: MyApp.Task, fields: [:workspace, :slug], line: 5},
+               %{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :slug], line: 6}
+             ]
+    end
+
     test "records a one-op list for a single-statement block" do
       result =
         ops("""

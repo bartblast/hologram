@@ -73,6 +73,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
   alias Hologram.Test.Fixtures.Entity.Module18, as: Entity18
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.Entity.Module20, as: Entity20
   alias Hologram.Test.Fixtures.Entity.Module26, as: Entity26
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
   alias Hologram.Test.Fixtures.Entity.Module33, as: Entity33
@@ -80,6 +81,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Entity.Module43, as: Entity43
   alias Hologram.Test.Fixtures.Entity.Module5, as: Entity5
+  alias Hologram.Test.Fixtures.Entity.Module53, as: Entity53
 
   # A frame opens with the application it came from, which carries the framework's version - the
   # one part of an expected message that cannot be spelled out and stay true across a release.
@@ -1668,7 +1670,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> extract_derived_queries(entity_types, ir_plt)
         |> Map.new()
 
-      assert Enum.map(queries.admitting_count, & &1.entity) == [Entity2, Entity4]
+      assert Enum.map(queries.admitting_count, & &1.entity) == [Entity2, Entity4, Entity53]
     end
 
     test "registers one entity type when only one admits a count whose entity type is an argument",
@@ -1679,8 +1681,8 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Map.new()
 
       expected_term =
-        Entity4
-        |> filter(d: 1)
+        Entity20
+        |> filter(views: 1)
         |> count()
         |> Stage.normalize()
 

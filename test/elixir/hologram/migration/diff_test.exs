@@ -10,7 +10,7 @@ defmodule Hologram.Migration.DiffTest do
       Map.new(entities, fn {entity_type, entry_overrides} ->
         entry =
           Map.merge(
-            %{attributes: [], relationships: [], roles: []},
+            %{attributes: [], relationships: [], roles: [], uniques: []},
             entry_overrides
           )
 
@@ -59,6 +59,31 @@ defmodule Hologram.Migration.DiffTest do
                ],
                questions: []
              }
+    end
+
+    test "emits a created entity type's keys after its members" do
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:slug, :string, []}],
+            relationships: [{:owner, MyApp.User, []}],
+            roles: [{:editor, []}],
+            uniques: [[:owner, :slug]]
+          }
+        })
+
+      assert %{ops: ops, questions: []} = diff(Model.empty(), current)
+
+      assert Enum.map(ops, & &1.op) == [
+               :create_entity,
+               :add_attribute,
+               :add_relationship,
+               :add_role,
+               :add_unique
+             ]
+
+      assert List.last(ops) == %{op: :add_unique, entity: MyApp.Task, fields: [:owner, :slug]}
+      assert Model.fold(Model.empty(), ops) == current
     end
 
     test "emits a deletion op for a deleted entity type" do
@@ -482,6 +507,319 @@ defmodule Hologram.Migration.DiffTest do
                ],
                questions: []
              }
+    end
+
+    test "emits a deleted key before the members it names and an added key after them" do
+      replayed =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :string, []}, {:slug, :string, []}],
+            relationships: [{:owner, MyApp.User, []}],
+            uniques: [[:kind, :slug], [:owner, :slug]]
+          }
+        })
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [
+              {:code, :string, [optional: true]},
+              {:kind, :string, []},
+              {:slug, :string, []}
+            ],
+            uniques: [[:code, :slug]]
+          }
+        })
+
+      assert %{ops: ops, questions: []} = diff(replayed, current)
+
+      assert ops == [
+               %{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :slug]},
+               %{op: :delete_unique, entity: MyApp.Task, fields: [:owner, :slug]},
+               %{
+                 op: :add_attribute,
+                 entity: MyApp.Task,
+                 name: :code,
+                 type: :string,
+                 opts: [optional: true]
+               },
+               %{op: :delete_relationship, entity: MyApp.Task, name: :owner},
+               %{op: :add_unique, entity: MyApp.Task, fields: [:code, :slug]}
+             ]
+    end
+
+    test "emits ops the replay folds to the current model when keys and their fields change" do
+      replayed =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:slug, :string, []}],
+            relationships: [{:owner, MyApp.User, []}],
+            uniques: [[:owner, :slug]]
+          }
+        })
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:slug, :string, []}],
+            relationships: [{:owner, [MyApp.User], []}]
+          }
+        })
+
+      assert %{ops: ops, questions: []} = diff(replayed, current)
+
+      assert Enum.map(ops, & &1.op) == [:delete_unique, :change_relationship]
+      assert Model.fold(replayed, ops) == current
+    end
+
+    test "emits a key whose field order changed as a delete and an add" do
+      attributes = [{:kind, :string, []}, {:slug, :string, []}]
+      replayed = model(%{MyApp.Task => %{attributes: attributes, uniques: [[:kind, :slug]]}})
+      current = model(%{MyApp.Task => %{attributes: attributes, uniques: [[:slug, :kind]]}})
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :slug]},
+                 %{op: :add_unique, entity: MyApp.Task, fields: [:slug, :kind]}
+               ],
+               questions: []
+             }
+    end
+
+    test "withholds a key naming a member a question asks about, with its new spelling" do
+      replayed =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :string, []}, {:name, :string, [optional: true]}],
+            uniques: [[:kind, :name]]
+          }
+        })
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :string, []}, {:title, :string, [optional: true]}],
+            uniques: [[:kind, :title]]
+          }
+        })
+
+      assert %{ops: [], questions: [question]} = diff(replayed, current)
+
+      assert question.kind == :attributes
+
+      assert question.withheld_ops == [
+               %{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :name]},
+               %{
+                 op: :add_attribute,
+                 entity: MyApp.Task,
+                 name: :title,
+                 type: :string,
+                 opts: [optional: true]
+               },
+               %{op: :delete_attribute, entity: MyApp.Task, name: :name},
+               %{op: :add_unique, entity: MyApp.Task, fields: [:kind, :title]}
+             ]
+
+      assert Model.fold(replayed, question.withheld_ops) == current
+    end
+
+    test "leaves nothing to migrate once the question about a key's field is answered as a rename" do
+      replayed =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:slug, :string, []}],
+            relationships: [{:owner, MyApp.User, []}],
+            uniques: [[:owner, :slug]]
+          }
+        })
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:slug, :string, []}],
+            relationships: [{:author, MyApp.User, []}],
+            uniques: [[:author, :slug]]
+          }
+        })
+
+      assert %{ops: [], questions: [%{kind: :relationships}]} = diff(replayed, current)
+
+      answer = [
+        %{op: :rename_relationship, entity: MyApp.Task, from: :owner, to: :author, line: 3}
+      ]
+
+      assert diff(Model.fold(replayed, answer), current) == %{ops: [], questions: []}
+    end
+
+    test "emits an added key naming what a question saw arrive when no deleted key is withheld" do
+      replayed =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :string, []}, {:name, :string, []}, {:slug, :string, []}],
+            uniques: [[:kind, :slug]]
+          }
+        })
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :string, []}, {:slug, :string, []}, {:title, :string, []}],
+            uniques: [[:slug, :title]]
+          }
+        })
+
+      assert %{ops: ops, questions: [question]} = diff(replayed, current)
+
+      assert ops == [
+               %{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :slug]},
+               %{op: :add_unique, entity: MyApp.Task, fields: [:slug, :title]}
+             ]
+
+      assert Enum.map(question.withheld_ops, & &1.op) == [:add_attribute, :delete_attribute]
+    end
+
+    test "rebuilds a key spelled the same when a field it names changes kind" do
+      to_one =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:slug, :string, []}],
+            relationships: [{:owner, MyApp.User, []}],
+            uniques: [[:owner, :slug]]
+          }
+        })
+
+      attribute =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:owner, :string, [optional: true]}, {:slug, :string, []}],
+            uniques: [[:owner, :slug]]
+          }
+        })
+
+      Enum.each([{to_one, attribute}, {attribute, to_one}], fn {replayed, current} ->
+        assert %{ops: ops, questions: []} = diff(replayed, current)
+
+        assert hd(ops) == %{op: :delete_unique, entity: MyApp.Task, fields: [:owner, :slug]}
+        assert List.last(ops) == %{op: :add_unique, entity: MyApp.Task, fields: [:owner, :slug]}
+        assert Model.fold(replayed, ops) == current
+      end)
+    end
+
+    test "withholds a key into every question asking about a member it names" do
+      replayed =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:name, :string, [optional: true]}],
+            relationships: [{:owner, MyApp.User, []}],
+            uniques: [[:owner, :name]]
+          }
+        })
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:title, :string, [optional: true]}],
+            relationships: [{:author, MyApp.User, []}],
+            uniques: [[:author, :title]]
+          }
+        })
+
+      assert %{ops: [], questions: [attributes, relationships]} = diff(replayed, current)
+
+      delete_op = %{op: :delete_unique, entity: MyApp.Task, fields: [:owner, :name]}
+      add_op = %{op: :add_unique, entity: MyApp.Task, fields: [:author, :title]}
+
+      assert attributes.kind == :attributes
+      assert hd(attributes.withheld_ops) == delete_op
+      assert List.last(attributes.withheld_ops) == add_op
+
+      assert relationships.kind == :relationships
+
+      assert relationships.withheld_ops == [
+               delete_op,
+               %{
+                 op: :add_relationship,
+                 entity: MyApp.Task,
+                 name: :author,
+                 type: MyApp.User,
+                 opts: []
+               },
+               %{op: :delete_relationship, entity: MyApp.Task, name: :owner},
+               add_op
+             ]
+    end
+
+    test "emits a key naming an attribute a fill question asks about" do
+      replayed = model(%{MyApp.Task => %{attributes: [{:slug, :string, []}]}})
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :string, []}, {:slug, :string, []}],
+            uniques: [[:kind, :slug]]
+          }
+        })
+
+      assert %{ops: ops, questions: [%{kind: :fill, withheld_ops: [%{op: :add_attribute}]}]} =
+               diff(replayed, current)
+
+      assert ops == [%{op: :add_unique, entity: MyApp.Task, fields: [:kind, :slug]}]
+    end
+
+    # The deleted role and the deleted enum value carry the names of the key's fields, so a
+    # question of either kind taking the key by name would show.
+    test "leaves key ops alone when the question asks about roles or enum values" do
+      replayed =
+        model(%{
+          MyApp.Task => %{
+            attributes: [
+              {:kind, :enum, [values: [:a, :kind]]},
+              {:slug, :string, []}
+            ],
+            roles: [{:slug, []}],
+            uniques: [[:kind, :slug]]
+          }
+        })
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [
+              {:kind, :enum, [values: [:a, :c]]},
+              {:slug, :string, []}
+            ],
+            roles: [{:owner, []}],
+            uniques: [[:slug, :kind]]
+          }
+        })
+
+      assert %{ops: ops, questions: [first, second]} = diff(replayed, current)
+
+      assert ops == [
+               %{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :slug]},
+               %{op: :add_unique, entity: MyApp.Task, fields: [:slug, :kind]}
+             ]
+
+      assert Enum.sort([first.kind, second.kind]) == [:enum_values, :roles]
+      assert first.deleted ++ second.deleted == [:kind, :slug]
+      refute Enum.any?(first.withheld_ops ++ second.withheld_ops, &Map.has_key?(&1, :fields))
+    end
+
+    test "withholds a created entity type's keys with its other creation ops" do
+      replayed =
+        model(%{MyApp.Draft => %{attributes: [{:kind, :string, []}, {:slug, :string, []}]}})
+
+      current =
+        model(%{
+          MyApp.Sketch => %{
+            attributes: [{:kind, :string, []}, {:slug, :string, []}],
+            uniques: [[:kind, :slug]]
+          }
+        })
+
+      assert %{ops: [], questions: [%{kind: :entities} = question]} = diff(replayed, current)
+
+      assert %{op: :add_unique, entity: MyApp.Sketch, fields: [:kind, :slug]} in question.withheld_ops
     end
 
     test "withholds member additions and deletions into a question" do
