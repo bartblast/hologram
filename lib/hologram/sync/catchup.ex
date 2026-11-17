@@ -8,11 +8,11 @@ defmodule Hologram.Sync.Catchup do
   # what it HOLDS. A client away for five minutes holding forty rows is told about the two that
   # moved, which is why the gap is the routine and the resync is the fallback.
   #
-  # Five doors lead to that fallback, and each is a thing that cannot usefully be answered rather
+  # Six doors lead to that fallback, and each is a thing that cannot usefully be answered rather
   # than a thing that went wrong: a place that cannot be read, a place judged under other rules, a
-  # place predating the log, a gap too big to be worth replaying, and a gap spanning a change of
-  # model. All of them are decided before a single ROW is looked at - the effects name which rows to
-  # read, and none is read here.
+  # place filled with other entity types, a place predating the log, a gap too big to be worth
+  # replaying, and a gap spanning a change of model. All of them are decided before a single ROW is
+  # looked at - the effects name which rows to read, and none is read here.
   #
   # Rules are a change no gap can hold at all: a deploy that narrows or widens who may read a row
   # moves no row and writes no effect, so what the client holds was decided by rules that no longer
@@ -84,7 +84,8 @@ defmodule Hologram.Sync.Catchup do
 
   @doc """
   Returns what to tell a returning client about the rows the given gap touched, given the `pot` it
-  may see now - the rows of every window it holds, keyed by id, already checked against who it is.
+  may see now - the rows of every window it holds, and the ones no window carries read again
+  through the read rules, keyed by id, already checked against who it is.
 
   A row the gap touched and the pot still holds is handed over WHOLE and as it now stands, not as
   the log said it was: the log names which rows to go and look at, and looking is what supplies
@@ -125,7 +126,8 @@ defmodule Hologram.Sync.Catchup do
   @doc """
   Returns the effects written since the given cursor and the grants the given actor held at it,
   or why everything must be sent again - a cursor judged under rules other than the given policy
-  hash's among the reasons (see `Hologram.Policy.hash/0`).
+  hash's (see `Hologram.Policy.hash/0`), and one filled with entity types other than the given
+  types hash's (see `Hologram.Sync.Cursor.types_hash/1`), among the reasons.
 
   What comes back names WHICH rows moved, never what they now hold - the values come from reading
   those rows as they stand. That is what makes the log safe to read as history: its order is not
@@ -136,11 +138,12 @@ defmodule Hologram.Sync.Catchup do
   row nothing touched can have changed hands in. Nil for an anonymous client too: no grant names
   it, so nothing about it can have moved.
   """
-  @spec gap(term, String.t() | nil, String.t()) ::
+  @spec gap(term, String.t() | nil, String.t(), String.t()) ::
           {:ok, list(map), list(struct) | nil} | {:full_resync, atom}
-  def gap(cursor, actor_user_id, policy_hash) do
-    with {:ok, tx, seq, cursor_policy_hash} <- decode_place(cursor),
+  def gap(cursor, actor_user_id, policy_hash, types_hash) do
+    with {:ok, tx, seq, cursor_policy_hash, cursor_types_hash} <- decode_place(cursor),
          :ok <- check_rules(cursor_policy_hash, policy_hash),
+         :ok <- check_types(cursor_types_hash, types_hash),
          :ok <- check_retention(tx, seq),
          {:ok, effects} <- read_gap(tx, seq) do
       {:ok, effects, grants_then(effects, tx, seq, actor_user_id)}
@@ -205,6 +208,13 @@ defmodule Hologram.Sync.Catchup do
 
   defp check_rules(_cursor_policy_hash, _policy_hash), do: {:full_resync, :policy_hash}
 
+  # A client filled before a deploy changed which types sync sends holds none of a type added since,
+  # and nothing in the log says so - the rows were always there, the client was just never sent
+  # them. Only filling it again does.
+  defp check_types(types_hash, types_hash), do: :ok
+
+  defp check_types(_cursor_types_hash, _types_hash), do: {:full_resync, :synced_types}
+
   # The cursor came from a frame, so the effect it names was written. If the oldest effect still
   # held is NEWER than that, the cursor predates the log and what it names cannot be told. If the
   # oldest is at or below it, the log speaks for the whole gap.
@@ -246,7 +256,7 @@ defmodule Hologram.Sync.Catchup do
 
   defp decode_place(cursor) do
     case Cursor.decode(cursor) do
-      {:ok, tx, seq, policy_hash} -> {:ok, tx, seq, policy_hash}
+      {:ok, tx, seq, policy_hash, types_hash} -> {:ok, tx, seq, policy_hash, types_hash}
       :error -> {:full_resync, :cursor}
     end
   end

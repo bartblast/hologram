@@ -5,6 +5,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Component.Action
   alias Hologram.DB.Oplog
+  alias Hologram.DB.QueryCache
   alias Hologram.LiveReload
   alias Hologram.Mutation.Record
   alias Hologram.Policy
@@ -19,6 +20,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Runtime.Session
   alias Hologram.StaleModelError
   alias Hologram.Sync.Catchup
+  alias Hologram.Sync.Cursor
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Handshake, as: SyncHandshake
   alias Hologram.Sync.Rules
@@ -227,10 +229,16 @@ defmodule Hologram.Realtime.SSE do
     end
   end
 
-  # No `connection` header: HTTP/2 forbids connection-specific header fields and treats a
-  # response carrying one as malformed, which WebKit enforces by dropping the stream. The
-  # header buys nothing where it is legal either, since HTTP/1.1 keeps connections alive by
-  # default and the adapter writes the header itself when a version needs it spelled out.
+  # Over HTTP/1.x the connection is closed once the stream ends. A server can keep it alive for
+  # the next request, and Bandit runs that request in the same process, which still holds what the
+  # stream left behind: its PubSub subscriptions, its registry entry and its timers. The client's
+  # next stream would then get each broadcast once per stream the connection ran, and the registry
+  # would close it as superseding itself. Closed, the process ends and takes all of that with it,
+  # as it does when the client goes. A stream ends this way when its sync session is cut.
+  #
+  # No `connection` header over HTTP/2: it forbids connection-specific header fields and treats a
+  # response carrying one as malformed, which WebKit enforces by dropping the stream. Each stream
+  # runs in a process of its own there.
   #
   # Public so tests can exercise the prep step without entering the blocking
   # message-pump loop.
@@ -240,7 +248,16 @@ defmodule Hologram.Realtime.SSE do
     conn
     |> Plug.Conn.put_resp_header("cache-control", "no-cache")
     |> Plug.Conn.put_resp_header("content-type", "text/event-stream")
+    |> close_after_stream()
     |> Plug.Conn.send_chunked(200)
+  end
+
+  defp close_after_stream(conn) do
+    if Plug.Conn.get_http_protocol(conn) in [:"HTTP/1.0", :"HTTP/1.1"] do
+      Plug.Conn.put_resp_header(conn, "connection", "close")
+    else
+      conn
+    end
   end
 
   # Public so tests can step the pump one message at a time without spawning
@@ -259,6 +276,7 @@ defmodule Hologram.Realtime.SSE do
       Keyword.get(opts, :receipts_refresh_interval_ms, @receipts_refresh_interval_ms)
 
     adapter = Keyword.get(opts, :adapter, Adapters.Passive)
+    sync_session = Keyword.get(opts, :sync_session)
 
     receive do
       {:add_sub_receipts, receipts} ->
@@ -368,6 +386,14 @@ defmodule Hologram.Realtime.SSE do
         end
 
       {:close, _reason} ->
+        {:halt, conn}
+
+      # The sync session ended, cut for a client it can no longer speak for. The link takes the
+      # stream down with it, but a server whose connection process traps exits, as Bandit's does,
+      # hands the exit over as a message instead, and the stream would stay open with nothing left
+      # to send on it. Ended, it sends the client through the doors again. A session the stream
+      # replaced on a change of identity is no longer this one, so its exit is passed over.
+      {:EXIT, ^sync_session, _reason} ->
         {:halt, conn}
 
       # A live reload whose compile failed, Elixir's or Hologram's. Forwarded as it came:
@@ -543,8 +569,12 @@ defmodule Hologram.Realtime.SSE do
 
     # Named rather than written inline as `resume? && gap(cursor, user_id, policy_hash)`: that
     # answers FALSE when it does not resume, and everything below reads "no gap" from nil alone.
+    # The types this build syncs, which a place names beside the rules: a client filled with others
+    # holds no rows of a type added since.
+    types_hash = Cursor.types_hash(QueryCache.synced_types())
+
     {gap, resync_reason} =
-      if resume?, do: gap(cursor, user_id, policy_hash), else: {nil, nil}
+      if resume?, do: gap(cursor, user_id, policy_hash, types_hash), else: {nil, nil}
 
     # What a rule reads besides its own row, so a row the gap never names can be judged again
     # when the row DECIDING it moved. Only for a returning client - one arriving with nothing
@@ -564,12 +594,43 @@ defmodule Hologram.Realtime.SSE do
       edges: edges,
       gap_end: gap_end(gap),
       resync_reason: resync_reason,
-      rules: rules
+      rules: rules,
+      types_hash: types_hash
     }
 
     if Policy.hash() == policy_hash, do: {:ok, start}, else: :rules_changed
   rescue
     StaleModelError -> :held
+  end
+
+  # The options a sync session is started with, for the given user and page, under the rules of the
+  # given policy hash, from what the start read decided (see `read_sync_start/5`) and what was read
+  # beside the connection's identity: its replica, how far that replica's batches are applied, and
+  # where the log stood. Public so tests can check what the session is handed without standing up
+  # a stream.
+  @doc false
+  @spec sync_session_opts(term | nil, term, String.t(), map, map) :: keyword
+  def sync_session_opts(user_id, page, policy_hash, start, connection) do
+    # Handed over as a reader rather than read here, because the session decides WHEN the gap is
+    # read - which runs it in the session's process, query and memory alike. Closing over the
+    # cursor alone keeps the rest of `start` out of the session's heap.
+    cursor = start.cursor
+    types_hash = start.types_hash
+    read_gap = cursor && fn -> Catchup.gap(cursor, user_id, policy_hash, types_hash) end
+
+    [
+      actor_user_id: user_id,
+      applied_seq: connection.applied_seq,
+      client: self(),
+      edges: start.edges,
+      fill_place: connection.fill_place,
+      gap_end: start.gap_end,
+      page: page,
+      policy_hash: policy_hash,
+      read_gap: read_gap,
+      replica_id: connection.replica_id,
+      types_hash: types_hash
+    ]
   end
 
   # Public so tests can check what a greeting's identity is worth without standing up a stream.
@@ -995,10 +1056,10 @@ defmodule Hologram.Realtime.SSE do
   # either told what it missed, or told to let go of what it holds - and is then filled the same
   # way a first arrival is. Deciding it here rather than in the session puts the answer beside the
   # reload notice it stands next to, both sent before the session's first frame.
-  defp gap(nil, _user_id, _policy_hash), do: {nil, nil}
+  defp gap(nil, _user_id, _policy_hash, _types_hash), do: {nil, nil}
 
-  defp gap(cursor, user_id, policy_hash) do
-    case Catchup.gap(cursor, user_id, policy_hash) do
+  defp gap(cursor, user_id, policy_hash, types_hash) do
+    case Catchup.gap(cursor, user_id, policy_hash, types_hash) do
       {:ok, effects, _grants_then} -> {effects, nil}
       {:full_resync, reason} -> {nil, reason}
     end
@@ -1067,25 +1128,16 @@ defmodule Hologram.Realtime.SSE do
     # Read here, beside the identity it is read for.
     applied_seq = replica_id && Record.highest_confirmed_seq(replica_id)
 
-    # Handed over as a reader rather than read here, because the session decides WHEN the gap is
-    # read - which runs it in the session's process, query and memory alike. Closing over the
-    # cursor alone keeps the rest of `start` out of the session's heap.
-    cursor = start.cursor
-    read_gap = cursor && fn -> Catchup.gap(cursor, user_id, policy_hash) end
+    connection = %{
+      applied_seq: applied_seq,
+      fill_place: {Oplog.current_xmin(), 0},
+      replica_id: replica_id
+    }
 
     {:ok, session} =
-      SyncSession.start_link(
-        actor_user_id: user_id,
-        applied_seq: applied_seq,
-        client: self(),
-        edges: start.edges,
-        fill_place: {Oplog.current_xmin(), 0},
-        gap_end: start.gap_end,
-        page: page,
-        policy_hash: policy_hash,
-        read_gap: read_gap,
-        replica_id: replica_id
-      )
+      user_id
+      |> sync_session_opts(page, policy_hash, start, connection)
+      |> SyncSession.start_link()
 
     {conn, session}
   end

@@ -3,7 +3,6 @@
 import Batches from "./batches.mjs";
 import Deltas from "./deltas.mjs";
 import Durability from "./durability.mjs";
-import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
@@ -68,12 +67,6 @@ export default class SyncStream {
 
     const pageModuleName = Interpreter.moduleExName(pageModule);
 
-    // The page this client greeted with - the one whose rows the server declares complete at the
-    // "page" scope, which is a narrower promise than "all" and arrives sooner. Navigation moves
-    // the current page and leaves this one behind, since only what the connect asked for is
-    // covered by that scope.
-    GlobalRegistry.set("connectPageModule", pageModuleName);
-
     const greeting = {
       model_hash: sync.modelHash,
       page: pageModuleName,
@@ -101,6 +94,21 @@ export default class SyncStream {
       // greet with nothing, and marking rows for a fill that never arrives would have the leader's
       // own completeness sweep take away rows this browser rightly holds.
       LocalDatabase.beginRefill();
+
+      // The stored rows go too, the way a resync takes them: a row the cut fill stored and the new
+      // one no longer sends would otherwise be read back on the next page load as one the stream
+      // vouched for, and a tab starting after this one would take it up the same way at once.
+      Durability.clear();
+
+      // And the group's other tabs, which hold the same rows out of the same store, are told so the
+      // way a resync tells them: kept as they are, their rows would never be marked, and the new
+      // fill's markers would sweep nothing there - a row gone since the cut fill would stay, and be
+      // counted.
+      Tabs.post({
+        event: "sync_resync",
+        frame: {reason: "no place to resume from"},
+        kind: "frame",
+      });
     }
 
     // The identity this browser presents - the pair it remembered from an earlier page load, or
@@ -330,9 +338,15 @@ export default class SyncStream {
           $.syncCursor = frame.cursor;
         }
 
-        LocalDatabase.markSynced(frame.scope);
+        // A scope this client does not know names nothing it holds - a node of an older build
+        // speaks of the page it connected on, which is not a claim about any type.
+        if (frame.scope === "types") {
+          LocalDatabase.markTypesSynced(frame.types);
+        } else if (frame.scope === "all") {
+          LocalDatabase.markAllSynced();
+        }
 
-        // What a query answers can change the moment a scope is complete - a count that was
+        // What a query answers can change the moment a type is complete - a count that was
         // reading the server's number starts counting rows - so the marker is a reason to
         // render like any frame is.
         $.scheduleRender();
@@ -400,20 +414,15 @@ export default class SyncStream {
   // The frame handed to the other tabs of this browser, which have no stream of their own: only
   // one tab is served sync, and what it receives is every tab's.
   //
-  // AFTER the frame has been written down, and that order is the whole of why a tab joining the
-  // group cannot miss anything. A write transaction is created before this returns, and IndexedDB
-  // orders what follows behind it - so a tab that reads the store on hearing this reads a store
-  // that already holds the frame, and a tab that was too late to read it is told by the message.
+  // AFTER the frame has been written down, which is what a tab joining the group relies on. A write
+  // transaction is created before this returns, and IndexedDB orders what follows behind it - so a
+  // tab that reads the store on hearing this reads a store that already holds the frame, and a tab
+  // that was too late to read it is told by the message.
   //
-  // The page the stream was GREETED with rides along, because a completeness marker for a page is
-  // a claim about that page rather than about whatever page each tab happens to be on.
+  // TODO(#1653): a starting tab reads the store before it joins the group, so a frame stored and
+  // posted in between reaches it neither way.
   static tell(event, frame) {
-    Tabs.post({
-      event,
-      frame,
-      kind: "frame",
-      page: GlobalRegistry.get("connectPageModule"),
-    });
+    Tabs.post({event, frame, kind: "frame"});
   }
 
   // Whether this tab has to hold its writes: the server would refuse them. That is a stop over the

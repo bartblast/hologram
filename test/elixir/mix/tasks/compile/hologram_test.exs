@@ -1334,6 +1334,36 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert MapSet.difference(macro_fields, fixture_fields) == MapSet.new()
   end
 
+  describe "migrations directory check" do
+    setup %{opts: opts} do
+      app_dir = Path.join(@tmp_dir, "migrations_check_app")
+      migrations_dir = Path.join([app_dir, "app", "migrations"])
+
+      File.mkdir_p!(migrations_dir)
+
+      migrations_dir
+      |> Path.join("20260813091522.ex")
+      |> File.write!("")
+
+      [opts: Keyword.put(opts, :app_dir, app_dir)]
+    end
+
+    # The project's elixirc_paths compile no app/ directory, so the file is left out.
+    test "refuses a build that leaves out the migration files app/migrations/ holds", %{
+      opts: opts
+    } do
+      assert_raise Hologram.CompileError, ~r/app\/migrations\/ holds migration files/, fn ->
+        run(opts)
+      end
+    end
+
+    test "checks nothing for language server builds", %{opts: opts} do
+      ls_opts = Keyword.put(opts, :build_dir, Path.join(opts[:build_dir], ".expert"))
+
+      assert run(ls_opts) == :noop
+    end
+  end
+
   describe "compiler skipping" do
     setup do
       # A validation with Hologram off fills the model caches from the beams.
@@ -1833,7 +1863,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
         module_infos: module_infos
       } = cache_state()
 
-      removed_reach = %{checks_permissions?: false, components: [], modules: MapSet.new()}
+      removed_reach = %{
+        checks_permissions?: false,
+        components: [],
+        modules: MapSet.new(),
+        reads_session_user?: false
+      }
+
       pages = Map.put(data_layer.pages, :removed_page, removed_reach)
       Cache.put_data_layer(%{data_layer | pages: pages})
 
@@ -1856,7 +1892,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         module_infos: module_infos
       } = cache_state()
 
-      removed_entry = %{derived_queries: [], terms: []}
+      removed_entry = %{count_types: %{}, derived_queries: [], terms: []}
       components = Map.put(data_layer.components, :removed_component, removed_entry)
       Cache.put_data_layer(%{data_layer | components: components})
 

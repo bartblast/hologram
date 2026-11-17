@@ -133,6 +133,30 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Compiles a migration module with the given version and body in memory, as though its file
+  were app/migrations/<version>.ex, and returns the module. The module name is unique, so
+  tests can compile the same version concurrently. A module compiled in memory is listed by
+  `Hologram.Reflection.list_migrations/0` only once an application spec names it.
+  """
+  @spec compile_migration(String.t(), String.t()) :: module
+  def compile_migration(version, body) do
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    module = Module.concat(random_module(), "V#{version}")
+
+    code = """
+    defmodule #{inspect(module)} do
+      use Hologram.Migration
+
+    #{body}
+    end
+    """
+
+    [{^module, _bytecode}] = Code.compile_string(code, "app/migrations/#{version}.ex")
+
+    module
+  end
+
+  @doc """
   Returns how many times the given function is called, in any process, while the given function runs.
   """
   @spec count_calls(mfa, (-> any)) :: non_neg_integer

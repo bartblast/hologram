@@ -9,6 +9,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Component
+  alias Hologram.DB.QueryCache
   alias Hologram.LiveReload
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
@@ -97,6 +98,7 @@ defmodule Hologram.ControllerTest do
   use_module_stub :chunk_registry
   use_module_stub :page_digest_registry
   use_module_stub :page_module_resolver
+  use_module_stub :query_cache
 
   setup :set_mox_global
 
@@ -3291,10 +3293,14 @@ defmodule Hologram.ControllerTest do
       assert String.contains?(conn.resp_body, "marker=injected_by_middleware")
     end
 
-    # The page reads its session user through the query runner, so this one needs the server.
+    # The page reads its session user through the query runner, so this one needs the server, and
+    # the read asks the query cache whether the build checks permissions on the client.
     @tag :database
     test "runs page middleware as the session user" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module51, :dummy_module_51_digest)
+
+      setup_query_cache(QueryCacheStub, false)
+      QueryCache.init(nil)
 
       conn =
         :get

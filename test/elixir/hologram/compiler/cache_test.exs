@@ -24,12 +24,13 @@ defmodule Hologram.Compiler.CacheTest do
 
   defp data_layer_state do
     %{
-      components: %{Module1 => %{derived_queries: [], terms: []}},
+      components: %{Module1 => %{count_types: %{}, derived_queries: [], terms: []}},
       pages: %{
         Module2 => %{
           checks_permissions?: false,
           components: [Module1],
-          modules: MapSet.new([Module1, Module2])
+          modules: MapSet.new([Module1, Module2]),
+          reads_session_user?: false
         }
       },
       sync_constants_js: "globalThis.Hologram.sync = null;"

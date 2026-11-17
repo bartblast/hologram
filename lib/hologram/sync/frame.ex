@@ -95,13 +95,14 @@ defmodule Hologram.Sync.Frame do
   @doc """
   Builds the SSE event-stream chunk saying how much of what the client will hold has arrived.
 
-  The scope says which queries it may now answer from its own store: `:page` covers the page it
-  is on, `:all` covers every page, so navigating needs no server. Until a scope arrives the client
-  answers from what the server rendered, because a store filled only part way would answer a query
-  with part of the truth.
+  The scope says which queries it may now answer from its own store: `{:types, types}` names entity
+  types whose every row the client may see it now holds, and `:all` says it holds everything, so
+  navigating needs no server. Until a query's types have arrived the client answers it from what
+  the server rendered, because a store filled only part way would answer with part of the truth.
 
-  Two scopes rather than one per window, because window ids are the server's business and never
-  cross the wire - and "can I answer this page myself?" is the whole of what a client asks.
+  Per entity type rather than per page or per window, because a type is what a fill sends whole,
+  and whether it is complete is the same claim on every page and in every tab - which a page is
+  not. The types are spelled the way a frame spells a row's type.
 
   The place comes with the marker for the same reason the marker exists: this is the moment the
   client holds a whole pot, and a place is a claim only a client holding one can honour. A deltas
@@ -110,14 +111,16 @@ defmodule Hologram.Sync.Frame do
   from, and would be filled from nothing on its next visit.
 
   Whether the marker names a place is about the CLIENT, not the scope. A first arrival holds a
-  whole pot only once `:all` has been announced, so its `:page` marker names none - the scope is
-  narrower than the claim. A client that came back holds one from its first frame, since it kept
-  what it had and is being told only what moved - so both of its markers name a place. And nil
-  for `:all` on a build whose windows have no places to speak of.
+  whole pot only once `:all` has been announced, so its types markers name none - the scope is
+  narrower than the claim. And nil for `:all` on a build whose windows have no places to speak of.
   """
-  @spec encode_synced_envelope(integer, :all | :page, String.t() | nil) :: String.t()
+  @spec encode_synced_envelope(integer, :all | {:types, list(module)}, String.t() | nil) ::
+          String.t()
   def encode_synced_envelope(id, scope, cursor) do
-    payload = %{cursor: cursor, protocol_version: @protocol_version, scope: scope}
+    payload =
+      scope
+      |> scope_payload()
+      |> Map.merge(%{cursor: cursor, protocol_version: @protocol_version})
 
     "event: synced\nid: #{id}\ndata: #{Jason.encode!(payload)}\n\n"
   end
@@ -263,6 +266,12 @@ defmodule Hologram.Sync.Frame do
       op: :patch_entity,
       type: type_of(row)
     }
+  end
+
+  defp scope_payload(:all), do: %{scope: :all}
+
+  defp scope_payload({:types, types}) do
+    %{scope: :types, types: Enum.map(types, &Codec.encode_enum_value/1)}
   end
 
   defp payload(:put_entity, delta), do: delta.data
