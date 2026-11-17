@@ -164,7 +164,8 @@ defmodule HologramSyncBenchmark.Cases.Access do
       fill.failed == 0 and fill.unfinished == 0 and fill.connect_failures == 0 and
         Enum.all?(fill.ms, &(&1 <= opts[:fill_timeout] * 1_000))
 
-    filled? and hide.done? and show.done? and hide.ms <= limit_ms and show.ms <= limit_ms
+    filled? and result.warmup_cut_short == 0 and hide.done? and show.done? and
+      hide.ms <= limit_ms and show.ms <= limit_ms
   end
 
   defp why_failed(result, opts) do
@@ -177,6 +178,8 @@ defmodule HologramSyncBenchmark.Cases.Access do
 
     [
       Sweep.fill_reasons(fill, opts[:fill_timeout]),
+      result.warmup_cut_short > 0 &&
+        "#{result.warmup_cut_short} warm-up writes never reached everyone",
       filled? && change_reason("archive", hide, limit_ms),
       hide.done? && change_reason("unarchive", show, limit_ms)
     ]
@@ -226,9 +229,10 @@ defmodule HologramSyncBenchmark.Cases.Access do
       # waiting for it would only stretch the step.
       filled? = fill.failed == 0 and fill.unfinished == 0 and fill.connect_failures == 0
 
+      warmup_cut_short = if filled?, do: warm_up(peer, clients, first_marker), else: 0
+
       {hide, stats_after_hide} =
         if filled? do
-          :ok = warm_up(peer, clients, first_marker)
           change(peer, clients, conn, context.project_id, true, :unsync, opts)
         else
           {skipped(), DB.settled_stats(conn)}
@@ -253,7 +257,8 @@ defmodule HologramSyncBenchmark.Cases.Access do
         hide: finish(hide, idle),
         memory_per_client:
           if(count >= Step.memory_min_clients(), do: (memory_after - memory_before) / count),
-        show: finish(show, idle)
+        show: finish(show, idle),
+        warmup_cut_short: warmup_cut_short
       }
     after
       Clients.close_all(clients)
@@ -320,32 +325,31 @@ defmodule HologramSyncBenchmark.Cases.Access do
     ]
   end
 
-  # Doc titles set to markers, each waited on until every client has it.
+  # Doc titles set to markers, each waited on until every client has it. Returns how many never
+  # reached everyone.
   defp warm_up(peer, clients, first_marker) do
     ids = Peer.rpc(peer, Writer, :ids, [Doc])
 
-    for offset <- 0..(@warmup_writes - 1) do
+    Enum.count(0..(@warmup_writes - 1), fn offset ->
       number = first_marker + offset
       Peer.rpc(peer, Writer, :update, [Doc, elem(ids, offset), :title, Client.marker(number)])
 
       deadline = System.monotonic_time(:millisecond) + @wait_ms
-      await_marker(clients, number, deadline)
-    end
-
-    :ok
+      not await_marker(clients, number, deadline)
+    end)
   end
 
   # Gives up on a failed client too, for the same reason as await_counts/4.
   defp await_marker(clients, number, deadline) do
     cond do
       Enum.all?(clients, &Client.has_marker?(&1, number)) ->
-        :ok
+        true
 
       Enum.any?(clients, &(Client.report(&1).failure != nil)) ->
-        :ok
+        false
 
       System.monotonic_time(:millisecond) >= deadline ->
-        :ok
+        false
 
       true ->
         Process.sleep(@poll_ms)

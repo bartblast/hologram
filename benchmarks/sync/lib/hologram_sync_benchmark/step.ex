@@ -293,8 +293,13 @@ defmodule HologramSyncBenchmark.Step do
 
     client_tuple = List.to_tuple(clients)
 
-    # Waited on, so their deliveries are over before anything is measured.
-    for offset <- 0..(@warmup_writes - 1), do: await_write(peer, client_tuple, spec, offset)
+    # Waited on, so their deliveries are over before anything is measured. One that never reached
+    # everyone may still be at work in the measured phases, so it fails the step.
+    warmup_cut_short =
+      Enum.count(0..(@warmup_writes - 1), fn offset ->
+        {_number, _committed_at, delivered?} = await_write(peer, client_tuple, spec, offset)
+        not delivered?
+      end)
 
     stats_before_isolated = DB.settled_stats(spec.conn)
     {isolated, stats_after_isolated} = isolated(peer, client_tuple, spec, stats_before_isolated)
@@ -323,7 +328,8 @@ defmodule HologramSyncBenchmark.Step do
       steady:
         steady
         |> finish_steady(idle)
-        |> Map.put(:streams_lost, steady.failed_clients - fill.failed)
+        |> Map.put(:streams_lost, steady.failed_clients - fill.failed),
+      warmup_cut_short: warmup_cut_short
     }
   end
 

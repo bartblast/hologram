@@ -277,24 +277,22 @@ defmodule HologramSyncBenchmark.Driver do
   end
 
   # Every client filled in time, every write reached every client it should have and no other,
-  # each single write within the wait, no session was cut, and the steady writes' p99 stayed
-  # within the limit. A session cut after the last write it should have had misses nothing, so
-  # the cuts count on their own.
+  # each warm-up and single write within the wait, no session was cut, and the steady writes' p99
+  # stayed within the limit. A session cut after the last write it should have had misses
+  # nothing, so the cuts count on their own.
   defp passed?(result, opts) do
-    filled?(result.fill, opts) and result.isolated.cut_short == 0 and
-      result.isolated.leaked == 0 and result.session_cuts == 0 and
-      delivered?(result.steady, opts)
+    filled?(result.fill, opts) and result.warmup_cut_short == 0 and
+      result.isolated.cut_short == 0 and result.isolated.leaked == 0 and
+      result.session_cuts == 0 and delivered?(result.steady, opts)
   end
 
   # What failed a step with writes, for the figure's note.
   defp why_failed(result, opts) do
-    %{fill: fill, isolated: isolated, steady: steady} = result
+    %{fill: fill, steady: steady} = result
 
     [
       Sweep.fill_reasons(fill, opts[:fill_timeout]),
-      isolated.cut_short > 0 && "#{isolated.cut_short} single writes never reached everyone",
-      isolated.leaked > 0 &&
-        count_of(isolated.leaked, "single write delivery", "single write deliveries") <> " leaked",
+      waited_reasons(result),
       steady.missing > 0 && count_of(steady.missing, "delivery", "deliveries") <> " missing",
       steady.leaked > 0 && "#{steady.leaked} deliveries leaked",
       steady.streams_lost > 0 && count_of(steady.streams_lost, "stream", "streams") <> " lost",
@@ -305,6 +303,16 @@ defmodule HologramSyncBenchmark.Driver do
     |> List.flatten()
     |> Enum.filter(& &1)
     |> Enum.join(", ")
+  end
+
+  # The writes each waited on until it reached everyone: the warm-up and the single writes.
+  defp waited_reasons(%{isolated: isolated, warmup_cut_short: warmup_cut_short}) do
+    [
+      warmup_cut_short > 0 && "#{warmup_cut_short} warm-up writes never reached everyone",
+      isolated.cut_short > 0 && "#{isolated.cut_short} single writes never reached everyone",
+      isolated.leaked > 0 &&
+        count_of(isolated.leaked, "single write delivery", "single write deliveries") <> " leaked"
+    ]
   end
 
   defp count_of(1, one, _many), do: "1 #{one}"
