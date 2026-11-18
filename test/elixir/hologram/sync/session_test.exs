@@ -3836,12 +3836,12 @@ defmodule Hologram.Sync.SessionTest do
     # While the client is being caught up: once it is, the session has left its windows.
     test "cuts the client off when an evaluator it reads stops" do
       windows(%{@page => [@board_window], @other_page => [@other_window]})
-      hold_windows([@board_window])
-      hold_silently(@other_window)
+      hold_silently(@board_window)
+      hold_windows([@other_window])
 
       session = start_session!(gap: [])
 
-      [{evaluator, _value}] = Registry.lookup(Evaluator.registry(), @board_window)
+      [{evaluator, _value}] = Registry.lookup(Evaluator.registry(), @other_window)
 
       # Killed between rounds, not in the middle of the one the session asked for, which would take
       # the test's connection down with it.
