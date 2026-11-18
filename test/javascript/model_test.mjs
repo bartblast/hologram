@@ -355,6 +355,61 @@ describe("Model", () => {
       }
     });
 
+    // The server accepts a date of any year the calendar has and spells it with Date.to_iso8601/1,
+    // so a year below 0 or past 9999 arrives on the wire like any other. One year is still one
+    // spelling: the server never writes fewer than four digits, a leading zero past four, a plus,
+    // or a minus before year 0.
+    it("boxes a date of any year the server spells, and no other spelling of one", () => {
+      const yearOf = (spelling) =>
+        field(
+          field(Model.box(TASK, row({due_on: spelling})), "due_on"),
+          "year",
+        );
+
+      assert.deepEqual(yearOf("-0001-03-01"), Type.integer(-1));
+      assert.deepEqual(yearOf("-10000-03-01"), Type.integer(-10000));
+      assert.deepEqual(yearOf("0000-03-01"), Type.integer(0));
+      assert.deepEqual(yearOf("10000-03-01"), Type.integer(10000));
+      assert.deepEqual(yearOf("20250-03-01"), Type.integer(20250));
+
+      const others = [
+        "206-03-01",
+        "02025-03-01",
+        "+2026-03-01",
+        "-0000-03-01",
+        "-00001-03-01",
+      ];
+
+      for (const spelling of others) {
+        assert.throw(
+          () => Model.box(TASK, row({due_on: spelling})),
+          HologramRuntimeError,
+          `invalid date on the wire: ${spelling}`,
+        );
+      }
+    });
+
+    // The calendar extended backwards keeps the leap rule as it is: years -4 and -400 are leap
+    // years, and -1 and -100 are not.
+    it("reads the leap rule for a year below 0", () => {
+      for (const spelling of ["-0004-02-29", "-0400-02-29"]) {
+        const boxed = Model.box(TASK, row({due_on: spelling}));
+
+        assert.deepEqual(
+          field(field(boxed, "due_on"), "day"),
+          Type.integer(29),
+        );
+      }
+
+      for (const spelling of ["-0001-02-29", "-0100-02-29"]) {
+        assert.throw(
+          () => Model.box(TASK, row({due_on: spelling})),
+          HologramRuntimeError,
+          `invalid date on the wire: ${spelling}`,
+        );
+      }
+    });
+
     it("boxes the last day of a leap February", () => {
       const boxed = Model.box(TASK, row({due_on: "2024-02-29"}));
 
@@ -432,6 +487,34 @@ describe("Model", () => {
         field(field(boxed, "updated_at"), "microsecond"),
         Type.tuple([Type.integer(999999), Type.integer(6)]),
       );
+    });
+
+    it("boxes a datetime with a year below 0 as the server spells it, and no other spelling", () => {
+      const boxed = Model.box(
+        TASK,
+        row({updated_at: "-0001-12-31T23:30:00.000005Z"}),
+      );
+
+      assert.deepEqual(
+        field(field(boxed, "updated_at"), "year"),
+        Type.integer(-1),
+      );
+
+      assert.deepEqual(
+        field(field(boxed, "updated_at"), "day"),
+        Type.integer(31),
+      );
+
+      for (const spelling of [
+        "+2026-08-16T00:00:00Z",
+        "-0000-01-01T00:00:00Z",
+      ]) {
+        assert.throw(
+          () => Model.box(TASK, row({updated_at: spelling})),
+          HologramRuntimeError,
+          `invalid datetime on the wire: ${spelling}`,
+        );
+      }
     });
 
     it("boxes a datetime carrying no fractional seconds", () => {

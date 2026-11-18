@@ -50,6 +50,18 @@ export default class Model {
 
   static #entries = {};
 
+  // A year the way Date.to_iso8601/1 spells one, which is how every date and datetime arrives:
+  // four digits, or more with no leading zero, and a minus before a year below 0 - never before 0
+  // itself. So one year is one spelling, as one day is, and the year of every date the server
+  // accepts reads back - the entity validator asks only that the calendar has the day.
+  static #YEAR = "((?!-0000)-?(?:\\d{4}|[1-9]\\d{4,}))";
+
+  static #DATE_PATTERN = new RegExp(`^${Model.#YEAR}-(\\d{2})-(\\d{2})$`);
+
+  static #DATETIME_PATTERN = new RegExp(
+    `^${Model.#YEAR}-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d+))?Z$`,
+  );
+
   // Every relationship of a row is absent from the row itself: a to-many lives in the
   // relationship facts and a to-one behind the reference field, so both are assembled by whoever
   // reads them and handed over here. What no reader asked for stays unasked-for rather than
@@ -562,7 +574,7 @@ export default class Model {
   // one down on both tiers, and a date column cannot hold one - so this is the third reader of one
   // rule agreeing with the other two, rather than a gate anything is expected to reach.
   static #boxDate(value) {
-    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const match = value.match(Model.#DATE_PATTERN);
 
     if (!match) {
       throw new HologramRuntimeError(`invalid date on the wire: ${value}`);
@@ -586,9 +598,7 @@ export default class Model {
   // Every datetime on the wire is UTC, which is what makes them comparable as plain strings in
   // the first place - so the zone is the same one every time rather than something to read.
   static #boxDateTime(value) {
-    const match = value.match(
-      /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z$/,
-    );
+    const match = value.match(Model.#DATETIME_PATTERN);
 
     if (!match) {
       throw new HologramRuntimeError(`invalid datetime on the wire: ${value}`);
