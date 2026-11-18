@@ -23,6 +23,7 @@ defmodule Hologram.Sync.Search do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
+  alias Hologram.Policy.Edges
 
   @whole_row_ops [:del_entity, :put_entity]
 
@@ -52,7 +53,7 @@ defmodule Hologram.Sync.Search do
   the caller has them. So a change to a column no read rule or verdict reads lists nothing. A
   listed row may be gone, which reading it again answers.
   """
-  @spec candidates(list(map), %{{module, atom} => list(tuple)}) :: %{
+  @spec candidates(list(map), Edges.t()) :: %{
           rows: %{module => MapSet.t(String.t())},
           whole_types: %{module => MapSet.t(String.t())}
         }

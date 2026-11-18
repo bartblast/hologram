@@ -6,6 +6,12 @@ defmodule Hologram.Policy.Edges do
   alias Hologram.Entity.Model
   alias Hologram.Policy
 
+  @typedoc """
+  The edges of a data model, keyed by entity type and operation or allow line name, or by entity
+  type and `{:verdicts}` (see `derive/1`).
+  """
+  @type t :: %{{module, Entity.operation() | {:verdicts}} => list(tuple)}
+
   @index_key {__MODULE__, :index}
 
   @universal_edges [:auth_change, :deploy]
@@ -57,7 +63,7 @@ defmodule Hologram.Policy.Edges do
   compile may have validated, raises rather than loops: the policies are built through
   `Hologram.Policy.build/1`, which refuses it (see `Hologram.Entity.Model.hold/0`).
   """
-  @spec derive(list(module)) :: %{{module, Entity.operation() | {:verdicts}} => list(tuple)}
+  @spec derive(list(module)) :: t()
   def derive(entity_types) do
     operation_pairs =
       for entity_type <- entity_types,
@@ -81,7 +87,7 @@ defmodule Hologram.Policy.Edges do
   recompiled data model is picked up by the next call. Raises while the data model is under a hold,
   cached or not (see `Hologram.Entity.Model.ensure_released!/0`).
   """
-  @spec index() :: %{{module, Entity.operation() | {:verdicts}} => list(tuple)}
+  @spec index() :: t()
   def index do
     Model.ensure_released!()
 
