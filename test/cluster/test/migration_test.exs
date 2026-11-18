@@ -175,7 +175,27 @@ defmodule HologramClusterTests.MigrationTest do
                Enum.map(migrations(), & &1.version)
     end
 
-    test "a build interrupted partway is rebuilt by the next boot" do
+    test "a build interrupted partway is rebuilt by a restart of the same release" do
+      first_peer = start_migration_peer(1)
+
+      assert serving?(first_peer)
+
+      index = "entities_item_container_id_$idx"
+
+      # The index a build that died partway leaves, met by a restart with nothing pending:
+      # it stays in the catalog serving no query and slowing every write. With no files to
+      # apply, the boot goes straight to the index repair, which rebuilds it.
+      invalidate_index(index)
+
+      assert index_validity(index) == false
+
+      next_peer = start_migration_peer(2)
+
+      assert serving?(next_peer)
+      assert index_validity(index) == true
+    end
+
+    test "a build interrupted partway is rebuilt after a later file renames its index" do
       # What a node killed during f4's concurrent build leaves behind: f4 is recorded
       # applied - it committed before the build began - while the index stays in the
       # catalog serving no query and slowing every write. The files after f4 are still
