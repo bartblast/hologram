@@ -41,8 +41,9 @@ defmodule Hologram.Policy.Edges do
       entity a grant-store row names, deciding that row's visibility.
 
   Beside the operations, `{entity type, :verdicts}` names the edges of the type's deciding items -
-  clauses and role references - when it has any (see `Hologram.Policy.deciding_quantifiers/1`):
-  what the server's verdicts sent with its rows read, whichever operation they decide.
+  clauses, role references and delegations - when it has any (see
+  `Hologram.Policy.deciding_quantifiers/1`): what the server's verdicts sent with its rows read,
+  whichever operation they decide.
 
   Delegations expand transitively: a via chain contributes the target policy's edges for the
   operation each delegation names, with the chain prefixed, so every pair's list is complete on

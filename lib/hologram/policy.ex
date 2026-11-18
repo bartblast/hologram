@@ -69,6 +69,8 @@ defmodule Hologram.Policy do
 
   @deciding_quantifiers_key {__MODULE__, :deciding_quantifiers}
 
+  @deciding_reads_key {__MODULE__, :deciding_reads}
+
   @hash_bytes 16
 
   @hash_key {__MODULE__, :hash}
@@ -303,11 +305,17 @@ defmodule Hologram.Policy do
 
   A read rule's role reference, given as `{:to, reference}`, is a deciding one when it reads a row
   of a type no session may read: a reference two or more relationships away reads the rows before
-  its last relationship, whose last reference holds the id the role is held on.
+  its last relationship, whose last reference holds the id the role is held on. So is a read rule's
+  delegation, given as `{:via, {operation, chain}}`, whose chain passes a row of such a type, the
+  row it leads to included: the client could ask no rule of that row.
   """
   @spec deciding_quantifier?(module, Entity.operation(), tuple) :: boolean
   def deciding_quantifier?(entity_type, operation, {:to, _reference} = item) do
     operation == :read and reads_unreadable_type?(entity_type, item)
+  end
+
+  def deciding_quantifier?(entity_type, operation, {:via, {_delegated_operation, chain}}) do
+    operation == :read and readable_prefix(entity_type, chain) != chain
   end
 
   def deciding_quantifier?(entity_type, operation, clause) do
@@ -319,10 +327,11 @@ defmodule Hologram.Policy do
   @doc """
   Returns the deciding items of the given entity type's rules, across every operation, as
   `{key, item}` pairs sorted by key: every clause standing in a rule's predicates - a predicate or
-  a quantifier, at the top or in a disjunction's alternatives, not inside another quantifier - and
-  every role reference of a rule's `to`, as `{:to, reference}`, that is a deciding one (see
-  `deciding_quantifier?/3`), keyed by `verdict_key/3`. An item written the same way twice in one
-  operation is one pair. `verdict_rule/1` gives the rule each one is answered as.
+  a quantifier, at the top or in a disjunction's alternatives, not inside another quantifier -
+  every role reference of a rule's `to`, as `{:to, reference}`, and a rule's delegation, as
+  `{:via, {operation, chain}}`, that is a deciding one (see `deciding_quantifier?/3`), keyed by
+  `verdict_key/3`. An item written the same way twice in one operation is one pair.
+  `verdict_rule/1` gives the rule each one is answered as.
 
   Cached, with the model facts, for the types of the project's compiled data model - a row's
   verdicts are worked out for every row a client is sent.
@@ -347,6 +356,36 @@ defmodule Hologram.Policy do
     case Map.fetch(cache, entity_type) do
       {:ok, pairs} -> pairs
       :error -> derived_deciding_quantifiers(entity_type)
+    end
+  end
+
+  @doc """
+  Returns the entity types the deciding items of the given entity type's rules read through
+  relationships (see `deciding_quantifiers/1` and `verdict_related_reads/2`), sorted: a change to
+  a row of one of them may move a verdict on any row of the type.
+
+  Cached like `deciding_quantifiers/1` - a sync round asks it of every type it holds rows of.
+  """
+  @spec deciding_related_reads(module) :: list(module)
+  def deciding_related_reads(entity_type) do
+    Model.ensure_released!()
+
+    cache =
+      case :persistent_term.get(@deciding_reads_key, nil) do
+        nil ->
+          cache = Map.new(Model.entity_types(), &{&1, derived_deciding_related_reads(&1)})
+
+          :persistent_term.put(@deciding_reads_key, cache)
+
+          cache
+
+        cache ->
+          cache
+      end
+
+    case Map.fetch(cache, entity_type) do
+      {:ok, types} -> types
+      :error -> derived_deciding_related_reads(entity_type)
     end
   end
 
@@ -666,6 +705,7 @@ defmodule Hologram.Policy do
   @spec reset_model_facts_cache() :: :ok
   def reset_model_facts_cache do
     :persistent_term.erase(@deciding_quantifiers_key)
+    :persistent_term.erase(@deciding_reads_key)
     :persistent_term.erase(@hash_key)
     :persistent_term.erase(@locked_set_links_key)
     :persistent_term.erase(@model_facts_key)
@@ -746,14 +786,26 @@ defmodule Hologram.Policy do
   Returns the key the server's verdict on the given deciding item of a rule of the given entity
   type and operation is sent under, and the client finds it by: the operation's key, a colon, and a
   short digest of the item - a clause with the definitions of the derived fields it reads, a role
-  reference alone, its roles expanded in it. A changed item, or a changed definition it reads, gets
-  a new key, so a client holding a verdict on what a rule used to mean never reads it for what the
-  rule means now - a deploy changing only policies or derived fields reloads no bundle. The digest's
-  encoding is pinned, so a build and the node running it agree across OTP releases.
+  reference alone, its roles expanded in it, and a delegation with the hash of the rules of every
+  type it reads (see `hash/1`) but the grant store's, whose rules every type's grant lifecycle lines
+  make. A changed item, or a changed definition or delegated rule it reads, gets a new key, so a
+  client holding a verdict on what a rule used to mean never reads it for what the rule means now -
+  a deploy changing only policies or derived fields reloads no bundle. The digest's encoding is
+  pinned, so a build and the node running it agree across OTP releases.
   """
   @spec verdict_key(module, Entity.operation(), tuple) :: String.t()
   def verdict_key(_entity_type, operation, {:to, _reference} = item) do
     "#{operation_key(operation)}:#{verdict_digest(item)}"
+  end
+
+  def verdict_key(entity_type, operation, {:via, _via} = item) do
+    rules_hash =
+      entity_type
+      |> verdict_related_reads(item)
+      |> List.delete(RoleGrant)
+      |> hash()
+
+    "#{operation_key(operation)}:#{verdict_digest({item, rules_hash})}"
   end
 
   def verdict_key(entity_type, operation, clause) do
@@ -776,15 +828,16 @@ defmodule Hologram.Policy do
   and the rows its to-one paths lead to, and a struct a pending write changed is not the stored row,
   which a client checks before it reads a verdict at all - so no unanswered write to the row, or to
   another row of its type, can move the answer. A pending delete leaves the stored row's verdict
-  standing for a struct of it, which is still true of the row as stored. A role reference leaves it
-  out the same way: it reads the rows its to-one chain leads to and the grant store.
+  standing for a struct of it, which is still true of the row as stored. A role reference and a
+  delegation leave it out the same way: they read the rows their to-one chains lead to, what the
+  delegated rules read from there, and the grant store.
   """
   @spec verdict_reads(module, tuple) :: list(module)
   def verdict_reads(entity_type, {_name, _operator, _value} = clause) do
     verdict_related_reads(entity_type, clause)
   end
 
-  def verdict_reads(entity_type, {:to, _reference} = item) do
+  def verdict_reads(entity_type, {kind, _reference_or_via} = item) when kind in [:to, :via] do
     verdict_related_reads(entity_type, item)
   end
 
@@ -799,7 +852,9 @@ defmodule Hologram.Policy do
   `verdict_reads/2` but the rule's own type, which is among them only when a relationship leads to
   a row of it, a set of rows of the type itself. A role reference reads the rows along its chain
   before the last relationship, and the grant store: a pending grant or revoke names it, and a
-  changed grant works the verdicts out again.
+  changed grant works the verdicts out again. A delegation reads the rows along its chain, the row
+  it leads to included, and what every rule it asks there reads through relationships - their
+  clauses', role references' and delegations' reads, as their own items would.
   """
   @spec verdict_related_reads(module, tuple) :: list(module)
   def verdict_related_reads(entity_type, {:to, reference}) do
@@ -809,6 +864,24 @@ defmodule Hologram.Policy do
           do: Entity.path_target(entity_type, Enum.take(chain, length))
 
     [RoleGrant | types]
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  def verdict_related_reads(entity_type, {:via, {delegated_operation, chain}}) do
+    target_type = Entity.path_target(entity_type, chain)
+
+    chain_types =
+      for length <- 1..length(chain)//1,
+          do: Entity.path_target(entity_type, Enum.take(chain, length))
+
+    delegated_types =
+      target_type
+      |> build()
+      |> Map.get(delegated_operation, [])
+      |> Enum.flat_map(&rule_related_reads(target_type, &1))
+
+    (chain_types ++ delegated_types)
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -837,10 +910,16 @@ defmodule Hologram.Policy do
 
   @doc """
   Returns the rule the server answers the given deciding item as (see `deciding_quantifiers/1`): a
-  rule requiring the clause alone, or holding the role reference alone.
+  rule requiring the clause alone, or holding the role reference or the delegation alone.
   """
-  @spec verdict_rule(tuple) :: %{predicates: list(tuple), to: list(tuple) | nil, via: nil}
+  @spec verdict_rule(tuple) :: %{
+          predicates: list(tuple),
+          to: list(tuple) | nil,
+          via: {Entity.operation(), list(atom)} | nil
+        }
   def verdict_rule({:to, reference}), do: %{predicates: [], to: [reference], via: nil}
+
+  def verdict_rule({:via, via}), do: %{predicates: [], to: nil, via: via}
 
   def verdict_rule(clause), do: %{predicates: [clause], to: nil, via: nil}
 
@@ -1036,10 +1115,19 @@ defmodule Hologram.Policy do
     |> build()
     |> Enum.flat_map(fn {operation, rules} ->
       for rule <- rules,
-          item <- standing_clauses(rule.predicates) ++ reference_items(rule.to),
+          item <-
+            standing_clauses(rule.predicates) ++ reference_items(rule.to) ++ via_items(rule.via),
           deciding_quantifier?(entity_type, operation, item),
           do: {verdict_key(entity_type, operation, item), item}
     end)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  defp derived_deciding_related_reads(entity_type) do
+    entity_type
+    |> deciding_quantifiers()
+    |> Enum.flat_map(fn {_key, item} -> verdict_related_reads(entity_type, item) end)
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -1486,6 +1574,14 @@ defmodule Hologram.Policy do
     %{derived: derived, inverses: inverses}
   end
 
+  # The types a rule reads through relationships from a row of the given type, as the server's
+  # verdicts on its items would read them (see verdict_related_reads/2).
+  defp rule_related_reads(entity_type, %{predicates: predicates, to: to, via: via}) do
+    items = predicates ++ reference_items(to) ++ via_items(via)
+
+    Enum.flat_map(items, &verdict_related_reads(entity_type, &1))
+  end
+
   # What the policy hash covers of the given entity type: its rules, each operation's sorted, the
   # operations its lines name, and what the rules read beyond the row's stored values. A derived
   # field's declaration and definition and an inverse's declaration are code the model hash never
@@ -1583,6 +1679,10 @@ defmodule Hologram.Policy do
     |> :erlang.term_to_binary([:deterministic, minor_version: 2])
     |> CryptographicUtils.short_digest(@verdict_digest_bytes)
   end
+
+  defp via_items(nil), do: []
+
+  defp via_items(via), do: [{:via, via}]
 
   # The inverses the given chain walks from the given entity type, each as the type declaring it and
   # its name. A chain may run through a derived field holding rows, whose own inverses its

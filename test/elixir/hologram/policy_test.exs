@@ -7,6 +7,7 @@ defmodule Hologram.PolicyTest do
       dead_entity_types: 1,
       deciding_quantifier?: 3,
       deciding_quantifiers: 1,
+      deciding_related_reads: 1,
       delegation: 2,
       expand_global_role: 1,
       expand_global_role: 2,
@@ -868,9 +869,63 @@ defmodule Hologram.PolicyTest do
     test "fails for a role reference on the row itself" do
       refute deciding_quantifier?(Policy.Readers.Module24, :read, {:to, {:own, [:member]}})
     end
+
+    # Readers.Module28's vault (Readers.Module25) has no read rule, so no client holds it.
+    test "holds for a read rule's delegation to a type nobody may read" do
+      item = {:via, {:update, [:vault]}}
+
+      assert deciding_quantifier?(Policy.Readers.Module28, :read, item)
+      refute deciding_quantifier?(Policy.Readers.Module28, :update, item)
+    end
+
+    # The crate is read through the shelf (Readers.Module27), which has no read rule.
+    test "holds for a read rule's delegation through a type nobody may read" do
+      assert deciding_quantifier?(
+               Policy.Readers.Module28,
+               :read,
+               {:via, {:read, [:shelf, :crate]}}
+             )
+    end
+
+    test "fails for a delegation through types someone may read" do
+      refute deciding_quantifier?(Policy.Readers.Module28, :read, {:via, {:read, [:crate]}})
+    end
+  end
+
+  describe "deciding_related_reads/1" do
+    # The vault's close rule holds a role, and the crate is read through the shelf.
+    test "returns the types every deciding item reads through relationships" do
+      assert deciding_related_reads(Policy.Readers.Module28) == [
+               RoleGrant,
+               Policy.Readers.Module25,
+               Policy.Readers.Module26,
+               Policy.Readers.Module27
+             ]
+    end
+
+    test "returns none for a type with no deciding item" do
+      assert deciding_related_reads(Policy.Readers.Module26) == []
+    end
   end
 
   describe "deciding_quantifiers/1" do
+    # The delegation to the crate runs through readable types only.
+    test "lists a read rule's delegations through a type nobody may read" do
+      items =
+        Policy.Readers.Module28
+        |> deciding_quantifiers()
+        |> Enum.map(fn {_key, item} -> item end)
+        |> Enum.sort()
+
+      assert items == [
+               {:via, {:archive, [:vault]}},
+               {:via, {:close, [:vault]}},
+               {:via, {:delete, [:vault]}},
+               {:via, {:read, [:shelf, :crate]}},
+               {:via, {:update, [:vault]}}
+             ]
+    end
+
     # The one-hop references for read and update read the task alone.
     test "lists a read rule's role reference reading a type nobody may read" do
       item = {:to, {:rel, [:project, :team], [:member]}}
@@ -2086,6 +2141,14 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "verdict_key/3" do
+    defmodule KeyedParcel do
+      use Hologram.Entity
+
+      relationship :vault, Hologram.PolicyTest.KeyedVault, optional: true
+
+      allow :read, via: {:update, vault}
+    end
+
     defmodule KeyedProject do
       use Hologram.Entity
 
@@ -2167,6 +2230,16 @@ defmodule Hologram.PolicyTest do
       assert verdict_key(KeyedProject, :archive, {:none, {[:members], []}}) != key
     end
 
+    # The vault has no read rule, so the parcel's read rule delegating to it is answered by the
+    # server's verdict, which a changed vault rule moves.
+    test "gives a delegation a new key when a rule it asks changes" do
+      open_key = delegation_key_with_vault("allow :update, when: open == true")
+      closed_key = delegation_key_with_vault("allow :update, when: open == false")
+
+      assert open_key != closed_key
+      assert delegation_key_with_vault("allow :update, when: open == true") == open_key
+    end
+
     # Its roles are expanded in it, so the reference alone says what it means.
     test "keys a role reference by its operation and a digest of it" do
       item = {:to, {:rel, [:project, :team], [:member]}}
@@ -2226,6 +2299,21 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "verdict_reads/2" do
+    test "returns the types along a delegation's chain" do
+      assert verdict_reads(Policy.Readers.Module28, {:via, {:read, [:shelf, :crate]}}) == [
+               Policy.Readers.Module26,
+               Policy.Readers.Module27
+             ]
+    end
+
+    # The vault's close rule holds a role on the vault.
+    test "returns the grant store for a delegation to a rule holding a role" do
+      assert verdict_reads(Policy.Readers.Module28, {:via, {:close, [:vault]}}) == [
+               RoleGrant,
+               Policy.Readers.Module25
+             ]
+    end
+
     # A pending grant or revoke names the grant store.
     test "returns the types a role reference reads before its last relationship and the grant store" do
       item = {:to, {:rel, [:project, :team], [:member]}}
@@ -2335,6 +2423,41 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "verdict_related_reads/2" do
+    # A delegation from the parcel to its crate, whose read rule delegates on to the vault through
+    # its parcel's path, reads what both rules read.
+    test "returns what the rules a delegation asks read, through their own delegations" do
+      assert verdict_related_reads(Hologram.PolicyTest.RelayParcel, {:via, {:read, [:crate]}}) ==
+               Enum.sort([
+                 RoleGrant,
+                 Hologram.PolicyTest.RelayCrate,
+                 Hologram.PolicyTest.RelayVault
+               ])
+    end
+
+    defmodule RelayVault do
+      use Hologram.Entity
+
+      role :member
+
+      allow :close, to: :member
+    end
+
+    defmodule RelayCrate do
+      use Hologram.Entity
+
+      relationship :vault, RelayVault, optional: true
+
+      allow :read, via: {:close, vault}
+    end
+
+    defmodule RelayParcel do
+      use Hologram.Entity
+
+      relationship :crate, RelayCrate, optional: true
+
+      allow :read, via: crate
+    end
+
     test "returns the types a role reference reads before its last relationship and the grant store" do
       item = {:to, {:rel, [:project, :team], [:member]}}
 
@@ -2373,6 +2496,12 @@ defmodule Hologram.PolicyTest do
 
       assert verdict_rule({:to, reference}) == %{predicates: [], to: [reference], via: nil}
     end
+
+    test "holds a delegation alone" do
+      via = {:update, [:vault]}
+
+      assert verdict_rule({:via, via}) == %{predicates: [], to: nil, via: via}
+    end
   end
 
   # A deploy changes what a type declares while its name stays, so the type is defined again under
@@ -2396,5 +2525,27 @@ defmodule Hologram.PolicyTest do
     put_derived_definitions([Hologram.PolicyTest.HashedProject])
 
     hash([Hologram.PolicyTest.HashedProject])
+  end
+
+  # The key of KeyedParcel's delegation to its vault, defined with the given rules and no read rule.
+  defp delegation_key_with_vault(rules) do
+    ignore_module_conflict? = Code.get_compiler_option(:ignore_module_conflict)
+    Code.put_compiler_option(:ignore_module_conflict, true)
+
+    try do
+      Code.compile_string("""
+      defmodule Hologram.PolicyTest.KeyedVault do
+        use Hologram.Entity
+
+        attribute :open, :boolean, default: false
+
+      #{rules}
+      end
+      """)
+    after
+      Code.put_compiler_option(:ignore_module_conflict, ignore_module_conflict?)
+    end
+
+    verdict_key(Hologram.PolicyTest.KeyedParcel, :read, {:via, {:update, [:vault]}})
   end
 end

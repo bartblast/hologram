@@ -42,6 +42,10 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module22, as: ReadersModule22
   alias Hologram.Test.Fixtures.Policy.Readers.Module23, as: ReadersModule23
   alias Hologram.Test.Fixtures.Policy.Readers.Module24, as: ReadersModule24
+  alias Hologram.Test.Fixtures.Policy.Readers.Module25, as: ReadersModule25
+  alias Hologram.Test.Fixtures.Policy.Readers.Module26, as: ReadersModule26
+  alias Hologram.Test.Fixtures.Policy.Readers.Module27, as: ReadersModule27
+  alias Hologram.Test.Fixtures.Policy.Readers.Module28, as: ReadersModule28
   alias Hologram.Test.Fixtures.Policy.Readers.Module5, as: ReadersModule5
   alias Hologram.Test.Fixtures.Role
 
@@ -2768,6 +2772,42 @@ defmodule Hologram.AuthTest do
       assert verdicts(holder.id, task) == %{key => true}
       assert verdicts(other_user.id, task) == %{key => false}
       assert verdicts(nil, task) == %{key => false}
+    end
+
+    # No client holds a vault or a shelf, so the server answers the parcel's delegations to them
+    # over the rows as stored.
+    test "answers a read rule's delegations through a type nobody may read over the rows" do
+      keeper = create_user("verdict_keeper@example.com")
+      other_user = create_user("verdict_stranger@example.com")
+
+      create = fn entity_type, values ->
+        values
+        |> entity_type.new()
+        |> DB.create!()
+      end
+
+      vault = create.(ReadersModule25, %{keeper_id: keeper.id, open: true})
+      crate = create.(ReadersModule26, %{open: false})
+      shelf = create.(ReadersModule27, %{crate_id: crate.id})
+      parcel = create.(ReadersModule28, %{shelf_id: shelf.id, vault_id: vault.id})
+
+      grant_role(keeper, :member, vault)
+
+      key = &Policy.verdict_key(ReadersModule28, :read, {:via, {&1, &2}})
+
+      expected = fn keeper?, stranger? ->
+        %{
+          key.(:archive, [:vault]) => keeper?,
+          key.(:close, [:vault]) => keeper?,
+          key.(:delete, [:vault]) => stranger?,
+          key.(:read, [:shelf, :crate]) => false,
+          key.(:update, [:vault]) => true
+        }
+      end
+
+      assert verdicts(keeper.id, parcel) == expected.(true, false)
+      assert verdicts(other_user.id, parcel) == expected.(false, true)
+      assert verdicts(nil, parcel) == expected.(false, false)
     end
   end
 end

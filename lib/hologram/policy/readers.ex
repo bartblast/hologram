@@ -79,17 +79,18 @@ defmodule Hologram.Policy.Readers do
       ones included.
     * `{:listed, anchor, default}` - it answers the default for every signed-in user the anchor
       can't name (see `t:anchor/0`): false for an equality on the acting user, for an `any`
-      bounded by a condition it requires and for a role reference, whose holders a `:grants`
-      anchor names, and true for a `none` whose condition is bounded so, since it holds exactly
-      when that `any` doesn't, and for an `all` whose condition is one `!=` on the acting user, the
-      `none` of the equality.
+      bounded by a condition it requires, for a role reference, whose holders a `:grants` anchor
+      names, and for a delegation whose rules asked of the related row are all listed, whose
+      users a `:via` anchor names, and true for a `none` whose condition is bounded so, since it
+      holds exactly when that `any` doesn't, and for an `all` whose condition is one `!=` on the
+      acting user, the `none` of the equality.
     * `:unlisted` - nothing bounds them, like a `!=` on the acting user or any other `all`.
 
   A clause carries no grant reference and no delegation - those are a rule's own - so nothing
-  but its conditions decide it, and a role reference is decided by the grants alone. An anonymous
-  user is no user an anchor names, but a `none` or an `all` naming the acting user answers no for
-  one (see `Hologram.Policy.Evaluator`), and so does a role reference, so a default is only ever a
-  signed-in user's answer.
+  but its conditions decide it, a role reference is decided by the grants alone, and a delegation
+  by the rules it asks of the related row. An anonymous user is no user an anchor names, but a
+  `none` or an `all` naming the acting user answers no for one (see `Hologram.Policy.Evaluator`),
+  and so does a role reference, so a default is only ever a signed-in user's answer.
   """
   @spec classify_verdicts(module) :: list({tuple, list(String.t()), verdict_class})
   def classify_verdicts(entity_type) do
@@ -101,7 +102,7 @@ defmodule Hologram.Policy.Readers do
     |> Enum.map(fn item ->
       keys = for {key, ^item} <- pairs, do: key
 
-      {item, keys, verdict_class(item)}
+      {item, keys, verdict_class(entity_type, item)}
     end)
   end
 
@@ -227,9 +228,32 @@ defmodule Hologram.Policy.Readers do
     |> Enum.map(&%{rule | predicates: &1})
   end
 
-  defp verdict_class({:to, reference}), do: {:listed, {:grants, [reference]}, false}
+  defp verdict_class(_entity_type, {:to, reference}), do: {:listed, {:grants, [reference]}, false}
 
-  defp verdict_class(clause) do
+  # A delegation answers as the rules it asks of the related row: the same for every user when each
+  # of them does - none at all among them, so it never holds - and false for every user their
+  # anchors leave out when each of them is listed.
+  defp verdict_class(entity_type, {:via, {delegated_operation, chain}}) do
+    classes =
+      entity_type
+      |> Entity.path_target(chain)
+      |> classify(delegated_operation)
+
+    cond do
+      Enum.all?(classes, &match?({:independent, _rule}, &1)) ->
+        :independent
+
+      Enum.all?(classes, &match?({:listed, _rule, _anchor}, &1)) ->
+        rule_anchors = Enum.map(classes, fn {:listed, rule, anchor} -> {rule, anchor} end)
+
+        {:listed, {:via, delegated_operation, chain, rule_anchors}, false}
+
+      true ->
+        :unlisted
+    end
+  end
+
+  defp verdict_class(_entity_type, clause) do
     cond do
       not Stage.names_actor?([clause]) -> :independent
       anchor = clause_anchor(clause) -> {:listed, anchor, false}

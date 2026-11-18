@@ -199,7 +199,7 @@ defmodule Hologram.DB.QueryCompiler do
   @doc """
   Compiles the statement deciding, for the rows of the given entity type with the given ids, which
   of the given users may read each one, and returning each readable row's current values - and,
-  when the given verdicts flag asks for them, the server's verdicts on the type's deciding clauses
+  when the given verdicts flag asks for them, the server's verdicts on the type's deciding items
   for the users who may read it (see `Hologram.Auth.verdicts/2`).
 
   Returns a map with :sql and :params as `compile/3` does. Params begin with two markers for the
@@ -1464,7 +1464,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   # Each deciding item's answer, as a flag in an array, in the given order. An item renders as the
   # rule of its own Policy.verdict_rule/1 gives it, so it is folded for nobody and reads its rows as
-  # a rule's conditions and references do.
+  # a rule's conditions, references and delegations do.
   defp verdict_flags_sql(_entity_type, _mapping, _policy, [], reversed_params) do
     {"'{}'::boolean[]", reversed_params}
   end

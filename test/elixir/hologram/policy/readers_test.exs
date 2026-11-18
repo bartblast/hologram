@@ -23,6 +23,7 @@ defmodule Hologram.Policy.ReadersTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module2
   alias Hologram.Test.Fixtures.Policy.Readers.Module21
   alias Hologram.Test.Fixtures.Policy.Readers.Module24
+  alias Hologram.Test.Fixtures.Policy.Readers.Module28
   alias Hologram.Test.Fixtures.Policy.Readers.Module3
   alias Hologram.Test.Fixtures.Policy.Readers.Module4
   alias Hologram.Test.Fixtures.Policy.Readers.Module5
@@ -369,6 +370,24 @@ defmodule Hologram.Policy.ReadersTest do
       reference = {:rel, [:project, :team], [:member]}
 
       assert verdict_class(Module24, {:to, reference}) == {:listed, {:grants, [reference]}, false}
+    end
+
+    # The vault's update rule and the crate's read rule name nobody.
+    test "a delegation to rules naming nobody is independent" do
+      assert verdict_class(Module28, {:via, {:update, [:vault]}}) == :independent
+      assert verdict_class(Module28, {:via, {:read, [:shelf, :crate]}}) == :independent
+    end
+
+    test "a delegation to listed rules is listed by their anchors" do
+      assert {:listed, {:via, :archive, [:vault], [{_rule, {:actor_equal, :keeper_id}}]}, false} =
+               verdict_class(Module28, {:via, {:archive, [:vault]}})
+
+      assert {:listed, {:via, :close, [:vault], [{_rule, {:grants, [{:own, [:member]}]}}]}, false} =
+               verdict_class(Module28, {:via, {:close, [:vault]}})
+    end
+
+    test "a delegation to an unlisted rule is unlisted" do
+      assert verdict_class(Module28, {:via, {:delete, [:vault]}}) == :unlisted
     end
 
     test "an any over a derived set naming nobody is independent" do

@@ -37,6 +37,11 @@ defmodule Hologram.Sync.RecheckTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module22
   alias Hologram.Test.Fixtures.Policy.Readers.Module23
   alias Hologram.Test.Fixtures.Policy.Readers.Module24
+  alias Hologram.Test.Fixtures.Policy.Readers.Module25
+  alias Hologram.Test.Fixtures.Policy.Readers.Module26
+  alias Hologram.Test.Fixtures.Policy.Readers.Module27
+  alias Hologram.Test.Fixtures.Policy.Readers.Module28
+  alias Hologram.Test.Fixtures.Policy.Readers.Module29
   alias Hologram.Test.Fixtures.Policy.Readers.Module3
   alias Hologram.Test.Fixtures.Policy.Readers.Module4
   alias Hologram.Test.Fixtures.Policy.Readers.Module5
@@ -646,6 +651,50 @@ defmodule Hologram.Sync.RecheckTest do
 
       assert reads?(readers, context.alice)
       assert reads?(readers, context.bob)
+    end
+
+    # Alice keeps and holds a role on the open vault, Bob keeps the closed one, and Carol reads the
+    # first parcel through the open vault alone.
+    test "answers a read rule's delegations through a type nobody may read", context do
+      open_vault = create(Module25, %{keeper_id: context.alice, open: true})
+      closed_vault = create(Module25, %{keeper_id: context.bob})
+      crate = create(Module26, %{open: true})
+      shelf = create(Module27, %{crate_id: crate.id})
+      parcel = create(Module28, %{shelf_id: shelf.id, vault_id: open_vault.id})
+      other_parcel = create(Module28, %{vault_id: closed_vault.id})
+
+      Auth.grant_role(context.alice, :member, open_vault)
+
+      assert_verdicts_as_auth(Module28, [parcel, other_parcel], context.users)
+    end
+
+    # Every delegation is to listed rules, so only the users their anchors name are tested: Alice
+    # keeps the vault and Carol holds a role on it, while Bob reads the open parcel by its own rule
+    # and answers the default.
+    test "answers a read rule's delegations to listed rules through a type nobody may read",
+         context do
+      vault = create(Module25, %{keeper_id: context.alice})
+      parcel = create(Module29, %{open: true, vault_id: vault.id})
+
+      Auth.grant_role(context.carol, :member, vault)
+
+      readable = assert_verdicts_as_auth(Module29, [parcel], context.users)
+      {_row, readers, row_verdicts} = readable[parcel.id]
+
+      archive_key = Policy.verdict_key(Module29, :read, {:via, {:archive, [:vault]}})
+      close_key = Policy.verdict_key(Module29, :read, {:via, {:close, [:vault]}})
+
+      tested_ids =
+        row_verdicts.users
+        |> Map.keys()
+        |> MapSet.new()
+
+      assert reads?(readers, context.bob)
+      assert tested_ids == MapSet.new([context.alice, context.carol])
+      assert verdicts(row_verdicts, context.bob) == row_verdicts.others
+      assert verdicts(row_verdicts, context.alice) == %{archive_key => true, close_key => false}
+      assert verdicts(row_verdicts, context.bob) == %{archive_key => false, close_key => false}
+      assert verdicts(row_verdicts, context.carol) == %{archive_key => false, close_key => true}
     end
 
     test "answers clauses over paths and through related sets for every user alike", context do
