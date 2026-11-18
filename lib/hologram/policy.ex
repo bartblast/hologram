@@ -1428,13 +1428,21 @@ defmodule Hologram.Policy do
 
   defp reads_set_value?(_entity_type, _clause), do: false
 
-  # Whether a deciding item reads a row of a type no session may read - along a path, a quantifier's
-  # source or a nested condition, or through a derived field it reads, or before a role reference's
-  # last relationship.
+  # Whether an item reads a row of a type no session may read - a role reference before its last
+  # relationship, a clause along the chains predicate_chains/2 gives it, which reads its derived
+  # values through their definitions as they resolve, since the validator asks before the build
+  # resolves any definition. A chain through a derived set is left out: a quantifier reading one is
+  # deciding already.
+  defp reads_unreadable_type?(entity_type, {:to, _reference} = item) do
+    entity_type
+    |> verdict_related_reads(item)
+    |> Enum.any?(&(not readable_type?(&1)))
+  end
+
   defp reads_unreadable_type?(entity_type, clause) do
     entity_type
-    |> verdict_related_reads(clause)
-    |> Enum.any?(&(not readable_type?(&1)))
+    |> predicate_chains([clause])
+    |> Enum.any?(&(readable_prefix(entity_type, &1) != &1))
   end
 
   defp reference_chains(nil), do: []

@@ -6,7 +6,7 @@ defmodule Hologram.Policy.Readers do
   alias Hologram.Query.Stage
 
   @typedoc """
-  What bounds the users a rule holds for, or a deciding clause answers differently for - each a
+  What bounds the users a rule holds for, or a deciding item answers differently for - each a
   superset of them:
 
     * `{:actor_equal, name}` - the value of the name, compared equal to the acting user.

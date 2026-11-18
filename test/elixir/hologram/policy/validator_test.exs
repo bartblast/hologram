@@ -165,8 +165,8 @@ defmodule Hologram.Policy.ValidatorTest do
       assert validate_model!([InlinePolicyFixture47], []) == :ok
     end
 
-    # A row reaches the browser only once the server's read rules admitted it, so the browser never
-    # decides them - a read rule may read through a type nobody may read.
+    # A read rule may read through a type nobody may read: the browser checks it only on rows as
+    # they were sent, and the server's verdict on each answers what it reads there.
     test "returns :ok for a read rule reading through a type nobody may read" do
       defmodule InlinePolicyFixture66 do
         use Hologram.Entity
@@ -1198,6 +1198,43 @@ defmodule Hologram.Policy.ValidatorTest do
         InlinePolicyFixture134,
         InlinePolicyFixture135
       ]
+
+      assert validate_model!(types, []) == :ok
+    end
+
+    # The validator asks whether the delegated read rule's any is deciding before the build resolves
+    # the card's derived field, so the answer comes from the field's own definition.
+    test "accepts a delegation to a read rule whose any reads a derived value before it resolves" do
+      defmodule InlinePolicyFixture139 do
+        use Hologram.Entity
+
+        attribute :score, :integer
+
+        relationship :board, Hologram.Policy.ValidatorTest.InlinePolicyFixture140, optional: true
+
+        derived :hot, :boolean, fn score -> score > 3 end
+
+        allow :read
+      end
+
+      defmodule InlinePolicyFixture140 do
+        use Hologram.Entity
+
+        relationship :cards, [InlinePolicyFixture139], inverse: board
+
+        allow :read, when: any(card <- cards, card.hot == true)
+      end
+
+      defmodule InlinePolicyFixture141 do
+        use Hologram.Entity
+
+        relationship :board, InlinePolicyFixture140
+
+        allow :read
+        allow :update, via: {:read, board}
+      end
+
+      types = [InlinePolicyFixture139, InlinePolicyFixture140, InlinePolicyFixture141]
 
       assert validate_model!(types, []) == :ok
     end

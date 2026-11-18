@@ -492,7 +492,7 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
-  # The dependency index keys a type's deciding clauses beside its operations, under
+  # The dependency index keys a type's deciding items beside its operations, under
   # {type, :verdicts} (see Hologram.Policy.Edges.derive/1), so an operation of that name would
   # share their key and lose its edges to them or hand them its own.
   defp validate_operation_name!(:verdicts, location) do

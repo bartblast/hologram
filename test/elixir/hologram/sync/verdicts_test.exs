@@ -5,9 +5,12 @@ defmodule Hologram.Sync.VerdictsTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.Entity
   alias Hologram.Policy
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Policy.Readers.Module23, as: ReadersProject
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24, as: ReadersTask
 
   use_module_stub :query_cache
 
@@ -170,6 +173,19 @@ defmodule Hologram.Sync.VerdictsTest do
       assert stale([row], %{row.id => %{delete_key() => true}}, nil, :all) == [
                {row, %{delete_key() => false}}
              ]
+    end
+
+    # The task's read rule holds a role on the team its project names, and no client holds a
+    # project - a task with no project answers no without reading the database.
+    test "returns a row whose role reference verdict differs when the round touched the grants or the rows on its chain" do
+      row = %{ReadersTask.new() | id: Entity.generate_id()}
+      key = Policy.verdict_key(ReadersTask, :read, {:to, {:rel, [:project, :team], [:member]}})
+
+      for changed_type <- [RoleGrant, ReadersProject] do
+        assert stale([row], %{}, Entity.generate_id(), MapSet.new([changed_type])) == [
+                 {row, %{key => false}}
+               ]
+      end
     end
 
     test "returns nothing for a row of a type with no deciding quantifier" do

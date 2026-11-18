@@ -776,6 +776,8 @@ defmodule Hologram.PolicyTest do
 
       relationship :project, Hologram.PolicyTest.UnreadableProject, optional: true
 
+      derived :project_open, :boolean, fn project -> project.archived == false end
+
       allow :read
     end
 
@@ -825,6 +827,14 @@ defmodule Hologram.PolicyTest do
 
     test "holds for a read rule's any whose condition reads a type nobody may read" do
       clause = {:any, {[:tags], [{[:project, :archived], :==, false}]}}
+
+      assert deciding_quantifier?(UnreadableReadTask, :read, clause)
+      refute deciding_quantifier?(UnreadableReadTask, :update, clause)
+    end
+
+    # Asked with no definition put, as the validator asks before the build resolves any.
+    test "holds for a read rule's any whose condition reads a derived value reading a type nobody may read" do
+      clause = {:any, {[:tags], [{:project_open, :==, true}]}}
 
       assert deciding_quantifier?(UnreadableReadTask, :read, clause)
       refute deciding_quantifier?(UnreadableReadTask, :update, clause)

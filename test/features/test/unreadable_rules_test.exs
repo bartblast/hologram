@@ -23,6 +23,30 @@ defmodule HologramFeatureTests.UnreadableRulesTest do
     truncate_every_entity_table()
   end
 
+  defp assert_arrives_readable(session, label) do
+    session
+    |> assert_text(css("#parcels"), label)
+    |> assert_text(css("#readable_parcels"), label)
+    |> assert_same_page_load()
+  end
+
+  # A second visit waits for the mount, so the assertion reads what the browser answered, not the
+  # server's render.
+  defp assert_readable_on_visit(session, labels) do
+    session
+    |> visit(Page11)
+    |> assert_text(css("#parcels"), labels)
+    |> assert_text(css("#readable_parcels"), labels)
+  end
+
+  defp await_empty(session) do
+    session
+    |> reload()
+    |> await_local_fill()
+    |> assert_text(css("#parcels"), ~r/^$/)
+    |> mark_this_page_load()
+  end
+
   defp create(entity_type, values) do
     values
     |> entity_type.new()
@@ -43,30 +67,6 @@ defmodule HologramFeatureTests.UnreadableRulesTest do
     |> visit(Page11)
     |> click(button("Log in"))
     |> assert_text(css("#result"), "logged_in")
-  end
-
-  # A second visit waits for the mount, so the assertion reads what the browser answered, not the
-  # server's render.
-  defp assert_readable_on_visit(session, labels) do
-    session
-    |> visit(Page11)
-    |> assert_text(css("#parcels"), labels)
-    |> assert_text(css("#readable_parcels"), labels)
-  end
-
-  defp await_empty(session) do
-    session
-    |> reload()
-    |> await_local_fill()
-    |> assert_text(css("#parcels"), ~r/^$/)
-    |> mark_this_page_load()
-  end
-
-  defp assert_arrives_readable(session, label) do
-    session
-    |> assert_text(css("#parcels"), label)
-    |> assert_text(css("#readable_parcels"), label)
-    |> assert_same_page_load()
   end
 
   feature "lets the user read a parcel in an open vault held when the page loads", %{

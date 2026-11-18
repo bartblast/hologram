@@ -4,7 +4,7 @@ defmodule Hologram.Sync.Recheck do
   # Who may read the rows a batch of changes touched, decided for every user with a sync session
   # on this node at once: one statement per entity type, whatever the number of users, each
   # returning the rows' current values beside their readers and the server's verdicts for them. A
-  # rule or a deciding clause answering the same for every user is decided once per row, and the
+  # rule or a deciding item answering the same for every user is decided once per row, and the
   # rest test each user as the acting user (see Hologram.DB.QueryCompiler.recheck/4).
   #
   # The values are read fresh here, never taken from the changes, so a row goes out as it is now.
@@ -29,7 +29,7 @@ defmodule Hologram.Sync.Recheck do
   by id, with the row's current values, its readers and its verdicts. The readers are `:all` when
   every user may read it, anonymous ones included, and otherwise the set of the given users who may
   - nil among them when an anonymous user may. The verdicts are the server's answers on the type's
-  deciding clauses for those readers, which `verdicts/2` gives per reader - none when the build has
+  deciding items for those readers, which `verdicts/2` gives per reader - none when the build has
   no client checking permissions, which never reads one, as `Hologram.Sync.Frame.row_verdicts/2`
   answers.
 
