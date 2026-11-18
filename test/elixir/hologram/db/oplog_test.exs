@@ -12,6 +12,7 @@ defmodule Hologram.DB.OplogTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module4
 
   @replica_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
@@ -139,6 +140,13 @@ defmodule Hologram.DB.OplogTest do
                id: created.id,
                updated_at: created.updated_at
              }
+    end
+
+    # The log spells a date with Date.to_iso8601/1, which writes a year past 9999 with all its
+    # digits - so reading one back can't stop at the four Date.from_iso8601/1 reads.
+    test "rebuilds a date with a year past 9999" do
+      assert %Module4{a: date} = entity_from_data(Module4, %{"a" => "20250-07-19"})
+      assert date == Date.new!(20_250, 7, 19)
     end
 
     test "refuses a key the type does not declare" do

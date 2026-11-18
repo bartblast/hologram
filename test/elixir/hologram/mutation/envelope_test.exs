@@ -250,6 +250,15 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert write.data == %{a: ~D[2026-07-19], c: :y, d: 1.5}
     end
 
+    # The browser spells a year past 9999 as Date.to_iso8601/1 does, with all its digits.
+    test "decodes a date of a year past 9999" do
+      entry = create(Module4, %{"a" => "20250-07-19", "c" => "y", "d" => 1.5})
+
+      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
+
+      assert write.data.a == Date.new!(20_250, 7, 19)
+    end
+
     test "reads a to-one reference through its id field" do
       entry = create(Module3, %{"c_id" => @target_id})
 

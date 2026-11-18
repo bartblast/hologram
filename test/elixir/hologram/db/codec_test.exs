@@ -85,6 +85,35 @@ defmodule Hologram.DB.CodecTest do
       assert decode_json("2026-07-19", :date) == {:ok, ~D[2026-07-19]}
     end
 
+    # Date.from_iso8601/1 reads no year wider than four digits, while Date.to_iso8601/1 writes one
+    # with all its digits - so a date the server stores and spells has to read back too. A wide
+    # year's day is still the calendar's to judge, and its spelling still the one the server writes.
+    test "reads a :date value back whatever the width of its year" do
+      assert decode_json("20250-01-02", :date) == {:ok, Date.new!(20_250, 1, 2)}
+      assert decode_json("-0001-01-02", :date) == {:ok, ~D[-0001-01-02]}
+
+      date = Date.new!(20_250, 12, 31)
+
+      assert date
+             |> encode_json(:date)
+             |> decode_json(:date) == {:ok, date}
+
+      assert decode_json("10001-02-29", :date) == :error
+      assert decode_json("20250-13-01", :date) == :error
+      assert decode_json("010000-01-02", :date) == :error
+      assert decode_json("+20250-01-02", :date) == :error
+      assert decode_json("10000-1-02", :date) == :error
+    end
+
+    # A date column ends at 5874897-12-31 and holds no year below -4713, and the driver would store
+    # a later day as some other one - so a wide year reads back only as far as the column reaches.
+    test "reads a wide year's :date value back only as far as a date column holds" do
+      assert decode_json("5874897-12-31", :date) == {:ok, Date.new!(5_874_897, 12, 31)}
+      assert decode_json("5874898-01-01", :date) == :error
+      assert decode_json("11761191-01-01", :date) == :error
+      assert decode_json("-10000-01-02", :date) == :error
+    end
+
     test "reads :datetime values back from their ISO 8601 form" do
       assert decode_json("2026-07-18T08:30:00.123456Z", :datetime) ==
                {:ok, ~U[2026-07-18 08:30:00.123456Z]}
