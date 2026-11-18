@@ -47,13 +47,15 @@ defmodule Hologram.ControllerMutationTest do
 
   # An update Mutation.Module1 grants its author - refused with :not_found while the row it names
   # is absent, and landing once it exists.
+  # Stamped a minute ahead - inside the clock allowance - so the update is newer than a row created
+  # within that minute after it is built, and an evaluation of it lands rather than losing the merge.
   defp authored_write(id) do
     %{
       "op" => "update",
       "type" => inspect(MutationModule1),
       "id" => id,
       "data" => %{"priority" => 9},
-      "stamp" => System.os_time(:millisecond) * 1024
+      "stamp" => (System.os_time(:millisecond) + 60_000) * 1024
     }
   end
 
@@ -227,7 +229,14 @@ defmodule Hologram.ControllerMutationTest do
       # differently and still decode equal.
       assert second.resp_body == first.resp_body
 
-      assert Jason.decode!(first.resp_body)["status"] == "rejected"
+      # Refused for the missing row, not for its clock - a clock refusal is never recorded, and two
+      # of them would answer alike with no replay at all.
+      assert Jason.decode!(first.resp_body) == %{
+               "status" => "rejected",
+               "write" => 0,
+               "reason" => Serializer.serialize!(:not_found)
+             }
+
       assert EntityOperations.get(MutationModule1, id).priority == 5
     end
 
