@@ -59,8 +59,12 @@ defmodule Hologram.Sync.Pot do
   takes them. Any order the frame applies them in leaves the same facts behind: a pair told here is
   never one a row handed over states.
 
-  The same part decided twice - the dispatcher reads a batch again after a crash - tells again what
-  it told, changing nothing the client holds.
+  The same part decided again with what the first decision returned - the dispatcher reads a batch
+  again after a crash - changes nothing the session knows of the client, and tells a client that
+  took the first news nothing it doesn't already hold. It doesn't tell the same: a row dropped
+  isn't dropped again, and a row handed over is held by then, so it comes back as a patch or not
+  at all - or, when held isn't trusted, whole again. So a replay is no way to send a frame that
+  never arrived.
 
   Given `trust_held?: false`, every row the user may read is handed over whole, held or not, and
   none patched: for a batch that may already be in some of what the client holds and not in the

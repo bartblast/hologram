@@ -464,7 +464,7 @@ defmodule Hologram.Sync.PotTest do
                news.appeared
     end
 
-    test "tells again what it told, changing nothing, when the same part is decided twice" do
+    test "changes nothing, and hands over and drops nothing again, when the same trusted part is decided twice" do
       part =
         part(
           readable: [%Project{id: @id_1, name: "renamed", public: true}, %Label{id: @id_3}],
