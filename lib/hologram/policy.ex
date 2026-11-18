@@ -642,10 +642,14 @@ defmodule Hologram.Policy do
   """
   @spec related_chains(module) :: list(list(atom))
   def related_chains(entity_type) do
+    # One build, each rule walked once: a rule can sit under several keys - every field a limited
+    # line covers, a line's name, a role operation's union.
     entity_type
     |> build()
-    |> Map.keys()
-    |> Enum.flat_map(&related_chains(entity_type, &1))
+    |> Map.values()
+    |> Enum.concat()
+    |> Enum.uniq()
+    |> Enum.flat_map(&rule_chains(entity_type, &1, :all))
     |> Enum.uniq()
     |> Enum.sort()
   end
