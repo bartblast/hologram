@@ -46,23 +46,29 @@ const GRANT_ID_NAMESPACE = Uint8Array.from([
   0xd9, 0xf6, 0x6c,
 ]);
 
-// Every value compares as the wire spells it - dates and datetimes as their strings, whose
-// character order IS their instant order - so one comparison serves most types.
+// Every value compares as the wire spells it, so one comparison serves most types.
 //
-// Two are the exceptions, and both for the same reason: a rule and the filter mirroring it have
+// Three are the exceptions, and all for the same reason: a rule and the filter mirroring it have
 // to admit the same rows. An enum's labels say nothing about its order, so the two compare by
-// their positions in the list the type declares. A string compares by the key derived from it and
-// then by the value behind it, which is the pair its ordering sorts by - the key is a bounded
-// prefix, which is what leaves the value something to settle.
+// their positions in the list the type declares. A date and a datetime compare by the day or
+// instant they name, which their characters stop telling once a year leaves 0 to 9999, its width
+// and sign being the year's own (Model.compareTemporal, which the query kernel orders them by too).
+// A string compares by the key derived from it and then by the value behind it, which is the pair
+// its ordering sorts by - the key is a bounded prefix, which is what leaves the value something to
+// settle.
 //
-// Which of the two applies is decided by the DECLARED type rather than by the runtime one: on the
-// wire a date is a string too, and the reference never folds one, because there it is a struct.
-function compare(left, right, ranks = null, foldsKey = false) {
+// Which applies is decided by the DECLARED type rather than by the runtime one: on the wire a date
+// is a string too, and the reference never folds one, because there it is a struct.
+function compare(left, right, ranks = null, type = null) {
   if (ranks) {
     return plainCompare(ranks.get(left), ranks.get(right));
   }
 
-  if (!foldsKey) {
+  if (type === "date" || type === "datetime") {
+    return ["lt", "eq", "gt"][Model.compareTemporal(left, right) + 1];
+  }
+
+  if (type !== "string") {
     return plainCompare(left, right);
   }
 
@@ -125,7 +131,7 @@ function heldAnswer(quantifier, answers) {
   }
 }
 
-function holds(fieldValue, operator, value, ranks, foldsKey = false) {
+function holds(fieldValue, operator, value, ranks, type = null) {
   if (operator === "==") {
     return equal(fieldValue, value);
   }
@@ -165,16 +171,16 @@ function holds(fieldValue, operator, value, ranks, foldsKey = false) {
       return fieldValue.startsWith(value);
 
     case "<":
-      return compare(fieldValue, value, ranks, foldsKey) === "lt";
+      return compare(fieldValue, value, ranks, type) === "lt";
 
     case "<=":
-      return compare(fieldValue, value, ranks, foldsKey) !== "gt";
+      return compare(fieldValue, value, ranks, type) !== "gt";
 
     case ">":
-      return compare(fieldValue, value, ranks, foldsKey) === "gt";
+      return compare(fieldValue, value, ranks, type) === "gt";
 
     default:
-      return compare(fieldValue, value, ranks, foldsKey) !== "lt";
+      return compare(fieldValue, value, ranks, type) !== "lt";
   }
 }
 
@@ -498,7 +504,7 @@ function predicateHolds(
     operator,
     operand,
     enumRanks(end.type, end.name),
-    declaredType(end.type, end.name) === "string",
+    declaredType(end.type, end.name),
   );
 }
 

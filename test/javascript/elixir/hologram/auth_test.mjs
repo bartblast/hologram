@@ -239,6 +239,7 @@ describe("Elixir_Hologram_Auth", () => {
             archived: "boolean",
             kind: "enum",
             name: "string",
+            opened_on: "date",
           },
           // Shout stands in for Module42's origin row, the server's path end, and late is this side's
           // own, for a string ordered inside a delegated row's definition. Recent documents is a
@@ -816,8 +817,8 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
-    // Temporal values compare as the strings the wire spells them with, whose character order IS
-    // their calendar order - which is what lets one comparison serve every type.
+    // Temporal values are held as the strings the wire spells them with, and within years 0 to 9999
+    // their character order is their calendar order.
     it("orders temporal values by their calendar semantics", () => {
       const entity = document({
         held_at: "2026-07-17T12:00:00.000000Z",
@@ -840,6 +841,60 @@ describe("Elixir_Hologram_Auth", () => {
         reads(
           [rule({predicates: [["released_on", "<", "2027-01-01"]]})],
           entity,
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    // Past years 0 to 9999 the characters stop ordering a date - -2 would sort after -1, and 10000
+    // before 9999 - so a rule compares the years as numbers, as Date.compare/2 and
+    // DateTime.compare/2 do in the reference, in a baked bound and against another attribute alike.
+    it("orders dates and datetimes of a year below 0 or past 9999 by the day or instant", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["released_on", ">", "9999-12-31"]]})],
+          document({released_on: "10000-01-01"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["released_on", ">", "9999-12-31"]]})],
+          document({released_on: "9999-06-01"}),
+        ),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["released_on", "<=", {attribute: "due_on"}]]})],
+          document({due_on: "-0001-01-01", released_on: "-0002-01-01"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [
+            rule({
+              predicates: [["held_at", "<", "-0001-01-01T00:00:00.000000Z"]],
+            }),
+          ],
+          document({held_at: "-0002-06-01T00:00:00.000000Z"}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    // The type is the one the path ends at, declared on the row it reaches.
+    it("orders a date a path reaches by its day", () => {
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, opened_on: "10000-01-01"});
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [[["folder", "opened_on"], ">", "9999-12-31"]]})],
+          document({folder_id: FOLDER_ID}),
         ),
         Type.boolean(true),
       );
