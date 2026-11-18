@@ -102,6 +102,17 @@ export default class Sse {
     ]);
   }
 
+  // Closes the stream there is, and stops the clocks it was keeping: the heartbeat watchdog, which
+  // would otherwise end whatever stream stands in its place - or throw on there being none - at
+  // its deadline, and the stability timer, which would clear the failure count on the strength of
+  // a stream that is gone.
+  static closeStream() {
+    clearTimeout($.heartbeatTimer);
+    clearTimeout($.stabilityTimer);
+
+    $.eventSource?.close();
+  }
+
   static async connect() {
     const runId = $.runId;
     const isStale = () => runId !== $.runId;
@@ -156,7 +167,7 @@ export default class Sse {
       // by a dying stream, and a deliberate restart under a new identity - and the second to
       // arrive would otherwise leave the first's stream open with nothing referring to it,
       // delivering every action and every frame a second time.
-      $.eventSource?.close();
+      $.closeStream();
 
       $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
 
@@ -306,7 +317,7 @@ export default class Sse {
     clearTimeout($.reconnectTimer);
     $.reconnectTimer = null;
 
-    $.eventSource?.close();
+    $.closeStream();
     $.eventSource = null;
 
     return $.connect();

@@ -747,6 +747,39 @@ describe("Sse", () => {
       sinon.stub(Logger, "debug");
     });
 
+    // A stream replaced before it had lasted has earned nothing, and the count belongs to the one
+    // replacing it.
+    it("clears nothing for a stream replaced before it lasted", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      fetchStub.returns(new Promise(() => {}));
+
+      Sse.reconnect();
+      Sse.reconnectAttempts = 3;
+
+      clock.tick(Sse.STABLE_CONNECTION_MS);
+
+      assert.equal(Sse.reconnectAttempts, 3);
+    });
+
+    // The same for a stream another connect closed: the count belongs to the one that stands.
+    it("clears nothing for a stream another connect closed before it lasted", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      await Sse.connect();
+      Sse.reconnectAttempts = 3;
+
+      clock.tick(Sse.STABLE_CONNECTION_MS);
+
+      assert.equal(Sse.reconnectAttempts, 3);
+    });
+
     // A batch whose send got no answer is still pending, and this is the one signal that means
     // the network is worth trying again.
     it("sends the pending batches again when the stream comes back", async () => {
@@ -872,6 +905,50 @@ describe("Sse", () => {
       Sse.eventSource.onerror({type: "error"});
 
       clock.tick(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS * 2);
+
+      sinon.assert.calledOnce(mockEventSource.close);
+    });
+
+    // The stream it watched is closed, and a new handshake may still be on its way.
+    it("is cancelled when the stream is replaced on purpose", async () => {
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      fetchStub.returns(new Promise(() => {}));
+
+      Sse.reconnect();
+
+      assert.doesNotThrow(() =>
+        clock.tick(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS * 2),
+      );
+
+      sinon.assert.calledOnce(mockEventSource.close);
+      sinon.assert.calledTwice(fetchStub);
+      assert.equal(Sse.reconnectAttempts, 0);
+    });
+
+    // Left armed, it would end the replacement at the old stream's deadline.
+    it("leaves alone the stream that replaced the one it watched", async () => {
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      await Sse.reconnect();
+
+      clock.tick(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS);
+
+      sinon.assert.calledOnce(mockEventSource.close);
+      assert.equal(Sse.reconnectAttempts, 0);
+    });
+
+    // Two connects in flight: the second closes the first's stream, whose watchdog must not go on
+    // to end the second's.
+    it("is cancelled when another connect closes the stream", async () => {
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      await Sse.connect();
+
+      clock.tick(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS);
 
       sinon.assert.calledOnce(mockEventSource.close);
     });
