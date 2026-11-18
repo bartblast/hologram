@@ -480,6 +480,26 @@ defmodule Hologram.EntityTest do
       assert diagnostics == []
     end
 
+    test "names the pin on an argument a derived query compares a field with itself beside" do
+      code = """
+      defmodule Hologram.EntityTest.InlineEntityFixture175 do
+        use Hologram.Entity
+
+        attribute :points, :integer
+
+        relationship :mentors, [Hologram.Test.Fixtures.Entity.Module34]
+
+        derived :higher_count, :integer, fn mentors, points ->
+          count(filter(mentors, points >= points))
+        end
+      end
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:9: points >= points compares points with itself, which only says points isn't nil - a value from the surrounding code is pinned: ^points",
+                   fn -> Code.eval_string(code) end
+    end
+
     test "raises on a capture of a zero-arity function of the entity type's own" do
       line = __ENV__.line + 9
 

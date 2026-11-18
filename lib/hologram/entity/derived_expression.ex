@@ -663,6 +663,14 @@ defmodule Hologram.Entity.DerivedExpression do
     Macro.expand(ast, state.env)
   end
 
+  # An argument read in a query, unpinned, is the queried row's name - the argument itself is read
+  # pinned. The definition function binds no variable to it, so it is marked for the query macros,
+  # whose refusal of a forgotten pin then names it as it names a variable's.
+  defp query_position({name, _meta, context} = ast, state)
+       when is_atom(name) and is_atom(context) do
+    if name in state.names, do: Expression.mark_pinnable(ast), else: ast
+  end
+
   defp query_position({head, meta, args}, state) when is_list(args) do
     {query_position(head, state), meta, Enum.map(args, &query_position(&1, state))}
   end

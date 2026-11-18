@@ -47,6 +47,10 @@ defmodule Hologram.Query.Expression do
 
   @ordering_names %{stage: "sort", names: "an attribute", spelled: "a bare name"}
 
+  # The meta key marking a bare name the surrounding code reads a value through, though no variable
+  # holds it where the query macros expand - see mark_pinnable/1.
+  @pinnable_key :hologram_pinnable
+
   @quantifiers [:all, :any, :none]
 
   @range_operators [:.., :..//]
@@ -179,6 +183,17 @@ defmodule Hologram.Query.Expression do
       {:path, [name]} -> name
       element -> merge_includes([element])
     end
+  end
+
+  @doc """
+  Marks the given bare name as one the surrounding code reads a value through, though no variable
+  holds it where the query macros expand - a derived field's argument, which its query pins to read
+  the row's field. A refusal that names a forgotten pin on a variable names it on a marked name too.
+  Takes a bare name only.
+  """
+  @spec mark_pinnable(Macro.t()) :: Macro.t()
+  def mark_pinnable({name, meta, context}) when is_atom(name) and is_atom(context) do
+    {name, Keyword.put(meta, @pinnable_key, true), context}
   end
 
   @doc """
@@ -830,6 +845,14 @@ defmodule Hologram.Query.Expression do
     end
   end
 
+  # Whether the surrounding code reads a value through the bare name: a variable, looked up the way
+  # Macro.Env.has_var?/2 keys it - by the counter a macro's hygiene gave it, or else by its context
+  # - or a name marked pinnable.
+  defp pinnable?({name, meta, context}, env) do
+    Keyword.get(meta, @pinnable_key, false) or
+      Macro.Env.has_var?(env, {name, Keyword.get(meta, :counter, context)})
+  end
+
   defp predicate_list!({:and, _meta, [left, right]}, names, env) do
     side!(left, :and, names, env) ++ side!(right, :and, names, env)
   end
@@ -992,6 +1015,11 @@ defmodule Hologram.Query.Expression do
   end
 
   defp reversed_hops(_ast), do: nil
+
+  # The bare name a reference starts at - the reference is a bare name or a dot chain over one.
+  defp root_name({name, _meta, context} = ast) when is_atom(name) and is_atom(context), do: ast
+
+  defp root_name({{:., _dot_meta, [left, _field]}, _meta, []}), do: root_name(left)
 
   # The row a dot chain's first name reads on: a row a quantifier around the condition bound, as many
   # out as its place among the bindings, or else the queried row, as many out as there are bindings.
@@ -1190,9 +1218,9 @@ defmodule Hologram.Query.Expression do
   # field is set. The lowering spells each row its own way - a name of the row a condition is about
   # as it is, one of a row above wrapped in {:outer, levels, name} - so equal names are one field,
   # and the same name on two rows stays two. A pinned operand is the stage's to judge, whatever it
-  # holds. When the right side starts at a variable of the surrounding code, the pin it forgot is
-  # the likelier meaning, so the fix names it - unless a quantifier around the comparison bound that
-  # name to its row, which the variable can't be read as there.
+  # holds. When the right side starts at a variable of the surrounding code, or at a name marked
+  # pinnable, the pin it forgot is the likelier meaning, so the fix names it - unless a quantifier
+  # around the comparison bound that name to its row, which the variable can't be read as there.
   defp validate_distinct_sides!(
          {operator, _meta, [left, right | _opts]} = ast,
          name,
@@ -1202,10 +1230,10 @@ defmodule Hologram.Query.Expression do
        ) do
     if operand == {:attribute, name} and not match?({:^, _pin_meta, [_expr]}, right) do
       field = Macro.to_string(left)
-      {root, _context} = variable = variable_of(right)
+      {root, _meta, _context} = root_node = root_name(right)
 
       fix =
-        if root not in names.bindings and Macro.Env.has_var?(env, variable) do
+        if root not in names.bindings and pinnable?(root_node, env) do
           " - a value from the surrounding code is pinned: #{pin_hint(right)}"
         else
           self_comparison_fix(operator, field)
@@ -1231,14 +1259,6 @@ defmodule Hologram.Query.Expression do
       true -> operand_error!(description, ast, env)
     end
   end
-
-  # The variable a reference starts at, keyed the way Macro.Env.has_var?/2 looks it up - by the
-  # counter a macro's hygiene gave it, or else by its context. The reference is a bare name or a dot
-  # chain over one.
-  defp variable_of({name, meta, context}) when is_atom(name) and is_atom(context),
-    do: {name, Keyword.get(meta, :counter, context)}
-
-  defp variable_of({{:., _dot_meta, [left, _field]}, _meta, []}), do: variable_of(left)
 
   @spec whole_side!(Macro.t(), :and | :or, map, Macro.Env.t()) :: no_return
   defp whole_side!(ast, :and, %{kind: :condition}, env) do
