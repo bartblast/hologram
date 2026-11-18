@@ -52,8 +52,8 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     Connection.query(statement)
   end
 
-  defp drop_index do
-    {:ok, _result} = Connection.query(~s{DROP INDEX "hologram_data"."#{@index}"})
+  defp drop_index(index \\ @index) do
+    {:ok, _result} = Connection.query(~s{DROP INDEX "hologram_data"."#{index}"})
   end
 
   defp grant_count do
@@ -65,7 +65,7 @@ defmodule Hologram.Migration.IndexRecoveryTest do
   end
 
   # :absent, false (a build died partway) or true (the index serves queries).
-  defp index_validity do
+  defp index_validity(index \\ @index) do
     statement = """
     SELECT i."indisvalid"
     FROM pg_catalog.pg_index i
@@ -75,7 +75,7 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     WHERE n."nspname" = 'hologram_data' AND ic."relname" = $1
     """
 
-    case Connection.query(statement, [@index]) do
+    case Connection.query(statement, [index]) do
       {:ok, %{rows: [[valid?]]}} -> valid?
       {:ok, %{rows: []}} -> :absent
     end
@@ -102,6 +102,15 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(user_id)])
   end
 
+  defp insert_task(slug) do
+    statement = """
+    INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "updated_at", "$revisions")
+    VALUES (gen_random_uuid(), $1, now(), now(), '{}')
+    """
+
+    {:ok, _result} = Connection.query(statement, [slug])
+  end
+
   defp migration(version, ops) do
     %{version: version, path: "app/migrations/#{version}.ex", ops: ops}
   end
@@ -121,7 +130,7 @@ defmodule Hologram.Migration.IndexRecoveryTest do
       :ok = run([create], model, @context)
     end)
 
-    [mapping: Mapper.derive_from_model!(model), model: model]
+    [chain: [create], mapping: Mapper.derive_from_model!(model), model: model]
   end
 
   describe "repair_indexes/1" do
@@ -173,6 +182,124 @@ defmodule Hologram.Migration.IndexRecoveryTest do
         assert repair_indexes(mapping) == :ok
 
         assert index_validity() == true
+      end)
+    end
+  end
+
+  # A later release meeting the index an interrupted deploy left unfinished: its file renames
+  # or drops an index that a build never started, or one that a failed build left invalid.
+  describe "run/3" do
+    @slug_index "my_app_task_slug_$uidx"
+
+    setup %{chain: chain, model: model, scratch: scratch} do
+      # A unique column added to a table that predates the file, so its index builds
+      # concurrently, after the file commits.
+      add_slug =
+        migration("20260813091523", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            type: :string,
+            opts: [optional: true, unique: true],
+            line: 3
+          }
+        ])
+
+      slug_chain = Enum.concat(chain, [add_slug])
+      slug_model = Model.fold(model, add_slug.ops)
+
+      route(scratch, fn ->
+        :ok = run(slug_chain, slug_model, @context)
+      end)
+
+      [chain: slug_chain, model: slug_model]
+    end
+
+    test "builds an index a deploy never got to before a pending file renames it", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      rename =
+        migration("20260813091524", [
+          %{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 3}
+        ])
+
+      post_model = Model.fold(model, rename.ops)
+
+      route(scratch, fn ->
+        # What a node killed after the file committed and before its build began leaves.
+        drop_index(@slug_index)
+
+        assert run(Enum.concat(chain, [rename]), post_model, @context) == :ok
+
+        assert index_validity("my_app_task_handle_$uidx") == true
+        assert index_validity(@slug_index) == :absent
+      end)
+    end
+
+    test "builds an index a deploy never got to before a pending file drops it", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      drop =
+        migration("20260813091524", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [unique: false],
+            line: 3
+          }
+        ])
+
+      post_model = Model.fold(model, drop.ops)
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+
+        assert run(Enum.concat(chain, [drop]), post_model, @context) == :ok
+
+        assert index_validity(@slug_index) == :absent
+      end)
+    end
+
+    # The index can't be rebuilt while rows repeat its key, and it doesn't need to be: it
+    # holds its name, so the pending drop finds it and takes it away.
+    test "leaves an index a failed build left invalid to the pending file that drops it", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      drop =
+        migration("20260813091524", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [unique: false],
+            line: 3
+          }
+        ])
+
+      post_model = Model.fold(model, drop.ops)
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+        insert_task("taken")
+        insert_task("taken")
+
+        # The repair a boot runs, failing on the repeated key the way a build that died
+        # partway fails: the index stays in the catalog, invalid.
+        assert_raise MatchError, fn -> repair_indexes(Mapper.derive_from_model!(model)) end
+
+        assert index_validity(@slug_index) == false
+
+        assert run(Enum.concat(chain, [drop]), post_model, @context) == :ok
+
+        assert index_validity(@slug_index) == :absent
       end)
     end
   end
