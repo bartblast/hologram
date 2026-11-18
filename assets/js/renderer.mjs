@@ -138,6 +138,21 @@ const SVG_ADJUSTED_TAG_NAMES = {
   textpath: "textPath",
 };
 
+// The attributes the browser reads when it turns a value written to an input or a textarea into
+// the form it stores: the type picks the rule, a range clamps to its min and max and snaps to its
+// step (counted from min, or from the value attribute when there's no valid min), an email input
+// with multiple trims each address, and a color input serializes through its alpha and colorspace.
+const VALUE_SANITIZATION_ATTRS = [
+  "alpha",
+  "colorspace",
+  "max",
+  "min",
+  "multiple",
+  "step",
+  "type",
+  "value",
+];
+
 export default class Renderer {
   // Event listener bindings collected during the current render, each a {target, key, attach,
   // handler} descriptor (see EventListenerRegistry). A <window> or <document> tag pushes here (with
@@ -1552,6 +1567,36 @@ export default class Renderer {
     return eventName.replace(/_/g, "");
   }
 
+  // What the element would hold if the given value were written to it, worked out on a detached
+  // element of the same tag, so nothing on the page is touched. The copy gets only the attributes
+  // that decide the stored form, and the patch has already applied this render's attribute changes
+  // by the time the hooks run. Copying every attribute would throw on names setAttribute() refuses
+  // but the HTML parser keeps, like "@click", and on inline handlers under Trusted Types. Built with
+  // createElement() rather than cloneNode(), which would run a customized built-in's constructor and
+  // value setter.
+  //
+  // A select is left as it is: what it holds depends on its options, which the copy doesn't have,
+  // and which on an update the patch changes only after the hook runs.
+  static #normalizeFormInputValue(element, value) {
+    if (element.localName === "select") {
+      return value;
+    }
+
+    const copy = element.ownerDocument.createElement(element.localName);
+
+    for (const name of VALUE_SANITIZATION_ATTRS) {
+      const attrValue = element.getAttribute(name);
+
+      if (attrValue !== null) {
+        copy.setAttribute(name, attrValue);
+      }
+    }
+
+    copy.value = value;
+
+    return copy.value;
+  }
+
   // Based on normalize_prop_name/1
   // Deps: [:erlang.binary_to_atom/1]
   static #normalizePropName(propDom) {
@@ -2345,9 +2390,20 @@ export default class Renderer {
     element.checked = newChecked;
   }
 
+  // Writes the controlled value onto the element, unless the write would leave it holding what it
+  // holds now.
+  //
+  // The browser stores some values in another form than the one written: a color input lowercases
+  // its hex, a range clamps to its bounds, a textarea turns CRLF into LF. Compared as plain strings,
+  // state holding "#FF0000" never matches the "#ff0000" read back, so every render would write
+  // again - and a write moves an open color picker, so it fights the pointer while it's dragged.
   static #updateFormInputValue(element, newValue) {
     // Skip redundant DOM writes
     if (newValue === element.value) {
+      return;
+    }
+
+    if ($.#normalizeFormInputValue(element, newValue) === element.value) {
       return;
     }
 
