@@ -371,6 +371,12 @@ defmodule Hologram.Migration.DriftTest do
 
         {:ok, _result} = Connection.query(~s{DROP INDEX "hologram_data"."#{@index}"})
 
+        # Plan-shaped, so a newer release's index as far as this node knows - which it leaves.
+        newer_index =
+          ~s{CREATE INDEX "my_app_task_created_at_$idx" ON "hologram_data"."my_app_task" ("created_at")}
+
+        {:ok, _result} = Connection.query(newer_index)
+
         log =
           ExUnit.CaptureLog.capture_log(fn ->
             assert run(chain, model, @context) == :ok
@@ -378,6 +384,51 @@ defmodule Hologram.Migration.DriftTest do
 
         assert log =~ "20260814091522"
         assert index_validity() == true
+        assert "my_app_task_created_at_$idx" in plan_index_names()
+      end)
+    end
+
+    test "refuses with the drift message before building an index on a column it lacks", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      drop =
+        migration("20260814091522", [
+          %{op: :delete_relationship, entity: MyApp.Task, name: :author, line: 3}
+        ])
+
+      route(scratch, fn ->
+        ExUnit.CaptureLog.capture_log(fn ->
+          :ok = run(Enum.concat(chain, [drop]), Model.fold(model, drop.ops), @context)
+        end)
+
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert_raise RuntimeError,
+                       ~r/column "author_id" on table "my_app_task" declared by the model is missing/,
+                       fn ->
+                         run(chain, model, @context)
+                       end
+        end)
+      end)
+    end
+  end
+
+  describe "run/3 with a column dropped by hand" do
+    test "refuses with the drift message rather than build the column's index", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        {:ok, _result} =
+          Connection.query(~s{ALTER TABLE "hologram_data"."my_app_task" DROP COLUMN "author_id"})
+
+        assert_raise RuntimeError,
+                     ~r/column "author_id" on table "my_app_task" declared by the model is missing/,
+                     fn ->
+                       run(chain, model, @context)
+                     end
       end)
     end
   end

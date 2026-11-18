@@ -477,6 +477,22 @@ defmodule Hologram.Migrator do
     :applied
   end
 
+  # A database holding an object under a name the current naming rule no longer derives - one
+  # a release that changed the rule left behind - can't be fixed by a migration: replay derives
+  # both sides with the current rule, so there is no difference for a file to express. The
+  # boot renames it instead, in one transaction and ahead of the pending migrations, whose
+  # ops name objects by the current rule and would otherwise fail on the old name. The
+  # diff is against what the applied migrations derive, and only its renames apply: anything
+  # else it finds is the pending files' to change, the index repair's to rebuild, or the drift
+  # check's to refuse.
+  #
+  # Only a node whose chain holds every applied version heals (see known_chain?/2). One that
+  # lacks some is most often an older release booting after a newer one migrated the database,
+  # which the drift check refuses, so renaming the newer release's objects back would gain
+  # nothing. The plan's indexes are repair_indexes/2's to rename, after the pending files. An older release that
+  # differs only by its naming rule does rename back, which is what it needs to boot once the
+  # newer nodes are stopped. Old and new nodes running against one database at once is a
+  # separate matter, not supported yet (#1627).
   defp apply_renames(pre_model) do
     expected =
       pre_model
@@ -669,26 +685,10 @@ defmodule Hologram.Migrator do
     {:ok, _result} = Connection.query(fill_statement, [encoded_value])
   end
 
-  # A database holding an object under a name the current naming rule no longer derives - one
-  # a release that changed the rule left behind - can't be fixed by a migration: replay derives
-  # both sides with the current rule, so there is no difference for a file to express. The
-  # boot renames it instead, in one transaction and ahead of the pending migrations, whose
-  # ops name objects by the current rule and would otherwise fail on the old name. The
-  # diff is against what the applied migrations derive, and only its renames apply: anything
-  # else it finds is the pending files' to change, the index repair's to rebuild, or the drift
-  # check's to refuse.
-  #
-  # Only a node whose chain holds every applied version heals. One that lacks some is an older
-  # release booting after a newer one migrated the database, which the drift check refuses
-  # anyway, so renaming the newer release's objects back would gain nothing. The plan's indexes
-  # are the repair's to rename (see converge_for_unknown_chain/4). An older release that
-  # differs only by its naming rule does rename back, which is what it needs to boot once the
-  # newer nodes are stopped. Old and new nodes running against one database at once is a
-  # separate matter, not supported yet (#1627).
   # A node whose chain lacks an applied version runs older code than the database, or the version
   # was removed from the chain. Its plan would drop the indexes a newer release needs and rename
   # theirs back, so it does neither. Most such gaps change the schema, and the drift check refuses
-  # them - before any build, which could name a column the database no longer has. One that left
+  # them before anything is built. One that left
   # the schema alone, like a role's change, passes it: the node then still builds the indexes its
   # plan is missing and rebuilds invalid ones, and says which versions it doesn't know.
   defp converge_for_unknown_chain(migrations, applied, mapping, plan) do
@@ -809,7 +809,8 @@ defmodule Hologram.Migrator do
   # Only what the model derives: an index the mapping does not name is drift for the
   # check to report, never something to create. A table the database does not have is
   # drift as well, and is skipped - creating its indexes would raise a relation error here,
-  # before check_drift!/1 gets to name the missing table as the cause. So is a name an index
+  # before check_drift!/1 gets to name the missing table as the cause - and so is a column it
+  # does not have, for the same reason. So is a name an index
   # already holds, whatever its definition, and an index the diff recognises as renamed:
   # building the derived one beside it would leave two, and the drift check names both.
   defp missing_indexes(mapping, plan) do
@@ -824,6 +825,7 @@ defmodule Hologram.Migrator do
     |> Schema.diff(Schema.from_mapping(mapping, plan))
     |> Enum.filter(fn op ->
       op.op == :create_index and Map.has_key?(actual.tables, op.table) and
+        Enum.all?(op.columns, &Map.has_key?(actual.tables[op.table].columns, &1)) and
         not MapSet.member?(held_names, op.index)
     end)
   end
