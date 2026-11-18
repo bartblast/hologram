@@ -133,6 +133,18 @@ defmodule Hologram.Sync.FrameTest do
       assert verdicts == %{delete_key() => true}
     end
 
+    test "works out the verdicts of a row that appeared with some given for its id under another type" do
+      check_permissions()
+
+      row = VerdictTask.new()
+      given = %{VerdictBoard => %{row.id => %{delete_key() => false}}}
+
+      assert [%{data: %{"$verdicts": verdicts}, op: :put_entity}] =
+               deltas(news(%{appeared: [row]}), Entity.generate_id(), given)
+
+      assert verdicts == %{delete_key() => true}
+    end
+
     test "sends a row that appeared whole" do
       row = Module2.new(a: true, c: "first")
 
