@@ -367,8 +367,10 @@ defmodule Hologram.Migrator do
   or verifies the database, objects standing under names the current naming rule no
   longer derives are renamed (one info line each), and the pending files apply from the
   model the applied ones produce - with the indexes the applied files derive and the
-  database lacks built before them, when the node knows every applied file. The index
-  repair and the drift check come last.
+  database lacks built before them, when the node knows every applied file. A unique one
+  whose build fails on rows repeating its key is left invalid for the pending files, and
+  the repair after them refuses it if they keep it - or the file that changes a type on its
+  table, which rebuilds it, refuses there. The index repair and the drift check come last.
   """
   @spec run(list(%{atom => any}), %{atom => any}, %{atom => any}) :: :ok
   def run(migrations, current_model, context) do
@@ -434,8 +436,27 @@ defmodule Hologram.Migrator do
   # applies: two values can convert to one, and the names a file's earlier ops leave behind
   # are the ones the database holds at this point. A tightening carrying a fill keeps its
   # type, so the clause above has no cast to ask about.
+  #
+  # The change rebuilds every index on the table, so an invalid unique one over rows that
+  # already repeat its key is asked about first - the cast's own check would blame the cast
+  # for the repeats.
   defp apply_op(%{op: :alter_column} = op) do
+    if op.before.type != op.after.type do
+      Preflight.check_invalid_unique_indexes!(op.table)
+    end
+
     Preflight.check_cast!(op)
+
+    execute_statements(DDL.statements(op))
+  end
+
+  # Converting each column to the rebuilt type rewrites its table, which rebuilds every index
+  # on it - see the alter_column clause above.
+  defp apply_op(%{op: :rebuild_enum_type} = op) do
+    op.columns
+    |> Enum.map(fn {table, _column} -> table end)
+    |> Enum.uniq()
+    |> Enum.each(&Preflight.check_invalid_unique_indexes!/1)
 
     execute_statements(DDL.statements(op))
   end
@@ -628,9 +649,16 @@ defmodule Hologram.Migrator do
   #
   # Creating only, never rebuilding: an invalid index holds its name, so a pending rename or
   # drop finds it, and the repair after the files rebuilds whatever survives them. Rebuilding
-  # it here would fail on rows repeating its key on every boot, even for a release whose
-  # pending file drops that index. Creating can fail on such rows too, once: the build that
-  # fails leaves the index invalid under its name, so the next boot gets past here (#1700).
+  # it here would refuse rows repeating its key on every boot, even for a release whose
+  # pending file drops that index.
+  #
+  # For the same reason a build that fails on such rows is not refused here. It leaves the
+  # index invalid under its name, which is all a pending rename or drop needs. A pending file
+  # that drops the index, or the table it stands on, takes it away, and the boot gets through.
+  # One that keeps it leaves it to the repair after the files, which refuses it there, with
+  # the pending files applied. A pending type change on its table rebuilds every index there,
+  # this one included, so it refuses at its file instead (see apply_op/1). No count first:
+  # the build is what leaves the name taken, so it runs either way.
   #
   # With nothing pending the applied files derive the current model, so the repair after
   # them does the same work. On a history this node does not fully know, what the applied
@@ -639,7 +667,8 @@ defmodule Hologram.Migrator do
     if pending != [] and known_history?(migrations, applied) do
       pre_model
       |> Mapper.derive_from_model!()
-      |> create_missing_indexes()
+      |> missing_indexes()
+      |> Enum.each(&build_index(Map.put(&1, :concurrently, true)))
     end
 
     :ok
@@ -650,20 +679,6 @@ defmodule Hologram.Migrator do
   defp create_index!(op) do
     check_unique_keys!(op)
     build_index!(Map.put(op, :concurrently, true))
-  end
-
-  defp create_index_concurrently(op) do
-    concurrent_op = Map.put(op, :concurrently, true)
-
-    execute_statements(DDL.statements(concurrent_op))
-  end
-
-  defp create_missing_indexes(mapping) do
-    mapping
-    |> missing_indexes()
-    |> Enum.each(&create_index_concurrently/1)
-
-    :ok
   end
 
   defp describe_non_plain_reason(:collation), do: "a collation other than its column's"
