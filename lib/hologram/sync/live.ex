@@ -16,6 +16,7 @@ defmodule Hologram.Sync.Live do
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.Oplog
   alias Hologram.DB.QueryCache
   alias Hologram.Policy
   alias Hologram.Policy.Edges
@@ -40,6 +41,7 @@ defmodule Hologram.Sync.Live do
 
   @type part :: %{
           checked: %{module => binary},
+          overtaking_seqs: %{String.t() => non_neg_integer},
           own_seqs: %{String.t() => non_neg_integer},
           pair_effects: %{{module, atom, module} => binary},
           pairs: %{{module, atom, module} => binary},
@@ -76,6 +78,11 @@ defmodule Hologram.Sync.Live do
     there now, and the pairs filed under other rows that a row arriving or leaving changes
   - `own_seqs` - per replica, the highest sequence number among the batches of it the effects came
     from
+  - `overtaking_seqs` - per replica, the highest sequence number among its batches in a
+    transaction above the batch's, read in the same snapshot as the rows (see
+    `Hologram.DB.Oplog.replica_seqs_after/1`). The rows are read after the effects, so they can
+    hold a replica's batch the effects don't - and what the rows have applied of a replica's
+    writes is the higher of this and `own_seqs` (see `Hologram.Sync.Session`)
   - `synced_types` - the given synced types, which decided what was asked about, so whoever reads
     the part judges it by the same ones
 
@@ -97,8 +104,8 @@ defmodule Hologram.Sync.Live do
   Only the given synced types are asked about: a row of another type is never sent, and the
   backwards search follows only the edges of synced types. An effect of an entity type this node
   does not know is passed over, as the search passes it over - bar the batch it came from, which
-  still counts towards its replica's number. The search, the recheck and the pairs read in one
-  snapshot, so they agree on what the tables hold.
+  still counts towards its replica's number. The search, the recheck, the pairs and the batches
+  that overtook the effects read in one snapshot, so they agree on what the tables hold.
   """
   @spec parts(
           list(map),
@@ -123,7 +130,9 @@ defmodule Hologram.Sync.Live do
       |> Enum.map(fn {_pid, user_id} -> user_id end)
       |> Enum.uniq()
 
-    {:ok, {searched, checked, rechecked, pairs}} =
+    tx_range = tx_range(effects)
+
+    {:ok, {searched, checked, rechecked, pairs, overtaking_seqs}} =
       Connection.snapshot(fn ->
         searched = Search.candidates(effects, synced_edges)
 
@@ -135,17 +144,22 @@ defmodule Hologram.Sync.Live do
 
         rechecked = recheck(checked, user_ids)
 
-        {searched, checked, rechecked, pairs_touching(checked, synced_types)}
+        pairs = pairs_touching(checked, synced_types)
+
+        {_lowest_tx, highest_tx} = tx_range
+
+        {searched, checked, rechecked, pairs, Oplog.replica_seqs_after(highest_tx)}
       end)
 
     shared = %{
       checked: Map.new(checked, fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end),
+      overtaking_seqs: overtaking_seqs,
       own_seqs: own_seqs(effects),
       pair_effects: pack_pair_effects(pair_effects),
       pairs: pairs,
       place: place,
       synced_types: synced_types,
-      tx_range: tx_range(effects)
+      tx_range: tx_range
     }
 
     written = written(effects)

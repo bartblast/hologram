@@ -1360,22 +1360,42 @@ defmodule Hologram.Sync.Session do
     {news, pot} =
       Pot.reread(state.pot, entity_type, rows, read_pairs, trust_held?: trust_held?)
 
-    reread = %{state | applied_seq: higher_seq(state.applied_seq, read_seq), pot: pot}
-
-    send_news(reread, news)
+    # Read after the batch, so its rows can hold batches of this client's the session hasn't told:
+    # their frames claim the number the read found, and the session keeps its own (see
+    # `tell_part/2`).
+    send_news(%{state | pot: pot}, news, %{}, higher_seq(state.applied_seq, read_seq))
   end
 
   # Frames carrying the given news, the rows handed over split across them by the frame size and
   # everything else riding the first (see `split_news/1`). A row handed over carries the given
   # verdicts for it, or has them worked out when none are given - a reread type's rows, read
   # after the batch.
-  defp send_news(state, news, verdicts \\ %{}) do
+  #
+  # The frames claim the given number. One above the session's own is a claim about rows read with
+  # this client's later batches in them, which holds for the rows handed over whole and not for a
+  # pair filed under a row the client already holds: the client takes a pair as a write to that
+  # row, which isn't restated. So the pairs go in a frame of their own, under the session's number -
+  # a pair applied twice changes nothing.
+  defp send_news(state, %{edges: edges} = news, verdicts, claim)
+       when claim != state.applied_seq and edges != [] do
+    state
+    |> send_frames(%{news | edges: []}, verdicts, claim)
+    |> send_frames(
+      %{appeared: [], edges: edges, patched: [], unsynced: []},
+      verdicts,
+      state.applied_seq
+    )
+  end
+
+  defp send_news(state, news, verdicts, claim), do: send_frames(state, news, verdicts, claim)
+
+  defp send_frames(state, news, verdicts, claim) do
     news
     |> split_news()
     |> Enum.reduce(state, fn frame_news, acc ->
       frame_deltas = Frame.deltas(frame_news, acc.actor_user_id, verdicts)
 
-      send(acc.client, {:sync_deltas, cursor(acc), frame_deltas, acc.applied_seq})
+      send(acc.client, {:sync_deltas, cursor(acc), frame_deltas, claim})
 
       remember_verdicts(acc, frame_deltas)
     end)
@@ -1384,8 +1404,20 @@ defmodule Hologram.Sync.Session do
   # What one batch tells this client: where it leaves it, how far its own batches are in, what the
   # batch changed of what it holds and may read (see `Hologram.Sync.Pot.decide/3`), the verdicts it
   # moved, and then the types a grant moved whole.
+  #
+  # The rows were read after the batch, so they can hold a later batch of this client's own that the
+  # batch doesn't. The client takes a frame's number to cover every write of its own to the rows the
+  # frame names, so a frame naming a row with that batch in it has to claim that batch, or the client
+  # shows the batch's writes twice - and a patch carries only the attributes the batch wrote, so a
+  # patch claiming it would drop what the client shows of the batch's other writes. So a part a
+  # later batch of this client's overtook hands its rows over whole, as read with that batch in them,
+  # under that batch's number. The session keeps the number of what it was told: the next part is
+  # judged against it, so one the same later batch overtook goes out whole too. The fill and the
+  # catch-up raise it from their own reads, which is safe because the edge is read after them: a
+  # part such a batch can overtake starts below the edge, and goes out whole (see `trusts_held?/2`).
   defp tell_part(state, part) do
     own_seq = state.replica_id && Map.get(part.own_seqs, state.replica_id)
+    overtaking_seq = state.replica_id && Map.get(part.overtaking_seqs, state.replica_id)
 
     placed = %{
       state
@@ -1393,7 +1425,8 @@ defmodule Hologram.Sync.Session do
         place: max_place(state.place, part.place)
     }
 
-    trust_held? = trusts_held?(placed, part)
+    overtaken? = overtaken?(placed.applied_seq, overtaking_seq)
+    trust_held? = trusts_held?(placed, part) and not overtaken?
     {news, pot} = Pot.decide(placed.pot, part, trust_held?: trust_held?)
 
     # A row handed over whole travels with its verdicts, and none held is patched when held isn't
@@ -1408,12 +1441,23 @@ defmodule Hologram.Sync.Session do
       end
 
     decided = %{placed | pot: pot}
+    claim = if overtaken?, do: overtaking_seq, else: placed.applied_seq
+    news_with_verdicts = %{news | patched: Verdicts.patches(news.patched, stale)}
 
-    told =
-      send_news(decided, %{news | patched: Verdicts.patches(news.patched, stale)}, part.verdicts)
+    told = send_news(decided, news_with_verdicts, part.verdicts, claim)
 
-    Enum.reduce(part.whole_types, told, &reread_type(&1, &2, part.synced_types, trust_held?))
+    # A reread is judged by the edge alone: its frames claim its own read's number, so a later
+    # batch of this client's that overtook the part leaves its rows as true as they are.
+    reread_trust? = trusts_held?(placed, part)
+
+    Enum.reduce(part.whole_types, told, &reread_type(&1, &2, part.synced_types, reread_trust?))
   end
+
+  defp overtaken?(_told_seq, nil), do: false
+
+  defp overtaken?(nil, _overtaking_seq), do: true
+
+  defp overtaken?(told_seq, overtaking_seq), do: overtaking_seq > told_seq
 
   # Whether what the session holds can be trusted to say what the client holds of the batch's rows.
   # Not for a batch with a transaction below the edge read once the fill or the catch-up was over.

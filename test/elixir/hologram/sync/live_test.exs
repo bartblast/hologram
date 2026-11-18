@@ -11,6 +11,8 @@ defmodule Hologram.Sync.LiveTest do
   alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
+  alias Hologram.DB.Codec
+  alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Oplog
   alias Hologram.Policy.Edges
@@ -81,6 +83,24 @@ defmodule Hologram.Sync.LiveTest do
       tx: Keyword.get(opts, :tx, 100),
       type: entity_type
     }
+  end
+
+  defp log_batch(row, tx, replica_id, seq) do
+    statement = """
+    INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "tx", "model_hash", "mutation_ref")
+    VALUES ('patch_entity', $1, $2, $3::text::xid8, 'h', $4)
+    """
+
+    params = [
+      Codec.encode_enum_value(row.__struct__),
+      Codec.encode(row.id, :uuid),
+      Integer.to_string(tx),
+      %{"replica_id" => replica_id, "seq" => seq}
+    ]
+
+    {:ok, _result} = Connection.query(statement, params)
+
+    :ok
   end
 
   # What a part's packed ids hold, per entity type.
@@ -450,6 +470,26 @@ defmodule Hologram.Sync.LiveTest do
       assert Map.keys(parts[context.alice].verdicts[PolicyModule17]) == [project.id]
       assert parts[context.bob].verdicts[PolicyModule17] == %{}
       assert parts[nil].verdicts[PolicyModule17] == %{}
+    end
+
+    # Read with the rows, so a replica's batch in a transaction above the batch's counts, while one
+    # in a transaction the batch holds doesn't. Logged by hand: every write a test makes is in the
+    # test's own transaction, so none can be above another.
+    test "gives each replica's highest batch in a transaction above the batch's", context do
+      project = create!(PolicyModule17, public: true)
+      batch_tx = Oplog.current_xmax() + 1
+
+      log_batch(project, batch_tx, "replica_b", 3)
+      log_batch(project, batch_tx + 1, "replica_a", 8)
+
+      effects = [
+        effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"}, tx: batch_tx)
+      ]
+
+      parts = parts(effects, context.sessions, context.edges, @synced, @place)
+
+      assert parts[nil].overtaking_seqs == %{"replica_a" => 8}
+      assert parts[context.alice].overtaking_seqs == %{"replica_a" => 8}
     end
 
     test "names the types a grant moved every row of, for its holder alone", context do

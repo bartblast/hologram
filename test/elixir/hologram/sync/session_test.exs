@@ -14,6 +14,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.PLT
   alias Hologram.DB
+  alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Oplog
@@ -3014,6 +3015,73 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, _cursor, [%{id: ^id, op: :unsync_entity}], _applied_seq}
     end
 
+    # The client's batch 8 commits after the batch holding its batch 7 was read, and before the
+    # rows were, so the frame claims 8 - and hands the row over whole, since a patch of what batch 7
+    # wrote would leave the client showing nothing of batch 8's other writes to it. The session
+    # keeps 7, what it was told.
+    test "hands a row over whole under a later batch of this replica's the rows hold" do
+      task = create("before")
+      windows(%{})
+
+      session = start_session!(replica_id: @replica_id)
+      await_fill()
+
+      DB.update!(Module2, task.id, c: "overtaken")
+      batch_tx = Oplog.current_xmax() + 1
+      overtake(task, batch_tx + 1, 8)
+
+      effect =
+        live_effect(:patch_entity, Module2, task.id, %{"c" => "after"}, ref(@replica_id, 7))
+
+      route([effect], {batch_tx, 0})
+
+      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], 8}
+      assert id == task.id
+      assert data.c == "overtaken"
+      assert :sys.get_state(session).applied_seq == 7
+
+      # Batch 8 overtakes the next batch too, and the session still holds 7, so it goes out whole.
+      overtake(task, batch_tx + 2, 8)
+      route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})], {batch_tx + 1, 0})
+
+      assert_receive {:sync_deltas, _cursor, [%{id: ^id, op: :put_entity}], 8}
+    end
+
+    test "hands a row over whole under a later batch of this replica's a batch of others' meets" do
+      task = create("before")
+      windows(%{})
+
+      start_session!(replica_id: @replica_id)
+      await_fill()
+
+      DB.update!(Module2, task.id, c: "overtaken")
+      batch_tx = Oplog.current_xmax() + 1
+      overtake(task, batch_tx + 1, 8)
+
+      route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})], {batch_tx, 0})
+
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], 8}
+      assert id == task.id
+    end
+
+    # The later batch is one the session already told, so the rows hold nothing it hasn't.
+    test "patches under its own number a batch that only an already told batch overtook" do
+      task = create("before")
+      windows(%{})
+
+      start_session!(applied_seq: 9, replica_id: @replica_id)
+      await_fill()
+
+      DB.update!(Module2, task.id, c: "after")
+      batch_tx = Oplog.current_xmax() + 1
+      overtake(task, batch_tx + 1, 8)
+
+      route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})], {batch_tx, 0})
+
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :patch_entity}], 9}
+      assert id == task.id
+    end
+
     test "passes over another replica's batches, and never lowers the number" do
       task = create("before")
       windows(%{})
@@ -3170,6 +3238,7 @@ defmodule Hologram.Sync.SessionTest do
 
       part = %{
         checked: %{},
+        overtaking_seqs: %{},
         own_seqs: %{},
         pair_effects: %{},
         pairs: %{},
@@ -3561,6 +3630,116 @@ defmodule Hologram.Sync.SessionTest do
         |> Enum.sort()
 
       assert told == Enum.sort([{:put_entity, project.id}, {:put_entity, other.id}])
+    end
+  end
+
+  describe "handle :live - overtaken" do
+    setup do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        permission_checking?: false,
+        synced_types: [Module28, Module29],
+        windows: %{}
+      })
+
+      :ok
+    end
+
+    # The label goes out whole under batch 8's number, while the pair naming it is filed under the
+    # message the client already holds, which the frame doesn't restate - so the pair goes in a
+    # frame of its own, under the number the session was told.
+    test "tells the pairs under a held row apart from the rows it hands over whole" do
+      label =
+        %{name: "before"}
+        |> Module29.new()
+        |> DB.create!()
+
+      message =
+        %{body: "hi", position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      :ok = EntityOperations.add_relationship(Module28, message.id, :labels, label.id)
+      windows(%{})
+
+      start_session!(replica_id: @replica_id)
+      await_fill()
+
+      DB.update!(Module29, label.id, name: "overtaken")
+      batch_tx = Oplog.current_xmax() + 1
+      overtake(label, batch_tx + 1, 8)
+
+      effect =
+        live_effect(:patch_entity, Module29, label.id, %{"name" => "after"}, ref(@replica_id, 7))
+
+      route([effect], {batch_tx, 0})
+
+      assert_receive {:sync_deltas, _cursor, [%{id: label_id, op: :put_entity}], 8}
+      assert label_id == label.id
+
+      assert_receive {:sync_deltas, _cursor, [%{data: data, id: holder_id, op: op}], 7}
+      assert {op, holder_id, data.target_id} == {:add_relationship, message.id, label.id}
+    end
+
+    # The type is read again whole after the batch, and the read holds this client's batch 8,
+    # which the session never told - so its frames claim 8, the pair under the held message goes
+    # apart under the session's 7, and the session keeps 7.
+    test "claims a reread's number in its frames without taking it" do
+      message =
+        %{body: "hi", position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      windows(%{})
+
+      read_fill = fn entity_type, actor_user_id, replica_id, synced_types ->
+        {rows, read_seq} =
+          read_fill_in_sandbox(entity_type, actor_user_id, replica_id, synced_types)
+
+        {rows, if(Process.get(:reread?), do: 8, else: read_seq)}
+      end
+
+      session = start_session!(applied_seq: 7, read_fill: read_fill, replica_id: @replica_id)
+      await_fill()
+
+      :sys.replace_state(session, fn state ->
+        Process.put(:reread?, true)
+
+        state
+      end)
+
+      label =
+        %{name: "arrived"}
+        |> Module29.new()
+        |> DB.create!()
+
+      :ok = EntityOperations.add_relationship(Module28, message.id, :labels, label.id)
+
+      tx = Oplog.current_xmax() + 1
+
+      part = %{
+        checked: %{},
+        overtaking_seqs: %{},
+        own_seqs: %{},
+        pair_effects: %{},
+        pairs: %{},
+        place: {tx, 0},
+        readable: %{},
+        synced_types: [Module28, Module29],
+        tx_range: {tx, tx},
+        verdicts: %{},
+        whole_types: [Module29],
+        written: %{}
+      }
+
+      send(session, {:live, part})
+
+      assert_receive {:sync_deltas, _cursor, [%{id: label_id, op: :put_entity}], 8}
+      assert label_id == label.id
+
+      assert_receive {:sync_deltas, _cursor, [%{id: holder_id, op: :add_relationship}], 7}
+      assert holder_id == message.id
+      assert :sys.get_state(session).applied_seq == 7
     end
   end
 
@@ -4089,6 +4268,27 @@ defmodule Hologram.Sync.SessionTest do
     ]
   end
 
+  # An effect of this replica's batch with the given number on the given row, logged in the given
+  # transaction - one above a batch's is what overtook it. Logged by hand: every write a test makes
+  # is in the test's own transaction, so none can be above another.
+  defp overtake(row, tx, seq) do
+    statement = """
+    INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "tx", "model_hash", "mutation_ref")
+    VALUES ('patch_entity', $1, $2, $3::text::xid8, 'h', $4)
+    """
+
+    params = [
+      Codec.encode_enum_value(row.__struct__),
+      Codec.encode(row.id, :uuid),
+      Integer.to_string(tx),
+      %{"replica_id" => @replica_id, "seq" => seq}
+    ]
+
+    {:ok, _result} = Connection.query(statement, params)
+
+    :ok
+  end
+
   # The batch a write belonged to, as the log spells it - string keys, since it comes back out of
   # a jsonb column.
   defp ref(replica_id, seq) do
@@ -4134,6 +4334,7 @@ defmodule Hologram.Sync.SessionTest do
 
     %{
       checked: %{PolicyProject => PackedIds.pack([project.id])},
+      overtaking_seqs: %{},
       own_seqs: %{},
       pair_effects: %{},
       pairs: %{},
