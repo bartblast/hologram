@@ -12,7 +12,7 @@ export default class SubmitEvent {
     const mapData = [...formData.entries()].map(([name, value]) => {
       const element = form.elements[name];
 
-      if (element.tagName === "INPUT" && element.type === "checkbox") {
+      if (element.localName === "input" && element.type === "checkbox") {
         // Note: FormData only includes checked checkboxes
         // Since this element appears in FormData, it means it's checked
         return [Type.bitstring(name), Type.boolean(true)];
