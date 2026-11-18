@@ -3252,6 +3252,33 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    // The baked policy is a plain object, so a name spelled like one of Object.prototype's
+    // properties must read no rules rather than the property.
+    it("answers no for a carried name the policy bakes no rules under", () => {
+      defineModel({});
+      globalThis.Hologram.sync.model[DOCUMENT].operations.push("constructor");
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), Type.atom("constructor"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers no for a delegation asking a name the related policy bakes no rules under", () => {
+      defineModel({read: [rule({via: ["constructor", ["folder"]]})]});
+
+      LocalDatabase.putRow(FOLDER, {archived: false, id: FOLDER_ID});
+
+      assert.deepStrictEqual(
+        can(
+          Type.bitstring(ALICE),
+          Type.atom("read"),
+          document({folder_id: FOLDER_ID}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
     // A named line is baked under its name as well as its operation, the build keeping the name's
     // own rules apart from the operation's other lines.
     it("answers a name by its own rules alone", () => {

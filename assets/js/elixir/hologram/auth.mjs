@@ -809,6 +809,12 @@ function viaHolds(rule, entityType, entity, actorUserId) {
   );
 }
 
+// The rules the build baked under the given key, or none. Only the policy's own keys count: it is
+// a plain object, so a name like constructor would otherwise read a property of Object.prototype.
+function policyRules(entry, key) {
+  return Object.hasOwn(entry.policy, key) ? entry.policy[key] : [];
+}
+
 function grants(entityType, row, operation, actorUserId) {
   const entry = globalThis.Hologram.sync?.model?.[entityType];
 
@@ -816,7 +822,7 @@ function grants(entityType, row, operation, actorUserId) {
     return false;
   }
 
-  const rules = entry.policy[operation] ?? [];
+  const rules = policyRules(entry, operation);
   const boxed = Model.box(entityType, row);
 
   return rules.some((related) =>
@@ -862,10 +868,10 @@ function coversFields(entry, entityType, entity, fields, actorUserId) {
     return matched.get(rule);
   };
 
-  const wholeRowRules = entry.policy.update ?? [];
+  const wholeRowRules = policyRules(entry, "update");
 
   return fields.every((field) =>
-    (entry.policy[`update:${field.value}`] ?? [])
+    policyRules(entry, `update:${field.value}`)
       .concat(wholeRowRules)
       .some(holds),
   );
@@ -1118,7 +1124,7 @@ const Elixir_Hologram_Auth = {
       );
     }
 
-    const rules = entry.policy[operationName] ?? [];
+    const rules = policyRules(entry, operationName);
 
     // An operation with no rules grants nothing, which is what makes the default deny.
     return Type.boolean(
