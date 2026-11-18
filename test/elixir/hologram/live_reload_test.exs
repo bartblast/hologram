@@ -975,7 +975,11 @@ defmodule Hologram.LiveReloadTest do
 
     test "keeps the request while a pass runs", %{from: from, state: state} do
       Model.hold()
-      state = %{state | pass: %{hold: Model.current_hold(), ref: make_ref()}}
+
+      state = %{
+        state
+        | pass: %{hold: Model.current_hold(), ref: make_ref(), registries_reloaded?: false}
+      }
 
       assert LiveReload.handle_call(:await_model, from, state) ==
                {:noreply, %{state | model_waiters: [from]}}
