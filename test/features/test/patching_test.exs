@@ -1328,7 +1328,24 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_text(css("#result"), "2")
       # The one write is the first render's: the attribute the server sent is removed when the
       # client takes the page over, and the value from state is written in its place.
-      |> assert_script_result("return window.__colorWrites;", 1)
+      |> assert_script_result("return window.__valueWrites.color_input;", 1)
+    end
+
+    feature "a re-render leaves a range value the browser snapped to its step alone", %{
+      session: session
+    } do
+      writes = "return window.__valueWrites.range_input;"
+
+      session
+      |> visit(Page20)
+      # The first render's write, as for the color input above.
+      |> assert_script_result(writes, 1)
+      |> click(button("Rerender"))
+      |> click(button("Rerender"))
+      |> click(button("Rerender"))
+      |> assert_text(css("#result"), "3")
+      |> assert_script_result(~s|return document.getElementById("range_input").value;|, "50")
+      |> assert_script_result(writes, 1)
     end
 
     feature "a picked color the action upcases is not written back", %{session: session} do
@@ -1342,13 +1359,13 @@ defmodule HologramFeatureTests.PatchingTest do
       session =
         session
         |> visit(Page20)
-        |> assert_script_result("return window.__colorWrites;", 1)
+        |> assert_script_result("return window.__valueWrites.color_input;", 1)
 
       script_result(session, pick)
 
       session
       |> assert_text(css("#state"), "#FF8800")
-      |> assert_script_result("return window.__colorWrites;", 1)
+      |> assert_script_result("return window.__valueWrites.color_input;", 1)
     end
   end
 end

@@ -12,6 +12,7 @@ defmodule HologramFeatureTests.Patching.Page20 do
     component
     |> put_state(:color, "#FF0000")
     |> put_state(:count, 0)
+    |> put_state(:range, "47")
   end
 
   # A color input reads its value back in lowercase, so state holding uppercase hex never equals
@@ -19,8 +20,11 @@ defmodule HologramFeatureTests.Patching.Page20 do
   # picker jump back while it's dragged. The input action upcases what the picker sends, the way an
   # app that stores colors in uppercase would.
   #
+  # A range input snaps its value to its step, so state holding 47 never equals the 50 the input
+  # shows. Its max puts the default, the midpoint, away from 50, so the first render writes once.
+  #
   # The script in the head wraps the value setter, before the runtime loads, to count the writes
-  # to the color input. It writes nothing itself, and the native descriptor it saves lets the test
+  # to each input by id. It writes nothing itself, and the native descriptor it saves lets the test
   # pick a color without going through the counter.
   def template do
     ~HOLO"""
@@ -36,13 +40,13 @@ defmodule HologramFeatureTests.Patching.Page20 do
               "value",
             );
 
-            window.__colorWrites = 0;
+            window.__valueWrites = {color_input: 0, range_input: 0};
 
             Object.defineProperty(HTMLInputElement.prototype, "value", {
               ...window.__nativeValue,
               set(value) {
-                if (this.id === "color_input") {
-                  window.__colorWrites += 1;
+                if (Object.hasOwn(window.__valueWrites, this.id)) {
+                  window.__valueWrites[this.id] += 1;
                 }
 
                 window.__nativeValue.set.call(this, value);
@@ -56,6 +60,10 @@ defmodule HologramFeatureTests.Patching.Page20 do
       <body>
         <p>
           <input type="color" id="color_input" value={@color} $input="color_input" />
+        </p>
+
+        <p>
+          <input type="range" id="range_input" min="0" max="200" step="10" value={@range} />
         </p>
 
         <p>
