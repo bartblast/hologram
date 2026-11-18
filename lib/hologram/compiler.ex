@@ -6113,16 +6113,15 @@ defmodule Hologram.Compiler do
          %{field_names: declared_field_names}
        )
        when is_atom(field_names) or is_list(field_names) do
-    unknown_name =
-      field_names
-      |> List.wrap()
-      |> Enum.find(&(not MapSet.member?(declared_field_names, &1)))
+    # Not List.wrap/1 or Enum.find/2: both take a field named nil for no field at all, while the
+    # run-time check judges it like any other name.
+    field_names = if is_list(field_names), do: field_names, else: [field_names]
 
-    case unknown_name do
-      nil ->
+    case Enum.reject(field_names, &MapSet.member?(declared_field_names, &1)) do
+      [] ->
         :ok
 
-      field_name ->
+      [field_name | _later_names] ->
         raise Hologram.CompileError,
           message:
             "unknown field #{inspect(field_name)} in #{inspect(operation)} in #{ask_location(ask)} - no entity type has a field an update sets by that name"

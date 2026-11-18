@@ -10481,6 +10481,32 @@ defmodule Hologram.CompilerTest do
       end
     end
 
+    test "raises on an update tuple naming nil as its field" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      expected_msg =
+        "unknown field nil in {:update, nil} in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - no entity type has a field an update sets by that name"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_operations!(@declaring_model, graph, single_ask_plt("{:update, nil}"))
+      end
+    end
+
+    test "raises on an update list naming nil among its fields" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      expected_msg =
+        "unknown field nil in {:update, [:title, nil, :titel]} in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - no entity type has a field an update sets by that name"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_operations!(
+          @declaring_model,
+          graph,
+          single_ask_plt("{:update, [:title, nil, :titel]}")
+        )
+      end
+    end
+
     test "raises on an update list naming a field no entity type's update sets" do
       graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
 
