@@ -3,6 +3,7 @@ defmodule Hologram.Reflection do
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.TaskUtils
+  alias Hologram.Query.Shape
 
   @beam_info_keys [
     :digest,
@@ -26,7 +27,8 @@ defmodule Hologram.Reflection do
     :route,
     :protocol_functions,
     :implementation_for,
-    :implemented_protocol
+    :implemented_protocol,
+    :query_shapes
   ]
 
   # Functions that broadcast action params from arbitrary server code to connected clients.
@@ -108,6 +110,8 @@ defmodule Hologram.Reflection do
   that is not a literal.
   `broadcast_caller?` says whether the module calls one of the broadcast functions (see
   `broadcast_mfas/0`), read from the BEAM's import table, which lists every remote function it calls.
+  `query_shapes` holds the shapes of the queries the module writes on an entity type, which the query
+  stages record into a persisted attribute (see `Hologram.Query.Shape`).
   The route is recorded as written: a route built at runtime (with interpolation, say) is nil here, and
   `Hologram.Compiler.validate_page_modules/2` checks that every page has a route and that it is a string.
   Returns nil when the BEAM is not an Elixir module (no `__info__/1` in its export table, as for an Erlang
@@ -139,7 +143,8 @@ defmodule Hologram.Reflection do
         route: "/my-page",
         protocol_functions: nil,
         implementation_for: nil,
-        implemented_protocol: nil
+        implemented_protocol: nil,
+        query_shapes: []
       }
   """
   # WARNING: a change in what this records about a module needs a bump of the call graph's
@@ -173,7 +178,8 @@ defmodule Hologram.Reflection do
             route: term,
             protocol_functions: list({atom, arity}) | nil,
             implementation_for: module | nil,
-            implemented_protocol: module | nil
+            implemented_protocol: module | nil,
+            query_shapes: list(Shape.t())
           }
           | nil
   def beam_info(beam_source) do
@@ -189,8 +195,10 @@ defmodule Hologram.Reflection do
         {:exports, exports},
         {~c"Dbgi", dbgi_chunk},
         {:compile_info, compile_info},
-        {:imports, imports}
-      ]}} = :beam_lib.chunks(beam_source, [:exports, ~c"Dbgi", :compile_info, :imports])
+        {:imports, imports},
+        {:attributes, attributes}
+      ]}} =
+      :beam_lib.chunks(beam_source, [:exports, ~c"Dbgi", :compile_info, :imports, :attributes])
 
     if {:__info__, 1} in exports do
       page? = {:__is_hologram_page__, 0} in exports
@@ -228,7 +236,8 @@ defmodule Hologram.Reflection do
         route: literal_return(definitions, :__route__, []),
         protocol_functions: literal_return(definitions, :__protocol__, [:functions]),
         implementation_for: literal_return(definitions, :__impl__, [:for]),
-        implemented_protocol: literal_return(definitions, :__impl__, [:protocol])
+        implemented_protocol: literal_return(definitions, :__impl__, [:protocol]),
+        query_shapes: Keyword.get(attributes, Shape.attribute(), [])
       }
     end
   end

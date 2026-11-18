@@ -28,6 +28,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Policy.Edges
   alias Hologram.Query
   alias Hologram.Query.Registry
+  alias Hologram.Query.Shape
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
@@ -722,25 +723,32 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the access needs of the statements the server runs that the build knows of (see
-  `Hologram.DB.IndexPlan.needs/3`), given the registered queries (see `build_queries/3`):
+  `Hologram.DB.IndexPlan.needs/3`), given the registered queries (see `build_queries/3`) and the
+  shapes of the queries server code writes (see `list_query_shapes/1`):
 
     * each registered query as the server render reads it, policied - a count as it stands, any
       other with the rows its paths read, and the ones its rules read for a build checking
       permissions on the client,
     * each window as the sync layer reads it, raw,
     * each synced type's fill, policied,
-    * each entity type bare, as `DB.read/1` reads it, raw and policied.
+    * each entity type bare, as `DB.read/1` reads it, raw and policied,
+    * each query chain the code writes, raw - recorded wherever it is written, so a chain only the
+      browser reads can add an index no statement uses, which costs writes where missing one would
+      cost a scan. A shape the stages refuse when replayed, or one on a type the mapping doesn't
+      hold, gives nothing.
 
   Policied is under the read rules of a signed-in session and of an anonymous one. The read rules
-  give the needs a policied read of any shape shares.
+  give the needs a policied read of any shape shares, so a query server code writes - raw or
+  policied as `DB.read/1` reads it - needs no more than its raw needs and its type's bare ones.
   """
   @spec build_index_needs(
           %{atom => any},
           list(module),
+          list(Shape.t()),
           %{module => %{atom => any}},
           boolean
         ) :: list(IndexPlan.need())
-  def build_index_needs(queries, synced_types, mapping, permission_checking?) do
+  def build_index_needs(queries, synced_types, query_shapes, mapping, permission_checking?) do
     registered_terms =
       queries.entries
       |> Enum.sort()
@@ -759,7 +767,14 @@ defmodule Hologram.Compiler do
       |> Enum.sort()
       |> Enum.map(&Stage.normalize/1)
 
-    raw_needs = Enum.flat_map(window_terms ++ bare_terms, &IndexPlan.needs(&1, mapping))
+    server_terms =
+      for shape <- query_shapes,
+          {:ok, term} <- [Shape.replay(shape)],
+          Map.has_key?(mapping, term.entity),
+          do: term
+
+    raw_needs =
+      Enum.flat_map(window_terms ++ bare_terms ++ server_terms, &IndexPlan.needs(&1, mapping))
 
     policied_needs =
       Enum.flat_map(registered_terms ++ fill_terms ++ bare_terms, &policied_needs(&1, mapping))
@@ -769,7 +784,7 @@ defmodule Hologram.Compiler do
 
   @doc """
   Builds the index needs PLT, whose one item is the access needs the build derived (see
-  `build_index_needs/4`), and returns it with the path to dump it at.
+  `build_index_needs/5`), and returns it with the path to dump it at.
   """
   @spec build_index_needs_plt(list(IndexPlan.need()), T.opts()) :: {PLT.t(), T.file_path()}
   def build_index_needs_plt(index_needs, opts) do
@@ -2217,6 +2232,34 @@ defmodule Hologram.Compiler do
   @spec list_pages(PLT.t()) :: list(module)
   def list_pages(module_info_plt) do
     list_modules_where(module_info_plt, :page?)
+  end
+
+  @doc """
+  Returns the shapes of the queries the modules recorded in the given module info PLT write on an
+  entity type (see `Hologram.Query.Shape`), by module. A module recording none is left out.
+  """
+  @spec list_query_shapes(PLT.t()) :: %{module => list(Shape.t())}
+  def list_query_shapes(module_info_plt) do
+    for {module, info} <- PLT.get_all(module_info_plt),
+        shapes = Map.get(info, :query_shapes, []),
+        shapes != [],
+        into: %{},
+        do: {module, shapes}
+  end
+
+  @doc """
+  Returns the shapes of the queries the given modules write on an entity type, by module, read
+  from the given module info PLT (see `list_query_shapes/1`). A module recording none, or one the
+  PLT doesn't hold, is left out.
+  """
+  @spec list_query_shapes(PLT.t(), list(module)) :: %{module => list(Shape.t())}
+  def list_query_shapes(module_info_plt, modules) do
+    for module <- modules,
+        {:ok, info} <- [PLT.get(module_info_plt, module)],
+        shapes = Map.get(info, :query_shapes, []),
+        shapes != [],
+        into: %{},
+        do: {module, shapes}
   end
 
   @doc """

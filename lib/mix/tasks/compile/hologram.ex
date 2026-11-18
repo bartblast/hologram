@@ -439,6 +439,11 @@ defmodule Mix.Tasks.Compile.Hologram do
       # Whether the kept derived definitions can be out of date (see derived_stale?/3).
       derived_stale? = derived_stale?(cache.data_layer, module_digests_diff, data_model_changed?)
 
+      # The shapes of the queries server code writes, which the index needs are derived from (see
+      # list_query_shapes/3).
+      query_shapes =
+        list_query_shapes(cache.data_layer, new_module_info_plt, module_digests_diff)
+
       # A page declares derived fields as a component does, so the data layer tracks the queries of
       # both.
       tracked_component_modules =
@@ -479,6 +484,7 @@ defmodule Mix.Tasks.Compile.Hologram do
             derived_stale?: derived_stale?,
             kept_page_reach: kept_page_reach,
             pages_to_list: pages_to_list,
+            query_shapes: query_shapes,
             stale_components: stale_components,
             tracked_component_modules: tracked_component_modules
           },
@@ -528,6 +534,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           module_info_plt: new_module_info_plt,
           opts: opts,
           pages_to_list: pages_to_list,
+          query_shapes: query_shapes,
           stale_components: stale_components,
           supervisor: sup,
           tracked_component_modules: tracked_component_modules
@@ -1248,7 +1255,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # The data layer is kept whole when the edit touches nothing it reads: no page's reach to list
   # again, no page gone, no component's queries stale, no kept component gone, the vocabulary the
-  # queries are judged against unchanged, and its dumps on disk from the compile that derived it,
+  # queries are judged against unchanged, the shapes of the queries server code writes the ones it
+  # was derived with, and its dumps on disk from the compile that derived it,
   # which put the state only once both were written. A page is gone when the kept reach holds a
   # page the build no longer has, and a component when a kept entry is no longer one of the tracked
   # components.
@@ -1264,6 +1272,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     parts.pages_to_list == [] and parts.stale_components == [] and
       not parts.data_model_changed? and not parts.derived_stale? and
+      kept_data_layer[:query_shapes] == parts.query_shapes and
       map_size(parts.kept_page_reach) == map_size(kept_data_layer.pages) and
       kept_components_tracked? and data_layer_dumps_exist?(opts)
   end
@@ -1384,10 +1393,18 @@ defmodule Mix.Tasks.Compile.Hologram do
     # build rather than the boot.
     mapping = Mapper.derive!(entity_types, Model.roles())
 
+    query_shapes =
+      context.query_shapes
+      |> Map.values()
+      |> Enum.concat()
+      |> Enum.uniq()
+      |> Enum.sort()
+
     index_needs =
       Compiler.build_index_needs(
         queries,
         sync_constants.synced_types,
+        query_shapes,
         mapping,
         permission_checking?
       )
@@ -1423,6 +1440,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       components: component_queries,
       derived: derived,
       pages: reach_by_page,
+      query_shapes: context.query_shapes,
       sync_constants_js: sync_constants_js
     })
 
@@ -1831,6 +1849,27 @@ defmodule Mix.Tasks.Compile.Hologram do
   # skips compilation does not pay the sweep.
   defp list_component_modules(module_info_plt, opts) do
     opts[:component_modules] || Compiler.list_components(module_info_plt)
+  end
+
+  # The shapes of the queries server code writes, by module (see Hologram.Query.Shape): the ones the
+  # kept data layer was derived with, the modules the edit added, edited or removed read again. A
+  # module's shapes are in its debug info, so a module whose shapes changed is an edited one. Every
+  # module's are read when nothing is kept, or what is kept was derived without them.
+  defp list_query_shapes(%{query_shapes: kept_shapes}, module_info_plt, module_digests_diff)
+       when is_map(kept_shapes) do
+    %{
+      added_modules: added_modules,
+      edited_modules: edited_modules,
+      removed_modules: removed_modules
+    } = module_digests_diff
+
+    kept_shapes
+    |> Map.drop(edited_modules ++ removed_modules)
+    |> Map.merge(Compiler.list_query_shapes(module_info_plt, added_modules ++ edited_modules))
+  end
+
+  defp list_query_shapes(_kept_data_layer, module_info_plt, _module_digests_diff) do
+    Compiler.list_query_shapes(module_info_plt)
   end
 
   # The components whose registered queries are extracted again: every tracked one when nothing is

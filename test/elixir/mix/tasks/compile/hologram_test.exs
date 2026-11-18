@@ -325,6 +325,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # A module of the test build that no page and no runtime function reaches.
   @unreached_module Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
+  # A module no page reaches that writes queries on an entity type, and the need of its read.
+  @query_shape_module Hologram.Test.Fixtures.Query.Shape.Module1
+  @query_shape_need %{
+    table: "test_fixtures_entity_module2",
+    eq: MapSet.new(["a"]),
+    range: nil,
+    order: ["b"]
+  }
+
   # Pages whose inits put an Ecto schema into state; only the second calls a reflection function on
   # a module it does not name (see the dynamic call gate tests).
   @reflection_closed_page Hologram.Test.Fixtures.Compiler.CallGraph.Module43
@@ -1240,8 +1249,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert window_id =~ ~r/^[0-9a-f]{32}$/
   end
 
-  # The needs of what the server runs: here, a registered query's filter and an entity type's read
-  # rule.
+  # The needs of what the server runs: here, a registered query's filter, an entity type's read
+  # rule and a query server code writes (Hologram.Test.Fixtures.Query.Shape.Module1).
   defp test_index_needs_plt(opts) do
     dump_path = Path.join(opts[:build_dir], Reflection.index_needs_plt_dump_file_name())
 
@@ -1268,6 +1277,19 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     assert filter_need in needs
     assert rule_need in needs
+    assert @query_shape_need in needs
+  end
+
+  defp load_index_needs(opts) do
+    plt = PLT.start()
+    PLT.load(plt, Path.join(opts[:build_dir], Reflection.index_needs_plt_dump_file_name()))
+
+    PLT.get!(plt, :needs)
+  end
+
+  defp put_index_needs(needs, opts) do
+    {plt, dump_path} = Compiler.build_index_needs_plt(needs, opts)
+    PLT.dump(plt, dump_path)
   end
 
   defp test_queries_plt(opts) do
@@ -1978,6 +2000,77 @@ defmodule Mix.Tasks.Compile.HologramTest do
       fake_edit(@unreached_module)
 
       assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+    end
+
+    test "an edit that changes a module's query shapes derives the data layer again", %{
+      opts: opts
+    } do
+      run(opts)
+
+      %{data_layer: data_layer} = cache_state()
+      assert Map.has_key?(data_layer.query_shapes, @query_shape_module)
+
+      # As if the last derivation had seen the module write no query.
+      shapes_before = Map.delete(data_layer.query_shapes, @query_shape_module)
+      Cache.put_data_layer(%{data_layer | query_shapes: shapes_before})
+
+      opts
+      |> load_index_needs()
+      |> List.delete(@query_shape_need)
+      |> put_index_needs(opts)
+
+      fake_edit(@query_shape_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+      assert cache_state().data_layer.query_shapes == data_layer.query_shapes
+      assert @query_shape_need in load_index_needs(opts)
+    end
+
+    test "an edit that keeps a module's query shapes keeps the data layer", %{opts: opts} do
+      run(opts)
+      fake_edit(@query_shape_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0, 0]
+    end
+
+    test "a removed module's query shapes are forgotten", %{opts: opts} do
+      run(opts)
+
+      %{
+        data_layer: data_layer,
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        module_infos: module_infos
+      } = cache_state()
+
+      removed_shapes = [{Hologram.Test.Fixtures.Entity.Module2, [take: [1]]}]
+      query_shapes = Map.put(data_layer.query_shapes, :removed_module, removed_shapes)
+      Cache.put_data_layer(%{data_layer | query_shapes: query_shapes})
+
+      module_infos
+      |> Map.put(:removed_module, %{digest: "removed", query_shapes: removed_shapes})
+      |> put_kept_module_infos(dumped_at, MapSet.put(editable_modules, :removed_module))
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+      assert cache_state().data_layer.query_shapes == data_layer.query_shapes
+    end
+
+    # A compile state an older Hologram dumped, whose data layer was derived without them.
+    test "a kept data layer holding no query shapes reads every module's and is derived again", %{
+      opts: opts
+    } do
+      run(opts)
+
+      %{data_layer: data_layer} = cache_state()
+
+      data_layer
+      |> Map.delete(:query_shapes)
+      |> Cache.put_data_layer()
+
+      fake_edit(@unreached_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+      assert cache_state().data_layer.query_shapes == data_layer.query_shapes
     end
 
     test "a run with no changes judges no operation ask", %{opts: opts} do

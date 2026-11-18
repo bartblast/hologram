@@ -3135,7 +3135,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_index_needs/4" do
+  describe "build_index_needs/5" do
     @entity2_table "test_fixtures_entity_module2"
     @entity41_table "test_fixtures_entity_module41"
 
@@ -3143,7 +3143,7 @@ defmodule Hologram.CompilerTest do
       %{table: table, eq: MapSet.new(eq), range: range, order: order}
     end
 
-    defp index_needs(terms, windows \\ []) do
+    defp index_needs(terms, windows \\ [], query_shapes \\ []) do
       entries =
         terms
         |> Enum.map(&Stage.normalize/1)
@@ -3158,7 +3158,7 @@ defmodule Hologram.CompilerTest do
 
       mapping = Mapper.derive!([Entity2, Entity34, Entity39, Entity40, Entity41], [])
 
-      build_index_needs(queries, [], mapping, false)
+      build_index_needs(queries, [], query_shapes, mapping, false)
     end
 
     test "needs what a registered query filters on" do
@@ -3182,6 +3182,32 @@ defmodule Hologram.CompilerTest do
 
     test "needs what an entity type's read rules ask, whatever the build registers" do
       assert index_need(@entity41_table, ["public"]) in index_needs([])
+    end
+
+    test "needs what a query server code writes reads" do
+      query_shape =
+        {Entity2,
+         [
+           filter: [[a: {:==, %Placeholder{name: :a}}]],
+           sort: [:b],
+           take: [5]
+         ]}
+
+      needs = index_needs([], [], [query_shape])
+
+      assert index_need(@entity2_table, ["a"], nil, ["b"]) in needs
+    end
+
+    test "leaves out a query shape the stages refuse" do
+      query_shape = {Entity2, [filter: [[unknown: {:==, 1}]]]}
+
+      assert index_needs([], [], [query_shape]) == index_needs([])
+    end
+
+    test "leaves out a query shape on a type the mapping doesn't hold" do
+      query_shape = {Entity1, [take: [1]]}
+
+      assert index_needs([], [], [query_shape]) == index_needs([])
     end
 
     test "lists each need once" do
@@ -8754,6 +8780,43 @@ defmodule Hologram.CompilerTest do
         end)
 
       assert count == 0
+    end
+  end
+
+  describe "list_query_shapes/1" do
+    test "returns the shapes each module recorded, leaving out a module recording none" do
+      shape_1 = {Entity2, [take: [1]]}
+      shape_2 = {Entity1, [take: [2]]}
+
+      module_info_plt =
+        PLT.start()
+        |> PLT.put(Module1, %{digest: 1, query_shapes: [shape_1, shape_2]})
+        |> PLT.put(Module2, %{digest: 2, query_shapes: [shape_1]})
+        |> PLT.put(Module3, %{digest: 3, query_shapes: []})
+        |> PLT.put(Module4, %{digest: 4})
+
+      assert list_query_shapes(module_info_plt) == %{
+               Module1 => [shape_1, shape_2],
+               Module2 => [shape_1]
+             }
+    end
+  end
+
+  describe "list_query_shapes/2" do
+    test "returns the shapes the given modules recorded, leaving out a module recording none or one the PLT doesn't hold" do
+      shape_1 = {Entity2, [take: [1]]}
+      shape_2 = {Entity1, [take: [2]]}
+
+      module_info_plt =
+        PLT.start()
+        |> PLT.put(Module1, %{digest: 1, query_shapes: [shape_1]})
+        |> PLT.put(Module2, %{digest: 2, query_shapes: [shape_2]})
+        |> PLT.put(Module3, %{digest: 3, query_shapes: []})
+        |> PLT.put(Module4, %{digest: 4})
+
+      modules = [Module1, Module3, Module4, Module5]
+
+      assert list_query_shapes(module_info_plt, modules) == %{Module1 => [shape_1]}
     end
   end
 
