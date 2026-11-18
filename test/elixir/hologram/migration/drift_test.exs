@@ -452,6 +452,169 @@ defmodule Hologram.Migration.DriftTest do
       end)
     end
 
+    test "renames two indexes whose names swapped, rebuilding neither", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      editor =
+        migration("20260814091522", [
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :editor,
+            type: MyApp.User,
+            opts: [optional: true],
+            line: 3
+          }
+        ])
+
+      editor_model = Model.fold(model, editor.ops)
+      editor_mapping = Mapper.derive_from_model!(editor_model)
+      editor_index = "my_app_task_editor_id_$idx"
+
+      route(scratch, fn ->
+        :ok = run(Enum.concat(chain, [editor]), editor_model, @context)
+
+        author_oid = index_oid(@index)
+        editor_oid = index_oid(editor_index)
+
+        for {from, to} <- [{@index, "swap"}, {editor_index, @index}, {"swap", editor_index}] do
+          {:ok, _result} =
+            Connection.query(~s{ALTER INDEX "hologram_data"."#{from}" RENAME TO "#{to}"})
+        end
+
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert repair_indexes(editor_mapping, IndexPlan.framework_plan(editor_mapping)) == :ok
+        end)
+
+        assert index_oid(@index) == author_oid
+        assert index_oid(editor_index) == editor_oid
+      end)
+    end
+
+    test "renames along a chain whose names the plan wants in turn", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      {_editor_model, editor_mapping} = with_editor(chain, model, scratch)
+      editor_index = "my_app_task_editor_id_$idx"
+
+      route(scratch, fn ->
+        author_oid = index_oid(@index)
+        editor_oid = index_oid(editor_index)
+
+        # The author index stands as "x", and the editor index in the author's name.
+        for {from, to} <- [{@index, "my_app_task_x_$idx"}, {editor_index, @index}] do
+          {:ok, _result} =
+            Connection.query(~s{ALTER INDEX "hologram_data"."#{from}" RENAME TO "#{to}"})
+        end
+
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert repair_indexes(editor_mapping, IndexPlan.framework_plan(editor_mapping)) == :ok
+        end)
+
+        assert index_oid(@index) == author_oid
+        assert index_oid(editor_index) == editor_oid
+      end)
+    end
+
+    test "renames first the stray of a definition standing in a name the plan wants", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      {_editor_model, editor_mapping} = with_editor(chain, model, scratch)
+      editor_index = "my_app_task_editor_id_$idx"
+
+      route(scratch, fn ->
+        author_oid = index_oid(@index)
+        editor_oid = index_oid(editor_index)
+
+        for {from, to} <- [{@index, "my_app_task_b_$idx"}, {editor_index, @index}] do
+          {:ok, _result} =
+            Connection.query(~s{ALTER INDEX "hologram_data"."#{from}" RENAME TO "#{to}"})
+        end
+
+        # A second stray of the editor's definition, first by name.
+        {:ok, _result} =
+          Connection.query(
+            ~s{CREATE INDEX "my_app_task_a_$idx" ON "hologram_data"."my_app_task" ("editor_id")}
+          )
+
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert repair_indexes(editor_mapping, IndexPlan.framework_plan(editor_mapping)) == :ok
+        end)
+
+        assert plan_index_names() == [@index, editor_index]
+        assert index_oid(@index) == author_oid
+        assert index_oid(editor_index) == editor_oid
+      end)
+    end
+
+    test "gives up a chain of renames whose end a plan index nothing moves holds", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      {_editor_model, editor_mapping} = with_editor(chain, model, scratch)
+      editor_index = "my_app_task_editor_id_$idx"
+
+      route(scratch, fn ->
+        for {from, to} <- [{@index, "my_app_task_x_$idx"}, {editor_index, @index}] do
+          {:ok, _result} =
+            Connection.query(~s{ALTER INDEX "hologram_data"."#{from}" RENAME TO "#{to}"})
+        end
+
+        {:ok, _result} =
+          Connection.query(
+            ~s{CREATE INDEX "#{editor_index}" ON "hologram_data"."my_app_task" ("created_at")}
+          )
+
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert repair_indexes(editor_mapping, IndexPlan.framework_plan(editor_mapping)) == :ok
+        end)
+
+        indexes = Introspection.schema().tables["my_app_task"].indexes
+
+        assert plan_index_names() == [@index, editor_index]
+        assert indexes[@index].columns == ["author_id"]
+        assert indexes[editor_index].columns == ["editor_id"]
+      end)
+    end
+
+    test "leaves a target an index outside the plan holds, dropping the stray", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      {_editor_model, editor_mapping} = with_editor(chain, model, scratch)
+      editor_index = "my_app_task_editor_id_$idx"
+
+      route(scratch, fn ->
+        {:ok, _result} =
+          Connection.query(
+            ~s{ALTER INDEX "hologram_data"."#{editor_index}" RENAME TO "my_app_task_y_$idx"}
+          )
+
+        {:ok, _result} =
+          Connection.query(
+            ~s{CREATE INDEX "#{editor_index}" ON "hologram_data"."my_app_task" ("editor_id") WHERE "editor_id" IS NOT NULL}
+          )
+
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert repair_indexes(editor_mapping, IndexPlan.framework_plan(editor_mapping)) == :ok
+        end)
+
+        assert plan_index_names() == [@index, editor_index]
+
+        assert Introspection.schema().tables["my_app_task"].indexes[editor_index][:non_plain] == [
+                 :predicate
+               ]
+      end)
+    end
+
     test "drops an index the plan doesn't name", %{mapping: mapping, scratch: scratch} do
       route(scratch, fn ->
         stray =
@@ -546,6 +709,30 @@ defmodule Hologram.Migration.DriftTest do
         assert_error RuntimeError, expected_msg, fn -> check_drift!(mapping) end
       end)
     end
+  end
+
+  # Adds an optional editor to-one beside the author, its migration applied, and returns the model
+  # and mapping it leaves.
+  defp with_editor(chain, model, scratch) do
+    editor =
+      migration("20260814091522", [
+        %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :editor,
+          type: MyApp.User,
+          opts: [optional: true],
+          line: 3
+        }
+      ])
+
+    editor_model = Model.fold(model, editor.ops)
+
+    route(scratch, fn ->
+      :ok = run(Enum.concat(chain, [editor]), editor_model, @context)
+    end)
+
+    {editor_model, Mapper.derive_from_model!(editor_model)}
   end
 
   defp index_oid(name) do

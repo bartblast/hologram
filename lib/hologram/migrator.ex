@@ -333,7 +333,7 @@ defmodule Hologram.Migrator do
   """
   @spec repair_indexes(%{module => %{atom => any}}, %{String.t() => %{String.t() => map}}) :: :ok
   def repair_indexes(mapping, plan) do
-    rename_plan_indexes(mapping, plan)
+    rename_plan_indexes(plan)
     drop_stray_plan_indexes(plan)
     build_indexes(mapping, plan)
   end
@@ -744,28 +744,125 @@ defmodule Hologram.Migrator do
     )
   end
 
-  # Renames run in one transaction: ALTER INDEX ... RENAME takes no long lock, and a node dying
-  # halfway would otherwise leave a pair of names to untangle.
-  defp rename_plan_indexes(mapping, plan) do
+  # A plan index standing under a name the plan doesn't give its definition - the name a renamed
+  # relationship or entity left it under - pairs with the plan's index of that definition on the same
+  # table, one to one, and is renamed. Renames run in one transaction, each index first to a
+  # temporary name and then to its own, so two indexes whose names swap are renamed rather than
+  # rebuilt: ALTER INDEX ... RENAME takes no long lock, and a node dying halfway would otherwise
+  # leave names to untangle. A target an index outside the plan holds is left alone, for the drift
+  # check to report, and so is one a plan index holds that no rename moves away - that index is
+  # then dropped as stray and the target built.
+  defp rename_plan_indexes(plan) do
     actual = Introspection.schema()
-    plan_names = plan_index_names(actual)
 
     renames =
       actual
-      |> Schema.diff(Schema.from_mapping(mapping, plan))
-      |> Enum.filter(&(&1.op == :rename_index and MapSet.member?(plan_names, &1.from)))
+      |> plan_index_renames(plan)
+      |> Enum.with_index()
 
     if renames != [] do
-      {:ok, _result} =
-        Connection.transaction(fn ->
-          Enum.each(renames, &execute_statements(DDL.statements(&1)))
-        end)
+      {:ok, _result} = Connection.transaction(fn -> rename_through_temporary_names(renames) end)
 
-      Enum.each(renames, &log_rename/1)
+      Enum.each(renames, fn {rename, _index} -> log_rename(rename) end)
     end
 
     :ok
   end
+
+  defp rename_through_temporary_names(renames) do
+    Enum.each(renames, fn {rename, index} ->
+      rename_index(rename.from, temporary_index_name(index))
+    end)
+
+    Enum.each(renames, fn {rename, index} ->
+      rename_index(temporary_index_name(index), rename.to)
+    end)
+  end
+
+  defp plan_index_renames(actual, plan) do
+    plan_names = plan_index_names(actual)
+
+    held_names =
+      for {_table, definition} <- actual.tables,
+          name <- Map.keys(definition.indexes),
+          into: MapSet.new(),
+          do: name
+
+    plan
+    |> Enum.sort()
+    |> Enum.flat_map(fn {table, indexes} ->
+      actual_indexes = Map.get(actual.tables, table, %{indexes: %{}}).indexes
+
+      strays =
+        for {name, index} <- Enum.sort(actual_indexes),
+            MapSet.member?(plan_names, name),
+            Map.get(indexes, name) != plain_definition(index),
+            do: {name, plain_definition(index)}
+
+      wanted =
+        for {name, definition} <- Enum.sort(indexes),
+            plain_definition(Map.get(actual_indexes, name)) != definition,
+            not MapSet.member?(held_names, name) or MapSet.member?(plan_names, name),
+            do: {name, definition}
+
+      wanted_names = MapSet.new(wanted, fn {name, _definition} -> name end)
+
+      # A stray standing in a name another wanted index needs goes first among its equals: renamed
+      # away, it frees that name too, where pairing another would leave it to be dropped and rebuilt.
+      strays
+      |> Enum.sort_by(fn {name, _definition} ->
+        {not MapSet.member?(wanted_names, name), name}
+      end)
+      |> pair_renames(wanted, table)
+    end)
+    |> free_targets(held_names)
+  end
+
+  # A rename lands only where nothing will stand: its target free, or held by an index this run
+  # renames away. Leaving one out can take a target back from another, so it runs to a fixed point.
+  defp free_targets(renames, held_names) do
+    froms = MapSet.new(renames, & &1.from)
+
+    landing =
+      Enum.filter(
+        renames,
+        &(not MapSet.member?(held_names, &1.to) or MapSet.member?(froms, &1.to))
+      )
+
+    if length(landing) == length(renames), do: renames, else: free_targets(landing, held_names)
+  end
+
+  # One to one by definition, in a fixed order on both sides, so the plan's renames never depend
+  # on the order the catalog lists indexes in.
+  defp pair_renames(strays, wanted, table) do
+    {renames, _left} =
+      Enum.reduce(wanted, {[], strays}, fn {to, definition}, {acc, left} ->
+        case List.keyfind(left, definition, 1) do
+          {from, _definition} = stray ->
+            {[%{op: :rename_index, table: table, from: from, to: to} | acc],
+             List.delete(left, stray)}
+
+          nil ->
+            {acc, left}
+        end
+      end)
+
+    Enum.reverse(renames)
+  end
+
+  defp plain_definition(nil), do: nil
+
+  defp plain_definition(index), do: Map.take(index, [:columns, :nulls_distinct, :unique])
+
+  defp rename_index(from, to) do
+    execute_statements([
+      "ALTER INDEX #{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(from)} " <>
+        "RENAME TO #{Mapper.quote_identifier(to)}"
+    ])
+  end
+
+  # Outside every name the derived scheme gives - no derived name starts with `$` - and short.
+  defp temporary_index_name(index), do: "$plan_rename_#{index}"
 
   # Dropped CONCURRENTLY, outside any transaction, like the builds: a plain DROP INDEX takes an
   # exclusive lock on the table while it waits for every reader.
