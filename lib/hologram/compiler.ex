@@ -3030,19 +3030,20 @@ defmodule Hologram.Compiler do
   defp quantified_type(hops, [entity_type | _types_above]),
     do: Derived.path_target(entity_type, hops)
 
-  # The verdict key and the read types of a deciding clause standing in a rule's predicates, as
-  # members of its object - none for any other clause.
-  defp render_verdict_members(clause, {entity_type, operation}) do
-    if Policy.deciding_quantifier?(entity_type, operation, clause) do
+  # The verdict key and the read types of a deciding item - a clause standing in a rule's
+  # predicates, or a role reference as {:to, reference} - as members of its object, none for any
+  # other.
+  defp render_verdict_members(item, {entity_type, operation}) do
+    if Policy.deciding_quantifier?(entity_type, operation, item) do
       reads_js =
         entity_type
-        |> Policy.verdict_reads(clause)
+        |> Policy.verdict_reads(item)
         |> Enum.map_join(",", &render_entity_type_label/1)
         |> then(&"[#{&1}]")
 
       verdict_js =
         entity_type
-        |> Policy.verdict_key(operation, clause)
+        |> Policy.verdict_key(operation, item)
         |> Jason.encode!()
 
       [{"reads", reads_js}, {"verdict", verdict_js}]
@@ -3051,7 +3052,7 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp render_verdict_members(_clause, nil), do: []
+  defp render_verdict_members(_item, nil), do: []
 
   defp resolve_derived_definition(entity_type, name, ir_plt) do
     if name in entity_type.__derived_builder_calls__() do
@@ -5218,7 +5219,7 @@ defmodule Hologram.Compiler do
 
     render_json_object([
       {"predicates", render_policy_predicates([entity_type], rule.predicates, verdict_context)},
-      {"to", render_policy_references(entity_type, rule.to)},
+      {"to", render_policy_references(entity_type, rule.to, verdict_context)},
       {"via", render_policy_delegation(rule.via)}
     ])
   end
@@ -5317,35 +5318,52 @@ defmodule Hologram.Compiler do
   end
 
   # A grant reference names WHERE a role must be held: on the entity itself, on its whole type,
-  # on a related entity, on the entity a grant row names, or nowhere at all (a global role).
-  defp render_policy_references(_entity_type, nil), do: "null"
+  # on a related entity, on the entity a grant row names, or nowhere at all (a global role). The
+  # verdict context is the rule's type and operation.
+  defp render_policy_references(_entity_type, nil, _verdict_context), do: "null"
 
-  defp render_policy_references(entity_type, references) do
+  defp render_policy_references(entity_type, references, verdict_context) do
     references
-    |> Enum.map_join(",", &render_policy_reference(entity_type, &1))
+    |> Enum.map_join(",", &render_policy_reference(entity_type, &1, verdict_context))
     |> then(&"[#{&1}]")
   end
 
-  defp render_policy_reference(_entity_type, {:own, role_names}) do
+  defp render_policy_reference(_entity_type, {:own, role_names}, _verdict_context) do
     render_policy_reference_entry("own", [render_policy_roles(role_names)])
   end
 
-  defp render_policy_reference(_entity_type, {:global, role_modules}) do
+  defp render_policy_reference(_entity_type, {:global, role_modules}, _verdict_context) do
     render_policy_reference_entry("global", [render_policy_roles(role_modules)])
   end
 
-  # The chain a role is held through, spelled the way a delegation spells its chain.
-  defp render_policy_reference(entity_type, {:rel, relationship_names, role_names}) do
+  # The chain a role is held through, spelled the way a delegation spells its chain. A deciding one
+  # - in a read rule, one reading a row of a type no client holds - carries a fifth element, the key
+  # the server's verdict on it is sent under and the types it reads, which the client answers it
+  # from instead.
+  defp render_policy_reference(
+         entity_type,
+         {:rel, relationship_names, role_names} = reference,
+         verdict_context
+       ) do
     target_type = Entity.path_target(entity_type, relationship_names)
 
-    render_policy_reference_entry("rel", [
-      render_policy_name(relationship_names),
-      render_entity_type_label(target_type),
-      render_policy_roles(role_names)
-    ])
+    verdict_entries =
+      case render_verdict_members({:to, reference}, verdict_context) do
+        [] -> []
+        members -> [render_json_object(members)]
+      end
+
+    render_policy_reference_entry(
+      "rel",
+      [
+        render_policy_name(relationship_names),
+        render_entity_type_label(target_type),
+        render_policy_roles(role_names)
+      ] ++ verdict_entries
+    )
   end
 
-  defp render_policy_reference(_entity_type, {kind, target_type, role_names}) do
+  defp render_policy_reference(_entity_type, {kind, target_type, role_names}, _verdict_context) do
     render_policy_reference_entry(Atom.to_string(kind), [
       render_entity_type_label(target_type),
       render_policy_roles(role_names)

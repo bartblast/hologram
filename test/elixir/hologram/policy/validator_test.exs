@@ -1155,6 +1155,53 @@ defmodule Hologram.Policy.ValidatorTest do
       assert validate_model!(types, []) == :ok
     end
 
+    # The delegated read rule's role reference is answered from the server's verdict on the related
+    # row, so no browser reads the row it reads the team's id off.
+    test "accepts a delegation to a read rule whose role reference runs through a type nobody may read" do
+      defmodule InlinePolicyFixture132 do
+        use Hologram.Entity
+
+        role :member
+
+        allow :read
+      end
+
+      defmodule InlinePolicyFixture133 do
+        use Hologram.Entity
+
+        relationship :team, Hologram.Policy.ValidatorTest.InlinePolicyFixture132
+
+        allow :create
+      end
+
+      defmodule InlinePolicyFixture134 do
+        use Hologram.Entity
+
+        relationship :project, Hologram.Policy.ValidatorTest.InlinePolicyFixture133
+
+        allow :read, to: {:member, project.team}
+      end
+
+      defmodule InlinePolicyFixture135 do
+        use Hologram.Entity
+
+        relationship :task, Hologram.Policy.ValidatorTest.InlinePolicyFixture134
+
+        allow :read
+        allow :update, via: {:read, task}
+      end
+
+      types = [
+        Module14,
+        InlinePolicyFixture132,
+        InlinePolicyFixture133,
+        InlinePolicyFixture134,
+        InlinePolicyFixture135
+      ]
+
+      assert validate_model!(types, []) == :ok
+    end
+
     test "accepts a non-read rule's none through a row of a type nobody may read" do
       defmodule InlinePolicyFixture113 do
         use Hologram.Entity

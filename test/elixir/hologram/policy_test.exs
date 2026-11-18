@@ -1330,6 +1330,13 @@ defmodule Hologram.PolicyTest do
       assert held_chains(Hologram.PolicyTest.UnreadableReadTask, :read) == []
     end
 
+    # The team's id is read off the project, which has no read rule, so the server's verdict answers
+    # the reference.
+    test "leaves out the chain a read rule's role reference reads through a type nobody may read" do
+      assert related_chains(Policy.Readers.Module24, :read) == [[:project]]
+      assert held_chains(Policy.Readers.Module24, :read) == []
+    end
+
     defmodule HeldOwner do
       use Hologram.Entity
 

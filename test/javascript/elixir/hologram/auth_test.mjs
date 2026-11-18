@@ -2763,6 +2763,116 @@ describe("Elixir_Hologram_Auth", () => {
         Type.boolean(false),
       );
     });
+
+    // In a read rule, a role reference reading a row of a type nobody may read comes with its
+    // verdict key and the types it reads: no client holds the folder the parent's id is read off.
+    describe("on a role reference the build sends with its verdict", () => {
+      const viaFolderParent = [
+        "rel",
+        ["folder", "parent"],
+        FOLDER,
+        ["admin"],
+        {reads: [FOLDER, GRANT], verdict: KEY},
+      ];
+
+      const documentReads = (userId) => {
+        defineModel({read: [rule({to: [viaFolderParent]})]});
+
+        return can(
+          Type.bitstring(userId),
+          Type.atom("read"),
+          document({folder_id: FOLDER_ID}),
+        );
+      };
+
+      beforeEach(() => {
+        LocalDatabase.actorUserId = ALICE;
+      });
+
+      it("grants on a true verdict", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(true));
+      });
+
+      // The held rows would grant it, but the verdict alone answers.
+      it("grants nothing on a false verdict", () => {
+        putDocument({$verdicts: {[KEY]: false}});
+        LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, parent_id: PARENT_ID});
+
+        LocalDatabase.putRow(
+          GRANT,
+          grantRow({entity_id: PARENT_ID, entity_type: FOLDER, role: "admin"}),
+        );
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      it("grants nothing on a verdict while a pending write names the grant store", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+        pendingWrite(GRANT, TAG_ID);
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      it("grants nothing on the session user's verdict asked about another user", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+
+        assert.deepStrictEqual(documentReads(BOB), Type.boolean(false));
+      });
+
+      it("grants nothing on a row the server sent with no verdicts", () => {
+        putDocument({});
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      // A document's update rule asks its folder's read rule, whose reference reads the folder's
+      // parent's parent, answered from the folder row's verdict.
+      it("answers a delegation to the read rule from the related row's verdict", () => {
+        defineModel(
+          {update: [rule({via: ["read", ["folder"]]})]},
+          {
+            read: [
+              rule({
+                to: [
+                  [
+                    "rel",
+                    ["parent", "parent"],
+                    FOLDER,
+                    ["admin"],
+                    {reads: [FOLDER, GRANT], verdict: KEY},
+                  ],
+                ],
+              }),
+            ],
+          },
+        );
+
+        const documentUpdate = () =>
+          can(
+            Type.bitstring(ALICE),
+            Type.atom("update"),
+            document({folder_id: FOLDER_ID}),
+          );
+
+        putFolder({[KEY]: true});
+
+        assert.deepStrictEqual(documentUpdate(), Type.boolean(true));
+
+        pendingWrite(FOLDER, FOLDER_ID);
+
+        assert.deepStrictEqual(documentUpdate(), Type.boolean(false));
+      });
+
+      // The reference reads only the rows its chain leads to, and a changed struct is not the row.
+      it("grants on a verdict while a pending write names another row of the rule's type", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+        pendingWrite(DOCUMENT, OTHER_DOC);
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(true));
+      });
+    });
   });
 
   // Cases this side alone has: no client holds a server-only attribute's value - a struct holds its

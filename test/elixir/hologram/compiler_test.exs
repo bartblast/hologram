@@ -105,6 +105,9 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module8, as: TwoHopDelegationPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Readers.Module22, as: ReadersTeam
+  alias Hologram.Test.Fixtures.Policy.Readers.Module23, as: ReadersProject
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24, as: ReadersTask
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
   alias Hologram.Test.Fixtures.Template.Renderer.Module131, as: SessionUserPage
@@ -5119,6 +5122,51 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(
                js,
                ~s/"read":[{"predicates":[{"reads":["Hologram.CompilerTest.BakedHiddenProject"],"verdict":"#{key}"}],"to":null,"via":null}]/
+             )
+    end
+
+    # Readers.Module24 reads the team's id off its project, a type nobody may read, so the read
+    # rule's reference carries the key the server's verdict on it is sent under and the types it
+    # reads. A reference one relationship away reads the team's id off the task itself.
+    test "bakes a read rule's role reference reading a type nobody may read with its verdict key and reads",
+         %{
+           ir_plt: ir_plt,
+           runtime_mfas: runtime_mfas
+         } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([ReadersProject, ReadersTask, ReadersTeam, RoleGrant])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      key =
+        Hologram.Policy.verdict_key(
+          ReadersTask,
+          :read,
+          {:to, {:rel, [:project, :team], [:member]}}
+        )
+
+      team_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module22"/
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[],"to":[["rel",["project","team"],#{team_js},["member"],{"reads":["Hologram.Auth.RoleGrant","Hologram.Test.Fixtures.Policy.Readers.Module23"],"verdict":"#{key}"}]],"via":null},{"predicates":[],"to":[["rel",["team"],#{team_js},["member"]]],"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"update":[{"predicates":[],"to":[["rel",["team"],#{team_js},["member"]]],"via":null}]/
              )
     end
 
