@@ -3,9 +3,12 @@ defmodule Hologram.Job.WorkerRunLockTest do
   # it starts. Apart from Hologram.Job.WorkerTest, which runs without a database.
   use Hologram.Test.BasicCase, async: true
 
+  import ExUnit.CaptureLog
+
   alias Hologram.Entity
   alias Hologram.Job.RunLock
   alias Hologram.Job.Worker
+  alias Hologram.Test.TCPProxy
 
   @moduletag :database
 
@@ -25,5 +28,35 @@ defmodule Hologram.Job.WorkerRunLockTest do
     start_supervised!({Worker, pass: fn _job_types -> 0 end, run_lock: run_lock})
 
     wait_until(fn -> RunLock.acquire(other, id) end)
+  end
+
+  # While the database is away nothing can be claimed, and a worker passing anyway would crash on
+  # every pass.
+  test "waits for its run lock connection before anything else" do
+    test_pid = self()
+    proxy = start_supervised!(TCPProxy)
+    port = TCPProxy.port(proxy)
+
+    capture_log(fn ->
+      run_lock =
+        start_supervised!(
+          Supervisor.child_spec({RunLock, port: port, reconnect_backoff: 50}, id: make_ref())
+        )
+
+      pass = fn _job_types ->
+        send(test_pid, :passed)
+        0
+      end
+
+      worker =
+        start_supervised!({Worker, pass: pass, poll_interval_ms: 20, run_lock: run_lock})
+
+      refute_receive :passed, 300
+      assert Process.alive?(worker)
+
+      TCPProxy.open(proxy)
+
+      assert_receive :passed, 2_000
+    end)
   end
 end

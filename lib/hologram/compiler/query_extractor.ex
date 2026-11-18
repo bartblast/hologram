@@ -2073,10 +2073,46 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp stage_error_message(function, arg_values, error, context) do
     prefix = context.subject
 
-    if contains_placeholder?(arg_values) do
+    if placeholder_caused?(function, arg_values, error) do
       "#{prefix} passes an argument to #{function}/#{length(arg_values)} in a position the build cannot enumerate - the rows to download cannot be worked out without its value"
     else
       "#{prefix} builds an invalid query - #{Exception.message(error)}"
+    end
+  end
+
+  # Whether a stage refused its arguments because of a placeholder among them. The call is run again
+  # with every list argument stripped of its top-level elements that hold a placeholder, like the
+  # ^row.b entry of filter(c: 5, b: ^row.b). When the stripped call raises the same message, an
+  # entry the build knows caused it, so the developer gets the real refusal. A placeholder the
+  # stripping can't remove - the query or a whole argument - is the cause, and so is a refusal the
+  # stripped call doesn't repeat word for word: it may have been about the stripped entry, or name
+  # the whole list. So a refusal inside the entry that holds the placeholder stays masked, like
+  # nonexistent: ^row.b or a > ^row.b on a boolean, and so does one the stripped call refuses for
+  # another reason, like size: 0 beside page: ^row.page.
+  defp placeholder_caused?(function, arg_values, error) do
+    stripped =
+      Enum.map(arg_values, fn
+        list when is_list(list) -> Enum.reject(list, &contains_placeholder?/1)
+        value -> value
+      end)
+
+    cond do
+      not contains_placeholder?(arg_values) ->
+        false
+
+      contains_placeholder?(stripped) ->
+        true
+
+      true ->
+        stripped_message =
+          try do
+            apply(Stage, function, stripped)
+            nil
+          rescue
+            stripped_error in [ArgumentError, MisuseError] -> Exception.message(stripped_error)
+          end
+
+        stripped_message != Exception.message(error)
     end
   end
 
