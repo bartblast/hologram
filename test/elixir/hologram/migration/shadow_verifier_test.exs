@@ -11,8 +11,9 @@ defmodule Hologram.Migration.ShadowVerifierTest do
   alias Hologram.Entity.Model
 
   # A configured name filling the PostgreSQL identifier limit exactly - concatenating the
-  # scratch suffix onto it produces 70 bytes, whose first 63 are the name itself.
-  @limit_database String.pad_trailing("hologram_database_named_at_the_identifier_limit_", 63, "x")
+  # scratch suffix onto it produces 70 bytes, whose first 63 are the name itself. It carries the
+  # OS process, so suites of other clones running at once don't drop it from under this one.
+  @limit_database String.pad_trailing("hologram_database_at_the_limit_#{System.pid()}_", 63, "x")
 
   @ops [
     %{op: :create_entity, entity: MyApp.Task, line: 3},

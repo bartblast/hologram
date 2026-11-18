@@ -7,7 +7,7 @@ defmodule Hologram.DB.ConfigTest do
     test "returns the configured database as Postgrex options" do
       opts = connection_opts()
 
-      assert opts[:database] == "hologram_test"
+      assert opts[:database] == System.get_env("HOLOGRAM_TEST_DATABASE", "hologram_test")
       assert opts[:hostname] == "localhost"
       assert opts[:password] == "postgres"
       assert opts[:port] == 5432
