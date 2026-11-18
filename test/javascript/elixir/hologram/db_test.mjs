@@ -607,7 +607,14 @@ describe("Elixir_Hologram_DB", () => {
 
       update(entity);
 
-      for (const write of Batches.current().writes) {
+      const writes = Batches.current().writes;
+
+      assert.deepStrictEqual(
+        writes.map((write) => write.op),
+        ["update", "add_relationship"],
+      );
+
+      for (const write of writes) {
         assert.notProperty(write, "claim");
       }
     });
