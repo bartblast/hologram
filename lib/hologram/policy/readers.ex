@@ -26,7 +26,7 @@ defmodule Hologram.Policy.Readers do
   @type class :: {:independent, map} | {:listed, map, anchor} | {:unlisted, map}
 
   @typedoc """
-  How the users a deciding clause answers differently for can be found from a row (see
+  How the users a deciding item answers differently for can be found from a row (see
   `classify_verdicts/1`).
   """
   @type verdict_class :: :independent | {:listed, anchor, boolean} | :unlisted
@@ -70,7 +70,7 @@ defmodule Hologram.Policy.Readers do
   end
 
   @doc """
-  Returns the deciding clauses of the given entity type
+  Returns the deciding items of the given entity type
   (see `Hologram.Policy.deciding_quantifiers/1`), each once with every verdict key it answers, in
   the order of their first keys, and classified by how the users it answers differently for can be
   found from a row:
@@ -78,28 +78,30 @@ defmodule Hologram.Policy.Readers do
     * `:independent` - it names no acting user, so it answers the same for every user, anonymous
       ones included.
     * `{:listed, anchor, default}` - it answers the default for every signed-in user the anchor
-      can't name (see `t:anchor/0`): false for an equality on the acting user and for an `any`
-      bounded by a condition it requires, and true for a `none` whose condition is bounded so,
-      since it holds exactly when that `any` doesn't, and for an `all` whose condition is one `!=`
-      on the acting user, the `none` of the equality.
+      can't name (see `t:anchor/0`): false for an equality on the acting user, for an `any`
+      bounded by a condition it requires and for a role reference, whose holders a `:grants`
+      anchor names, and true for a `none` whose condition is bounded so, since it holds exactly
+      when that `any` doesn't, and for an `all` whose condition is one `!=` on the acting user, the
+      `none` of the equality.
     * `:unlisted` - nothing bounds them, like a `!=` on the acting user or any other `all`.
 
   A clause carries no grant reference and no delegation - those are a rule's own - so nothing
-  but its conditions decide it. An anonymous user is no user an anchor names, but a `none` or an
-  `all` naming the acting user answers no for one (see `Hologram.Policy.Evaluator`), so a default
-  is only ever a signed-in user's answer.
+  but its conditions decide it, and a role reference is decided by the grants alone. An anonymous
+  user is no user an anchor names, but a `none` or an `all` naming the acting user answers no for
+  one (see `Hologram.Policy.Evaluator`), and so does a role reference, so a default is only ever a
+  signed-in user's answer.
   """
   @spec classify_verdicts(module) :: list({tuple, list(String.t()), verdict_class})
   def classify_verdicts(entity_type) do
     pairs = Policy.deciding_quantifiers(entity_type)
 
     pairs
-    |> Enum.map(fn {_key, clause} -> clause end)
+    |> Enum.map(fn {_key, item} -> item end)
     |> Enum.uniq()
-    |> Enum.map(fn clause ->
-      keys = for {key, ^clause} <- pairs, do: key
+    |> Enum.map(fn item ->
+      keys = for {key, ^item} <- pairs, do: key
 
-      {clause, keys, verdict_class(clause)}
+      {item, keys, verdict_class(item)}
     end)
   end
 
@@ -224,6 +226,8 @@ defmodule Hologram.Policy.Readers do
     |> conjunctions()
     |> Enum.map(&%{rule | predicates: &1})
   end
+
+  defp verdict_class({:to, reference}), do: {:listed, {:grants, [reference]}, false}
 
   defp verdict_class(clause) do
     cond do

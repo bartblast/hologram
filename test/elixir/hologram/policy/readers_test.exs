@@ -22,6 +22,7 @@ defmodule Hologram.Policy.ReadersTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module19
   alias Hologram.Test.Fixtures.Policy.Readers.Module2
   alias Hologram.Test.Fixtures.Policy.Readers.Module21
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24
   alias Hologram.Test.Fixtures.Policy.Readers.Module3
   alias Hologram.Test.Fixtures.Policy.Readers.Module4
   alias Hologram.Test.Fixtures.Policy.Readers.Module5
@@ -361,6 +362,13 @@ defmodule Hologram.Policy.ReadersTest do
 
     test "an inequality on the acting user is unlisted" do
       assert verdict_class(Module19, {[:report, :steward_id], :!=, {:actor}}) == :unlisted
+    end
+
+    # Only the reference's holders can hold it, and the grant anchor names them.
+    test "a role reference is listed by its holders" do
+      reference = {:rel, [:project, :team], [:member]}
+
+      assert verdict_class(Module24, {:to, reference}) == {:listed, {:grants, [reference]}, false}
     end
 
     test "an any over a derived set naming nobody is independent" do

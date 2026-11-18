@@ -34,6 +34,9 @@ defmodule Hologram.Sync.RecheckTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module2
   alias Hologram.Test.Fixtures.Policy.Readers.Module20
   alias Hologram.Test.Fixtures.Policy.Readers.Module21
+  alias Hologram.Test.Fixtures.Policy.Readers.Module22
+  alias Hologram.Test.Fixtures.Policy.Readers.Module23
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24
   alias Hologram.Test.Fixtures.Policy.Readers.Module3
   alias Hologram.Test.Fixtures.Policy.Readers.Module4
   alias Hologram.Test.Fixtures.Policy.Readers.Module5
@@ -625,6 +628,24 @@ defmodule Hologram.Sync.RecheckTest do
       other_task = create(Module21, %{project_id: archived.id})
 
       assert_verdicts_as_auth(Module21, [task, other_task], context.users)
+    end
+
+    # Alice holds the role on the team the project names, so the reference through the project
+    # holds for her. Bob reads the task through its own team only, so it fails for him.
+    test "answers a read rule's role reference through a type nobody may read", context do
+      project_team = create(Module22, %{})
+      task_team = create(Module22, %{})
+      project = create(Module23, %{team_id: project_team.id})
+      task = create(Module24, %{project_id: project.id, team_id: task_team.id})
+
+      Auth.grant_role(context.alice, :member, project_team)
+      Auth.grant_role(context.bob, :member, task_team)
+
+      readable = assert_verdicts_as_auth(Module24, [task], context.users)
+      {_row, readers, _verdicts} = readable[task.id]
+
+      assert reads?(readers, context.alice)
+      assert reads?(readers, context.bob)
     end
 
     test "answers clauses over paths and through related sets for every user alike", context do

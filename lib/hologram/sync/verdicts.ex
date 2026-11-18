@@ -69,12 +69,13 @@ defmodule Hologram.Sync.Verdicts do
   Returns the rows among the given ones whose verdicts for the given user differ from what was
   told, each with its verdicts now, in the order given.
 
-  Only rows of a type with a deciding quantifier are worked out again: every one of them when the
-  given changed types meet a type such a quantifier reads through a relationship (see
-  `Hologram.Policy.verdict_related_reads/2`), and otherwise only the rows among the given moved
-  ids - those whose own values or pairs moved - since a quantifier may read the row it decides
-  about, and the pairs of a to-many stored on it. Given `:all`, every row of such a type is worked
-  out - what a client resuming with verdicts it was told before this session is owed.
+  Only rows of a type with a deciding item are worked out again: every one of them when the given
+  changed types meet a type such an item reads through a relationship (see
+  `Hologram.Policy.verdict_related_reads/2`), the grant store among them for a role reference, and
+  otherwise only the rows among the given moved ids - those whose own values or pairs moved -
+  since an item may read the row it decides about, and the pairs of a to-many stored on it. Given
+  `:all`, every row of such a type is worked out - what a client resuming with verdicts it was
+  told before this session is owed.
   """
   @spec stale(
           list(struct),
@@ -112,9 +113,9 @@ defmodule Hologram.Sync.Verdicts do
       changed_types == :all ->
         :every_row
 
-      Enum.any?(deciding, fn {_key, clause} ->
+      Enum.any?(deciding, fn {_key, item} ->
         entity_type
-        |> Policy.verdict_related_reads(clause)
+        |> Policy.verdict_related_reads(item)
         |> Enum.any?(&MapSet.member?(changed_types, &1))
       end) ->
         :every_row

@@ -29,7 +29,8 @@ defmodule Hologram.PolicyTest do
       validate_operation!: 2,
       verdict_key: 3,
       verdict_reads: 2,
-      verdict_related_reads: 2
+      verdict_related_reads: 2,
+      verdict_rule: 1
     ]
 
   alias Hologram.Auth.RoleGrant
@@ -838,9 +839,47 @@ defmodule Hologram.PolicyTest do
     test "fails for a read rule's path through types someone may read" do
       refute deciding_quantifier?(UnreadableReadTask, :read, {[:owner_tag, :name], :==, "x"})
     end
+
+    # Readers.Module24's project (Readers.Module23) has no read rule, and the team's id the role is
+    # held on is read off it.
+    test "holds for a read rule's role reference reading a type nobody may read" do
+      item = {:to, {:rel, [:project, :team], [:member]}}
+
+      assert deciding_quantifier?(Policy.Readers.Module24, :read, item)
+      refute deciding_quantifier?(Policy.Readers.Module24, :update, item)
+    end
+
+    # The team's id is read off the task itself.
+    test "fails for a role reference one relationship away" do
+      refute deciding_quantifier?(
+               Policy.Readers.Module24,
+               :read,
+               {:to, {:rel, [:team], [:member]}}
+             )
+    end
+
+    # Readers.Module13's parent (Policy.Module1) has a read rule.
+    test "fails for a role reference reading types someone may read" do
+      item = {:to, {:rel, [:parent, :parent], [:member]}}
+
+      refute deciding_quantifier?(Policy.Readers.Module13, :read, item)
+    end
+
+    test "fails for a role reference on the row itself" do
+      refute deciding_quantifier?(Policy.Readers.Module24, :read, {:to, {:own, [:member]}})
+    end
   end
 
   describe "deciding_quantifiers/1" do
+    # The one-hop references for read and update read the task alone.
+    test "lists a read rule's role reference reading a type nobody may read" do
+      item = {:to, {:rel, [:project, :team], [:member]}}
+
+      assert deciding_quantifiers(Policy.Readers.Module24) == [
+               {verdict_key(Policy.Readers.Module24, :read, item), item}
+             ]
+    end
+
     defmodule VerdictProject do
       use Hologram.Entity
 
@@ -2121,6 +2160,22 @@ defmodule Hologram.PolicyTest do
       assert verdict_key(KeyedProject, :archive, {:none, {[:members], []}}) != key
     end
 
+    # Its roles are expanded in it, so the reference alone says what it means.
+    test "keys a role reference by its operation and a digest of it" do
+      item = {:to, {:rel, [:project, :team], [:member]}}
+
+      assert verdict_key(Policy.Readers.Module24, :read, item) == "read:407dcd1e54324cb9"
+    end
+
+    test "gives a role reference naming other roles a new key" do
+      key =
+        verdict_key(Policy.Readers.Module24, :read, {:to, {:rel, [:project, :team], [:member]}})
+
+      other_item = {:to, {:rel, [:project, :team], [:member, :owner]}}
+
+      assert verdict_key(Policy.Readers.Module24, :read, other_item) != key
+    end
+
     # The two types declare the same label computed two ways, so the same clause over it means two
     # things - while over an attribute it means one.
     test "gives a clause reading a derived field a new key when the field's definition changes" do
@@ -2164,6 +2219,13 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "verdict_reads/2" do
+    # A pending grant or revoke names the grant store.
+    test "returns the types a role reference reads before its last relationship and the grant store" do
+      item = {:to, {:rel, [:project, :team], [:member]}}
+
+      assert verdict_reads(Policy.Readers.Module24, item) == [RoleGrant, Policy.Readers.Module23]
+    end
+
     test "returns the rule's type and every type along the clause's sets and paths" do
       clause =
         {:any,
@@ -2266,6 +2328,15 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "verdict_related_reads/2" do
+    test "returns the types a role reference reads before its last relationship and the grant store" do
+      item = {:to, {:rel, [:project, :team], [:member]}}
+
+      assert verdict_related_reads(Policy.Readers.Module24, item) == [
+               RoleGrant,
+               Policy.Readers.Module23
+             ]
+    end
+
     test "returns the types the clause reaches through a relationship, leaving out the rule's own type" do
       assert verdict_related_reads(Hologram.PolicyTest.VerdictProject, {:none, {[:labels], []}}) ==
                [Hologram.PolicyTest.VerdictLabel]
@@ -2280,6 +2351,20 @@ defmodule Hologram.PolicyTest do
                  Hologram.PolicyTest.VerdictMember,
                  Hologram.PolicyTest.VerdictProject
                ])
+    end
+  end
+
+  describe "verdict_rule/1" do
+    test "requires a clause alone" do
+      clause = {:archived, :==, false}
+
+      assert verdict_rule(clause) == %{predicates: [clause], to: nil, via: nil}
+    end
+
+    test "holds a role reference alone" do
+      reference = {:rel, [:project, :team], [:member]}
+
+      assert verdict_rule({:to, reference}) == %{predicates: [], to: [reference], via: nil}
     end
   end
 

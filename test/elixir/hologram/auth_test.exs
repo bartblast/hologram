@@ -39,6 +39,9 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module8
   alias Hologram.Test.Fixtures.Policy.Readers.Module20, as: ReadersModule20
   alias Hologram.Test.Fixtures.Policy.Readers.Module21, as: ReadersModule21
+  alias Hologram.Test.Fixtures.Policy.Readers.Module22, as: ReadersModule22
+  alias Hologram.Test.Fixtures.Policy.Readers.Module23, as: ReadersModule23
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24, as: ReadersModule24
   alias Hologram.Test.Fixtures.Policy.Readers.Module5, as: ReadersModule5
   alias Hologram.Test.Fixtures.Role
 
@@ -2740,6 +2743,31 @@ defmodule Hologram.AuthTest do
       assert verdicts(user_id, task) == %{archived_key => true, steward_key => true}
       assert verdicts(user_id, other_task) == %{archived_key => false, steward_key => false}
       assert verdicts(nil, task) == %{archived_key => true, steward_key => false}
+    end
+
+    # The team's id the role is held on is read off the project, which no client holds.
+    test "answers a read rule's role reference through a type nobody may read over the rows" do
+      holder = create_user("verdict_holder@example.com")
+      other_user = create_user("verdict_other@example.com")
+
+      key =
+        Policy.verdict_key(ReadersModule24, :read, {:to, {:rel, [:project, :team], [:member]}})
+
+      create = fn entity_type, values ->
+        values
+        |> entity_type.new()
+        |> DB.create!()
+      end
+
+      team = create.(ReadersModule22, %{})
+      project = create.(ReadersModule23, %{team_id: team.id})
+      task = create.(ReadersModule24, %{project_id: project.id})
+
+      grant_role(holder, :member, team)
+
+      assert verdicts(holder.id, task) == %{key => true}
+      assert verdicts(other_user.id, task) == %{key => false}
+      assert verdicts(nil, task) == %{key => false}
     end
   end
 end

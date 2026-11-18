@@ -19,6 +19,9 @@ defmodule Hologram.Policy.EdgesTest do
   alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Policy.Readers.Module20, as: ReadersModule20
   alias Hologram.Test.Fixtures.Policy.Readers.Module21, as: ReadersModule21
+  alias Hologram.Test.Fixtures.Policy.Readers.Module22, as: ReadersModule22
+  alias Hologram.Test.Fixtures.Policy.Readers.Module23, as: ReadersModule23
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24, as: ReadersModule24
   alias Hologram.Test.Fixtures.Role
 
   @index_key {Hologram.Policy.Edges, :index}
@@ -514,6 +517,15 @@ defmodule Hologram.Policy.EdgesTest do
       assert derive([ReadersModule21])[{ReadersModule21, :verdicts}] == [
                {:attributes, [:project_id]},
                {:relationship_attributes, [:project], ReadersModule20, [:archived, :steward_id]}
+             ]
+    end
+
+    # The team's id is read off the project, which no client holds, and the role is held on the team.
+    test "names what a read rule's role reference through a type nobody may read reads under :verdicts" do
+      assert derive([ReadersModule24])[{ReadersModule24, :verdicts}] == [
+               {:attributes, [:project_id]},
+               {:relationship_attributes, [:project], ReadersModule23, [:team_id]},
+               {:relationship_grants, [:project, :team], ReadersModule22, [:member]}
              ]
     end
 
