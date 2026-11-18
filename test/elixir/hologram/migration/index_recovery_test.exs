@@ -162,6 +162,19 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     %{version: version, path: "app/migrations/#{version}.ex", ops: ops}
   end
 
+  # Marks the index invalid and stops or restarts writes going through it - a superuser's
+  # catalog write, which the test user is. The flag is re-read by every later statement.
+  defp set_index_ready(index, ready?) do
+    {:ok, _result} =
+      Connection.query(
+        """
+        UPDATE pg_catalog.pg_index SET "indisvalid" = false, "indisready" = $1
+        WHERE "indexrelid" = '"hologram_data"."#{index}"'::regclass
+        """,
+        [ready?]
+      )
+  end
+
   setup %{scratch: scratch} do
     create =
       migration("20260813091522", [
@@ -449,6 +462,22 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     }
 
     @invalid_slug_msg ~s{found 1 duplicate key in "my_app_task" over ("slug") - the unique index over it is not built yet, and a type change on the table rebuilds it - update the rows}
+
+    @drop_unique_slug %{
+      version: "20260813091525",
+      path: "app/migrations/20260813091525.ex",
+      ops: [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :slug,
+          changes: [unique: false],
+          line: 3
+        }
+      ]
+    }
+
+    @checking_slug_msg ~s{found 1 duplicate key in "my_app_task" over ("slug") - the unique index over it is not built yet, but it already checks the rows this file writes - update the rows}
 
     @duplicate_slug_msg ~s{found 1 duplicate key in "my_app_task" over ("slug") - a unique index cannot be built while rows repeat a key - update the rows or drop the unique declaration}
 
@@ -755,6 +784,139 @@ defmodule Hologram.Migration.IndexRecoveryTest do
         refute "20260813091524" in applied_versions()
       end)
     end
+
+    # A repeat a running node writes while a concurrent build runs, after the build took its
+    # snapshot and before it checked the rows, fails the build in its last phase. The index it
+    # leaves is invalid and serves no query, but writes already go through it, and a write
+    # that puts a row with the repeated key back into it fails. Staged in the catalog, since
+    # that window can't be timed from here: the index stops taking writes, the repeat is
+    # written past it, and it takes writes again.
+    test "refuses a pending fill on the table of an invalid index still checking writes", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      {extra_chain, extra_model} = apply_extra_attributes(chain, model, scratch)
+
+      fill =
+        migration("20260813091525", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [optional: false, default: "none"],
+            line: 3
+          }
+        ])
+
+      assert_refused_with_checking_index(scratch, extra_chain, extra_model, fill)
+    end
+
+    test "refuses a pending required attribute on the table of an invalid index still " <>
+           "checking writes",
+         %{chain: chain, model: model, scratch: scratch} do
+      add =
+        migration("20260813091524", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :priority,
+            type: :integer,
+            opts: [default: 5],
+            line: 3
+          }
+        ])
+
+      assert_refused_with_checking_index(scratch, chain, model, add)
+    end
+
+    # The build before the pending files fails over the repeat while building, which leaves
+    # an index that takes no writes. Fills go past it, and the later file that drops the
+    # unique declaration takes it away.
+    test "boots on the first try when pending fills pass an invalid index taking no writes", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      fills =
+        migration("20260813091524", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :priority,
+            type: :integer,
+            opts: [default: 5],
+            line: 3
+          },
+          # Two rows without a slug take the same one, a repeat of its own - one only a valid
+          # index would refuse.
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [optional: false, default: "filled"],
+            line: 4
+          }
+        ])
+
+      pending = [fills, @drop_unique_slug]
+      post_model = Enum.reduce(pending, model, &Model.fold(&2, &1.ops))
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+        insert_task("taken")
+        insert_task("taken")
+        insert_task(nil)
+        insert_task(nil)
+
+        assert run(Enum.concat(chain, pending), post_model, @context) == :ok
+
+        assert index_validity(@slug_index) == :absent
+      end)
+    end
+
+    # The tightening writes only the rows without an amount, and the repeated rows hold one,
+    # so its fill never puts the repeated key back into the index.
+    test "boots on the first try when a pending tightening writes none of the repeated rows", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      {extra_chain, extra_model} = apply_extra_attributes(chain, model, scratch)
+
+      fill =
+        migration("20260813091525", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [optional: false, default: "none"],
+            line: 3
+          }
+        ])
+
+      drop_unique = migration("20260813091526", @drop_unique_slug.ops)
+      pending = [fill, drop_unique]
+      post_model = Enum.reduce(pending, extra_model, &Model.fold(&2, &1.ops))
+
+      route(scratch, fn ->
+        insert_task("taken")
+        set_index_ready(@slug_index, false)
+        insert_task("taken")
+
+        {:ok, _result} =
+          Connection.query(
+            ~s{UPDATE "hologram_data"."my_app_task" SET "amount" = 'set' WHERE "slug" = 'taken'}
+          )
+
+        set_index_ready(@slug_index, true)
+        insert_task("other")
+
+        assert run(Enum.concat(extra_chain, pending), post_model, @context) == :ok
+
+        assert index_validity(@slug_index) == :absent
+      end)
+    end
   end
 
   # Two optional attributes the rows leave NULL, which any type change or enum rebuild takes.
@@ -787,6 +949,36 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     end)
 
     {extra_chain, extra_model}
+  end
+
+  # The repeat goes in first, so the rows written after it fill its page: a fill of a column no
+  # index covers then can't keep the row's new version on that page, and has to write it into
+  # every index. A fill of an indexed column writes into every index anyway.
+  defp assert_refused_with_checking_index(scratch, chain, model, pending) do
+    pending_chain = Enum.concat(chain, [pending])
+    post_model = Model.fold(model, pending.ops)
+
+    route(scratch, fn ->
+      insert_task("taken")
+      set_index_ready(@slug_index, false)
+      insert_task("taken")
+      set_index_ready(@slug_index, true)
+
+      Enum.each(1..300, &insert_task("filler-#{&1}"))
+
+      assert_error RuntimeError, @checking_slug_msg, fn ->
+        run(pending_chain, post_model, @context)
+      end
+
+      refute pending.version in applied_versions()
+
+      {:ok, _result} =
+        Connection.query(~s{DELETE FROM "hologram_data"."my_app_task" WHERE "slug" = 'taken'})
+
+      assert run(pending_chain, post_model, @context) == :ok
+
+      assert index_validity(@slug_index) == true
+    end)
   end
 
   defp assert_refused_with_invalid_index(scratch, chain, model, pending) do

@@ -240,10 +240,13 @@ defmodule Hologram.DB.DDL do
   Returns the pre-flight check statement counting the key groups of the given table's
   columns that hold more than one row - the duplicates that block a unique index build.
 
-  Nulls compare as values when nulls_distinct is false, matching the index being built.
+  Nulls compare as values when nulls_distinct is false, matching the index being built. Given
+  a written column, only the groups holding a row with a NULL there count - the rows a fill
+  of that column writes.
   """
-  @spec duplicate_check_statement(String.t(), list(String.t()), boolean) :: String.t()
-  def duplicate_check_statement(table, columns, nulls_distinct) do
+  @spec duplicate_check_statement(String.t(), list(String.t()), boolean, String.t() | nil) ::
+          String.t()
+  def duplicate_check_statement(table, columns, nulls_distinct, written_column \\ nil) do
     quoted_columns = Enum.map(columns, &Mapper.quote_identifier/1)
     grouped = Enum.join(quoted_columns, ", ")
 
@@ -254,8 +257,15 @@ defmodule Hologram.DB.DDL do
         ""
       end
 
+    written_part =
+      if written_column do
+        " AND COUNT(*) FILTER (WHERE #{Mapper.quote_identifier(written_column)} IS NULL) > 0"
+      else
+        ""
+      end
+
     "SELECT COUNT(*) FROM (SELECT 1 FROM #{qualified(table)}#{not_null_part} " <>
-      "GROUP BY #{grouped} HAVING COUNT(*) > 1) AS duplicates"
+      "GROUP BY #{grouped} HAVING COUNT(*) > 1#{written_part}) AS duplicates"
   end
 
   @doc """
@@ -329,15 +339,18 @@ defmodule Hologram.DB.DDL do
   end
 
   @doc """
-  Returns the statement listing the names of the invalid indexes of the data schema.
+  Returns the statement listing the invalid indexes of the data schema - each one's name, and
+  whether writes go through it.
 
   A concurrent build that failed partway leaves its index in the catalog flagged
-  invalid: it holds the derived name and serves no query.
+  invalid: it holds the derived name and serves no query. Writes go through it when the
+  build failed in its last phase, checking the rows - a unique one then refuses a write
+  repeating its key - and not when it failed in its first, building the index.
   """
   @spec invalid_indexes_statement() :: String.t()
   def invalid_indexes_statement do
     """
-    SELECT ic.relname
+    SELECT ic.relname, i.indisready
     FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
     JOIN pg_catalog.pg_class c ON c.oid = i.indrelid

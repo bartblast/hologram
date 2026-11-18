@@ -98,46 +98,69 @@ defmodule Hologram.DB.Preflight do
 
   The mapping the file leaves names the indexes as the file ends, and a rename later in the
   file has not happened yet where the fill runs, so the catalog is read instead - as
-  check_cast!/1 does, and skipping the hand-made indexes it skips.
+  check_cast!/1 does, and skipping the hand-made indexes it skips. An invalid index that
+  takes no writes is skipped too: the fill doesn't go through it, and whoever builds it
+  later counts the keys then.
   """
   @spec check_fill!(%{atom => any}) :: :ok
   def check_fill!(op) do
     op.table
-    |> standing_unique_indexes(op.column)
+    |> standing_unique_indexes(op.column, invalid_indexes(false))
     |> check_filled_keys!(op.table, op.column, op.fill)
   end
 
   @doc """
-  Validates that no invalid unique index on the given table meets rows repeating its key.
+  Validates that no invalid unique index on the given table that the given change goes
+  through meets rows repeating its key.
 
-  Returns :ok, or raises naming the table, the index's columns and how many keys repeat. A
-  type change rewrites its table and rebuilds every index on it, invalid ones included, and
-  rebuilding a unique one fails on rows that repeat its key. The boot leaves such an index
-  when its build before the pending files fails on those rows, which a running node can
-  write while the index is missing, and so does a node writing them while a file's index
-  builds after its commit. A valid unique index holds no repeated key, so only the invalid
-  ones are counted, and the schema is read only when there are any.
+  Returns :ok, or raises naming the table, the index's columns and how many keys repeat. The
+  boot leaves such an index when its build before the pending files fails on those rows,
+  which a running node can write while the index is missing, and so does a node writing
+  them while a file's index builds after its commit. A valid unique index holds no repeated
+  key, so only the invalid ones are counted, and the schema is read only when there are any.
+
+  A :rewrite - a type change - rebuilds every index on its table, invalid ones included, and
+  rebuilding a unique one fails on rows that repeat its key. An :update - a fill of every
+  row - puts the rows it writes back into every index that takes writes, which an invalid one
+  does when its build failed in its last phase, over a repeat written while it ran: putting
+  back a row with the repeated key fails. One that takes no writes, as a build failing in
+  its first phase leaves, is passed over. A `{:fill, column}` writes only the rows where the
+  column is NULL, so only a repeated key one of those rows holds counts, and an index over
+  the column is passed over: the rows it writes take a new key there, which check_fill!/1
+  asks about. That only changes the answer for an index comparing nulls as values - one
+  that keeps them distinct holds no row with a NULL in its columns to count.
 
   An index introspection marks as not plain is hand-made, and is skipped, as check_cast!/1
   skips it.
   """
-  @spec check_invalid_unique_indexes!(String.t()) :: :ok
-  def check_invalid_unique_indexes!(table) do
-    {:ok, %{rows: rows}} = Connection.query(DDL.invalid_indexes_statement())
+  @spec check_invalid_unique_indexes!(String.t(), :rewrite | :update | {:fill, String.t()}) ::
+          :ok
+  def check_invalid_unique_indexes!(table, change) do
+    invalid_names = invalid_indexes(if change == :rewrite, do: :any, else: true)
 
-    if rows != [] do
-      invalid_names = MapSet.new(rows, fn [index] -> index end)
+    written_column =
+      case change do
+        {:fill, column} -> column
+        _all_rows -> nil
+      end
 
+    if MapSet.size(invalid_names) > 0 do
       table
       |> table_indexes()
       |> Enum.filter(fn {name, index} ->
         MapSet.member?(invalid_names, name) and index.unique and
-          not Map.has_key?(index, :non_plain)
+          not Map.has_key?(index, :non_plain) and written_column not in index.columns
       end)
       |> Enum.each(fn {_name, index} ->
-        statement = DDL.duplicate_check_statement(table, index.columns, index.nulls_distinct)
+        statement =
+          DDL.duplicate_check_statement(
+            table,
+            index.columns,
+            index.nulls_distinct,
+            written_column
+          )
 
-        raise_invalid_duplicate_keys!(table, index.columns, count_result(statement))
+        raise_invalid_duplicate_keys!(table, index.columns, change, count_result(statement))
       end)
     end
 
@@ -200,7 +223,8 @@ defmodule Hologram.DB.Preflight do
 
   A type change asks once more right before it applies, about the unique indexes standing
   over its column then (see check_cast!/1), and before that about the invalid unique indexes
-  on its table, which the change rebuilds (see check_invalid_unique_indexes!/1).
+  on its table, which the change rebuilds (see check_invalid_unique_indexes!/2). A fill asks
+  the same about the invalid unique indexes that still take writes.
 
   An enum rebuild's removed values exclude the ones an unscoped remap carries: those rows
   follow the value to its new label rather than losing it.
@@ -412,6 +436,14 @@ defmodule Hologram.DB.Preflight do
     |> Enum.find(&(&1.table == table))
   end
 
+  # The names of the invalid indexes of the data schema that take writes (true), that don't
+  # (false), or either (:any).
+  defp invalid_indexes(ready) do
+    {:ok, %{rows: rows}} = Connection.query(DDL.invalid_indexes_statement())
+
+    for [index, ready?] <- rows, ready == :any or ready? == ready, into: MapSet.new(), do: index
+  end
+
   defp raise_cast_duplicate_keys!(_op, _columns, 0), do: :ok
 
   defp raise_cast_duplicate_keys!(op, columns, count) do
@@ -433,14 +465,18 @@ defmodule Hologram.DB.Preflight do
             "key - update the rows or drop the unique declaration"
   end
 
-  defp raise_invalid_duplicate_keys!(_table, _columns, 0), do: :ok
+  defp raise_invalid_duplicate_keys!(_table, _columns, _change, 0), do: :ok
 
-  defp raise_invalid_duplicate_keys!(table, columns, count) do
+  defp raise_invalid_duplicate_keys!(table, columns, change, count) do
     key = Enum.map_join(columns, ", ", &~s("#{&1}"))
 
+    reason =
+      if change == :rewrite,
+        do: "and a type change on the table rebuilds it",
+        else: "but it already checks the rows this file writes"
+
     raise ~s{found #{count} duplicate #{pluralize_keys(count)} in "#{table}" over (#{key}) - } <>
-            "the unique index over it is not built yet, and a type change on the table " <>
-            "rebuilds it - update the rows"
+            "the unique index over it is not built yet, #{reason} - update the rows"
   end
 
   defp raise_filled_duplicate_keys!(_table, _column, _columns, 0), do: :ok
@@ -466,9 +502,10 @@ defmodule Hologram.DB.Preflight do
 
   defp pluralize_values(_values), do: "values"
 
-  defp standing_unique_indexes(table, column) do
+  defp standing_unique_indexes(table, column, skipped_names \\ MapSet.new()) do
     Introspection.schema().tables[table].indexes
     |> Enum.sort_by(fn {name, _index} -> name end)
+    |> Enum.reject(fn {name, _index} -> MapSet.member?(skipped_names, name) end)
     |> Enum.map(fn {_name, index} -> index end)
     |> Enum.filter(&(&1.unique and not Map.has_key?(&1, :non_plain) and column in &1.columns))
   end

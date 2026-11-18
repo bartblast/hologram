@@ -198,7 +198,7 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
-  describe "duplicate_check_statement/3" do
+  describe "duplicate_check_statement/4" do
     test "counts the duplicate key groups, nulls compared as values" do
       statement = duplicate_check_statement("task", ["project_id", "slug"], false)
 
@@ -213,6 +213,15 @@ defmodule Hologram.DB.DDLTest do
       assert statement ==
                ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
                  ~s{WHERE "slug" IS NOT NULL GROUP BY "slug" HAVING COUNT(*) > 1) AS duplicates}
+    end
+
+    test "counts only the groups holding a NULL in the written column" do
+      statement = duplicate_check_statement("task", ["slug"], true, "amount")
+
+      assert statement ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
+                 ~s{WHERE "slug" IS NOT NULL GROUP BY "slug" HAVING COUNT(*) > 1 } <>
+                 ~s{AND COUNT(*) FILTER (WHERE "amount" IS NULL) > 0) AS duplicates}
     end
   end
 
@@ -279,10 +288,10 @@ defmodule Hologram.DB.DDLTest do
   end
 
   describe "invalid_indexes_statement/0" do
-    test "lists the invalid indexes of the data schema, by name" do
+    test "lists the invalid indexes of the data schema, by name, with whether they take writes" do
       statement = normalize_newlines(invalid_indexes_statement())
 
-      assert statement =~ "SELECT ic.relname"
+      assert statement =~ "SELECT ic.relname, i.indisready"
       assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid"
       assert statement =~ "ORDER BY ic.relname"
     end

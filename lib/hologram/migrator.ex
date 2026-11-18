@@ -415,16 +415,22 @@ defmodule Hologram.Migrator do
   # dev: the two mechanisms have to leave the same rows behind, not merely the same columns.
   # The default is the one the add's chunk leaves, which reconciliation's one diff also uses
   # when the declaration arrives in one go.
+  #
+  # The fill writes every row, so an invalid unique index that still checks writes, over
+  # rows repeating its key, is asked about first - see check_invalid_unique_indexes!/2.
   defp apply_op(%{op: :add_column, backfill: value} = op) do
+    Preflight.check_invalid_unique_indexes!(op.table, :update)
     add_column_filled(op, value)
   end
 
   # The NULLs take the declared default before the column tightens over them. Only when
   # there are any: an enum value added in this transaction cannot be used in it, not even as
   # the parameter of an UPDATE that matches no row. Asked before the fill: under a unique
-  # index that stands, a fill making rows repeat a key would fail in PostgreSQL.
+  # index that stands, a fill making rows repeat a key would fail in PostgreSQL - and so would
+  # one writing a row that already repeats the key of an invalid one that still checks writes.
   defp apply_op(%{op: :alter_column, fill: value} = op) do
     if count_result(DDL.null_check_statement(op.table, op.column)) > 0 do
+      Preflight.check_invalid_unique_indexes!(op.table, {:fill, op.column})
       Preflight.check_fill!(op)
       fill_with_companions(op, value)
     end
@@ -442,7 +448,7 @@ defmodule Hologram.Migrator do
   # for the repeats.
   defp apply_op(%{op: :alter_column} = op) do
     if op.before.type != op.after.type do
-      Preflight.check_invalid_unique_indexes!(op.table)
+      Preflight.check_invalid_unique_indexes!(op.table, :rewrite)
     end
 
     Preflight.check_cast!(op)
@@ -456,7 +462,7 @@ defmodule Hologram.Migrator do
     op.columns
     |> Enum.map(fn {table, _column} -> table end)
     |> Enum.uniq()
-    |> Enum.each(&Preflight.check_invalid_unique_indexes!/1)
+    |> Enum.each(&Preflight.check_invalid_unique_indexes!(&1, :rewrite))
 
     execute_statements(DDL.statements(op))
   end
@@ -500,6 +506,10 @@ defmodule Hologram.Migrator do
     # the diff applies add_column before alter_column, so a source column being cast to
     # text in the same file still holds its old type when its companion lands. The renderer
     # names the added columns as the file leaves them, so a rename after the add is followed.
+    # It writes only the rows whose source holds a value. A companion comes with a text
+    # attribute, so its source either arrives with this file, holding values only when an add
+    # filled them, or turns text with a type change - both of which asked about the invalid
+    # unique indexes on the table already, against these same rows (see apply_op/1).
     SchemaReconciler.backfill_companions!(render.added_columns, mapping)
 
     # The tail's checks run here, against the schema the statements above just produced and
@@ -875,7 +885,7 @@ defmodule Hologram.Migrator do
   defp invalid_indexes do
     {:ok, %{rows: rows}} = Connection.query(DDL.invalid_indexes_statement())
 
-    Enum.map(rows, fn [index] -> index end)
+    Enum.map(rows, fn [index, _ready?] -> index end)
   end
 
   defp known_history?(migrations, applied) do
