@@ -21,7 +21,6 @@ defmodule Hologram.Sync.Carry do
 
   alias Hologram.DB.Codec
   alias Hologram.Entity
-  alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
   alias Hologram.Query
   alias Hologram.Sync.Frame
@@ -60,15 +59,14 @@ defmodule Hologram.Sync.Carry do
   the rows a page carries - the client is told the number itself, and holds it until its own database is
   complete enough to count.
 
-  The key names the component, the prop or field, and the arguments its function was called with,
-  which is what tells two instances of one component apart. The arguments are spelled the same way on
-  both tiers, which `inspect/1` alone doesn't do for a struct: an entity row by its type and id, the
-  only parts both tiers are sure to hold alike, a list, a tuple and a map by their items, a map's
-  entries and a struct's fields sorted, and anything else by `inspect/1`, in full.
+  The key names the component, the derived field and the normalized query term it ran, spelled the
+  way the client spells its own (see `spell_query/1`). The query holds every value it reads, so a
+  changed value is a changed key, and the client never shows this number for a query the server
+  didn't count. Two instances of one component running one query share a key, and the number.
   """
-  @spec collect_count(module, atom, list, integer) :: :ok
-  def collect_count(module, name, args, count) do
-    collected = Map.put(gathered_counts(), count_key(module, name, args), count)
+  @spec collect_count(module, atom, Query.t(), integer) :: :ok
+  def collect_count(module, name, term, count) do
+    collected = Map.put(gathered_counts(), count_key(module, name, term), count)
 
     Process.put(@counts_key, collected)
 
@@ -169,7 +167,7 @@ defmodule Hologram.Sync.Carry do
   # Spells the given normalized query term as text, the way the client spells its own normalized
   # term of the same query (QuerySpelling.spell in query_spelling.mjs), so an answer the server
   # carries can be looked up by the query that gave it. The query holds every value it reads, so a
-  # changed value is a changed spelling, where a row argument spelled by its type and id is not.
+  # changed value is a changed spelling.
   #
   # The two terms aren't one shape, so neither is spelled as it stands. What's spelled is what both
   # hold: the term's fields but its source and trust, which a client term doesn't have, and every
@@ -205,8 +203,8 @@ defmodule Hologram.Sync.Carry do
   def spell_query(term), do: spell_unknown(term)
 
   # WARNING: must match the client's DataLayer.#carriedCount (data_layer.mjs).
-  defp count_key(module, name, args) do
-    "#{inspect(module)}/#{name}/#{Enum.map_join(args, ",", &spell_key_part/1)}"
+  defp count_key(module, name, term) do
+    "#{inspect(module)}/#{name}/#{spell_query(term)}"
   end
 
   defp entities(%NotIncluded{}), do: []
@@ -300,10 +298,6 @@ defmodule Hologram.Sync.Carry do
 
   defp spell_clauses(clauses), do: spell_unknown(clauses)
 
-  defp spell_entity_id(id) when is_binary(id), do: id
-
-  defp spell_entity_id(id), do: spell_key_part(id)
-
   defp spell_include(include) when is_map(include) and not is_struct(include) do
     names = Map.keys(include)
 
@@ -320,68 +314,6 @@ defmodule Hologram.Sync.Carry do
   end
 
   defp spell_include(include), do: spell_unknown(include)
-
-  # A row is told apart by the metadata every entity struct carries, rather than by its type, so a
-  # row of a type the client's model doesn't bake is spelled the same way there.
-  #
-  # WARNING: must match the client's DataLayer.#spellKeyPart (data_layer.mjs).
-  defp spell_key_part(%module{__meta__: %Metadata{}} = term),
-    do: "#{inspect(module)}##{spell_entity_id(term.id)}"
-
-  defp spell_key_part(%module{} = term) do
-    fields =
-      term
-      |> Map.from_struct()
-      |> Enum.sort_by(fn {key, _value} -> Atom.to_string(key) end)
-      |> Enum.map_join(", ", fn {key, value} -> "#{key}: #{spell_key_part(value)}" end)
-
-    "%#{inspect(module)}{#{fields}}"
-  end
-
-  defp spell_key_part(term) when is_map(term) do
-    entries =
-      term
-      |> Enum.map(fn {key, value} -> {spell_key_part(key), spell_key_part(value)} end)
-      |> Enum.sort()
-      |> Enum.map_join(", ", fn {key, value} -> "#{key} => #{value}" end)
-
-    "%{#{entries}}"
-  end
-
-  defp spell_key_part(term) when is_list(term) do
-    items =
-      term
-      |> spell_list_items()
-      |> Enum.join(", ")
-
-    "[#{items}]"
-  end
-
-  defp spell_key_part(term) when is_tuple(term) do
-    items =
-      term
-      |> Tuple.to_list()
-      |> Enum.map_join(", ", &spell_key_part/1)
-
-    "{#{items}}"
-  end
-
-  # The client's inspect spells some floats unlike Elixir's, so a float is spelled by its bits.
-  defp spell_key_part(term) when is_float(term) do
-    <<bits::binary-size(8)>> = <<term::float-64>>
-
-    "float:#{Base.encode16(bits, case: :lower)}"
-  end
-
-  defp spell_key_part(term), do: inspect(term, limit: :infinity, printable_limit: :infinity)
-
-  # Walked rather than mapped, so an improper list's tail is spelled after a bar, as inspect does.
-  defp spell_list_items([]), do: []
-
-  defp spell_list_items([item | rest]) when is_list(rest),
-    do: [spell_key_part(item) | spell_list_items(rest)]
-
-  defp spell_list_items([item | tail]), do: ["#{spell_key_part(item)} | #{spell_key_part(tail)}"]
 
   # WARNING: must match the client's QuerySpelling.#spellNumber (query_spelling.mjs).
   defp spell_number(number) when is_integer(number), do: Integer.to_string(number)

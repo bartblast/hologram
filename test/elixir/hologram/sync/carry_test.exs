@@ -99,10 +99,25 @@ defmodule Hologram.Sync.CarryTest do
     |> Map.merge(embeds)
   end
 
+  defp c_count_term(value) do
+    Module2
+    |> Stage.filter(c: value)
+    |> Stage.count()
+    |> Stage.normalize()
+  end
+
+  defp count_key(name, term), do: "#{inspect(Module2)}/#{name}/#{spell_query(term)}"
+
   defp spell(query) do
     query
     |> Stage.normalize()
     |> spell_query()
+  end
+
+  defp total_term do
+    Module2
+    |> Stage.count()
+    |> Stage.normalize()
   end
 
   describe "collect/1" do
@@ -297,128 +312,44 @@ defmodule Hologram.Sync.CarryTest do
   end
 
   describe "collect_count/4" do
-    test "records a count under the prop that answered it" do
-      collect_count(Module2, :total, [], 7)
-
-      assert take_counts() == %{"Hologram.Test.Fixtures.Entity.Module2/total/" => 7}
-    end
-
-    # Two instances of one component answer two counts, and what tells them apart is what their
-    # builders were called with.
-    test "keys instances apart by the arguments the builder was called with" do
-      collect_count(Module2, :total, ["p1"], 7)
-      collect_count(Module2, :total, ["p2"], 3)
+    test "records a count under the field and the query that answered it" do
+      collect_count(Module2, :total, total_term(), 7)
 
       assert take_counts() == %{
-               ~s(Hologram.Test.Fixtures.Entity.Module2/total/"p1") => 7,
-               ~s(Hologram.Test.Fixtures.Entity.Module2/total/"p2") => 3
-             }
-    end
-
-    test "spells every argument of a multi-argument builder" do
-      collect_count(Module2, :total, ["p1", true], 7)
-
-      assert take_counts() == %{~s(Hologram.Test.Fixtures.Entity.Module2/total/"p1",true) => 7}
-    end
-
-    # The client spells the key with no limit, so a long argument is spelled in full here too.
-    test "spells an argument holding over 50 items in full" do
-      collect_count(Module2, :total, [Enum.to_list(1..51)], 7)
-
-      assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/total/#{inspect(Enum.to_list(1..51), limit: :infinity)}" =>
+               ~S|Hologram.Test.Fixtures.Entity.Module2/total/{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[],"include":{},"skip":null,"sort":[],"take":null}| =>
                  7
              }
     end
 
-    # The rows a derived field passes on are an argument like any other. A row is spelled by its type
-    # and id, the parts both tiers are sure to hold alike, and the client spells the same key (see
-    # the data layer's answerDerivedQuery() tests).
-    test "spells an entity row by its type and id" do
-      row = Module2.new(id: "01a1cbe6-0000-7000-8000-000000000001", a: true, c: "banana")
-
-      collect_count(Module2, :total, [[row]], 7)
+    # Two instances of one component answer two counts, and what tells them apart is the query
+    # each one's builder built.
+    test "keys instances apart by the query their builders built" do
+      collect_count(Module2, :total, c_count_term("p1"), 7)
+      collect_count(Module2, :total, c_count_term("p2"), 3)
 
       assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/total/[Hologram.Test.Fixtures.Entity.Module2#01a1cbe6-0000-7000-8000-000000000001]" =>
-                 7
+               count_key(:total, c_count_term("p1")) => 7,
+               count_key(:total, c_count_term("p2")) => 3
              }
     end
 
-    test "spells a tuple by its items" do
-      collect_count(Module2, :total, [{1, "a"}], 7)
-
-      assert take_counts() == %{~s(Hologram.Test.Fixtures.Entity.Module2/total/{1, "a"}) => 7}
-    end
-
-    test "spells a struct by its fields, sorted by name" do
-      collect_count(Module2, :total, [~D[2026-01-02]], 7)
+    test "keys fields of one component apart" do
+      collect_count(Module2, :open_total, total_term(), 7)
+      collect_count(Module2, :done_total, total_term(), 3)
 
       assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/total/%Date{calendar: Calendar.ISO, day: 2, month: 1, year: 2026}" =>
-                 7
+               count_key(:open_total, total_term()) => 7,
+               count_key(:done_total, total_term()) => 3
              }
     end
 
-    test "spells a map by its entries, sorted by key" do
-      collect_count(Module2, :total, [%{b: 1, a: 2}], 7)
+    # The same field running the same query twice is one answer, not two - the later one, which is
+    # what a re-render would have produced.
+    test "records one count per field and query" do
+      collect_count(Module2, :total, c_count_term("p1"), 7)
+      collect_count(Module2, :total, c_count_term("p1"), 9)
 
-      assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/total/%{:a => 2, :b => 1}" => 7
-             }
-    end
-
-    # Two structs of one row are two keys that spell alike.
-    test "spells a map whose keys spell alike by its entries, sorted by value" do
-      map = %{Module2.new(id: "x", a: true) => 2, Module2.new(id: "x", a: false) => 1}
-
-      collect_count(Module2, :total, [map], 7)
-
-      assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/total/%{Hologram.Test.Fixtures.Entity.Module2#x => 1, Hologram.Test.Fixtures.Entity.Module2#x => 2}" =>
-                 7
-             }
-    end
-
-    test "spells an improper list with its tail after a bar" do
-      collect_count(Module2, :total, [[1 | 2]], 7)
-
-      assert take_counts() == %{"Hologram.Test.Fixtures.Entity.Module2/total/[1 | 2]" => 7}
-    end
-
-    test "spells a float by its bits" do
-      collect_count(Module2, :total, [1.0e20], 7)
-
-      assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/total/float:4415af1d78b58c40" => 7
-             }
-    end
-
-    test "sorts a map's entries in code point order" do
-      collect_count(Module2, :total, [%{"😀" => 2, "！" => 1}], 7)
-
-      assert take_counts() == %{
-               ~s(Hologram.Test.Fixtures.Entity.Module2/total/%{"！" => 1, "😀" => 2}) => 7
-             }
-    end
-
-    test "keys props of one component apart" do
-      collect_count(Module2, :open_total, [], 7)
-      collect_count(Module2, :done_total, [], 3)
-
-      assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/open_total/" => 7,
-               "Hologram.Test.Fixtures.Entity.Module2/done_total/" => 3
-             }
-    end
-
-    # The same prop of the same instance resolved twice is one answer, not two - the later one,
-    # which is what a re-render would have produced.
-    test "records one count per prop instance" do
-      collect_count(Module2, :total, ["p1"], 7)
-      collect_count(Module2, :total, ["p1"], 9)
-
-      assert take_counts() == %{~s(Hologram.Test.Fixtures.Entity.Module2/total/"p1") => 9}
+      assert take_counts() == %{count_key(:total, c_count_term("p1")) => 9}
     end
   end
 
@@ -862,7 +793,7 @@ defmodule Hologram.Sync.CarryTest do
 
   describe "start/0" do
     test "clears the counts a previous render gathered" do
-      collect_count(Module2, :total, [], 7)
+      collect_count(Module2, :total, total_term(), 7)
 
       start()
 
@@ -939,7 +870,7 @@ defmodule Hologram.Sync.CarryTest do
     end
 
     test "leaves nothing behind for the next render" do
-      collect_count(Module2, :total, [], 7)
+      collect_count(Module2, :total, total_term(), 7)
 
       take_counts()
 
