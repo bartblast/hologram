@@ -17,6 +17,7 @@ defmodule Hologram.DB.IndexPlan do
   # arms of another beside it - so each OR gives its arms as needs of their own, each with what
   # stands beside it, and two ORs beside each other are never crossed.
 
+  alias Hologram.DB.QueryCompiler
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Query
@@ -46,8 +47,9 @@ defmodule Hologram.DB.IndexPlan do
         }
 
   @doc """
-  Returns the access needs of the statement the given normalized query term compiles to with no
-  policy, against the given mapping - each a map with :table, :eq (the columns an equality or a
+  Returns the access needs of the statement the given normalized query term compiles to with the
+  given policy (nil for a raw read, otherwise as `Hologram.DB.QueryCompiler.compile/3` takes it),
+  against the given mapping - each a map with :table, :eq (the columns an equality or a
   membership narrows to given values, in any order), :range (the one column a range narrows, or
   nil) and :order (the columns the statement's ordering reads after those, in order).
 
@@ -92,13 +94,81 @@ defmodule Hologram.DB.IndexPlan do
   ids. A set before a source's last link is read through a correlated subquery of its own, which
   needs its reference column when it is an inverse of a to-one. A path or a to-one reads its row by
   its id.
+
+  The read rules a policy applies - for an anonymous session, the ones left once whatever names
+  the acting user or a role is folded away - join the statement as one OR group, and their
+  needs stand beside the filter's rather than crossed with them, since Postgres combines the two
+  with a BitmapAnd. Each rule gives the needs its predicates give, as a filter would, when every
+  rule has a predicate an index serves. A rule asking only for a role or a delegation, which are
+  subqueries, leaves the group to be checked row by row, so then the rules give nothing, and so
+  does a rule asking nothing, which drops the group. A rule that never holds - a delegation to a
+  type granting nothing - is left out first, as the compiler leaves it out. The related tables a
+  rule's predicates read give their needs as anywhere else, and those of the rules of the tables
+  the statement reaches give none.
   """
-  @spec needs(Query.t(), %{module => %{atom => any}}) :: list(need)
-  def needs(term, mapping) do
+  @spec needs(Query.t(), %{module => %{atom => any}}, %{atom => any} | nil) :: list(need)
+  def needs(term, mapping, policy \\ nil) do
     term
     |> level_needs(nil, mapping)
     |> Enum.concat(deeper_needs(term, mapping))
+    |> Enum.concat(rule_needs(term, mapping, policy))
     |> Enum.uniq()
+  end
+
+  # The read rules join the statement as one OR group of their alternatives, ANDed with the filter -
+  # or, when one rule is left, as that rule's conditions ANDed with it. Postgres combines the two
+  # with a BitmapAnd, so the rules' needs stand beside the filter's rather than crossed with them -
+  # crossing them would make filters times rules indexes. The group is answered from indexes only
+  # when every rule has a condition an index serves: a grant and a delegation are subqueries, which
+  # none does, so a rule asking only those leaves the group to be checked row by row, and the rules
+  # add nothing. A rule that never holds - a delegation to a type granting nothing - leaves the
+  # group, as the compiler leaves it out. A rule asking nothing drops the group and every condition
+  # its rules ask, and rules nobody can satisfy make the statement read no rows, so both need
+  # nothing. What the rules read of related tables - their quantifiers, the derived fields they read
+  # - is needed as any condition's is, a lone rule's ANDed at the top of the statement.
+  defp rule_needs(_term, _mapping, nil), do: []
+
+  defp rule_needs(term, mapping, policy) do
+    rules =
+      policy.rules
+      |> QueryCompiler.applicable_rules(policy)
+      |> Enum.reject(&QueryCompiler.never_rule?(term.entity, &1, policy))
+
+    unconditional? = Enum.any?(rules, &(&1.predicates == [] and &1.to == nil and &1.via == nil))
+
+    if unconditional? or rules == [] do
+      []
+    else
+      group_needs(term, rules, mapping) ++ rules_deeper_needs(term.entity, rules, mapping)
+    end
+  end
+
+  defp group_needs(term, rules, mapping) do
+    if Enum.all?(rules, &servable_rule?(&1, term.entity, mapping)) do
+      Enum.flat_map(rules, fn rule ->
+        rule_term = %{term | filter: rule.predicates, sort: [], take: nil, cardinality: :set}
+
+        level_needs(rule_term, nil, mapping)
+      end)
+    else
+      []
+    end
+  end
+
+  defp rules_deeper_needs(entity_type, rules, mapping) do
+    context = %{mapping: mapping, outer: []}
+    top? = match?([_rule], rules)
+
+    Enum.flat_map(rules, &clause_level_needs(&1.predicates, entity_type, top?, context))
+  end
+
+  defp servable_rule?(rule, entity_type, mapping) do
+    entity_mapping = Map.fetch!(mapping, entity_type)
+    scope = level_scope(entity_mapping, false)
+
+    rule.predicates
+    |> paths(scope)
+    |> Enum.any?(&(&1 != []))
   end
 
   # The needs of one level of a statement - the queried row's, or a related table's a subquery
@@ -107,15 +177,7 @@ defmodule Hologram.DB.IndexPlan do
   # id.
   defp level_needs(term, link, mapping) do
     entity_mapping = Map.fetch!(mapping, term.entity)
-    unique_columns = unique_columns(entity_mapping)
-
-    scope = %{
-      entity_mapping: entity_mapping,
-      leading_unique_columns: leading_unique_columns(entity_mapping),
-      linked?: link != nil,
-      raw_keys: raw_keys(entity_mapping, unique_columns),
-      unique_columns: unique_columns
-    }
+    scope = level_scope(entity_mapping, link != nil)
 
     linked = fn path -> if link, do: [{:eq, link} | path], else: path end
 
@@ -135,6 +197,18 @@ defmodule Hologram.DB.IndexPlan do
     |> Enum.reject(fn {path, _order} -> key_served?(path, entity_mapping) end)
     |> Enum.map(fn {path, order} -> path_need(path, order, scope) end)
     |> Enum.reject(&empty_need?/1)
+  end
+
+  defp level_scope(entity_mapping, linked?) do
+    unique_columns = unique_columns(entity_mapping)
+
+    %{
+      entity_mapping: entity_mapping,
+      leading_unique_columns: leading_unique_columns(entity_mapping),
+      linked?: linked?,
+      raw_keys: raw_keys(entity_mapping, unique_columns),
+      unique_columns: unique_columns
+    }
   end
 
   # The needs of the related tables a statement's subqueries read: its quantifiers', the counts and
@@ -473,7 +547,7 @@ defmodule Hologram.DB.IndexPlan do
   # nil is the IS NULL alone.
   defp spell_out_membership({name, :in, values} = clause, scope)
        when is_atom(name) and is_list(values) do
-    column = own_column(scope.entity_mapping, name)
+    column = QueryCompiler.name_column(scope.entity_mapping, name)
 
     if column != nil and nil in values do
       case Enum.reject(values, &is_nil/1) do
@@ -565,7 +639,7 @@ defmodule Hologram.DB.IndexPlan do
 
   @spec conjunct(Query.clause(), %{atom => any}) :: conjunct | nil
   defp conjunct({name, operator, operand}, scope) when is_atom(name) do
-    case own_column(scope.entity_mapping, name) do
+    case QueryCompiler.name_column(scope.entity_mapping, name) do
       nil -> nil
       column -> column_conjunct(column, operator, operand, scope)
     end
@@ -669,26 +743,10 @@ defmodule Hologram.DB.IndexPlan do
   # The column an ordering entry sorts by from an index, or nil when no index can: a placeholder,
   # or a derived value, which no column holds.
   defp order_column(name, scope) when is_atom(name) do
-    own_column(scope.entity_mapping, name)
+    QueryCompiler.name_column(scope.entity_mapping, name)
   end
 
   defp order_column(_name, _scope), do: nil
-
-  # The column a name of the row reads, as the query compiler resolves it: a declared attribute, a
-  # to-one's reference field, or a system column. A derived field's name is none of these - the
-  # entity validator refuses a field colliding with another - so it reads no column.
-  defp own_column(%{columns: columns}, name) do
-    column_name = Atom.to_string(name)
-
-    Enum.find(columns, fn column ->
-      case column.source do
-        {:attribute, attribute_name} -> attribute_name == name
-        {:relationship, relationship_name} -> "#{relationship_name}_id" == column_name
-        :system -> column.name == column_name
-        _other_source -> false
-      end
-    end)
-  end
 
   # The sort key of each string a unique index holds raw, by the raw column's name.
   defp raw_keys(entity_mapping, unique_columns) do

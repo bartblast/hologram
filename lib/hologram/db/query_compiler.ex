@@ -27,6 +27,19 @@ defmodule Hologram.DB.QueryCompiler do
   }
 
   @doc """
+  Returns the read rules a statement compiled with the given policy applies: all of them for a
+  signed-in session, and for an anonymous one (`anonymous?: true`) what remains once everything
+  naming the acting user or a role is folded away - a rule asking only that is dropped, and one
+  holding it in a disjunction keeps the alternatives that ask nothing of the user. An anonymous
+  statement keeps what nobody can satisfy out of the statement rather than binding a nil
+  placeholder - at every nesting level, delegated policies included.
+  """
+  @spec applicable_rules(list(%{atom => any}), %{atom => any}) :: list(%{atom => any})
+  def applicable_rules(rules, %{anonymous?: true}), do: Enum.flat_map(rules, &anonymous_rule/1)
+
+  def applicable_rules(rules, _policy), do: rules
+
+  @doc """
   Compiles the given normalized query term into a SQL statement using the given
   physical name mapping.
 
@@ -199,6 +212,53 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   @doc """
+  Returns the column of the given entity mapping a name of its row reads - a declared attribute, a
+  to-one's reference field (`<relationship>_id`) or a system column - or nil when it reads none,
+  as a derived field's name does.
+  """
+  @spec name_column(%{atom => any}, atom) :: %{atom => any} | nil
+  def name_column(%{columns: columns}, name) do
+    column_name = Atom.to_string(name)
+
+    Enum.find(columns, fn column ->
+      case column.source do
+        {:attribute, attribute_name} -> attribute_name == name
+        {:relationship, relationship_name} -> "#{relationship_name}_id" == column_name
+        :system -> column.name == column_name
+        _other_source -> false
+      end
+    end)
+  end
+
+  @doc """
+  Returns whether the given read rule of the given entity type can never hold for a statement
+  read with the given policy's anonymity, so the statement leaves it out of its rules: a
+  delegation whose related type grants nothing - no rule for the delegated operation, none left
+  once folded for nobody, or only rules that never hold themselves. A rule delegating to a related
+  type whose rules ask nothing still holds wherever its chain leads to a row.
+  """
+  @spec never_rule?(module, %{atom => any}, %{atom => any}) :: boolean
+  def never_rule?(entity_type, %{via: {operation, relationship_names}} = rule, policy) do
+    target_rules =
+      entity_type
+      |> Entity.path_target(relationship_names)
+      |> Policy.build()
+      |> Map.get(operation, [])
+
+    never_rule?(entity_type, %{rule | via: {operation, relationship_names, target_rules}}, policy)
+  end
+
+  def never_rule?(entity_type, %{via: {_operation, relationship_names, target_rules}}, policy) do
+    target_type = Entity.path_target(entity_type, relationship_names)
+
+    target_rules
+    |> applicable_rules(policy)
+    |> Enum.all?(&never_rule?(target_type, &1, policy))
+  end
+
+  def never_rule?(_entity_type, _rule, _policy), do: false
+
+  @doc """
   Compiles the statement deciding, for the rows of the given entity type with the given ids, which
   of the given users may read each one, and returning each readable row's current values.
 
@@ -358,12 +418,6 @@ defmodule Hologram.DB.QueryCompiler do
       {:ok, clauses} -> [%{rule | predicates: clauses}]
     end
   end
-
-  # An anonymous statement keeps what nobody can satisfy out of the statement rather than binding
-  # a nil placeholder - at every nesting level, delegated policies included.
-  defp applicable_rules(rules, %{anonymous?: true}), do: Enum.flat_map(rules, &anonymous_rule/1)
-
-  defp applicable_rules(rules, _context), do: rules
 
   # Bind slots inside an ARRAY constructor carry no type context of their own -
   # without the cast Postgres resolves them to text.
@@ -2036,18 +2090,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp fold_term(term, :loose), do: SortKey.fold(term)
 
-  defp fetch_column!(%{columns: columns}, name) do
-    column_name = Atom.to_string(name)
-
-    Enum.find(columns, fn column ->
-      case column.source do
-        {:attribute, attribute_name} -> attribute_name == name
-        {:relationship, relationship_name} -> "#{relationship_name}_id" == column_name
-        :system -> column.name == column_name
-        _other_source -> false
-      end
-    end)
-  end
+  defp fetch_column!(entity_mapping, name), do: name_column(entity_mapping, name)
 
   # Membership of a string of the row asks its sort key too, the way equality does - each value's
   # key in a list of its own, bound before the values.

@@ -5,6 +5,7 @@ defmodule Hologram.DB.IndexPlanTest do
   import Hologram.DB.IndexPlan
 
   alias Hologram.DB.Mapper
+  alias Hologram.Policy
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -24,6 +25,8 @@ defmodule Hologram.DB.IndexPlanTest do
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module40
   alias Hologram.Test.Fixtures.Entity.Module41
+  alias Hologram.Test.Fixtures.Entity.Module50
+  alias Hologram.Test.Fixtures.Entity.Module51
   alias Hologram.Test.Fixtures.Entity.Module52
   alias Hologram.Test.Fixtures.Entity.Module54
   alias Hologram.Test.Fixtures.Entity.Module55
@@ -825,6 +828,194 @@ defmodule Hologram.DB.IndexPlanTest do
         |> count()
 
       assert term_needs(term) == []
+    end
+  end
+
+  describe "needs/3 with read rules" do
+    defp rule(entity_type, predicates, to \\ nil) do
+      %{predicates: Stage.predicate_triples!(entity_type, predicates), to: to, via: nil}
+    end
+
+    defp rule_needs(term, rules, anonymous? \\ false) do
+      term
+      |> Stage.normalize()
+      |> needs(@mapping, %{anonymous?: anonymous?, rules: rules})
+    end
+
+    @owner "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"
+
+    test "needs what a rule's predicates fix" do
+      rules = [rule(Module2, a: true)]
+
+      assert rule_needs(Module2, rules) == [need(@module2, ["a"])]
+    end
+
+    test "needs each rule of the group beside the filter's need, crossing none" do
+      rules = [rule(Module2, a: true), rule(Module2, c: "x")]
+
+      assert rule_needs(filter(Module2, b == 1), rules) == [
+               need(@module2, ["b"]),
+               need(@module2, ["a"]),
+               need(@module2, ["c_$sort"])
+             ]
+    end
+
+    test "needs a column the acting user fixes" do
+      rules = [rule(Module3, c_id: {:actor})]
+
+      assert rule_needs(Module3, rules) == [need(@module3, ["c_id"])]
+    end
+
+    test "needs nothing of the rules when one asks only for a role" do
+      rules = [rule(Module2, a: true), rule(Module2, [], [{:own, [:member]}])]
+
+      assert rule_needs(filter(Module2, b == 1), rules) == [need(@module2, ["b"])]
+    end
+
+    test "needs the predicates of a rule asking for a role beside them" do
+      rules = [rule(Module2, [a: true], [{:own, [:member]}]), rule(Module2, c: "x")]
+
+      assert rule_needs(Module2, rules) == [need(@module2, ["a"]), need(@module2, ["c_$sort"])]
+    end
+
+    test "needs what's left of the rules for an anonymous session" do
+      rules = [
+        rule(Module3, c_id: {:actor}),
+        rule(Module3, [], [{:own, [:member]}]),
+        rule(Module3, b_id: @owner)
+      ]
+
+      assert rule_needs(Module3, rules) == []
+      assert rule_needs(Module3, rules, true) == [need(@module3, ["b_id"])]
+    end
+
+    test "needs nothing of rules a rule asking nothing drops, or rules nobody satisfies" do
+      assert rule_needs(Module2, [rule(Module2, a: true), rule(Module2, [])]) == []
+      assert rule_needs(Module3, [rule(Module3, c_id: {:actor})], true) == []
+    end
+
+    test "needs each arm of an OR in a rule" do
+      rules = [rule(Module2, or: [[a: true], [b: 1]])]
+
+      assert rule_needs(Module2, rules) == [need(@module2, ["a"]), need(@module2, ["b"])]
+    end
+
+    test "needs the related rows a rule's quantifier reads, a lone rule's at the top" do
+      quantifier = Stage.predicate_triples!(Module26, any: {[:messages], [position: 1]})
+      quantified = %{predicates: quantifier, to: nil, via: nil}
+
+      assert rule_needs(Module26, [quantified]) == [
+               need(@module28, ["channel_id", "position"]),
+               need(@module28, ["position"])
+             ]
+
+      assert rule_needs(Module26, [quantified, rule(Module26, name: "x")]) == [
+               need(@module28, ["channel_id", "position"])
+             ]
+    end
+
+    test "leaves out a rule delegating to a type that grants nothing" do
+      never = %{predicates: [], to: nil, via: {:read, [:b], []}}
+
+      assert rule_needs(Module3, [never, rule(Module3, b_id: @owner)]) == [
+               need(@module3, ["b_id"])
+             ]
+    end
+
+    test "leaves out a declared delegation to a type declaring no rule" do
+      mapping = Mapper.derive!([Module50, Module51], [])
+      [delegation] = Policy.build(Module51).read
+      rules = [delegation, rule(Module51, parent_id: @owner)]
+
+      term = Stage.normalize(Module51)
+
+      assert needs(term, mapping, %{rules: rules}) == [
+               need("test_fixtures_entity_module51", ["parent_id"])
+             ]
+    end
+
+    test "leaves out a delegation an anonymous session folds every target rule of away" do
+      target_rules = [rule(Module2, [], [{:own, [:member]}]), rule(Module2, id: {:actor})]
+      delegation = %{predicates: [], to: nil, via: {:read, [:b], target_rules}}
+      rules = [delegation, rule(Module3, b_id: @owner)]
+
+      assert rule_needs(Module3, rules) == []
+      assert rule_needs(Module3, rules, true) == [need(@module3, ["b_id"])]
+    end
+
+    test "leaves out a delegation whose target's only rule never holds" do
+      nested = %{predicates: [], to: nil, via: {:read, [:topic], []}}
+      delegation = %{predicates: [], to: nil, via: {:read, [:channel], [nested]}}
+
+      assert rule_needs(Module28, [delegation, rule(Module28, position: 1)]) == [
+               need(@module28, ["position"])
+             ]
+    end
+
+    test "needs nothing of the rules when one asks only for a delegation that holds" do
+      holding = %{predicates: [], to: nil, via: {:read, [:b], [rule(Module2, [])]}}
+
+      assert rule_needs(Module3, [holding, rule(Module3, b_id: @owner)]) == []
+    end
+
+    test "needs nothing of the rules' quantifiers when a rule asking nothing drops the group" do
+      quantifier = Stage.predicate_triples!(Module26, any: {[:messages], [position: 1]})
+      rules = [%{predicates: quantifier, to: nil, via: nil}, rule(Module26, [])]
+
+      assert rule_needs(Module26, rules) == []
+    end
+
+    test "needs nothing of an empty rule list, which reads no rows" do
+      assert rule_needs(Module2, []) == []
+    end
+
+    test "needs no rule for a key that serves it, and the other rules of the group" do
+      rules = [rule(Module2, id: @owner), rule(Module2, a: true)]
+
+      assert rule_needs(Module2, rules) == [need(@module2, ["a"])]
+    end
+
+    test "orders nothing after a rule's conditions, though the filter's need does" do
+      query =
+        Module4
+        |> filter(c == :x)
+        |> sort(b)
+        |> take(5)
+
+      assert rule_needs(query, [rule(Module4, d: 1.0)]) == [
+               need(@module4, ["c"], nil, ["b"]),
+               need(@module4, ["d"])
+             ]
+    end
+
+    test "needs what a derived field a rule reads reads" do
+      put_derived_definitions([Module37, Module38])
+      mapping = Mapper.derive!([Module1, Module2, Module37, Module38], [])
+
+      term = Stage.normalize(Module37)
+      rules = [rule(Module37, pinned_count: {:>, 3})]
+
+      assert needs(term, mapping, %{rules: rules}) == [need(@module38, ["channel_id", "pinned"])]
+    end
+
+    test "needs none of the read rules of an included type" do
+      put_derived_definitions([Module34, Module39, Module40])
+
+      mapping =
+        Mapper.derive!(
+          [Module1, Module2, Module32, Module33, Module34, Module39, Module40, Module41],
+          []
+        )
+
+      term =
+        Module40
+        |> include(notes)
+        |> Stage.normalize()
+
+      assert needs(term, mapping, %{rules: [rule(Module40, name: "x")]}) == [
+               need("test_fixtures_entity_module41", ["team_id"]),
+               need("test_fixtures_entity_module40", ["name_$sort"])
+             ]
     end
   end
 end
