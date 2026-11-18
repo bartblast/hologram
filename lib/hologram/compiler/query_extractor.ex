@@ -1360,7 +1360,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp filtered_names(_variant), do: nil
 
-  defp filter_stage_names({:filter, [predicates], line}) when is_list(predicates) do
+  defp filter_stage_names({:filter, [predicates | _hints], line}) when is_list(predicates) do
     names =
       predicates
       |> Stage.written_names()
