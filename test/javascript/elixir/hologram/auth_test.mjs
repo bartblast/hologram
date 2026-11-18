@@ -3089,17 +3089,34 @@ describe("Elixir_Hologram_Auth", () => {
   // A case this side alone has - the reference always holds every type. An entry absent from a
   // build is a type declaring NO policy (the build ships an entry for every policied type, whether
   // a page reaches it or not), and a policy-less type is denied by the server's own default - so
-  // no is the server's answer, not a fallback.
+  // no is the server's answer, not a fallback. An update list naming no field raises instead, as
+  // the server refuses it whatever the type declares. An update naming a field answers no, since
+  // telling an unknown field from a real one takes the entry.
   describe("a type the model does not carry", () => {
-    it("denies without asking the model for an entry", () => {
-      const unmodelled = Type.map([
-        [Type.atom("__struct__"), Type.alias("MyApp.Unpolicied")],
-        [Type.atom("id"), Type.bitstring(DOC)],
-      ]);
+    const unmodelled = Type.map([
+      [Type.atom("__struct__"), Type.alias("MyApp.Unpolicied")],
+      [Type.atom("id"), Type.bitstring(DOC)],
+    ]);
 
+    it("denies without asking the model for an entry", () => {
       assert.deepStrictEqual(
         can(Type.nil(), Type.atom("read"), unmodelled),
         Type.boolean(false),
+      );
+    });
+
+    it("denies an update ask naming a field", () => {
+      assert.deepStrictEqual(
+        can(Type.nil(), updateOf(Type.atom("title")), unmodelled),
+        Type.boolean(false),
+      );
+    });
+
+    it("raises on an update list naming no field", () => {
+      assertBoxedError(
+        () => can(Type.nil(), updateOf(Type.list([])), unmodelled),
+        "Hologram.MisuseError",
+        "unknown operation {:update, []} for MyApp.Unpolicied - {:update, fields} names at least one field",
       );
     });
   });

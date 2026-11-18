@@ -1090,8 +1090,14 @@ const Elixir_Hologram_Auth = {
     // An entry absent from a build is a type that declares NO policy - the build ships an entry
     // for every policied type, whether a page reaches it or not, precisely so this read can mean
     // that. And a policy-less type is denied by the server's own default, so no is not a fallback
-    // here: it is the server's answer.
+    // here: it is the server's answer. An update list naming no field is refused whatever the
+    // type declares, so it raises before a missing entry answers no. An unknown field can't be told
+    // from a real one without the entry, so an update naming one answers no.
     const entry = globalThis.Hologram.sync?.model?.[entityType];
+
+    if (fields !== null && fields.length === 0) {
+      Model.validateOperation(entityType, operation);
+    }
 
     if (!entry) {
       return Type.boolean(false);
