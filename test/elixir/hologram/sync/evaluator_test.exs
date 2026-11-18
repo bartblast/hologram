@@ -268,13 +268,18 @@ defmodule Hologram.Sync.EvaluatorTest do
       create("first")
 
       staying = spawn(fn -> Process.sleep(:infinity) end)
-      start_evaluator!(subscribers: [self(), staying])
+      evaluator = start_evaluator!(subscribers: [self(), staying])
 
       assert unsubscribe(@window_id, self()) == :ok
 
       round(@window_id, transactions())
-      wait_for_result_store_write()
 
+      # Subscribers hear of a round only after its result is stored, so the store can't say the
+      # round is over - the evaluator can, once it answers, since it handles what this process sent
+      # it in order.
+      :sys.get_state(evaluator)
+
+      assert ResultStore.versions(@window_id) == [1]
       refute_received {:round, @window_id, _version, _transactions, _place}
     end
 
@@ -298,6 +303,11 @@ defmodule Hologram.Sync.EvaluatorTest do
       stranger = spawn(fn -> Process.sleep(:infinity) end)
 
       assert unsubscribe(@window_id, stranger) == :ok
+
+      # Asked without waiting for an answer, so the evaluator is waited for before it is looked at -
+      # one that stopped makes the wait itself fail.
+      :sys.get_state(evaluator)
+
       assert Process.alive?(evaluator)
     end
 
