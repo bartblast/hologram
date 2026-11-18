@@ -81,6 +81,8 @@ defmodule Hologram.DB.SimpleConnection do
   defdelegate format_status(opts, status), to: SimpleConnection
 
   @impl :gen_statem
+  @spec handle_event(:gen_statem.event_type(), term, term, term) ::
+          :gen_statem.event_handler_result(term)
   def handle_event(:internal, {:connect, _info} = event, state_name, state) do
     case Protocol.rescue_peer_reset(fn ->
            SimpleConnection.handle_event(:internal, event, state_name, state)
@@ -98,6 +100,7 @@ defmodule Hologram.DB.SimpleConnection do
   # handle_event/4 above, so it's asked for an asynchronous start, whose connect this module then
   # runs right away, mapping the result the way Postgrex.SimpleConnection.init/1 does.
   @impl :gen_statem
+  @spec init({module, term, keyword}) :: :gen_statem.init_result(term)
   def init({module, args, opts}) do
     sync_connect? = opts[:sync_connect] not in [nil, false]
     async_start = SimpleConnection.init({module, args, Keyword.put(opts, :sync_connect, false)})
