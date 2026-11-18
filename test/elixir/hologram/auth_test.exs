@@ -400,19 +400,25 @@ defmodule Hologram.AuthTest do
       refute can?(other_id, {:update, :archived}, channel)
     end
 
+    # The except line holds on an open channel and grants what it covers, but leaves :archived out,
+    # so only the line covering the whole row can grant that.
     test "answers a field an except line leaves out through the other lines" do
-      user_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
-      channel = %Module38{archived: true, name: "open"}
+      owner_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
+      other_id = "018f4571-a1b2-7c3d-8e4f-000000000002"
+      channel = %Module38{archived: true, name: "open", owner_id: owner_id}
 
-      assert can?(user_id, {:update, :sent_count}, channel)
-      refute can?(user_id, {:update, :owner}, channel)
+      assert can?(other_id, {:update, :sent_count}, channel)
+      assert can?(owner_id, {:update, :archived}, channel)
+      refute can?(other_id, {:update, :archived}, channel)
     end
 
+    # No line that holds here covers both :topic and :name, so the list is granted only by two
+    # lines together.
     test "answers a list of fields when some holding line covers each" do
       user_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
-      channel = %Module38{archived: false, name: "open"}
+      channel = %Module38{archived: false, name: "general", owner_id: user_id}
 
-      assert can?(user_id, {:update, [:topic, :sent_count]}, channel)
+      assert can?(user_id, {:update, [:topic, :name]}, channel)
       refute can?(user_id, {:update, [:topic, :owner]}, channel)
     end
 
