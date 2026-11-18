@@ -36,6 +36,10 @@ import SyncStream from "./sync_stream.mjs";
 // lands ON something the tab has not taken up yet - see `#deliver`.
 const HELD_UNTIL_READY = new Set(["answered", "frame", "state"]);
 
+// What only the tab that leads posts, so what a tab that leads hears of it is the tab before it
+// still speaking - see `#deliver`.
+const SPOKEN_BY_THE_LEADER = new Set(["frame", "state"]);
+
 export default class Tabs {
   static leader = true;
 
@@ -421,7 +425,41 @@ export default class Tabs {
   // the adopt passes over what it already holds), a tab asking for the group's state (which can be
   // answered at any time), and a storage failure, which is the one message a tab should act on
   // before it has finished anything else.
+  //
+  // And TWO KINDS A TAB THAT LEADS PASSES OVER: a frame and the group's state. Only the tab that
+  // leads posts either, so one that reaches the tab leading now was posted by the tab that led
+  // before it, and arrived after the lead did - a message and the lock's grant are separate
+  // tasks, in no set order. Taken, a frame would move the place this tab greets the server from
+  // past the store its lead brought into step with its memory (see #lead), and the server would
+  // never send those rows for the store to hold; a state would hand back a place this tab gave up
+  // to start over. Passed over, the server sends the rows again from the place this tab holds, and
+  // the rules and any stop with them. (A tab handed the lead while starting holds them instead,
+  // and takes them before it takes the lead, which then starts from the place they left it at -
+  // see ready().)
+  //
+  // Except a frame starting over because somebody else signed in, which the server does not send
+  // again: it is said once, to the stream it happened on. (Any other start-over the server says
+  // again to this tab's own greeting, or the store the tab that led cleared says it - see #lead.)
+  // So it is taken, and this tab starts over as the tab that led would have gone on to: the store
+  // cleared, in case that tab's clear was lost as it closed, and a stream opened that greets from
+  // nowhere - here, or by the lead itself when this arrives while it is being taken.
   static #deliver(message) {
+    if (Tabs.#ready && Tabs.leader && SPOKEN_BY_THE_LEADER.has(message.kind)) {
+      if (
+        message.event === "sync_resync" &&
+        message.frame.reason === "identity"
+      ) {
+        Tabs.#onMessage(message);
+        Durability.clear();
+
+        if (Sse.isStarted && !Tabs.takingLead) {
+          Sse.reconnect();
+        }
+      }
+
+      return;
+    }
+
     if (!Tabs.#ready && HELD_UNTIL_READY.has(message.kind)) {
       Tabs.#held.push(message);
 

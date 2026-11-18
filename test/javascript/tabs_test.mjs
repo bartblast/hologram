@@ -557,6 +557,211 @@ describe("Tabs", () => {
       assert.isFalse(led.called);
     });
 
+    // The tab that led posted them, and they reached this tab after the lead did. Taken, a frame
+    // would move the place this tab greets the server from past what the store holds.
+    describe("what the tab before it still says", () => {
+      const deltas = {
+        event: "sync_deltas",
+        frame: {applied_seq: 0, cursor: "place-2", deltas: []},
+        kind: "frame",
+      };
+
+      const resync = {
+        event: "sync_resync",
+        frame: {reason: "identity"},
+        kind: "frame",
+      };
+
+      const state = {
+        completeness: {all: true, types: []},
+        cursor: "place-2",
+        kind: "state",
+      };
+
+      const answered = {answer: "ok", kind: "answered", seq: 3};
+      const sealed = {kind: "sealed"};
+
+      // Says the messages from another tab, with a sealed batch after them as the barrier.
+      const say = (group, messages) => {
+        const other = sibling(group);
+
+        for (const message of [...messages, sealed]) {
+          other.postMessage(message);
+        }
+      };
+
+      // What this tab acts on, and a promise that the barrier say() posts last is in - so whatever
+      // it took of the rest it has taken by then.
+      const hearing = (receive = () => {}) => {
+        const seen = [];
+
+        let arrived;
+
+        const hasHeard = new Promise((resolve) => {
+          arrived = resolve;
+        });
+
+        const onMessage = (message) => {
+          seen.push(message);
+
+          if (message.kind === "sealed") {
+            arrived();
+          } else {
+            receive(message);
+          }
+        };
+
+        return {hasHeard, onMessage, seen};
+      };
+
+      const leadReady = async (group, handlers) => {
+        const release = await holdLeaderLock(group);
+
+        await Tabs.join(group, handlers);
+
+        Tabs.ready();
+
+        release();
+        await waitForEventLoop();
+
+        assert.isTrue(Tabs.leader);
+      };
+
+      it("passes over a frame and the group's state once it has taken the lead", async () => {
+        SyncStream.syncCursor = "place-1";
+
+        const group = nextGroup();
+        const heard = hearing();
+
+        await leadReady(group, heard);
+
+        say(group, [deltas, state, answered]);
+        await heard.hasHeard;
+
+        assert.deepStrictEqual(heard.seen, [answered, sealed]);
+      });
+
+      it("passes them over as the first tab of the group", async () => {
+        const group = nextGroup();
+        const heard = hearing();
+
+        assert.isTrue(await Tabs.join(group, heard));
+
+        Tabs.ready();
+
+        say(group, [deltas, state, answered]);
+        await heard.hasHeard;
+
+        assert.deepStrictEqual(heard.seen, [answered, sealed]);
+      });
+
+      it("takes them while it follows", async () => {
+        const group = nextGroup();
+        const heard = hearing();
+
+        await holdLeaderLock(group);
+        await Tabs.join(group, heard);
+
+        Tabs.ready();
+
+        say(group, [deltas, state, answered]);
+        await heard.hasHeard;
+
+        assert.deepStrictEqual(heard.seen, [deltas, state, answered, sealed]);
+      });
+
+      // The window the repair leaves open: the place it writes down is the one this tab greets from.
+      it("keeps the place it repairs the store to while the repair is under way", async () => {
+        SyncStream.syncCursor = "place-1";
+
+        sinon.stub(SyncStream, "scheduleRender");
+
+        let finishRepair;
+
+        repairing.returns(new Promise((resolve) => (finishRepair = resolve)));
+
+        const group = nextGroup();
+        const heard = hearing(Tabs.receive);
+
+        await leadReady(group, heard);
+
+        assert.isTrue(Tabs.takingLead);
+
+        say(group, [deltas]);
+        await heard.hasHeard;
+
+        finishRepair(false);
+        await waitForEventLoop();
+
+        assert.equal(SyncStream.syncCursor, "place-1");
+      });
+
+      // Somebody else signing in is said once, to the stream it happened on.
+      it("takes a frame starting over, and starts over itself", async () => {
+        const group = nextGroup();
+        const heard = hearing();
+
+        await leadReady(group, heard);
+
+        clearing.resetHistory();
+        reconnecting.resetHistory();
+
+        say(group, [resync]);
+        await heard.hasHeard;
+
+        assert.deepStrictEqual(heard.seen, [resync, sealed]);
+
+        sinon.assert.calledOnce(clearing);
+        sinon.assert.calledOnce(reconnecting);
+      });
+
+      // The server says any other start-over again, to this tab's own greeting.
+      it("passes over a frame starting over for any other reason", async () => {
+        const group = nextGroup();
+        const heard = hearing();
+
+        await leadReady(group, heard);
+
+        clearing.resetHistory();
+        reconnecting.resetHistory();
+
+        say(group, [{...resync, frame: {reason: "gap"}}]);
+        await heard.hasHeard;
+
+        assert.deepStrictEqual(heard.seen, [sealed]);
+
+        sinon.assert.notCalled(clearing);
+        sinon.assert.notCalled(reconnecting);
+      });
+
+      // The lead being taken opens the stream once it has settled, from the place this leaves.
+      it("leaves the stream to a lead still being taken when a frame starting over arrives", async () => {
+        SyncStream.syncCursor = "place-1";
+
+        let finishRepair;
+
+        repairing.returns(new Promise((resolve) => (finishRepair = resolve)));
+
+        const group = nextGroup();
+        const heard = hearing();
+
+        await leadReady(group, heard);
+
+        reconnecting.resetHistory();
+
+        say(group, [resync]);
+        await heard.hasHeard;
+
+        sinon.assert.calledOnce(clearing);
+        sinon.assert.notCalled(reconnecting);
+
+        finishRepair(false);
+        await waitForEventLoop();
+
+        sinon.assert.calledOnce(reconnecting);
+      });
+    });
+
     describe("what it held while starting", () => {
       const answered = {answer: "ok", kind: "answered", seq: 3};
       const frame = {
@@ -1402,7 +1607,9 @@ describe("Tabs", () => {
       assert.deepStrictEqual(seen, [barrier, frame(1), frame(2)]);
     });
 
+    // A follower's: the tab that leads passes the frames it hears over.
     it("hands a frame straight through once the tab is ready", async () => {
+      const group = nextGroup();
       const seen = [];
 
       let arrived;
@@ -1411,7 +1618,9 @@ describe("Tabs", () => {
         arrived = resolve;
       });
 
-      await Tabs.join(nextGroup(), {
+      await holdLeaderLock(group);
+
+      await Tabs.join(group, {
         onLead: () => {},
         onMessage: (message) => {
           seen.push(message);
