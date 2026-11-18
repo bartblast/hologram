@@ -3,10 +3,12 @@ defmodule Hologram.Migration.RefusalTest do
   # is refused before the DDL it cannot follow runs, and the database is left exactly as it
   # was.
   #
-  # Three things are asserted for every one of them, because a refusal that raised while
+  # Four things are asserted for every one of them, because a refusal that raised while
   # leaving something behind would satisfy the first alone: the apply raises with the
   # message the operator is meant to act on, the version stays unapplied so the next deploy
-  # retries the same file, and the rows are byte-for-byte what they were.
+  # retries the same file, the schema is what it was - a table, column or index the file
+  # created, renamed or dropped before the refused op went back with it - and the rows are
+  # byte-for-byte what they were.
   #
   # Only the scratch tier can make that last claim. Under the sandbox the rows a test wrote
   # and the rows a refusal spared live in the same never-committed transaction, so "the
@@ -38,6 +40,7 @@ defmodule Hologram.Migration.RefusalTest do
   import Hologram.Migrator
 
   alias Hologram.DB.Connection
+  alias Hologram.DB.Introspection
   alias Hologram.Entity.Model
 
   @context %{
@@ -572,12 +575,14 @@ defmodule Hologram.Migration.RefusalTest do
     end
   end
 
-  # The three claims every refusal owes, asserted together so none can be made without the
-  # others: it raises what the operator is meant to read, it applies nothing, and it moves
-  # no data.
+  # The claims every refusal owes, asserted together so none can be made without the
+  # others: it raises what the operator is meant to read, it applies nothing, it changes no
+  # schema, and it moves no data. The schema goes before the rows, so a table left renamed
+  # reports as a schema difference rather than a failed read.
   defp assert_refused(scratch, create, first_model, refused, expected_msg) do
     route(scratch, fn ->
       rows_before = task_rows()
+      schema_before = Introspection.schema()
       full_model = Model.fold(first_model, refused.ops)
 
       assert_error RuntimeError, expected_msg, fn ->
@@ -585,6 +590,7 @@ defmodule Hologram.Migration.RefusalTest do
       end
 
       assert applied_versions_list() == ["20260813091522"]
+      assert Introspection.schema() == schema_before
       assert task_rows() == rows_before
     end)
   end
