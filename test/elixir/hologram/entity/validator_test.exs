@@ -989,6 +989,32 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects an improper field list" do
+      expected_msg =
+        "invalid only option [:topic | :tail] for allow :update in Hologram.Entity.ValidatorTest.ImproperFieldsFixture - the only option must be a non-empty list of field names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule ImproperFieldsFixture do
+          use Hologram.Entity
+
+          allow :update, only: [:topic | :tail]
+        end
+      end
+    end
+
+    test "describes a line with an improper field list without its fields" do
+      expected_msg =
+        "invalid via option nil for allow :update in Hologram.Entity.ValidatorTest.ImproperFieldsNilViaFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule ImproperFieldsNilViaFixture do
+          use Hologram.Entity
+
+          allow :update, via: nil, only: [:topic | :tail]
+        end
+      end
+    end
+
     test "rejects a nil field option" do
       expected_msg =
         "invalid only option nil for allow :update in Hologram.Entity.ValidatorTest.NilOnlyFixture - omit the option instead"

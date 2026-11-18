@@ -1853,8 +1853,8 @@ defmodule Hologram.Entity.Validator do
 
   defp fields_suffix(spec) do
     with [key] <- Enum.filter([:only, :except], &Keyword.has_key?(spec, &1)),
-         [_first | _rest] = fields <- Keyword.fetch!(spec, key),
-         true <- Enum.all?(fields, &is_atom/1) do
+         fields = Keyword.fetch!(spec, key),
+         true <- field_list?(fields) do
       ", #{key}: #{inspect(fields)}"
     else
       _other -> ""
@@ -1952,8 +1952,15 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  # A non-empty proper list of atoms. Proper is checked first: enumerating an improper list raises
+  # at its tail.
+  defp field_list?(fields) do
+    is_list(fields) and fields != [] and not List.improper?(fields) and
+      Enum.all?(fields, &is_atom/1)
+  end
+
   defp validate_fields_opt_value!(module, line, key, fields) do
-    if fields == [] or not is_list(fields) or not Enum.all?(fields, &is_atom/1) do
+    if not field_list?(fields) do
       raise Hologram.CompileError,
         message:
           "invalid #{key} option #{inspect(fields)} for #{line} in #{inspect(module)} - the #{key} option must be a non-empty list of field names"
