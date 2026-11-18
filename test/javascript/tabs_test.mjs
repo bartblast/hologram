@@ -697,14 +697,23 @@ describe("Tabs", () => {
       });
 
       // Somebody else signing in is said once, to the stream it happened on.
+      // Taken for real, so the stream it opens is seen to greet from nowhere.
       it("takes a frame starting over, and starts over itself", async () => {
+        SyncStream.syncCursor = "place-1";
+
+        sinon.stub(Logger, "debug");
+
         const group = nextGroup();
-        const heard = hearing();
+        const heard = hearing(Tabs.receive);
 
         await leadReady(group, heard);
 
         clearing.resetHistory();
         reconnecting.resetHistory();
+
+        let greetedFrom;
+
+        reconnecting.callsFake(() => (greetedFrom = SyncStream.syncCursor));
 
         say(group, [resync]);
         await heard.hasHeard;
@@ -713,6 +722,8 @@ describe("Tabs", () => {
 
         sinon.assert.calledOnce(clearing);
         sinon.assert.calledOnce(reconnecting);
+
+        assert.isNull(greetedFrom);
       });
 
       // The server says any other start-over again, to this tab's own greeting.
@@ -742,12 +753,18 @@ describe("Tabs", () => {
 
         repairing.returns(new Promise((resolve) => (finishRepair = resolve)));
 
+        sinon.stub(Logger, "debug");
+
         const group = nextGroup();
-        const heard = hearing();
+        const heard = hearing(Tabs.receive);
 
         await leadReady(group, heard);
 
         reconnecting.resetHistory();
+
+        let greetedFrom;
+
+        reconnecting.callsFake(() => (greetedFrom = SyncStream.syncCursor));
 
         say(group, [resync]);
         await heard.hasHeard;
@@ -759,6 +776,8 @@ describe("Tabs", () => {
         await waitForEventLoop();
 
         sinon.assert.calledOnce(reconnecting);
+
+        assert.isNull(greetedFrom);
       });
     });
 
