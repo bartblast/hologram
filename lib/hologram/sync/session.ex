@@ -180,6 +180,7 @@ defmodule Hologram.Sync.Session do
       told_verdicts: %{},
       trust_edge: nil,
       types_hash: Keyword.fetch!(opts, :types_hash),
+      unsent: nil,
       versions: %{},
       window_refs: %{}
     }
@@ -1389,16 +1390,33 @@ defmodule Hologram.Sync.Session do
 
   defp send_news(state, news, verdicts, claim), do: send_frames(state, news, verdicts, claim)
 
+  # Only the batch's last frame carries its place. The client keeps each frame's cursor as the frame
+  # lands, so an earlier frame carrying it would have a client cut off after that frame come back
+  # past the rest of the batch, which it would then never get. The others carry none, which leaves
+  # the client where it was: one cut off among them replays the batch. So each frame is held back
+  # until the next one is worked out, and the last until the batch is over (see `flush_frames/1`).
   defp send_frames(state, news, verdicts, claim) do
     news
     |> split_news()
     |> Enum.reduce(state, fn frame_news, acc ->
       frame_deltas = Frame.deltas(frame_news, acc.actor_user_id, verdicts)
 
-      send(acc.client, {:sync_deltas, cursor(acc), frame_deltas, claim})
-
-      remember_verdicts(acc, frame_deltas)
+      acc
+      |> send_unsent(nil)
+      |> Map.put(:unsent, {frame_deltas, claim})
+      |> remember_verdicts(frame_deltas)
     end)
+  end
+
+  # Sends the batch's last frame, with the batch's place.
+  defp flush_frames(state), do: send_unsent(state, cursor(state))
+
+  defp send_unsent(%{unsent: nil} = state, _cursor), do: state
+
+  defp send_unsent(%{unsent: {deltas, claim}} = state, cursor) do
+    send(state.client, {:sync_deltas, cursor, deltas, claim})
+
+    %{state | unsent: nil}
   end
 
   # What one batch tells this client: where it leaves it, how far its own batches are in, what the
@@ -1450,7 +1468,9 @@ defmodule Hologram.Sync.Session do
     # batch of this client's that overtook the part leaves its rows as true as they are.
     reread_trust? = trusts_held?(placed, part)
 
-    Enum.reduce(part.whole_types, told, &reread_type(&1, &2, part.synced_types, reread_trust?))
+    part.whole_types
+    |> Enum.reduce(told, &reread_type(&1, &2, part.synced_types, reread_trust?))
+    |> flush_frames()
   end
 
   defp overtaken?(_told_seq, nil), do: false

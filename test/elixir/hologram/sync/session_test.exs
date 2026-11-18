@@ -3160,6 +3160,27 @@ defmodule Hologram.Sync.SessionTest do
       assert Enum.map(second, & &1.op) == [:put_entity]
     end
 
+    # A client keeps each frame's cursor as it lands, so one cut off after the first frame would
+    # come back past the second if the first claimed the batch's place.
+    test "dates only the last frame of a batch split across frames" do
+      windows(%{})
+      put_app_env(:sync, rows_per_frame: 2)
+
+      start_session!([])
+      await_fill()
+
+      1..3
+      |> Enum.map(&create("row #{&1}"))
+      |> Enum.map(&live_effect(:put_entity, Module2, &1.id, %{"a" => true, "c" => &1.c}))
+      |> route()
+
+      assert_receive {:sync_deltas, first_cursor, _first, _applied_seq}
+      assert_receive {:sync_deltas, last_cursor, _last, _applied_seq}
+
+      assert first_cursor == nil
+      assert last_cursor != nil
+    end
+
     test "tells a batch queued during the fill once the fill is over, dated" do
       task = create("before")
       windows(%{})
@@ -3686,11 +3707,15 @@ defmodule Hologram.Sync.SessionTest do
 
       route([effect], {batch_tx, 0})
 
-      assert_receive {:sync_deltas, _cursor, [%{id: label_id, op: :put_entity}], 8}
+      assert_receive {:sync_deltas, rows_cursor, [%{id: label_id, op: :put_entity}], 8}
       assert label_id == label.id
 
-      assert_receive {:sync_deltas, _cursor, [%{data: data, id: holder_id, op: op}], 7}
+      assert_receive {:sync_deltas, pairs_cursor, [%{data: data, id: holder_id, op: op}], 7}
       assert {op, holder_id, data.target_id} == {:add_relationship, message.id, label.id}
+
+      # The pairs frame is the batch's last, so it alone claims the batch's place.
+      assert rows_cursor == nil
+      assert pairs_cursor != nil
     end
 
     # The type is read again whole after the batch, and the read holds this client's batch 8,
