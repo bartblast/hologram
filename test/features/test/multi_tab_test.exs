@@ -249,4 +249,44 @@ defmodule HologramFeatureTests.MultiTabTest do
 
     assert [%Todo{title: "alpha"}] = await_server_todos(1)
   end
+
+  # A starting tab learns what the group holds two ways: from the store it reads, and from the
+  # frames the leading tab posts once it is listening. A frame stored after its read and posted
+  # before it listened would reach it neither way, so it joins the group before it reads.
+  #
+  # The store block holds the second tab's read, and the leading tab's write of the frame behind
+  # it, for as long as the test wants - so the frame is certainly stored after the read. The second
+  # tab's page is rendered before the row exists, so no row the page carried hides a miss.
+  feature "shows a row sent while a new tab was reading the store", %{session: session} do
+    leading =
+      session
+      |> visit(WriteQueuePage)
+      |> await_local_fill()
+
+    first = tab_handle(leading)
+
+    starting =
+      leading
+      |> block_store()
+      |> open_tab_unmounted(WriteQueuePage)
+
+    second = tab_handle(starting)
+
+    # Long enough for its boot to reach the read of the store, which the block holds. Only a run
+    # without the fix needs it: with it, a frame posted before the tab listened is in the store
+    # it reads, whenever the read starts.
+    Process.sleep(1_000)
+
+    %{title: "alpha"}
+    |> Todo.new()
+    |> DB.create!()
+
+    starting
+    |> focus_tab(first)
+    |> assert_text(css("#todos"), "alpha 0")
+    |> unblock_store()
+    |> focus_tab(second)
+    |> await_page_mount(WriteQueuePage)
+    |> assert_text(css("#todos"), "alpha 0")
+  end
 end
