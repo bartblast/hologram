@@ -2834,11 +2834,13 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "fills a client on a page reaching no window" do
+      task = create("first")
       windows(%{@page => []})
 
       start_session!([])
 
-      assert_receive {:sync_synced, :all, _cursor}
+      assert [%{id: id, op: :put_entity}] = await_fill()
+      assert id == task.id
     end
   end
 
