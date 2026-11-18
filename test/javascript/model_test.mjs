@@ -1003,6 +1003,185 @@ describe("Model", () => {
       assert.equal(Model.unbox(date, "date"), "2026-08-06");
     });
 
+    // Date.to_iso8601/1 pads the year to four digits and puts a minus before a year below 0, so one
+    // day is one spelling on both tiers.
+    it("unboxes a date of any year the way the server spells it", () => {
+      const dateOf = (year) =>
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Date")],
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("month"), Type.integer(3)],
+          [Type.atom("year"), Type.integer(year)],
+        ]);
+
+      assert.equal(Model.unbox(dateOf(-1), "date"), "-0001-03-01");
+      assert.equal(Model.unbox(dateOf(-10000), "date"), "-10000-03-01");
+      assert.equal(Model.unbox(dateOf(0), "date"), "0000-03-01");
+      assert.equal(Model.unbox(dateOf(20250), "date"), "20250-03-01");
+    });
+
+    // The server spells a datetime as the UTC instant it stands for, whatever its zone (the
+    // expected spellings are Hologram.DB.Codec.encode_json/2's for the same structs), so a query
+    // value and a write mean the instant the server means.
+    describe("a datetime outside UTC", () => {
+      const zoned = ({
+        amount = 0,
+        day,
+        hour,
+        minute = 0,
+        month,
+        stdOffset = 0,
+        utcOffset,
+        year,
+      }) =>
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("DateTime")],
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), Type.integer(day)],
+          [Type.atom("hour"), Type.integer(hour)],
+          [
+            Type.atom("microsecond"),
+            Type.tuple([Type.integer(amount), Type.integer(6)]),
+          ],
+          [Type.atom("minute"), Type.integer(minute)],
+          [Type.atom("month"), Type.integer(month)],
+          [Type.atom("second"), Type.integer(0)],
+          [Type.atom("std_offset"), Type.integer(stdOffset)],
+          [Type.atom("time_zone"), Type.bitstring("Europe/Warsaw")],
+          [Type.atom("utc_offset"), Type.integer(utcOffset)],
+          [Type.atom("year"), Type.integer(year)],
+          [Type.atom("zone_abbr"), Type.bitstring("CET")],
+        ]);
+
+      it("unboxes it as the instant it stands for, across a month end", () => {
+        const midnight = zoned({
+          day: 1,
+          hour: 0,
+          month: 3,
+          utcOffset: 3600,
+          year: 2026,
+        });
+
+        assert.equal(
+          Model.unbox(midnight, "datetime"),
+          "2026-02-28T23:00:00.000000Z",
+        );
+      });
+
+      it("unboxes it across a leap day", () => {
+        const value = zoned({
+          day: 1,
+          hour: 0,
+          minute: 30,
+          month: 3,
+          utcOffset: 3600,
+          year: 2024,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "2024-02-29T23:30:00.000000Z",
+        );
+      });
+
+      it("unboxes it across a year end, keeping its microseconds", () => {
+        const value = zoned({
+          amount: 22508,
+          day: 1,
+          hour: 0,
+          month: 1,
+          utcOffset: 3600,
+          year: 2026,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "2025-12-31T23:00:00.022508Z",
+        );
+      });
+
+      it("unboxes it forward into the next day for an offset behind UTC", () => {
+        const value = zoned({
+          day: 31,
+          hour: 23,
+          month: 12,
+          utcOffset: -18000,
+          year: 2026,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "2027-01-01T04:00:00.000000Z",
+        );
+      });
+
+      it("unboxes it moved by its daylight saving offset too", () => {
+        const value = zoned({
+          day: 1,
+          hour: 1,
+          month: 7,
+          stdOffset: 3600,
+          utcOffset: 3600,
+          year: 2026,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "2026-06-30T23:00:00.000000Z",
+        );
+      });
+
+      it("unboxes it moved by an offset that is not a whole number of hours", () => {
+        const value = zoned({
+          day: 1,
+          hour: 0,
+          minute: 15,
+          month: 3,
+          utcOffset: 20700,
+          year: 2026,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "2026-02-28T18:30:00.000000Z",
+        );
+      });
+
+      // Date.UTC would read year 50 as 1950.
+      it("unboxes it in a year below 100", () => {
+        const value = zoned({
+          day: 1,
+          hour: 0,
+          month: 1,
+          utcOffset: 3600,
+          year: 50,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "0049-12-31T23:00:00.000000Z",
+        );
+      });
+
+      it("unboxes it back across year 0, spelling the year below it with a minus", () => {
+        const value = zoned({
+          amount: 5,
+          day: 1,
+          hour: 0,
+          minute: 30,
+          month: 1,
+          utcOffset: 3600,
+          year: 0,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "-0001-12-31T23:30:00.000005Z",
+        );
+      });
+    });
+
     // One spelling per instant is what lets a datetime compare as a plain string, so a value
     // written at any precision leaves here with six fractional digits.
     it("unboxes a datetime at the precision the wire carries", () => {

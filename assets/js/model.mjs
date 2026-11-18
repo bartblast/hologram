@@ -924,18 +924,60 @@ export default class Model {
     return String(value).padStart(width, "0");
   }
 
-  static #unboxDate(value) {
-    const year = Model.#field(value, "year").value;
-    const month = Model.#field(value, "month").value;
-    const day = Model.#field(value, "day").value;
-
-    return `${Model.#pad(year, 4)}-${Model.#pad(month, 2)}-${Model.#pad(day, 2)}`;
+  // A time of day's clock as the wire spells it, the amount in microseconds always at six digits -
+  // the reason is on #unboxTime.
+  static #spellClock(hour, minute, second, microsecond) {
+    return `${Model.#pad(hour, 2)}:${Model.#pad(minute, 2)}:${Model.#pad(second, 2)}.${Model.#pad(microsecond, 6)}`;
   }
 
-  // The two halves it is made of, spelled by the two that spell them - a datetime and a time
-  // that disagreed on the clock would be a bug nothing here could see.
+  // A day as the wire spells it: the year the way Date.to_iso8601/1 spells it - at least four
+  // digits, and a minus before a year below 0 rather than inside the padding - so one day is one
+  // spelling on both tiers. The year may be a BigInt (a struct's field) or a Number (a Date's).
+  static #spellDate(year, month, day) {
+    const spelledYear =
+      year < 0 ? `-${Model.#pad(-year, 4)}` : Model.#pad(year, 4);
+
+    return `${spelledYear}-${Model.#pad(month, 2)}-${Model.#pad(day, 2)}`;
+  }
+
+  static #unboxDate(value) {
+    return Model.#spellDate(
+      Model.#field(value, "year").value,
+      Model.#field(value, "month").value,
+      Model.#field(value, "day").value,
+    );
+  }
+
+  // The instant the struct stands for, in UTC: its wall clock moved back by the offsets it carries,
+  // which is what the server's codec does before it spells one - so a datetime in any zone is the
+  // instant it names, in a query and in a write alike. The move is a Date's, built through
+  // setUTCFullYear rather than Date.UTC, which maps years 0 to 99 into the 1900s, and a Date
+  // reaches past every year the server can hold a datetime in. Offsets are whole seconds, so the
+  // microseconds never move.
   static #unboxDateTime(value) {
-    return `${Model.#unboxDate(value)}T${Model.#unboxTime(value)}Z`;
+    const part = (name) => Number(Model.#field(value, name).value);
+    const offset = part("utc_offset") + part("std_offset");
+
+    const instant = new Date(0);
+    instant.setUTCFullYear(part("year"), part("month") - 1, part("day"));
+    instant.setUTCHours(part("hour"), part("minute"), part("second") - offset);
+
+    const microsecond = Model.#field(value, "microsecond").data[0].value;
+
+    const date = Model.#spellDate(
+      instant.getUTCFullYear(),
+      instant.getUTCMonth() + 1,
+      instant.getUTCDate(),
+    );
+
+    const clock = Model.#spellClock(
+      instant.getUTCHours(),
+      instant.getUTCMinutes(),
+      instant.getUTCSeconds(),
+      microsecond,
+    );
+
+    return `${date}T${clock}Z`;
   }
 
   // A module travels as its name without the prefix every module atom carries, a plain atom as
@@ -953,13 +995,11 @@ export default class Model {
   // amount is in microseconds whatever the precision, as Elixir keeps it - half a second is
   // {500000, 1} - so the precision only says how many of the digits were written.
   static #unboxTime(value) {
-    const microsecond = Model.#field(value, "microsecond");
-    const fraction = Number(microsecond.data[0].value);
-
-    const hour = Model.#pad(Model.#field(value, "hour").value, 2);
-    const minute = Model.#pad(Model.#field(value, "minute").value, 2);
-    const second = Model.#pad(Model.#field(value, "second").value, 2);
-
-    return `${hour}:${minute}:${second}.${Model.#pad(fraction, 6)}`;
+    return Model.#spellClock(
+      Model.#field(value, "hour").value,
+      Model.#field(value, "minute").value,
+      Model.#field(value, "second").value,
+      Model.#field(value, "microsecond").data[0].value,
+    );
   }
 }
