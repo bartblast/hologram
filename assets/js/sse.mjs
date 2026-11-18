@@ -105,12 +105,15 @@ export default class Sse {
   // Closes the stream there is, and stops the clocks it was keeping: the heartbeat watchdog, which
   // would otherwise end whatever stream stands in its place - or throw on there being none - at
   // its deadline, and the stability timer, which would clear the failure count on the strength of
-  // a stream that is gone.
+  // a stream that is gone. And the page no longer says it is connected until the stream that
+  // replaces it opens.
   static closeStream() {
     clearTimeout($.heartbeatTimer);
     clearTimeout($.stabilityTimer);
 
     $.eventSource?.close();
+
+    GlobalRegistry.set("sseConnected?", false);
   }
 
   static async connect() {
@@ -286,13 +289,9 @@ export default class Sse {
   // A stream is over whether the browser reported it or the heartbeat watchdog did:
   // stop trusting it, close it, and re-run the handshake protocol after a backoff.
   static handleStreamLoss(reason) {
-    clearTimeout($.heartbeatTimer);
-    clearTimeout($.stabilityTimer);
-
     Logger.debug(`SSE stream lost: ${reason}`);
-    GlobalRegistry.set("sseConnected?", false);
-    $.eventSource.close();
 
+    $.closeStream();
     $.scheduleReconnect();
   }
 

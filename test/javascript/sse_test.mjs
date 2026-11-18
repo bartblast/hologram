@@ -284,6 +284,26 @@ describe("Sse", () => {
       assert.equal(Sse.reconnectAttempts, 0);
     });
 
+    // Until the new stream opens there is none, and a page that says otherwise lets a test that
+    // waits for the connection go on too early.
+    it("says the page is not connected until the new stream opens", async () => {
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+      sinon.stub(Logger, "debug");
+
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      assert.isTrue(GlobalRegistry.get("sseConnected?"));
+
+      fetchStub.returns(new Promise(() => {}));
+
+      const setting = sinon.spy(GlobalRegistry, "set");
+
+      Sse.reconnect();
+
+      sinon.assert.calledOnceWithExactly(setting, "sseConnected?", false);
+    });
+
     it("opens a stream when there is none to close", async () => {
       stubHandshakeResponse({handshakeId: "abc-handshake-id"});
       sinon.stub(Logger, "debug");
@@ -674,11 +694,13 @@ describe("Sse", () => {
     });
 
     it("flips the sseConnected? signal to false on the global registry", async () => {
-      const globalRegistrySetSpy = sinon.spy(GlobalRegistry, "set");
-
       stubHandshakeResponse();
 
       await Sse.connect();
+
+      // After the connect, which says so itself before the stream opens.
+      const globalRegistrySetSpy = sinon.spy(GlobalRegistry, "set");
+
       Sse.eventSource.onerror({type: "error"});
 
       sinon.assert.calledWith(globalRegistrySetSpy, "sseConnected?", false);
@@ -978,10 +1000,11 @@ describe("Sse", () => {
     });
 
     it("reconnects the way a browser-reported error does", async () => {
-      const globalRegistrySetSpy = sinon.spy(GlobalRegistry, "set");
-
       await Sse.connect();
       Sse.eventSource.onopen({});
+
+      // After the stream opened, so what it records is the loss.
+      const globalRegistrySetSpy = sinon.spy(GlobalRegistry, "set");
 
       clock.tick(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS);
 
