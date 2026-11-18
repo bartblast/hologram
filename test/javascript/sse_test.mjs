@@ -286,22 +286,31 @@ describe("Sse", () => {
 
     // Until the new stream opens there is none, and a page that says otherwise lets a test that
     // waits for the connection go on too early.
+    //
+    // On a fake clock: the opened stream sets the heartbeat watchdog and the stability timer, and a
+    // failed assertion would leave them running into the tests after this one.
     it("says the page is not connected until the new stream opens", async () => {
-      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
-      sinon.stub(Logger, "debug");
+      const timers = sinon.useFakeTimers();
 
-      await Sse.connect();
-      Sse.eventSource.onopen({});
+      try {
+        stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+        sinon.stub(Logger, "debug");
 
-      assert.isTrue(GlobalRegistry.get("sseConnected?"));
+        await Sse.connect();
+        Sse.eventSource.onopen({});
 
-      fetchStub.returns(new Promise(() => {}));
+        assert.isTrue(GlobalRegistry.get("sseConnected?"));
 
-      const setting = sinon.spy(GlobalRegistry, "set");
+        fetchStub.returns(new Promise(() => {}));
 
-      Sse.reconnect();
+        const setting = sinon.spy(GlobalRegistry, "set");
 
-      sinon.assert.calledOnceWithExactly(setting, "sseConnected?", false);
+        Sse.reconnect();
+
+        sinon.assert.calledOnceWithExactly(setting, "sseConnected?", false);
+      } finally {
+        timers.restore();
+      }
     });
 
     it("opens a stream when there is none to close", async () => {
