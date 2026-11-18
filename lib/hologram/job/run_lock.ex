@@ -23,6 +23,7 @@ defmodule Hologram.Job.RunLock do
 
   @behaviour Postgrex.SimpleConnection
 
+  alias Hologram.DB
   alias Hologram.DB.Config
   alias Postgrex.SimpleConnection
 
@@ -169,7 +170,8 @@ defmodule Hologram.Job.RunLock do
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
-    SimpleConnection.start_link(__MODULE__, nil, Config.held_connection_opts(opts))
+    # TODO(#1696): SimpleConnection.start_link/3 again, see Hologram.DB.SimpleConnection.
+    DB.SimpleConnection.start_link(__MODULE__, nil, Config.held_connection_opts(opts))
   end
 
   @impl SimpleConnection

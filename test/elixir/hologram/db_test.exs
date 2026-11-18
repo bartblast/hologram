@@ -20,6 +20,8 @@ defmodule Hologram.DBTest do
   alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.SQLError
+  alias Hologram.Test.ClosingTCP
+  alias Hologram.Test.CountingListener
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module13
@@ -374,6 +376,39 @@ defmodule Hologram.DBTest do
 
       assert log =~ "the database cannot be reached yet"
       assert log =~ "the database system is starting up"
+    end
+
+    # As a peer that resets the connection right after accepting it can make the probe fail.
+    test "waits while the connections it probes with fail as they open" do
+      peer = start_supervised!(CountingListener)
+
+      connection_opts =
+        Config.connection_opts(
+          port: CountingListener.port(peer),
+          socket_options: ClosingTCP.socket_options()
+        )
+
+      log =
+        capture_log(fn ->
+          pool = start_unreachable_pool()
+
+          {pid, monitor_ref} =
+            spawn_monitor(fn ->
+              Connection.with_connection(pool, fn ->
+                await_database(connection_opts: connection_opts, retry_interval_ms: 10)
+              end)
+            end)
+
+          wait_until(fn -> CountingListener.accepted(peer) >= 2 end)
+
+          refute_received {:DOWN, ^monitor_ref, :process, ^pid, _reason}
+
+          stop_waiter(pid)
+          stop_unreachable_pool()
+        end)
+
+      assert log =~ "the database cannot be reached yet"
+      assert log =~ "tcp setopts: invalid argument - :einval"
     end
 
     # A server that is down and settings that are wrong look the same through the pool, and only
