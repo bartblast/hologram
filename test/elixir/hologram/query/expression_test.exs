@@ -9,6 +9,14 @@ defmodule Hologram.Query.ExpressionTest do
     %{__ENV__ | file: Path.join(File.cwd!(), "lib/my_app/queries.ex"), line: 7}
   end
 
+  # The env of a stage call made where a variable of the given name is bound.
+  defp env_binding(name) do
+    {_value, _binding, env} =
+      Code.eval_quoted_with_env({:=, [], [{name, [], nil}, nil]}, [], env())
+
+    env
+  end
+
   # Parses the code, lowers it with the given lowering and evaluates what it lowered to, with the
   # given binding standing for the caller's variables.
   defp lower(lowering, code, binding \\ []) do
@@ -305,6 +313,26 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_condition("all(members)") end
     end
 
+    test "raises on an attribute compared with itself" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: owner_id == owner_id compares owner_id with itself, which is always true",
+                   fn -> lower_condition("owner_id == owner_id") end
+    end
+
+    test "raises on an attribute compared with itself beside a variable of its name, naming the pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: owner_id == owner_id compares owner_id with itself, which is always true - a value from the surrounding code is pinned: ^owner_id",
+                   fn -> lower(&condition(&1, env_binding(:owner_id)), "owner_id == owner_id") end
+    end
+
+    test "raises on an attribute compared with itself inside a quantifier's condition" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: member.role >= member.role compares member.role with itself, which only says member.role isn't nil - write member.role != nil",
+                   fn ->
+                     lower_condition("any(member <- members, member.role >= member.role)")
+                   end
+    end
+
     test "raises on nil" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:7: unsupported expression in a condition: nil - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), or a pinned list of predicates",
@@ -596,6 +624,12 @@ defmodule Hologram.Query.ExpressionTest do
                [status: {:==, [:todo]}]
     end
 
+    test "lowers a bound row's attribute compared with the same attribute of the row above" do
+      assert lower_predicates("any(message <- messages, message.created_at > created_at)") == [
+               any: {[:messages], [created_at: {:>, {:attribute, {:outer, 1, :created_at}}}]}
+             ]
+    end
+
     test "lowers a bound row's path inside a quantifier" do
       assert lower_predicates(~s|any(message <- messages, message.author.name == "ada")|) ==
                [any: {[:messages], [{[:author, :name], {:==, "ada"}}]}]
@@ -622,6 +656,11 @@ defmodule Hologram.Query.ExpressionTest do
     test "lowers a comparison with a path on the left" do
       assert lower_predicates("channel.archived == false") ==
                [{[:channel, :archived], {:==, false}}]
+    end
+
+    test "lowers a comparison with a pinned attribute operand naming its left side" do
+      assert lower_predicates("owner_id == ^{:attribute, :owner_id}") ==
+               [owner_id: {:==, {:attribute, :owner_id}}]
     end
 
     test "lowers a comparison with an attribute" do
@@ -868,6 +907,11 @@ defmodule Hologram.Query.ExpressionTest do
                [{[:author, :username], {:starts_with, "jo"}}]
     end
 
+    test "lowers a search with a pinned term naming its attribute" do
+      assert lower_predicates("starts_with(title, ^{:attribute, :title})") ==
+               [title: {:starts_with, {:attribute, :title}}]
+    end
+
     test "lowers a search with mode: :exact" do
       assert lower_predicates(~s|starts_with(code, "AB-", mode: :exact)|) ==
                [code: {:starts_with_exact, "AB-"}]
@@ -1031,6 +1075,27 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates(code) end
     end
 
+    test "raises on a bound row's attribute compared with itself" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: message.created_at > message.created_at compares message.created_at with itself, which is always false",
+                   fn ->
+                     lower_predicates(
+                       "any(message <- messages, message.created_at > message.created_at)"
+                     )
+                   end
+    end
+
+    test "raises on a bound row's attribute compared with itself, its name also a variable's, naming no pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: message.read_at > message.read_at compares message.read_at with itself, which is always false",
+                   fn ->
+                     lower(
+                       &predicates(&1, env_binding(:message)),
+                       "any(message <- messages, message.read_at > message.read_at)"
+                     )
+                   end
+    end
+
     test "raises on a call as a comparison operand" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute, a path or a pinned expression, got: Date.utc_today() - a value from the surrounding code is pinned: ^Date.utc_today()",
@@ -1162,6 +1227,34 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates("status in [channel.status]") end
     end
 
+    test "raises on a path compared with itself" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: project.owner_id == project.owner_id compares project.owner_id with itself, which is always true",
+                   fn -> lower_predicates("project.owner_id == project.owner_id") end
+    end
+
+    test "raises on a path compared with itself beside a variable of another name, naming no pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: project.owner_id == project.owner_id compares project.owner_id with itself, which is always true",
+                   fn ->
+                     lower(
+                       &predicates(&1, env_binding(:owner_id)),
+                       "project.owner_id == project.owner_id"
+                     )
+                   end
+    end
+
+    test "raises on a path compared with itself beside a variable of its first name, naming the pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: project.owner_id == project.owner_id compares project.owner_id with itself, which is always true - a value from the surrounding code is pinned: ^project.owner_id",
+                   fn ->
+                     lower(
+                       &predicates(&1, env_binding(:project)),
+                       "project.owner_id == project.owner_id"
+                     )
+                   end
+    end
+
     test "raises on a pinned left side" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: the left side of a comparison names an attribute of the queried entity or a path to one, got: ^x",
@@ -1260,6 +1353,26 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates(~s|[starts_with(username, "jo"), active == true]|) end
     end
 
+    test "raises on a search for the attribute it reads" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: starts_with(title, title) compares title with itself, which only says title isn't nil - write title != nil",
+                   fn -> lower_predicates("starts_with(title, title)") end
+    end
+
+    test "raises on a search for the attribute it reads beside a variable of its name, naming the pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: starts_with(title, title) compares title with itself, which only says title isn't nil - a value from the surrounding code is pinned: ^title",
+                   fn ->
+                     lower(&predicates(&1, env_binding(:title)), "starts_with(title, title)")
+                   end
+    end
+
+    test "raises on a search for the attribute it reads with mode: :exact" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: contains(title, title, mode: :exact) compares title with itself, which only says title isn't nil - write title != nil",
+                   fn -> lower_predicates("contains(title, title, mode: :exact)") end
+    end
+
     test "raises on a search operator tuple as a keyword value" do
       assert_error Hologram.CompileError,
                    ~s|lib/my_app/queries.ex:7: a keyword predicate is an equality, got: [username: {:starts_with, "jo"}] - write it as an expression: starts_with(username, "jo")|,
@@ -1332,6 +1445,69 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: all takes a condition - all over no condition says nothing, got: all(tasks) - write all(row <- tasks, row.<attribute> == ...)",
                    fn -> lower_predicates("all(tasks)") end
+    end
+
+    # A variable a macro generated is keyed by the counter its hygiene gave it, not by its context.
+    test "raises on an attribute compared with itself beside a macro-generated variable of its name, naming the pin" do
+      variable = {:inserted_at, [counter: 7, line: 12], MyApp.Macros}
+      {_value, _binding, env} = Code.eval_quoted_with_env({:=, [], [variable, nil]}, [], env())
+
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: inserted_at >= inserted_at compares inserted_at with itself, which only says inserted_at isn't nil - a value from the surrounding code is pinned: ^inserted_at",
+                   fn -> predicates({:>=, [line: 12], [variable, variable]}, env) end
+    end
+
+    test "raises on an attribute compared with itself beside a variable of its name, naming the pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: inserted_at >= inserted_at compares inserted_at with itself, which only says inserted_at isn't nil - a value from the surrounding code is pinned: ^inserted_at",
+                   fn ->
+                     lower(
+                       &predicates(&1, env_binding(:inserted_at)),
+                       "inserted_at >= inserted_at"
+                     )
+                   end
+    end
+
+    test "raises on an attribute compared with itself by ==" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: owner_id == owner_id compares owner_id with itself, which is always true",
+                   fn -> lower_predicates("owner_id == owner_id") end
+    end
+
+    test "raises on an attribute compared with itself by an operator that is always false" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: updated_at != updated_at compares updated_at with itself, which is always false",
+                   fn -> lower_predicates("updated_at != updated_at") end
+
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: updated_at < updated_at compares updated_at with itself, which is always false",
+                   fn -> lower_predicates("updated_at < updated_at") end
+
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: updated_at > updated_at compares updated_at with itself, which is always false",
+                   fn -> lower_predicates("updated_at > updated_at") end
+    end
+
+    test "raises on an attribute compared with itself by an ordering operator taking equality" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: updated_at <= updated_at compares updated_at with itself, which only says updated_at isn't nil - write updated_at != nil",
+                   fn -> lower_predicates("updated_at <= updated_at") end
+
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: updated_at >= updated_at compares updated_at with itself, which only says updated_at isn't nil - write updated_at != nil",
+                   fn -> lower_predicates("updated_at >= updated_at") end
+    end
+
+    test "raises on an attribute compared with itself in an alternative" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: owner_id != owner_id compares owner_id with itself, which is always false",
+                   fn -> lower_predicates("archived == true or owner_id != owner_id") end
+    end
+
+    test "raises on an attribute of the queried row compared with itself inside a quantifier" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: created_at < created_at compares created_at with itself, which is always false",
+                   fn -> lower_predicates("any(message <- messages, created_at < created_at)") end
     end
 
     test "raises on an exact search operator tuple as a keyword value" do

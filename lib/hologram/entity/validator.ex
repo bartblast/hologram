@@ -187,9 +187,10 @@ defmodule Hologram.Entity.Validator do
 
   # Only the canonical lowercase 8-4-4-4-12 form is valid - the framework
   # generates and stores ids in that spelling, and the client tier compares ids
-  # as strings, so any alternative spelling would match on one tier only.
+  # as strings, so any alternative spelling would match on one tier only. The
+  # pattern ends in \z, not $, which also matches before a final newline.
   def attribute_value_valid?(value, :uuid, _opts) when is_binary(value) do
-    String.match?(value, ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+    String.match?(value, ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/)
   end
 
   def attribute_value_valid?(_value, :uuid, _opts), do: false

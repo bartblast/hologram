@@ -4,6 +4,7 @@ defmodule Hologram.DB do
   use Supervisor
 
   require Hologram.Query
+  require Logger
 
   alias Hologram.Auth.Context
   alias Hologram.DB.Clock
@@ -11,6 +12,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Mapper
+  alias Hologram.DB.Protocol
   alias Hologram.DB.QueryRunner
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.SQLQuery
@@ -24,11 +26,23 @@ defmodule Hologram.DB do
   alias Hologram.Query.Stage
   alias Hologram.Reflection
   alias Hologram.SQLError
+  alias Hologram.Test.DatabaseBootstrap.Connection, as: ProbeConnection
   alias Hologram.WriteError
 
   @mapping_key {__MODULE__, :mapping}
 
+  # How long the boot waits between two tries while the database cannot be reached. Each try also
+  # waits for the pool to give up on a checkout, about 4 seconds with DBConnection's defaults, then
+  # opens a connection of its own, which a host that drops packets holds for Postgrex's connect
+  # timeout of 15 seconds.
+  @await_retry_interval_ms :timer.seconds(2)
+
   @pool_name Hologram.DB.Pool
+
+  # What a server starting up or shutting down answers with - one that is away for a moment rather
+  # than one the settings are wrong for. Not a connection limit: a role's or a database's limit
+  # answers the same way as the server's, and would hold the boot for good.
+  @unavailable_error_codes [:admin_shutdown, :cannot_connect_now, :crash_shutdown]
 
   @typedoc """
   What an SQL read answers: the column names as strings, in the order the select list named them,
@@ -621,11 +635,100 @@ defmodule Hologram.DB do
   def mapping_key, do: @mapping_key
 
   @doc """
+  Applies the session settings every pool connection runs with to the given connection, and
+  returns :ok - the pool's after_connect.
+
+  The server keepalives and user timeout (see Hologram.DB.Config.keepalive_statement/0). A node
+  that vanishes leaves its sessions open on the server until the operating system there notices,
+  and a session caught claiming a job holds that job's row locked meanwhile, so no other node can
+  claim it.
+
+  Best effort: a server refusing them - one compatible with PostgreSQL that lacks a setting - is
+  warned about (see Hologram.DB.Config.warn_keepalives_refused/1) and the connection used as it
+  is. Raising would leave the pool without a connection it could use, for good.
+  """
+  @spec apply_session_settings(DBConnection.conn()) :: :ok
+  def apply_session_settings(connection) do
+    case Postgrex.query(connection, Config.keepalive_statement(), []) do
+      {:ok, _result} ->
+        :ok
+
+      # The connection is gone, which the pool logs, and its replacement runs this again.
+      {:error, %DBConnection.ConnectionError{}} ->
+        :ok
+
+      {:error, error} ->
+        Config.warn_keepalives_refused(error)
+    end
+  end
+
+  @doc """
+  Returns :ok once the database answers through the current connection, trying again while it
+  cannot be reached yet, with a warning for each try that failed.
+
+  What the boot steps that need the database run first. A database that is away while the node
+  boots - started alongside it, or restarting - holds the boot until it is back, the way the pool
+  itself keeps trying, rather than failing it: a boot step that fails fails the application.
+
+  A pool tells only that it has no connection to give, which a server that is down and settings
+  that are wrong look the same through. So a failed try opens one connection of its own to learn
+  which: a server that refuses or cannot be reached - a host name that does not resolve included -
+  or one still starting up or shutting down, is waited for. Any other error - a wrong password, a
+  database that does not exist, a connection limit - raises, failing the boot as it did before the
+  wait. An error the query itself answers with raises the same way, unless it is one of
+  those.
+
+  It runs inside the start of the database's supervisor, so a restart of that supervisor while the
+  database is away - rare, since the pool waits rather than failing - holds the unit above it, and
+  an application stop meanwhile, until the database is back.
+
+  Options:
+
+    * `:connection_opts` - the Postgrex options the connection of its own opens with, defaulting to
+      the configured database's (see Hologram.DB.Config.connection_opts/1), which is what the pool
+      started at boot reaches.
+
+    * `:retry_interval_ms` - how long to wait between two tries, defaulting to 2 seconds.
+  """
+  @spec await_database(keyword) :: :ok
+  def await_database(opts \\ []) do
+    retry_interval_ms = Keyword.get(opts, :retry_interval_ms, @await_retry_interval_ms)
+
+    case Connection.query("SELECT 1") do
+      {:ok, _result} ->
+        :ok
+
+      {:error, %DBConnection.ConnectionError{}} ->
+        opts
+        |> Keyword.get_lazy(:connection_opts, &Config.connection_opts/0)
+        |> probe_database!()
+        |> warn_unreachable(retry_interval_ms)
+
+        Process.sleep(retry_interval_ms)
+
+        await_database(opts)
+
+      {:error, %Postgrex.Error{postgres: %{code: code}} = error}
+      when code in @unavailable_error_codes ->
+        warn_unreachable(error, retry_interval_ms)
+
+        Process.sleep(retry_interval_ms)
+
+        await_database(opts)
+
+      {:error, error} ->
+        raise error
+    end
+  end
+
+  @doc """
   Runs the migration applier as a one-shot supervision child after the pool starts and
-  returns :ignore (no process stays running). A failed apply fails the boot loudly.
+  returns :ignore (no process stays running). Waits for the database first (see
+  await_database/1). A failed apply fails the boot loudly.
   """
   @spec migrate_at_boot() :: :ignore
   def migrate_at_boot do
+    await_database()
     Migrator.run()
 
     :ignore
@@ -659,11 +762,12 @@ defmodule Hologram.DB do
 
   @doc """
   Runs dev schema reconciliation as a one-shot supervision child after the pool starts
-  and returns :ignore (no process stays running). A failed reconciliation fails the
-  boot loudly.
+  and returns :ignore (no process stays running). Waits for the database first (see
+  await_database/1). A failed reconciliation fails the boot loudly.
   """
   @spec reconcile_at_boot() :: :ignore
   def reconcile_at_boot do
+    await_database()
     SchemaReconciler.reconcile(reconciliation_context())
 
     :ignore
@@ -737,7 +841,9 @@ defmodule Hologram.DB do
   Starts the database: derives and caches the mapping, then starts the connection pool -
   in dev, schema reconciliation runs as a one-shot boot step right after the pool is up,
   and outside dev and test the migration applier runs there instead.
-  The given opts override the resolved connection options. The database is a VM-wide
+  The given opts override the resolved connection options - the test helper's ownership pool
+  among them, and :after_connect, which replaces the session settings rather than adding to them
+  (see apply_session_settings/1). The database is a VM-wide
   singleton - starting while an instance is already running yields :ignore instead of
   failing the caller's supervision tree.
   """
@@ -764,6 +870,7 @@ defmodule Hologram.DB do
     postgrex_opts =
       Keyword.merge(
         [
+          after_connect: {__MODULE__, :apply_session_settings, []},
           database: resolved_opts[:database],
           hostname: resolved_opts[:host],
           name: @pool_name,
@@ -775,7 +882,8 @@ defmodule Hologram.DB do
         opts
       )
 
-    pool_child = {Postgrex, postgrex_opts}
+    # TODO(#1696): {Postgrex, postgrex_opts} again, see Hologram.DB.Protocol.
+    pool_child = {Protocol, postgrex_opts}
 
     # The environment selects the schema mechanism: dev converges from the model, test
     # manages its schema from the test helpers, and every other env applies the
@@ -879,6 +987,28 @@ defmodule Hologram.DB do
     "  * key #{inspect(fields)} is already taken#{given_part}"
   end
 
+  # Opens a connection of its own to learn why the pool has none to give. Returns the error of a
+  # database that is away, or nil when this one connected - the pool's own connections are then
+  # still waiting out their backoff. Raises any other error.
+  defp probe_database!(connection_opts) do
+    case ProbeConnection.start(connection_opts) do
+      {:ok, pid} ->
+        ProbeConnection.stop(pid)
+
+        nil
+
+      {:error, %DBConnection.ConnectionError{} = error} ->
+        error
+
+      {:error, %Postgrex.Error{postgres: %{code: code}} = error}
+      when code in @unavailable_error_codes ->
+        error
+
+      {:error, error} ->
+        raise error
+    end
+  end
+
   # A unique field is a declared attribute or the reference field of a unique to-one, and the line
   # names which, the way the :not_found line names a reference.
   defp unique_kind(entity_type, field) do
@@ -907,5 +1037,17 @@ defmodule Hologram.DB do
     end
 
     :ok
+  end
+
+  defp warn_unreachable(nil, retry_interval_ms) do
+    Logger.warning(
+      "the database answers, but the pool has not connected to it yet, trying again in #{retry_interval_ms} ms"
+    )
+  end
+
+  defp warn_unreachable(error, retry_interval_ms) do
+    Logger.warning(
+      "the database cannot be reached yet, trying again in #{retry_interval_ms} ms: #{Exception.message(error)}"
+    )
   end
 end

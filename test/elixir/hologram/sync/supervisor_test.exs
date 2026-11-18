@@ -3,6 +3,7 @@ defmodule Hologram.Sync.SupervisorTest do
 
   import Hologram.Sync.Supervisor
 
+  alias Hologram.DB.Listener
   alias Hologram.Sync.Dispatcher
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
@@ -52,20 +53,8 @@ defmodule Hologram.Sync.SupervisorTest do
     test "hears about appends on a connection of its own, outside the pool" do
       spec = child_spec_of(notifications())
 
-      assert {Postgrex.Notifications, :start_link, [opts]} = spec.start
+      assert {Listener, :start_link, [opts]} = spec.start
       assert opts[:name] == notifications()
-      assert opts[:database]
-    end
-
-    # Connecting while booting would fail this child whenever the database is briefly away, and a
-    # child failing fast enough often enough takes its supervisor, the database unit and the node
-    # with it. Not reconnecting in place is what has the dispatcher restart and listen again.
-    test "opens that connection after booting, and does not reopen it in place" do
-      spec = child_spec_of(notifications())
-
-      assert {Postgrex.Notifications, :start_link, [opts]} = spec.start
-      assert opts[:sync_connect] == false
-      assert opts[:auto_reconnect] == false
     end
 
     # The dispatcher reads the log and has to hand what it reads somewhere - the fanout is what

@@ -265,6 +265,42 @@ defmodule Hologram.Entity.DerivedExpressionTest do
       end
     end
 
+    test "raises on a field compared with itself" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} compares score with itself, which is always false"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower("fn score -> score > score end")
+      end
+    end
+
+    test "raises on a field compared with itself by an ordering operator taking equality" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} compares score with itself, which only says score isn't nil - write score != nil"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower("fn score -> score >= score end")
+      end
+    end
+
+    test "raises on a field compared with itself in the condition of if" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} compares score with itself, which is always true"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower("fn score -> if score == score, do: 1, else: 2 end")
+      end
+    end
+
+    test "raises on a path compared with itself" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} compares channel.score with itself, which is always true"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower("fn channel -> channel.score == channel.score end")
+      end
+    end
+
     test "raises at the membership's line on a list holding a field" do
       expected_msg =
         "lib/my_app/channel.ex:13: #{@field} looks a field up in [1, other] - the right side of in is a list of values or an @attribute"
