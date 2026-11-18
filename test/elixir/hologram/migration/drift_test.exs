@@ -8,9 +8,11 @@ defmodule Hologram.Migration.DriftTest do
   # own - a node that died between a file's commit and its index build leaves exactly that.
   # Anything else that differs is something a hand did, and a hand undoes it.
   #
-  # The order is what makes the carve-out work, and it is what these tests pin: the repair runs
-  # BEFORE the drift check inside one boot, so a missing index is rebuilt and then found present.
-  # Reverse the two and a dropped index refuses the boot it was supposed to survive.
+  # The order is what makes the carve-out work: the repair runs BEFORE the drift check inside one
+  # boot, so a missing index is rebuilt and then found present. Reverse the two and a dropped index
+  # refuses the boot it was supposed to survive (see the index recovery tests). The index plan's
+  # indexes are neither: the boot leaves them to Hologram.DB.IndexBuilder, which these tests run
+  # where a state needs the plan's indexes standing.
   #
   # The sandboxed suite covers the drift check called directly, which is enough to pin its
   # messages. What it cannot do is reach either behaviour through a real boot: the drift has to
@@ -25,8 +27,8 @@ defmodule Hologram.Migration.DriftTest do
   import Hologram.Migrator
 
   alias Hologram.DB.Connection
+  alias Hologram.DB.IndexBuilder
   alias Hologram.DB.IndexPlan
-  alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
 
@@ -61,6 +63,16 @@ defmodule Hologram.Migration.DriftTest do
     %{version: version, path: "app/migrations/#{version}.ex", ops: ops}
   end
 
+  # What the index builder does once a node serves: the plan's indexes for the given chain's model.
+  defp build_plan_indexes(chain, model) do
+    plan =
+      model
+      |> Mapper.derive_from_model!()
+      |> IndexPlan.framework_plan()
+
+    :ok = IndexBuilder.converge(plan, chain, step_pause_ms: 0)
+  end
+
   setup %{scratch: scratch} do
     create =
       migration("20260813091522", [
@@ -80,6 +92,7 @@ defmodule Hologram.Migration.DriftTest do
 
     route(scratch, fn ->
       :ok = run([create], model, @context)
+      build_plan_indexes([create], model)
     end)
 
     [chain: [create], mapping: Mapper.derive_from_model!(model), model: model]
@@ -106,7 +119,7 @@ defmodule Hologram.Migration.DriftTest do
       end)
     end
 
-    test "rebuilds an index dropped by hand rather than refusing", %{
+    test "passes a deploy over a plan index dropped by hand, leaving it to the index builder", %{
       chain: chain,
       model: model,
       scratch: scratch
@@ -114,13 +127,9 @@ defmodule Hologram.Migration.DriftTest do
       route(scratch, fn ->
         {:ok, _result} = Connection.query(~s{DROP INDEX "hologram_data"."#{@index}"})
 
-        assert index_validity() == :absent
-
-        # The same difference that refuses as a column converges as an index: the deploy
-        # completes, because the repair ran before the check and left nothing to report.
         assert run(chain, model, @context) == :ok
 
-        assert index_validity() == true
+        assert index_validity() == :absent
       end)
     end
   end
@@ -149,7 +158,7 @@ defmodule Hologram.Migration.DriftTest do
       {:ok, _result} = Connection.query(rename)
     end
 
-    test "renames the index at boot instead of building a second one", %{
+    test "leaves a plan index under an old name to the index builder", %{
       chain: chain,
       model: model,
       scratch: scratch
@@ -157,32 +166,18 @@ defmodule Hologram.Migration.DriftTest do
       route(scratch, fn ->
         rename_index_to_old_name()
 
-        # The suite runs at :warning, and the line is an info one. The module is async: false,
-        # so raising the level for one run touches no other test.
-        level = Logger.level()
-        Logger.configure(level: :info)
+        assert run(chain, model, @context) == :ok
 
-        log =
-          try do
-            ExUnit.CaptureLog.capture_log([level: :info], fn ->
-              assert run(chain, model, @context) == :ok
-            end)
-          after
-            Logger.configure(level: level)
-          end
-
-        assert log =~
-                 ~s(Hologram: renamed index "#{@old_index}" to "#{@index}" to follow the current naming rule)
-
-        assert index_names() == [@index]
+        assert index_names() == [@old_index]
       end)
     end
 
-    test "renames the index before a pending migration that drops it", %{
-      chain: chain,
-      model: model,
-      scratch: scratch
-    } do
+    test "applies a pending migration deleting a relationship whose plan index stands under an old name",
+         %{
+           chain: chain,
+           model: model,
+           scratch: scratch
+         } do
       drop =
         migration("20260814091522", [
           %{op: :delete_relationship, entity: MyApp.Task, name: :author, line: 3}
@@ -201,7 +196,7 @@ defmodule Hologram.Migration.DriftTest do
       end)
     end
 
-    test "renames the index and still refuses a hand-made one beside it", %{
+    test "refuses a hand-made index beside a plan index under an old name", %{
       chain: chain,
       model: model,
       scratch: scratch
@@ -223,15 +218,16 @@ defmodule Hologram.Migration.DriftTest do
           assert_error RuntimeError, expected_msg, fn -> run(chain, model, @context) end
         end)
 
-        assert index_names() == [@index, "rogue_index"]
+        assert index_names() == [@old_index, "rogue_index"]
       end)
     end
 
-    test "renames a join table and its constraints and reverse index, keeping the links", %{
-      chain: chain,
-      model: model,
-      scratch: scratch
-    } do
+    test "renames a join table and its constraints, keeping the links, and leaves its reverse index to the index builder",
+         %{
+           chain: chain,
+           model: model,
+           scratch: scratch
+         } do
       watchers =
         migration("20260814091522", [
           %{
@@ -251,6 +247,7 @@ defmodule Hologram.Migration.DriftTest do
 
       route(scratch, fn ->
         :ok = run(chain, model, @context)
+        build_plan_indexes(chain, model)
 
         {:ok, _result} =
           Connection.query("""
@@ -298,7 +295,7 @@ defmodule Hologram.Migration.DriftTest do
           |> String.split("\n")
           |> Enum.filter(&(&1 =~ "Hologram: renamed "))
 
-        assert length(renamed_lines) == 6
+        assert length(renamed_lines) == 5
         assert log =~ ~s(Hologram: renamed table "#{old_table}" to "#{join_table}")
         assert log =~ ~s(Hologram: renamed constraint "my_app_task_old_$pk" to "my_app_task_$pk")
 
@@ -306,6 +303,10 @@ defmodule Hologram.Migration.DriftTest do
           Connection.query(~s{SELECT count(*) FROM "hologram_data"."#{join_table}"})
 
         assert rows == [[1]]
+
+        build_plan_indexes(chain, model)
+
+        assert index_names(join_table) == ["#{join_table}_target_id_source_id_$idx"]
       end)
     end
 
@@ -327,8 +328,12 @@ defmodule Hologram.Migration.DriftTest do
           }
         ])
 
+      newer_chain = Enum.concat(chain, [newer])
+      newer_model = Model.fold(model, newer.ops)
+
       route(scratch, fn ->
-        :ok = run(Enum.concat(chain, [newer]), Model.fold(model, newer.ops), @context)
+        :ok = run(newer_chain, newer_model, @context)
+        build_plan_indexes(newer_chain, newer_model)
 
         rename_pk =
           ~s{ALTER TABLE "hologram_data"."my_app_task" RENAME CONSTRAINT "my_app_task_$pk" TO "my_app_task_old_$pk"}
@@ -351,43 +356,15 @@ defmodule Hologram.Migration.DriftTest do
 
         assert rows == [["my_app_task_old_$pk"]]
 
-        # Nor does it converge the plan: the newer release's index stays, as does the older one.
+        # Nor does it touch the plan's indexes: the newer release's index stays, as does the older
+        # one.
         assert index_names("my_app_project") == ["my_app_project_owner_id_$idx"]
         assert index_names() == [@index]
       end)
     end
   end
 
-  describe "run/3 with an applied version the chain doesn't hold that left the schema alone" do
-    test "still builds the plan's missing indexes, and says which versions it doesn't know", %{
-      chain: chain,
-      model: model,
-      scratch: scratch
-    } do
-      reverted = migration("20260814091522", [])
-
-      route(scratch, fn ->
-        :ok = run(Enum.concat(chain, [reverted]), model, @context)
-
-        {:ok, _result} = Connection.query(~s{DROP INDEX "hologram_data"."#{@index}"})
-
-        # Plan-shaped, so a newer release's index as far as this node knows - which it leaves.
-        newer_index =
-          ~s{CREATE INDEX "my_app_task_created_at_$idx" ON "hologram_data"."my_app_task" ("created_at")}
-
-        {:ok, _result} = Connection.query(newer_index)
-
-        log =
-          ExUnit.CaptureLog.capture_log(fn ->
-            assert run(chain, model, @context) == :ok
-          end)
-
-        assert log =~ "20260814091522"
-        assert index_validity() == true
-        assert "my_app_task_created_at_$idx" in plan_index_names()
-      end)
-    end
-
+  describe "run/3 with an applied version the chain doesn't hold" do
     test "refuses with the drift message before building an index on a column it lacks", %{
       chain: chain,
       model: model,
@@ -433,261 +410,6 @@ defmodule Hologram.Migration.DriftTest do
     end
   end
 
-  describe "repair_indexes/2" do
-    test "renames an index the plan names standing under another name, building no copy", %{
-      mapping: mapping,
-      scratch: scratch
-    } do
-      route(scratch, fn ->
-        rename = ~s{ALTER INDEX "hologram_data"."#{@index}" RENAME TO "my_app_task_old_$idx"}
-        {:ok, _result} = Connection.query(rename)
-        oid = index_oid("my_app_task_old_$idx")
-
-        ExUnit.CaptureLog.capture_log(fn ->
-          assert repair_indexes(mapping, IndexPlan.framework_plan(mapping)) == :ok
-        end)
-
-        assert plan_index_names() == [@index]
-        assert index_oid(@index) == oid
-      end)
-    end
-
-    test "renames two indexes whose names swapped, rebuilding neither", %{
-      chain: chain,
-      model: model,
-      scratch: scratch
-    } do
-      editor =
-        migration("20260814091522", [
-          %{
-            op: :add_relationship,
-            entity: MyApp.Task,
-            name: :editor,
-            type: MyApp.User,
-            opts: [optional: true],
-            line: 3
-          }
-        ])
-
-      editor_model = Model.fold(model, editor.ops)
-      editor_mapping = Mapper.derive_from_model!(editor_model)
-      editor_index = "my_app_task_editor_id_$idx"
-
-      route(scratch, fn ->
-        :ok = run(Enum.concat(chain, [editor]), editor_model, @context)
-
-        author_oid = index_oid(@index)
-        editor_oid = index_oid(editor_index)
-
-        for {from, to} <- [{@index, "swap"}, {editor_index, @index}, {"swap", editor_index}] do
-          {:ok, _result} =
-            Connection.query(~s{ALTER INDEX "hologram_data"."#{from}" RENAME TO "#{to}"})
-        end
-
-        ExUnit.CaptureLog.capture_log(fn ->
-          assert repair_indexes(editor_mapping, IndexPlan.framework_plan(editor_mapping)) == :ok
-        end)
-
-        assert index_oid(@index) == author_oid
-        assert index_oid(editor_index) == editor_oid
-      end)
-    end
-
-    test "renames along a chain whose names the plan wants in turn", %{
-      chain: chain,
-      model: model,
-      scratch: scratch
-    } do
-      {_editor_model, editor_mapping} = with_editor(chain, model, scratch)
-      editor_index = "my_app_task_editor_id_$idx"
-
-      route(scratch, fn ->
-        author_oid = index_oid(@index)
-        editor_oid = index_oid(editor_index)
-
-        # The author index stands as "x", and the editor index in the author's name.
-        for {from, to} <- [{@index, "my_app_task_x_$idx"}, {editor_index, @index}] do
-          {:ok, _result} =
-            Connection.query(~s{ALTER INDEX "hologram_data"."#{from}" RENAME TO "#{to}"})
-        end
-
-        ExUnit.CaptureLog.capture_log(fn ->
-          assert repair_indexes(editor_mapping, IndexPlan.framework_plan(editor_mapping)) == :ok
-        end)
-
-        assert index_oid(@index) == author_oid
-        assert index_oid(editor_index) == editor_oid
-      end)
-    end
-
-    test "renames first the stray of a definition standing in a name the plan wants", %{
-      chain: chain,
-      model: model,
-      scratch: scratch
-    } do
-      {_editor_model, editor_mapping} = with_editor(chain, model, scratch)
-      editor_index = "my_app_task_editor_id_$idx"
-
-      route(scratch, fn ->
-        author_oid = index_oid(@index)
-        editor_oid = index_oid(editor_index)
-
-        for {from, to} <- [{@index, "my_app_task_b_$idx"}, {editor_index, @index}] do
-          {:ok, _result} =
-            Connection.query(~s{ALTER INDEX "hologram_data"."#{from}" RENAME TO "#{to}"})
-        end
-
-        # A second stray of the editor's definition, first by name.
-        {:ok, _result} =
-          Connection.query(
-            ~s{CREATE INDEX "my_app_task_a_$idx" ON "hologram_data"."my_app_task" ("editor_id")}
-          )
-
-        ExUnit.CaptureLog.capture_log(fn ->
-          assert repair_indexes(editor_mapping, IndexPlan.framework_plan(editor_mapping)) == :ok
-        end)
-
-        assert plan_index_names() == [@index, editor_index]
-        assert index_oid(@index) == author_oid
-        assert index_oid(editor_index) == editor_oid
-      end)
-    end
-
-    test "gives up a chain of renames whose end a plan index nothing moves holds", %{
-      chain: chain,
-      model: model,
-      scratch: scratch
-    } do
-      {_editor_model, editor_mapping} = with_editor(chain, model, scratch)
-      editor_index = "my_app_task_editor_id_$idx"
-
-      route(scratch, fn ->
-        for {from, to} <- [{@index, "my_app_task_x_$idx"}, {editor_index, @index}] do
-          {:ok, _result} =
-            Connection.query(~s{ALTER INDEX "hologram_data"."#{from}" RENAME TO "#{to}"})
-        end
-
-        {:ok, _result} =
-          Connection.query(
-            ~s{CREATE INDEX "#{editor_index}" ON "hologram_data"."my_app_task" ("created_at")}
-          )
-
-        ExUnit.CaptureLog.capture_log(fn ->
-          assert repair_indexes(editor_mapping, IndexPlan.framework_plan(editor_mapping)) == :ok
-        end)
-
-        indexes = Introspection.schema().tables["my_app_task"].indexes
-
-        assert plan_index_names() == [@index, editor_index]
-        assert indexes[@index].columns == ["author_id"]
-        assert indexes[editor_index].columns == ["editor_id"]
-      end)
-    end
-
-    test "leaves a target an index outside the plan holds, dropping the stray", %{
-      chain: chain,
-      model: model,
-      scratch: scratch
-    } do
-      {_editor_model, editor_mapping} = with_editor(chain, model, scratch)
-      editor_index = "my_app_task_editor_id_$idx"
-
-      route(scratch, fn ->
-        {:ok, _result} =
-          Connection.query(
-            ~s{ALTER INDEX "hologram_data"."#{editor_index}" RENAME TO "my_app_task_y_$idx"}
-          )
-
-        {:ok, _result} =
-          Connection.query(
-            ~s{CREATE INDEX "#{editor_index}" ON "hologram_data"."my_app_task" ("editor_id") WHERE "editor_id" IS NOT NULL}
-          )
-
-        ExUnit.CaptureLog.capture_log(fn ->
-          assert repair_indexes(editor_mapping, IndexPlan.framework_plan(editor_mapping)) == :ok
-        end)
-
-        assert plan_index_names() == [@index, editor_index]
-
-        assert Introspection.schema().tables["my_app_task"].indexes[editor_index][:non_plain] == [
-                 :predicate
-               ]
-      end)
-    end
-
-    test "drops an index the plan doesn't name", %{mapping: mapping, scratch: scratch} do
-      route(scratch, fn ->
-        stray =
-          ~s{CREATE INDEX "my_app_task_created_at_$idx" ON "hologram_data"."my_app_task" ("created_at")}
-
-        {:ok, _result} = Connection.query(stray)
-
-        ExUnit.CaptureLog.capture_log(fn ->
-          assert repair_indexes(mapping, IndexPlan.framework_plan(mapping)) == :ok
-        end)
-
-        assert plan_index_names() == [@index]
-      end)
-    end
-
-    test "rebuilds an index the plan names that stands with another definition", %{
-      mapping: mapping,
-      scratch: scratch
-    } do
-      route(scratch, fn ->
-        {:ok, _result} = Connection.query(~s{DROP INDEX "hologram_data"."#{@index}"})
-
-        {:ok, _result} =
-          Connection.query(
-            ~s{CREATE INDEX "#{@index}" ON "hologram_data"."my_app_task" ("created_at")}
-          )
-
-        ExUnit.CaptureLog.capture_log(fn ->
-          assert repair_indexes(mapping, IndexPlan.framework_plan(mapping)) == :ok
-        end)
-
-        assert Introspection.schema().tables["my_app_task"].indexes[@index].columns == [
-                 "author_id"
-               ]
-      end)
-    end
-  end
-
-  describe "run/3 with a file renaming a to-one and adding one under its old name" do
-    test "converges both reference indexes in the same boot", %{
-      chain: chain,
-      model: model,
-      scratch: scratch
-    } do
-      reshuffle =
-        migration("20260814091522", [
-          %{op: :rename_relationship, entity: MyApp.Task, from: :author, to: :creator, line: 3},
-          %{
-            op: :add_relationship,
-            entity: MyApp.Task,
-            name: :author,
-            type: MyApp.User,
-            opts: [optional: true],
-            line: 4
-          }
-        ])
-
-      route(scratch, fn ->
-        oid = index_oid(@index)
-
-        ExUnit.CaptureLog.capture_log(fn ->
-          assert run(Enum.concat(chain, [reshuffle]), Model.fold(model, reshuffle.ops), @context) ==
-                   :ok
-        end)
-
-        # The renamed relationship's index is renamed with it, not rebuilt.
-        assert index_oid("my_app_task_creator_id_$idx") == oid
-
-        assert plan_index_names() == ["my_app_task_author_id_$idx", "my_app_task_creator_id_$idx"]
-      end)
-    end
-  end
-
   describe "check_drift!/1 with a hand-made unique index under the plan's kind" do
     test "refuses it, since the plan builds no unique index", %{
       mapping: mapping,
@@ -709,56 +431,6 @@ defmodule Hologram.Migration.DriftTest do
         assert_error RuntimeError, expected_msg, fn -> check_drift!(mapping) end
       end)
     end
-  end
-
-  # Adds an optional editor to-one beside the author, its migration applied, and returns the model
-  # and mapping it leaves.
-  defp with_editor(chain, model, scratch) do
-    editor =
-      migration("20260814091522", [
-        %{
-          op: :add_relationship,
-          entity: MyApp.Task,
-          name: :editor,
-          type: MyApp.User,
-          opts: [optional: true],
-          line: 3
-        }
-      ])
-
-    editor_model = Model.fold(model, editor.ops)
-
-    route(scratch, fn ->
-      :ok = run(Enum.concat(chain, [editor]), editor_model, @context)
-    end)
-
-    {editor_model, Mapper.derive_from_model!(editor_model)}
-  end
-
-  defp index_oid(name) do
-    {:ok, %{rows: [[oid]]}} =
-      Connection.query(
-        ~s{SELECT c.oid FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c."relnamespace" WHERE n."nspname" = 'hologram_data' AND c."relname" = $1},
-        [name]
-      )
-
-    oid
-  end
-
-  defp plan_index_names do
-    statement = """
-    SELECT ic."relname"
-    FROM pg_catalog.pg_index i
-    JOIN pg_catalog.pg_class ic ON ic.oid = i."indexrelid"
-    JOIN pg_catalog.pg_class c ON c.oid = i."indrelid"
-    JOIN pg_catalog.pg_namespace n ON n.oid = c."relnamespace"
-    WHERE n."nspname" = 'hologram_data' AND c."relname" = 'my_app_task' AND NOT i."indisprimary"
-    ORDER BY ic."relname"
-    """
-
-    {:ok, %{rows: rows}} = Connection.query(statement)
-
-    Enum.map(rows, fn [name] -> name end)
   end
 
   describe "run/3 with an index nothing derives" do

@@ -118,6 +118,22 @@ defmodule Hologram.DB.IndexPlan do
   end
 
   @doc """
+  Returns the names of the indexes of the given schema (see `Hologram.DB.Introspection.schema/0`)
+  the index plan owns: the plain btree ones named `...$idx` that aren't unique. Introspection marks
+  any other shape with `:non_plain`. One under another name is the drift check's.
+  """
+  @spec owned_index_names(%{atom => any}) :: MapSet.t(String.t())
+  def owned_index_names(schema) do
+    for {_table, definition} <- schema.tables,
+        {name, index} <- definition.indexes,
+        String.ends_with?(name, "$idx"),
+        not index.unique,
+        not Map.has_key?(index, :non_plain),
+        into: MapSet.new(),
+        do: name
+  end
+
+  @doc """
   Returns the index plan over the tables of the given mapping for what the server runs: the
   framework's own lookups and the needs the build derived from the queries (see `dumped_needs/1`).
   A dumped need naming a table or a column the mapping no longer holds is left out, as `select/2`

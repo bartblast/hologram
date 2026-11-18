@@ -1005,7 +1005,7 @@ defmodule Hologram.MigratorTest do
     end
   end
 
-  describe "repair_indexes/2" do
+  describe "repair_indexes/1" do
     setup do
       ensure_managed!(@context)
 
@@ -1031,7 +1031,7 @@ defmodule Hologram.MigratorTest do
 
     # No index plan: these apply files without a boot, and the plan's indexes are its own to build.
     test "passes a database carrying every index the model derives", %{mapping: mapping} do
-      assert repair_indexes(mapping, %{}) == :ok
+      assert repair_indexes(mapping) == :ok
     end
 
     test "leaves a table the database does not have to the drift check", %{mapping: mapping} do
@@ -1039,7 +1039,7 @@ defmodule Hologram.MigratorTest do
 
       # Its indexes went with it. Creating them here would raise a relation error before
       # check_drift!/1 reports the missing table, which is the cause worth naming.
-      assert repair_indexes(mapping, %{}) == :ok
+      assert repair_indexes(mapping) == :ok
     end
   end
 

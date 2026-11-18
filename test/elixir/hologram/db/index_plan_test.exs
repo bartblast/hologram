@@ -1046,6 +1046,29 @@ defmodule Hologram.DB.IndexPlanTest do
     end
   end
 
+  describe "owned_index_names/1" do
+    test "names the plain btree indexes named ...$idx that aren't unique" do
+      plain = %{columns: ["a"], nulls_distinct: true, unique: false}
+
+      schema = %{
+        tables: %{
+          "task" => %{
+            indexes: %{
+              "task_a_$idx" => plain,
+              "task_a_$uidx" => %{plain | unique: true},
+              "task_b_$idx" => Map.put(plain, :non_plain, [:predicate]),
+              "task_c_$idx" => %{plain | unique: true},
+              "hand_made" => plain
+            }
+          },
+          "project" => %{indexes: %{"project_a_$idx" => plain}}
+        }
+      }
+
+      assert owned_index_names(schema) == MapSet.new(["project_a_$idx", "task_a_$idx"])
+    end
+  end
+
   describe "plan/2" do
     test "plans the framework's needs and the dumped ones" do
       mapping = Mapper.derive!([Module1, Module2, Module3], [])

@@ -329,20 +329,27 @@ defmodule Hologram.DB.DDL do
   end
 
   @doc """
-  Returns the statement listing the names of the invalid indexes of the data schema.
+  Returns the statement listing the names of the invalid indexes of the data schema, the unique
+  ones or the others as the given flag says.
 
   A concurrent build that failed partway leaves its index in the catalog flagged
-  invalid: it holds the derived name, serves no query, and every write maintains it.
+  invalid: it holds the derived name, serves no query, and every write maintains it. The
+  migrator repairs the unique ones, which the model derives, and `Hologram.DB.IndexBuilder` the
+  others, which the index plan derives - apart, since a build in flight reads as invalid too, and
+  each builds its own under the migration lock.
   """
-  @spec invalid_indexes_statement() :: String.t()
-  def invalid_indexes_statement do
+  @spec invalid_indexes_statement(boolean) :: String.t()
+  def invalid_indexes_statement(unique?) do
+    unique_sql = if unique?, do: "i.indisunique", else: "NOT i.indisunique"
+
     """
     SELECT ic.relname
     FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
     JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = '#{Mapper.data_schema()}' AND NOT i.indisvalid\
+    WHERE n.nspname = '#{Mapper.data_schema()}' AND NOT i.indisvalid AND #{unique_sql}
+    ORDER BY ic.relname\
     """
   end
 
