@@ -222,12 +222,15 @@ defmodule HologramFeatureTests.SyncTest do
       |> visit(SyncPage)
       |> await_local_fill()
       |> mark_this_page_load()
+      |> click(button("Read folder locally"))
+      |> assert_text(css("#local_folder"), ~r/^kept_folder$/)
       |> click(button("Read the document's folder locally"))
       |> assert_text(css("#local_document_folder"), ~r/^linked$/)
 
     DB.update!(Document, document.id, folder_id: nil)
 
-    # The folder is read only once the change has arrived, so what shows is that read's answer.
+    # Reading the document's folder clears the folder read shown, so the folder on screen at the
+    # end is a read made once the change has arrived.
     session
     |> await_local_read("Read the document's folder locally", "local_document_folder", "none")
     |> click(button("Read folder locally"))

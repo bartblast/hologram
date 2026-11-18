@@ -43,6 +43,7 @@ defmodule HologramFeatureTests.SyncPage do
   end
 
   # Whether the document, as the browser's database holds it, points at a folder - or isn't there.
+  # The folder read shown is cleared, so the next one on screen is a read made after this one.
   def action(:read_document_folder_locally, _params, component) do
     document_title = component.state.document_title
 
@@ -59,7 +60,9 @@ defmodule HologramFeatureTests.SyncPage do
         true -> "linked"
       end
 
-    put_state(component, :local_document_folder, local_document_folder)
+    component
+    |> put_state(:local_document_folder, local_document_folder)
+    |> put_state(:local_folder, nil)
   end
 
   # The read runs in the browser over what its database holds - every folder its user may read,
