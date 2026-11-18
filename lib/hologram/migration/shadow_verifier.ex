@@ -5,6 +5,7 @@ defmodule Hologram.Migration.ShadowVerifier do
   alias Hologram.DB.Connection
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
+  alias Hologram.DB.Protocol
   alias Hologram.DB.Schema
   alias Hologram.Entity.Model
   alias Hologram.Migrator
@@ -167,7 +168,8 @@ defmodule Hologram.Migration.ShadowVerifier do
 
   defp start_connection(database) do
     connection_opts = Config.connection_opts(database: database)
-    {:ok, connection_pid} = Postgrex.start_link(connection_opts)
+    # TODO(#1696): Postgrex.start_link/1 again, see Hologram.DB.Protocol.
+    {:ok, connection_pid} = Protocol.start_link(connection_opts)
 
     connection_pid
   end
