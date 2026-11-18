@@ -1824,6 +1824,27 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    // A name an object inherits is no relationship - only the ones the model bakes are.
+    it("raises on a name every object inherits as an unknown attribute", () => {
+      assertBoxedError(
+        () => filter(task, predicates([["constructor", Type.integer(1)]])),
+        "Hologram.MisuseError",
+        "unknown attribute :constructor in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
+      );
+    });
+
+    it("raises on a path through a name every object inherits", () => {
+      assertBoxedError(
+        () =>
+          filter(
+            Type.alias(CHANNEL),
+            pathPredicates(["constructor", "body"], Type.bitstring("x")),
+          ),
+        "Hologram.MisuseError",
+        "unknown relationship :constructor in MyApp.Channel - known relationships: :owner",
+      );
+    });
+
     // A to-one relationship names a reference the predicate can read instead, and the message
     // says which - a to-many has none to offer.
     it("raises on a one-element list as a predicate name", () => {
@@ -2449,6 +2470,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    // The baked model is a plain object, so a name spelled like one of Object.prototype's
+    // properties must read the derived field rather than the property.
+    it("raises on a value a derived enum named like a prototype property does not declare", () => {
+      const derived = globalThis.Hologram.sync.model[POST].derived;
+      derived.toString = derived.tier;
+
+      assertBoxedError(
+        () => filter(post, pairs([["toString", op(">", Type.atom("mid"))]])),
+        "Hologram.MisuseError",
+        ":mid is not a value of attribute :toString in MyApp.Post - the values are [:low, :high]",
+      );
+    });
+
     it("compares a derived string for equality", () => {
       const query = filter(
         post,
@@ -3019,6 +3053,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
         "raises on a source going through an unknown relationship, listing every relationship",
         () => filter(channel, entry("any", atoms("posts", "messages"), [])),
         "unknown relationship :posts in MyApp.Channel - known relationships: :messages, :owner, :topic",
+      ],
+      [
+        "raises on a source naming a name every object inherits",
+        () => filter(channel, entry("any", atoms("constructor"), [])),
+        "unknown relationship :constructor in MyApp.Channel - known relationships: :messages, :owner, :topic",
       ],
       [
         "raises on a source naming an attribute",

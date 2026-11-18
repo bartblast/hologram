@@ -1868,6 +1868,20 @@ describe("Model", () => {
     });
   });
 
+  describe("own()", () => {
+    it("returns the value an object holds under its own key", () => {
+      assert.strictEqual(Model.own({title: "string"}, "title"), "string");
+    });
+
+    it("returns undefined for a name the object does not hold", () => {
+      assert.isUndefined(Model.own({title: "string"}, "body"));
+    });
+
+    it("returns undefined for a name every object inherits", () => {
+      assert.isUndefined(Model.own({title: "string"}, "constructor"));
+    });
+  });
+
   describe("pathTarget()", () => {
     beforeEach(() => {
       globalThis.Hologram.sync.model[PROJECT].relationships = {
@@ -1903,6 +1917,23 @@ describe("Model", () => {
       Model.reset();
 
       assert.equal(Model.pathTarget(TASK, ["project", "tasks"]), TASK);
+    });
+
+    // A name every object inherits is no relationship, so the inverse of that name is the one read.
+    it("follows an inverse named like a prototype property", () => {
+      globalThis.Hologram.sync.model[PROJECT].inverses = {
+        toString: {
+          forward: "project",
+          reference: true,
+          sort: [],
+          toMany: true,
+          type: TASK,
+        },
+      };
+
+      Model.reset();
+
+      assert.equal(Model.pathTarget(TASK, ["project", "toString"]), TASK);
     });
   });
 

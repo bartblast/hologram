@@ -87,7 +87,9 @@ function attributeType(entityType, name) {
   const derived = Model.derivedField(entityType, name);
   const derivedType = derived?.kind === "scalar" ? derived.type : null;
 
-  return Model.entry(entityType).attributes[name] ?? derivedType ?? "uuid";
+  return (
+    Model.own(Model.entry(entityType).attributes, name) ?? derivedType ?? "uuid"
+  );
 }
 
 function byKey(keyOf) {
@@ -263,7 +265,7 @@ function entryClauses(pair, scope) {
 // The values an enum declares, in their declared order: an enum attribute's, or a derived enum's.
 function enumValues(entityType, name) {
   return (
-    Model.entry(entityType).enumValues[name] ??
+    Model.own(Model.entry(entityType).enumValues, name) ??
     Model.derivedField(entityType, name).values
   );
 }
@@ -1339,7 +1341,10 @@ function validateFilteredName(name, entityType) {
     return;
   }
 
-  const relationship = Model.entry(entityType).relationships[name.value];
+  const relationship = Model.own(
+    Model.entry(entityType).relationships,
+    name.value,
+  );
 
   if (relationship && !relationship.toMany) {
     Interpreter.raiseMisuseError(
@@ -1543,7 +1548,10 @@ function validatePathHop(hop, entityType) {
     );
   }
 
-  const relationship = Model.entry(entityType).relationships[hop.value];
+  const relationship = Model.own(
+    Model.entry(entityType).relationships,
+    hop.value,
+  );
 
   if (relationship && relationship.toMany) {
     Interpreter.raiseMisuseError(
@@ -1654,7 +1662,7 @@ function validateSourceSet(name, entityType) {
     );
   }
 
-  const relationship = Model.relationships(entityType)[name.value];
+  const relationship = Model.own(Model.relationships(entityType), name.value);
 
   if (relationship && relationship.toMany) {
     return relationship.type;

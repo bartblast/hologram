@@ -302,7 +302,9 @@ function chainTargetId(entityType, entity, relationshipNames) {
 function declaredType(entityType, name) {
   const derived = Model.derivedField(entityType, name);
 
-  return Model.entry(entityType).attributes[name] ?? derived?.type ?? null;
+  return (
+    Model.own(Model.entry(entityType).attributes, name) ?? derived?.type ?? null
+  );
 }
 
 // The value a rule compares against, read off the boxed entity in the spelling the rules were
@@ -735,7 +737,10 @@ function throughDerivedSet(entityType, names) {
       return true;
     }
 
-    type = (Model.relationships(type)[name] ?? Model.inverses(type)[name]).type;
+    type = (
+      Model.own(Model.relationships(type), name) ??
+      Model.own(Model.inverses(type), name)
+    ).type;
   }
 
   return false;
@@ -1290,7 +1295,7 @@ function expandedGlobalRoles(role) {
   const expanded = globalThis.Hologram.sync?.expandedRoles ?? {};
   const label = Type.isAlias(role) ? Interpreter.moduleExName(role) : null;
 
-  if (label !== null && expanded[label]) {
+  if (label !== null && Object.hasOwn(expanded, label)) {
     return expanded[label];
   }
 

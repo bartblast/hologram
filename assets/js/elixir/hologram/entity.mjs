@@ -38,7 +38,7 @@ function attributeValue(entry, given, name) {
     return Elixir_Hologram_Entity["generate_id/0"]();
   }
 
-  return entry.defaults[name] ?? Type.nil();
+  return Model.own(entry.defaults, name) ?? Type.nil();
 }
 
 // The struct as Model.box builds one for a row, in the same field order, so a row constructed
@@ -242,7 +242,7 @@ function declaredAttributes(entry) {
 }
 
 function constraintErrors(entry, name, value, attributeType) {
-  const constraints = entry.constraints[name] ?? {};
+  const constraints = Model.own(entry.constraints, name) ?? {};
 
   return [
     ...boundErrors(name, value, attributeType, constraints, "min"),

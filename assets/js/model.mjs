@@ -182,6 +182,13 @@ export default class Model {
     return Model.entry(type).derived;
   }
 
+  // The value the given baked object holds under the given name, or undefined. Its own keys only:
+  // the baked model is made of plain objects, so a name like constructor or toString would otherwise
+  // read a property of Object.prototype.
+  static own(object, name) {
+    return Object.hasOwn(object, name) ? object[name] : undefined;
+  }
+
   // The derived field of the given name, or null for a name the type declares no derived field by -
   // its own key only, so a name like constructor is no derived field.
   static derivedField(type, name) {
@@ -262,8 +269,10 @@ export default class Model {
   static pathTarget(type, relationshipNames) {
     return relationshipNames.reduce(
       (current, name) =>
-        (Model.relationships(current)[name] ?? Model.inverses(current)[name])
-          .type,
+        (
+          Model.own(Model.relationships(current), name) ??
+          Model.own(Model.inverses(current), name)
+        ).type,
       type,
     );
   }

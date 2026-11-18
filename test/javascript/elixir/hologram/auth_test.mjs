@@ -883,6 +883,24 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    // The baked model is a plain object, so a derived field named like one of Object.prototype's
+    // properties must read as the string it holds rather than as the property.
+    it("compares a derived string named like a prototype property by its sort key", () => {
+      defineModel({read: [rule({predicates: [["toString", ">=", "m"]]})]});
+
+      globalThis.Hologram.sync.model[DOCUMENT].derived.toString = {
+        definition: {concat: [{name: "title"}, {value: "!"}]},
+        kind: "scalar",
+        type: "string",
+        values: null,
+      };
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document({title: "Mango"})),
+        Type.boolean(true),
+      );
+    });
+
     it("settles a string bound that shares a key by the value itself", () => {
       const rules = [rule({predicates: [["title", ">", "Zebra"]]})];
 
@@ -2286,6 +2304,34 @@ describe("Elixir_Hologram_Auth", () => {
       assert.deepStrictEqual(folderReads(predicates), Type.boolean(true));
     });
 
+    // The baked inverses are a plain object, so an inverse named like one of Object.prototype's
+    // properties is followed to its rows rather than read as the property.
+    it("reads a set through an inverse named like a prototype property", () => {
+      const predicates = [
+        {
+          filter: [["name", "==", "urgent"]],
+          quantifier: "any",
+          source: ["toString", "tags"],
+        },
+      ];
+
+      defineModel({}, {read: [rule({predicates})]});
+
+      const inverses = globalThis.Hologram.sync.model[FOLDER].inverses;
+      inverses.toString = inverses.documents;
+      delete inverses.documents;
+      Model.reset();
+
+      putDocument({});
+      LocalDatabase.putRow(TAG, {id: TAG_ID, name: "urgent"});
+      LocalDatabase.replaceFacts(DOCUMENT, "tags", DOC, [TAG_ID]);
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), folder()),
+        Type.boolean(true),
+      );
+    });
+
     // A row not created yet has nothing in any set of its, as the server reads it - not every held
     // row whose reference is empty too.
     it("reads no set off a row with no id", () => {
@@ -3660,6 +3706,18 @@ describe("Elixir_Hologram_Auth", () => {
         () => hasRole(Type.bitstring(ALICE), Type.alias("MyApp.Roles.Nobody")),
         "Hologram.MisuseError",
         "unknown global role MyApp.Roles.Nobody - defined global roles are: MyApp.Roles.Admin, MyApp.Roles.Support",
+      );
+    });
+
+    // The baked roles are a plain object, so an alias spelled like one of Object.prototype's
+    // properties is no role.
+    it("raises on an alias named like a prototype property", () => {
+      LocalDatabase.putRow(GRANT, grantRow({role: ADMIN}));
+
+      assertBoxedError(
+        () => hasRole(Type.bitstring(ALICE), Type.alias("constructor")),
+        "Hologram.MisuseError",
+        'unknown global role :"Elixir.constructor" - defined global roles are: MyApp.Roles.Admin, MyApp.Roles.Support',
       );
     });
 
