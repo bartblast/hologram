@@ -445,7 +445,7 @@ defmodule Hologram.Sync.Carry do
   end
 
   # Never what the client spells: what it spells starts with a quote, a bracket, a brace, a digit,
-  # a minus, `float:` or `null`.
+  # a minus, `float:`, `null` or the exclamation mark it marks its own unknown shapes with.
   defp spell_unknown(term), do: "?" <> inspect(term, limit: :infinity, printable_limit: :infinity)
 
   # A value as the client holds it once its stage has unboxed it (see Model.unbox in model.mjs),

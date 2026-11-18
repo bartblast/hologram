@@ -779,6 +779,40 @@ defmodule Hologram.Sync.CarryTest do
                ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["rating","==",float:4340000000000000]],"include":{},"skip":null,"sort":[],"take":null}|
     end
 
+    # A character past U+FFFF is two code units in JavaScript, whose own comparison sorts it below
+    # U+FFFD, where code point order puts it above.
+    test "sorts clauses by code point" do
+      query =
+        Module2
+        |> Stage.filter(c: "😀", c: "\u{FFFD}")
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==","| <>
+                 "\u{FFFD}" <>
+                 ~S|"],["c","==","😀"]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells the largest whole float a JavaScript Number holds exactly as an integer" do
+      query =
+        Module10
+        |> Stage.filter(rating: 9_007_199_254_740_991.0)
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["rating","==",9007199254740991]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells a negative fraction by its bits" do
+      query =
+        Module10
+        |> Stage.filter(rating: {:<, -2.5})
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["rating","<",float:c004000000000000]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
     test "spells a placeholder by its name" do
       query = Stage.filter(Module2, c: %Placeholder{name: :search})
 
