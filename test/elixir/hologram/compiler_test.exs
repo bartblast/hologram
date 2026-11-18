@@ -108,6 +108,10 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module22, as: ReadersTeam
   alias Hologram.Test.Fixtures.Policy.Readers.Module23, as: ReadersProject
   alias Hologram.Test.Fixtures.Policy.Readers.Module24, as: ReadersTask
+  alias Hologram.Test.Fixtures.Policy.Readers.Module25, as: ReadersVault
+  alias Hologram.Test.Fixtures.Policy.Readers.Module26, as: ReadersCrate
+  alias Hologram.Test.Fixtures.Policy.Readers.Module27, as: ReadersShelf
+  alias Hologram.Test.Fixtures.Policy.Readers.Module28, as: ReadersParcel
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
   alias Hologram.Test.Fixtures.Template.Renderer.Module131, as: SessionUserPage
@@ -5168,6 +5172,54 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/"update":[{"predicates":[],"to":[["rel",["team"],#{team_js},["member"]]],"via":null}]/
              )
+    end
+
+    # The parcel's vault and shelf have no read rule, so its read rule's delegations through them
+    # carry the key the server's verdict on each is sent under and the types it reads. The one to
+    # the crate runs through readable types alone.
+    test "bakes a read rule's delegation through a type nobody may read with its verdict key and reads",
+         %{
+           ir_plt: ir_plt,
+           runtime_mfas: runtime_mfas
+         } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types:
+            MapSet.new([ReadersCrate, ReadersParcel, ReadersShelf, ReadersVault, RoleGrant])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      vault_key = Hologram.Policy.verdict_key(ReadersParcel, :read, {:via, {:update, [:vault]}})
+
+      shelf_key =
+        Hologram.Policy.verdict_key(ReadersParcel, :read, {:via, {:read, [:shelf, :crate]}})
+
+      vault_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module25"/
+      crate_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module26"/
+      shelf_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module27"/
+
+      assert String.contains?(
+               js,
+               ~s/"via":["update",["vault"],{"reads":[#{vault_js}],"verdict":"#{vault_key}"}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"via":["read",["shelf","crate"],{"reads":[#{crate_js},#{shelf_js}],"verdict":"#{shelf_key}"}]/
+             )
+
+      assert String.contains?(js, ~s/"via":["read",["crate"]]}/)
     end
 
     # Each time is spelled by the type of the attribute it is compared with, on the row that

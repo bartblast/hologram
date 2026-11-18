@@ -90,10 +90,10 @@ defmodule Hologram.Query.Window do
   `Hologram.Policy.related_chains/1`) are embedded the way a path's relationships are, and so are
   those of every type it includes, under that include. A chain stops before its first type no
   session may read (see `Hologram.Policy.readable_prefix/2`): no client is ever sent such a row,
-  and the server's verdict answers what a read rule's conditions read of it. A row embedded for a
-  path or for a rule gets no rule chains of its own: the template never sees it, whatever a
-  delegation reads through it is in the delegating type's chains already, and a rule reading a
-  row of its own type would otherwise never stop embedding.
+  and the server's verdict answers what a read rule's conditions, role references and delegations
+  read of it. A row embedded for a path or for a rule gets no rule chains of its own: the template
+  never sees it, whatever a delegation reads through it is in the delegating type's chains
+  already, and a rule reading a row of its own type would otherwise never stop embedding.
 
   Sort, skip and take are emptied rather than dropped. They shape what a query answers rather
   than what it downloads, so two queries reading the same rows in different orders share one

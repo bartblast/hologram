@@ -507,9 +507,9 @@ defmodule Hologram.Policy do
   @doc """
   Returns the chains `related_chains/2` returns for the given operation of the given entity type
   that a client answers from the rows it holds, sorted: those its rules read outside any deciding
-  clause or role reference (see `deciding_quantifier?/3`), whose sets and paths and the rows on the
-  way to them the server's verdict answers over the rows as stored. A delegation's are those of the
-  operation it asks the related row, the delegation's own chain among them.
+  clause, role reference or delegation (see `deciding_quantifier?/3`), whose sets and paths and the
+  rows on the way to them the server's verdict answers over the rows as stored. A delegation's are
+  those of the operation it asks the related row, the delegation's own chain among them.
 
   Takes a validated data model, for the reason `related_chains/1` does.
   """
@@ -645,7 +645,7 @@ defmodule Hologram.Policy do
   Returns the relationships of the given chain, read from a row of the given entity type, before
   its first hop to a type no session may read (see `readable_type?/1`): the part of it a client can
   hold rows along. Past that type no client gets a row, and the server's verdict answers what a
-  read rule's conditions read of it.
+  read rule's conditions, role references and delegations read of it.
   """
   @spec readable_prefix(module, list(atom)) :: list(atom)
   def readable_prefix(entity_type, chain) do
@@ -1505,18 +1505,19 @@ defmodule Hologram.Policy do
 
   # The chains a rule reads - all of them, or those a client answers from the rows it holds.
   defp rule_chains(entity_type, %{predicates: predicates, to: to, via: via}, reads) do
-    {read_predicates, read_references} =
+    {read_predicates, read_references, read_via} =
       case reads do
         :all ->
-          {predicates, to}
+          {predicates, to, via}
 
         {:held, operation} ->
           {undecided_predicates(entity_type, operation, predicates),
-           undecided_references(entity_type, operation, to)}
+           undecided_references(entity_type, operation, to),
+           undecided_via(entity_type, operation, via)}
       end
 
     predicate_chains(entity_type, read_predicates) ++
-      reference_chains(read_references) ++ delegation_chains(entity_type, via, reads)
+      reference_chains(read_references) ++ delegation_chains(entity_type, read_via, reads)
   end
 
   # The set links a rule's condition reads: those of its quantifiers, and those of the derived
@@ -1652,6 +1653,13 @@ defmodule Hologram.Policy do
 
   defp undecided_references(entity_type, operation, references) do
     Enum.reject(references, &deciding_quantifier?(entity_type, operation, {:to, &1}))
+  end
+
+  # The given delegation, or nil when it is a deciding one.
+  defp undecided_via(_entity_type, _operation, nil), do: nil
+
+  defp undecided_via(entity_type, operation, via) do
+    if deciding_quantifier?(entity_type, operation, {:via, via}), do: nil, else: via
   end
 
   defp unknown_operation_message(entity_type, operation) do

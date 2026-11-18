@@ -1392,6 +1392,18 @@ defmodule Hologram.PolicyTest do
       assert held_chains(Policy.Readers.Module24, :read) == []
     end
 
+    # The vault and the shelf have no read rule, so the server's verdicts answer the delegations
+    # through them, while the crate is read through readable types alone.
+    test "leaves out the chains of a read rule's delegations through a type nobody may read" do
+      assert related_chains(Policy.Readers.Module28, :read) == [
+               [:crate],
+               [:shelf, :crate],
+               [:vault]
+             ]
+
+      assert held_chains(Policy.Readers.Module28, :read) == [[:crate]]
+    end
+
     defmodule HeldOwner do
       use Hologram.Entity
 

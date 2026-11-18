@@ -535,8 +535,8 @@ defmodule Hologram.Policy.Validator do
   # A rule reading a related row through a type nobody may read answers no in every browser - the
   # row never reaches one - while the server reads the row as stored and may answer yes, the
   # client-locality defect validate_server_only_predicates!/4 refuses for a value, one relationship
-  # away. A type's own read rules are left out: a condition or a role reference they read through
-  # such a type is a deciding item, which the server's verdict on the row answers (see
+  # away. A type's own read rules are left out: a condition, a role reference or a delegation they
+  # read through such a type is a deciding item, which the server's verdict on the row answers (see
   # Hologram.Policy.deciding_quantifier?/3). A rule delegating to a read rule is not a read rule, so
   # its own chains stay checked, while the delegated rule's deciding items are answered by the
   # verdicts on the row it delegates to. The chains a deciding item reads are not checked, since

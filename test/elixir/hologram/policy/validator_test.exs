@@ -1202,6 +1202,39 @@ defmodule Hologram.Policy.ValidatorTest do
       assert validate_model!(types, []) == :ok
     end
 
+    # The delegated read rule's own delegation is answered from the server's verdict on the related
+    # row, so no browser reads the vault it leads to.
+    test "accepts a delegation to a read rule whose delegation runs through a type nobody may read" do
+      defmodule InlinePolicyFixture136 do
+        use Hologram.Entity
+
+        attribute :open, :boolean, default: false
+
+        allow :update, when: open == true
+      end
+
+      defmodule InlinePolicyFixture137 do
+        use Hologram.Entity
+
+        relationship :vault, Hologram.Policy.ValidatorTest.InlinePolicyFixture136
+
+        allow :read, via: {:update, vault}
+      end
+
+      defmodule InlinePolicyFixture138 do
+        use Hologram.Entity
+
+        relationship :parcel, Hologram.Policy.ValidatorTest.InlinePolicyFixture137
+
+        allow :read
+        allow :update, via: {:read, parcel}
+      end
+
+      types = [InlinePolicyFixture136, InlinePolicyFixture137, InlinePolicyFixture138]
+
+      assert validate_model!(types, []) == :ok
+    end
+
     test "accepts a non-read rule's none through a row of a type nobody may read" do
       defmodule InlinePolicyFixture113 do
         use Hologram.Entity

@@ -3031,8 +3031,8 @@ defmodule Hologram.Compiler do
     do: Derived.path_target(entity_type, hops)
 
   # The verdict key and the read types of a deciding item - a clause standing in a rule's
-  # predicates, or a role reference as {:to, reference} - as members of its object, none for any
-  # other.
+  # predicates, a role reference as {:to, reference} or a delegation as {:via, via} - as members of
+  # its object, none for any other.
   defp render_verdict_members(item, {entity_type, operation}) do
     if Policy.deciding_quantifier?(entity_type, operation, item) do
       reads_js =
@@ -5220,7 +5220,7 @@ defmodule Hologram.Compiler do
     render_json_object([
       {"predicates", render_policy_predicates([entity_type], rule.predicates, verdict_context)},
       {"to", render_policy_references(entity_type, rule.to, verdict_context)},
-      {"via", render_policy_delegation(rule.via)}
+      {"via", render_policy_delegation(rule.via, verdict_context)}
     ])
   end
 
@@ -5386,16 +5386,25 @@ defmodule Hologram.Compiler do
     |> then(&"[#{&1}]")
   end
 
-  # Operation first, as the server's tuple holds it - the array shape grant references bake as.
-  defp render_policy_delegation(nil), do: "null"
+  # Operation first, as the server's tuple holds it - the array shape grant references bake as. A
+  # deciding one - in a read rule, one whose chain passes a row of a type no client holds - carries
+  # a third element, the key the server's verdict on it is sent under and the types it reads, which
+  # the client answers it from instead.
+  defp render_policy_delegation(nil, _verdict_context), do: "null"
 
-  defp render_policy_delegation({operation, relationship_names}) do
+  defp render_policy_delegation({operation, relationship_names} = via, verdict_context) do
     operation_js =
       operation
       |> Policy.operation_key()
       |> Jason.encode!()
 
-    "[#{operation_js},#{render_policy_name(relationship_names)}]"
+    verdict_js =
+      case render_verdict_members({:via, via}, verdict_context) do
+        [] -> ""
+        members -> ",#{render_json_object(members)}"
+      end
+
+    "[#{operation_js},#{render_policy_name(relationship_names)}#{verdict_js}]"
   end
 
   # An attribute as its name, and a path or the chain of a delegation or a grant reference as the
