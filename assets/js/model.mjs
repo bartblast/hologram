@@ -56,6 +56,11 @@ export default class Model {
   // accepts reads back - the entity validator asks only that the calendar has the day.
   static #YEAR = "((?!-0000)-?(?:\\d{4}|[1-9]\\d{4,}))";
 
+  // Signed either way and of any width, since toISOString - which wireDateTime builds on - writes a
+  // year past 9999 as +010000 and one below 0 as -000001. Only the wall clock reaches it, so neither
+  // arrives, but an order that read one wrongly would break the sort it is handed to.
+  static #YEAR_PREFIX = /^[+-]?\d+/;
+
   static #DATE_PATTERN = new RegExp(`^${Model.#YEAR}-(\\d{2})-(\\d{2})$`);
 
   static #DATETIME_PATTERN = new RegExp(
@@ -513,9 +518,35 @@ export default class Model {
     );
   }
 
+  // Two dates, or two datetimes, as the wire spells them, in the order of the days or instants
+  // they name: -1, 0 or 1. Within one year the rest of the spelling is fixed width - every datetime
+  // on the wire is UTC at six fractional digits - so it orders as its characters do, but the year
+  // does not: it is as wide as it needs and signed, so -2 would sort after -1 and 10000 before 9999.
+  // So the years compare as numbers, BigInt for any width, and the rest as the string it is.
+  static compareTemporal(left, right) {
+    const [leftYear] = left.match(Model.#YEAR_PREFIX);
+    const [rightYear] = right.match(Model.#YEAR_PREFIX);
+
+    const leftNumber = BigInt(leftYear);
+    const rightNumber = BigInt(rightYear);
+
+    if (leftNumber !== rightNumber) {
+      return leftNumber < rightNumber ? -1 : 1;
+    }
+
+    const leftRest = left.slice(leftYear.length);
+    const rightRest = right.slice(rightYear.length);
+
+    if (leftRest === rightRest) {
+      return 0;
+    }
+
+    return leftRest < rightRest ? -1 : 1;
+  }
+
   // A datetime as the wire spells it, from a count of milliseconds - six fractional digits, the
-  // same rule #unboxDateTime follows, so an instant this client derives compares as a plain string
-  // with one the server sent. toISOString writes exactly three, which is all a millisecond has.
+  // same rule #unboxDateTime follows, so an instant this client derives is spelled the way one the
+  // server sent is. toISOString writes exactly three, which is all a millisecond has.
   static wireDateTime(milliseconds) {
     return `${new Date(milliseconds).toISOString().slice(0, -1)}000Z`;
   }
@@ -595,8 +626,8 @@ export default class Model {
     ]);
   }
 
-  // Every datetime on the wire is UTC, which is what makes them comparable as plain strings in
-  // the first place - so the zone is the same one every time rather than something to read.
+  // Every datetime on the wire is UTC, which is what gives one instant one spelling - so the zone
+  // is the same one every time rather than something to read.
   static #boxDateTime(value) {
     const match = value.match(Model.#DATETIME_PATTERN);
 

@@ -331,7 +331,7 @@ describe("Model", () => {
 
     // The last two spellings are the ones only the SHAPE check can refuse: their fields name a
     // real day, so the calendar behind it would pass them. The wire carries one spelling per
-    // date, which is what lets these compare as plain strings at all.
+    // date, which is what lets two equal dates be equal strings.
     it("raises for a date the wire spelled some other way", () => {
       for (const spelling of ["garbage", "2026-7-17", "2026-08-16T00:00:00Z"]) {
         assert.throw(
@@ -1265,8 +1265,9 @@ describe("Model", () => {
       });
     });
 
-    // One spelling per instant is what lets a datetime compare as a plain string, so a value
-    // written at any precision leaves here with six fractional digits.
+    // One spelling per instant is what lets a datetime equal another as a plain string, and order
+    // by its characters within a year, so a value written at any precision leaves here with six
+    // fractional digits.
     it("unboxes a datetime at the precision the wire carries", () => {
       assert.equal(
         Model.unbox(datetime(22508, 6), "datetime"),
@@ -1560,6 +1561,78 @@ describe("Model", () => {
       assert.deepEqual(
         Model.notIncluded("tags"),
         field(Model.box(TASK, row()), "tags"),
+      );
+    });
+  });
+
+  // The order asserted is Date.compare/2's and DateTime.compare/2's over the same values.
+  describe("compareTemporal()", () => {
+    it("orders dates by their years as numbers", () => {
+      const ordered = [
+        "-10000-01-01",
+        "-0002-12-31",
+        "-0001-01-01",
+        "0000-01-01",
+        "9999-12-31",
+        "10000-01-01",
+        "20250-01-01",
+      ];
+
+      for (const [index, left] of ordered.entries()) {
+        for (const [otherIndex, right] of ordered.entries()) {
+          assert.equal(
+            Model.compareTemporal(left, right),
+            Math.sign(index - otherIndex),
+            `${left} against ${right}`,
+          );
+        }
+      }
+    });
+
+    it("orders dates within one year by month and day", () => {
+      assert.equal(Model.compareTemporal("-0001-02-01", "-0001-11-30"), -1);
+      assert.equal(Model.compareTemporal("10000-12-31", "10000-01-01"), 1);
+      assert.equal(Model.compareTemporal("-0001-06-01", "-0001-06-01"), 0);
+    });
+
+    // The wall clock's own spelling (toISOString) of a year past 9999 carries a plus and two more
+    // digits - one year, however it is spelled, compares as that year.
+    it("orders a year by its number, however wide or signed its spelling", () => {
+      assert.equal(
+        Model.compareTemporal(
+          "+010000-01-01T00:00:00.000000Z",
+          "9999-12-31T23:59:59.999999Z",
+        ),
+        1,
+      );
+
+      assert.equal(Model.compareTemporal("-000001-01-01", "-0001-01-01"), 0);
+      assert.equal(Model.compareTemporal("-0001-01-01", "-000001-01-01"), 0);
+    });
+
+    it("orders datetimes by their years, then by the instant within one", () => {
+      assert.equal(
+        Model.compareTemporal(
+          "-0002-12-31T23:59:59.999999Z",
+          "-0001-01-01T00:00:00.000000Z",
+        ),
+        -1,
+      );
+
+      assert.equal(
+        Model.compareTemporal(
+          "2026-03-01T10:00:00.000001Z",
+          "2026-03-01T10:00:00.000000Z",
+        ),
+        1,
+      );
+
+      assert.equal(
+        Model.compareTemporal(
+          "0000-01-01T00:00:00.000000Z",
+          "0000-01-01T00:00:00.000000Z",
+        ),
+        0,
       );
     });
   });
