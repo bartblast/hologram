@@ -828,6 +828,26 @@ describe("Tabs", () => {
         assert.deepStrictEqual(seen, [{kind: "sealed"}, answered]);
       });
 
+      // Said only once, and the one start-over that drops the rows at once: the refill would leave
+      // the previous person's rows readable until it ends, this page's own among them.
+      it("keeps a start-over for somebody else signing in when it leads with no place", async () => {
+        const resync = {
+          event: "sync_resync",
+          frame: {reason: "identity"},
+          kind: "frame",
+        };
+
+        const seen = [];
+
+        await holdThenHandOver(seen, {
+          messages: [frame, resync, state, answered],
+        });
+
+        Tabs.ready();
+
+        assert.deepStrictEqual(seen, [{kind: "sealed"}, resync, answered]);
+      });
+
       // Read before the leader wrote it, the store can lack the identity the queue was numbered
       // under - and this tab sends the queue now.
       it("takes and writes down the identity the group's state names when it leads with no place", async () => {

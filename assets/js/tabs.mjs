@@ -40,6 +40,14 @@ const HELD_UNTIL_READY = new Set(["answered", "frame", "state"]);
 // still speaking - see `#deliver`.
 const SPOKEN_BY_THE_LEADER = new Set(["frame", "state"]);
 
+// The server starting over because somebody else signed in - the one start-over it says only once,
+// to the stream it happened on, and the one that drops rows rather than leaving them readable until
+// the refill ends.
+const startsOverForSomebodyElse = (message) =>
+  message.kind === "frame" &&
+  message.event === "sync_resync" &&
+  message.frame.reason === "identity";
+
 export default class Tabs {
   static leader = true;
 
@@ -372,18 +380,24 @@ export default class Tabs {
   // place (or for belonging to somebody else). Replayed, the tail's marker would give it a place
   // and call the pot complete over the tail's rows alone, and the lead would then write exactly
   // that to the store. So the frames and the group's state go: the fill repeats the rows, and the
-  // stream repeats a stop and the rules. Two things stay. The answers to batches are about the
-  // queue, which the new fill does not replace. And the identity the group's state names is the one
-  // the queue was numbered under - read before the leader had written it, the store can lack it -
-  // so it is taken as the state would have given it, and written down, since this tab now sends
-  // under it. (A state its leader posted before its own restore names that page's pair instead, and
-  // a tab that held no state keeps the pair its restore settled on: see #1680.)
+  // stream repeats a stop and the rules. Three things stay. The answers to batches are about the
+  // queue, which the new fill does not replace. A start-over because somebody else signed in is
+  // said only once, and drops at once every row the previous person may see - any this tab's own
+  // page carried for them included, which the new fill would leave readable until it ends. And the
+  // identity the group's state names is the one the queue was numbered under - read before the
+  // leader had written it, the store can lack it - so it is taken as the state would have given it,
+  // and written down, since this tab now sends under it. (A state its leader posted before its own
+  // restore names that page's pair instead, and a tab that held no state keeps the pair its restore
+  // settled on: see #1680.)
   static ready() {
     const lead = Tabs.#leadWhenReady;
     const fromNowhere = lead && SyncStream.syncCursor === null;
 
     const held = fromNowhere
-      ? Tabs.#held.filter((message) => message.kind === "answered")
+      ? Tabs.#held.filter(
+          (message) =>
+            message.kind === "answered" || startsOverForSomebodyElse(message),
+        )
       : Tabs.#held;
 
     if (fromNowhere) {
@@ -445,10 +459,7 @@ export default class Tabs {
   // nowhere - here, or by the lead itself when this arrives while it is being taken.
   static #deliver(message) {
     if (Tabs.#ready && Tabs.leader && SPOKEN_BY_THE_LEADER.has(message.kind)) {
-      if (
-        message.event === "sync_resync" &&
-        message.frame.reason === "identity"
-      ) {
+      if (startsOverForSomebodyElse(message)) {
         Tabs.#onMessage(message);
         Durability.clear();
 
