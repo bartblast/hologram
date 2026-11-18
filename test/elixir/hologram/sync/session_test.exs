@@ -1103,8 +1103,8 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     # The change lands just after the gap was read, so the gap doesn't name it. Its batch reaches the
-    # session while the client is being caught up, is kept, and is told once the client is caught
-    # up - whole, since it is below the edge the catch-up's reads may have seen part of.
+    # session while it is reading the gap, waits behind the catch-up, and is told once the client is
+    # caught up - whole, since it is below the edge the catch-up's reads may have seen part of.
     test "tells a batch routed while the client is being caught up once it is" do
       renamed = create("old title")
       windows(%{@page => [@board_window]})
@@ -1131,8 +1131,11 @@ defmodule Hologram.Sync.SessionTest do
       route([live_effect(:patch_entity, Module2, renamed.id, %{"c" => "new title"})], {1, 0})
       send(session, :judge)
 
-      assert_receive {:sync_synced, :all, _cursor}
-      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      # Read in the order they came: a batch before the marker would pass an assert_receive too.
+      assert_receive first
+      assert_receive second
+      assert {:sync_synced, :all, _cursor} = first
+      assert {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], _seq} = second
       assert id == renamed.id
       assert data.c == "new title"
     end
@@ -3455,8 +3458,11 @@ defmodule Hologram.Sync.SessionTest do
       route([live_effect(:patch_entity, PolicyModule1, row.id, %{"public" => false})], {1, 0})
       send(session, :judge)
 
-      assert_receive {:sync_synced, :all, _cursor}
-      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :unsync_entity}], _seq}
+      # Read in the order they came: a batch before the marker would pass an assert_receive too.
+      assert_receive first
+      assert_receive second
+      assert {:sync_synced, :all, _cursor} = first
+      assert {:sync_deltas, _cursor, [%{id: id, op: :unsync_entity}], _seq} = second
       assert id == row.id
     end
 
