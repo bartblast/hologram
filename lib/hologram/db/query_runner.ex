@@ -9,7 +9,6 @@ defmodule Hologram.DB.QueryRunner do
   alias Hologram.DB.SortKey
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Metadata
-  alias Hologram.Entity.Validator
   alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Query
@@ -482,7 +481,7 @@ defmodule Hologram.DB.QueryRunner do
         :ok
 
       value ->
-        if not Validator.attribute_value_valid?(value, type, opts) do
+        if not Stage.value_fits?(value, type, opts) do
           raise MisuseError,
             message:
               "invalid element #{inspect(value)} in the list for placeholder #{inspect(name)} - expected #{expected_description(type, opts)}"
@@ -497,7 +496,7 @@ defmodule Hologram.DB.QueryRunner do
   end
 
   defp validate_binding!(name, value, :scalar, type, opts) do
-    if not Validator.attribute_value_valid?(value, type, opts) do
+    if not Stage.value_fits?(value, type, opts) do
       raise MisuseError,
         message:
           "invalid value #{inspect(value)} for placeholder #{inspect(name)} - expected #{expected_description(type, opts)}"

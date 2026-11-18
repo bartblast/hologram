@@ -12,6 +12,7 @@ defmodule Hologram.Migrator do
   alias Hologram.DB.Protocol
   alias Hologram.DB.Schema
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.DB.SortKey
   alias Hologram.Entity.Model
   alias Hologram.Migration.Loader
   alias Hologram.Migration.Renderer
@@ -346,7 +347,9 @@ defmodule Hologram.Migrator do
   The not-covered check runs first, before any database access - then the guard claims
   or verifies the database, objects standing under names the current naming rule no
   longer derives are renamed (one info line each), and the pending files apply from the
-  model the applied ones produce. The index repair and the drift check come last.
+  model the applied ones produce - with the indexes the applied files derive and the
+  database lacks built before them, when the node knows every applied file. The index
+  repair and the drift check come last.
   """
   @spec run(list(%{atom => any}), %{atom => any}, %{atom => any}) :: :ok
   def run(migrations, current_model, context) do
@@ -386,35 +389,39 @@ defmodule Hologram.Migrator do
     end
   end
 
-  defp apply_op(%{op: :add_column, backfill: value} = op, _mapping) do
+  # A required column with no explicit backfill carries its declared default as one - the
+  # renderer stamps it, which is what schema reconciliation does for the same declaration in
+  # dev: the two mechanisms have to leave the same rows behind, not merely the same columns.
+  # The default is the one the add's chunk leaves, which reconciliation's one diff also uses
+  # when the declaration arrives in one go.
+  defp apply_op(%{op: :add_column, backfill: value} = op) do
     add_column_filled(op, value)
   end
 
-  # A required column with no backfill takes its declared default, which is what schema
-  # reconciliation does for the same declaration in dev - the two mechanisms have to leave
-  # the same rows behind, not merely the same columns.
-  defp apply_op(%{op: :add_column} = op, mapping) do
-    fill =
-      if op.definition.null,
-        do: :none,
-        else: Preflight.fill_value(mapping, op.table, op.column)
-
-    case fill do
-      :none -> execute_statements(DDL.statements(op))
-      {:ok, encoded_value} -> add_column_filled(op, encoded_value)
+  # The NULLs take the declared default before the column tightens over them. Only when
+  # there are any: an enum value added in this transaction cannot be used in it, not even as
+  # the parameter of an UPDATE that matches no row. Asked before the fill: under a unique
+  # index that stands, a fill making rows repeat a key would fail in PostgreSQL.
+  defp apply_op(%{op: :alter_column, fill: value} = op) do
+    if count_result(DDL.null_check_statement(op.table, op.column)) > 0 do
+      Preflight.check_fill!(op)
+      fill_with_companions(op, value)
     end
+
+    execute_statements(DDL.statements(op))
   end
 
   # A type change asks about the unique indexes standing over its column right before it
   # applies: two values can convert to one, and the names a file's earlier ops leave behind
-  # are the ones the database holds at this point.
-  defp apply_op(%{op: :alter_column} = op, _mapping) do
+  # are the ones the database holds at this point. A tightening carrying a fill keeps its
+  # type, so the clause above has no cast to ask about.
+  defp apply_op(%{op: :alter_column} = op) do
     Preflight.check_cast!(op)
 
     execute_statements(DDL.statements(op))
   end
 
-  defp apply_op(op, _mapping), do: execute_statements(DDL.statements(op))
+  defp apply_op(op), do: execute_statements(DDL.statements(op))
 
   # Added nullable, filled, then tightened - the value never travels in the DDL, and the
   # rows that predate the column receive it.
@@ -437,22 +444,28 @@ defmodule Hologram.Migrator do
     end
   end
 
+  # Each op is checked right before it applies, against the database the ops before it
+  # left: a check read once for the whole file would look for a renamed attribute or entity
+  # under its new name in a database that still has the old one. A refusal takes back the
+  # ops before it with the transaction.
   defp apply_transactional(render, version, context) do
-    actual = Introspection.schema()
-    mapping = Mapper.derive_from_model!(render.post_model)
+    Enum.each(render.transactional, fn op ->
+      Preflight.check!(op)
+      apply_op(op)
+    end)
 
-    Preflight.run!(render.transactional, actual, mapping)
-    Enum.each(render.transactional, &apply_op(&1, mapping))
+    mapping = Mapper.derive_from_model!(render.post_model)
 
     # A companion this file adds is filled AFTER every op has applied, not at its own add:
     # the diff applies add_column before alter_column, so a source column being cast to
-    # text in the same file still holds its old type when its companion lands.
-    SchemaReconciler.backfill_companions!(render.transactional, mapping)
+    # text in the same file still holds its old type when its companion lands. The renderer
+    # names the added columns as the file leaves them, so a rename after the add is followed.
+    SchemaReconciler.backfill_companions!(render.added_columns, mapping)
 
     # The tail's checks run here, against the schema the statements above just produced and
     # before anything commits: a file whose index cannot be built does not apply at all,
-    # rather than committing and failing afterwards. The schema is read again on purpose - a
-    # column this file adds and fills is absent from the one the file started from, and a
+    # rather than committing and failing afterwards. They read the schema after every op,
+    # companions filled, so a column this file adds and fills is counted like any other - a
     # check against an absent column answers zero, which a backfilled unique column must not
     # get.
     Preflight.run!(render.tail, Introspection.schema(), mapping)
@@ -546,16 +559,55 @@ defmodule Hologram.Migrator do
     :claimed
   end
 
+  defp companion_key(:search_key, value), do: SortKey.search_key(value)
+
+  defp companion_key(:sort_key, value), do: SortKey.compute(value)
+
   defp count_result(statement) do
     {:ok, %{rows: [[count]]}} = Connection.query(statement)
 
     count
   end
 
+  # A file builds some of its indexes after it commits, so a node that stopped in between
+  # leaves the file recorded as applied and its index absent. A pending file that renames or
+  # drops that index names one that is not there and fails - on every boot, since the repair
+  # after the pending files never gets to build it. So the indexes the applied files derive
+  # are created first, under the names the pending files expect. For a pending drop that is
+  # a build the file takes back at once - the price of a crash in that window being followed
+  # by a release that drops that very index.
+  #
+  # Creating only, never rebuilding: an invalid index holds its name, so a pending rename or
+  # drop finds it, and the repair after the files rebuilds whatever survives them. Rebuilding
+  # it here would fail on rows repeating its key on every boot, even for a release whose
+  # pending file drops that index. Creating can fail on such rows too, once: the build that
+  # fails leaves the index invalid under its name, so the next boot gets past here (#1700).
+  #
+  # With nothing pending the applied files derive the current model, so the repair after
+  # them does the same work. On a history this node does not fully know, what the applied
+  # files derive is not what the database holds - see heal_renames/3.
+  defp create_applied_indexes(migrations, applied, pending, pre_model) do
+    if pending != [] and known_history?(migrations, applied) do
+      pre_model
+      |> Mapper.derive_from_model!()
+      |> create_missing_indexes()
+    end
+
+    :ok
+  end
+
   defp create_index_concurrently(op) do
     concurrent_op = Map.put(op, :concurrently, true)
 
     execute_statements(DDL.statements(concurrent_op))
+  end
+
+  defp create_missing_indexes(mapping) do
+    mapping
+    |> missing_indexes()
+    |> Enum.each(&create_index_concurrently/1)
+
+    :ok
   end
 
   defp describe_non_plain_reason(:collation), do: "a collation other than its column's"
@@ -654,6 +706,32 @@ defmodule Hologram.Migrator do
     {:ok, _result} = Connection.query(fill_statement, [encoded_value])
   end
 
+  # Every filled row takes the one value, so its companions take one key each, set in the
+  # same statement - on the rows the fill reaches only, where the companion fill after the
+  # ops would recompute every row of the table.
+  # sobelow_skip ["SQL.Query"]
+  defp fill_with_companions(op, encoded_value) do
+    assignments = [
+      {op.column, encoded_value}
+      | Enum.map(op.fill_companions, fn {kind, name} ->
+          {name, companion_key(kind, encoded_value)}
+        end)
+    ]
+
+    set_sql =
+      assignments
+      |> Enum.with_index(1)
+      |> Enum.map_join(", ", fn {{name, _value}, position} ->
+        "#{Mapper.quote_identifier(name)} = $#{position}"
+      end)
+
+    table = ~s("#{Mapper.data_schema()}".#{Mapper.quote_identifier(op.table)})
+    column = Mapper.quote_identifier(op.column)
+    statement = "UPDATE #{table} SET #{set_sql} WHERE #{column} IS NULL"
+
+    {:ok, _result} = Connection.query(statement, Enum.map(assignments, &elem(&1, 1)))
+  end
+
   # A database holding an object under a name the current naming rule no longer derives - one
   # a release that changed the rule left behind - can't be fixed by a migration: replay derives
   # both sides with the current rule, so there is no difference for a file to express. The
@@ -670,9 +748,7 @@ defmodule Hologram.Migrator do
   # needs to boot once the newer nodes are stopped. Old and new nodes running against one
   # database at once is a separate matter, not supported yet (#1627).
   defp heal_renames(migrations, applied, pre_model) do
-    known_versions = MapSet.new(migrations, & &1.version)
-
-    if Enum.all?(applied, &MapSet.member?(known_versions, &1)) do
+    if known_history?(migrations, applied) do
       apply_renames(pre_model)
     else
       :ok
@@ -696,6 +772,12 @@ defmodule Hologram.Migrator do
     {:ok, %{rows: rows}} = Connection.query(DDL.invalid_indexes_statement())
 
     Enum.map(rows, fn [index] -> index end)
+  end
+
+  defp known_history?(migrations, applied) do
+    known_versions = MapSet.new(migrations, & &1.version)
+
+    Enum.all?(applied, &MapSet.member?(known_versions, &1))
   end
 
   defp log_rename(op) do
@@ -746,11 +828,7 @@ defmodule Hologram.Migrator do
   defp rebuild_and_create_indexes(mapping) do
     Enum.each(invalid_indexes(), &rebuild_index/1)
 
-    mapping
-    |> missing_indexes()
-    |> Enum.each(&create_index_concurrently/1)
-
-    :ok
+    create_missing_indexes(mapping)
   end
 
   defp rebuild_index(index) do
@@ -786,9 +864,11 @@ defmodule Hologram.Migrator do
 
       heal_renames(migrations, applied, pre_model)
 
-      migrations
-      |> pending(applied)
-      |> apply_pending(pre_model, context)
+      pending = pending(migrations, applied)
+
+      create_applied_indexes(migrations, applied, pending, pre_model)
+
+      apply_pending(pending, pre_model, context)
 
       mapping = Mapper.derive_from_model!(current_model)
 

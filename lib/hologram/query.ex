@@ -307,11 +307,18 @@ defmodule Hologram.Query do
   Ordering comparisons require an orderable attribute - every type but boolean and uuid - and a
   non-nil operand - SQL comparisons with NULL never match, so a nil operand would mean different
   things on the two execution tiers. A comparison on an enum attribute reads the declared
-  `values:` order, so `priority >= :medium` on `[:low, :medium, :high]` means medium or high, and
-  the operand must be one of the declared values. A comparison on a string attribute reads the
-  order `sort` puts it in - case and diacritics fold the way they do in the list - and a
-  bound names a position in that list, spelled the way the list spells it: `name >= "M"` reaches
-  `M`, `m`, `Mango`, while `name >= "m"` starts at `m`.
+  `values:` order, so `priority >= :medium` on `[:low, :medium, :high]` means medium or high. A
+  comparison on a string attribute reads the order `sort` puts it in - case and diacritics fold the
+  way they do in the list - and a bound names a position in that list, spelled the way the list
+  spells it: `name >= "M"` reaches `M`, `m`, `Mango`, while `name >= "m"` starts at `m`.
+
+  A value an attribute is compared with - by equality or an ordering operator - fits the
+  attribute's type, and so does each element of a membership list and each bound of a range: a
+  string for a string attribute, `true` or `false` for a boolean, a `Date`, `DateTime` or `Time`
+  struct for those types, an integer that fits in 64 bits for an integer, one of the declared
+  values for an enum, and for a uuid or a reference field the lowercase hyphenated spelling ids are
+  stored in. A float attribute takes a float or such an integer, the same number compared. Nil fits
+  any type where the operator takes it.
 
   An integer range (`priority in 3..10`) is shorthand for the inclusive bounds - it expands into
   a `>=` triple and a `<=` triple. Ranges require an integer attribute, step 1, and at least one
@@ -334,8 +341,10 @@ defmodule Hologram.Query do
   one side of `and` or `or` or as a quantifier's condition, when a quantifier has a condition but no
   bound row, a bound row but no condition, or - for `all` - no condition at all, when a quantifier
   binds a name an enclosing one already bound, when its relationship is pinned or not a
-  relationship, when a bound row is compared whole rather than through an attribute, when the
-  predicates name `user_id()`, which only a policy condition can (a user's id is pinned from a
+  relationship, when a bound row is compared whole rather than through an attribute, when a
+  comparison or a search reads the same attribute of the same row on both sides - which tells
+  nothing about the row but whether the attribute is set, and the error says what it answers - when
+  the predicates name `user_id()`, which only a policy condition can (a user's id is pinned from a
   variable holding it: `^user_id`), or when the predicates take any other form - a bare name where
   only a value goes (a keyword value, a membership element, a range bound) is most likely a
   forgotten pin, and the error says so.
@@ -350,9 +359,10 @@ defmodule Hologram.Query do
   derived set, when `{:outer, levels, name}` reaches past the queried row, when a disjunction holds
   fewer than two predicate lists or one of them is empty or not such a list, when a comparison names
   an attribute with itself or two attributes that do not compare, when a search names an attribute
-  that isn't a string or its term isn't a string, or when a value is invalid for its attribute or
-  its operator - a pinned keyword value holding a list, a tuple or a range is refused as an equality
-  operand, since membership and comparisons are written as expressions.
+  that isn't a string or its term isn't a string, when a value doesn't fit the type of the
+  attribute it's compared with, or when a value is invalid for its operator - a pinned keyword
+  value holding a list, a tuple or a range is refused as an equality operand, since membership and
+  comparisons are written as expressions.
   """
   defmacro filter(query, predicates) do
     lowered = Expression.predicates(predicates, __CALLER__)
