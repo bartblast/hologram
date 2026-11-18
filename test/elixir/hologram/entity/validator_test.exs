@@ -882,6 +882,7 @@ defmodule Hologram.Entity.ValidatorTest do
       defmodule LimitedLineFixture do
         use Hologram.Entity
 
+        attribute :name, :string
         attribute :topic, :string
 
         allow :update, only: [:topic]
