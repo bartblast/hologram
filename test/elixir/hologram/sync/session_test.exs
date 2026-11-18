@@ -396,18 +396,30 @@ defmodule Hologram.Sync.SessionTest do
       assert Evaluators.live() == [{@board_window, Stage.normalize(Module2)}]
     end
 
+    # Both sessions are kept catching up by a window that never fills: a session that is caught up
+    # has left its windows, and the holder alone would keep the evaluator running.
     test "joins the window a session already holds rather than starting a second evaluator" do
-      windows(%{@page => [@board_window]})
-      hold_windows([@board_window])
+      windows(%{@page => [@board_window, @other_window]})
+      holder = hold_windows([@board_window])
+      hold_silently(@other_window)
 
-      start_session!(gap: [])
-      assert_receive {:sync_synced, :all, _cursor}
+      first = start_session!(gap: [])
 
       other_client = spawn_link(fn -> Process.sleep(:infinity) end)
+      second = start_session!(gap: [], client: other_client)
 
-      start_session!(gap: [], client: other_client)
+      :sys.get_state(first)
+      :sys.get_state(second)
 
-      assert length(Evaluators.live()) == 1
+      [{evaluator, _value}] = Registry.lookup(Evaluator.registry(), @board_window)
+
+      subscribers =
+        evaluator
+        |> :sys.get_state()
+        |> Map.fetch!(:subscribers)
+        |> Map.keys()
+
+      assert Enum.sort(subscribers) == Enum.sort([holder, first, second])
     end
   end
 
