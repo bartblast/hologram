@@ -415,7 +415,17 @@ export default class SyncStream {
       // there would draw the page being LEFT over the destination's virtual document - the same
       // window in which an action is held rather than run. Nothing is lost by standing down: the
       // mount renders when it closes the transition.
-      if (Hologram.domEpoch !== Hologram.registryEpoch) {
+      //
+      // And before a page has mounted there is nothing to render, and while one is mounting the
+      // mount's own render is on its way. A tab listens to its group from before it reads the
+      // store (see DataLayer.boot), so a batch another tab seals can be taken up then and ask for
+      // a render - which, run first, would be the page's first render and leave the mount's to be
+      // treated as a page arriving. The mount renders what was taken up.
+      if (
+        Hologram.pageModule() === null ||
+        Hologram.isMounting ||
+        Hologram.domEpoch !== Hologram.registryEpoch
+      ) {
         return;
       }
 

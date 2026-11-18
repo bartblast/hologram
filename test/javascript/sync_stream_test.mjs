@@ -703,6 +703,60 @@ describe("SyncStream", () => {
       assert.isTrue(SyncStream.rowsChangedSinceRender);
     });
 
+    // A tab hears its group before it reads the store, so a batch another tab seals can be taken up
+    // before the page mounts - and the mount renders it.
+    it("renders nothing before the first page has mounted", () => {
+      sinon
+        .stub(window, "requestAnimationFrame")
+        .callsFake((callback) => callback());
+      sinon.stub(Hologram, "pageModule").returns(null);
+
+      const rendering = sinon.stub(Hologram, "render");
+
+      SyncStream.scheduleRender();
+
+      sinon.assert.notCalled(rendering);
+      assert.isFalse(SyncStream.renderScheduled);
+    });
+
+    // Run first, it would be the page's first render, and the mount's would be taken for a page
+    // arriving.
+    it("leaves the render to a mount under way", () => {
+      sinon
+        .stub(window, "requestAnimationFrame")
+        .callsFake((callback) => callback());
+      sinon
+        .stub(Hologram, "pageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      const rendering = sinon.stub(Hologram, "render");
+
+      Hologram.isMounting = true;
+
+      try {
+        SyncStream.scheduleRender();
+      } finally {
+        Hologram.isMounting = false;
+      }
+
+      sinon.assert.notCalled(rendering);
+    });
+
+    it("renders once a page has mounted", () => {
+      sinon
+        .stub(window, "requestAnimationFrame")
+        .callsFake((callback) => callback());
+      sinon
+        .stub(Hologram, "pageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      const rendering = sinon.stub(Hologram, "render");
+
+      SyncStream.scheduleRender();
+
+      sinon.assert.calledOnce(rendering);
+    });
+
     it("marks rows changed while a render is already scheduled", () => {
       SyncStream.renderScheduled = true;
       SyncStream.rowsChangedSinceRender = false;
@@ -843,6 +897,11 @@ describe("SyncStream", () => {
 
     it("schedules a repaint rather than repainting in the handler", () => {
       const renderStub = sinon.stub(Hologram, "render");
+
+      // A page is mounted: before the first mount there is nothing to repaint.
+      sinon
+        .stub(Hologram, "pageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
 
       eventSource.listeners.sync_deltas({data: frame()});
 
