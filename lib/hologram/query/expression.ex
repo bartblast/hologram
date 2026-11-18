@@ -53,6 +53,10 @@ defmodule Hologram.Query.Expression do
 
   @search_operators [:contains, :starts_with]
 
+  # The operators that compare a field with itself true wherever the field is set - an ordering
+  # comparison taking equality, and a search, which a string passes against itself.
+  @set_field_operators [:<=, :>=, :contains, :starts_with]
+
   # The data form spells an exact search as an operator of its own.
   @exact_search_operators %{contains: :contains_exact, starts_with: :starts_with_exact}
 
@@ -117,7 +121,8 @@ defmodule Hologram.Query.Expression do
   Raises Hologram.CompileError, located at the offending node, on a keyword list (naming the
   expression to write when it holds equalities only), on a pinned list as one side of `and` or
   `or`, on a quantifier refused as a filter refuses it, on a comparison or a search reading the
-  same attribute of the same row on both sides (naming what it always answers), on a search with
+  same attribute of the same row on both sides (naming what it always answers, and the pin when
+  its right side starts at a variable of the surrounding code), on a search with
   an option other than `mode: :loose` or `mode: :exact` or with a pinned option, on
   `String.starts_with?/2` and `String.contains?/2` (naming the search operator), and on anything
   else.
@@ -257,7 +262,8 @@ defmodule Hologram.Query.Expression do
   binding beside its condition, with a binding and no condition, as `all` with no condition, with
   a name already bound around it, or with a source that is pinned or no relationship, on a bound
   row compared whole, on a comparison or a search reading the same attribute of the same row on
-  both sides (naming what it always answers), on a search the way `condition/2` refuses one, on
+  both sides (naming what it always answers, and the pin when its right side starts at a variable
+  of the surrounding code), on a search the way `condition/2` refuses one, on
   `user_id()`, which only a policy condition names, and on anything else.
   """
   @spec predicates(Macro.t(), Macro.Env.t()) :: Macro.t()
@@ -269,13 +275,14 @@ defmodule Hologram.Query.Expression do
 
   @doc """
   Returns what a comparison or a search of a field with itself is refused with, following what was
-  written: that it compares the given field with itself, and what it answers on every row. The nil
-  rules decide the answer - `==` and `!=` take nil as a value, while an ordering comparison and a
-  search match no row where either side is nil.
+  written: that it compares the given field with itself, and what it always answers - true, false,
+  or whether the field is set, which `!= nil` says plainly. The nil rules decide the answer - `==`
+  and `!=` take nil as a value, while an ordering comparison and a search match no row where either
+  side is nil.
   """
   @spec self_comparison(atom, String.t()) :: String.t()
   def self_comparison(operator, field) do
-    "compares #{field} with itself, #{self_comparison_answer(operator, field)}"
+    self_comparison(operator, field, self_comparison_fix(operator, field))
   end
 
   # A filter means the same rows whoever asks, so it can't name the acting user the way a policy
@@ -843,7 +850,7 @@ defmodule Hologram.Query.Expression do
        when operator in @comparison_operators do
     attribute = attribute!(left, names, env)
     operand = comparison_operand!(right, names, env)
-    validate_distinct_sides!(ast, attribute, operand, env)
+    validate_distinct_sides!(ast, attribute, operand, names, env)
 
     [{attribute, {operator, operand}}]
   end
@@ -1017,7 +1024,7 @@ defmodule Hologram.Query.Expression do
 
     attribute = attribute!(left, names, env)
     operand = comparison_operand!(right, names, env)
-    validate_distinct_sides!(ast, attribute, operand, env)
+    validate_distinct_sides!(ast, attribute, operand, names, env)
 
     {attribute, {lowered_operator, operand}}
   end
@@ -1059,15 +1066,22 @@ defmodule Hologram.Query.Expression do
     )
   end
 
+  defp self_comparison(operator, field, fix) do
+    "compares #{field} with itself, #{self_comparison_answer(operator, field)}#{fix}"
+  end
+
   defp self_comparison_answer(:==, _field), do: "which is always true"
 
   defp self_comparison_answer(operator, _field) when operator in [:!=, :<, :>],
     do: "which is always false"
 
-  defp self_comparison_answer(operator, field)
-       when operator in [:<=, :>=] or operator in @search_operators do
-    "which only says #{field} isn't nil - write #{field} != nil"
-  end
+  defp self_comparison_answer(operator, field) when operator in @set_field_operators,
+    do: "which only says #{field} isn't nil"
+
+  defp self_comparison_fix(operator, field) when operator in @set_field_operators,
+    do: " - write #{field} != nil"
+
+  defp self_comparison_fix(_operator, _field), do: ""
 
   # A keyword list and a pinned list are each a whole filter, so neither is one side of an and or
   # an or - the stage it would be joined to is a second filter call, and a disjunction holding one
@@ -1172,19 +1186,33 @@ defmodule Hologram.Query.Expression do
 
   defp user_id_call(_ast), do: nil
 
-  # Both sides naming the same field of the same row answer the same on every row. The lowering
-  # spells each row its own way - a name of the row a condition is about as it is, one of a row
-  # above wrapped in {:outer, levels, name} - so equal names are one field, and the same name on two
-  # rows stays two. A pinned operand is the stage's to judge, whatever it holds.
+  # Both sides naming the same field of the same row tell nothing about the row but whether the
+  # field is set. The lowering spells each row its own way - a name of the row a condition is about
+  # as it is, one of a row above wrapped in {:outer, levels, name} - so equal names are one field,
+  # and the same name on two rows stays two. A pinned operand is the stage's to judge, whatever it
+  # holds. When the right side starts at a variable of the surrounding code, the pin it forgot is
+  # the likelier meaning, so the fix names it - unless a quantifier around the comparison bound that
+  # name to its row, which the variable can't be read as there.
   defp validate_distinct_sides!(
          {operator, _meta, [left, right | _opts]} = ast,
          name,
          operand,
+         names,
          env
        ) do
     if operand == {:attribute, name} and not match?({:^, _pin_meta, [_expr]}, right) do
+      field = Macro.to_string(left)
+      {root, _context} = variable = variable_of(right)
+
+      fix =
+        if root not in names.bindings and Macro.Env.has_var?(env, variable) do
+          " - a value from the surrounding code is pinned: #{pin_hint(right)}"
+        else
+          self_comparison_fix(operator, field)
+        end
+
       compile_error!(
-        "#{Macro.to_string(ast)} #{self_comparison(operator, Macro.to_string(left))}",
+        "#{Macro.to_string(ast)} #{self_comparison(operator, field, fix)}",
         ast,
         env
       )
@@ -1203,6 +1231,14 @@ defmodule Hologram.Query.Expression do
       true -> operand_error!(description, ast, env)
     end
   end
+
+  # The variable a reference starts at, keyed the way Macro.Env.has_var?/2 looks it up - by the
+  # counter a macro's hygiene gave it, or else by its context. The reference is a bare name or a dot
+  # chain over one.
+  defp variable_of({name, meta, context}) when is_atom(name) and is_atom(context),
+    do: {name, Keyword.get(meta, :counter, context)}
+
+  defp variable_of({{:., _dot_meta, [left, _field]}, _meta, []}), do: variable_of(left)
 
   @spec whole_side!(Macro.t(), :and | :or, map, Macro.Env.t()) :: no_return
   defp whole_side!(ast, :and, %{kind: :condition}, env) do

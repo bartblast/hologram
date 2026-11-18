@@ -342,11 +342,12 @@ defmodule Hologram.Query do
   bound row, a bound row but no condition, or - for `all` - no condition at all, when a quantifier
   binds a name an enclosing one already bound, when its relationship is pinned or not a
   relationship, when a bound row is compared whole rather than through an attribute, when a
-  comparison or a search reads the same attribute of the same row on both sides - which answers the
-  same on every row, and the error says what - when the predicates name `user_id()`, which only a
-  policy condition can (a user's id is pinned from a variable holding it: `^user_id`), or when the
-  predicates take any other form - a bare name where only a value goes (a keyword value, a
-  membership element, a range bound) is most likely a forgotten pin, and the error says so.
+  comparison or a search reads the same attribute of the same row on both sides - which tells
+  nothing about the row but whether the attribute is set, and the error says what it answers - when
+  the predicates name `user_id()`, which only a policy condition can (a user's id is pinned from a
+  variable holding it: `^user_id`), or when the predicates take any other form - a bare name where
+  only a value goes (a keyword value, a membership element, a range bound) is most likely a
+  forgotten pin, and the error says so.
   Raises Hologram.MisuseError when the query is neither an entity type module nor a query term, when
   pinned predicates are not a list of name and value pairs - a name being an attribute or a path -
   when pinned predicates name the acting user, which only a policy condition can (outside a derived

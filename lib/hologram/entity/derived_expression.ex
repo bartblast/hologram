@@ -620,8 +620,8 @@ defmodule Hologram.Entity.DerivedExpression do
   defp predicates({:in, _meta, [left, right]} = ast, state),
     do: [{condition_name!(left, ast, state), {:in, membership!(right, ast, state)}}]
 
-  # Both sides naming the same field answer the same on every row, refused in the words a filter's
-  # comparison is.
+  # Both sides naming the same field tell nothing about the row but whether the field is set,
+  # refused in the words a filter's comparison is.
   defp predicates({operator, _meta, [left, right]} = ast, state)
        when operator in @comparison_operators do
     name = condition_name!(left, ast, state)

@@ -9,6 +9,14 @@ defmodule Hologram.Query.ExpressionTest do
     %{__ENV__ | file: Path.join(File.cwd!(), "lib/my_app/queries.ex"), line: 7}
   end
 
+  # The env of a stage call made where a variable of the given name is bound.
+  defp env_binding(name) do
+    {_value, _binding, env} =
+      Code.eval_quoted_with_env({:=, [], [{name, [], nil}, nil]}, [], env())
+
+    env
+  end
+
   # Parses the code, lowers it with the given lowering and evaluates what it lowered to, with the
   # given binding standing for the caller's variables.
   defp lower(lowering, code, binding \\ []) do
@@ -309,6 +317,12 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: owner_id == owner_id compares owner_id with itself, which is always true",
                    fn -> lower_condition("owner_id == owner_id") end
+    end
+
+    test "raises on an attribute compared with itself beside a variable of its name, naming the pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: owner_id == owner_id compares owner_id with itself, which is always true - a value from the surrounding code is pinned: ^owner_id",
+                   fn -> lower(&condition(&1, env_binding(:owner_id)), "owner_id == owner_id") end
     end
 
     test "raises on an attribute compared with itself inside a quantifier's condition" do
@@ -1071,6 +1085,17 @@ defmodule Hologram.Query.ExpressionTest do
                    end
     end
 
+    test "raises on a bound row's attribute compared with itself, its name also a variable's, naming no pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: message.read_at > message.read_at compares message.read_at with itself, which is always false",
+                   fn ->
+                     lower(
+                       &predicates(&1, env_binding(:message)),
+                       "any(message <- messages, message.read_at > message.read_at)"
+                     )
+                   end
+    end
+
     test "raises on a call as a comparison operand" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute, a path or a pinned expression, got: Date.utc_today() - a value from the surrounding code is pinned: ^Date.utc_today()",
@@ -1208,6 +1233,28 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates("project.owner_id == project.owner_id") end
     end
 
+    test "raises on a path compared with itself beside a variable of another name, naming no pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: project.owner_id == project.owner_id compares project.owner_id with itself, which is always true",
+                   fn ->
+                     lower(
+                       &predicates(&1, env_binding(:owner_id)),
+                       "project.owner_id == project.owner_id"
+                     )
+                   end
+    end
+
+    test "raises on a path compared with itself beside a variable of its first name, naming the pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: project.owner_id == project.owner_id compares project.owner_id with itself, which is always true - a value from the surrounding code is pinned: ^project.owner_id",
+                   fn ->
+                     lower(
+                       &predicates(&1, env_binding(:project)),
+                       "project.owner_id == project.owner_id"
+                     )
+                   end
+    end
+
     test "raises on a pinned left side" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: the left side of a comparison names an attribute of the queried entity or a path to one, got: ^x",
@@ -1312,6 +1359,14 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates("starts_with(title, title)") end
     end
 
+    test "raises on a search for the attribute it reads beside a variable of its name, naming the pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: starts_with(title, title) compares title with itself, which only says title isn't nil - a value from the surrounding code is pinned: ^title",
+                   fn ->
+                     lower(&predicates(&1, env_binding(:title)), "starts_with(title, title)")
+                   end
+    end
+
     test "raises on a search for the attribute it reads with mode: :exact" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: contains(title, title, mode: :exact) compares title with itself, which only says title isn't nil - write title != nil",
@@ -1390,6 +1445,27 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: all takes a condition - all over no condition says nothing, got: all(tasks) - write all(row <- tasks, row.<attribute> == ...)",
                    fn -> lower_predicates("all(tasks)") end
+    end
+
+    # A variable a macro generated is keyed by the counter its hygiene gave it, not by its context.
+    test "raises on an attribute compared with itself beside a macro-generated variable of its name, naming the pin" do
+      variable = {:inserted_at, [counter: 7, line: 12], MyApp.Macros}
+      {_value, _binding, env} = Code.eval_quoted_with_env({:=, [], [variable, nil]}, [], env())
+
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: inserted_at >= inserted_at compares inserted_at with itself, which only says inserted_at isn't nil - a value from the surrounding code is pinned: ^inserted_at",
+                   fn -> predicates({:>=, [line: 12], [variable, variable]}, env) end
+    end
+
+    test "raises on an attribute compared with itself beside a variable of its name, naming the pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: inserted_at >= inserted_at compares inserted_at with itself, which only says inserted_at isn't nil - a value from the surrounding code is pinned: ^inserted_at",
+                   fn ->
+                     lower(
+                       &predicates(&1, env_binding(:inserted_at)),
+                       "inserted_at >= inserted_at"
+                     )
+                   end
     end
 
     test "raises on an attribute compared with itself by ==" do
