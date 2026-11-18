@@ -236,6 +236,21 @@ defmodule Hologram.Query.Expression do
   def ordering(ast, env), do: name!(ast, @ordering_names, env)
 
   @doc """
+  Returns the hints `Hologram.Query.Stage.sort/3` can add to its refusal of a name the given
+  `sort/2` spec wrote: for a bare name the surrounding code holds a variable of, the pin it most
+  likely forgot. Takes a spec `ordering/2` lowered without raising.
+
+  A derived field's argument gets none - pinned, it is a field of the row, which a sort can't name.
+  """
+  @spec ordering_hints(Macro.t(), Macro.Env.t()) :: list(Hologram.Query.Stage.name_hint())
+  def ordering_hints({:^, _meta, [_expr]}, _env), do: []
+
+  def ordering_hints(list, env) when is_list(list),
+    do: Enum.flat_map(list, &ordering_entry_hints(&1, env))
+
+  def ordering_hints(ast, env), do: sort_name_hints(ast, env)
+
+  @doc """
   Lowers the options argument of `paginate/2` to what the stage function takes: a keyword list
   whose values are integer literals or pinned, or the pinned expression itself. The option names
   are the stage's to judge.
@@ -294,6 +309,24 @@ defmodule Hologram.Query.Expression do
   def predicates(list, env) when is_list(list), do: Enum.map(list, &keyword_entry!(&1, env))
 
   def predicates(ast, env), do: predicate_list!(ast, @filter_names, env)
+
+  @doc """
+  Returns the hints `Hologram.Query.Stage.filter/3` can add to its refusal of a name the given
+  `filter/2` predicates wrote, as the queried entity is only known when the query is built. A name
+  or path on the right side of a comparison or a search whose first name the surrounding code holds
+  a variable of, or names an argument of a derived field (see `mark_pinnable/1`), gets the pin it
+  most likely forgot. So does a comparison's left side when its right side is a name or a path too,
+  the pinned value moved to the right side - `search == title` is most likely `title == ^search`.
+  A name bound by a quantifier around it is that row, and gets none.
+
+  Takes predicates `predicates/2` lowered without raising.
+  """
+  @spec predicate_hints(Macro.t(), Macro.Env.t()) :: list(Hologram.Query.Stage.name_hint())
+  def predicate_hints({:^, _meta, [_expr]}, _env), do: []
+
+  def predicate_hints(list, _env) when is_list(list), do: []
+
+  def predicate_hints(ast, env), do: clause_hints(ast, [], env)
 
   @doc """
   Returns what a comparison or a search of a field with itself is refused with, following what was
@@ -418,6 +451,33 @@ defmodule Hologram.Query.Expression do
   defp bound_row_error!(name, fix, ast, env) do
     compile_error!("#{name} is a bound row - #{fix}", ast, env)
   end
+
+  # The hints of a condition the lowering took, walked the way predicate_list!/3 walks it - the
+  # bindings being the rows the quantifiers around it bound, nearest first. A membership's right side
+  # is a value, never a name.
+  defp clause_hints({operator, _meta, [left, right]}, bindings, env) when operator in [:and, :or],
+    do: clause_hints(left, bindings, env) ++ clause_hints(right, bindings, env)
+
+  defp clause_hints({operator, _meta, [left, right]}, bindings, env)
+       when operator in @comparison_operators do
+    operand_hints(right, bindings, env) ++ key_hints(operator, left, right, bindings, env)
+  end
+
+  defp clause_hints(
+         {quantifier, _meta,
+          [{:<-, _arrow_meta, [{name, _name_meta, _context}, _source]}, condition]},
+         bindings,
+         env
+       )
+       when quantifier in @quantifiers do
+    clause_hints(condition, [name | bindings], env)
+  end
+
+  defp clause_hints({operator, _meta, [_left, right | _opts]}, bindings, env)
+       when operator in @search_operators,
+       do: operand_hints(right, bindings, env)
+
+  defp clause_hints(_ast, _bindings, _env), do: []
 
   # A pinned operand is the surrounding code's value, unless no variable holds it.
   defp comparison_operand!({:^, _meta, [_expr]} = ast, names, env),
@@ -547,6 +607,16 @@ defmodule Hologram.Query.Expression do
     end
   end
 
+  defp flipped(:<), do: :>
+
+  defp flipped(:<=), do: :>=
+
+  defp flipped(:>), do: :<
+
+  defp flipped(:>=), do: :<=
+
+  defp flipped(operator), do: operator
+
   # A bare name where only a value goes - a membership element, a range bound, a keyword value - is
   # most likely a variable missing its pin, and a path where a keyword value goes a field of one.
   # The given fix, when there is one, names what the name can mean there instead.
@@ -593,6 +663,22 @@ defmodule Hologram.Query.Expression do
     do: true
 
   defp integer_literal?(_ast), do: false
+
+  # A value of the surrounding code goes on the right side of a comparison, so a left side reading
+  # one, compared with a name, is most likely the two swapped - the operator flipped with them. A
+  # right side reading one too forgot its own pin, which its own hint names, so the key gets none.
+  defp key_hints(operator, left, right, bindings, env) do
+    with right_name when right_name != nil <- written_name(right, bindings),
+         nil <- pin_fix(right, bindings, env, :operand),
+         name when name != nil <- written_name(left, bindings),
+         fix when fix != nil <- pin_fix(left, bindings, env, :key) do
+      swapped = Macro.to_string({flipped(operator), [], [right, {:^, [], [left]}]})
+
+      [{:key, length(bindings), name, "#{fix}, on the right side: #{swapped}", []}]
+    else
+      _no_hint -> []
+    end
+  end
 
   defp keyword_entry!({key, value}, env) when is_atom(key) do
     {key, {:==, keyword_value!(key, value, env)}}
@@ -824,6 +910,15 @@ defmodule Hologram.Query.Expression do
     )
   end
 
+  defp operand_hints(right, bindings, env) do
+    with name when name != nil <- written_name(right, bindings),
+         fix when fix != nil <- pin_fix(right, bindings, env, :operand) do
+      [{:operand, length(bindings), name, fix, []}]
+    else
+      nil -> []
+    end
+  end
+
   defp option_value!({:^, _meta, [expr]}, _env), do: expr
 
   defp option_value!(ast, env) do
@@ -846,6 +941,10 @@ defmodule Hologram.Query.Expression do
 
   defp ordering_entry!(ast, env), do: name!(ast, @ordering_names, env)
 
+  defp ordering_entry_hints({key, _direction}, env), do: sort_name_hints(key, env)
+
+  defp ordering_entry_hints(ast, env), do: sort_name_hints(ast, env)
+
   defp ordering_key!(key, _env) when is_atom(key), do: key
 
   defp ordering_key!(ast, env), do: name!(ast, @ordering_names, env)
@@ -865,6 +964,31 @@ defmodule Hologram.Query.Expression do
   defp pagination_option!(entry, env), do: pagination_error!(entry, env)
 
   defp path?(ast), do: match?([_hop, _name | _rest], hops(ast))
+
+  # The pin a name or a path most likely forgot, when its first name is a derived field's argument
+  # or a variable of the surrounding code rather than a row a quantifier binds - nil otherwise. The
+  # key's fix names where the pinned value goes after it.
+  defp pin_fix(ast, bindings, env, position) do
+    {root, meta, _context} = root_node = root_name(ast)
+    pinned = if position == :key, do: "read pinned", else: "read pinned: #{pin_hint(ast)}"
+
+    cond do
+      root in bindings ->
+        nil
+
+      Keyword.get(meta, @pinnable_key, false) ->
+        "#{root} is an argument of the derived field's function, #{pinned}"
+
+      variable?(root_node, env) and position == :key ->
+        "a value from the surrounding code is pinned"
+
+      variable?(root_node, env) ->
+        "a value from the surrounding code is pinned: #{pin_hint(ast)}"
+
+      true ->
+        nil
+    end
+  end
 
   # ^ binds looser than a call or a dot, and tighter than any other operator, so only an operator
   # expression needs parentheses to be pinned whole. A module attribute reads as a name: ^@max.
@@ -924,9 +1048,8 @@ defmodule Hologram.Query.Expression do
   # Whether the surrounding code reads a value through the bare name: a variable, looked up the way
   # Macro.Env.has_var?/2 keys it - by the counter a macro's hygiene gave it, or else by its context
   # - or a name marked pinnable.
-  defp pinnable?({name, meta, context}, env) do
-    Keyword.get(meta, @pinnable_key, false) or
-      Macro.Env.has_var?(env, {name, Keyword.get(meta, :counter, context)})
+  defp pinnable?({_name, meta, _context} = ast, env) do
+    Keyword.get(meta, @pinnable_key, false) or variable?(ast, env)
   end
 
   defp predicate_list!({:and, _meta, [left, right]}, names, env) do
@@ -1057,23 +1180,14 @@ defmodule Hologram.Query.Expression do
   end
 
   # A name as the row it is read on spells it, and how many quantifiers out that row is - nil for
-  # anything that is no name.
+  # anything that is no name, and a refusal for a row a quantifier binds, compared whole.
   defp reference!(ast, names, env) do
-    case hops(ast) do
-      nil ->
-        nil
+    case {written_name(ast, names.bindings), hops(ast)} do
+      {nil, [root]} ->
+        bound_row_error!(root, "compare one of its attributes: #{root}.<attribute>", ast, env)
 
-      [root | rest] = hops ->
-        case root_row(root, names) do
-          {:queried, levels} ->
-            scoped_name(local_name(hops), levels)
-
-          {:bound, _levels} when rest == [] ->
-            bound_row_error!(root, "compare one of its attributes: #{root}.<attribute>", ast, env)
-
-          {:bound, levels} ->
-            scoped_name(local_name(rest), levels)
-        end
+      {name, _hops} ->
+        if name, do: Macro.escape(name)
     end
   end
 
@@ -1099,18 +1213,20 @@ defmodule Hologram.Query.Expression do
 
   # The row a dot chain's first name reads on: a row a quantifier around the condition bound, as many
   # out as its place among the bindings, or else the queried row, as many out as there are bindings.
-  defp root_row(root, names) do
-    case Enum.find_index(names.bindings, &(&1 == root)) do
-      nil -> {:queried, length(names.bindings)}
+  defp root_row(root, bindings) do
+    case Enum.find_index(bindings, &(&1 == root)) do
+      nil -> {:queried, length(bindings)}
       index -> {:bound, index}
     end
   end
 
   # A name of the row the condition is about stands as it is, and one of a row above is wrapped with
   # how many quantifiers out it lies.
-  defp scoped_name(name, 0), do: name
-
-  defp scoped_name(name, levels), do: Macro.escape({:outer, levels, name})
+  defp scoped_name(name, levels) do
+    name
+    |> written_scoped(levels)
+    |> Macro.escape()
+  end
 
   # A search names the attribute it reads, the term it looks for, and optionally how the two are
   # matched - loosely, with case and accents folded, unless mode: :exact asks for the bytes. Each
@@ -1207,6 +1323,17 @@ defmodule Hologram.Query.Expression do
 
   defp side!(ast, _operator, names, env), do: predicate_list!(ast, names, env)
 
+  # A sort names attributes of the queried row only, so the hint's depth is always 0.
+  defp sort_name_hints({name, meta, _context} = ast, env) do
+    if bare_name?(ast) and variable?(ast, env) and not Keyword.get(meta, @pinnable_key, false) do
+      [{:sort, 0, name, "a value from the surrounding code is pinned: ^#{name}", []}]
+    else
+      []
+    end
+  end
+
+  defp sort_name_hints(_ast, _env), do: []
+
   # A source names the relationships to a set, read on the bound row its dot chain starts at or on
   # the queried row - always a list, since even one relationship is a list of hops.
   defp source!({:^, _meta, [_expr]} = ast, _names, env) do
@@ -1227,7 +1354,7 @@ defmodule Hologram.Query.Expression do
         )
 
       [root | rest] = hops ->
-        case root_row(root, names) do
+        case root_row(root, names.bindings) do
           {:queried, levels} ->
             scoped_name(hops, levels)
 
@@ -1336,6 +1463,12 @@ defmodule Hologram.Query.Expression do
     end
   end
 
+  # Whether a variable of the surrounding code is bound under the bare name, looked up the way
+  # Macro.Env.has_var?/2 keys it - by the counter a macro's hygiene gave it, or else by its context.
+  defp variable?({name, meta, context}, env) do
+    Macro.Env.has_var?(env, {name, Keyword.get(meta, :counter, context)})
+  end
+
   @spec whole_side!(Macro.t(), :and | :or, map, Macro.Env.t()) :: no_return
   defp whole_side!(ast, :and, %{kind: :condition}, env) do
     compile_error!(
@@ -1371,6 +1504,23 @@ defmodule Hologram.Query.Expression do
 
   defp written_as(expression), do: "write it as an expression: #{Macro.to_string(expression)}"
 
+  # The name a reference is written as in the data form - its row's, wrapped with how many
+  # quantifiers out that row is - or nil for anything that is no name, and for a bound row alone.
+  # reference!/3 lowers through it, so a hint names what the lowering wrote.
+  defp written_name(ast, bindings) do
+    case hops(ast) do
+      [root | rest] = hops ->
+        case root_row(root, bindings) do
+          {:queried, levels} -> written_scoped(local_name(hops), levels)
+          {:bound, _levels} when rest == [] -> nil
+          {:bound, levels} -> written_scoped(local_name(rest), levels)
+        end
+
+      nil ->
+        nil
+    end
+  end
+
   # The paths a keyword value naming relationships would be written as - nil when the value names
   # anything else.
   defp written_paths(prefix, atom) when is_atom(atom) and atom not in [nil, true, false],
@@ -1391,4 +1541,8 @@ defmodule Hologram.Query.Expression do
       hops -> [Enum.join([prefix | hops], ".")]
     end
   end
+
+  defp written_scoped(name, 0), do: name
+
+  defp written_scoped(name, levels), do: {:outer, levels, name}
 end

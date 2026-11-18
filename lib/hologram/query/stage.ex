@@ -703,21 +703,21 @@ defmodule Hologram.Query.Stage do
     {name, operator, {:attribute, other}}
   end
 
-  # A name the query macros left a hint for is refused with it - the operand's ahead of where the
-  # triple checks it again, which then passes.
+  # A name the query macros left a hint for is refused with it - the operand's ahead of the key and
+  # of where the triple checks it again, which then passes, since the macros leave a key no hint
+  # when the operand has one. A key's hint is about a comparison with a name, the only one the
+  # macros leave it for, so a membership of the same name doesn't take it.
   defp attribute_triples!(scope, {name, value}, name_hints) do
     entity_type = name_type!(scope, name)
+    other = attribute_operand(value)
+    key_hint = if other, do: name_hint(name_hints, :key, name, scope)
 
-    validate_predicate_name!(
-      local_name(name),
-      entity_type,
-      name_hint(name_hints, :key, name, scope)
-    )
-
-    with other when other != nil <- attribute_operand(value),
+    with true <- other != nil,
          hint when hint != nil <- name_hint(name_hints, :operand, other, scope) do
       validate_operand_name!(other, name_type!(scope, other), hint)
     end
+
+    validate_predicate_name!(local_name(name), entity_type, key_hint)
 
     predicate_triples!(name, value, entity_type, scope)
   end

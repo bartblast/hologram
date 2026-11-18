@@ -2647,6 +2647,19 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    # The macros leave the left side no hint when the right side has one, so the right side's comes
+    # first.
+    test "names the fix a right side's hint gives ahead of refusing the left side" do
+      expected_msg =
+        "unknown attribute :term in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - a value from the surrounding code is pinned: ^term"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [search: {:==, {:attribute, :term}}], [
+          {:operand, 0, :term, "a value from the surrounding code is pinned: ^term", []}
+        ])
+      end
+    end
+
     test "leaves out a hint of another depth" do
       expected_msg =
         "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :updated_at"
@@ -2686,6 +2699,15 @@ defmodule Hologram.Query.StageTest do
         filter(Module3, [c_id: {:==, {:attribute, [:b, :nope, :x]}}], [
           {:operand, 0, [:b, :nope, :x], @fix, []}
         ])
+      end
+    end
+
+    test "leaves a left side's hint out of a membership of the same name" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [search: {:in, [1]}], [{:key, 0, :search, @fix, []}])
       end
     end
 

@@ -4044,6 +4044,28 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    // The macros leave the left side no hint when the right side has one, so the right side's comes
+    // first.
+    it("names the fix a right side's hint gives ahead of refusing the left side", () => {
+      const term = Type.atom("term");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["search", op("==", attribute(term))]]),
+            hints([
+              "operand",
+              0,
+              term,
+              "a value from the surrounding code is pinned: ^term",
+            ]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :term in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - a value from the surrounding code is pinned: ^term",
+      );
+    });
+
     it("leaves out a hint of another depth", () => {
       const outerSearch = outer(1, "search");
 
@@ -4097,6 +4119,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
           ),
         "Hologram.MisuseError",
         "unknown relationship :boss in MyApp.User - known relationships: :manager, :projects",
+      );
+    });
+
+    it("leaves a left side's hint out of a membership of the same name", () => {
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["search", op("in", Type.list([Type.integer(1)]))]]),
+            hints(["key", 0, search, fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
       );
     });
 

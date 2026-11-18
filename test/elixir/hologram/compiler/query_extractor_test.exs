@@ -45,6 +45,8 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module134
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module135
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module136
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module137
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module138
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module55
@@ -1969,6 +1971,36 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_derived_queries(Module135, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on an unknown attribute naming the pin its variable forgot", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_137.ex:10: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module137 builds an invalid query - unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - a value from the surrounding code is pinned: ^search
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_137.ex:10: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module137.__derived_rows__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module137, entity_types, ir_plt)
+      end
+    end
+
+    # The stage call carries the hints of what it was written with, so the names a record filters on
+    # are read past them.
+    test "raises on a record no entity type admits, naming what it filters on beside hints", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        "test/elixir/support/fixtures/compiler/query_extractor/module_138.ex:12: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module138 builds no query that any entity type of the build admits - it filters on :nonexistent, :search, :c - a derived field with no window would read rows nothing ever fills"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module138, entity_types, ir_plt)
       end
     end
 

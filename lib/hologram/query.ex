@@ -354,23 +354,33 @@ defmodule Hologram.Query do
   pinned predicates are not a list of name and value pairs - a name being an attribute or a path -
   when pinned predicates name the acting user, which only a policy condition can (outside a derived
   field, a user's id is pinned from a variable holding it: `^user_id`), when a predicate names a
-  relationship or an unknown attribute - on the right side of a comparison, which is how a forgotten
-  pin on a variable reads - when a path goes through a to-many relationship, an attribute or an
-  unknown relationship, or ends at a name the related type does not declare, when a quantifier's
-  relationships do not lead through relationships to a to-many relationship, an inverse set or a
-  derived set, when `{:outer, levels, name}` reaches past the queried row, when a disjunction holds
-  fewer than two predicate lists or one of them is empty or not such a list, when a comparison names
-  an attribute with itself or two attributes that do not compare, when a search names an attribute
-  that isn't a string or its term isn't a string, when a value doesn't fit the type of the
-  attribute it's compared with, or when a value is invalid for its operator - a pinned keyword
-  value holding a list, a tuple or a range is refused as an equality operand, since membership and
-  comparisons are written as expressions.
+  relationship or an unknown attribute - which is how a forgotten pin reads (the error names the pin
+  when the name, on the right side of a comparison or a search or on the left side of one compared
+  with a name, is a variable of the surrounding code or a derived field's argument) - when a path
+  goes through a to-many relationship, an attribute or an unknown relationship, or ends at a name
+  the related type does not declare, when a quantifier's relationships do not lead through
+  relationships to a to-many relationship, an inverse set or a derived set, when
+  `{:outer, levels, name}` reaches past the queried row, when a disjunction holds fewer than two
+  predicate lists or one of them is empty or not such a list, when a comparison names an attribute
+  with itself or two attributes that do not compare, when a search names an attribute that isn't a
+  string or its term isn't a string, when a value doesn't fit the type of the attribute it's
+  compared with, or when a value is invalid for its operator - a pinned keyword value holding a
+  list, a tuple or a range is refused as an equality operand, since membership and comparisons are
+  written as expressions.
   """
   defmacro filter(query, predicates) do
     lowered = Expression.predicates(predicates, __CALLER__)
 
-    quote do
-      Stage.filter(unquote(query), unquote(lowered))
+    case Expression.predicate_hints(predicates, __CALLER__) do
+      [] ->
+        quote do
+          Stage.filter(unquote(query), unquote(lowered))
+        end
+
+      hints ->
+        quote do
+          Stage.filter(unquote(query), unquote(lowered), unquote(Macro.escape(hints)))
+        end
     end
   end
 
@@ -584,14 +594,22 @@ defmodule Hologram.Query do
   pair nor pinned. Raises
   Hologram.MisuseError when the query is neither an entity type module nor a query term, when the
   spec is neither an attribute name nor a list, when an entry names a relationship or an unknown
-  attribute - which is how a forgotten pin on a variable reads - or when a direction is neither :asc
-  nor :desc.
+  attribute - which is how a forgotten pin on a variable reads, and the error names the pin - or
+  when a direction is neither :asc nor :desc.
   """
   defmacro sort(query, spec) do
     lowered = Expression.ordering(spec, __CALLER__)
 
-    quote do
-      Stage.sort(unquote(query), unquote(lowered))
+    case Expression.ordering_hints(spec, __CALLER__) do
+      [] ->
+        quote do
+          Stage.sort(unquote(query), unquote(lowered))
+        end
+
+      hints ->
+        quote do
+          Stage.sort(unquote(query), unquote(lowered), unquote(Macro.escape(hints)))
+        end
     end
   end
 

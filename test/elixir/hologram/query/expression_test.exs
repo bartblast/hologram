@@ -41,6 +41,21 @@ defmodule Hologram.Query.ExpressionTest do
     value
   end
 
+  # The hints of the given code, where variables of the given names are bound - the names in marked
+  # being a derived field's arguments, marked the way DerivedExpression marks them.
+  defp hints_of(hinting, code, names, marked \\ []) do
+    code
+    |> Code.string_to_quoted!(line: 12)
+    |> Macro.prewalk(fn
+      {name, _meta, context} = ast when is_atom(name) and is_atom(context) ->
+        if name in marked, do: mark_pinnable(ast), else: ast
+
+      ast ->
+        ast
+    end)
+    |> hinting.(env_binding(names))
+  end
+
   # The stage call is made where the binding's variables are bound, as a pinned name reads one.
   defp lower_bound(code, binding \\ []),
     do: lower(&bound(&1, :take, env_binding(Keyword.keys(binding))), code, binding)
@@ -637,6 +652,43 @@ defmodule Hologram.Query.ExpressionTest do
     end
   end
 
+  describe "ordering_hints/2" do
+    @fix "a value from the surrounding code is pinned: ^sort_field"
+
+    test "hints the pin a variable's name forgot" do
+      assert hints_of(&ordering_hints/2, "sort_field", [:sort_field]) == [
+               {:sort, 0, :sort_field, @fix, []}
+             ]
+    end
+
+    test "hints the pin a variable's name forgot in a list, paired or alone" do
+      assert hints_of(&ordering_hints/2, "[{sort_field, :desc}, title, other]", [
+               :sort_field,
+               :other
+             ]) == [
+               {:sort, 0, :sort_field, @fix, []},
+               {:sort, 0, :other, "a value from the surrounding code is pinned: ^other", []}
+             ]
+    end
+
+    test "hints nothing for a name no variable holds" do
+      assert hints_of(&ordering_hints/2, "[title, priority: :desc]", []) == []
+    end
+
+    test "hints nothing for a keyword key" do
+      assert hints_of(&ordering_hints/2, "[sort_field: :desc]", [:sort_field]) == []
+    end
+
+    test "hints nothing for a pinned spec" do
+      assert hints_of(&ordering_hints/2, "^sort_field", [:sort_field]) == []
+    end
+
+    # Pinned in a derived field's query, an argument is a field of the row, which a sort can't name.
+    test "hints nothing for a derived field's argument" do
+      assert hints_of(&ordering_hints/2, "position", [], [:position]) == []
+    end
+  end
+
   describe "pagination/2" do
     test "lowers a pinned option" do
       assert lower_pagination("[page: ^page, size: 25]", page: 2) == [page: 2, size: 25]
@@ -660,6 +712,137 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: paginate takes page: and size: options or a pinned expression, got: opts - a value from the surrounding code is pinned: ^opts",
                    fn -> lower_pagination("opts") end
+    end
+  end
+
+  describe "predicate_hints/2" do
+    @fix "a value from the surrounding code is pinned: ^search"
+
+    test "hints the pin a variable's name forgot on the right side" do
+      assert hints_of(&predicate_hints/2, "title == search", [:search]) == [
+               {:operand, 0, :search, @fix, []}
+             ]
+    end
+
+    test "hints the pin a path over a variable forgot" do
+      assert hints_of(&predicate_hints/2, "owner_id == user.id", [:user]) == [
+               {:operand, 0, [:user, :id],
+                "a value from the surrounding code is pinned: ^user.id", []}
+             ]
+    end
+
+    test "hints the pin a search term forgot" do
+      assert hints_of(&predicate_hints/2, "contains(title, search, mode: :exact)", [:search]) ==
+               [{:operand, 0, :search, @fix, []}]
+    end
+
+    test "hints a variable's name on the left side of a comparison with a name, flipping the operator" do
+      assert hints_of(&predicate_hints/2, "search < title", [:search]) == [
+               {:key, 0, :search,
+                "a value from the surrounding code is pinned, on the right side: title > ^search",
+                []}
+             ]
+    end
+
+    test "hints a path over a variable on the left side of a comparison with a name" do
+      assert hints_of(&predicate_hints/2, "user.name == title", [:user]) == [
+               {:key, 0, [:user, :name],
+                "a value from the surrounding code is pinned, on the right side: title == ^user.name",
+                []}
+             ]
+    end
+
+    test "hints a variable's name on the left side inside a quantifier, at its depth" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(message <- messages, since <= message.created_at)",
+               [:since]
+             ) == [
+               {:key, 1, {:outer, 1, :since},
+                "a value from the surrounding code is pinned, on the right side: message.created_at >= ^since",
+                []}
+             ]
+    end
+
+    test "flips an ordering operator taking equality when it swaps the sides" do
+      assert hints_of(&predicate_hints/2, "since >= created_at", [:since]) == [
+               {:key, 0, :since,
+                "a value from the surrounding code is pinned, on the right side: created_at <= ^since",
+                []}
+             ]
+    end
+
+    # The right side's own hint names its pin - swapping the two would leave it unpinned.
+    test "hints only the right side when both sides are variables' names" do
+      assert hints_of(&predicate_hints/2, "since < until", [:since, :until]) == [
+               {:operand, 0, :until, "a value from the surrounding code is pinned: ^until", []}
+             ]
+    end
+
+    test "hints nothing on the left side of a comparison with a pinned value" do
+      assert hints_of(&predicate_hints/2, "project_id == ^project_id", [:project_id]) == []
+    end
+
+    test "hints nothing on the left side of a search" do
+      assert hints_of(&predicate_hints/2, "contains(search, title)", [:search]) == []
+    end
+
+    test "hints the argument a derived field's query forgot to pin" do
+      assert hints_of(&predicate_hints/2, "created_at > last_read_at", [], [:last_read_at]) == [
+               {:operand, 0, :last_read_at,
+                "last_read_at is an argument of the derived field's function, read pinned: ^last_read_at",
+                []}
+             ]
+    end
+
+    test "hints a derived field's argument on the left side of a comparison with a name" do
+      assert hints_of(&predicate_hints/2, "last_read_at < created_at", [], [:last_read_at]) == [
+               {:key, 0, :last_read_at,
+                "last_read_at is an argument of the derived field's function, read pinned, on the right side: created_at > ^last_read_at",
+                []}
+             ]
+    end
+
+    test "hints the pin a variable's name forgot inside a quantifier, at its depth" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(message <- messages, message.created_at > search)",
+               [:search]
+             ) == [{:operand, 1, {:outer, 1, :search}, @fix, []}]
+    end
+
+    test "hints nothing for a name a quantifier binds, though a variable holds it too" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(message <- messages, created_at > message.edited_at)",
+               [:message]
+             ) == []
+    end
+
+    test "hints each side of and and or" do
+      assert hints_of(&predicate_hints/2, "title == search or (body == search and a == 1)", [
+               :search
+             ]) == [{:operand, 0, :search, @fix, []}, {:operand, 0, :search, @fix, []}]
+    end
+
+    test "hints nothing for a name no variable holds" do
+      assert hints_of(&predicate_hints/2, "title == name", []) == []
+    end
+
+    test "hints nothing for a membership" do
+      assert hints_of(&predicate_hints/2, "search in [1, 2]", [:search]) == []
+    end
+
+    test "hints nothing for a negated membership" do
+      assert hints_of(&predicate_hints/2, "search not in [1, 2]", [:search]) == []
+    end
+
+    test "hints nothing for a keyword list" do
+      assert hints_of(&predicate_hints/2, "[title: ^search]", [:search]) == []
+    end
+
+    test "hints nothing for pinned predicates" do
+      assert hints_of(&predicate_hints/2, "^search", [:search]) == []
     end
   end
 

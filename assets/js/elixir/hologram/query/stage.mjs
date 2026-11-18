@@ -265,8 +265,10 @@ function entityTypeOf(entity, stage) {
 // The scope is the type of the row the predicates are about, then the type of each row above it,
 // nearest first - the queried type last.
 //
-// A name the query macros left a hint for is refused with it - the operand's ahead of where the
-// triple checks it again, which then passes.
+// A name the query macros left a hint for is refused with it - the operand's ahead of the key and
+// of where the triple checks it again, which then passes, since the macros leave a key no hint
+// when the operand has one. A key's hint is about a comparison with a name, the only one the
+// macros leave it for, so a membership of the same name doesn't take it.
 function entryClauses(pair, scope, hints) {
   const [name, value] = pair.data;
 
@@ -289,19 +291,18 @@ function entryClauses(pair, scope, hints) {
 
   const entityType = nameTypeOf(scope, name);
   const declaredName = localName(name);
-  const keyHint = nameHint(hints, "key", name, scope);
+  const other = attributeOperand(value);
+  const keyHint = other && nameHint(hints, "key", name, scope);
+  const operandHint = other && nameHint(hints, "operand", other, scope);
+
+  if (operandHint) {
+    validateOperandName(other, nameTypeOf(scope, other), operandHint);
+  }
 
   if (isPath(declaredName)) {
     validatePath(declaredName, entityType, keyHint);
   } else {
     validateFilteredName(declaredName, entityType, keyHint);
-  }
-
-  const other = attributeOperand(value);
-  const operandHint = other && nameHint(hints, "operand", other, scope);
-
-  if (operandHint) {
-    validateOperandName(other, nameTypeOf(scope, other), operandHint);
   }
 
   return predicateTriples(name, value, entityType, scope);

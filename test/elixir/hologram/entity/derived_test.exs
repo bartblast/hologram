@@ -371,6 +371,33 @@ defmodule Hologram.Entity.DerivedTest do
       assert resolve(Module33, :tier) == {:value, :low}
     end
 
+    test "names the argument a derived field's query forgot to pin" do
+      defmodule InlineEntityFixture198 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        attribute :last_read_at, :integer
+
+        relationship :messages, [Module33]
+
+        derived :unread_count, :integer, fn messages, last_read_at ->
+          messages
+          |> filter(position > last_read_at)
+          |> count()
+        end
+      end
+
+      line = __ENV__.line - 7
+
+      expected_msg =
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: invalid derived field :unread_count in Hologram.Entity.DerivedTest.InlineEntityFixture198 - unknown attribute :last_read_at in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :tier, :updated_at - last_read_at is an argument of the derived field's function, read pinned: ^last_read_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        resolve(InlineEntityFixture198, :unread_count)
+      end
+    end
+
     test "raises at the field's declaration when its definition can't be built" do
       expected_msg =
         "lib/my_app/channel.ex:7: invalid derived field :broken in Hologram.Test.Fixtures.Entity.Derived.Module1 - unknown relationship :nothing"
