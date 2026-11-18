@@ -809,10 +809,12 @@ defmodule Hologram.MutationTest do
           stamp: newer - 1
         )
 
-      assert {:ok, %{"status" => "rejected", "write" => 0} = answer} =
+      assert {:ok, %{"status" => "rejected", "write" => 0, "reason" => reason} = answer} =
                run(envelope([write]), server())
 
+      assert reason =~ "not allowed to delete Hologram.Test.Fixtures.Policy.Module38"
       refute Map.has_key?(answer, "kept")
+      assert EntityOperations.get(Channel, channel.id) != nil
     end
 
     test "judges a counter a browser moves by the lines covering it" do
