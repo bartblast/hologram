@@ -1161,7 +1161,7 @@ describe("Durability", () => {
         "place-1",
       );
 
-      await repairing;
+      assert.isFalse(await repairing);
 
       assert.equal(Durability.inFlight, 0);
 
@@ -1192,21 +1192,33 @@ describe("Durability", () => {
       assert.equal(await readMeta("clock"), 1_756_100_000_999_000);
     });
 
-    // A store with no place at all is behind any memory that has one - the rows it holds were left
-    // by a fill that never finished, and the memory's are dated.
-    it("rewrites a store holding no place", async () => {
+    // A store with no place may have been cleared by a start-over nobody heard of, and whatever
+    // emptied it, the rows the tab holds are not what it vouches for - so the tab starts over.
+    it("writes nothing and says so when the store holds no place", async () => {
       await seedPreviousLoad({cursor: undefined});
       await Durability.open();
       await Durability.load();
 
-      await Durability.repair([taskRecord("t2", "second")], "place-2");
+      assert.isTrue(
+        await Durability.repair([taskRecord("t2", "second")], "place-2"),
+      );
 
       assert.deepStrictEqual(
         (await readAll("entities")).map((record) => record.id),
-        ["t2"],
+        ["t1"],
       );
 
-      assert.equal(await readMeta("cursor"), "place-2");
+      assert.isUndefined(await readMeta("cursor"));
+    });
+
+    it("says the store held a place when it rewrote it", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.isFalse(
+        await Durability.repair([taskRecord("t2", "second")], "place-2"),
+      );
     });
 
     // A tab handed the lead while starting asks for the repair from its restore, and its page opens
@@ -1249,14 +1261,18 @@ describe("Durability", () => {
         .stub(FDBDatabase.prototype, "transaction")
         .throws(new DOMException("The read was refused.", "UnknownError"));
 
-      await Durability.repair([taskRecord("t2", "second")], "place-2");
+      assert.isFalse(
+        await Durability.repair([taskRecord("t2", "second")], "place-2"),
+      );
 
       assert.equal(Durability.mode, "memory");
       sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
     });
 
     it("does nothing in memory mode", async () => {
-      await Durability.repair([taskRecord("t2", "second")], "place-2");
+      assert.isFalse(
+        await Durability.repair([taskRecord("t2", "second")], "place-2"),
+      );
 
       assert.equal(Durability.mode, "memory");
       assert.equal(Durability.inFlight, 0);

@@ -312,6 +312,35 @@ describe("SyncStream", () => {
       }
     });
 
+    // A frame served while the tab settles where its lead starts from would land on a store about
+    // to be cleared; the tab greets again once that is settled.
+    it("says nothing for a tab still settling the lead it took", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      // With no place, too: what a greeting asking for everything does to the store waits for
+      // the greeting that is served.
+      const clearing = sinon.stub(Durability, "clear");
+      const posting = sinon.stub(Tabs, "post");
+      const refilling = sinon.spy(LocalDatabase, "beginRefill");
+
+      SyncStream.syncCursor = null;
+      Tabs.takingLead = true;
+
+      try {
+        assert.deepStrictEqual(SyncStream.buildGreeting(pageModule), {});
+      } finally {
+        Tabs.takingLead = false;
+      }
+
+      assert.isFalse(clearing.called);
+      assert.isFalse(posting.called);
+      assert.isFalse(refilling.called);
+    });
+
     it("says nothing before the page has mounted", () => {
       globalThis.Hologram.sync = {
         modelHash: "a3f9c2",
@@ -1324,8 +1353,8 @@ describe("SyncStream", () => {
       assert.strictEqual(posting.firstCall.args[1], written);
     });
 
-    // A clear that landed and a resync nobody heard would leave a tab that read the emptied store
-    // taking the next leader's place over no rows; a resync heard and a clear lost mend themselves.
+    // Either half lost mends itself: the tabs that heard a resync hold no place, and a store a clear
+    // emptied holds none - and the next tab to lead starts over from either.
     it("tells the group of a resync without waiting for the clear", () => {
       sinon.stub(Durability, "clear").returns(new Promise(() => {}));
 

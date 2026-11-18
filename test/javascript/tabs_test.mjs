@@ -394,8 +394,8 @@ describe("Tabs", () => {
       });
     });
 
-    // The page opens its stream right after the restore, and that one greets the server as the
-    // leader by itself - a reconnect would open a second one beside it.
+    // Pins the check alone: a page always starts its stream in the same run as the restore, so a
+    // tab holding a place has one by the time its lead is settled.
     it("opens no stream of its own when the page has not started one", async () => {
       SyncStream.syncCursor = "place-1";
       Sse.isStarted = false;
@@ -436,8 +436,36 @@ describe("Tabs", () => {
       assert.isFalse(clearing.called);
     });
 
-    // Read before the repair is awaited: by the time it answers, the page has started its stream.
-    it("leaves the stream the page starts alone while the repair runs", async () => {
+    // The tab that was leading cleared the store to start over and closed before saying so, so the
+    // place this tab holds is older than that start-over.
+    it("starts over when the store it would repair holds no place", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      let stated;
+
+      Tabs.postState.callsFake(() => (stated = SyncStream.syncCursor));
+
+      repairing.resolves(true);
+      SyncStream.syncCursor = "place-1";
+
+      await succeed(nextGroup());
+
+      // What the group is told names no place: the tabs that drop theirs on the resync would
+      // otherwise take this one back.
+      assert.isNull(stated);
+      assert.isNull(SyncStream.syncCursor);
+      assert.isTrue(clearing.calledOnce);
+      assert.isTrue(reconnecting.calledOnce);
+
+      sinon.assert.calledWith(posting, {
+        event: "sync_resync",
+        frame: {reason: "no place to resume from"},
+        kind: "frame",
+      });
+    });
+
+    // The page's stream greeted with no sync while this checked, so it is replaced.
+    it("starts over on the stream the page started while it checked", async () => {
       let repaired;
 
       repairing.returns(new Promise((resolve) => (repaired = resolve)));
@@ -451,11 +479,47 @@ describe("Tabs", () => {
       // What the page does right after the restore.
       Sse.isStarted = true;
 
-      repaired();
+      repaired(true);
       await waitForEventLoop();
 
-      assert.isFalse(reconnecting.called);
+      assert.isTrue(clearing.calledOnce);
+      assert.isTrue(reconnecting.calledOnce);
+    });
+
+    // A stream the page opens while the lead is being settled is not served sync - a frame stored
+    // then would land on a store about to be cleared - so it is replaced once that is settled.
+    it("replaces the stream the page started while it decided", async () => {
+      let repaired;
+
+      repairing.returns(new Promise((resolve) => (repaired = resolve)));
+      Sse.isStarted = false;
+
+      await handOverWhileStarting(nextGroup());
+
+      SyncStream.syncCursor = "place-1";
+      Tabs.ready();
+
+      assert.isTrue(Tabs.takingLead);
+
+      // What the page does right after the restore.
+      Sse.isStarted = true;
+
+      repaired(false);
+      await waitForEventLoop();
+
+      assert.isFalse(Tabs.takingLead);
+      assert.isTrue(reconnecting.calledOnce);
       assert.isTrue(flushing.calledOnce);
+    });
+
+    it("settles its lead even when the check fails", async () => {
+      repairing.rejects(new Error("refused"));
+      SyncStream.syncCursor = "place-1";
+
+      // The lead's rejection goes nowhere: the lock's callback lets it drop.
+      await succeed(nextGroup());
+
+      assert.isFalse(Tabs.takingLead);
     });
 
     it("asks for everything when its restore left it no place", async () => {
@@ -897,6 +961,23 @@ describe("Tabs", () => {
       assert.equal(posting.firstCall.args[0].kind, "state");
     });
 
+    // The place it holds may be about to go, and it says what it holds once that is settled.
+    it("answers a tab that has joined with nothing, while it settles its lead", async () => {
+      await Tabs.join(nextGroup(), {onLead: () => {}});
+
+      const posting = sinon.stub(Tabs, "post");
+
+      Tabs.takingLead = true;
+
+      try {
+        Tabs.receive({kind: "joined"});
+      } finally {
+        Tabs.takingLead = false;
+      }
+
+      assert.isFalse(posting.called);
+    });
+
     it("answers a tab that has joined with nothing, when it follows", async () => {
       const group = nextGroup();
 
@@ -1231,6 +1312,17 @@ describe("Tabs", () => {
       await Tabs.leave();
 
       assert.isTrue(await isLockFree(group));
+    });
+
+    // A tab whose group dissolved while it was settling its lead has no lead left to settle.
+    it("settles no lead afterwards", async () => {
+      await Tabs.join(nextGroup(), stubs());
+
+      Tabs.takingLead = true;
+
+      await Tabs.leave();
+
+      assert.isFalse(Tabs.takingLead);
     });
 
     it("leads itself afterwards", async () => {

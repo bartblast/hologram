@@ -61,7 +61,11 @@ export default class SyncStream {
     // The connection itself stays. It carries this tab's own realtime traffic - the actions and
     // receipts the server addresses to this instance - which is per tab by design and not the
     // sync session's to consolidate.
-    if (pageModule === null || !Tabs.leader) {
+    //
+    // Nor does a tab still settling where its lead starts from (see Tabs.takingLead): a frame
+    // served now would be written over a store that is about to be cleared. It is greeted again
+    // once that is settled.
+    if (pageModule === null || !Tabs.leader || Tabs.takingLead) {
       return {};
     }
 
@@ -173,11 +177,10 @@ export default class SyncStream {
       // do. What this browser DID - its identity, its counter, its clock - stays: a resync
       // replaces what the SERVER said, and none of those three are the server's to take away.
       //
-      // Told without waiting for the clear, unlike a frame's rows. A resync heard and a clear lost
-      // mend themselves: every tab that heard it holds no place, so the next to lead starts over
-      // and clears again. A clear landed and a resync never heard do not - the next tab to lead
-      // puts its rows back (see Durability.repair), but a tab that read the emptied store
-      // meanwhile takes that tab's place and completeness over no rows.
+      // Told without waiting for the clear, unlike a frame's rows: either half lost mends itself.
+      // A resync heard and a clear lost leave every tab that heard it with no place, so the next to
+      // lead starts over and clears again. A clear landed and a resync never heard leave the store
+      // with no place, which the next to lead finds and starts over from (see Durability.repair).
       Durability.clear();
 
       $.tell("sync_resync", frame);

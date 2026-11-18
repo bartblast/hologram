@@ -426,34 +426,47 @@ export default class Durability {
   // Why they can differ: the tab that led before wrote things down before telling the group of
   // them, so a tab closed between the two leaves the store ahead of what every other tab heard. A
   // frame ahead is harmless on its own - the rows are newer than the place this tab greets from,
-  // and the server sends them again. A clear ahead is not: it belongs to a resync told behind a
-  // frame still waiting for its write (see Tabs.post), and carrying on would write the next
-  // frame's place over an emptied store. The store can be behind too, for a tab that read it ahead
-  // and leads after another tab's repair. So the rows memory holds are written whole, with the
+  // and the server sends them again. The store can be behind too, for a tab that read it ahead and
+  // leads after another tab's repair. Either way the rows memory holds are written whole, with the
   // place they stand at, in one transaction, and the server sends what follows that place again.
   //
   // Only where they differ. A place is a string, so equal places mean the store already holds
   // exactly what the memory does, and nothing is written - which is the usual case.
   //
+  // And never over a store naming NO place, which this tab cannot tell from a clear ahead: a
+  // start-over the tab that led wrote down and closed before telling anyone of (see Tabs.post).
+  // Whatever emptied it, the rows this tab holds are not what the store vouches for. Rewritten, the
+  // store would claim them while a tab that read it empty meanwhile takes this tab's place and
+  // completeness over none. So nothing is written, and this answers true: the tab taking the lead
+  // starts over, the way the start-over would have told it to.
+  //
   // The read and the write are ONE read-write transaction, created before this returns, and the
-  // write is chained onto the read's own callback the way fileBatch chains its counter. A tab
-  // handed the lead while it was starting asks for this from its restore, and its page opens the
-  // stream right after (see Tabs.#lead), so the stream's first frame can be stored while this is
-  // still deciding: read in a transaction of its own, the write after it would land on top of that
-  // frame and put the store back behind what this tab holds. Created here, it is ahead of every
-  // frame stored after it.
+  // write is chained onto the read's own callback the way fileBatch chains its counter: read in a
+  // transaction of its own, a write after it could land on top of something stored in between and
+  // put the store back behind what this tab holds. (The tab serves itself no frames while this
+  // decides - see Tabs.takingLead - but this does not rest on that.)
   //
   // So a read that fails is a write that fails, and stops the storage the way any failed write
   // does (see #fail) - rather than skipping the repair, which would leave the store naming another
   // place than this tab with nothing to say so.
-  static repair(records, cursor) {
-    return Durability.#write([ENTITIES, META], (transaction) => {
+  static async repair(records, cursor) {
+    let placeless = false;
+
+    await Durability.#write([ENTITIES, META], (transaction) => {
       const entities = transaction.objectStore(ENTITIES);
       const meta = transaction.objectStore(META);
       const stored = meta.get("cursor");
 
       stored.onsuccess = () => {
-        if ((stored.result ?? null) === cursor) {
+        const place = stored.result ?? null;
+
+        if (place === null) {
+          placeless = true;
+
+          return;
+        }
+
+        if (place === cursor) {
           return;
         }
 
@@ -467,6 +480,8 @@ export default class Durability {
         meta.put(Clock.last(), "clock");
       };
     });
+
+    return placeless;
   }
 
   // Takes up what the previous page load left, and answers the three things the runtime resumes

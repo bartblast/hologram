@@ -39,6 +39,10 @@ const HELD_UNTIL_READY = new Set(["answered", "frame", "state"]);
 export default class Tabs {
   static leader = true;
 
+  // Whether this tab is still settling where the lead it took starts from - while it checks the
+  // store against what it holds (see #lead). A stream opened meanwhile is not served sync.
+  static takingLead = false;
+
   // The group this tab belongs to, and nothing when it belongs to none.
   static name = null;
 
@@ -223,6 +227,7 @@ export default class Tabs {
 
     Tabs.leader = true;
     Tabs.name = null;
+    Tabs.takingLead = false;
 
     return released ?? Promise.resolve();
   }
@@ -251,9 +256,11 @@ export default class Tabs {
 
       // A tab that has finished starting up, asking for what the store could not tell it: what is
       // complete, which nothing writes down, and the place and the identity as they stand now.
-      // Answered by the tab that has them.
+      // Answered by the tab that has them - and not while it is still settling where its lead
+      // starts from, since the place it holds then may be about to go (see #lead), which says
+      // what it holds once that is settled.
       case "joined":
-        if (Tabs.leader) {
+        if (Tabs.leader && !Tabs.takingLead) {
           Tabs.postState();
         }
 
@@ -453,51 +460,72 @@ export default class Tabs {
   // been nobody left to hand anything over.
   //
   // Everything it needs is in its own memory, in the store, or in the grant itself.
-  //
-  // Read before anything is awaited: whether this tab's page has opened its stream yet. A tab
-  // handed the lead while starting takes it from ready(), before its page starts the stream, and
-  // that stream greets the server as the leader all by itself.
   static async #lead() {
-    const started = Sse.isStarted;
-
     if (SyncStream.syncCursor === null) {
-      // Nowhere to be brought up to date FROM: the tab that was leading died mid-fill, or never
-      // got far enough to have a place. So this one asks for everything again, and says so to the
-      // group, whose tabs hold the same rows out of the same store.
-      //
-      // The rows stay on every screen in the meantime, each tab's included: the fill that follows
-      // confirms the ones this browser may still see and the marker ending it takes away the rest,
-      // which is the same answer arriving without a gap in the middle of it.
-      LocalDatabase.beginRefill();
-      Durability.clear();
-
-      Tabs.post({
-        event: "sync_resync",
-        frame: {reason: "no place to resume from"},
-        kind: "frame",
-      });
+      Tabs.#startOver();
     } else {
       // The store can name another place than this tab holds: the tab that was leading can have
       // written a frame down and closed before telling the group of it. Carrying on would leave the
       // store naming a place this tab does not hold the rows for (see Durability.repair).
-      await Durability.repair(
-        LocalDatabase.records(LocalDatabase.vouchedRowKeys()),
-        SyncStream.syncCursor,
-      );
+      //
+      // Or it can name none, which this tab cannot tell from the tab that was leading having
+      // cleared it to start over and closed before saying so. Whatever emptied it, the rows this
+      // tab holds are not what the store vouches for, and it starts over.
+      //
+      // A stream the page opens while this decides is not served sync (see Tabs.takingLead): a
+      // frame stored now would land on a store about to be cleared, with a place.
+      Tabs.takingLead = true;
+
+      let placeless;
+
+      try {
+        placeless = await Durability.repair(
+          LocalDatabase.records(LocalDatabase.vouchedRowKeys()),
+          SyncStream.syncCursor,
+        );
+      } finally {
+        Tabs.takingLead = false;
+      }
+
+      if (placeless) {
+        SyncStream.syncCursor = null;
+        Tabs.#startOver();
+      }
     }
 
     Tabs.postState();
 
-    // The stream this tab has is a realtime one - it greeted the server with no sync, being a
-    // follower at the time - so it is replaced by one the server serves sync on. A tab handed the
-    // lead while starting has none yet: its page starts one right after, which greets as the leader
-    // by itself, and a reconnect here would open a second one beside it.
-    if (started) {
+    // The stream this tab has greeted the server with no sync - opened as a follower, or while this
+    // was deciding - or has not greeted yet, and would then greet with sync from whatever place
+    // the decision left; either way one the server serves sync on stands in its place, whichever
+    // answers last (see Sse.connect). Holding no place when it took the lead, a tab handed the lead
+    // while starting has none yet: its page starts one right after, which greets as the leader by
+    // itself, and a reconnect would open a second one beside it.
+    if (Sse.isStarted) {
       Sse.reconnect();
     }
 
     // And the queue is this tab's to drain now.
     Batches.flush();
+  }
+
+  // Nowhere to be brought up to date FROM: the tab that was leading died mid-fill, never got far
+  // enough to have a place, or started over and closed before saying so. So this one asks for
+  // everything again, and says so to the group, whose tabs hold the same rows out of the same
+  // store.
+  //
+  // The rows stay on every screen in the meantime, each tab's included: the fill that follows
+  // confirms the ones this browser may still see and the marker ending it takes away the rest,
+  // which is the same answer arriving without a gap in the middle of it.
+  static #startOver() {
+    LocalDatabase.beginRefill();
+    Durability.clear();
+
+    Tabs.post({
+      event: "sync_resync",
+      frame: {reason: "no place to resume from"},
+      kind: "frame",
+    });
   }
 
   // The identity the last of the given messages that is the group's state names, taken up and
