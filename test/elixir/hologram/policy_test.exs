@@ -16,6 +16,7 @@ defmodule Hologram.PolicyTest do
       grant_role_qualifying_roles: 2,
       hash: 1,
       held_chains: 2,
+      line_held_chains: 2,
       locked_set_links: 1,
       operation_key: 1,
       operations: 1,
@@ -35,6 +36,8 @@ defmodule Hologram.PolicyTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Entity.Derived
   alias Hologram.MisuseError
+  alias Hologram.PolicyTest.HeldBoard
+  alias Hologram.PolicyTest.HeldTask
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -1487,6 +1490,47 @@ defmodule Hologram.PolicyTest do
 
     test "returns a row a path reads that a deciding quantifier reads a set through too" do
       assert held_chains(HeldRoom, :update) == [[:board]]
+    end
+  end
+
+  describe "line_held_chains/2" do
+    defmodule LineHeldOwner do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      allow :read
+    end
+
+    defmodule LineHeldBanner do
+      use Hologram.Entity
+
+      attribute :title, :string
+
+      relationship :owner, Hologram.PolicyTest.LineHeldOwner, optional: true
+
+      allow :update, only: [:title]
+      allow :update, except: [:owner], when: owner.name == "x"
+    end
+
+    test "tells apart the lines sharing a field's key" do
+      [plain_line, reading_line] = LineHeldBanner.__policies__()
+
+      assert held_chains(LineHeldBanner, {:update, :title}) == [[:owner]]
+      assert line_held_chains(LineHeldBanner, plain_line) == []
+      assert line_held_chains(LineHeldBanner, reading_line) == [[:owner]]
+    end
+
+    test "returns a delegation's chain" do
+      [line] = HeldTask.__policies__()
+
+      assert line_held_chains(HeldTask, line) == [[:project]]
+    end
+
+    test "leaves out the chains of a deciding quantifier" do
+      [_update_line, _delete_line, archive_line] = HeldBoard.__policies__()
+
+      assert line_held_chains(HeldBoard, archive_line) == []
     end
   end
 

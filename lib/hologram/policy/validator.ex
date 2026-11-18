@@ -100,8 +100,9 @@ defmodule Hologram.Policy.Validator do
   end
 
   # A key of the compiled policy as the line behind it was written: a name as the line naming it,
-  # anything else as the operation it is.
-  defp describe_key(entity_type, key) do
+  # a field as the first limited line covering it that the given function picks, anything else as
+  # the operation it is.
+  defp describe_key(entity_type, key, line_fits? \\ fn _line -> true end) do
     named_line =
       Enum.find(entity_type.__policies__(), fn {_operation, _to, _via, _predicates, name, _fields} ->
         name == key
@@ -109,7 +110,7 @@ defmodule Hologram.Policy.Validator do
 
     case {key, named_line} do
       {_key, {operation, _to, _via, _predicates, name, _fields}} -> describe_line(operation, name)
-      {{:update, field}, nil} -> describe_field_key(entity_type, field)
+      {{:update, field}, nil} -> describe_field_key(entity_type, field, line_fits?)
       {key, nil} -> "allow #{inspect(key)}"
     end
   end
@@ -119,12 +120,18 @@ defmodule Hologram.Policy.Validator do
   defp describe_line(operation, name),
     do: "allow #{inspect(line_operation(operation))}, as: #{inspect(name)}"
 
-  # A field key stands for the limited lines covering the field, described by the first of them.
-  defp describe_field_key(entity_type, field) do
-    {_operation, _to, _via, _predicates, name, {key, names}} =
-      Enum.find(entity_type.__policies__(), fn {_operation, _to, _via, _predicates, _name, fields} ->
+  # A field key stands for the limited lines covering the field, described by the first of them
+  # the given function picks, or by the first of them when it picks none.
+  defp describe_field_key(entity_type, field, line_fits?) do
+    [first_line | _later_lines] =
+      covering_lines =
+      Enum.filter(entity_type.__policies__(), fn {_operation, _to, _via, _predicates, _name,
+                                                  fields} ->
         fields != nil and field in covered_fields(entity_type, fields)
       end)
+
+    {_operation, _to, _via, _predicates, name, {key, names}} =
+      Enum.find(covering_lines, first_line, line_fits?)
 
     named = if name, do: ", as: #{inspect(name)}", else: ""
 
@@ -656,17 +663,25 @@ defmodule Hologram.Policy.Validator do
           chain <- Policy.held_chains(entity_type, operation),
           {hop_type, index} <- chain_hop_types(entity_type, chain),
           not readable_type?(hop_type) do
-        {entity_type, operation, Enum.take(chain, index + 1), hop_type}
+        {entity_type, operation, chain, Enum.take(chain, index + 1), hop_type}
       end
 
     case unreadable_hops do
       [] ->
         :ok
 
-      [{entity_type, operation, chain, hop_type} | _later_hops] ->
+      [{entity_type, operation, full_chain, chain, hop_type} | _later_hops] ->
+        # Several limited lines share a field's key, so the line named is one reading the chain.
+        line =
+          describe_key(
+            entity_type,
+            operation,
+            &(full_chain in Policy.line_held_chains(entity_type, &1))
+          )
+
         raise Hologram.CompileError,
           message:
-            "#{describe_key(entity_type, operation)} in #{inspect(entity_type)} reads #{inspect(hop_type)} through #{Enum.join(chain, ".")}, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on #{inspect(hop_type)}, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+            "#{line} in #{inspect(entity_type)} reads #{inspect(hop_type)} through #{Enum.join(chain, ".")}, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on #{inspect(hop_type)}, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
     end
   end
 

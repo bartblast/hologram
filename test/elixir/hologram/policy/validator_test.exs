@@ -2422,6 +2422,35 @@ defmodule Hologram.Policy.ValidatorTest do
   # Every message below has a local-line twin in the describe above, asserting the same text
   # WITHOUT the tail - so the pair pins that the tail appears exactly when the line was taken.
   describe "validate_model!/2 for a line taken from a policy" do
+    test "names the line reading the chain among the limited lines covering a field" do
+      defmodule SharedFieldChainTarget do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        allow :create
+      end
+
+      defmodule SharedFieldChainSource do
+        use Hologram.Entity
+
+        attribute :topic, :string
+
+        relationship :parent, Hologram.Policy.ValidatorTest.SharedFieldChainTarget
+
+        allow :read
+        allow :update, only: [:topic]
+        allow :update, except: [:parent], when: parent.archived == false
+      end
+
+      expected_msg =
+        "allow :update, except: [:parent] in Hologram.Policy.ValidatorTest.SharedFieldChainSource reads Hologram.Policy.ValidatorTest.SharedFieldChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.SharedFieldChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([SharedFieldChainTarget, SharedFieldChainSource], [])
+      end
+    end
+
     test "rejects a to option naming a role the taking entity type does not declare" do
       defmodule TakenOwnReferencePolicy do
         use Hologram.Policy

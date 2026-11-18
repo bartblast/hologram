@@ -265,11 +265,7 @@ defmodule Hologram.Policy do
 
     entity_type.__policies__()
     |> Enum.flat_map(fn {operation, to, via, predicates, name, fields} ->
-      rule = %{
-        predicates: Stage.predicate_triples!(entity_type, predicates),
-        to: build_to(entity_type, to),
-        via: delegation(operation, via)
-      }
+      rule = line_rule(entity_type, operation, to, via, predicates)
 
       keyed_rules = keyed_rules(entity_type, operation, fields, rule)
 
@@ -483,6 +479,22 @@ defmodule Hologram.Policy do
     |> build()
     |> Map.get(operation, [])
     |> Enum.flat_map(&rule_chains(entity_type, &1, :held))
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
+  Returns the chains the rule of one allow line of the given entity type reads that a client
+  answers from the rows it holds, sorted - what `held_chains/2` returns for a key, for one line as
+  `__policies__/0` lists it. Several lines can share a key, like the limited update lines covering
+  one field, and this tells which of them reads a chain.
+
+  Takes a validated data model, for the reason `related_chains/1` does.
+  """
+  @spec line_held_chains(module, tuple) :: list(list(atom))
+  def line_held_chains(entity_type, {operation, to, via, predicates, _name, _fields}) do
+    entity_type
+    |> rule_chains(line_rule(entity_type, operation, to, via, predicates), :held)
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -1263,6 +1275,14 @@ defmodule Hologram.Policy do
         Map.put(acc, operation, union)
       end
     end)
+  end
+
+  defp line_rule(entity_type, operation, to, via, predicates) do
+    %{
+      predicates: Stage.predicate_triples!(entity_type, predicates),
+      to: build_to(entity_type, to),
+      via: delegation(operation, via)
+    }
   end
 
   # A limited update line is keyed by the fields it covers, any other line by its operation, per
