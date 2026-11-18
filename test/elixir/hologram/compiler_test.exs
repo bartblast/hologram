@@ -1450,7 +1450,7 @@ defmodule Hologram.CompilerTest do
     assert permission_mfas() -- CallGraph.manually_ported_elixir_mfas() == []
   end
 
-  describe "operation_asks/2" do
+  describe "operation_asks/3" do
     # The offending asks are built as IR rather than as file fixtures, because a file fixture
     # would refuse the build in the compile.hologram Mix task tests, which compile the whole
     # project. The module's name has to exist as an atom before IR.for_code/2 resolves it, which
@@ -1491,7 +1491,7 @@ defmodule Hologram.CompilerTest do
       assert operation_asks(graph, plt) == [
                %{line: 3, mfa: {@asker, :f, 2}, operation: :nope},
                %{line: 4, mfa: {@asker, :g, 2}, operation: {:grant_role, :editr}},
-               %{line: 2, mfa: {@asker, :h, 3}, operation: :dynamic}
+               %{line: 2, mfa: {@asker, :h, 3}, operation: {:dynamic}}
              ]
     end
 
@@ -10530,6 +10530,29 @@ defmodule Hologram.CompilerTest do
 
       assert_raise Hologram.CompileError, expected_msg, fn ->
         validate_operations!(@declaring_model, graph, single_ask_plt("{:update, []}"))
+      end
+    end
+
+    test "doesn't raise for a literal :dynamic an allow line carries as its name" do
+      defmodule DynamicNameFixture do
+        use Hologram.Entity
+
+        allow :delete, as: :dynamic
+      end
+
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      assert validate_operations!([DynamicNameFixture], graph, single_ask_plt(":dynamic")) == :ok
+    end
+
+    test "raises on a literal :dynamic no allow line carries" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      expected_msg =
+        "unknown operation :dynamic in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - it is neither a framework operation nor a name an allow line carries; the names this build's allow lines carry are :archive, :publish, :triage and :unlink"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_operations!(@declaring_model, graph, single_ask_plt(":dynamic"))
       end
     end
 

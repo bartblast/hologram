@@ -440,7 +440,8 @@ defmodule Hologram.Compiler do
   each call of `Hologram.Auth.can?/3` found in the IR of the functions the call graph names as
   its callers, with the line of the call and the operation it names - a literal atom, a literal
   `{name, role}` tuple of atoms, a literal `{:update, field}` or `{:update, fields}` tuple, or
-  `:dynamic` when the operation is computed and the build cannot read it.
+  `{:dynamic}` when the operation is computed and the build cannot read it - a tuple rather than an
+  atom, so a name an allow line carries, `:dynamic` included, is never mistaken for it.
 
   Takes the UNSPLIT call graph - `can?/3` is hand-ported, so the runtime graph no longer holds the
   vertices whose callers this reads. The IR of a caller whose module the call graph's module info
@@ -454,7 +455,7 @@ defmodule Hologram.Compiler do
       already; every caller is read without it (default: none).
   """
   @spec operation_asks(CallGraph.t(), PLT.t(), T.opts()) ::
-          list(%{mfa: mfa, line: integer | nil, operation: Entity.operation() | :dynamic})
+          list(%{mfa: mfa, line: integer | nil, operation: Entity.operation() | {:dynamic}})
   def operation_asks(call_graph, ir_plt, opts \\ []) do
     callers =
       @operation_asks
@@ -2815,7 +2816,7 @@ defmodule Hologram.Compiler do
   Refuses an entity operation the build asks about that is neither a framework operation nor a
   name some allow line carries, or returns :ok.
 
-  Every literal ask `operation_asks/2` reads is judged against the build's whole vocabulary - the
+  Every literal ask `operation_asks/3` reads is judged against the build's whole vocabulary - the
   framework's operations and every name an allow line on any of the given entity types carries -
   because the entity argument's type is not known at the ask. A role tuple's role has to be one
   some entity type declares, and every field an `{:update, field}` or `{:update, fields}` tuple
@@ -3094,11 +3095,11 @@ defmodule Hologram.Compiler do
     if Enum.all?(field_irs, &match?(%IR.AtomType{}, &1)) do
       {:update, Enum.map(field_irs, & &1.value)}
     else
-      :dynamic
+      {:dynamic}
     end
   end
 
-  defp literal_operation(_ir), do: :dynamic
+  defp literal_operation(_ir), do: {:dynamic}
 
   # One branch of a block renders, so an atom ref counts as often as the branch that renders it the
   # most times. The other branches' refs still name refs the page can render, so they stay for the
@@ -6073,7 +6074,7 @@ defmodule Hologram.Compiler do
     end)
   end
 
-  defp validate_operation_ask!(%{operation: :dynamic}, _declared), do: :ok
+  defp validate_operation_ask!(%{operation: {:dynamic}}, _declared), do: :ok
 
   defp validate_operation_ask!(%{operation: operation} = ask, %{vocabulary: vocabulary})
        when is_atom(operation) do
