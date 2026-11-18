@@ -2399,9 +2399,8 @@ defmodule Hologram.Compiler do
   `:synced_types` are the entity types sync sends rows of, sorted by name: the types the queries
   read and the pages' client code mentions, as for `:entity_types`, and, when the build checks
   permissions on the client (see `permission_checking?/2`), the types every rule of those types
-  reads through relationships, with the grant type. A browser never decides a read rule - a row
-  reaches it only once the server's read rules admitted it - so the rules count only where the
-  browser answers them. They are followed one step: client code checks only rows of types it
+  reads through relationships, with the grant type. Read rules count too, since the browser decides
+  them in `can?`. They are followed one step: client code checks only rows of types it
   queries or mentions, and a rule's chains already follow its delegations. That is at least what
   the windows download, which follow the rules of a query's own type and its includes only - bar
   a type the model leaves out, which declares no rule, so no read rule admits its rows. A
@@ -3033,7 +3032,7 @@ defmodule Hologram.Compiler do
   # The verdict key and the read types of a deciding clause standing in a rule's predicates, as
   # members of its object - none for any other clause.
   defp render_verdict_members(clause, {entity_type, operation}) do
-    if Policy.deciding_quantifier?(entity_type, clause) do
+    if Policy.deciding_quantifier?(entity_type, operation, clause) do
       reads_js =
         entity_type
         |> Policy.verdict_reads(clause)
@@ -5265,9 +5264,10 @@ defmodule Hologram.Compiler do
     render_json_object(members ++ render_verdict_members(clause, verdict_context))
   end
 
-  # A deciding predicate standing in a rule's predicates - one reading a server-only attribute,
-  # whose value no client holds - is the key the server's verdict on it is sent under and the types it
-  # reads alone, since the client answers it from the verdict and nothing else.
+  # A deciding predicate standing in a rule's predicates - one reading a server-only attribute, whose
+  # value no client holds, or in a read rule a row of a type no client holds - is the key the
+  # server's verdict on it is sent under and the types it reads alone, since the client answers it
+  # from the verdict and nothing else.
   defp render_policy_clause(types, {_name, _operator, _value} = clause, verdict_context) do
     case render_verdict_members(clause, verdict_context) do
       [] -> render_policy_triple(types, clause)

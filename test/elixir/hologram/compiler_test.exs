@@ -2524,8 +2524,8 @@ defmodule Hologram.CompilerTest do
       refute PolicyEntity in sync_constants.synced_types
     end
 
-    # A browser never decides a read rule, and with no page checking permissions it answers no
-    # other rule either, so the rows the rules read are no use to it.
+    # With no page checking permissions the browser decides no rule, so the rows the rules read are
+    # no use to it.
     test "syncs none of the types the rules read when no page checks permissions", %{
       module_info_plt: module_info_plt
     } do
@@ -3628,6 +3628,22 @@ defmodule Hologram.CompilerTest do
       relationship :report, BakedReport, optional: true
 
       allow :read, when: report.reviewed == true
+    end
+
+    defmodule BakedHiddenProject do
+      use Hologram.Entity
+
+      attribute :archived, :boolean
+
+      allow :update
+    end
+
+    defmodule BakedHiddenTask do
+      use Hologram.Entity
+
+      relationship :project, BakedHiddenProject, optional: true
+
+      allow :read, when: project.archived == false
     end
 
     defp archive_key do
@@ -5001,8 +5017,8 @@ defmodule Hologram.CompilerTest do
 
     # No client holds a server-only value, so a predicate reading one is the key the server's verdict
     # on it is sent under and the types it reads alone - none for the row's own attribute, which no
-    # write of the client's can move, and the types along a path. A stored attribute beside it in an
-    # alternative stays a triple.
+    # write of the client's can move, and the types along a path, without the rule's own. A stored
+    # attribute beside it in an alternative stays a triple.
     test "bakes a predicate on a server-only attribute as its verdict key and the types it reads",
          %{
            ir_plt: ir_plt,
@@ -5037,7 +5053,40 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"reads":["Hologram.CompilerTest.BakedReport","Hologram.CompilerTest.BakedReportNote"],"verdict":"#{note_key}"}],"to":null,"via":null}]/
+               ~s/"read":[{"predicates":[{"reads":["Hologram.CompilerTest.BakedReport"],"verdict":"#{note_key}"}],"to":null,"via":null}]/
+             )
+    end
+
+    # No client holds a row of a type nobody may read, so a read rule's predicate reading one is the
+    # key the server's verdict on it is sent under and the types it reads alone.
+    test "bakes a read rule's predicate reading a type nobody may read as its verdict key and reads",
+         %{
+           ir_plt: ir_plt,
+           runtime_mfas: runtime_mfas
+         } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedHiddenProject, BakedHiddenTask, RoleGrant])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      key =
+        Hologram.Policy.verdict_key(BakedHiddenTask, :read, {[:project, :archived], :==, false})
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"reads":["Hologram.CompilerTest.BakedHiddenProject"],"verdict":"#{key}"}],"to":null,"via":null}]/
              )
     end
 
@@ -9976,7 +10025,7 @@ defmodule Hologram.CompilerTest do
     end
 
     # Rules a deploy added can read a type the client's bundle never held, and the client needs its
-    # entry to hold the rows the rule reads and follow the path to them.
+    # entry to box a row of it and follow a path to it.
     test "renders a type declaring no rule or role that a rule reads through a relationship" do
       label = "Hologram.Test.Fixtures.Entity.Module44"
 

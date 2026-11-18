@@ -285,28 +285,34 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns whether the given clause of a rule of the given entity type is a deciding one: a
-  quantifier whose clause tree holds a `none`, an `all` or a quantifier whose source runs through a
-  derived field holding rows - itself, or one in its condition at any depth - or whose condition
-  reads a derived field holding a value that reads a related set, or any clause, a predicate
-  included, reading a server-only attribute - the row's own, one a path or a quantifier's set leads
-  to, or one an attribute operand or an outer name reads. A client answers such a clause from the
-  server's verdict (see `Hologram.Auth.verdicts/2`), since the rows it holds of a set can't decide
-  one for certain - a bounded or filtered set computed over the rows it holds can hold rows the
-  server's doesn't, so not even an `any` over one, and a count it can't compute at all - and it
-  never holds a server-only value. The name dates from when only quantifiers were.
+  Returns whether the given clause of a rule of the given entity type and operation is a deciding
+  one: a quantifier whose clause tree holds a `none`, an `all` or a quantifier whose source runs
+  through a derived field holding rows - itself, or one in its condition at any depth - or whose
+  condition reads a derived field holding a value that reads a related set, or any clause, a
+  predicate included, reading a server-only attribute - the row's own, one a path or a quantifier's
+  set leads to, or one an attribute operand or an outer name reads - or, in a read rule, any clause
+  reading a row of a type no session may read (see `readable_type?/1`) along its paths and sets. A
+  client answers such a clause from the server's verdict (see `Hologram.Auth.verdicts/2`), since
+  the rows it holds of a set can't decide one for certain - a bounded or filtered set computed over
+  the rows it holds can hold rows the server's doesn't, so not even an `any` over one, and a count
+  it can't compute at all - it never holds a server-only value, and it never holds a row of a type
+  nobody may read. A rule for any other operation reading such a row fails the build instead,
+  unless the clause is deciding for another reason (see `Hologram.Policy.Validator`): a client
+  checks those on the structs its own actions change, which no verdict on the stored row answers.
+  The name dates from when only quantifiers were.
   """
-  @spec deciding_quantifier?(module, tuple) :: boolean
-  def deciding_quantifier?(entity_type, clause) do
+  @spec deciding_quantifier?(module, Entity.operation(), tuple) :: boolean
+  def deciding_quantifier?(entity_type, operation, clause) do
     deciding_clause?(clause, [entity_type]) or reads_set_value?(entity_type, clause) or
-      reads_server_only?(entity_type, clause)
+      reads_server_only?(entity_type, clause) or
+      (operation == :read and reads_unreadable_type?(entity_type, clause))
   end
 
   @doc """
   Returns the deciding clauses of the given entity type's rules, across every operation, as
   `{key, clause}` pairs sorted by key: every clause standing in a rule's predicates - a predicate
   or a quantifier, at the top or in a disjunction's alternatives, not inside another quantifier -
-  that is a deciding one (see `deciding_quantifier?/2`), keyed by `verdict_key/3`. A clause written
+  that is a deciding one (see `deciding_quantifier?/3`), keyed by `verdict_key/3`. A clause written
   the same way twice in one operation is one pair.
 
   Cached, with the model facts, for the types of the project's compiled data model - a row's
@@ -453,7 +459,7 @@ defmodule Hologram.Policy do
   @doc """
   Returns the chains `related_chains/2` returns for the given operation of the given entity type
   that a client answers from the rows it holds, sorted: those its rules read outside any deciding
-  clause (see `deciding_quantifier?/2`), whose sets and paths and the rows on the way to them the
+  clause (see `deciding_quantifier?/3`), whose sets and paths and the rows on the way to them the
   server's verdict answers over the rows as stored. A delegation's are those of the operation it
   asks the related row, the delegation's own chain among them.
 
@@ -464,7 +470,7 @@ defmodule Hologram.Policy do
     entity_type
     |> build()
     |> Map.get(operation, [])
-    |> Enum.flat_map(&rule_chains(entity_type, &1, :held))
+    |> Enum.flat_map(&rule_chains(entity_type, &1, {:held, operation}))
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -570,6 +576,19 @@ defmodule Hologram.Policy do
     |> Enum.flat_map(&global_role_modules(entity_type, &1))
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  @doc """
+  Returns whether some session may read rows of the given entity type: it has read rules, its own
+  lines or the ones taken from its policy modules. The grant store's are supplied by the framework.
+  No client ever holds a row of a type without them.
+  """
+  @spec readable_type?(module) :: boolean
+  def readable_type?(entity_type) do
+    entity_type
+    |> build()
+    |> Map.get(:read, [])
+    |> Kernel.!=([])
   end
 
   @doc """
@@ -722,26 +741,26 @@ defmodule Hologram.Policy do
 
   @doc """
   Returns the entity types the given deciding clause of a rule of the given entity type reads,
-  sorted: the rule's own, and every type along its sets' sources and its paths, and through the
-  derived fields it reads, nested quantifiers included - a derived set's own reads among them. A
-  client takes the server's verdict on the clause as current only while none of its own unanswered
-  writes names one of them.
+  sorted: every type along its sets' sources and its paths, and through the derived fields it reads,
+  nested quantifiers included - a derived set's own reads among them - and for a quantifier the
+  rule's own. A client takes the server's verdict on the clause as current only while none of its
+  own unanswered writes names one of them.
 
-  None for a predicate reading nothing but server-only attributes of the row itself: no client
-  write can carry such a value, and a struct a pending write changed is not the stored row, which a
-  client checks before it reads a verdict at all - so no unanswered write can move the answer. A
-  pending delete leaves the stored row's verdict standing for a struct of it, which is still true of
-  the row as stored.
+  A predicate leaves the rule's own type out unless a path leads back to it. It reads the row itself
+  and the rows its to-one paths lead to, and a struct a pending write changed is not the stored row,
+  which a client checks before it reads a verdict at all - so no unanswered write to the row, or to
+  another row of its type, can move the answer. A pending delete leaves the stored row's verdict
+  standing for a struct of it, which is still true of the row as stored.
   """
   @spec verdict_reads(module, tuple) :: list(module)
+  def verdict_reads(entity_type, {_name, _operator, _value} = clause) do
+    verdict_related_reads(entity_type, clause)
+  end
+
   def verdict_reads(entity_type, clause) do
-    if own_server_only_reads?(entity_type, clause) do
-      []
-    else
-      [entity_type | verdict_related_reads(entity_type, clause)]
-      |> Enum.uniq()
-      |> Enum.sort()
-    end
+    [entity_type | verdict_related_reads(entity_type, clause)]
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   @doc """
@@ -866,7 +885,7 @@ defmodule Hologram.Policy do
   end
 
   # Whether a clause read on a row of the first of the given types, with the rows of the others
-  # above it, is a deciding quantifier (see deciding_quantifier?/2).
+  # above it, is a deciding quantifier (see deciding_quantifier?/3).
   defp deciding_clause?({quantifier, {source, clauses}}, types) when quantifier in @quantifiers do
     {start_type, relationship_names} =
       case source do
@@ -965,7 +984,7 @@ defmodule Hologram.Policy do
     |> Enum.flat_map(fn {operation, rules} ->
       for rule <- rules,
           clause <- standing_clauses(rule.predicates),
-          deciding_quantifier?(entity_type, clause),
+          deciding_quantifier?(entity_type, operation, clause),
           do: {verdict_key(entity_type, operation, clause), clause}
     end)
     |> Enum.uniq()
@@ -992,7 +1011,7 @@ defmodule Hologram.Policy do
     target_chains =
       case reads do
         :all -> related_chains(target_type, operation)
-        :held -> held_chains(target_type, operation)
+        {:held, _operation} -> held_chains(target_type, operation)
       end
 
     lifted_chains = Enum.map(target_chains, &(relationship_names ++ &1))
@@ -1207,18 +1226,6 @@ defmodule Hologram.Policy do
     end)
   end
 
-  # Whether a predicate reads nothing but server-only attributes of the row itself - none through a
-  # relationship or a derived field, which a client's writes may move. A quantifier reads its set
-  # even when its condition names only the row above, and a client's writes move the set.
-  defp own_server_only_reads?(entity_type, {_name, _operator, _value} = clause) do
-    case server_only_references(entity_type, clause) do
-      [] -> false
-      references -> Enum.all?(references, &(&1 == {[], true}))
-    end
-  end
-
-  defp own_server_only_reads?(_entity_type, _clause), do: false
-
   # The quantifier clauses among the given ones, those in a disjunction's alternatives included.
   defp quantifier_clauses(clauses) do
     Enum.flat_map(clauses, fn
@@ -1279,6 +1286,14 @@ defmodule Hologram.Policy do
   end
 
   defp reads_set_value?(_entity_type, _clause), do: false
+
+  # Whether a clause reads a row of a type no session may read - along a path, a quantifier's source
+  # or a nested condition, or through a derived field it reads.
+  defp reads_unreadable_type?(entity_type, clause) do
+    entity_type
+    |> verdict_related_reads(clause)
+    |> Enum.any?(&(not readable_type?(&1)))
+  end
 
   defp reference_chains(nil), do: []
 
@@ -1347,7 +1362,7 @@ defmodule Hologram.Policy do
     read_predicates =
       case reads do
         :all -> predicates
-        :held -> undecided_predicates(entity_type, predicates)
+        {:held, operation} -> undecided_predicates(entity_type, operation, predicates)
       end
 
     predicate_chains(entity_type, read_predicates) ++
@@ -1464,13 +1479,13 @@ defmodule Hologram.Policy do
   end
 
   # The given predicates without their deciding clauses - in a disjunction's alternatives too.
-  defp undecided_predicates(entity_type, predicates) do
+  defp undecided_predicates(entity_type, operation, predicates) do
     Enum.flat_map(predicates, fn
       {:or, alternatives} ->
-        [{:or, Enum.map(alternatives, &undecided_predicates(entity_type, &1))}]
+        [{:or, Enum.map(alternatives, &undecided_predicates(entity_type, operation, &1))}]
 
       clause ->
-        if deciding_quantifier?(entity_type, clause), do: [], else: [clause]
+        if deciding_quantifier?(entity_type, operation, clause), do: [], else: [clause]
     end)
   end
 

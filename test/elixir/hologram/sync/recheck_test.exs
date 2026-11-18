@@ -32,6 +32,8 @@ defmodule Hologram.Sync.RecheckTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module18
   alias Hologram.Test.Fixtures.Policy.Readers.Module19
   alias Hologram.Test.Fixtures.Policy.Readers.Module2
+  alias Hologram.Test.Fixtures.Policy.Readers.Module20
+  alias Hologram.Test.Fixtures.Policy.Readers.Module21
   alias Hologram.Test.Fixtures.Policy.Readers.Module3
   alias Hologram.Test.Fixtures.Policy.Readers.Module4
   alias Hologram.Test.Fixtures.Policy.Readers.Module5
@@ -613,6 +615,16 @@ defmodule Hologram.Sync.RecheckTest do
 
       assert_verdicts_as_auth(Module18, [reviewed, stewarded], context.users)
       assert_verdicts_as_auth(Module19, [note, other_note], context.users)
+    end
+
+    # No client holds a row of a type nobody may read, so the server answers a read rule reading one.
+    test "answers read rule clauses through a type nobody may read", context do
+      open = create(Module20, %{steward_id: context.bob})
+      archived = create(Module20, %{archived: true, steward_id: context.alice})
+      task = create(Module21, %{project_id: open.id})
+      other_task = create(Module21, %{project_id: archived.id})
+
+      assert_verdicts_as_auth(Module21, [task, other_task], context.users)
     end
 
     test "answers clauses over paths and through related sets for every user alike", context do

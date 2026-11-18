@@ -17,6 +17,8 @@ defmodule Hologram.Policy.EdgesTest do
   alias Hologram.Test.Fixtures.Entity.Module41
   alias Hologram.Test.Fixtures.Entity.Module42
   alias Hologram.Test.Fixtures.Policy
+  alias Hologram.Test.Fixtures.Policy.Readers.Module20, as: ReadersModule20
+  alias Hologram.Test.Fixtures.Policy.Readers.Module21, as: ReadersModule21
   alias Hologram.Test.Fixtures.Role
 
   @index_key {Hologram.Policy.Edges, :index}
@@ -505,6 +507,14 @@ defmodule Hologram.Policy.EdgesTest do
     # No client holds a server-only value, so the read rule's predicate on one is a verdict too.
     test "names what a predicate on a server-only attribute reads under :verdicts" do
       assert derive([EdgeReport])[{EdgeReport, :verdicts}] == [{:attributes, [:reviewed]}]
+    end
+
+    # No client holds a row of a type nobody may read, so the read rules' paths to one are verdicts.
+    test "names what a read rule reads through a type nobody may read under :verdicts" do
+      assert derive([ReadersModule21])[{ReadersModule21, :verdicts}] == [
+               {:attributes, [:project_id]},
+               {:relationship_attributes, [:project], ReadersModule20, [:archived, :steward_id]}
+             ]
     end
 
     test "names no :verdicts edges for a type with no deciding quantifier" do

@@ -241,8 +241,9 @@ function alternativesHold(
 }
 
 // A clause is a triple, a disjunction, a quantifier, or a predicate the build sends as its verdict
-// key and the types it reads alone - one reading a server-only attribute, which only the server's
-// verdict answers, since no client holds the value it compares.
+// key and the types it reads alone - one reading a server-only attribute, or in a read rule a row of
+// a type nobody may read, which only the server's verdict answers, since no client holds the value
+// it compares.
 function clauseHolds(entityType, entity, clause, actorUserId, outer) {
   if (Array.isArray(clause)) {
     return predicateHolds(entityType, entity, clause, actorUserId, outer);
@@ -760,7 +761,8 @@ function canonicalId(value) {
 }
 
 // The server's verdict on a clause this client can't decide - a quantifier the held rows leave
-// open, or a predicate reading a server-only attribute - as the row's last frame carried it. The
+// open, a predicate reading a server-only attribute, or a read rule's clause reading a row of a type
+// nobody may read - as the row's last frame carried it. The
 // server works verdicts out for the session's user over the row as stored, so any other question
 // is UNKNOWN: one about another user or a visitor, one about a struct whose stored fields differ
 // from the row's - changed in an action and not written yet - and one asked while a write of this

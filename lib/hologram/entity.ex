@@ -239,9 +239,10 @@ defmodule Hologram.Entity do
 
   So a rule that reads a related row through an entity type with no read rules fails the build: no
   client ever holds such a row, and the browser would answer no where the server may answer yes. A
-  rule for `:read` itself is exempt, since a row reaches a client only once the server's read rules
-  admitted it, and a client never decides them. A quantifier the server answers is exempt too,
-  since its answer stands in for the rows it reads.
+  quantifier the server answers is exempt, since its answer stands in for the rows it reads. So is
+  a condition in a rule for `:read`: the server answers it for each row it sends too, and the
+  browser checks a read rule only on rows as they were sent. A rule for any other operation is
+  checked on rows an action changed, which the server's answer for the stored row doesn't cover.
   """
   @spec allow(operation, T.opts()) :: Macro.t()
   defmacro allow(operation, spec \\ []) do

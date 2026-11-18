@@ -21,6 +21,7 @@ defmodule Hologram.Policy.ReadersTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module18
   alias Hologram.Test.Fixtures.Policy.Readers.Module19
   alias Hologram.Test.Fixtures.Policy.Readers.Module2
+  alias Hologram.Test.Fixtures.Policy.Readers.Module21
   alias Hologram.Test.Fixtures.Policy.Readers.Module3
   alias Hologram.Test.Fixtures.Policy.Readers.Module4
   alias Hologram.Test.Fixtures.Policy.Readers.Module5
@@ -349,6 +350,13 @@ defmodule Hologram.Policy.ReadersTest do
 
       assert verdict_class(Module15, clause) ==
                {:listed, {:any, [:cards], {:actor_equal, :author_id}}, true}
+    end
+
+    test "a read rule's predicate through a type nobody may read is classified as any other" do
+      assert verdict_class(Module21, {[:project, :archived], :==, false}) == :independent
+
+      assert verdict_class(Module21, {[:project, :steward_id], :==, {:actor}}) ==
+               {:listed, {:actor_equal, [:project, :steward_id]}, false}
     end
 
     test "an inequality on the acting user is unlisted" do

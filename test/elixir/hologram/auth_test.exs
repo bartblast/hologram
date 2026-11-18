@@ -37,6 +37,8 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module4
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module8
+  alias Hologram.Test.Fixtures.Policy.Readers.Module20, as: ReadersModule20
+  alias Hologram.Test.Fixtures.Policy.Readers.Module21, as: ReadersModule21
   alias Hologram.Test.Fixtures.Policy.Readers.Module5, as: ReadersModule5
   alias Hologram.Test.Fixtures.Role
 
@@ -2713,6 +2715,31 @@ defmodule Hologram.AuthTest do
                policy_verdict_key(:feature) => true,
                policy_verdict_key(:publish) => true
              }
+    end
+
+    # No client holds a row of a type nobody may read, so the server answers the read rule over the
+    # related row as stored.
+    test "answers a read rule's paths through a type nobody may read over the related row" do
+      user_id = Entity.generate_id()
+      archived_clause = {[:project, :archived], :==, false}
+      steward_clause = {[:project, :steward_id], :==, {:actor}}
+      archived_key = Policy.verdict_key(ReadersModule21, :read, archived_clause)
+      steward_key = Policy.verdict_key(ReadersModule21, :read, steward_clause)
+
+      create = fn entity_type, values ->
+        values
+        |> entity_type.new()
+        |> DB.create!()
+      end
+
+      open = create.(ReadersModule20, %{steward_id: user_id})
+      archived = create.(ReadersModule20, %{archived: true})
+      task = create.(ReadersModule21, %{project_id: open.id})
+      other_task = create.(ReadersModule21, %{project_id: archived.id})
+
+      assert verdicts(user_id, task) == %{archived_key => true, steward_key => true}
+      assert verdicts(user_id, other_task) == %{archived_key => false, steward_key => false}
+      assert verdicts(nil, task) == %{archived_key => true, steward_key => false}
     end
   end
 end

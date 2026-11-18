@@ -257,15 +257,6 @@ defmodule Hologram.Policy.Validator do
         "cyclic policy delegation for allow #{inspect(operation)} - a via chain can't return to the entity type it starts from:\n#{descriptions}"
   end
 
-  # A type whose rows some session may read - the grant store's are, through rules the framework
-  # supplies rather than declarations.
-  defp readable_type?(entity_type) do
-    entity_type
-    |> Policy.build()
-    |> Map.get(:read, [])
-    |> Kernel.!=([])
-  end
-
   defp related_chain_operations(entity_type) do
     entity_type
     |> Policy.build()
@@ -544,18 +535,19 @@ defmodule Hologram.Policy.Validator do
   # A rule reading a related row through a type nobody may read answers no in every browser - the
   # row never reaches one - while the server reads the row as stored and may answer yes, the
   # client-locality defect validate_server_only_predicates!/4 refuses for a value, one relationship
-  # away. A type's own read rules are left out, though the browser does decide them in
-  # can?(user, :read, row), and answers no over a row it doesn't hold where the server may answer
-  # yes (#1656). A rule delegating to a read rule is not a read rule, and its chains stay checked.
-  # The chains a deciding clause reads are not, since the server's verdict answers it over the rows
-  # as stored (see Hologram.Policy.held_chains/2).
+  # away. A type's own read rules are left out: a condition they read through such a type is a
+  # deciding clause, which the server's verdict on the row answers (see
+  # Hologram.Policy.deciding_quantifier?/3). A rule delegating to a read rule is not a read rule, so
+  # its own chains stay checked, while the delegated rule's deciding clauses are answered by the
+  # verdicts on the row it delegates to. The chains a deciding clause reads are not checked, since
+  # the server's verdict answers it over the rows as stored (see Hologram.Policy.held_chains/2).
   defp validate_readable_chains!(entity_types) do
     unreadable_hops =
       for entity_type <- Enum.sort(entity_types),
           operation <- related_chain_operations(entity_type),
           chain <- Policy.held_chains(entity_type, operation),
           {hop_type, index} <- chain_hop_types(entity_type, chain),
-          not readable_type?(hop_type) do
+          not Policy.readable_type?(hop_type) do
         {entity_type, operation, Enum.take(chain, index + 1), hop_type}
       end
 
@@ -636,7 +628,7 @@ defmodule Hologram.Policy.Validator do
   end
 
   # Read predicates may reference server-only attributes: a client answers one from the server's
-  # verdict on the row it was sent (see Hologram.Policy.deciding_quantifier?/2), and a read is asked
+  # verdict on the row it was sent (see Hologram.Policy.deciding_quantifier?/3), and a read is asked
   # about rows as they were sent. Every other operation is asked about a struct being changed, which
   # the verdict on the stored row says nothing about, so there the reference is rejected.
   defp validate_server_only_predicates!(_entity_type, :read, _clauses, _location), do: :ok
