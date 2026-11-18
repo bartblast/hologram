@@ -2813,13 +2813,24 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "says it is done once every synced type has been sent" do
-      create("first")
+      task = create("first")
+
+      readable =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
       windows(%{@page => [@board_window, @other_window]})
 
       start_session!([])
 
-      assert_receive {:sync_deltas, _cursor, _board_deltas, _applied_seq}
-      assert_receive {:sync_synced, :all, _cursor}
+      # What came before the marker, so a type sent after it is missing here.
+      put_ids =
+        await_fill()
+        |> Enum.filter(&(&1.op == :put_entity))
+        |> Enum.map(& &1.id)
+
+      assert Enum.sort(put_ids) == Enum.sort([task.id, readable.id])
     end
 
     test "fills a client on a page reaching no window" do
