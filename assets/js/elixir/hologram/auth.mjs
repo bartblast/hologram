@@ -826,7 +826,8 @@ function grants(entityType, row, operation, actorUserId) {
 
 // The fields an {:update, field} or {:update, fields} ask names, or null for any other operation.
 // The names are not validated here - Model.validateOperation refuses an unknown one, or an empty
-// list, in the server's words.
+// list, in the server's words. For a type with no baked entry only the empty list is refused, since
+// telling an unknown field from a real one takes the entry.
 function askedFields(operation) {
   if (!Type.isTuple(operation) || operation.data.length !== 2) {
     return null;
@@ -1090,16 +1091,19 @@ const Elixir_Hologram_Auth = {
     // An entry absent from a build is a type that declares NO policy - the build ships an entry
     // for every policied type, whether a page reaches it or not, precisely so this read can mean
     // that. And a policy-less type is denied by the server's own default, so no is not a fallback
-    // here: it is the server's answer. An update list naming no field is refused whatever the
-    // type declares, so it raises before a missing entry answers no. An unknown field can't be told
-    // from a real one without the entry, so an update naming one answers no.
+    // here: it is the server's answer.
     const entry = globalThis.Hologram.sync?.model?.[entityType];
 
-    if (fields !== null && fields.length === 0) {
-      Model.validateOperation(entityType, operation);
-    }
-
+    // The build also ships an entry for every type declaring a role, so a type with no entry
+    // carries no allow line name and no role either. The server's refusals of an unknown name,
+    // role or tuple, or of an update list naming no field, are made here without the entry. A
+    // field is the one thing the entry is needed to tell apart from a typo, so an update naming
+    // one answers no.
     if (!entry) {
+      if (fields === null || fields.length === 0) {
+        Model.validateOperation(entityType, operation);
+      }
+
       return Type.boolean(false);
     }
 

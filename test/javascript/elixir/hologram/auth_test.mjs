@@ -3089,16 +3089,17 @@ describe("Elixir_Hologram_Auth", () => {
   // A case this side alone has - the reference always holds every type. An entry absent from a
   // build is a type declaring NO policy (the build ships an entry for every policied type, whether
   // a page reaches it or not), and a policy-less type is denied by the server's own default - so
-  // no is the server's answer, not a fallback. An update list naming no field raises instead, as
-  // the server refuses it whatever the type declares. An update naming a field answers no, since
-  // telling an unknown field from a real one takes the entry.
+  // no is the server's answer, not a fallback. Such a type carries no allow line name and no role
+  // either, so an ask naming one raises as the server's does, and so does an update list naming no
+  // field. An update naming a field answers no, since telling an unknown field from a real one
+  // takes the entry.
   describe("a type the model does not carry", () => {
     const unmodelled = Type.map([
       [Type.atom("__struct__"), Type.alias("MyApp.Unpolicied")],
       [Type.atom("id"), Type.bitstring(DOC)],
     ]);
 
-    it("denies without asking the model for an entry", () => {
+    it("denies a framework operation", () => {
       assert.deepStrictEqual(
         can(Type.nil(), Type.atom("read"), unmodelled),
         Type.boolean(false),
@@ -3112,11 +3113,65 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    it("denies an update ask naming a list of fields", () => {
+      assert.deepStrictEqual(
+        can(Type.nil(), updateOf(Type.list([Type.atom("title")])), unmodelled),
+        Type.boolean(false),
+      );
+    });
+
     it("raises on an update list naming no field", () => {
       assertBoxedError(
         () => can(Type.nil(), updateOf(Type.list([])), unmodelled),
         "Hologram.MisuseError",
         "unknown operation {:update, []} for MyApp.Unpolicied - {:update, fields} names at least one field",
+      );
+    });
+
+    it("raises on a name no allow line carries", () => {
+      assertBoxedError(
+        () => can(Type.nil(), Type.atom("publish"), unmodelled),
+        "Hologram.MisuseError",
+        "unknown operation :publish for MyApp.Unpolicied - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry no name",
+      );
+    });
+
+    it("raises on a grant lifecycle tuple naming a role", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.nil(),
+            Type.tuple([Type.atom("grant_role"), Type.atom("editor")]),
+            unmodelled,
+          ),
+        "Hologram.MisuseError",
+        "unknown role :editor in {:grant_role, :editor} for MyApp.Unpolicied - it declares no role",
+      );
+    });
+
+    it("raises on a revoke lifecycle tuple naming a role", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.nil(),
+            Type.tuple([Type.atom("revoke_role"), Type.atom("editor")]),
+            unmodelled,
+          ),
+        "Hologram.MisuseError",
+        "unknown role :editor in {:revoke_role, :editor} for MyApp.Unpolicied - it declares no role",
+      );
+    });
+
+    it("raises on a tuple naming no operation", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.nil(),
+            Type.tuple([Type.atom("publish"), Type.atom("editor")]),
+            unmodelled,
+          ),
+        "Hologram.MisuseError",
+        "unknown operation {:publish, :editor} for MyApp.Unpolicied - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}",
       );
     });
   });
@@ -3413,17 +3468,6 @@ describe("Elixir_Hologram_Auth", () => {
         () => can(Type.bitstring(ALICE), operation, document()),
         "Hologram.MisuseError",
         "unknown role :editr in {:grant_role, :editr} for MyApp.Document - declared roles are: :editor, :owner, :viewer",
-      );
-    });
-
-    it("answers no for a type this build did not bake before asking about the operation", () => {
-      assert.deepStrictEqual(
-        can(
-          Type.bitstring(ALICE),
-          Type.atom("transfer"),
-          Type.struct(USER, [[Type.atom("id"), Type.bitstring(ALICE)]]),
-        ),
-        Type.boolean(false),
       );
     });
   });
