@@ -577,16 +577,20 @@ defmodule Hologram.Sync.PotTest do
              ]
     end
 
+    # Neither is held before the reread, so each stays in the other's set only when sets are judged
+    # by what the client holds after it.
     test "hands over rows naming each other with each other in their sets" do
       rows = [
-        %Project{id: @id_1, labels: [%Label{id: @id_2}], public: true},
-        %Project{id: @id_3, labels: [%Label{id: @id_2}], public: true}
+        %Module30{id: @id_1, follows: [%Module30{id: @id_2}]},
+        %Module30{id: @id_2, follows: [%Module30{id: @id_1}]}
       ]
 
-      {news, _told} = reread(pot(%{Label => [@id_2]}), Project, rows, fn _ids -> %{} end)
+      {news, _told} = reread(Pot.new(), Module30, rows, fn _ids -> %{} end)
 
-      assert [%Project{labels: [%Label{id: @id_2}]}, %Project{labels: [%Label{id: @id_2}]}] =
-               news.appeared
+      assert [
+               %Module30{id: @id_1, follows: [%Module30{id: @id_2}]},
+               %Module30{id: @id_2, follows: [%Module30{id: @id_1}]}
+             ] = news.appeared
     end
 
     test "reads no pairs when nothing is handed over or dropped" do
