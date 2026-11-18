@@ -4,7 +4,7 @@ defmodule Hologram.DB.Writer do
   # The executors behind the DB verbs' struct forms: resolve a struct's claim, evaluate it
   # inside the transaction against the row as it stands, and apply the pending write through
   # EntityOperations. An update is judged by the fields it changes: each has to be covered by an
-  # update rule that holds - a field-limited line naming it, or a line covering the whole row. The
+  # update rule that holds - a field-limited line covering it, or a line covering the whole row. The
   # evaluation holds the grant rows its answer rests on, and the related rows its delegations read,
   # until the transaction ends, so the authority a write was judged on is still there when it
   # commits.

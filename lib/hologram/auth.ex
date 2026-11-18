@@ -154,7 +154,7 @@ defmodule Hologram.Auth do
 
   # The fields among the given ones of an update of the given row that no update rule holding for the
   # given user covers, sorted - none when the user may change them all. A field is covered by the
-  # field-limited lines naming it and by every line covering the whole row (see
+  # field-limited lines covering it and by every line covering the whole row (see
   # Hologram.Policy.field_rules/2). Each rule is evaluated once however many fields it covers, with
   # the grants taken from the given source as can?/4 takes them. The fields are not validated: the
   # Writer passes what a write changed, and can? what it validated.
