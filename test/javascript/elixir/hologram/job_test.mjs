@@ -18,7 +18,7 @@ defineRuntimeGlobals();
 
 // Mirrors the create describes of test/elixir/hologram/job_test.exs, as far as this tier goes:
 // there is no worker here, so what a job DOES is not among them - only that enqueuing one is an
-// ordinary create of its row, carrying whatever authority the call claimed.
+// ordinary create of its row.
 describe("Elixir_Hologram_Job", () => {
   const NOTIFY = "MyApp.Jobs.Notify";
   const TASK = "MyApp.Task";
@@ -69,7 +69,6 @@ describe("Elixir_Hologram_Job", () => {
             "create",
             "delete",
             "grant_role",
-            "notify",
             "read",
             "read_roles",
             "revoke_role",
@@ -127,36 +126,10 @@ describe("Elixir_Hologram_Job", () => {
       assert.notProperty(write.data, "status");
     });
 
-    it("carries no claim when the call names none", () => {
+    it("sends no claim", () => {
       create(notify, values([["reason", Type.bitstring("x")]]));
 
-      assert.isNull(Batches.current().writes[0].claim);
-    });
-
-    it("carries the operation an authorize option named", () => {
-      createWithOpts(
-        notify,
-        values([["reason", Type.bitstring("x")]]),
-        opts([["authorize", Type.atom("notify")]]),
-      );
-
-      assert.deepStrictEqual(Batches.current().writes[0].claim, [
-        "authorize",
-        "notify",
-      ]);
-    });
-
-    it("raises on an operation the job type never declared", () => {
-      assertBoxedError(
-        () =>
-          createWithOpts(
-            notify,
-            values([["reason", Type.bitstring("x")]]),
-            opts([["authorize", Type.atom("no_such")]]),
-          ),
-        "Hologram.MisuseError",
-        "unknown operation :no_such for MyApp.Jobs.Notify - its allow lines declare :notify, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
-      );
+      assert.notProperty(Batches.current().writes[0], "claim");
     });
 
     it("answers the job as it now stands", () => {
@@ -213,23 +186,20 @@ describe("Elixir_Hologram_Job", () => {
             opts([["nope", Type.boolean(true)]]),
           ),
         "Hologram.MisuseError",
-        "Job.create takes authorize: operation or trust: true, got: [nope: true]",
+        "Job.create takes trust: true as its only option, got: [nope: true]",
       );
     });
 
-    it("raises for both options at once", () => {
+    it("raises for claiming an operation", () => {
       assertBoxedError(
         () =>
           createWithOpts(
             notify,
             Type.map([]),
-            opts([
-              ["authorize", Type.atom("notify")],
-              ["trust", Type.boolean(true)],
-            ]),
+            opts([["authorize", Type.atom("update")]]),
           ),
         "Hologram.MisuseError",
-        "Job.create takes authorize: operation or trust: true, got: [authorize: :notify, trust: true]",
+        "Job.create takes trust: true as its only option, got: [authorize: :update]",
       );
     });
 

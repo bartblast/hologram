@@ -68,8 +68,8 @@ defmodule HologramFeatureTests.OptimisticGrantsPage do
   # action, so the grant is judged against a row this browser made a line earlier and has been
   # told nothing about yet.
   # The operation is read from state rather than spelled here, so the build passes it over and the
-  # browser's own check is what answers - the one tier where an operation nothing declares can
-  # still reach a call. It raises, and the error overlay is what the person sees.
+  # browser's own check is what answers - the one tier where an operation that is neither the
+  # framework's nor a name can still reach a call. It raises, and the error overlay is what the person sees.
   def action(:ask_computed, _params, component) do
     can?(
       component.state.session_user_id,

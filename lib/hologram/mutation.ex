@@ -4,11 +4,14 @@ defmodule Hologram.Mutation do
   # Applies a batch of client writes: refuses one built against another model, answers one already
   # answered from its record, and runs the rest in ONE transaction under the session's own user.
   #
-  # Every write goes through the same executor a server-side verb goes through, so a claim, a
-  # value, a reference and a merge are judged exactly as they are for a write made on the server -
-  # there is no second set of rules for a write that arrived over the wire. A refusal at any step
-  # rolls the whole batch back and names the write it refused - and a refusal the EVALUATOR made
-  # is then kept, the batch as it arrived beside its answer, for the session that sent it.
+  # Every write goes through the same executor a server-side verb goes through, so a value, a
+  # reference and a merge are judged exactly as they are for a write made on the server - there is
+  # no second set of rules for a write that arrived over the wire. Its authority is the one
+  # difference: a batch carries no claim, and every write in it is judged by the verb's own rules -
+  # an update by the fields it changes - under the anonymous semantics when nobody is signed in,
+  # where a server-side verb with no acting user would write raw. A refusal at any step rolls the
+  # whole batch back and names the write it refused - and a refusal the EVALUATOR made is then
+  # kept, the batch as it arrived beside its answer, for the session that sent it.
 
   alias Hologram.Auth
   alias Hologram.Auth.Context
@@ -234,8 +237,13 @@ defmodule Hologram.Mutation do
   # Only the VALUES go through the merge. A delta is not a claim about what the column should
   # hold, so there is nothing to compare it against and nothing for it to lose: it is applied
   # whatever the row's revision is, which is what makes two writers' +1s land as +2.
+  # The write is judged before the merge, by every field it names: whether it is refused must not
+  # turn on which of its values lose to another writer's, and a write whose every value loses
+  # still answers with the columns it lost to.
   defp apply_write(%Write{op: :update} = write, index, _created_rows) do
     row = lock_row(write, index)
+
+    Writer.check_update!(row, Map.keys(write.data) ++ Map.keys(write.deltas))
 
     {changes, lost} =
       Merge.resolve(write.data, write.based_on, write.stamp, row.__meta__.revisions)
@@ -265,11 +273,18 @@ defmodule Hologram.Mutation do
     end
   end
 
+  # Judged before the merge, like an update: a delete the merge drops answers with the whole row it
+  # lost to, which is an answer for whoever may delete it, not for whoever knows the id.
   defp apply_write(%Write{op: :delete} = write, index, _created_rows) do
     case EntityOperations.get(write.entity_type, write.id, lock: :update) do
       # Deleting a row that is not there is what the verb itself does: nothing, and no complaint.
-      nil -> {%{}, nil}
-      row -> apply_delete(write, row, index)
+      nil ->
+        {%{}, nil}
+
+      row ->
+        Writer.check_delete!(row)
+
+        apply_delete(write, row, index)
     end
   end
 

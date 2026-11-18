@@ -6,6 +6,12 @@ defmodule Hologram.Policy.Edges do
   alias Hologram.Entity.Model
   alias Hologram.Policy
 
+  @typedoc """
+  The edges of a data model, keyed by entity type and operation or allow line name, or by entity
+  type and `{:verdicts}` (see `derive/1`).
+  """
+  @type t :: %{{module, Entity.operation() | {:verdicts}} => list(tuple)}
+
   @index_key {__MODULE__, :index}
 
   @universal_edges [:auth_change, :deploy]
@@ -40,9 +46,10 @@ defmodule Hologram.Policy.Edges do
     * `{:named_grants, entity_type, role_names}` - grants of these roles held on the
       entity a grant-store row names, deciding that row's visibility.
 
-  Beside the operations, `{entity type, :verdicts}` names the edges of the type's deciding
+  Beside the operations, `{entity type, {:verdicts}}` names the edges of the type's deciding
   quantifiers, when it has any (see `Hologram.Policy.deciding_quantifiers/1`): what the server's
-  verdicts sent with its rows read, whichever operation they decide.
+  verdicts sent with its rows read, whichever operation they decide. It is a tuple rather than an
+  atom so that no operation or allow line name can take its key.
 
   Delegations expand transitively: a via chain contributes the target policy's edges for the
   operation each delegation names, with the chain prefixed, so every pair's list is complete on
@@ -56,7 +63,7 @@ defmodule Hologram.Policy.Edges do
   compile may have validated, raises rather than loops: the policies are built through
   `Hologram.Policy.build/1`, which refuses it (see `Hologram.Entity.Model.hold/0`).
   """
-  @spec derive(list(module)) :: %{{module, Entity.operation()} => list(tuple)}
+  @spec derive(list(module)) :: t()
   def derive(entity_types) do
     operation_pairs =
       for entity_type <- entity_types,
@@ -67,7 +74,7 @@ defmodule Hologram.Policy.Edges do
       for entity_type <- entity_types,
           deciding = Policy.deciding_quantifiers(entity_type),
           deciding != [],
-          do: {{entity_type, :verdicts}, verdict_edges(entity_type, deciding)}
+          do: {{entity_type, {:verdicts}}, verdict_edges(entity_type, deciding)}
 
     Map.new(operation_pairs ++ verdict_pairs)
   end
@@ -80,7 +87,7 @@ defmodule Hologram.Policy.Edges do
   recompiled data model is picked up by the next call. Raises while the data model is under a hold,
   cached or not (see `Hologram.Entity.Model.ensure_released!/0`).
   """
-  @spec index() :: %{{module, Entity.operation()} => list(tuple)}
+  @spec index() :: t()
   def index do
     Model.ensure_released!()
 

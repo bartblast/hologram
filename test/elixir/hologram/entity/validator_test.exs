@@ -629,7 +629,7 @@ defmodule Hologram.Entity.ValidatorTest do
         allow :read
       end
 
-      assert InlineEntityFixture71.__policies__() == [{:read, nil, nil, []}]
+      assert InlineEntityFixture71.__policies__() == [{:read, nil, nil, [], nil, nil}]
     end
 
     test "accepts a condition through a path" do
@@ -640,7 +640,7 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       assert InlineEntityFixture105.__policies__() == [
-               {:read, nil, nil, [{[:parent, :public], {:==, true}}]}
+               {:read, nil, nil, [{[:parent, :public], {:==, true}}], nil, nil}
              ]
     end
 
@@ -652,7 +652,7 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       assert InlineEntityFixture107.__policies__() == [
-               {:update, {:owner, [:trip, :user]}, nil, []}
+               {:update, {:owner, [:trip, :user]}, nil, [], nil, nil}
              ]
     end
 
@@ -667,7 +667,7 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       assert InlineEntityFixture96.__policies__() == [
-               {{:grant_role, :viewer}, :editor, nil, []}
+               {{:grant_role, :viewer}, :editor, nil, [], nil, nil}
              ]
     end
 
@@ -682,13 +682,39 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       assert InlineEntityFixture97.__policies__() == [
-               {{:revoke_role, [:viewer, :editor]}, :editor, nil, []}
+               {{:revoke_role, [:viewer, :editor]}, :editor, nil, [], nil, nil}
              ]
+    end
+
+    test "rejects an operation that is not one of the framework's, pointing at a named line" do
+      expected_msg =
+        "unknown operation :pin used for allow in Hologram.Entity.ValidatorTest.CustomOperationFixture - an allow line names one of the framework's operations, :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update. To keep :pin as a name can? and via: ask by, put it on a line of the operation the rule grants, like allow :update, as: :pin, only: [...] or allow :delete, as: :pin"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule CustomOperationFixture do
+          use Hologram.Entity
+
+          allow :pin
+        end
+      end
+    end
+
+    test "offers no name for an operation that couldn't be one" do
+      expected_msg =
+        "unknown operation nil used for allow in Hologram.Entity.ValidatorTest.NilOperationFixture - an allow line names one of the framework's operations, :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilOperationFixture do
+          use Hologram.Entity
+
+          allow nil
+        end
+      end
     end
 
     test "rejects non-atom operation" do
       expected_msg =
-        "invalid operation \"read\" used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture73 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+        "invalid operation \"read\" used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture73 - an allow line names a framework operation, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture73 do
@@ -701,7 +727,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a grant lifecycle operation naming an empty role list" do
       expected_msg =
-        "invalid operation {:grant_role, []} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture98 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+        "invalid operation {:grant_role, []} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture98 - an allow line names a framework operation, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture98 do
@@ -716,7 +742,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a grant lifecycle operation naming a non-atom role" do
       expected_msg =
-        "invalid operation {:grant_role, \"viewer\"} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture99 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+        "invalid operation {:grant_role, \"viewer\"} used for allow in Hologram.Entity.ValidatorTest.InlineEntityFixture99 - an allow line names a framework operation, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture99 do
@@ -751,6 +777,271 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           allow :read, via: nil
+        end
+      end
+    end
+
+    test "accepts a name" do
+      defmodule NamedLineFixture do
+        use Hologram.Entity
+
+        allow :update, as: :archive
+      end
+
+      assert NamedLineFixture.__policies__() == [{:update, nil, nil, [], :archive, nil}]
+    end
+
+    test "rejects a nil as option" do
+      expected_msg =
+        "invalid as option nil for allow :update in Hologram.Entity.ValidatorTest.NilAsOptionFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilAsOptionFixture do
+          use Hologram.Entity
+
+          allow :update, as: nil
+        end
+      end
+    end
+
+    test "rejects a name that is not an atom" do
+      expected_msg =
+        ~s(invalid as option "archive" for allow :update in Hologram.Entity.ValidatorTest.StringAsOptionFixture - the as option must be an atom naming the rule)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule StringAsOptionFixture do
+          use Hologram.Entity
+
+          allow :update, as: "archive"
+        end
+      end
+    end
+
+    test "rejects a boolean name" do
+      expected_msg =
+        "invalid as option true for allow :update in Hologram.Entity.ValidatorTest.BooleanAsOptionFixture - the as option must be an atom naming the rule"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule BooleanAsOptionFixture do
+          use Hologram.Entity
+
+          allow :update, as: true
+        end
+      end
+    end
+
+    test "rejects a name that is not a plain atom (1)" do
+      expected_msg =
+        "invalid as option MyApp.User for allow :update in Hologram.Entity.ValidatorTest.NonPlainAsOptionFixture1 - a name is a plain atom, like :archive"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NonPlainAsOptionFixture1 do
+          use Hologram.Entity
+
+          allow :update, as: MyApp.User
+        end
+      end
+    end
+
+    test "rejects a name that is not a plain atom (2)" do
+      expected_msg =
+        ~s(invalid as option :"grant_role:editor" for allow :update in Hologram.Entity.ValidatorTest.NonPlainAsOptionFixture2 - a name is a plain atom, like :archive)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NonPlainAsOptionFixture2 do
+          use Hologram.Entity
+
+          allow :update, as: :"grant_role:editor"
+        end
+      end
+    end
+
+    test "rejects a name that is not a plain atom (3)" do
+      expected_msg =
+        "invalid as option :Archive for allow :update in Hologram.Entity.ValidatorTest.NonPlainAsOptionFixture3 - a name is a plain atom, like :archive"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NonPlainAsOptionFixture3 do
+          use Hologram.Entity
+
+          allow :update, as: :Archive
+        end
+      end
+    end
+
+    test "rejects a name that is not a plain atom (4)" do
+      expected_msg =
+        "invalid as option :__proto__ for allow :update in Hologram.Entity.ValidatorTest.NonPlainAsOptionFixture4 - a name is a plain atom, like :archive"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NonPlainAsOptionFixture4 do
+          use Hologram.Entity
+
+          allow :update, as: :__proto__
+        end
+      end
+    end
+
+    test "accepts an update line limited to some fields" do
+      defmodule LimitedLineFixture do
+        use Hologram.Entity
+
+        attribute :name, :string
+        attribute :topic, :string
+
+        allow :update, only: [:topic]
+        allow :update, except: [:topic]
+      end
+
+      assert LimitedLineFixture.__policies__() == [
+               {:update, nil, nil, [], nil, {:only, [:topic]}},
+               {:update, nil, nil, [], nil, {:except, [:topic]}}
+             ]
+    end
+
+    test "rejects only and except on one line" do
+      expected_msg =
+        "invalid options for allow :update in Hologram.Entity.ValidatorTest.OnlyAndExceptFixture - a line takes only or except, not both"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule OnlyAndExceptFixture do
+          use Hologram.Entity
+
+          attribute :topic, :string
+
+          allow :update, only: [:topic], except: [:topic]
+        end
+      end
+    end
+
+    test "rejects a field option on a line of another operation" do
+      expected_msg =
+        "invalid only option for allow :read in Hologram.Entity.ValidatorTest.ReadOnlyOptionFixture - only and except name the fields an update line covers, so they go on allow :update lines alone"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule ReadOnlyOptionFixture do
+          use Hologram.Entity
+
+          attribute :topic, :string
+
+          allow :read, only: [:topic]
+        end
+      end
+    end
+
+    test "rejects an empty field list" do
+      expected_msg =
+        "invalid except option [] for allow :update in Hologram.Entity.ValidatorTest.EmptyExceptFixture - the except option must be a non-empty list of field names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule EmptyExceptFixture do
+          use Hologram.Entity
+
+          allow :update, except: []
+        end
+      end
+    end
+
+    test "names a named line by its name in a refusal" do
+      expected_msg =
+        "invalid only option [] for allow :update, as: :pin in Hologram.Entity.ValidatorTest.NamedEmptyOnlyFixture - the only option must be a non-empty list of field names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NamedEmptyOnlyFixture do
+          use Hologram.Entity
+
+          allow :update, as: :pin, only: []
+        end
+      end
+    end
+
+    test "names a field-limited line with its fields in a refusal" do
+      expected_msg =
+        "invalid to option nil for allow :update, as: :retitle, except: [:owner] in Hologram.Entity.ValidatorTest.LimitedNilToFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule LimitedNilToFixture do
+          use Hologram.Entity
+
+          allow :update, as: :retitle, except: [:owner], to: nil
+        end
+      end
+    end
+
+    test "describes a line by its operation alone when its name is what is wrong" do
+      expected_msg =
+        "invalid to option nil for allow :update in Hologram.Entity.ValidatorTest.InvalidNameNilToFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InvalidNameNilToFixture do
+          use Hologram.Entity
+
+          allow :update, as: "pin", to: nil
+        end
+      end
+    end
+
+    test "rejects a field list holding something other than an atom" do
+      expected_msg =
+        ~s(invalid only option ["topic"] for allow :update in Hologram.Entity.ValidatorTest.StringFieldFixture - the only option must be a non-empty list of field names)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule StringFieldFixture do
+          use Hologram.Entity
+
+          allow :update, only: ["topic"]
+        end
+      end
+    end
+
+    test "rejects an improper field list" do
+      expected_msg =
+        "invalid only option [:topic | :tail] for allow :update in Hologram.Entity.ValidatorTest.ImproperFieldsFixture - the only option must be a non-empty list of field names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule ImproperFieldsFixture do
+          use Hologram.Entity
+
+          allow :update, only: [:topic | :tail]
+        end
+      end
+    end
+
+    test "describes a line with an improper field list without its fields" do
+      expected_msg =
+        "invalid via option nil for allow :update in Hologram.Entity.ValidatorTest.ImproperFieldsNilViaFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule ImproperFieldsNilViaFixture do
+          use Hologram.Entity
+
+          allow :update, via: nil, only: [:topic | :tail]
+        end
+      end
+    end
+
+    test "rejects a nil field option" do
+      expected_msg =
+        "invalid only option nil for allow :update in Hologram.Entity.ValidatorTest.NilOnlyFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilOnlyFixture do
+          use Hologram.Entity
+
+          allow :update, only: nil
+        end
+      end
+    end
+
+    test "rejects a name spelling a framework operation" do
+      expected_msg =
+        "invalid as option :delete for allow :update in Hologram.Entity.ValidatorTest.FrameworkAsOptionFixture - a name can't be a framework operation, since can? and via ask those by the same atom"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule FrameworkAsOptionFixture do
+          use Hologram.Entity
+
+          allow :update, as: :delete
         end
       end
     end
@@ -1645,6 +1936,19 @@ defmodule Hologram.Entity.ValidatorTest do
                [{:slug, :string, [default: nil, optional: true, unique: true]}]
     end
 
+    test "rejects an attribute named nil" do
+      expected_msg =
+        "invalid name nil used for attribute in Hologram.Entity.ValidatorTest.NilAttributeFixture - nil, true and false already stand for no value and for flags, so they can't name a declaration"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilAttributeFixture do
+          use Hologram.Entity
+
+          attribute nil, :string
+        end
+      end
+    end
+
     test "rejects non-atom attribute name" do
       expected_msg =
         "invalid name \"title\" used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture15 - declaration names must be atoms"
@@ -1806,6 +2110,81 @@ defmodule Hologram.Entity.ValidatorTest do
     end
   end
 
+  describe "validate_derived_name!/2" do
+    test "reports a derived field named nil before its function" do
+      line = __ENV__.line + 9
+
+      expected_msg =
+        "#{location(line)}invalid name nil used for derived field in Hologram.Entity.ValidatorTest.NilDerivedFixture - nil, true and false already stand for no value and for flags, so they can't name a declaration"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilDerivedFixture do
+          use Hologram.Entity
+
+          derived nil, :integer, 5
+        end
+      end
+    end
+
+    test "reports a derived field name that is no atom before its function" do
+      line = __ENV__.line + 9
+
+      expected_msg =
+        ~s(#{location(line)}invalid name "copy" used for derived field in Hologram.Entity.ValidatorTest.StringDerivedFixture - declaration names must be atoms)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule StringDerivedFixture do
+          use Hologram.Entity
+
+          derived "copy", :integer, 5
+        end
+      end
+    end
+
+    test "reports a reserved derived field name before its function" do
+      line = __ENV__.line + 9
+
+      expected_msg =
+        "#{location(line)}reserved name :id used for derived field in Hologram.Entity.ValidatorTest.ReservedDerivedFixture - system attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule ReservedDerivedFixture do
+          use Hologram.Entity
+
+          derived :id, :integer, 5
+        end
+      end
+    end
+
+    test "reports a derived field name holding $ before its function" do
+      line = __ENV__.line + 9
+
+      expected_msg =
+        ~s|#{location(line)}invalid name :"a$b" used for derived field in Hologram.Entity.ValidatorTest.SeamDerivedFixture - $ is reserved for the physical names the framework derives, so a declared name can't contain it|
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule SeamDerivedFixture do
+          use Hologram.Entity
+
+          derived :"a$b", :integer, 5
+        end
+      end
+    end
+
+    # A module attribute quotes as a call, so its value is only known once the body runs.
+    test "accepts a derived field named by a module attribute" do
+      defmodule AttributeNamedDerivedFixture do
+        use Hologram.Entity
+
+        @name :copy
+
+        derived @name, :integer, fn id -> id end
+      end
+
+      assert [{:copy, :integer, []}] = AttributeNamedDerivedFixture.__derived__()
+    end
+  end
+
   describe "validate_derived!/4" do
     # A derived field reaches no database name, so the underscore rule for attributes and
     # relationships doesn't apply to it.
@@ -1839,19 +2218,6 @@ defmodule Hologram.Entity.ValidatorTest do
                {:rows, [Module28], []},
                {:tier, :enum, [values: [:low, :high]]}
              ]
-    end
-
-    test "rejects a reserved name" do
-      expected_msg =
-        "reserved name :id used for derived field in Hologram.Entity.ValidatorTest.InlineEntityFixture143 - system attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        defmodule InlineEntityFixture143 do
-          use Hologram.Entity
-
-          derived :id, :integer, fn -> 1 end
-        end
-      end
     end
 
     test "rejects a name an attribute declares" do
@@ -2975,6 +3341,32 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           role :owner, granted_to: false
+        end
+      end
+    end
+
+    test "rejects a role named true" do
+      expected_msg =
+        "invalid name true used for role in Hologram.Entity.ValidatorTest.TrueRoleFixture - nil, true and false already stand for no value and for flags, so they can't name a declaration"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule TrueRoleFixture do
+          use Hologram.Entity
+
+          role true
+        end
+      end
+    end
+
+    test "rejects a role named nil" do
+      expected_msg =
+        "invalid name nil used for role in Hologram.Entity.ValidatorTest.NilRoleFixture - nil, true and false already stand for no value and for flags, so they can't name a declaration"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilRoleFixture do
+          use Hologram.Entity
+
+          role nil
         end
       end
     end
