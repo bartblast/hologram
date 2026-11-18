@@ -328,8 +328,10 @@ defmodule Hologram.Sync.CarryTest do
       collect_count(Module2, :total, c_count_term("p2"), 3)
 
       assert take_counts() == %{
-               count_key(:total, c_count_term("p1")) => 7,
-               count_key(:total, c_count_term("p2")) => 3
+               ~S|Hologram.Test.Fixtures.Entity.Module2/total/{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==","p1"]],"include":{},"skip":null,"sort":[],"take":null}| =>
+                 7,
+               ~S|Hologram.Test.Fixtures.Entity.Module2/total/{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==","p2"]],"include":{},"skip":null,"sort":[],"take":null}| =>
+                 3
              }
     end
 
