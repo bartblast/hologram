@@ -472,14 +472,23 @@ describe("DataLayer", () => {
 
     // A frame the tab holding the stream stores and posts while this tab starts is either in the
     // store this tab reads or a message it hears - but only if it is listening before it reads.
-    it("reads the store after joining the group", async () => {
+    it("reads the store once it has joined the group", async () => {
       Durability.mode = "indexeddb";
 
-      await DataLayer.boot(identity());
+      let joined;
+      joining.returns(new Promise((resolve) => (joined = resolve)));
+
+      const booting = DataLayer.boot(identity());
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      sinon.assert.calledOnce(joining);
+      sinon.assert.notCalled(loading);
+
+      joined(false);
+      await booting;
 
       sinon.assert.calledOnceWithExactly(loading);
-      assert.isTrue(joining.calledAfter(opening));
-      assert.isTrue(loading.calledAfter(joining));
     });
 
     it("reads the store when it joins no group", async () => {
