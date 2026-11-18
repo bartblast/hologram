@@ -173,8 +173,8 @@ defineClientOnlyModule3Fixture();
 defineClientOnlyModule4Fixture();
 
 // Records every value written to a real form element, still passing each write on to the element.
-// The recorder is the element's own property, so the copy the renderer makes to work out the stored
-// form of a value doesn't have it.
+// The recorder is the element's own property, so it counts only writes to this element, not the
+// ones to the spare element the renderer checks values on.
 function recordValueWrites(element) {
   const descriptor = Object.getOwnPropertyDescriptor(
     Object.getPrototypeOf(element),
@@ -3689,6 +3689,59 @@ describe("Renderer", () => {
 
             assert.deepStrictEqual(writes, []);
             assert.strictEqual(input.value, "20");
+          });
+
+          it("writes a value an earlier range clamped when the range has no max", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("type"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("range")],
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([[Type.atom("text"), Type.bitstring("80")]]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // A range with max="50" checked first, which holds 50 for 80
+            input.type = "range";
+            input.setAttribute("max", "50");
+            input.value = "80";
+
+            result.data.hook.update(null, {
+              elm: input,
+              data: {hologramFormInputValue: "80"},
+            });
+
+            // A range without a max, moved to 50, where 80 fits
+            const otherInput = document.createElement("input");
+            otherInput.type = "range";
+            otherInput.value = "50";
+
+            const writes = recordValueWrites(otherInput);
+
+            result.data.hook.update(null, {
+              elm: otherInput,
+              data: {hologramFormInputValue: "80"},
+            });
+
+            assert.deepStrictEqual(writes, ["80"]);
+            assert.strictEqual(otherInput.value, "80");
           });
 
           it("does not write an address list the input trims when it holds the trimmed list", () => {

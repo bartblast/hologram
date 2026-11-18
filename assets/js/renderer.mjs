@@ -138,10 +138,12 @@ const SVG_ADJUSTED_TAG_NAMES = {
   textpath: "textPath",
 };
 
-// The attributes the browser reads when it turns a value written to an input or a textarea into
-// the form it stores: the type picks the rule, a range clamps to its min and max and snaps to its
+// The attributes, besides the type, that the browser reads when it turns a value written to an
+// input or a textarea into the form it stores: a range clamps to its min and max and snaps to its
 // step (counted from min, or from the value attribute when there's no valid min), an email input
 // with multiple trims each address, and a color input serializes through its alpha and colorspace.
+// The type picks the rule, and each type gets a spare element of its own (see
+// #formInputValueSpares).
 const VALUE_SANITIZATION_ATTRS = [
   "alpha",
   "colorspace",
@@ -149,7 +151,6 @@ const VALUE_SANITIZATION_ATTRS = [
   "min",
   "multiple",
   "step",
-  "type",
   "value",
 ];
 
@@ -172,6 +173,12 @@ export default class Renderer {
   // patch, so the binding is held here until resolveResizeBindings turns it into a registry binding
   // once `.elm` exists. renderPage() resets this.
   static resizeBindings = [];
+
+  // input type, or "textarea" -> a detached element of that kind, which #normalizeFormInputValue
+  // writes values to, to see what the browser stores for them. One per type, made the first time a
+  // type needs one: switching a spare's type makes the browser redo work on every check, while
+  // changing its other attributes is cheap. Bounded by the number of input types.
+  static #formInputValueSpares = new Map();
 
   // Based on Elixir Renderer.encode_tree/1, which it inverts clause for clause.
   //
@@ -1264,6 +1271,29 @@ export default class Renderer {
     );
   }
 
+  // The spare element #normalizeFormInputValue writes to for elements of this kind, made the first
+  // time one is needed. Keyed by the element's type property rather than its type attribute, so
+  // "COLOR" and "color" share a spare, and an unknown type shares the text input's, as the
+  // browser treats it.
+  static #formInputValueSpare(element) {
+    const key =
+      element.localName === "input" ? element.type : element.localName;
+
+    let spare = $.#formInputValueSpares.get(key);
+
+    if (spare === undefined) {
+      spare = element.ownerDocument.createElement(element.localName);
+
+      if (element.localName === "input") {
+        spare.type = key;
+      }
+
+      $.#formInputValueSpares.set(key, spare);
+    }
+
+    return spare;
+  }
+
   // Which props carry a required: or values: option is a property of the module, not of the render,
   // so it is derived once and cached on the module proxy the way __props__ already is. Most
   // components constrain nothing, which leaves the per-render cost at a single length check.
@@ -1568,33 +1598,36 @@ export default class Renderer {
   }
 
   // What the element would hold if the given value were written to it, worked out on a detached
-  // element of the same tag, so nothing on the page is touched. The copy gets only the attributes
-  // that decide the stored form, and the patch has already applied this render's attribute changes
-  // by the time the hooks run. Copying every attribute would throw on names setAttribute() refuses
-  // but the HTML parser keeps, like "@click", and on inline handlers under Trusted Types. Built with
-  // createElement() rather than cloneNode(), which would run a customized built-in's constructor and
-  // value setter.
+  // spare element of the same kind, so nothing on the page is touched. The spare gets the
+  // element's attributes that decide the stored form and loses any left from an earlier element.
+  // The patch has already applied this render's attribute changes by the time the hooks run.
+  // Copying every attribute would throw on names setAttribute() refuses but the HTML
+  // parser keeps, like "@click", and on inline handlers under Trusted Types. Spares are made with
+  // createElement() rather than cloneNode(), which would run a customized built-in's constructor
+  // and value setter.
   //
-  // A select is left as it is: what it holds depends on its options, which the copy doesn't have,
+  // A select is left as it is: what it holds depends on its options, which a spare doesn't have,
   // and which on an update the patch changes only after the hook runs.
   static #normalizeFormInputValue(element, value) {
     if (element.localName === "select") {
       return value;
     }
 
-    const copy = element.ownerDocument.createElement(element.localName);
+    const spare = $.#formInputValueSpare(element);
 
     for (const name of VALUE_SANITIZATION_ATTRS) {
       const attrValue = element.getAttribute(name);
 
-      if (attrValue !== null) {
-        copy.setAttribute(name, attrValue);
+      if (attrValue === null) {
+        spare.removeAttribute(name);
+      } else if (spare.getAttribute(name) !== attrValue) {
+        spare.setAttribute(name, attrValue);
       }
     }
 
-    copy.value = value;
+    spare.value = value;
 
-    return copy.value;
+    return spare.value;
   }
 
   // Based on normalize_prop_name/1
