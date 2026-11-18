@@ -100,7 +100,7 @@ defmodule Hologram.DB.EntityOperations do
         violations = write_violations!(entity_type, refusal)
         values = Map.from_struct(entity)
 
-        {:error, advisory_violations(entity_type, values, entity.id, violations)}
+        {:error, advisory_violations(entity_type, values, %{}, entity.id, violations)}
     end
   end
 
@@ -423,7 +423,7 @@ defmodule Hologram.DB.EntityOperations do
           overflow_violations(entity_type, id, deltas_map, refusal) ||
             write_violations!(entity_type, refusal)
 
-        {:error, advisory_violations(entity_type, changes_map, id, violations)}
+        {:error, advisory_violations(entity_type, changes_map, deltas_map, id, violations)}
     end
   end
 
@@ -439,16 +439,34 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   # A unique attribute is worth asking about only when the value could be compared at all: a
-  # field carrying its own violation is not comparable, and nil never conflicts.
+  # field carrying a violation of its value is not comparable, and nil never conflicts. One the
+  # write already answered :unique for is answered.
   defp advisory_candidate?({name, _type, opts}, values, violations) do
-    Keyword.get(opts, :unique) == true and not Map.has_key?(violations, name) and
-      not is_nil(values[name])
+    Keyword.get(opts, :unique) == true and comparable?(violations, name) and
+      :unique not in Map.get(violations, name, []) and not is_nil(values[name])
+  end
+
+  # A key is worth asking about when the write sets or moves at least one of its fields - an
+  # update leaving all of them alone cannot make the row repeat it - and every field it touches
+  # could be compared: none carries a violation of its value, and none is set to nil, since a
+  # row with nil in a key repeats nothing. One the write already answered for is answered.
+  defp advisory_key_candidate?(key, values, deltas, violations) do
+    touched_fields =
+      Enum.filter(key.fields, &(Map.has_key?(values, &1) or Map.has_key?(deltas, &1)))
+
+    reason = {:unique, key.fields}
+
+    touched_fields != [] and
+      Enum.all?(touched_fields, &comparable?(violations, &1)) and
+      not Enum.any?(key.fields, &(Map.has_key?(values, &1) and is_nil(values[&1]))) and
+      Enum.all?(key.fields, &(reason not in Map.get(violations, &1, [])))
   end
 
   # A to-one reference is worth asking about only when it names something to look for: nil is a
-  # cleared reference rather than a missing one, and a field carrying its own violation holds a
-  # value no id column can be compared against - binding it would fail the query rather than
-  # answer it. To-many relationships have no column here at all; their edges carry their own.
+  # cleared reference rather than a missing one, and a field carrying a violation of its value
+  # holds one no id column can be compared against - binding it would fail the query rather than
+  # answer it. One the write already answered :unique for is answered. To-many relationships
+  # have no column here at all; their edges carry their own.
   defp advisory_reference_candidates(entity_type, values, violations) do
     entity_type.__relationships__()
     |> Enum.reject(fn {_name, target, _opts} -> is_list(target) end)
@@ -456,7 +474,8 @@ defmodule Hologram.DB.EntityOperations do
       {name, String.to_existing_atom("#{name}_id"), target, Keyword.get(opts, :unique) == true}
     end)
     |> Enum.filter(fn {_name, field, _target, _unique?} ->
-      not Map.has_key?(violations, field) and not is_nil(values[field])
+      comparable?(violations, field) and :unique not in Map.get(violations, field, []) and
+        not is_nil(values[field])
     end)
   end
 
@@ -466,12 +485,16 @@ defmodule Hologram.DB.EntityOperations do
   # are asked about the same way and for the same reason: a foreign key is enforced by a trigger
   # after the row goes in, and the first one that fails abandons the rest. A unique reference whose
   # target is there is asked whether another row already names it - one whose target is gone has
-  # nothing another row could be naming. The candidate filters leave a field that already carries
-  # a violation alone, so an authoritative answer is never replaced by an advisory one - and
-  # references read the attributes' result rather than the original map, so one pass cannot
-  # overwrite the other. Advisory by nature: what is taken now may be free by the resubmit, and a
-  # target alive now may be gone - the resubmit is answered by the write.
-  defp advisory_violations(entity_type, values, id, violations) do
+  # nothing another row could be naming. The candidate filters leave alone a field whose value
+  # broke a declaration, and a question the write already answered, so an authoritative answer
+  # is never replaced by an advisory one - and each pass reads the result of the one before it
+  # rather than the original map, adding its reasons beside the ones a field already carries. A
+  # key declared with unique is asked about last, the same way: whether another row holds the
+  # values the write leaves its fields with - the ones it sets, the stored ones it moves by an
+  # amount, and the stored ones it leaves alone. Advisory by nature: what is taken now may be
+  # free by the resubmit, and a target alive now may be gone - the resubmit is answered by the
+  # write.
+  defp advisory_violations(entity_type, values, deltas, id, violations) do
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
 
     attribute_violations =
@@ -481,24 +504,38 @@ defmodule Hologram.DB.EntityOperations do
         column = Enum.find(columns, &(&1.source == {:attribute, name}))
 
         if unique_value_taken?(table, column.name, values[name], type, id) do
-          Map.put(acc, name, [:unique])
+          put_violation(acc, name, :unique)
         else
           acc
         end
       end)
 
+    reference_violations =
+      entity_type
+      |> advisory_reference_candidates(values, attribute_violations)
+      |> Enum.reduce(attribute_violations, fn {name, field, target, unique?}, acc ->
+        cond do
+          not reference_target_exists?(target, values[field]) ->
+            put_violation(acc, field, :not_found)
+
+          unique? and reference_taken?(table, columns, name, values[field], id) ->
+            put_violation(acc, field, :unique)
+
+          true ->
+            acc
+        end
+      end)
+
+    # Keys last, reading what the two passes above found: a reference naming no row is a value
+    # nothing can be compared against.
     entity_type
-    |> advisory_reference_candidates(values, attribute_violations)
-    |> Enum.reduce(attribute_violations, fn {name, field, target, unique?}, acc ->
-      cond do
-        not reference_target_exists?(target, values[field]) ->
-          Map.put(acc, field, [:not_found])
-
-        unique? and reference_taken?(table, columns, name, values[field], id) ->
-          Map.put(acc, field, [:unique])
-
-        true ->
-          acc
+    |> declared_keys(columns)
+    |> Enum.reduce(reference_violations, fn key, acc ->
+      if advisory_key_candidate?(key, values, deltas, acc) and
+           key_taken?(table, key, values, deltas, id) do
+        put_key_violation(acc, key)
+      else
+        acc
       end
     end)
   end
@@ -543,6 +580,15 @@ defmodule Hologram.DB.EntityOperations do
             not Validator.attribute_value_valid?(Map.fetch!(row, name) + amount, :integer),
             do: name
     end
+  end
+
+  # Whether the value a field holds can be bound and compared: a field whose value broke a
+  # declaration cannot, while one that is only known to be taken can - being taken says nothing
+  # against the value itself.
+  defp comparable?(violations, field) do
+    violations
+    |> Map.get(field, [])
+    |> Enum.all?(&(&1 == :unique or match?({:unique, _fields}, &1)))
   end
 
   # The one place a column name is spliced into SQL as a LITERAL rather than as a quoted
@@ -729,6 +775,20 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  # The keys the entity type declares with unique, each as the fields a violation names - an
+  # attribute by its name, a to-one by its `<name>_id` reference field - beside the columns that
+  # hold them, in declared order.
+  defp declared_keys(entity_type, columns) do
+    Enum.map(entity_type.__uniques__(), fn names ->
+      key_columns =
+        Enum.map(names, fn name ->
+          Enum.find(columns, &(&1.source in [{:attribute, name}, {:relationship, name}]))
+        end)
+
+      %{columns: key_columns, fields: Enum.map(key_columns, &field_name/1)}
+    end)
+  end
+
   defp field_name(%{source: :system, name: name}), do: String.to_existing_atom(name)
 
   defp field_name(%{source: {:attribute, name}}), do: name
@@ -809,6 +869,58 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  # Whether another row holds the key the write would leave the row with: the values it sets,
+  # beside the stored row's own for the fields it leaves alone, and the stored ones plus the
+  # amount for the fields it moves. The stored values are read in the statement itself, so a row
+  # that is not there, or holds NULL in one of them, compares to nothing and the answer is no -
+  # which is the index's own: nulls never repeat a key. A moved value is added up as a numeric,
+  # so a move past what the column holds answers no rather than raising. The row itself is
+  # excluded, as in unique_value_taken?/5.
+  # sobelow_skip ["SQL.Query"]
+  defp key_taken?(table, key, values, deltas, id) do
+    qualified_table = qualified_table(table)
+
+    # The id is bound first, so the values number from 2 whichever fields the write gives. Both
+    # lists are built back to front.
+    {conditions, params} =
+      key.columns
+      |> Enum.zip(key.fields)
+      |> Enum.reduce({[], [Codec.encode(id, :uuid)]}, fn {column, field}, {conditions, params} ->
+        quoted_column = Mapper.quote_identifier(column.name)
+        stored = ~s|(SELECT #{quoted_column} FROM #{qualified_table} WHERE "id" = $1)|
+        placeholder = "$#{length(params) + 1}"
+
+        case {Map.fetch(values, field), Map.fetch(deltas, field)} do
+          {{:ok, value}, _delta} ->
+            condition = "#{quoted_column} = #{placeholder}"
+
+            {[condition | conditions], [Codec.encode(value, column.type) | params]}
+
+          {:error, {:ok, amount}} ->
+            moved = "#{stored}::numeric + #{placeholder}::#{column.sql_type}"
+
+            {["#{quoted_column} = #{moved}" | conditions],
+             [Codec.encode(amount, column.type) | params]}
+
+          {:error, :error} ->
+            {["#{quoted_column} = #{stored}" | conditions], params}
+        end
+      end)
+
+    key_condition =
+      conditions
+      |> Enum.reverse()
+      |> Enum.join(" AND ")
+
+    statement =
+      ~s|SELECT EXISTS (SELECT 1 FROM #{qualified_table} WHERE #{key_condition} AND "id" != $1)|
+
+    case Connection.query(statement, Enum.reverse(params)) do
+      {:ok, %Postgrex.Result{rows: [[taken?]]}} -> taken?
+      {:error, error} -> raise error
+    end
+  end
+
   # One clause per mode and none for anything else, so a misspelled mode fails to match rather
   # than reading the row without a lock.
   defp lock_clause(nil), do: ""
@@ -842,6 +954,17 @@ defmodule Hologram.DB.EntityOperations do
 
       {name, Map.fetch!(entity, name)}
     end)
+  end
+
+  # Every field of the key carries the reason, which names the key by its fields: a form shows
+  # it beside whichever of them it holds.
+  defp put_key_violation(violations, key) do
+    Enum.reduce(key.fields, violations, &put_violation(&2, &1, {:unique, key.fields}))
+  end
+
+  # Beside the reasons the field already carries, in the order Entity.validate/2 lists them.
+  defp put_violation(violations, field, reason) do
+    Map.update(violations, field, [reason], &Enum.sort([reason | &1]))
   end
 
   # What the entity now is, as the oplog records it, with the revisions the write set.
@@ -1102,21 +1225,34 @@ defmodule Hologram.DB.EntityOperations do
 
   # A unique index derived from a `unique: true` attribute or to-one names that declaration back,
   # so a duplicate is answered the way a value violation is - by field, in Entity.validate/2's
-  # shape, a reference by its `<name>_id` field. Any other unique index is not ours to explain
-  # and keeps raising: a duplicate primary key is a framework bug rather than something a caller
-  # did, and the grant store's index is over four columns, so neither matches the shape below -
-  # one column, derived from an attribute or a to-one.
+  # shape, a reference by its `<name>_id` field. An index derived from a key the type declares
+  # with unique is answered on every field of the key, the reason naming the key. Any other
+  # unique index is not ours to explain and keeps raising: a duplicate primary key is a
+  # framework bug rather than something a caller did, and the grant store's index derives from
+  # no declaration - its type declares no key - so neither matches the shapes below.
   defp unique_violations(entity_type, %Postgrex.Error{
          postgres: %{code: :unique_violation, constraint: constraint}
        }) do
     %{columns: columns, indexes: indexes} = Map.fetch!(DB.mapping(), entity_type)
 
-    with %{unique: true, columns: [column_name]} <- indexes[constraint],
-         %{source: {kind, _name}} = column when kind in [:attribute, :relationship] <-
-           Enum.find(columns, &(&1.name == column_name)) do
-      %{field_name(column) => [:unique]}
-    else
-      _no_match -> nil
+    case indexes[constraint] do
+      %{unique: true, columns: [column_name]} ->
+        case Enum.find(columns, &(&1.name == column_name)) do
+          %{source: {kind, _name}} = column when kind in [:attribute, :relationship] ->
+            %{field_name(column) => [:unique]}
+
+          _column ->
+            nil
+        end
+
+      %{unique: true, columns: column_names} ->
+        entity_type
+        |> declared_keys(columns)
+        |> Enum.find(&(Enum.map(&1.columns, fn column -> column.name end) == column_names))
+        |> then(&(&1 && put_key_violation(%{}, &1)))
+
+      _index ->
+        nil
     end
   end
 

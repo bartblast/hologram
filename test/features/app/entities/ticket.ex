@@ -5,4 +5,5 @@ defmodule HologramFeatureTests.Entities.Ticket do
   attribute :title, :string
 
   allow :read
+  allow :update
 end

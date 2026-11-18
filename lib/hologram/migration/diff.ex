@@ -70,7 +70,12 @@ defmodule Hologram.Migration.Diff do
         %{op: :add_role, entity: entity_type, name: name, opts: opts}
       end)
 
-    [%{op: :create_entity, entity: entity_type} | attribute_ops ++ relationship_ops ++ role_ops]
+    member_ops = attribute_ops ++ relationship_ops ++ role_ops
+
+    [
+      %{op: :create_entity, entity: entity_type}
+      | member_ops ++ key_ops(:add_unique, entity_type, entry.uniques)
+    ]
   end
 
   # Emitted last, so the designation lands after the ops creating the entity type it names.
@@ -196,7 +201,9 @@ defmodule Hologram.Migration.Diff do
       diff_entity_roles(entity_type, old_entry.roles, new_entry.roles)
     ]
 
-    merge_plans(plans)
+    plans
+    |> merge_plans()
+    |> put_key_ops(entity_type, old_entry, new_entry)
   end
 
   defp diff_entity_roles(entity_type, old_members, new_members) do
@@ -459,6 +466,10 @@ defmodule Hologram.Migration.Diff do
 
   defp extends_delta(%{extends: extends}), do: extends
 
+  defp key_ops(kind, entity_type, keys) do
+    Enum.map(keys, &%{op: kind, entity: entity_type, fields: &1})
+  end
+
   # A deleted and an added member of the same type look like a rename - only when each
   # is the single member of that type on its side, so the pairing is unambiguous.
   defp member_rename_hints(deleted_members, added_members) do
@@ -492,11 +503,15 @@ defmodule Hologram.Migration.Diff do
     |> Enum.sort()
   end
 
+  defp member_names(members), do: Enum.map(members, &elem(&1, 0))
+
   defp merge_plans(plans) do
     Enum.reduce(plans, {[], []}, fn {ops, questions}, {acc_ops, acc_questions} ->
       {acc_ops ++ ops, acc_questions ++ questions}
     end)
   end
+
+  defp names_any?(fields, names), do: Enum.any?(fields, &(&1 in names))
 
   defp pair_hint([old], [new]), do: [{:rename, old, new}]
 
@@ -513,6 +528,43 @@ defmodule Hologram.Migration.Diff do
       true ->
         List.insert_at(placed, -1, value)
     end
+  end
+
+  # A key leaves before the members it names and arrives after them: the replay refuses a
+  # field deleted from under a key, and a key over a field that is not there yet.
+  #
+  # A key spelled the same on both sides still leaves and comes back when a member it names
+  # is deleted: the name returned as the other kind of member, an attribute where a to-one
+  # was or the reverse, and the key's index is over another column now.
+  #
+  # A key that names a member a question asks about waits with that question. Answered as a
+  # rename, the key follows the field and there is nothing left to delete - a delete_unique
+  # written ahead of the answer would name a key the rename just respelled, and the
+  # add_unique of its new spelling a key already there. So the delete is withheld, and with
+  # it the adds naming what the same question saw arrive. Every question whose members the
+  # key names carries it, since each is answered on its own. Whatever the answers leave
+  # undone is the next generated file's to say.
+  defp put_key_ops({ops, questions}, entity_type, old_entry, new_entry) do
+    rebuilt = Enum.filter(old_entry.uniques, &rebuilt_key?(&1, old_entry, new_entry))
+
+    delete_ops =
+      key_ops(:delete_unique, entity_type, (old_entry.uniques -- new_entry.uniques) ++ rebuilt)
+
+    add_ops =
+      key_ops(:add_unique, entity_type, (new_entry.uniques -- old_entry.uniques) ++ rebuilt)
+
+    asked = Enum.map(questions, &withhold_key_ops(&1, delete_ops, add_ops))
+    held = Enum.flat_map(asked, fn {_question, held_ops} -> held_ops end)
+
+    {(delete_ops -- held) ++ ops ++ (add_ops -- held), Enum.map(asked, &elem(&1, 0))}
+  end
+
+  defp rebuilt_key?(fields, old_entry, new_entry) do
+    deleted_names =
+      (member_names(old_entry.attributes) -- member_names(new_entry.attributes)) ++
+        (member_names(old_entry.relationships) -- member_names(new_entry.relationships))
+
+    fields in new_entry.uniques and names_any?(fields, deleted_names)
   end
 
   defp relationship_change_op(entity_type, old_by_name, {name, new_type, new_opts}) do
@@ -537,6 +589,22 @@ defmodule Hologram.Migration.Diff do
   end
 
   defp unfilled_add?(_op), do: false
+
+  defp withhold_key_ops(%{kind: kind} = question, delete_ops, add_ops)
+       when kind in [:attributes, :relationships] do
+    held_deletes = Enum.filter(delete_ops, &names_any?(&1.fields, question.deleted))
+
+    held_adds =
+      if held_deletes == [],
+        do: [],
+        else: Enum.filter(add_ops, &names_any?(&1.fields, question.added))
+
+    withheld_ops = held_deletes ++ question.withheld_ops ++ held_adds
+
+    {%{question | withheld_ops: withheld_ops}, held_deletes ++ held_adds}
+  end
+
+  defp withhold_key_ops(question, _delete_ops, _add_ops), do: {question, []}
 
   # An attribute added to an entity the history already carries meets rows that predate
   # it, and a required one leaves them without a value. Which value is the author's to

@@ -36,7 +36,9 @@ defmodule Hologram.Job.Runner do
   another session holds its run lock.
 
   The lock is taken before the claim commits, so whoever reads the row as running finds it held.
-  A claim that raises or exits after taking it gives it back.
+  A claim that raises or exits after taking it gives it back, and raises or exits as it was going
+  to even when giving it back exits - the lock went with the connection then. Taking the lock exits
+  when the RunLock connection leaves it unanswered for 5 seconds, which ends that connection.
 
   The claim is the framework's own write, made without an acting user: a job type grants no
   operation for it, and whose job it is has already been decided by whoever enqueued it.
@@ -50,7 +52,7 @@ defmodule Hologram.Job.Runner do
     result
   catch
     kind, reason ->
-      if Process.delete(@uncommitted_lock_key), do: RunLock.release(run_lock, id)
+      if Process.delete(@uncommitted_lock_key), do: release_quietly(run_lock, id)
 
       :erlang.raise(kind, reason, __STACKTRACE__)
   end
@@ -101,7 +103,8 @@ defmodule Hologram.Job.Runner do
 
   The job's run lock is held on the given RunLock connection from the claim until the outcome is
   recorded, and given up then even when recording it raises - until the outcome commits, the row
-  must look like a run in progress.
+  must look like a run in progress. Giving it up never replaces the answer or the error: a release
+  that exits means the connection, and the lock with it, is gone already.
 
   The outcome is recorded only on a row still running. One a pass on another node has already
   failed keeps that verdict - its lock was lost mid-run, so this run looked abandoned - and a row
@@ -121,7 +124,7 @@ defmodule Hologram.Job.Runner do
 
           outcome_status(outcome)
         after
-          RunLock.release(run_lock, id)
+          release_quietly(run_lock, id)
         end
     end
   end
@@ -209,6 +212,16 @@ defmodule Hologram.Job.Runner do
       end)
 
     :ok
+  end
+
+  # Gives up a run lock on the way out of a claim or a run, whether or not it ended in an error. A
+  # release that exits - the connection gone, or killed for leaving it unanswered - is let go: the
+  # lock went with the session either way, and the worker goes down with the connection. What it
+  # must not do is replace the error the claim or the run is leaving with.
+  defp release_quietly(run_lock, id) do
+    RunLock.release(run_lock, id)
+  catch
+    :exit, _reason -> :ok
   end
 
   defp run_lock_free?(id) do

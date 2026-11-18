@@ -61,7 +61,7 @@ defmodule HologramClusterTests.MigrationHelpers do
   """
   @spec migrations() :: [%{atom => any}]
   def migrations do
-    Loader.load_dir!(Loader.migrations_dir())
+    Loader.list!()
   end
 
   @doc """

@@ -42,6 +42,9 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module130
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module131
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module132
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module134
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module135
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module136
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module55
@@ -73,6 +76,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
   alias Hologram.Test.Fixtures.Entity.Module18, as: Entity18
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.Entity.Module20, as: Entity20
   alias Hologram.Test.Fixtures.Entity.Module26, as: Entity26
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
   alias Hologram.Test.Fixtures.Entity.Module33, as: Entity33
@@ -80,6 +84,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Entity.Module43, as: Entity43
   alias Hologram.Test.Fixtures.Entity.Module5, as: Entity5
+  alias Hologram.Test.Fixtures.Entity.Module53, as: Entity53
 
   # A frame opens with the application it came from, which carries the framework's version - the
   # one part of an expected message that cannot be spelled out and stay true across a release.
@@ -1668,7 +1673,20 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> extract_derived_queries(entity_types, ir_plt)
         |> Map.new()
 
-      assert Enum.map(queries.admitting_count, & &1.entity) == [Entity2, Entity4]
+      assert Enum.map(queries.admitting_count, & &1.entity) == [Entity2, Entity4, Entity53]
+    end
+
+    # Module4's a is a date, so the builder refuses true for it and the type drops out.
+    test "registers only the entity types whose attribute fits a value compared with it", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module106
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      assert Enum.map(queries.fitting_count, & &1.entity) == [Entity2]
     end
 
     test "registers one entity type when only one admits a count whose entity type is an argument",
@@ -1679,8 +1697,8 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Map.new()
 
       expected_term =
-        Entity4
-        |> filter(d: 1)
+        Entity20
+        |> filter(views: 1)
         |> count()
         |> Stage.normalize()
 
@@ -1919,6 +1937,54 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_derived_queries(Module121, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a mistyped value beside an argument the build cannot enumerate", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_134.ex:10: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module134 builds an invalid query - 5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_134.ex:10: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module134.__derived_rows__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module134, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on an unknown attribute beside an argument the build cannot enumerate", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_135.ex:10: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module135 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_135.ex:10: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module135.__derived_rows__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module135, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on an include name the build cannot enumerate", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_136.ex:11: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module136 passes an argument to include/2 in a position the build cannot enumerate - the rows to download cannot be worked out without its value
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_136.ex:11: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module136.__derived_rows__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module136, entity_types, ir_plt)
       end
     end
 

@@ -778,7 +778,12 @@ defmodule Hologram.DB.MapperTest do
         entities:
           Map.new(relationships, fn {entity_type, relationship} ->
             {entity_type,
-             %{attributes: [], relationships: [{relationship, [entity_type], []}], roles: []}}
+             %{
+               attributes: [],
+               relationships: [{relationship, [entity_type], []}],
+               roles: [],
+               uniques: []
+             }}
           end),
         roles: %{},
         user_entity: nil
@@ -806,9 +811,10 @@ defmodule Hologram.DB.MapperTest do
           Nonexistent.Post => %{
             attributes: [],
             relationships: [{relationship, [Nonexistent.Post], []}],
-            roles: []
+            roles: [],
+            uniques: []
           },
-          entity_type => %{attributes: [], relationships: [], roles: []}
+          entity_type => %{attributes: [], relationships: [], roles: [], uniques: []}
         },
         roles: %{},
         user_entity: nil
@@ -837,7 +843,8 @@ defmodule Hologram.DB.MapperTest do
           Nonexistent.Ghost => %{
             attributes: [{:name, :string, [unique: true]}],
             relationships: [],
-            roles: []
+            roles: [],
+            uniques: []
           }
         },
         roles: %{},
@@ -855,13 +862,118 @@ defmodule Hologram.DB.MapperTest do
              }
     end
 
+    test "derives a unique index per key, over its fields' columns in declared order" do
+      model = %{
+        entities: %{
+          Nonexistent.Ghost => %{
+            attributes: [{:name, :string, []}, {:rank, :integer, [optional: true]}],
+            relationships: [{:owner, Nonexistent.Ghost, [optional: true]}],
+            roles: [],
+            uniques: [[:owner, :name], [:rank, :owner]]
+          }
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      mapping = derive_from_model!(model)
+
+      assert mapping[Nonexistent.Ghost].indexes == %{
+               "nonexistent_ghost_owner_id_name_$uidx" => %{
+                 columns: ["owner_id", "name"],
+                 nulls_distinct: true,
+                 unique: true
+               },
+               "nonexistent_ghost_rank_owner_id_$uidx" => %{
+                 columns: ["rank", "owner_id"],
+                 nulls_distinct: true,
+                 unique: true
+               }
+             }
+    end
+
+    test "cuts a key's index name that does not fit, keeping its digest and kind" do
+      long_field = :aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      long = Atom.to_string(long_field)
+
+      model = %{
+        entities: %{
+          Nonexistent.Ghost => %{
+            attributes: [{long_field, :string, []}, {:name, :string, []}],
+            relationships: [],
+            roles: [],
+            uniques: [[long_field, :name]]
+          }
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      [{name, index}] = Map.to_list(derive_from_model!(model)[Nonexistent.Ghost].indexes)
+
+      assert index.columns == [long, "name"]
+      assert byte_size(name) <= 63
+      assert name == fit_identifier(["nonexistent", "ghost"], [long, "name"], "$uidx")
+      assert String.ends_with?(name, "_$uidx")
+    end
+
+    test "keeps the plain index of a to-one a key names" do
+      model = %{
+        entities: %{
+          Nonexistent.Ghost => %{
+            attributes: [{:name, :string, []}],
+            relationships: [{:owner, Nonexistent.Ghost, [optional: true]}],
+            roles: [],
+            uniques: [[:name, :owner]]
+          }
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      mapping = derive_from_model!(model)
+      owner_column = Enum.find(mapping[Nonexistent.Ghost].columns, &(&1.name == "owner_id"))
+
+      assert owner_column.index == "nonexistent_ghost_owner_id_$idx"
+    end
+
+    test "reports a key's index another entity type's unique attribute derives too" do
+      model = %{
+        entities: %{
+          Nonexistent.Ghost => %{
+            attributes: [{:name, :string, []}, {:tag, :string, []}],
+            relationships: [],
+            roles: [],
+            uniques: [[:name, :tag]]
+          },
+          Nonexistent.GhostName => %{
+            attributes: [{:tag, :string, [unique: true]}],
+            relationships: [],
+            roles: [],
+            uniques: []
+          }
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "nonexistent_ghost_name_tag_$uidx" is derived from attribute :tag in Nonexistent.GhostName, unique [:name, :tag] in Nonexistent.Ghost\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn -> derive_from_model!(model) end
+    end
+
     test "derives a unique index from a term's to-one relationship options" do
       model = %{
         entities: %{
           Nonexistent.Ghost => %{
             attributes: [],
             relationships: [{:owner, Nonexistent.Ghost, [optional: true, unique: true]}],
-            roles: []
+            roles: [],
+            uniques: []
           }
         },
         roles: %{},
@@ -888,7 +1000,8 @@ defmodule Hologram.DB.MapperTest do
           Nonexistent.Ghost => %{
             attributes: [{:name, :string, []}],
             relationships: [],
-            roles: []
+            roles: [],
+            uniques: []
           }
         },
         roles: %{},
@@ -905,7 +1018,7 @@ defmodule Hologram.DB.MapperTest do
     # this, the rename made the store vanish from every model preceding it.
     test "derives the grant store for the entity type the term designates" do
       model = %{
-        entities: %{Module1 => %{attributes: [], relationships: [], roles: []}},
+        entities: %{Module1 => %{attributes: [], relationships: [], roles: [], uniques: []}},
         roles: %{},
         user_entity: Module1
       }
@@ -917,7 +1030,7 @@ defmodule Hologram.DB.MapperTest do
 
     test "derives no grant store for a term designating no user entity type" do
       model = %{
-        entities: %{Module14 => %{attributes: [], relationships: [], roles: []}},
+        entities: %{Module14 => %{attributes: [], relationships: [], roles: [], uniques: []}},
         roles: %{},
         user_entity: nil
       }
@@ -930,7 +1043,7 @@ defmodule Hologram.DB.MapperTest do
     test "derives the grant store's enum values from the term" do
       model = %{
         entities: %{
-          Module14 => %{attributes: [], relationships: [], roles: [{:editor, []}]}
+          Module14 => %{attributes: [], relationships: [], roles: [{:editor, []}], uniques: []}
         },
         roles: %{Nonexistent.Roles.Admin => %{extends: []}},
         user_entity: Module14
@@ -955,7 +1068,7 @@ defmodule Hologram.DB.MapperTest do
       entity_type = Nonexistent.Entities.NameOneByteLongerThanAnEnumLabelWillHoldXyz
 
       model = %{
-        entities: %{entity_type => %{attributes: [], relationships: [], roles: []}},
+        entities: %{entity_type => %{attributes: [], relationships: [], roles: [], uniques: []}},
         roles: %{},
         user_entity: entity_type
       }
@@ -971,7 +1084,7 @@ defmodule Hologram.DB.MapperTest do
       role_module = Nonexistent.Roles.NameOneByteLongerThanAnEnumLabelWillHoldAbcdef
 
       model = %{
-        entities: %{Module14 => %{attributes: [], relationships: [], roles: []}},
+        entities: %{Module14 => %{attributes: [], relationships: [], roles: [], uniques: []}},
         roles: %{role_module => %{extends: []}},
         user_entity: Module14
       }
@@ -987,7 +1100,7 @@ defmodule Hologram.DB.MapperTest do
       entity_type = Nonexistent.Entities.NameFillingTheEnumLabelToItsVeryLastByteAb
 
       model = %{
-        entities: %{entity_type => %{attributes: [], relationships: [], roles: []}},
+        entities: %{entity_type => %{attributes: [], relationships: [], roles: [], uniques: []}},
         roles: %{},
         user_entity: entity_type
       }

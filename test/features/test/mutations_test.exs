@@ -551,6 +551,20 @@ defmodule HologramFeatureTests.MutationsTest do
     end
   end
 
+  feature "refuses a filter value that doesn't fit the attribute's type in the browser", %{
+    session: session
+  } do
+    expected_msg =
+      ~s("yes" is not a value of attribute :pinned in HologramFeatureTests.Entities.Note - ) <>
+        "the attribute has type :boolean, which takes true or false"
+
+    assert_client_error session, Hologram.MisuseError, expected_msg, fn ->
+      session
+      |> visit(MutationsPage)
+      |> click(button("Read mistyped filter"))
+    end
+  end
+
   # The browser holds a query as a plain object and prints it as its JSON - its type and bound are
   # matched, not the whole shape, which may still change.
   feature "prints the query a by-id read was handed in the browser", %{session: session} do

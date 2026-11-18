@@ -1,13 +1,15 @@
 defmodule Hologram.Test.DatabaseBootstrap.Connection do
   @moduledoc false
 
-  # A single Postgres connection that opens synchronously, for the test database bootstrap.
+  # A single Postgres connection that opens synchronously, for the test database bootstrap - and
+  # for Hologram.DB.await_database/1, which opens one to learn why the pool has no connection.
   # A pooled connection opens in the background, and a query queued on it gives up after the
   # pool's queue window, so a server slow to answer its first connection looks like no server
   # at all. Here start/1 returns once the connection is open, or returns the driver's error.
 
   @behaviour Postgrex.SimpleConnection
 
+  alias Hologram.DB
   alias Postgrex.SimpleConnection
 
   @impl SimpleConnection
@@ -57,7 +59,8 @@ defmodule Hologram.Test.DatabaseBootstrap.Connection do
     trap_exit? = Process.flag(:trap_exit, true)
 
     try do
-      SimpleConnection.start_link(__MODULE__, nil, opts)
+      # TODO(#1696): SimpleConnection.start_link/3 again, see Hologram.DB.SimpleConnection.
+      DB.SimpleConnection.start_link(__MODULE__, nil, opts)
     after
       Process.flag(:trap_exit, trap_exit?)
 

@@ -1,21 +1,21 @@
 defmodule Hologram.Migration.AtomicityTest do
-  # A file applies whole or not at all. The gate that enforces it is the pre-flight refusal,
-  # which runs over every op of the file before any of them executes - so a file with one
-  # bad op does not apply its good ones first.
+  # A file applies whole or not at all. Two things enforce it together: the pre-flight
+  # refusal, which checks each op right before it executes, against the database the ops
+  # before it left, and the file's transaction, which takes those earlier ops back when a
+  # later one is refused - so a file with one bad op keeps none of its good ones.
   #
-  # The transaction underneath is the second gate, and it has no reachable trigger: every
-  # op the migration DSL can express is pre-flight checked, and the checks are total in the
-  # direction that matters - each refuses at least every row PostgreSQL would. A file that
-  # gets past pre-flight and then fails mid-apply is by construction a Hologram bug, not a
-  # scenario, so it is recorded here rather than tested. It WAS testable until the cast
-  # checks gained their range branches: an out-of-range numeric used to pass the syntax-only
-  # check and fail the cast, which is the state this suite reproduced before that was fixed.
+  # PostgreSQL itself never refuses: every op the migration DSL can express is pre-flight
+  # checked, and the checks are total in the direction that matters - each refuses at least
+  # every row PostgreSQL would. A file that gets past pre-flight and then fails mid-apply is
+  # by construction a Hologram bug, not a scenario, so it is recorded here rather than
+  # tested. It WAS testable until the cast checks gained their range branches: an
+  # out-of-range numeric used to pass the syntax-only check and fail the cast, which is the
+  # state this suite reproduced before that was fixed.
   #
-  # The pre-flight has TWO moments, and they take back different amounts of work. The
-  # transactional one runs before any op executes, so a file it refuses never ran anything.
-  # The TAIL's runs after the transactional ops have applied - an index build cannot go
-  # inside the file's transaction, so its check is the last thing before the commit - and a
-  # file refused there is one whose work was really done and really taken back.
+  # The pre-flight has TWO moments. The transactional one runs op by op, so a file it
+  # refuses has run the ops before the refused one, inside the transaction that takes them
+  # back. The TAIL's runs after every transactional op has applied - an index build cannot
+  # go inside the file's transaction, so its check is the last thing before the commit.
   #
   # Only the scratch tier can ask the question at all. Under the sandbox every apply is
   # already inside a never-committed transaction, so "the file left nothing behind" is true
@@ -50,7 +50,7 @@ defmodule Hologram.Migration.AtomicityTest do
   end
 
   defp migration(version, ops) do
-    %{version: version, path: "#{version}.exs", ops: ops}
+    %{version: version, path: "app/migrations/#{version}.ex", ops: ops}
   end
 
   defp task_columns do
@@ -115,13 +115,13 @@ defmodule Hologram.Migration.AtomicityTest do
   end
 
   describe "run/3" do
-    # The other refusal point. Here the file's transactional op APPLIES and is then taken
-    # back, where the test below refuses before anything runs at all - which is why this one
-    # asserts the render's shape too: without it, "the rename is gone" would be satisfied by
-    # a file that never carried a rename to begin with. What no assertion from outside can
-    # separate is applied-then-rolled-back from never-applied, since an uncommitted change is
-    # invisible to every other session by construction. The ORDER is what settles it, and it
-    # is fixed in apply_transactional/3: transactional ops execute, then the tail is checked.
+    # The other refusal point. Here every transactional op of the file APPLIES and is then
+    # taken back, which is why this test asserts the render's shape too: without it, "the
+    # rename is gone" would be satisfied by a file that never carried a rename to begin with.
+    # What no assertion from outside can separate is applied-then-rolled-back from
+    # never-applied, since an uncommitted change is invisible to every other session by
+    # construction. The ORDER is what settles it, and it is fixed in apply_transactional/3:
+    # transactional ops execute, then the tail is checked.
     test "applies none of a file whose tail check refuses after its transactional ops ran", %{
       create: create,
       first_model: first_model,
@@ -213,8 +213,8 @@ defmodule Hologram.Migration.AtomicityTest do
           run([create, refused], full_model, @context)
         end
 
-        # The op that would have succeeded never ran: the refusal covers the file, not the
-        # op that earned it.
+        # The op before the refused one applied and was taken back with the transaction: the
+        # refusal covers the file, not the op that earned it.
         assert task_columns() == [
                  "$revisions",
                  "amount",

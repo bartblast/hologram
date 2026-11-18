@@ -25,7 +25,7 @@ export default class LocalDatabase {
   // client may see can change without anyone becoming someone else.
   static actorUserId = null;
 
-  // What the render that handed this page over counted, keyed by the prop instance that asked -
+  // What the render that handed this page over counted, keyed by the field and the query it ran -
   // held until this client's own database is complete enough to count for itself.
   static syncCounts = {};
 

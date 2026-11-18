@@ -1,7 +1,6 @@
 "use strict";
 
 import Batches from "./batches.mjs";
-import Bitstring from "./bitstring.mjs";
 import Deltas from "./deltas.mjs";
 import Durability from "./durability.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -13,6 +12,7 @@ import ManuallyPortedElixirHologramJob from "./elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQueryStage from "./elixir/hologram/query/stage.mjs";
 import Model from "./model.mjs";
 import QueryKernel from "./query_kernel.mjs";
+import QuerySpelling from "./query_spelling.mjs";
 import ReloadNotice from "./reload_notice.mjs";
 import Replica from "./replica.mjs";
 import SyncStream from "./sync_stream.mjs";
@@ -33,11 +33,12 @@ export default class DataLayer {
   // Based on run_query!/4
   //
   // Answers the given normalized term a derived field of the given module is defined by, for the
-  // given name and the arguments its function was called with. The result is boxed here and
+  // given name. The arguments its function was called with are in the term, as the values it
+  // reads. The result is boxed here and
   // nowhere else: rows live plain, and this is the boundary where one becomes something a
   // template can read.
   static answerDerivedQuery(module, name, args, term) {
-    const carried = $.#carriedCount(module, name, args, term);
+    const carried = $.#carriedCount(module, name, term);
 
     if (carried !== null) {
       return Type.integer(carried);
@@ -671,12 +672,14 @@ export default class DataLayer {
   // marked, on whichever page and in whichever tab. A field the build listed no types for waits for
   // the whole pot.
   //
-  // The key names the component, the prop or derived field, and the arguments its function was
-  // called with - which is what tells two instances of one component apart - spelled the way the
-  // server spells them (see #spellKeyPart).
+  // The key names the component, the derived field and the query it ran, spelled the way the
+  // server spells it (see QuerySpelling). The query holds every value it reads, so a row argument
+  // whose field the query reads changing is a query the server never counted, and misses, while
+  // one whose other fields change still finds the number. Two instances of one component running
+  // one query share a number, which is the same number.
   //
   // WARNING: must match count_key/3 on the server (carry.ex).
-  static #carriedCount(module, name, args, term) {
+  static #carriedCount(module, name, term) {
     if (term.cardinality !== "count") {
       return null;
     }
@@ -685,9 +688,7 @@ export default class DataLayer {
       return null;
     }
 
-    const key = `${module}/${name.value}/${args
-      .map((arg) => $.#spellKeyPart(arg))
-      .join(",")}`;
+    const key = `${module}/${name.value}/${QuerySpelling.spell(term)}`;
 
     return LocalDatabase.syncCounts[key] ?? null;
   }
@@ -703,107 +704,6 @@ export default class DataLayer {
       types !== undefined &&
       types.every((type) => LocalDatabase.isTypeSynced(type))
     );
-  }
-
-  // Code point order, which is the order Elixir sorts UTF-8 binaries in - where JavaScript's own
-  // comparison orders UTF-16 code units, which a character past U+FFFF puts elsewhere.
-  static #compareCodePoints(left, right) {
-    const leftPoints = Array.from(left, (char) => char.codePointAt(0));
-    const rightPoints = Array.from(right, (char) => char.codePointAt(0));
-    const length = Math.min(leftPoints.length, rightPoints.length);
-
-    for (let index = 0; index < length; ++index) {
-      if (leftPoints[index] !== rightPoints[index]) {
-        return leftPoints[index] < rightPoints[index] ? -1 : 1;
-      }
-    }
-
-    return leftPoints.length - rightPoints.length;
-  }
-
-  static #spellEntityId(id) {
-    return Type.isBinary(id) ? Bitstring.toText(id) : $.#spellKeyPart(id);
-  }
-
-  // Based on spell_key_part/1 (carry.ex)
-  //
-  // An argument spelled the same way on both tiers, which inspect alone doesn't do for a struct or
-  // a float: an entity row by its type and id, the only parts both tiers are sure to hold alike, a
-  // list, a tuple and a map by their items, a map's entries and a struct's fields sorted, a float
-  // by its bits, and anything else by inspect.
-  //
-  // WARNING: must match spell_key_part/1 on the server.
-  static #spellKeyPart(term) {
-    if (Type.isStruct(term)) {
-      const name = Interpreter.moduleExName(
-        term.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
-      );
-
-      // A row is told apart by the metadata every entity struct carries, rather than by its type,
-      // so a row of a type the model doesn't bake is spelled as the server spells it.
-      const meta = term.data[Type.encodeMapKey(Type.atom("__meta__"))];
-
-      if (meta && Type.isStruct(meta[1], "Hologram.Entity.Metadata")) {
-        const id = term.data[Type.encodeMapKey(Type.atom("id"))][1];
-
-        return `${name}#${$.#spellEntityId(id)}`;
-      }
-
-      const fields = Object.values(term.data)
-        .filter(([key]) => key.value !== "__struct__")
-        .map(([key, value]) => [key.value, value])
-        .sort(([left], [right]) => $.#compareCodePoints(left, right))
-        .map(([key, value]) => `${key}: ${$.#spellKeyPart(value)}`)
-        .join(", ");
-
-      return `%${name}{${fields}}`;
-    }
-
-    if (Type.isMap(term)) {
-      const entries = Object.values(term.data)
-        .map(([key, value]) => [$.#spellKeyPart(key), $.#spellKeyPart(value)])
-        // Two keys can spell alike - two structs of one row - so a tie is broken by the value, as
-        // the server's sort of the spelled pairs does.
-        .sort(
-          ([leftKey, leftValue], [rightKey, rightValue]) =>
-            $.#compareCodePoints(leftKey, rightKey) ||
-            $.#compareCodePoints(leftValue, rightValue),
-        )
-        .map(([key, value]) => `${key} => ${value}`)
-        .join(", ");
-
-      return `%{${entries}}`;
-    }
-
-    if (Type.isList(term)) {
-      const items = term.data.map((item) => $.#spellKeyPart(item));
-
-      if (!term.isProper) {
-        const tail = items.pop();
-
-        return `[${items.join(", ")} | ${tail}]`;
-      }
-
-      return `[${items.join(", ")}]`;
-    }
-
-    if (Type.isTuple(term)) {
-      return `{${term.data.map((item) => $.#spellKeyPart(item)).join(", ")}}`;
-    }
-
-    if (Type.isFloat(term)) {
-      const view = new DataView(new ArrayBuffer(8));
-
-      view.setFloat64(0, term.value);
-
-      const bits = Array.from(new Uint8Array(view.buffer), (byte) =>
-        byte.toString(16).padStart(2, "0"),
-      ).join("");
-
-      return `float:${bits}`;
-    }
-
-    return Interpreter.inspect(term);
   }
 }
 

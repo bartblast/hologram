@@ -10,7 +10,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module151 do
     |> sort(c)
   end
 
-  # A count reading another derived field's rows, so the arguments it is carried under hold rows.
+  # A count reading another derived field's rows, so the query it is carried under holds their ids.
   derived :ripe_total, :integer, fn ripe ->
     ids = Enum.map(ripe, & &1.id)
 

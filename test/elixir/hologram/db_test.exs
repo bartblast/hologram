@@ -2,12 +2,14 @@ defmodule Hologram.DBTest do
   # async: false - the boot-mechanism tests flip the HOLOGRAM_ENV env var, which is global.
   use Hologram.Test.DatabaseCase, async: false
 
+  import ExUnit.CaptureLog
   import Hologram.DB
   import Hologram.Query, only: [decrement: 3, put_attribute: 3]
   import Hologram.Test, only: [as_user: 2]
 
   alias Hologram.AccessDeniedError
   alias Hologram.Auth.RoleGrant
+  alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
@@ -18,6 +20,8 @@ defmodule Hologram.DBTest do
   alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.SQLError
+  alias Hologram.Test.ClosingTCP
+  alias Hologram.Test.CountingListener
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module13
@@ -28,10 +32,106 @@ defmodule Hologram.DBTest do
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module32
+  alias Hologram.Test.Fixtures.Entity.Module53
+  alias Hologram.Test.Fixtures.Entity.Module54
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
+  alias Hologram.Test.TCPProxy
   alias Hologram.WriteError
 
   @stale_model_msg "the code changed since the last compile that validated the data model - fix the compile error, if there is one, and save again"
+
+  # A server that answers every connection the way PostgreSQL does while it starts up: a FATAL
+  # 57P03 in place of the authentication request. Returns its port.
+  defp start_starting_up_server do
+    {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false])
+    {:ok, port} = :inet.port(listen_socket)
+
+    fields =
+      [{?S, "FATAL"}, {?V, "FATAL"}, {?C, "57P03"}, {?M, "the database system is starting up"}]
+      |> Enum.map(fn {type, value} -> <<type, value::binary, 0>> end)
+      |> IO.iodata_to_binary()
+
+    error_response = <<?E, byte_size(fields) + 5::32, fields::binary, 0>>
+
+    spawn_link(fn -> answer_starting_up(listen_socket, error_response) end)
+
+    port
+  end
+
+  # A connection that goes away before it is answered - its caller killed mid-handshake - is
+  # closed and the next one answered.
+  defp answer_starting_up(listen_socket, error_response) do
+    {:ok, socket} = :gen_tcp.accept(listen_socket)
+
+    with {:ok, _startup_packet} <- :gen_tcp.recv(socket, 0) do
+      :gen_tcp.send(socket, error_response)
+    end
+
+    :gen_tcp.close(socket)
+
+    answer_starting_up(listen_socket, error_response)
+  end
+
+  # A pool behind a proxy that refuses connections until the test opens it, giving up on a checkout
+  # and reconnecting within milliseconds rather than seconds. Each try to connect logs, so a test
+  # starts it inside its log capture and stops it there with stop_unreachable_pool/0.
+  defp start_unreachable_pool(proxy \\ start_supervised!(TCPProxy)) do
+    port = TCPProxy.port(proxy)
+
+    opts =
+      Config.connection_opts(
+        backoff_max: 50,
+        backoff_min: 10,
+        pool_size: 1,
+        port: port,
+        queue_interval: 20,
+        queue_target: 10
+      )
+
+    start_supervised!(Supervisor.child_spec({Postgrex, opts}, id: :unreachable_pool))
+  end
+
+  defp stop_unreachable_pool, do: stop_supervised!(:unreachable_pool)
+
+  # Stops a process waiting for the database, and returns once the probe connection it may have
+  # been opening is gone too. The probe traps exits and finishes its connect before it goes, so it
+  # would otherwise log after the test's capture ended. Suspended first, so it opens no other.
+  defp stop_waiter(waiter) do
+    :erlang.suspend_process(waiter)
+    {:links, links} = Process.info(waiter, :links)
+
+    refs = for pid <- [waiter | Enum.filter(links, &is_pid/1)], do: {pid, Process.monitor(pid)}
+
+    Process.exit(waiter, :kill)
+
+    for {pid, ref} <- refs do
+      receive do
+        {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+      end
+    end
+  end
+
+  # The boot steps wait before they touch the database: each is left waiting on a pool that
+  # cannot reach it, and stopped there.
+  defp assert_waits_for_database(boot_step) do
+    run_boot_step = fn -> apply(Hologram.DB, boot_step, []) end
+
+    log =
+      capture_log(fn ->
+        pool = start_unreachable_pool()
+
+        {pid, monitor_ref} =
+          spawn_monitor(fn -> Connection.with_connection(pool, run_boot_step) end)
+
+        refute_receive {:DOWN, ^monitor_ref, :process, ^pid, _reason}, 1_000
+
+        stop_waiter(pid)
+        stop_unreachable_pool()
+      end)
+
+    # The configured database answers, so the wait is on the pool alone.
+    assert log =~ "the database answers, but the pool has not connected to it yet"
+  end
 
   describe "__using__/1" do
     test "imports the query and write stages, and aliases the modules the verbs live on" do
@@ -75,6 +175,34 @@ defmodule Hologram.DBTest do
       init([])
 
       assert mapping() == Mapper.derive!([Module1], [])
+    end
+
+    # A vanished node's sessions would otherwise stay open on the server for hours, holding the row
+    # locks of whatever job they were claiming.
+    test "sets the keepalives and the user timeout of each pool connection" do
+      statement =
+        "SELECT current_setting('tcp_keepalives_idle'), current_setting('tcp_keepalives_interval'), current_setting('tcp_keepalives_count'), current_setting('tcp_user_timeout')"
+
+      assert {:ok, %Postgrex.Result{rows: [["30", "10", "3", user_timeout]]}} =
+               Connection.query(statement)
+
+      # A platform without the user timeout keeps it at 0.
+      assert user_timeout in ["0", "60000"]
+    end
+
+    test "applies the session settings as each pool connection connects" do
+      {:ok, {_flags, [%{start: {_pool, :start_link, [{Hologram.DB.Protocol, opts}]}}]}} = init([])
+
+      assert opts[:after_connect] == {Hologram.DB, :apply_session_settings, []}
+    end
+
+    test "leaves the given after_connect in place" do
+      after_connect = {IO, :inspect, []}
+
+      {:ok, {_flags, [%{start: {_pool, :start_link, [{Hologram.DB.Protocol, opts}]}}]}} =
+        init(after_connect: after_connect)
+
+      assert opts[:after_connect] == after_connect
     end
 
     test "starts only the connection pool in test" do
@@ -129,6 +257,12 @@ defmodule Hologram.DBTest do
     end
   end
 
+  describe "migrate_at_boot/0" do
+    test "waits for the database first" do
+      assert_waits_for_database(:migrate_at_boot)
+    end
+  end
+
   describe "pool_name/0" do
     test "names a running connection pool that executes queries" do
       assert Postgrex.query!(pool_name(), "SELECT 1", []).rows == [[1]]
@@ -152,6 +286,12 @@ defmodule Hologram.DBTest do
     end
   end
 
+  describe "reconcile_at_boot/0" do
+    test "waits for the database first" do
+      assert_waits_for_database(:reconcile_at_boot)
+    end
+  end
+
   describe "reconciliation_context/0" do
     test "carries the mapping, guard facts, and marker diagnostics" do
       context = reconciliation_context()
@@ -161,6 +301,144 @@ defmodule Hologram.DBTest do
       assert context.env == "test"
       assert context.hologram_version == Mix.Project.config()[:version]
       assert %DateTime{} = context.timestamp
+    end
+  end
+
+  describe "apply_session_settings/1" do
+    # A server that lacks a setting would otherwise leave the pool without a connection it could
+    # use - each one raising on connect, then trying again.
+    test "warns rather than raising when the server refuses the settings" do
+      connection = start_supervised!({Postgrex, Config.connection_opts(pool_size: 1)})
+      Postgrex.query!(connection, "BEGIN", [])
+      {:error, _error} = Postgrex.query(connection, "SELECT 1 / 0", [])
+
+      log = capture_log(fn -> assert apply_session_settings(connection) == :ok end)
+
+      assert log =~ "the database refused the session's keepalive settings"
+    end
+  end
+
+  describe "await_database/1" do
+    test "returns :ok when the database answers" do
+      assert await_database(retry_interval_ms: 10) == :ok
+    end
+
+    test "waits while the database cannot be reached, and returns once it answers" do
+      proxy = start_supervised!(TCPProxy)
+      port = TCPProxy.port(proxy)
+
+      log =
+        capture_log(fn ->
+          pool = start_unreachable_pool(proxy)
+
+          task =
+            Task.async(fn ->
+              Connection.with_connection(pool, fn ->
+                await_database(
+                  connection_opts: Config.connection_opts(port: port),
+                  retry_interval_ms: 20
+                )
+              end)
+            end)
+
+          refute Task.yield(task, 200)
+
+          TCPProxy.open(proxy)
+
+          assert Task.await(task) == :ok
+
+          stop_unreachable_pool()
+        end)
+
+      assert log =~ "the database cannot be reached yet, trying again in 20 ms"
+      assert log =~ "tcp recv (idle): closed"
+    end
+
+    test "waits while the database is starting up" do
+      connection_opts = Config.connection_opts(port: start_starting_up_server())
+
+      log =
+        capture_log(fn ->
+          pool = start_unreachable_pool()
+
+          {pid, monitor_ref} =
+            spawn_monitor(fn ->
+              Connection.with_connection(pool, fn ->
+                await_database(connection_opts: connection_opts, retry_interval_ms: 10)
+              end)
+            end)
+
+          refute_receive {:DOWN, ^monitor_ref, :process, ^pid, _reason}, 1_000
+
+          stop_waiter(pid)
+          stop_unreachable_pool()
+        end)
+
+      assert log =~ "the database cannot be reached yet"
+      assert log =~ "the database system is starting up"
+    end
+
+    # As a peer that resets the connection right after accepting it can make the probe fail.
+    test "waits while the connections it probes with fail as they open" do
+      peer = start_supervised!(CountingListener)
+
+      connection_opts =
+        Config.connection_opts(
+          port: CountingListener.port(peer),
+          socket_options: ClosingTCP.socket_options()
+        )
+
+      log =
+        capture_log(fn ->
+          pool = start_unreachable_pool()
+
+          {pid, monitor_ref} =
+            spawn_monitor(fn ->
+              Connection.with_connection(pool, fn ->
+                await_database(connection_opts: connection_opts, retry_interval_ms: 10)
+              end)
+            end)
+
+          wait_until(fn -> CountingListener.accepted(peer) >= 2 end)
+
+          refute_received {:DOWN, ^monitor_ref, :process, ^pid, _reason}
+
+          stop_waiter(pid)
+          stop_unreachable_pool()
+        end)
+
+      assert log =~ "the database cannot be reached yet"
+      assert log =~ "tcp setopts: invalid argument - :einval"
+    end
+
+    # A server that is down and settings that are wrong look the same through the pool, and only
+    # the first is worth waiting for.
+    test "raises when the database cannot be connected to for a reason other than being away" do
+      connection_opts = Config.connection_opts(database: "hologram_no_such_database")
+
+      capture_log(fn ->
+        pool = start_unreachable_pool()
+
+        assert_raise Postgrex.Error, ~r/hologram_no_such_database/, fn ->
+          Connection.with_connection(pool, fn ->
+            await_database(connection_opts: connection_opts, retry_interval_ms: 10)
+          end)
+        end
+
+        stop_unreachable_pool()
+      end)
+    end
+
+    # Waiting is for a database that is away - one that answers with an error would answer the
+    # same way on every try.
+    test "raises an error other than a connection error" do
+      connection = start_supervised!({Postgrex, Config.connection_opts(pool_size: 1)})
+      Postgrex.query!(connection, "BEGIN", [])
+      {:error, _error} = Postgrex.query(connection, "SELECT 1 / 0", [])
+
+      assert_raise Postgrex.Error, ~r/current transaction is aborted/, fn ->
+        Connection.with_connection(connection, fn -> await_database(retry_interval_ms: 10) end)
+      end
     end
   end
 
@@ -308,6 +586,20 @@ defmodule Hologram.DBTest do
         end
 
       assert error.reason == %{slug: [:unique]}
+    end
+
+    test "raises a write error naming a taken key once, with the values given" do
+      create!(Module53.new(a: "bang_key_a", b: "bang_key_b"))
+
+      expected_msg =
+        normalize_newlines("""
+        cannot create Hologram.Test.Fixtures.Entity.Module53:
+          * key [:a, :b] is already taken (a "bang_key_a", b "bang_key_b")\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn ->
+        create!(Module53.new(a: "bang_key_a", b: "bang_key_b"))
+      end
     end
 
     test "raises a write error naming a taken unique reference" do
@@ -526,6 +818,40 @@ defmodule Hologram.DBTest do
           "type and the name of one of its to-many relationships"
 
       assert_error MisuseError, expected_msg, fn -> join_table_name(Reflection, :a) end
+    end
+  end
+
+  describe "refusal_lines/3" do
+    # One line per key, in the place of the first of its fields, then the field's own lines.
+    test "writes a taken key once, beside the other reasons its fields carry" do
+      violations = %{
+        a: [unique: [:a, :b]],
+        b: [unique: [:a, :b], unique: [:b, :d]],
+        d: [unique: [:b, :d]],
+        kind: [unique: [:kind, :slug]],
+        slug: [:unique, {:unique, [:kind, :slug]}]
+      }
+
+      values = %{a: "x", b: "y", d: "z", kind: :y, slug: "s"}
+
+      assert refusal_lines(Module53, violations, values) ==
+               normalize_newlines("""
+                 * key [:a, :b] is already taken (a "x", b "y")
+                 * key [:b, :d] is already taken (b "y", d "z")
+                 * key [:kind, :slug] is already taken (kind :y, slug "s")
+                 * attribute :slug "s" is already taken\
+               """)
+    end
+
+    # An update moving a field by an amount names no value for it.
+    test "leaves out the values the write did not give" do
+      assert refusal_lines(Module19, %{code: [:unique]}, %{}) ==
+               "  * attribute :code is already taken"
+
+      violations = %{count: [unique: [:name, :count]], name: [unique: [:name, :count]]}
+
+      assert refusal_lines(Module54, violations, %{}) ==
+               "  * key [:name, :count] is already taken"
     end
   end
 
@@ -906,6 +1232,39 @@ defmodule Hologram.DBTest do
       end
 
       assert read(Module19, entity.id).slug == "taken"
+    end
+
+    # An update gives only its changes, so the key's line spells out the changed field and
+    # names the rest by the key.
+    test "raises naming a taken key with the changed values" do
+      create!(Module53.new(a: "update_key_a", b: "update_key_b"))
+      entity = create!(Module53.new(a: "update_key_a", b: "update_key_free"))
+
+      expected_msg =
+        "cannot update Hologram.Test.Fixtures.Entity.Module53 #{inspect(entity.id)}:\n" <>
+          ~s|  * key [:a, :b] is already taken (b "update_key_b")|
+
+      assert_error WriteError, expected_msg, fn ->
+        entity
+        |> put_attribute(:b, "update_key_b")
+        |> update!()
+      end
+    end
+
+    # A move names no value, so the key's line gives none.
+    test "raises naming a key a counter's move repeats" do
+      create!(Module54.new(count: 3, name: "moved_bang"))
+      entity = create!(Module54.new(count: 4, name: "moved_bang"))
+
+      expected_msg =
+        "cannot update Hologram.Test.Fixtures.Entity.Module54 #{inspect(entity.id)}:\n" <>
+          "  * key [:name, :count] is already taken"
+
+      assert_error WriteError, expected_msg, fn ->
+        entity
+        |> decrement(:count, 1)
+        |> update!()
+      end
     end
 
     test "raises naming a moved attribute's refused result" do

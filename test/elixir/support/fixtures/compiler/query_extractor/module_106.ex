@@ -12,7 +12,7 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module106 do
 
   derived :admitting_count, :integer, fn entity_type ->
     entity_type
-    |> filter(a: true)
+    |> filter(a: nil)
     |> count()
   end
 
@@ -26,9 +26,15 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module106 do
 
   derived :every_relationship, [Entity3], fn relation -> include(Entity3, ^relation) end
 
+  derived :fitting_count, :integer, fn entity_type ->
+    entity_type
+    |> filter(a: true)
+    |> count()
+  end
+
   derived :one_admitting_count, :integer, fn entity_type ->
     entity_type
-    |> filter(d: 1)
+    |> filter(views: 1)
     |> count()
   end
 

@@ -344,6 +344,31 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "__uniques__/0" do
+    test "returns empty list for entity type with no unique declarations" do
+      assert Module1.__uniques__() == []
+    end
+
+    test "returns the declared keys sorted, each in the order it names its fields" do
+      defmodule InlineEntityFixture174 do
+        use Hologram.Entity
+
+        unique [:workspace, :slug]
+        unique [:position, :workspace]
+
+        attribute :position, :integer
+        attribute :slug, :string
+
+        relationship :workspace, Module1
+      end
+
+      assert InlineEntityFixture174.__uniques__() == [
+               [:position, :workspace],
+               [:workspace, :slug]
+             ]
+    end
+  end
+
   describe "allow/2" do
     test "raises the lowering's compile error" do
       code = """
@@ -453,6 +478,26 @@ defmodule Hologram.EntityTest do
         end)
 
       assert diagnostics == []
+    end
+
+    test "names the pin on an argument a derived query compares a field with itself beside" do
+      code = """
+      defmodule Hologram.EntityTest.InlineEntityFixture175 do
+        use Hologram.Entity
+
+        attribute :points, :integer
+
+        relationship :mentors, [Hologram.Test.Fixtures.Entity.Module34]
+
+        derived :higher_count, :integer, fn mentors, points ->
+          count(filter(mentors, points >= points))
+        end
+      end
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:9: points >= points compares points with itself, which only says points isn't nil - a value from the surrounding code is pinned: ^points",
+                   fn -> Code.eval_string(code) end
     end
 
     test "raises on a capture of a zero-arity function of the entity type's own" do

@@ -193,6 +193,7 @@ describe("Elixir_Hologram_Entity", () => {
             opens_at: "time",
             released_on: "date",
             slug: "string",
+            subtitle: "string",
             username: "string",
           },
           constraints: {
@@ -222,7 +223,8 @@ describe("Elixir_Hologram_Entity", () => {
               optional: true,
             },
             released_on: {max: boxedDate(2030, 12, 31), optional: true},
-            slug: {optional: true, unique: true},
+            slug: {max_bytes: 2692, optional: true, unique: true},
+            subtitle: {max_bytes: 1335, optional: true},
             username: {max_length: 8, min_length: 3, optional: true},
           },
           defaults: {},
@@ -1367,6 +1369,25 @@ describe("Elixir_Hologram_Entity", () => {
         violation(
           "slug",
           Type.tuple([Type.atom("max_bytes"), Type.integer(2692)]),
+        ),
+      );
+    });
+
+    // A string of a compound key carries its share of the key's index entry, which the server
+    // works out and bakes in as max_bytes - it declares no unique option of its own.
+    it("accepts a key's string holding exactly the bound the server baked", () => {
+      assert.deepEqual(
+        item({subtitle: Type.bitstring("a".repeat(1335))}),
+        Type.atom("ok"),
+      );
+    });
+
+    it("reports a key's string one byte over the bound the server baked", () => {
+      assert.deepEqual(
+        item({subtitle: Type.bitstring("a".repeat(1336))}),
+        violation(
+          "subtitle",
+          Type.tuple([Type.atom("max_bytes"), Type.integer(1335)]),
         ),
       );
     });
