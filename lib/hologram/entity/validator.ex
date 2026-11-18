@@ -376,6 +376,29 @@ defmodule Hologram.Entity.Validator do
   end
 
   @doc """
+  Validates a derived field's name written as an atom, a string or an unsigned number, where the
+  declaration is expanded - before its function is read, so a bad name is reported first. Only what
+  the name alone says is checked here: its type and spelling. A name written any other way, like a
+  module attribute, a variable, an alias, a list, a tuple or a signed number (which quotes as a
+  call), is left to `validate_derived!/4`, which checks every name once it is a value, uniqueness
+  included.
+
+  Returns :ok, or raises Hologram.CompileError located at the declaration.
+  """
+  @spec validate_derived_name!(Macro.t(), Macro.Env.t()) :: :ok
+  def validate_derived_name!(name, env)
+      when is_atom(name) or is_binary(name) or is_number(name) do
+    validate_name_spelling!(env.module, "derived field", name)
+  rescue
+    error in Hologram.CompileError ->
+      reraise Hologram.CompileError,
+              [file: env.file, line: env.line, message: error.message],
+              __STACKTRACE__
+  end
+
+  def validate_derived_name!(_name, _env), do: :ok
+
+  @doc """
   Validates that the given derived field definition is no capture of a zero-arity function, which
   reads no field of the row - a derived field of an entity type is computed from its row, so such a
   function can only return a query of every row of a type or a value fixed at build time. A capture
@@ -1337,6 +1360,13 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp validate_declaration_name!(module, kind, name) do
+    validate_name_spelling!(module, kind, name)
+    validate_name_uniqueness!(module, kind, name)
+  end
+
+  # What can be said of a name from the name alone, without the declarations beside it - so the
+  # derived macro can say it before it reads the field's function (see validate_derived_name!/2).
+  defp validate_name_spelling!(module, kind, name) do
     validate_name_type!(module, kind, name)
 
     if name in @reserved_names do
@@ -1372,7 +1402,6 @@ defmodule Hologram.Entity.Validator do
     end
 
     validate_name_underscores!(module, kind, name)
-    validate_name_uniqueness!(module, kind, name)
   end
 
   defp validate_default_constraints!(_module, _name, _type, _opts, nil), do: :ok

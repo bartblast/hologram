@@ -2079,6 +2079,81 @@ defmodule Hologram.Entity.ValidatorTest do
     end
   end
 
+  describe "validate_derived_name!/2" do
+    test "reports a derived field named nil before its function" do
+      line = __ENV__.line + 9
+
+      expected_msg =
+        "#{location(line)}invalid name nil used for derived field in Hologram.Entity.ValidatorTest.NilDerivedFixture - nil, true and false already stand for no value and for flags, so they can't name a declaration"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilDerivedFixture do
+          use Hologram.Entity
+
+          derived nil, :integer, 5
+        end
+      end
+    end
+
+    test "reports a derived field name that is no atom before its function" do
+      line = __ENV__.line + 9
+
+      expected_msg =
+        ~s(#{location(line)}invalid name "copy" used for derived field in Hologram.Entity.ValidatorTest.StringDerivedFixture - declaration names must be atoms)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule StringDerivedFixture do
+          use Hologram.Entity
+
+          derived "copy", :integer, 5
+        end
+      end
+    end
+
+    test "reports a reserved derived field name before its function" do
+      line = __ENV__.line + 9
+
+      expected_msg =
+        "#{location(line)}reserved name :id used for derived field in Hologram.Entity.ValidatorTest.ReservedDerivedFixture - system attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule ReservedDerivedFixture do
+          use Hologram.Entity
+
+          derived :id, :integer, 5
+        end
+      end
+    end
+
+    test "reports a derived field name holding $ before its function" do
+      line = __ENV__.line + 9
+
+      expected_msg =
+        ~s|#{location(line)}invalid name :"a$b" used for derived field in Hologram.Entity.ValidatorTest.SeamDerivedFixture - $ is reserved for the physical names the framework derives, so a declared name can't contain it|
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule SeamDerivedFixture do
+          use Hologram.Entity
+
+          derived :"a$b", :integer, 5
+        end
+      end
+    end
+
+    # A module attribute quotes as a call, so its value is only known once the body runs.
+    test "accepts a derived field named by a module attribute" do
+      defmodule AttributeNamedDerivedFixture do
+        use Hologram.Entity
+
+        @name :copy
+
+        derived @name, :integer, fn id -> id end
+      end
+
+      assert [{:copy, :integer, []}] = AttributeNamedDerivedFixture.__derived__()
+    end
+  end
+
   describe "validate_derived!/4" do
     # A derived field reaches no database name, so the underscore rule for attributes and
     # relationships doesn't apply to it.
@@ -2112,19 +2187,6 @@ defmodule Hologram.Entity.ValidatorTest do
                {:rows, [Module28], []},
                {:tier, :enum, [values: [:low, :high]]}
              ]
-    end
-
-    test "rejects a reserved name" do
-      expected_msg =
-        "reserved name :id used for derived field in Hologram.Entity.ValidatorTest.InlineEntityFixture143 - system attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        defmodule InlineEntityFixture143 do
-          use Hologram.Entity
-
-          derived :id, :integer, fn -> 1 end
-        end
-      end
     end
 
     test "rejects a name an attribute declares" do

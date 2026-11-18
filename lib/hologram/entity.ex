@@ -1034,6 +1034,7 @@ defmodule Hologram.Entity do
   end
 
   defp derived_declaration(name, type, opts, definition, env) do
+    Validator.validate_derived_name!(name, env)
     Validator.validate_derived_capture!(name, definition, env)
 
     definition = Hologram.Derived.function(name, definition, env)
