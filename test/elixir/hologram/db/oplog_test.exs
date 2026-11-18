@@ -153,7 +153,9 @@ defmodule Hologram.DB.OplogTest do
         send(test_pid, {:finished_tx, finished_tx})
       end)
 
-      assert_receive {:finished_tx, finished_tx}, 1_000
+      # The worker's connection comes from the pool the other database tests share, so it may wait
+      # for one to free up, until the pool gives up on the wait after a few seconds.
+      assert_receive {:finished_tx, finished_tx}, 15_000
 
       assert finished_tx > open_tx
       assert current_xmax() > finished_tx
