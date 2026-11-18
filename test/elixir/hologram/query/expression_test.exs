@@ -9,10 +9,22 @@ defmodule Hologram.Query.ExpressionTest do
     %{__ENV__ | file: Path.join(File.cwd!(), "lib/my_app/queries.ex"), line: 7}
   end
 
-  # The env of a stage call made where a variable of the given name is bound.
-  defp env_binding(name) do
+  # Lowers predicates where the macro is called, returning what they lowered to as data.
+  defmacro lower_in_caller(ast) do
+    ast
+    |> predicates(__CALLER__)
+    |> Macro.escape()
+  end
+
+  # The env of a stage call made where variables of the given names are bound.
+  defp env_binding(names) do
+    assignments =
+      names
+      |> List.wrap()
+      |> Enum.map(&{:=, [], [{&1, [], nil}, nil]})
+
     {_value, _binding, env} =
-      Code.eval_quoted_with_env({:=, [], [{name, [], nil}, nil]}, [], env())
+      Code.eval_quoted_with_env({:__block__, [], [nil | assignments]}, [], env())
 
     env
   end
@@ -29,17 +41,24 @@ defmodule Hologram.Query.ExpressionTest do
     value
   end
 
-  defp lower_bound(code, binding \\ []), do: lower(&bound(&1, :take, env()), code, binding)
+  # The stage call is made where the binding's variables are bound, as a pinned name reads one.
+  defp lower_bound(code, binding \\ []),
+    do: lower(&bound(&1, :take, env_binding(Keyword.keys(binding))), code, binding)
 
-  defp lower_condition(code, binding \\ []), do: lower(&condition(&1, env()), code, binding)
+  defp lower_condition(code, binding \\ []),
+    do: lower(&condition(&1, env_binding(Keyword.keys(binding))), code, binding)
 
-  defp lower_inclusion(code, binding \\ []), do: lower(&inclusion(&1, env()), code, binding)
+  defp lower_inclusion(code, binding \\ []),
+    do: lower(&inclusion(&1, env_binding(Keyword.keys(binding))), code, binding)
 
-  defp lower_ordering(code, binding \\ []), do: lower(&ordering(&1, env()), code, binding)
+  defp lower_ordering(code, binding \\ []),
+    do: lower(&ordering(&1, env_binding(Keyword.keys(binding))), code, binding)
 
-  defp lower_pagination(code, binding \\ []), do: lower(&pagination(&1, env()), code, binding)
+  defp lower_pagination(code, binding \\ []),
+    do: lower(&pagination(&1, env_binding(Keyword.keys(binding))), code, binding)
 
-  defp lower_predicates(code, binding \\ []), do: lower(&predicates(&1, env()), code, binding)
+  defp lower_predicates(code, binding \\ []),
+    do: lower(&predicates(&1, env_binding(Keyword.keys(binding))), code, binding)
 
   describe "bound/3" do
     test "lowers a negative integer for the stage to judge" do
@@ -295,10 +314,28 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_condition("^base or b == 2") end
     end
 
+    test "raises on a pinned name no variable holds, naming the field of the entity" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^owner_id pins owner_id, which no variable holds here - inside a condition a name without a pin reads a field of the entity: owner_id",
+                   fn -> lower_condition("assignee_id == ^owner_id") end
+    end
+
+    test "raises on a pinned name no variable holds inside a quantifier's condition, naming the bound row too" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^role pins role, which no variable holds here - inside a condition a name without a pin reads a field of the entity: role - or of the row member binds, through its name: member.role",
+                   fn -> lower_condition("any(member <- members, member.role == ^role)") end
+    end
+
     test "raises on a pinned quantifier's condition" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a quantifier's condition is an expression, got: ^predicates - a condition built at runtime goes whole into when: ^predicates",
                    fn -> lower_condition("any(member <- members, ^predicates)") end
+    end
+
+    test "raises on a pinned user_id no variable holds, naming user_id()" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^user_id pins user_id, which no variable holds here - the acting user's id is user_id()",
+                   fn -> lower_condition("owner_id == ^user_id") end
     end
 
     test "raises on a quantifier with too many arguments, naming user_id()" do
@@ -563,6 +600,24 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_ordering("sort_key()") end
     end
 
+    test "raises on a pinned name in a pair no variable holds, naming the bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^key pins key, which no variable holds here - sort names an attribute with a bare name, without the pin: key",
+                   fn -> lower_ordering("[{^key, :desc}]") end
+    end
+
+    test "raises on a pinned name in a list no variable holds, naming the bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^key pins key, which no variable holds here - sort names an attribute with a bare name, without the pin: key",
+                   fn -> lower_ordering("[title, ^key]") end
+    end
+
+    test "raises on a pinned name no variable holds, naming the bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^priority pins priority, which no variable holds here - sort names an attribute with a bare name, without the pin: priority",
+                   fn -> lower_ordering("^priority") end
+    end
+
     test "raises on a dot path" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: sort names an attribute with a bare name, or with a pinned expression when the name comes from the surrounding code, got: entity.field - a value from the surrounding code is pinned: ^entity.field",
@@ -801,6 +856,32 @@ defmodule Hologram.Query.ExpressionTest do
     test "lowers a pinned call" do
       assert lower_predicates("created_at > ^Date.add(today, -7)", today: ~D[2026-10-20]) ==
                [created_at: {:>, ~D[2026-10-13]}]
+    end
+
+    # A variable a macro generated is keyed by the counter its hygiene gave it, not by its context.
+    test "lowers a pinned macro-generated variable" do
+      variable = {:since, [counter: 7, line: 12], MyApp.Macros}
+      {_value, _binding, env} = Code.eval_quoted_with_env({:=, [], [variable, nil]}, [], env())
+
+      assert predicates(
+               {:>, [line: 12], [{:created_at, [line: 12], nil}, {:^, [line: 12], [variable]}]},
+               env
+             ) ==
+               [created_at: {:>, variable}]
+    end
+
+    test "lowers a pinned path over a bound row's name a variable also holds" do
+      assert lower_predicates("any(message <- messages, message.created_at > ^message.edited_at)",
+               message: %{edited_at: 5}
+             ) == [any: {[:messages], [created_at: {:>, 5}]}]
+    end
+
+    # Code.eval_string/2 binds its binding's variables in the env a macro in the code expands in.
+    test "lowers a pinned variable an evaluation binds" do
+      code = "#{inspect(__MODULE__)}.lower_in_caller(created_at > ^since)"
+
+      assert {[created_at: {:>, {:since, _meta, nil}}], _binding} =
+               Code.eval_string("require #{inspect(__MODULE__)}; #{code}", since: nil)
     end
 
     test "lowers a pinned dot chain" do
@@ -1285,6 +1366,60 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a keyword list or a pinned list of predicates is a whole filter, not one side of or, got: ^base - write the alternative as an expression, or put the whole disjunction in a pinned list: [or: [predicates, predicates]]",
                    fn -> lower_predicates("^base or b == 2") end
+    end
+
+    test "raises on a pinned bound row" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^message pins message, the row a quantifier binds - its fields read without a pin: message.<attribute>",
+                   fn -> lower_predicates("any(message <- messages, message.id == ^message)") end
+    end
+
+    test "raises on a pinned name no variable holds, naming the field" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^created_at pins created_at, which no variable holds here - inside a filter a name without a pin reads a field of the queried entity: created_at",
+                   fn -> lower_predicates("updated_at > ^created_at") end
+    end
+
+    test "raises on a pinned name no variable holds as a search term" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^name pins name, which no variable holds here - inside a filter a name without a pin reads a field of the queried entity: name",
+                   fn -> lower_predicates("contains(title, ^name)") end
+    end
+
+    test "raises on a pinned name no variable holds inside a nested quantifier, naming the nearest bound row" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^archived_at pins archived_at, which no variable holds here - inside a filter a name without a pin reads a field of the queried entity: archived_at - or of the row message binds, through its name: message.archived_at",
+                   fn ->
+                     lower_predicates(
+                       "any(channel <- channels, any(message <- channel.messages, message.created_at > ^archived_at))"
+                     )
+                   end
+    end
+
+    test "raises on a pinned name no variable holds inside a quantifier, naming the bound row too" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^last_read_at pins last_read_at, which no variable holds here - inside a filter a name without a pin reads a field of the queried entity: last_read_at - or of the row message binds, through its name: message.last_read_at",
+                   fn ->
+                     lower_predicates(
+                       "any(message <- messages, message.created_at > ^last_read_at)"
+                     )
+                   end
+    end
+
+    test "raises on a pinned path no variable holds, naming the field" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^project.owner_id pins project, which no variable holds here - inside a filter a name without a pin reads a field of the queried entity: project.owner_id",
+                   fn -> lower_predicates("assignee_id == ^project.owner_id") end
+    end
+
+    test "raises on a pinned path over a bound row" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^message.edited_at pins message, the row a quantifier binds - its fields read without a pin: message.edited_at",
+                   fn ->
+                     lower_predicates(
+                       "any(message <- messages, message.created_at > ^message.edited_at)"
+                     )
+                   end
     end
 
     test "raises on a pinned quantifier's relationship" do

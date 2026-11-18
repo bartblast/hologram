@@ -39,7 +39,9 @@ defmodule Hologram.Policy.Expression do
   an unknown option (naming the condition it can mean when its value is an equality operand), on a
   grant reference with the scope first or a relationship written as an atom, on a role written as
   a bare name, on a delegation written as an atom, on a delegation with the relationship first or
-  with an operation that is not an atom, and on anything else.
+  with an operation that is not an atom, on a pinned bare name no variable of the surrounding code
+  holds where `via:` names a relationship (naming the bare spelling), on what
+  `Hologram.Query.Expression.condition/2` refuses in a `when:`, and on anything else.
   """
   @spec spec(Macro.t(), Macro.t(), Macro.Env.t()) :: Macro.t()
   def spec(operation, spec, env) when is_list(spec) do

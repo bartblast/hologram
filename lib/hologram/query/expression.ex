@@ -126,7 +126,9 @@ defmodule Hologram.Query.Expression do
   expression to write when it holds equalities only), on a pinned list as one side of `and` or
   `or`, on a quantifier refused as a filter refuses it, on a comparison or a search reading the
   same attribute of the same row on both sides (naming what it always answers, and the pin when
-  its right side starts at a variable of the surrounding code), on a search with
+  its right side starts at a variable of the surrounding code), on a pinned name or path on the
+  right side of a comparison or a search whose first name no variable of the surrounding code holds
+  (naming the field it reads without the pin, and `user_id()` for `^user_id`), on a search with
   an option other than `mode: :loose` or `mode: :exact` or with a pinned option, on
   `String.starts_with?/2` and `String.contains?/2` (naming the search operator), and on anything
   else.
@@ -202,10 +204,11 @@ defmodule Hologram.Query.Expression do
   is spelled there, for the messages.
 
   Raises Hologram.CompileError, located at the argument, on an atom where a bare name goes (naming
-  the bare spelling) and on anything else.
+  the bare spelling), on a pinned bare name no variable of the surrounding code holds (naming the
+  bare spelling) and on anything else.
   """
   @spec name!(Macro.t(), map, Macro.Env.t()) :: Macro.t()
-  def name!({:^, _meta, [expr]}, _names, _env), do: expr
+  def name!({:^, _meta, [_expr]} = ast, names, env), do: pinned_name!(ast, names, env)
 
   def name!({name, _meta, context}, _names, _env) when is_atom(name) and is_atom(context),
     do: name
@@ -221,11 +224,12 @@ defmodule Hologram.Query.Expression do
   name or the whole spec may be pinned.
 
   Raises Hologram.CompileError, located at the offending node, on an atom where a bare name goes
-  (naming the bare spelling), on a direction that is neither an atom nor pinned, and on anything
-  else in a name position.
+  (naming the bare spelling), on a pinned bare name no variable of the surrounding code holds - as
+  the spec or as a name in it - (naming the bare spelling), on a direction that is neither an atom
+  nor pinned, and on anything else in a name position.
   """
   @spec ordering(Macro.t(), Macro.Env.t()) :: Macro.t()
-  def ordering({:^, _meta, [expr]}, _env), do: expr
+  def ordering({:^, _meta, [_expr]} = ast, env), do: pinned_name!(ast, @ordering_names, env)
 
   def ordering(list, env) when is_list(list), do: Enum.map(list, &ordering_entry!(&1, env))
 
@@ -278,8 +282,11 @@ defmodule Hologram.Query.Expression do
   a name already bound around it, or with a source that is pinned or no relationship, on a bound
   row compared whole, on a comparison or a search reading the same attribute of the same row on
   both sides (naming what it always answers, and the pin when its right side starts at a variable
-  of the surrounding code), on a search the way `condition/2` refuses one, on
-  `user_id()`, which only a policy condition names, and on anything else.
+  of the surrounding code), on a pinned name or path on the right side of a comparison or a search
+  whose first name no variable of the surrounding code holds (naming the field it reads without the
+  pin - the queried row's, or the bound row's through the name a quantifier around it binds), on a
+  search the way `condition/2` refuses one, on `user_id()`, which only a policy condition names,
+  and on anything else.
   """
   @spec predicates(Macro.t(), Macro.Env.t()) :: Macro.t()
   def predicates({:^, _meta, [expr]}, _env), do: expr
@@ -412,10 +419,15 @@ defmodule Hologram.Query.Expression do
     compile_error!("#{name} is a bound row - #{fix}", ast, env)
   end
 
+  # A pinned operand is the surrounding code's value, unless no variable holds it.
+  defp comparison_operand!({:^, _meta, [_expr]} = ast, names, env),
+    do: pinned_operand!(ast, names, env)
+
   # The acting user is a value only a policy condition can name - a filter means the same rows
   # whoever asks, so value!/4, keyword_value!/3 and membership!/3 refuse user_id() there. A
-  # paren-less user_id can only be the call missing its parens in a condition, since a policy has
-  # no variables in scope, so it is refused as that rather than as a forgotten pin.
+  # paren-less user_id in a condition is almost always the call missing its parens - a policy line's
+  # module body rarely binds a variable of that name - so it is refused as that rather than as a
+  # forgotten pin.
   defp comparison_operand!({:user_id, _meta, []}, %{kind: :condition}, _env),
     do: Macro.escape({:actor})
 
@@ -503,6 +515,36 @@ defmodule Hologram.Query.Expression do
 
   defp expression_hint(_key, _value) do
     "a comparison, a membership or a range is written as an expression"
+  end
+
+  # What a pinned operand no variable holds is refused with: its first name is a row a quantifier
+  # binds, whose fields read through it, or in a policy condition the acting user's id, or else a
+  # field of the queried row - or, inside a quantifier, of the row the nearest one binds.
+  defp extra_pin_message(ast, expr, root, rest, names) do
+    pinned = Macro.to_string(ast)
+    spelled = Macro.to_string(expr)
+
+    cond do
+      root in names.bindings ->
+        field = if rest == [], do: "#{root}.<attribute>", else: spelled
+
+        "#{pinned} pins #{root}, the row a quantifier binds - its fields read without a pin: #{field}"
+
+      root == :user_id and rest == [] and names.kind == :condition ->
+        "#{pinned} pins user_id, which no variable holds here - the acting user's id is user_id()"
+
+      true ->
+        reading =
+          "#{pinned} pins #{root}, which no variable holds here - inside #{names.subject} a name without a pin reads a field of #{names.row}: #{spelled}"
+
+        case names.bindings do
+          [] ->
+            reading
+
+          [binding | _bindings] ->
+            "#{reading} - or of the row #{binding} binds, through its name: #{binding}.#{spelled}"
+        end
+    end
   end
 
   # A bare name where only a value goes - a membership element, a range bound, a keyword value - is
@@ -842,6 +884,40 @@ defmodule Hologram.Query.Expression do
       ""
     else
       " - a value from the surrounding code is pinned: #{pin_hint(ast)}"
+    end
+  end
+
+  # A pinned bare name reads a variable of the surrounding code, so where none of that name is bound
+  # it can only be a name written with a pin it doesn't take - refused with the bare spelling,
+  # before Elixir's refusal of an undefined variable, which says nothing about the query.
+  defp pinned_name!({:^, _meta, [expr]} = ast, names, env) do
+    if bare_name?(expr) and not pinnable?(expr, env) do
+      compile_error!(
+        "#{Macro.to_string(ast)} pins #{Macro.to_string(expr)}, which no variable holds here - #{names.stage} names #{names.names} with a bare name, without the pin: #{Macro.to_string(expr)}",
+        ast,
+        env
+      )
+    end
+
+    expr
+  end
+
+  # A pinned name or path on the right side of a comparison reads a variable of the surrounding
+  # code, so where none is bound under its first name it can only be a field written with a pin it
+  # doesn't take - refused with the spelling that reads the field: bare for the queried row, and
+  # through the bound name for a row a quantifier around it binds. A first name the surrounding code
+  # holds is its variable, even where a quantifier binds the same name.
+  defp pinned_operand!({:^, _meta, [expr]} = ast, names, env) do
+    case hops(expr) do
+      [root | rest] ->
+        if not pinnable?(root_name(expr), env) do
+          compile_error!(extra_pin_message(ast, expr, root, rest, names), ast, env)
+        end
+
+        expr
+
+      nil ->
+        expr
     end
   end
 

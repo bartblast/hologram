@@ -347,7 +347,9 @@ defmodule Hologram.Query do
   the predicates name `user_id()`, which only a policy condition can (a user's id is pinned from a
   variable holding it: `^user_id`), or when the predicates take any other form - a bare name where
   only a value goes (a keyword value, a membership element, a range bound) is most likely a
-  forgotten pin, and the error says so.
+  forgotten pin, and the error says so - or when a pinned name or path on the right side of a
+  comparison or a search starts at a name no variable holds, which is most likely a field written
+  with a pin it doesn't take, and the error names the spelling that reads it.
   Raises Hologram.MisuseError when the query is neither an entity type module nor a query term, when
   pinned predicates are not a list of name and value pairs - a name being an attribute or a path -
   when pinned predicates name the acting user, which only a policy condition can (outside a derived
@@ -576,8 +578,10 @@ defmodule Hologram.Query do
   which has no stored sort key.
 
   Raises Hologram.CompileError, naming the location, when an attribute is written as an atom
-  (`sort(:priority)` is refused in favour of `sort(priority)`), when a direction is neither an atom
-  nor pinned, or when the spec or an entry is neither a bare name, a pair nor pinned. Raises
+  (`sort(:priority)` is refused in favour of `sort(priority)`), when a pinned name - the spec or an
+  entry - is no variable, which is most likely a name written with a pin it doesn't take, when a
+  direction is neither an atom nor pinned, or when the spec or an entry is neither a bare name, a
+  pair nor pinned. Raises
   Hologram.MisuseError when the query is neither an entity type module nor a query term, when the
   spec is neither an attribute name nor a list, when an entry names a relationship or an unknown
   attribute - which is how a forgotten pin on a variable reads - or when a direction is neither :asc

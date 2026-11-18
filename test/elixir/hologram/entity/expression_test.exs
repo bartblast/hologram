@@ -10,15 +10,26 @@ defmodule Hologram.Entity.ExpressionTest do
   end
 
   # Parses the options of a relationship line, lowers them and evaluates what they lowered to in
-  # this module, with the given binding standing for the caller's values.
+  # this module, with the given binding standing for the caller's variables.
   defp lower_opts(code, binding \\ []) do
     {value, _binding} =
       code
       |> Code.string_to_quoted!(line: 12)
-      |> relationship_opts(env())
+      |> relationship_opts(env_binding(Keyword.keys(binding)))
       |> Code.eval_quoted(binding, env())
 
     value
+  end
+
+  # The env of a line written where variables of the given names are bound, as a pinned name reads
+  # one.
+  defp env_binding(names) do
+    assignments = Enum.map(names, &{:=, [], [{&1, [], nil}, nil]})
+
+    {_value, _binding, env} =
+      Code.eval_quoted_with_env({:__block__, [], [nil | assignments]}, [], env())
+
+    env
   end
 
   describe "relationship_opts/2" do
@@ -99,6 +110,18 @@ defmodule Hologram.Entity.ExpressionTest do
       assert_error Hologram.CompileError,
                    "relationship options with inverse: or sort: are written in place on the line, got: [sort: :position]",
                    fn -> lower_opts("opts", opts: [sort: :position]) end
+    end
+
+    test "raises on a pinned inverse name no variable holds, naming the bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/channel.ex:12: ^channel pins channel, which no variable holds here - inverse names the relationship it reverses with a bare name, without the pin: channel",
+                   fn -> lower_opts("[inverse: ^channel]") end
+    end
+
+    test "raises on a pinned sort name no variable holds, naming the bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/channel.ex:12: ^created_at pins created_at, which no variable holds here - sort names an attribute with a bare name, without the pin: created_at",
+                   fn -> lower_opts("[sort: ^created_at]") end
     end
 
     test "raises on a sort name written as an atom" do
