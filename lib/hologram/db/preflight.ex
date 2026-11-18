@@ -113,7 +113,9 @@ defmodule Hologram.DB.Preflight do
 
   Returns :ok, or raises naming the table, its columns and how many keys repeat. The check run!/3
   makes before any DDL sees the rows as they stood then, so a run that adds a column filled
-  with its default asks again here, with every column of the index in place.
+  with its default asks again here, with every column of the index in place. The boot's index
+  repair asks too, before it builds an index and after a build fails, since running nodes can
+  write rows that repeat a key while the index is missing.
   """
   @spec check_unique_index!(%{atom => any}) :: :ok
   def check_unique_index!(op) do

@@ -279,11 +279,12 @@ defmodule Hologram.DB.DDLTest do
   end
 
   describe "invalid_indexes_statement/0" do
-    test "lists the invalid indexes of the data schema" do
+    test "lists the invalid indexes of the data schema, by name" do
       statement = normalize_newlines(invalid_indexes_statement())
 
       assert statement =~ "SELECT ic.relname"
       assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid"
+      assert statement =~ "ORDER BY ic.relname"
     end
   end
 
@@ -291,13 +292,6 @@ defmodule Hologram.DB.DDLTest do
     test "counts rows with a NULL in the column" do
       assert null_check_statement("task", "subtitle") ==
                ~s{SELECT COUNT(*) FROM "hologram_data"."task" WHERE "subtitle" IS NULL}
-    end
-  end
-
-  describe "reindex_statement/1" do
-    test "rebuilds the index in place, concurrently" do
-      assert reindex_statement("task_project_id_$idx") ==
-               ~s{REINDEX INDEX CONCURRENTLY "hologram_data"."task_project_id_$idx"}
     end
   end
 
@@ -695,6 +689,14 @@ defmodule Hologram.DB.DDLTest do
       op = %{op: :drop_index, index: "task_project_id_$idx"}
 
       assert statements(op) == [~s(DROP INDEX "hologram_data"."task_project_id_$idx")]
+    end
+
+    test "renders a concurrent drop" do
+      op = %{op: :drop_index, index: "task_project_id_$idx", concurrently: true}
+
+      assert statements(op) == [
+               ~s(DROP INDEX CONCURRENTLY "hologram_data"."task_project_id_$idx")
+             ]
     end
   end
 
