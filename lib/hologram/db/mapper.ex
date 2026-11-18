@@ -267,6 +267,27 @@ defmodule Hologram.DB.Mapper do
   end
 
   @doc """
+  Returns the table segments of the given entity type module - its module path below the app's
+  root, each part underscored - the parts every name derived for its table, its join tables and
+  their objects is fitted from (see fit_identifier/3). A framework-provided entity type is pinned
+  whole, as one segment, the way its table name is.
+  """
+  @spec table_segments(module) :: list(String.t())
+  def table_segments(Hologram.Auth.RoleGrant), do: ["hologram_role_grant"]
+
+  def table_segments(entity_type) do
+    root =
+      Reflection.otp_app()
+      |> Atom.to_string()
+      |> Macro.camelize()
+
+    entity_type
+    |> Module.split()
+    |> strip_root(root)
+    |> Enum.map(&Macro.underscore/1)
+  end
+
+  @doc """
   Validates that the given entity type modules form no cycles of required to-one
   relationships (self-references included).
 
@@ -867,21 +888,6 @@ defmodule Hologram.DB.Mapper do
   defp strip_root([root | [_head | _tail] = remainder], root), do: remainder
 
   defp strip_root(segments, _root), do: segments
-
-  # Framework-provided entity types are pinned whole, as one segment - see table_name/1.
-  defp table_segments(Hologram.Auth.RoleGrant), do: ["hologram_role_grant"]
-
-  defp table_segments(entity_type) do
-    root =
-      Reflection.otp_app()
-      |> Atom.to_string()
-      |> Macro.camelize()
-
-    entity_type
-    |> Module.split()
-    |> strip_root(root)
-    |> Enum.map(&Macro.underscore/1)
-  end
 
   defp timestamp_columns do
     Enum.map(["created_at", "updated_at"], fn name ->

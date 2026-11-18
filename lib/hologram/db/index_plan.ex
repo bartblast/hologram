@@ -17,6 +17,7 @@ defmodule Hologram.DB.IndexPlan do
   # arms of another beside it - so each OR gives its arms as needs of their own, each with what
   # stands beside it, and two ORs beside each other are never crossed.
 
+  alias Hologram.DB.Mapper
   alias Hologram.DB.QueryCompiler
   alias Hologram.Entity
   alias Hologram.Entity.Derived
@@ -45,6 +46,37 @@ defmodule Hologram.DB.IndexPlan do
           range: String.t() | nil,
           order: list(String.t())
         }
+
+  @doc """
+  Returns the access needs of the lookups the framework itself makes, whatever the queries: each
+  reference column, which a delete checks and the sync's backwards search and recheck follow from
+  the row it names; each join table's reverse direction, from the target back to its sources, which
+  its primary key - led by the source - can't serve; and the grant store's lookup of the grants on
+  an entity, by type, then id, then role.
+  """
+  @spec framework_needs(%{module => %{atom => any}}) :: list(need)
+  def framework_needs(mapping) do
+    mapping
+    |> Enum.sort()
+    |> Enum.flat_map(fn {entity_type, entity_mapping} ->
+      reference_needs =
+        for %{references: references, name: name} <- entity_mapping.columns,
+            references != nil,
+            do: %{table: entity_mapping.table, eq: MapSet.new([name]), range: nil, order: []}
+
+      reverse_needs =
+        Enum.map(entity_mapping.join_tables, fn join_table ->
+          %{
+            table: join_table.name,
+            eq: MapSet.new(["target_id"]),
+            range: nil,
+            order: ["source_id"]
+          }
+        end)
+
+      reference_needs ++ reverse_needs ++ grant_store_needs(entity_type, entity_mapping)
+    end)
+  end
 
   @doc """
   Returns the access needs of the statement the given normalized query term compiles to with the
@@ -113,6 +145,60 @@ defmodule Hologram.DB.IndexPlan do
     |> Enum.concat(deeper_needs(term, mapping))
     |> Enum.concat(rule_needs(term, mapping, policy))
     |> Enum.uniq()
+  end
+
+  @doc """
+  Returns the indexes that serve the given access needs over the tables of the given mapping, as
+  `%{table => %{name => %{columns:, nulls_distinct: true, unique: false}}}`, the shape
+  `Hologram.DB.Schema` holds indexes in - the same plan whatever order the needs come in.
+
+  An index serves a need when its first columns are the need's equality columns in any order,
+  followed by its range column, then by its order columns. The primary key and the model's unique
+  indexes count, so a need they serve adds nothing. The others are merged into as few indexes as
+  serve them all, greedily: taken from the fewest equality columns up, a need extends an index
+  whose columns are all among its equality columns, with the rest of them sorted by name, then its
+  range and order columns - the largest such index, the first created among equals - and otherwise
+  starts one of its own. An index whose columns lead another's
+  is dropped, the longer one serving all it does. A need naming a table or a column the mapping
+  doesn't hold is left out, since a live reload reconciles the model before the build writes fresh
+  needs, and so is one naming a raw string column: no plan index ever holds one.
+
+  Each index is named `<table segments>_<columns>_$idx`, fitted the way every derived name is (see
+  `Hologram.DB.Mapper.fit_identifier/3`). Raises Hologram.CompileError when two indexes derive the
+  same name.
+  """
+  @spec select(list(need), %{module => %{atom => any}}) :: %{String.t() => %{String.t() => map}}
+  def select(needs, mapping) do
+    tables = table_directory(mapping)
+
+    indexes =
+      needs
+      |> Enum.filter(&known_need?(&1, tables))
+      |> Enum.uniq()
+      |> Enum.group_by(& &1.table)
+      |> Enum.sort()
+      |> Enum.flat_map(fn {table, table_needs} ->
+        table_info = Map.fetch!(tables, table)
+
+        table_needs
+        |> Enum.sort_by(&need_rank/1)
+        |> Enum.reduce([], &place_need(&1, &2, table_info.keys))
+        |> Enum.reverse()
+        |> without_prefixes()
+        |> Enum.map(fn index ->
+          name = Mapper.fit_identifier(table_info.segments, index.columns, "$idx")
+          declaration = "#{table_info.declaration} by #{Enum.join(index.columns, ", ")}"
+
+          {table, name, index.columns, declaration}
+        end)
+      end)
+
+    validate_names!(indexes)
+
+    Enum.reduce(indexes, %{}, fn {table, name, columns, _declaration}, acc ->
+      definition = %{columns: columns, nulls_distinct: true, unique: false}
+      Map.update(acc, table, %{name => definition}, &Map.put(&1, name, definition))
+    end)
   end
 
   # The read rules join the statement as one OR group of their alternatives, ANDed with the filter -
@@ -197,6 +283,176 @@ defmodule Hologram.DB.IndexPlan do
     |> Enum.reject(fn {path, _order} -> key_served?(path, entity_mapping) end)
     |> Enum.map(fn {path, order} -> path_need(path, order, scope) end)
     |> Enum.reject(&empty_need?/1)
+  end
+
+  # The tables of the mapping by name: each entity table and join table, with the segments its
+  # names are fitted from, its columns, the column lists of the indexes the model gives it - its
+  # primary key and its unique indexes - and what a collision report names it by.
+  defp table_directory(mapping) do
+    Enum.reduce(mapping, %{}, fn {entity_type, entity_mapping}, acc ->
+      segments = Mapper.table_segments(entity_type)
+
+      keys = [
+        ["id"]
+        | for({_name, %{unique: true, columns: columns}} <- entity_mapping.indexes, do: columns)
+      ]
+
+      raw_strings =
+        for %{type: :string, source: {:attribute, _name}, name: name} <- entity_mapping.columns,
+            into: MapSet.new(),
+            do: name
+
+      entity_entry = %{
+        columns: MapSet.new(entity_mapping.columns, & &1.name),
+        raw_strings: raw_strings,
+        declaration: "the queries on #{inspect(entity_type)}",
+        keys: keys,
+        segments: segments
+      }
+
+      join_entries =
+        Map.new(
+          entity_mapping.join_tables,
+          &{&1.name, join_table_entry(&1, entity_type, segments)}
+        )
+
+      acc
+      |> Map.put(entity_mapping.table, entity_entry)
+      |> Map.merge(join_entries)
+    end)
+  end
+
+  defp join_table_entry(join_table, entity_type, segments) do
+    %{
+      columns: MapSet.new(["source_id", "target_id"]),
+      raw_strings: MapSet.new(),
+      declaration: "relationship #{inspect(join_table.relationship)} in #{inspect(entity_type)}",
+      keys: [["source_id", "target_id"]],
+      segments: Enum.concat(segments, ["#{join_table.relationship}_$join"])
+    }
+  end
+
+  # A need naming a column the table doesn't hold is stale: a live reload reconciles the model
+  # before the build writes fresh needs. So is one naming a raw string: the needs name one only
+  # when a unique index serves them, which bounds it to what fits that index alone, so a need a
+  # model change left behind must never build an index over it.
+  defp known_need?(need, tables) do
+    case Map.fetch(tables, need.table) do
+      {:ok, %{columns: columns, raw_strings: raw_strings}} ->
+        need
+        |> need_columns()
+        |> Enum.all?(&(MapSet.member?(columns, &1) and not MapSet.member?(raw_strings, &1)))
+
+      :error ->
+        false
+    end
+  end
+
+  defp need_columns(need), do: MapSet.to_list(need.eq) ++ List.wrap(need.range) ++ need.order
+
+  # By the fewest equality columns first, since an index can grow from them to serve more - the
+  # rest of the rank only makes it a total order, so the plan never depends on the needs' order.
+  defp need_rank(need),
+    do: {MapSet.size(need.eq), Enum.sort(need.eq), need.range || "", need.order}
+
+  # Places a need into the indexes chosen so far, newest first: served by a key or a chosen index,
+  # extending the largest chosen index it can, or as an index of its own.
+  defp place_need(need, chosen, keys) do
+    cond do
+      Enum.any?(keys, &serves?(&1, need)) or Enum.any?(chosen, &serves?(&1.columns, need)) ->
+        chosen
+
+      extended = extension_target(need, chosen) ->
+        Enum.map(chosen, &extended_if(&1, extended, need))
+
+      true ->
+        [extend(%{columns: []}, need) | chosen]
+    end
+  end
+
+  # An index whose columns lead another's serves nothing the longer one doesn't, since a need reads
+  # only an index's leading columns - as when two needs fix the same columns and their orders nest.
+  defp without_prefixes(indexes) do
+    Enum.reject(indexes, fn index ->
+      Enum.any?(indexes, fn other ->
+        length(other.columns) > length(index.columns) and
+          List.starts_with?(other.columns, index.columns)
+      end)
+    end)
+  end
+
+  defp extended_if(index, index, need), do: extend(index, need)
+
+  defp extended_if(index, _extended, _need), do: index
+
+  defp extension_target(need, chosen) do
+    chosen
+    |> Enum.reverse()
+    |> Enum.filter(&Enum.all?(&1.columns, fn column -> MapSet.member?(need.eq, column) end))
+    |> Enum.max_by(&length(&1.columns), fn -> nil end)
+  end
+
+  defp extend(index, need) do
+    added_eq =
+      need.eq
+      |> MapSet.difference(MapSet.new(index.columns))
+      |> Enum.sort()
+
+    %{columns: index.columns ++ added_eq ++ List.wrap(need.range) ++ need.order}
+  end
+
+  # An index serves a need when it leads with the need's equality columns, in any order, then holds
+  # its range column, then its order columns.
+  defp serves?(columns, need) do
+    eq_size = MapSet.size(need.eq)
+    {lead, rest} = Enum.split(columns, eq_size)
+
+    MapSet.new(lead) == need.eq and length(lead) == eq_size and
+      List.starts_with?(rest, List.wrap(need.range) ++ need.order)
+  end
+
+  defp collision_declarations(group) do
+    group
+    |> Enum.map(fn {_table, _name, _columns, declaration} -> declaration end)
+    |> Enum.sort()
+    |> Enum.join(", ")
+  end
+
+  defp grant_store_needs(Hologram.Auth.RoleGrant, entity_mapping) do
+    [
+      %{
+        table: entity_mapping.table,
+        eq: MapSet.new(["entity_type"]),
+        range: nil,
+        order: ["entity_id", "role"]
+      }
+    ]
+  end
+
+  defp grant_store_needs(_entity_type, _entity_mapping), do: []
+
+  # Index names live in one namespace per schema, across tables. A plan index ends in `$idx`, which
+  # no primary key (`$pk`) or unique index (`$uidx`) does, so it can only collide with another plan
+  # index - two tables whose segments and columns join to the same name.
+  defp validate_names!(indexes) do
+    collisions =
+      indexes
+      |> Enum.group_by(fn {_table, name, _columns, _declaration} -> name end)
+      |> Enum.filter(fn {_name, group} -> length(group) > 1 end)
+      |> Enum.sort()
+
+    if collisions != [] do
+      descriptions =
+        Enum.map_join(collisions, "\n", fn {name, group} ->
+          "  * index \"#{name}\" is derived from #{collision_declarations(group)}"
+        end)
+
+      raise Hologram.CompileError,
+        message:
+          "colliding derived names - rename the declarations so that every derived name is unique:\n#{descriptions}"
+    end
+
+    :ok
   end
 
   defp level_scope(entity_mapping, linked?) do

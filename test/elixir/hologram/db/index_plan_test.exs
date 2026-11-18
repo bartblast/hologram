@@ -9,6 +9,7 @@ defmodule Hologram.DB.IndexPlanTest do
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module26
@@ -1016,6 +1017,281 @@ defmodule Hologram.DB.IndexPlanTest do
                need("test_fixtures_entity_module41", ["team_id"]),
                need("test_fixtures_entity_module40", ["name_$sort"])
              ]
+    end
+  end
+
+  describe "framework_needs/1" do
+    test "needs each reference column and each join table's reverse direction" do
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
+
+      assert framework_needs(mapping) == [
+               need(@module3, ["b_id"]),
+               need(@module3, ["c_id"]),
+               need("test_fixtures_entity_module3_a_$join", ["target_id"], nil, ["source_id"])
+             ]
+    end
+
+    test "needs the grant store's lookup of the grants on an entity" do
+      mapping = Mapper.derive!([Module14], [])
+
+      assert need("hologram_role_grant", ["entity_type"], nil, ["entity_id", "role"]) in framework_needs(
+               mapping
+             )
+    end
+  end
+
+  describe "select/2" do
+    defp index(columns), do: %{columns: columns, nulls_distinct: true, unique: false}
+
+    defp index_name(table_segments, columns),
+      do: Mapper.fit_identifier(table_segments, columns, "$idx")
+
+    @module4_segments ["test", "fixtures", "entity", "module4"]
+
+    test "merges needs whose equality columns nest into one index" do
+      needs = [need(@module4, ["c"]), need(@module4, ["a", "c"]), need(@module4, ["a", "c", "d"])]
+
+      assert select(needs, @mapping) == %{
+               @module4 => %{
+                 index_name(@module4_segments, ["c", "a", "d"]) => index(["c", "a", "d"])
+               }
+             }
+    end
+
+    test "gives the same plan whatever order the needs come in" do
+      needs = [
+        need(@module4, ["c"]),
+        need(@module4, ["a", "c"]),
+        need(@module4, ["d"], "b"),
+        need(@module4, ["a"], nil, ["b"]),
+        need(@module4, ["d"])
+      ]
+
+      expected = %{
+        @module4 => %{
+          index_name(@module4_segments, ["c", "a"]) => index(["c", "a"]),
+          index_name(@module4_segments, ["d", "b"]) => index(["d", "b"]),
+          index_name(@module4_segments, ["a", "b"]) => index(["a", "b"])
+        }
+      }
+
+      assert select(needs, @mapping) == expected
+      assert select(Enum.reverse(needs), @mapping) == expected
+    end
+
+    test "starts an index of its own for a need fixing a column an index ranges or orders by" do
+      ranged = [need(@module4, ["c"], "b"), need(@module4, ["c", "d"])]
+      ordered = [need(@module4, ["a", "c"]), need(@module4, ["a"], nil, ["d"])]
+
+      assert select(ranged, @mapping) == %{
+               @module4 => %{
+                 index_name(@module4_segments, ["c", "b"]) => index(["c", "b"]),
+                 index_name(@module4_segments, ["c", "d"]) => index(["c", "d"])
+               }
+             }
+
+      assert select(ordered, @mapping) == %{
+               @module4 => %{
+                 index_name(@module4_segments, ["a", "c"]) => index(["a", "c"]),
+                 index_name(@module4_segments, ["a", "d"]) => index(["a", "d"])
+               }
+             }
+    end
+
+    test "extends an index ending in a range with a need fixing every column it holds" do
+      needs = [need(@module4, ["c"], "b"), need(@module4, ["b", "c"], nil, ["d"])]
+
+      assert select(needs, @mapping) == %{
+               @module4 => %{
+                 index_name(@module4_segments, ["c", "b", "d"]) => index(["c", "b", "d"])
+               }
+             }
+    end
+
+    test "drops an index whose columns lead another's" do
+      ranged = [need(@module4, ["a"], "b"), need(@module4, ["a"], "b", ["d"])]
+      ordered = [need(@module4, ["a"], nil, ["b"]), need(@module4, ["a", "b"], nil, ["d"])]
+
+      for needs <- [ranged, ordered] do
+        assert select(needs, @mapping) == %{
+                 @module4 => %{
+                   index_name(@module4_segments, ["a", "b", "d"]) => index(["a", "b", "d"])
+                 }
+               }
+      end
+    end
+
+    test "serves a need from an index the plan chose for another" do
+      needs = [need(@module4, ["a", "c"]), need(@module4, ["a"], nil, ["c"])]
+
+      assert select(needs, @mapping) == %{
+               @module4 => %{index_name(@module4_segments, ["a", "c"]) => index(["a", "c"])}
+             }
+    end
+
+    test "serves a need from an index leading with its equality columns in another order" do
+      needs = [
+        need(@module4, ["c"]),
+        need(@module4, ["a", "c"], nil, ["b"]),
+        need(@module4, ["a", "c"], "b")
+      ]
+
+      assert select(needs, @mapping) == %{
+               @module4 => %{
+                 index_name(@module4_segments, ["c", "a", "b"]) => index(["c", "a", "b"])
+               }
+             }
+    end
+
+    test "extends the largest index it can, the first chosen among equals" do
+      first = [need(@module4, ["a"]), need(@module4, ["c"]), need(@module4, ["a", "c"])]
+
+      largest = [
+        need(@module4, ["a"]),
+        need(@module4, ["a", "c"]),
+        need(@module4, ["d"]),
+        need(@module4, ["a", "c", "d"])
+      ]
+
+      assert select(first, @mapping) == %{
+               @module4 => %{
+                 index_name(@module4_segments, ["a", "c"]) => index(["a", "c"]),
+                 index_name(@module4_segments, ["c"]) => index(["c"])
+               }
+             }
+
+      assert select(largest, @mapping) == %{
+               @module4 => %{
+                 index_name(@module4_segments, ["a", "c", "d"]) => index(["a", "c", "d"]),
+                 index_name(@module4_segments, ["d"]) => index(["d"])
+               }
+             }
+    end
+
+    test "places the needs by their equality columns, ranging and ordering ones among them" do
+      needs = [
+        need(@module4, ["a", "c", "d"], nil, ["b"]),
+        need(@module4, ["d"]),
+        need(@module4, ["a", "d"], "b", ["c"]),
+        need(@module4, [], "a", ["d", "c", "b"]),
+        need(@module4, ["a"])
+      ]
+
+      assert map_size(select(needs, @mapping)[@module4]) == 2
+    end
+
+    test "serves a need from an index whose leading columns it fixes" do
+      needs = [need(@module4, ["a", "c"]), need(@module4, ["c", "a"], "b"), need(@module4, ["a"])]
+
+      assert select(needs, @mapping) == %{
+               @module4 => %{
+                 index_name(@module4_segments, ["a", "c", "b"]) => index(["a", "c", "b"])
+               }
+             }
+    end
+
+    test "gives two needs no columns lead together indexes of their own" do
+      needs = [need(@module4, ["a"]), need(@module4, ["c"])]
+
+      assert select(needs, @mapping) == %{
+               @module4 => %{
+                 index_name(@module4_segments, ["a"]) => index(["a"]),
+                 index_name(@module4_segments, ["c"]) => index(["c"])
+               }
+             }
+    end
+
+    test "adds nothing for a need the primary key or a unique index serves" do
+      assert select([need(@module19, ["slug"]), need(@module19, ["id"])], @mapping) == %{}
+
+      key_lead = need("test_fixtures_entity_module52", ["workspace_id"])
+      join_source = need("test_fixtures_entity_module3_a_$join", ["source_id"])
+      unique_to_one = need("test_fixtures_entity_module27", ["channel_id"])
+
+      assert select([key_lead, join_source, unique_to_one], @mapping) == %{}
+    end
+
+    test "leaves out a need naming a raw string no unique index serves" do
+      mapping = Mapper.derive!([Module14], [])
+
+      assert select([need("test_fixtures_entity_module14", ["email"])], mapping) == %{}
+    end
+
+    test "gives a join table's reverse direction an index its primary key can't serve" do
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
+      [join_table] = mapping[Module3].join_tables
+
+      plan =
+        mapping
+        |> framework_needs()
+        |> select(mapping)
+
+      assert plan[join_table.name] == %{
+               join_table.reverse_index => index(["target_id", "source_id"])
+             }
+    end
+
+    test "keeps the grant store's index in the order the recheck reads it" do
+      mapping = Mapper.derive!([Module14], [])
+
+      plan =
+        mapping
+        |> framework_needs()
+        |> select(mapping)
+
+      # Its identity index leads with the user, so the user's reference needs no index of its own.
+      assert plan["hologram_role_grant"] == %{
+               "hologram_role_grant_entity_type_entity_id_role_$idx" =>
+                 index(["entity_type", "entity_id", "role"]),
+               "hologram_role_grant_granted_by_id_$idx" => index(["granted_by_id"])
+             }
+    end
+
+    test "leaves out a need naming a table or a column the mapping doesn't hold" do
+      needs = [need(@module4, ["gone"]), need("gone_table", ["a"])]
+
+      assert select(needs, @mapping) == %{}
+    end
+
+    test "fits a name over the identifier limit" do
+      columns = ["count", "n1", "n2", "n3", "n4", "name_$sort", "s1_$sort"]
+      segments = ["test", "fixtures", "entity", "module54"]
+      expected_columns = Enum.sort(columns)
+
+      plan = select([need(@module54, columns)], @mapping)
+      [{name, definition}] = Map.to_list(plan[@module54])
+
+      assert name == index_name(segments, expected_columns)
+      assert name != Enum.join(segments ++ expected_columns, "_") <> "_$idx"
+      assert byte_size(name) <= 63
+      assert definition == index(expected_columns)
+    end
+
+    test "raises on two tables deriving the same index name" do
+      defmodule Foo do
+        use Hologram.Entity
+
+        attribute :bar_baz, :integer
+      end
+
+      defmodule FooBar do
+        use Hologram.Entity
+
+        attribute :baz, :integer
+      end
+
+      mapping = Mapper.derive!([Foo, FooBar], [])
+      foo = mapping[Foo].table
+      foo_bar = mapping[FooBar].table
+
+      message = """
+      colliding derived names - rename the declarations so that every derived name is unique:
+        * index "db_index_plan_test_foo_bar_baz_$idx" is derived from the queries on Hologram.DB.IndexPlanTest.Foo by bar_baz, the queries on Hologram.DB.IndexPlanTest.FooBar by baz\
+      """
+
+      assert_raise Hologram.CompileError, message, fn ->
+        select([need(foo, ["bar_baz"]), need(foo_bar, ["baz"])], mapping)
+      end
     end
   end
 end
