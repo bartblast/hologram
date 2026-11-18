@@ -66,6 +66,8 @@ defmodule Hologram.Reflection do
 
   @page_windows_plt_dump_file_name "page_windows.plt"
 
+  @index_needs_plt_dump_file_name "index_needs.plt"
+
   @queries_plt_dump_file_name "queries.plt"
 
   @doc """
@@ -519,6 +521,16 @@ defmodule Hologram.Reflection do
   @spec has_struct?(module) :: boolean
   def has_struct?(module) do
     has_function?(module, :__struct__, 0) && has_function?(module, :__struct__, 1)
+  end
+
+  @doc """
+  Returns the file name of the index needs PLT dump: the access needs of the statements the server
+  runs that the build derived (see `Hologram.Compiler.build_index_needs/4`), which the database
+  converges its indexes to.
+  """
+  @spec index_needs_plt_dump_file_name() :: String.t()
+  def index_needs_plt_dump_file_name do
+    @index_needs_plt_dump_file_name
   end
 
   @doc """

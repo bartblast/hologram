@@ -4,6 +4,8 @@ defmodule Hologram.DB.IndexPlanTest do
 
   import Hologram.DB.IndexPlan
 
+  alias Hologram.Commons.PLT
+  alias Hologram.Compiler
   alias Hologram.DB.Mapper
   alias Hologram.Policy
   alias Hologram.Query.Stage
@@ -78,6 +80,17 @@ defmodule Hologram.DB.IndexPlanTest do
     |> Stage.normalize()
     |> Map.put(:filter, filter)
     |> needs(@mapping)
+  end
+
+  # Dumps the given needs the way the build does, at a path of the test's own.
+  defp write_dump(needs) do
+    path = Path.join(System.tmp_dir!(), "index_needs_#{System.unique_integer([:positive])}.plt")
+    on_exit(fn -> File.rm(path) end)
+
+    {plt, _dump_path} = Compiler.build_index_needs_plt(needs, build_dir: System.tmp_dir!())
+    PLT.dump(plt, path)
+
+    path
   end
 
   defp value(name) when name in [:count, :percent, :priority], do: 1
@@ -1016,6 +1029,45 @@ defmodule Hologram.DB.IndexPlanTest do
                need("test_fixtures_entity_module41", ["team_id"]),
                need("test_fixtures_entity_module40", ["name_$sort"])
              ]
+    end
+  end
+
+  describe "dumped_needs/1" do
+    test "reads the needs the build dumped" do
+      needs = [need(@module2, ["b"])]
+
+      dump_path = write_dump(needs)
+
+      assert dumped_needs(dump_path) == needs
+    end
+
+    test "needs nothing when there is no dump" do
+      assert dumped_needs(Path.join(System.tmp_dir!(), "no_index_needs.plt")) == []
+    end
+  end
+
+  describe "plan/2" do
+    test "plans the framework's needs and the dumped ones" do
+      mapping = Mapper.derive!([Module1, Module2, Module3], [])
+      needs = [need(@module2, ["b"])]
+
+      dump_path = write_dump(needs)
+
+      expected_plan =
+        mapping
+        |> framework_needs()
+        |> Enum.concat(needs)
+        |> select(mapping)
+
+      assert plan(mapping, dump_path) == expected_plan
+      assert Map.has_key?(expected_plan, @module2)
+    end
+
+    test "leaves out a dumped need naming a table the mapping no longer holds" do
+      mapping = Mapper.derive!([Module1, Module3], [])
+      dump_path = write_dump([need(@module2, ["b"])])
+
+      assert plan(mapping, dump_path) == select(framework_needs(mapping), mapping)
     end
   end
 

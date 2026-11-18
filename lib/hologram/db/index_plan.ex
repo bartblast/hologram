@@ -17,12 +17,14 @@ defmodule Hologram.DB.IndexPlan do
   # arms of another beside it - so each OR gives its arms as needs of their own, each with what
   # stands beside it, and two ORs beside each other are never crossed.
 
+  alias Hologram.Commons.SerializationUtils
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryCompiler
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Query
   alias Hologram.Query.Stage
+  alias Hologram.Reflection
 
   # The most needs the ORs of one clause list may add between them. An OR that would take them
   # past it adds nothing, and is left to the conditions beside it: an index per arm costs every
@@ -88,6 +90,45 @@ defmodule Hologram.DB.IndexPlan do
 
       reference_needs ++ reverse_needs ++ grant_store_needs(entity_type, entity_mapping)
     end)
+  end
+
+  @doc """
+  Returns the path of the index needs dump the build writes (see
+  `Hologram.Compiler.build_index_needs_plt/2`).
+  """
+  @spec dump_path() :: String.t()
+  def dump_path do
+    Path.join([Reflection.build_dir(), Reflection.index_needs_plt_dump_file_name()])
+  end
+
+  @doc """
+  Returns the access needs in the index needs dump at the given path, or none when there is no
+  dump, as for an app the Hologram compile never ran in.
+  """
+  @spec dumped_needs(String.t()) :: list(need)
+  def dumped_needs(path \\ dump_path()) do
+    if File.exists?(path) do
+      path
+      |> File.read!()
+      |> SerializationUtils.deserialize(true)
+      |> Map.fetch!(:needs)
+    else
+      []
+    end
+  end
+
+  @doc """
+  Returns the index plan over the tables of the given mapping for what the server runs: the
+  framework's own lookups and the needs the build derived from the queries (see `dumped_needs/1`).
+  A dumped need naming a table or a column the mapping no longer holds is left out, as `select/2`
+  leaves one out.
+  """
+  @spec plan(%{module => %{atom => any}}, String.t()) :: %{String.t() => %{String.t() => map}}
+  def plan(mapping, dump_path \\ dump_path()) do
+    mapping
+    |> framework_needs()
+    |> Enum.concat(dumped_needs(dump_path))
+    |> select(mapping)
   end
 
   @doc """

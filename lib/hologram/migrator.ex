@@ -986,7 +986,7 @@ defmodule Hologram.Migrator do
 
       mapping = Mapper.derive_from_model!(current_model)
 
-      plan = IndexPlan.framework_plan(mapping)
+      plan = IndexPlan.plan(mapping)
 
       if chain_known? do
         repair_indexes(mapping, plan)

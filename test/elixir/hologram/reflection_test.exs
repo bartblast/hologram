@@ -1882,6 +1882,10 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  test "index_needs_plt_dump_file_name/0" do
+    assert index_needs_plt_dump_file_name() == "index_needs.plt"
+  end
+
   test "queries_plt_dump_file_name/0" do
     assert queries_plt_dump_file_name() == "queries.plt"
   end

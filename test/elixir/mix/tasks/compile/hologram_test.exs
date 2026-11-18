@@ -375,11 +375,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     count_calls({QueryExtractor, :extract_derived_queries, 3}, fun)
   end
 
-  # How many times the page windows PLT and the queries PLT are dumped while the given function
-  # runs, in that order: each goes through a private function of the task, whose local calls are
-  # counted.
+  # How many times the index needs PLT, the page windows PLT and the queries PLT are dumped while the
+  # given function runs, in that order: each goes through a private function of the task, whose
+  # local calls are counted.
   defp count_data_layer_dumps(fun) do
     mfas = [
+      {Mix.Tasks.Compile.Hologram, :dump_index_needs_plt, 2},
       {Mix.Tasks.Compile.Hologram, :dump_page_windows_plt, 2},
       {Mix.Tasks.Compile.Hologram, :dump_queries_plt, 2}
     ]
@@ -404,13 +405,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   # How many times the call graph and the module info PLT are dumped while the given function runs.
   # PLT.dump/2 also writes the page digest PLT and the chunk registry PLT, once before the batches
-  # and once after each, and the page windows PLT and the queries PLT, once before the batches,
-  # through private functions whose local calls are counted and taken off.
+  # and once after each, and the index needs PLT, the page windows PLT and the queries PLT, once
+  # before the batches, through private functions whose local calls are counted and taken off.
   defp count_dumps(fun) do
     counted = [
       {CallGraph, :dump, 2, [:call_count]},
       {PLT, :dump, 2, [:call_count]},
       {Mix.Tasks.Compile.Hologram, :dump_chunk_registry_plt, 2, [:local, :call_count]},
+      {Mix.Tasks.Compile.Hologram, :dump_index_needs_plt, 2, [:local, :call_count]},
       {Mix.Tasks.Compile.Hologram, :dump_page_digest_plt, 2, [:local, :call_count]},
       {Mix.Tasks.Compile.Hologram, :dump_page_windows_plt, 2, [:local, :call_count]},
       {Mix.Tasks.Compile.Hologram, :dump_queries_plt, 2, [:local, :call_count]}
@@ -427,6 +429,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         call_graph_dumps,
         plt_dumps,
         chunk_registry_dumps,
+        index_needs_dumps,
         page_digest_dumps,
         page_windows_dumps,
         queries_dumps
@@ -438,7 +441,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       [
         call_graph_dumps,
-        plt_dumps - chunk_registry_dumps - page_digest_dumps - page_windows_dumps - queries_dumps
+        plt_dumps - chunk_registry_dumps - index_needs_dumps - page_digest_dumps -
+          page_windows_dumps - queries_dumps
       ]
     after
       Enum.each(counted, fn {module, function, arity, flags} ->
@@ -1039,6 +1043,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test_module_info_plt(opts)
     test_page_bundles(opts)
     test_page_digest_plt(opts)
+    test_index_needs_plt(opts)
     test_page_windows_plt(opts)
     test_queries_plt(opts)
     test_runtime_bundle(opts)
@@ -1233,6 +1238,36 @@ defmodule Mix.Tasks.Compile.HologramTest do
     # window.
     assert [window_id] = page_windows_items[PageModule18]
     assert window_id =~ ~r/^[0-9a-f]{32}$/
+  end
+
+  # The needs of what the server runs: here, a registered query's filter and an entity type's read
+  # rule.
+  defp test_index_needs_plt(opts) do
+    dump_path = Path.join(opts[:build_dir], Reflection.index_needs_plt_dump_file_name())
+
+    assert File.exists?(dump_path)
+
+    plt = PLT.start()
+    PLT.load(plt, dump_path)
+
+    assert %{needs: needs} = PLT.get_all(plt)
+
+    filter_need = %{
+      table: "test_fixtures_entity_module2",
+      eq: MapSet.new(["b"]),
+      range: nil,
+      order: []
+    }
+
+    rule_need = %{
+      table: "test_fixtures_entity_module41",
+      eq: MapSet.new(["public"]),
+      range: nil,
+      order: []
+    }
+
+    assert filter_need in needs
+    assert rule_need in needs
   end
 
   defp test_queries_plt(opts) do
@@ -1839,7 +1874,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       fake_edit(@unreached_module)
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0, 0]
     end
 
     # The runtime bundle carries the data layer's statement, so a statement derived again would be
@@ -1860,7 +1895,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       fake_edit(QueryExtractorModule84)
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
     end
 
     test "an edit of a component reuses the derived definitions", %{opts: opts} do
@@ -1906,7 +1941,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       fake_edit(Entity2)
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
     end
 
     # Another Hologram build can extract and render differently, so the bundle inputs moving is
@@ -1917,7 +1952,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
       assert map_size(cache_state().data_layer.pages) == @num_pages
     end
 
@@ -1930,7 +1965,19 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       fake_edit(@unreached_module)
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+    end
+
+    test "a kept data layer whose index needs dump is gone is derived again", %{opts: opts} do
+      run(opts)
+
+      opts[:build_dir]
+      |> Path.join(Reflection.index_needs_plt_dump_file_name())
+      |> File.rm!()
+
+      fake_edit(@unreached_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
     end
 
     test "a run with no changes judges no operation ask", %{opts: opts} do
@@ -2013,7 +2060,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> Map.put(:removed_page, %{digest: "removed", page?: true})
       |> put_kept_module_infos(dumped_at, MapSet.put(editable_modules, :removed_page))
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
       refute Map.has_key?(cache_state().data_layer.pages, :removed_page)
       assert map_size(cache_state().data_layer.pages) == @num_pages
     end
@@ -2072,7 +2119,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # The edited component derives the data layer, which reads the definitions kept with it.
       resolutions =
         count_resolutions(fn ->
-          assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+          assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
         end)
 
       assert resolutions == 0
@@ -2085,7 +2132,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Cache.reset()
       fake_recompile()
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0, 0]
       assert cache_state().data_layer == data_layer
     end
 
@@ -2097,7 +2144,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       dump_paths =
         Enum.map(
-          [Reflection.page_windows_plt_dump_file_name(), Reflection.queries_plt_dump_file_name()],
+          [
+            Reflection.index_needs_plt_dump_file_name(),
+            Reflection.page_windows_plt_dump_file_name(),
+            Reflection.queries_plt_dump_file_name()
+          ],
           &Path.join(opts[:build_dir], &1)
         )
 
@@ -2117,7 +2168,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert_error Hologram.CompileError, expected_msg, fn -> run(failing_opts) end
 
-      assert Enum.map(dump_paths, &File.read!/1) == ["untouched", "untouched"]
+      assert Enum.map(dump_paths, &File.read!/1) == ["untouched", "untouched", "untouched"]
       assert Cache.get().data_layer == data_layer
     end
 
@@ -2138,7 +2189,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       data_layer = cache_state().data_layer
 
       assert cache_state().runtime == nil
-      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0, 0]
       assert cache_state().data_layer == data_layer
     end
   end
@@ -2232,6 +2283,63 @@ defmodule Mix.Tasks.Compile.HologramTest do
                 Reflection.list_roles(module_info_plt)},
                :next_batch
              ]
+    end
+
+    test "a compile calls the index needs hook after the data model hook, before the first batch",
+         %{opts: opts} do
+      run(opts)
+      put_pending_kept_pages(1)
+
+      {record, recorded} = record_calls()
+
+      hooks = [
+        data_model_ready: fn _entity_types, _role_modules -> record.(:data_model_ready) end,
+        index_needs_ready: fn -> record.(:index_needs_ready) end,
+        next_batch: fn remaining_pages, _links ->
+          record.(:next_batch)
+          MapSet.to_list(remaining_pages)
+        end
+      ]
+
+      run(Keyword.merge(opts, hooks))
+
+      assert recorded.() == [:data_model_ready, :index_needs_ready, :next_batch]
+    end
+
+    test "a compile keeping the data layer calls the index needs hook", %{opts: opts} do
+      run(opts)
+      fake_edit(@unreached_module)
+
+      {record, recorded} = record_calls()
+      index_needs_ready = fn -> record.(:index_needs_ready) end
+
+      assert count_data_layer_dumps(fn ->
+               run(Keyword.put(opts, :index_needs_ready, index_needs_ready))
+             end) == [0, 0, 0]
+
+      assert recorded.() == [:index_needs_ready]
+    end
+
+    # The failed compile derived the data layer for the edit, so the next one keeps it only if the
+    # failed one left the picture the edit is in.
+    test "a compile after one the index needs hook failed keeps the data layer and calls it again",
+         %{opts: opts} do
+      run(opts)
+      fake_edit(QueryExtractorModule84)
+
+      failing_opts = Keyword.put(opts, :index_needs_ready, fn -> raise "hook failed" end)
+      assert_raise RuntimeError, "hook failed", fn -> run(failing_opts) end
+
+      {record, recorded} = record_calls()
+      index_needs_ready = fn -> record.(:index_needs_ready) end
+
+      assert count_data_layer_dumps(fn ->
+               opts
+               |> Keyword.merge(force?: true, index_needs_ready: index_needs_ready)
+               |> run()
+             end) == [0, 0, 0]
+
+      assert recorded.() == [:index_needs_ready]
     end
 
     test "a compile reads no beam to list the data model", %{opts: opts} do

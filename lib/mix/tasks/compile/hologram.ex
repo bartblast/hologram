@@ -34,6 +34,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     * `:data_model_ready` - called once per compile, right after the validation, with the entity
       types and the roles. A compile that raises here builds nothing. Defaults to doing nothing.
 
+    * `:index_needs_ready` - called once per compile, with no arguments, once the data layer is
+      derived or kept, so its index needs dump is the one the queries give (live reload, to build
+      the indexes they need). A compile that raises here builds nothing, and the next one keeps the
+      data layer it derived and calls it again. Defaults to doing nothing.
+
   An invocation that never compiles (Hologram off in dev and test) validates the model from the
   beams instead, and only when the Elixir compile manifest of a loaded application moved since the
   last validation that passed in the same build dir, which leaves the data model inputs dump there
@@ -41,7 +46,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   ## Build dir
 
-  A compile leaves eight files in the build dir, so that the first compile in the next VM (the next
+  A compile leaves nine files in the build dir, so that the first compile in the next VM (the next
   `mix` command, say) reuses what this one built, and the running app reads what it derived:
 
     * the call graph dump and the module info dump - the before picture: the graph of what the
@@ -66,6 +71,9 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     * the queries dump - the registered queries of every component, which the renderer and the
       sync layer read.
+
+    * the index needs dump - the access needs of the statements the server runs, which the database
+      converges its indexes to (see `Hologram.DB.IndexPlan.plan/2`).
 
   The bundles go to the build dir too, to its static dir (see `Hologram.Reflection.bundles_dir/0`),
   which `Hologram.Router` serves them from. Each build env has a build dir of its own, so a compile
@@ -211,6 +219,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       bundles_built: fn _built -> :ok end,
       data_model_failed: fn _kind, _reason -> :ok end,
       data_model_ready: fn _entity_types, _role_modules -> :ok end,
+      index_needs_ready: fn -> :ok end,
       js_dir: Path.join(assets_dir, "js"),
       # TODO: Remove together with the removal in compile/1.
       legacy_bundles_dir: Path.join(Reflection.otp_app_static_dir(), "hologram"),
@@ -796,6 +805,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       Cache.put_module_infos(module_info_dump_stamp, editable_modules)
 
+      # Once the data layer is derived or kept and this compile's before picture is written, so that
+      # a compile failing here leaves the picture the data layer was derived against: the next one
+      # keeps that data layer and calls this again. Before the bundling, like the data model hook.
+      opts[:index_needs_ready].()
+
       old_build_static_artifacts =
         opts[:static_dir]
         |> File.ls!()
@@ -1220,6 +1234,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # Whether the dumps the data layer derivation writes are in the build dir.
   defp data_layer_dumps_exist?(opts) do
     dump_file_names = [
+      Reflection.index_needs_plt_dump_file_name(),
       Reflection.page_windows_plt_dump_file_name(),
       Reflection.queries_plt_dump_file_name()
     ]
@@ -1364,6 +1379,27 @@ defmodule Mix.Tasks.Compile.Hologram do
     sync_constants =
       Compiler.build_sync_constants(reach_by_page, component_queries, module_info_plt)
 
+    # The access needs of what the server runs, dumped so that a boot builds the indexes they need
+    # without deriving anything. Selected here once, so that two indexes deriving one name fail the
+    # build rather than the boot.
+    mapping = Mapper.derive!(entity_types, Model.roles())
+
+    index_needs =
+      Compiler.build_index_needs(
+        queries,
+        sync_constants.synced_types,
+        mapping,
+        permission_checking?
+      )
+
+    IndexPlan.select(IndexPlan.framework_needs(mapping) ++ index_needs, mapping)
+
+    {index_needs_plt, index_needs_plt_dump_path} =
+      Compiler.build_index_needs_plt(
+        index_needs,
+        Keyword.put(opts, :supervisor, context.supervisor)
+      )
+
     # The entity types sync sends rows of ride with the registered queries: the sync layer reads
     # both, and both are loaded at boot.
     {queries_plt, queries_plt_dump_path} =
@@ -1377,8 +1413,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     # built together (see Hologram.Compiler.build_sync_constants_js/1).
     sync_constants_js = Compiler.build_sync_constants_js(sync_constants)
 
-    # Both dumps once everything above passed, so that a derivation that raises leaves the dumps of
+    # The dumps once everything above passed, so that a derivation that raises leaves the dumps of
     # the last one that did not, which the kept data layer state describes.
+    dump_index_needs_plt(index_needs_plt, index_needs_plt_dump_path)
     dump_page_windows_plt(page_windows_plt, page_windows_plt_dump_path)
     dump_queries_plt(queries_plt, queries_plt_dump_path)
 
@@ -1390,6 +1427,12 @@ defmodule Mix.Tasks.Compile.Hologram do
     })
 
     sync_constants_js
+  end
+
+  # The index needs PLT is dumped once, after the data layer is validated and before the batches, like
+  # the page windows PLT.
+  defp dump_index_needs_plt(index_needs_plt, index_needs_plt_dump_path) do
+    PLT.dump(index_needs_plt, index_needs_plt_dump_path)
   end
 
   # The page windows PLT is dumped once, after the data layer is validated and before the batches:

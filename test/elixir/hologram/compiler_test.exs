@@ -15,6 +15,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.DB.Mapper
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
   alias Hologram.Policy
@@ -68,6 +69,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module39, as: Entity39
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Entity.Module40, as: Entity40
+  alias Hologram.Test.Fixtures.Entity.Module41, as: Entity41
   alias Hologram.Test.Fixtures.Entity.Module42, as: Entity42
   alias Hologram.Test.Fixtures.Entity.Module43, as: Entity43
   alias Hologram.Test.Fixtures.Entity.Module44, as: Entity44
@@ -3130,6 +3132,73 @@ defmodule Hologram.CompilerTest do
                PLT.get(plt, Module1)
 
       PLT.stop(plt)
+    end
+  end
+
+  describe "build_index_needs/4" do
+    @entity2_table "test_fixtures_entity_module2"
+    @entity41_table "test_fixtures_entity_module41"
+
+    defp index_need(table, eq, range \\ nil, order \\ []) do
+      %{table: table, eq: MapSet.new(eq), range: range, order: order}
+    end
+
+    defp index_needs(terms, windows \\ []) do
+      entries =
+        terms
+        |> Enum.map(&Stage.normalize/1)
+        |> Registry.build(false)
+
+      window_terms =
+        windows
+        |> Enum.with_index()
+        |> Map.new(fn {term, i} -> {"w#{i}", Stage.normalize(term)} end)
+
+      queries = %{entries: entries, windows: window_terms}
+
+      mapping = Mapper.derive!([Entity2, Entity34, Entity39, Entity40, Entity41], [])
+
+      build_index_needs(queries, [], mapping, false)
+    end
+
+    test "needs what a registered query filters on" do
+      assert index_need(@entity2_table, ["b"]) in index_needs([filter(Entity2, b == 1)])
+    end
+
+    test "needs what a registered count filters on" do
+      query =
+        Entity2
+        |> filter(b == 1)
+        |> count()
+
+      needs = index_needs([query])
+
+      assert index_need(@entity2_table, ["b"]) in needs
+    end
+
+    test "needs what a window filters on" do
+      assert index_need(@entity2_table, ["b"]) in index_needs([], [filter(Entity2, b == 1)])
+    end
+
+    test "needs what an entity type's read rules ask, whatever the build registers" do
+      assert index_need(@entity41_table, ["public"]) in index_needs([])
+    end
+
+    test "lists each need once" do
+      needs = index_needs([filter(Entity2, b == 1)], [filter(Entity2, b == 1)])
+
+      assert needs == Enum.uniq(needs)
+    end
+  end
+
+  describe "build_index_needs_plt/2" do
+    test "holds the needs and dumps beside the other build artifacts" do
+      needs = [%{table: "my_table", eq: MapSet.new(["a"]), range: nil, order: []}]
+
+      {plt, dump_path} = build_index_needs_plt(needs, build_dir: "/my_build_dir")
+
+      assert PLT.get_all(plt) == %{needs: needs}
+      assert dump_path == "/my_build_dir/index_needs.plt"
     end
   end
 

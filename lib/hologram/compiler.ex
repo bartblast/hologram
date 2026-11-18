@@ -18,6 +18,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.DB.Codec
+  alias Hologram.DB.IndexPlan
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
@@ -31,6 +32,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Runtime.Serializer
+  alias Hologram.Sync.Fill
   alias Hologram.Sync.Frame
 
   # The declaration options a write is judged against, which is why they are the ones baked into
@@ -716,6 +718,65 @@ defmodule Hologram.Compiler do
       Path.join([opts[:build_dir], Reflection.chunk_registry_plt_dump_file_name()])
 
     {chunk_registry_plt, chunk_registry_plt_dump_path}
+  end
+
+  @doc """
+  Returns the access needs of the statements the server runs that the build knows of (see
+  `Hologram.DB.IndexPlan.needs/3`), given the registered queries (see `build_queries/3`):
+
+    * each registered query as the server render reads it, policied - a count as it stands, any
+      other with the rows its paths read, and the ones its rules read for a build checking
+      permissions on the client,
+    * each window as the sync layer reads it, raw,
+    * each synced type's fill, policied,
+    * each entity type bare, as `DB.read/1` reads it, raw and policied.
+
+  Policied is under the read rules of a signed-in session and of an anonymous one. The read rules
+  give the needs a policied read of any shape shares.
+  """
+  @spec build_index_needs(
+          %{atom => any},
+          list(module),
+          %{module => %{atom => any}},
+          boolean
+        ) :: list(IndexPlan.need())
+  def build_index_needs(queries, synced_types, mapping, permission_checking?) do
+    registered_terms =
+      queries.entries
+      |> Enum.sort()
+      |> Enum.map(fn {_id, entry} -> render_term(entry.term, permission_checking?) end)
+
+    window_terms =
+      queries.windows
+      |> Enum.sort()
+      |> Enum.map(fn {_id, term} -> term end)
+
+    fill_terms = Enum.map(synced_types, &Fill.term(&1, synced_types))
+
+    bare_terms =
+      mapping
+      |> Map.keys()
+      |> Enum.sort()
+      |> Enum.map(&Stage.normalize/1)
+
+    raw_needs = Enum.flat_map(window_terms ++ bare_terms, &IndexPlan.needs(&1, mapping))
+
+    policied_needs =
+      Enum.flat_map(registered_terms ++ fill_terms ++ bare_terms, &policied_needs(&1, mapping))
+
+    Enum.uniq(raw_needs ++ policied_needs)
+  end
+
+  @doc """
+  Builds the index needs PLT, whose one item is the access needs the build derived (see
+  `build_index_needs/4`), and returns it with the path to dump it at.
+  """
+  @spec build_index_needs_plt(list(IndexPlan.need()), T.opts()) :: {PLT.t(), T.file_path()}
+  def build_index_needs_plt(index_needs, opts) do
+    plt = PLT.start(items: [needs: index_needs], supervisor: opts[:supervisor])
+    dump_path = Path.join([opts[:build_dir], Reflection.index_needs_plt_dump_file_name()])
+
+    {plt, dump_path}
   end
 
   @doc """
@@ -3029,6 +3090,24 @@ defmodule Hologram.Compiler do
 
   defp quantified_type(hops, [entity_type | _types_above]),
     do: Derived.path_target(entity_type, hops)
+
+  # The needs of the given term under the read rules of a signed-in session and of an anonymous one.
+  defp policied_needs(term, mapping) do
+    rules =
+      term.entity
+      |> Policy.build()
+      |> Map.get(:read, [])
+
+    Enum.flat_map([false, true], fn anonymous? ->
+      IndexPlan.needs(term, mapping, %{anonymous?: anonymous?, rules: rules})
+    end)
+  end
+
+  # What the server render reads for a registered query (see Hologram.Template.Renderer): a count
+  # as it stands, any other query with the rows the client is carried.
+  defp render_term(%{cardinality: :count} = term, _permission_checking?), do: term
+
+  defp render_term(term, permission_checking?), do: Window.embed(term, permission_checking?)
 
   # The verdict key and the read types of a deciding clause standing in a rule's predicates, as
   # members of its object - none for any other clause.
