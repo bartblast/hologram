@@ -103,9 +103,8 @@ export default class Sse {
   }
 
   // Closes the stream there is, and stops the clocks it was keeping: the heartbeat watchdog, which
-  // would otherwise end whatever stream stands in its place - or throw on there being none - at
-  // its deadline, and the stability timer, which would clear the failure count on the strength of
-  // a stream that is gone. And the page no longer says it is connected until the stream that
+  // would otherwise end whatever stream stands in its place at its deadline, and the stability
+  // timer, which would clear the failure count on the strength of a stream that is gone. And the page no longer says it is connected until the stream that
   // replaces it opens.
   static closeStream() {
     clearTimeout($.heartbeatTimer);
@@ -370,17 +369,11 @@ export default class Sse {
     $.isSuspended = true;
     $.runId++;
 
-    clearTimeout($.heartbeatTimer);
     clearTimeout($.reconnectTimer);
-    clearTimeout($.stabilityTimer);
 
     $.reconnectAttempts = 0;
 
-    if ($.eventSource !== null) {
-      $.eventSource.close();
-    }
-
-    GlobalRegistry.set("sseConnected?", false);
+    $.closeStream();
   }
 }
 
