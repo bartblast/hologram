@@ -343,8 +343,8 @@ defmodule Hologram.DB.Preflight do
 
   defp pluralize_values(_values), do: "values"
 
-  # The column indexes a mapping derives are never unique, so the entity's own index entries
-  # hold every unique index of its table.
+  # The mapping derives unique indexes alone - the others are the index plan's - so the entity's
+  # own index entries hold every unique index of its table.
   defp unique_indexes(mapping, table) do
     indexes =
       case entity_mapping(mapping, table) do

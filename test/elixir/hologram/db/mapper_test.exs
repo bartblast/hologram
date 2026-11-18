@@ -680,9 +680,8 @@ defmodule Hologram.DB.MapperTest do
   end
 
   describe "derive_from_model!/1" do
-    # Four join tables in two colliding pairs, and one reverse index name all four derive - which
-    # neither pair's line reports, so it gets a line of its own.
-    test "reports an index two colliding join table pairs share" do
+    # Four join tables in two colliding pairs, one line each.
+    test "reports two colliding join table pairs" do
       r = String.duplicate("r", 37)
 
       relationships = [

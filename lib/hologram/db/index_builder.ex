@@ -17,9 +17,15 @@ defmodule Hologram.DB.IndexBuilder do
   #      every write - CONCURRENTLY, so the next steps build it again
   #   2. rename the plan indexes standing under another name with the plan's definition - what a
   #      migration renaming a relationship or an entity leaves - in one transaction
-  #   3. drop a plan index the plan no longer names, or names with another definition, CONCURRENTLY,
-  #      so a stale one costs no write and frees its name for the one the plan wants
+  #   3. drop a plan index standing in a name the plan gives another definition, CONCURRENTLY, so
+  #      the one the plan wants can take the name
   #   4. build a missing one CONCURRENTLY
+  #   5. drop a plan index the plan no longer names, CONCURRENTLY, so a stale one costs no write -
+  #      after the builds, since a query change often replaces an index with a wider one, and the
+  #      table keeps the old one while the new one builds
+  #
+  # Builds go in name order, so a build that fails for good - a full disk, say - holds up the
+  # builds and the drops behind it until its cause is fixed; the warning each try logs names it.
   #
   # A node whose chain lacks a migration the database applied runs older code than the database, so
   # its plan would drop the indexes a newer release needs and rename theirs back: it only does 1
@@ -223,8 +229,9 @@ defmodule Hologram.DB.IndexBuilder do
 
     with nil <- invalid_index(owned_names),
          nil <- if(chain_known?, do: renames(actual, plan, owned_names)),
-         nil <- if(chain_known?, do: unused_index(actual, plan, owned_names)),
-         nil <- missing_index(actual, plan) do
+         nil <- if(chain_known?, do: unused_index(actual, plan, owned_names, :held_name)),
+         nil <- missing_index(actual, plan),
+         nil <- if(chain_known?, do: unused_index(actual, plan, owned_names, :any)) do
       :done
     end
   end
@@ -307,12 +314,21 @@ defmodule Hologram.DB.IndexBuilder do
     List.first(missing)
   end
 
-  defp unused_index(actual, plan, owned_names) do
+  # An owned index the plan doesn't want as it stands: of those standing in a name the plan gives
+  # another index (:held_name), or of all of them (:any).
+  defp unused_index(actual, plan, owned_names, which) do
+    planned_names =
+      for {_table, indexes} <- plan,
+          name <- Map.keys(indexes),
+          into: MapSet.new(),
+          do: name
+
     unused =
       for {table, definition} <- Enum.sort(actual.tables),
           {name, index} <- Enum.sort(definition.indexes),
           MapSet.member?(owned_names, name),
           get_in(plan, [table, name]) != plain_definition(index),
+          which == :any or MapSet.member?(planned_names, name),
           do: {:drop_unused, name}
 
     List.first(unused)

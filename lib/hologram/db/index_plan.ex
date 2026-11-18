@@ -17,6 +17,7 @@ defmodule Hologram.DB.IndexPlan do
   # arms of another beside it - so each OR gives its arms as needs of their own, each with what
   # stands beside it, and two ORs beside each other are never crossed.
 
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.SerializationUtils
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryCompiler
@@ -233,8 +234,9 @@ defmodule Hologram.DB.IndexPlan do
   needs, and so is one naming a raw string column: no plan index ever holds one.
 
   Each index is named `<table segments>_<columns>_$idx`, fitted the way every derived name is (see
-  `Hologram.DB.Mapper.fit_identifier/3`). Raises Hologram.CompileError when two indexes derive the
-  same name.
+  `Hologram.DB.Mapper.fit_identifier/3`). Of two indexes of one table deriving one name, the first by
+  its columns keeps it and each other one carries a 4-byte digest of its columns after them. Raises
+  Hologram.CompileError when indexes of two tables derive the same name.
   """
   @spec select(list(need), %{module => %{atom => any}}) :: %{String.t() => %{String.t() => map}}
   def select(needs, mapping) do
@@ -254,12 +256,8 @@ defmodule Hologram.DB.IndexPlan do
         |> Enum.reduce([], &place_need(&1, &2, table_info.keys))
         |> Enum.reverse()
         |> without_prefixes()
-        |> Enum.map(fn index ->
-          name = Mapper.fit_identifier(table_info.segments, index.columns, "$idx")
-          declaration = "#{table_info.declaration} by #{Enum.join(index.columns, ", ")}"
-
-          {table, name, index.columns, declaration}
-        end)
+        |> Enum.map(& &1.columns)
+        |> name_indexes(table, table_info)
       end)
 
     validate_names!(indexes)
@@ -503,6 +501,35 @@ defmodule Hologram.DB.IndexPlan do
   end
 
   defp grant_store_needs(_entity_type, _entity_mapping), do: []
+
+  # Columns join their names with `_`, so two indexes of one table can derive one name -
+  # `["public", "id"]` and `["public_id"]`. Nobody declared either, so there is nothing to rename:
+  # the first by its columns keeps the name, and each other one carries a digest of its columns.
+  # A name an index of another table derives stays a collision (see validate_names!/1).
+  defp name_indexes(column_lists, table, table_info) do
+    column_lists
+    |> Enum.group_by(&Mapper.fit_identifier(table_info.segments, &1, "$idx"))
+    |> Enum.sort()
+    |> Enum.flat_map(fn {name, columns_group} ->
+      [first | rest] = Enum.sort(columns_group)
+
+      [{name, first} | Enum.map(rest, &{digested_name(&1, table_info), &1})]
+    end)
+    |> Enum.map(fn {name, columns} ->
+      declaration = "#{table_info.declaration} by #{Enum.join(columns, ", ")}"
+
+      {table, name, columns, declaration}
+    end)
+  end
+
+  defp digested_name(columns, table_info) do
+    digest =
+      columns
+      |> Enum.join(",")
+      |> CryptographicUtils.short_digest(4)
+
+    Mapper.fit_identifier(table_info.segments, Enum.concat(columns, [digest]), "$idx")
+  end
 
   # Index names live in one namespace per schema, across tables. A plan index ends in `$idx`, which
   # no primary key (`$pk`) or unique index (`$uidx`) does, so it can only collide with another plan

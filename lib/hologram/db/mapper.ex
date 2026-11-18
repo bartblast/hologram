@@ -757,13 +757,6 @@ defmodule Hologram.DB.Mapper do
     |> Enum.map(fn {name, target, _opts} -> {name, target} end)
   end
 
-  # The companion's index holds the KEY alone. A btree entry is capped at 2704 bytes and the key
-  # at 64, while the raw column is unbounded - a composite over both would refuse the writes the
-  # column itself accepts, which is why PostgreSQL's own advice for long text is an index over a
-  # bounded prefix. The key IS that prefix, stored as a column. The raw column does tie-work only:
-  # the planner serves a bound as a range over the key with the pair rechecked on what it returns,
-  # and the ordering as an incremental sort within each equal-key group. The index plan gives the key
-  # an index when a query sorts or compares by the attribute (see Hologram.DB.IndexPlan).
   # Framework-owned, on every table: the revision each settable column was last set at. The
   # default fills existing rows through the reconciler's add-nullable-fill-tighten path, and is
   # never a DB DEFAULT - a row written after this reads its revisions from whoever wrote it.
@@ -805,6 +798,14 @@ defmodule Hologram.DB.Mapper do
     end)
   end
 
+  # A string sorts and compares through its sort key, and an index over it holds the KEY alone - the
+  # index plan gives it one when a query sorts or compares by the attribute (see
+  # Hologram.DB.IndexPlan). A btree entry is capped at 2704 bytes and the key at 64, while the raw
+  # column is unbounded - a composite over both would refuse the writes the column itself accepts,
+  # which is why PostgreSQL's own advice for long text is an index over a bounded prefix. The key IS
+  # that prefix, stored as a column. The raw column does tie-work only: the planner serves a bound
+  # as a range over the key with the pair rechecked on what it returns, and the ordering as an
+  # incremental sort within each equal-key group.
   defp sort_key_columns(attributes) do
     attributes
     |> Enum.filter(fn {_name, type, _opts} -> type == :string end)

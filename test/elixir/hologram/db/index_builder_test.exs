@@ -107,6 +107,10 @@ defmodule Hologram.DB.IndexBuilderTest do
     end
   end
 
+  defp fold_chain(chain, model, migration) do
+    {Enum.concat(chain, [migration]), Model.fold(model, migration.ops)}
+  end
+
   # Adds an optional editor to-one beside the author, its migration applied and its index built,
   # and returns the chain and the model it leaves.
   defp with_editor(chain, model, scratch) do
@@ -380,6 +384,32 @@ defmodule Hologram.DB.IndexBuilderTest do
       end)
     end
 
+    test "builds an index that replaces another before it drops the other", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      wider_index = "my_app_task_author_id_id_$idx"
+
+      wider_plan = %{
+        "my_app_task" => %{
+          wider_index => %{columns: ["author_id", "id"], nulls_distinct: true, unique: false}
+        }
+      }
+
+      route(scratch, fn ->
+        :ok = converge(plan(model), chain, step_pause_ms: 0)
+
+        log = capture_info(fn -> assert converge(wider_plan, chain, step_pause_ms: 0) == :ok end)
+
+        {built_at, _length} = :binary.match(log, ~s(built index "#{wider_index}"))
+        {dropped_at, _length} = :binary.match(log, ~s(dropped index "#{@index}"))
+
+        assert built_at < dropped_at
+        assert index_names() == [wider_index]
+      end)
+    end
+
     test "rebuilds an index the plan names that stands with another definition", %{
       chain: chain,
       model: model,
@@ -624,16 +654,17 @@ defmodule Hologram.DB.IndexBuilderTest do
               end)
             end)
 
+          # Built, not merely begun: a drop meeting the build in flight deadlocks with it.
           wait_until(
             fn ->
               %{rows: rows} =
                 Postgrex.query!(
                   other_node,
-                  ~s{SELECT 1 FROM pg_catalog.pg_class WHERE "relname" = $1},
+                  ~s{SELECT i."indisvalid" FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i."indexrelid" WHERE c."relname" = $1},
                   [@index]
                 )
 
-              rows != []
+              rows == [[true]]
             end,
             10_000
           )
@@ -708,6 +739,66 @@ defmodule Hologram.DB.IndexBuilderTest do
   end
 
   describe "Hologram.Migrator.run/3 beside the builder" do
+    # A btree entry is capped near 2.7 kB, so an index over the raw text would refuse a long value.
+    test "drops a plan index over a column a migration casts to text, and only that one", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      amount =
+        migration("20260814091522", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            type: :integer,
+            opts: [optional: true],
+            line: 3
+          }
+        ])
+
+      to_float =
+        migration("20260815091522", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [type: :float],
+            line: 3
+          }
+        ])
+
+      to_string =
+        migration("20260816091522", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [type: :string],
+            line: 3
+          }
+        ])
+
+      amount_index = "my_app_task_amount_$idx"
+
+      route(scratch, fn ->
+        :ok = converge(plan(model), chain, step_pause_ms: 0)
+
+        {amount_chain, amount_model} = fold_chain(chain, model, amount)
+        :ok = Migrator.run(amount_chain, amount_model, @context)
+        query!(~s{CREATE INDEX "#{amount_index}" ON "hologram_data"."my_app_task" ("amount")})
+
+        # A cast to another type than text keeps it: PostgreSQL rebuilds it over the new type.
+        {float_chain, float_model} = fold_chain(amount_chain, amount_model, to_float)
+        assert Migrator.run(float_chain, float_model, @context) == :ok
+        assert index_names() == [amount_index, @index]
+
+        {string_chain, string_model} = fold_chain(float_chain, float_model, to_string)
+        assert Migrator.run(string_chain, string_model, @context) == :ok
+        assert index_names() == [@index]
+      end)
+    end
+
     test "boots without the lock when nothing is left to do, while a build holds it", %{
       chain: chain,
       model: model,

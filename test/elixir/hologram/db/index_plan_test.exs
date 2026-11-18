@@ -4,6 +4,7 @@ defmodule Hologram.DB.IndexPlanTest do
 
   import Hologram.DB.IndexPlan
 
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.DB.Mapper
@@ -1382,6 +1383,28 @@ defmodule Hologram.DB.IndexPlanTest do
       """
 
       assert_raise Hologram.CompileError, message, fn -> framework_plan(mapping) end
+    end
+
+    test "gives the later of two indexes of one table deriving one name a digest of its columns" do
+      defmodule Pub do
+        use Hologram.Entity
+
+        attribute :public, :boolean
+        attribute :public_id, :integer
+      end
+
+      mapping = Mapper.derive!([Pub], [])
+      table = mapping[Pub].table
+      segments = Mapper.table_segments(Pub)
+      digest = CryptographicUtils.short_digest("public_id", 4)
+
+      assert select([need(table, ["public"], nil, ["id"]), need(table, ["public_id"])], mapping) ==
+               %{
+                 table => %{
+                   index_name(segments, ["public", "id"]) => index(["public", "id"]),
+                   index_name(segments, ["public_id", digest]) => index(["public_id"])
+                 }
+               }
     end
 
     test "raises on two tables deriving the same index name" do

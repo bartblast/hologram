@@ -534,7 +534,7 @@ defmodule Hologram.Reflection do
 
   @doc """
   Returns the file name of the index needs PLT dump: the access needs of the statements the server
-  runs that the build derived (see `Hologram.Compiler.build_index_needs/4`), which the database
+  runs that the build derived (see `Hologram.Compiler.build_index_needs/5`), which the database
   converges its indexes to.
   """
   @spec index_needs_plt_dump_file_name() :: String.t()

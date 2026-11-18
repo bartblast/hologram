@@ -489,10 +489,12 @@ defmodule Hologram.Migrator do
   end
 
   # A type change asks about the unique indexes standing over its column right before it
-  # applies: two values can convert to one, and the names a file's earlier ops leave behind
-  # are the ones the database holds at this point.
+  # applies: two values can convert to one. It drops the plan's indexes over a column cast to
+  # text then too. Both read the names a file's earlier ops leave behind, which are the ones the
+  # database holds at this point.
   defp apply_op(%{op: :alter_column} = op, _mapping) do
     Preflight.check_cast!(op)
+    drop_plan_indexes_cast_to_text(op)
 
     execute_statements(DDL.statements(op))
   end
@@ -708,6 +710,29 @@ defmodule Hologram.Migrator do
     |> Enum.sort()
     |> Enum.concat(designation)
   end
+
+  # A column cast to text keeps its indexes - PostgreSQL rebuilds them over the raw text, which no
+  # plan index holds: a btree entry is capped near 2.7 kB, so a longer value would fail its write
+  # until the builder dropped the index. Dropped here instead, in the file's transaction, whose
+  # cast locks the table anyway, and the builder builds the plan's index over the sort key once the
+  # node serves.
+  defp drop_plan_indexes_cast_to_text(
+         %{before: %{type: before_type}, after: %{type: "text"}} = op
+       )
+       when before_type != "text" do
+    actual = Introspection.schema()
+    owned_names = IndexPlan.owned_index_names(actual)
+
+    for {name, index} <- Enum.sort(actual.tables[op.table].indexes),
+        MapSet.member?(owned_names, name),
+        op.column in index.columns do
+      execute_statements(DDL.statements(%{op: :drop_index, index: name}))
+    end
+
+    :ok
+  end
+
+  defp drop_plan_indexes_cast_to_text(_op), do: :ok
 
   # What differs between the database and what the given mapping derives, leaving out the index
   # plan's indexes (see check_drift!/1).

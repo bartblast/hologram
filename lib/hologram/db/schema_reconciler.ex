@@ -341,8 +341,9 @@ defmodule Hologram.DB.SchemaReconciler do
 
   defp apply_op(op, _mapping), do: execute_statements(DDL.statements(op))
 
-  # The indexes the model leaves to the plan, which the context carries - or, for a caller giving
-  # none, the ones the framework's own lookups need.
+  # The indexes the model leaves to the plan, which the context carries (see
+  # Hologram.DB.reconciliation_context/0) - or, for a context built without one, as the tests
+  # build theirs, the ones the framework's own lookups need.
   defp index_plan(%{plan: plan}), do: plan
 
   defp index_plan(context), do: IndexPlan.framework_plan(context.mapping)
