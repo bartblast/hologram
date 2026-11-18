@@ -582,13 +582,15 @@ defmodule Hologram.Policy do
   Returns whether some session may read rows of the given entity type: it has read rules, its own
   lines or the ones taken from its policy modules. The grant store's are supplied by the framework.
   No client ever holds a row of a type without them.
+
+  Read off the declarations rather than the built rules: a page render asks it for every type its
+  queries' rules read.
   """
   @spec readable_type?(module) :: boolean
+  def readable_type?(RoleGrant), do: true
+
   def readable_type?(entity_type) do
-    entity_type
-    |> build()
-    |> Map.get(:read, [])
-    |> Kernel.!=([])
+    Enum.any?(entity_type.__policies__(), &match?({:read, _to, _via, _predicates}, &1))
   end
 
   @doc """
