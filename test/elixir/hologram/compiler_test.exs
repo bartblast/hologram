@@ -303,12 +303,13 @@ defmodule Hologram.CompilerTest do
 
   # What the data layer keeps of one page whose client code names only the given modules and
   # reaches no component, checking permissions on the client or not.
-  defp mentioning_reach(modules, checks_permissions?) do
+  defp mentioning_reach(modules, checks_permissions?, reads_session_user? \\ false) do
     %{
       PageModule18 => %{
         checks_permissions?: checks_permissions?,
         components: [],
-        modules: MapSet.new(modules)
+        modules: MapSet.new(modules),
+        reads_session_user?: reads_session_user?
       }
     }
   end
@@ -2235,7 +2236,8 @@ defmodule Hologram.CompilerTest do
         PageModule18 => %{
           checks_permissions?: false,
           components: [QueryExtractorModule133],
-          modules: MapSet.new([QueryExtractorModule133])
+          modules: MapSet.new([QueryExtractorModule133]),
+          reads_session_user?: false
         }
       }
 
@@ -2574,6 +2576,74 @@ defmodule Hologram.CompilerTest do
 
       refute MapSet.member?(sync_constants.entity_types, Entity50)
       assert sync_constants.synced_types == [RoleGrant, Entity51]
+    end
+
+    # The page names no user type, and answers the session user from the browser's database - so
+    # the user's row has to be there, and kept current.
+    test "syncs the user type when a page reads the session user from the context", %{
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = mentioning_reach([Entity4], false, true)
+
+      assert build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types == [
+               UserEntity,
+               Entity4
+             ]
+    end
+
+    # A user type declaring no rule is one nobody may read, so it syncs no row - but the page reads
+    # it, so it is held and named like a type a page mentions.
+    test "syncs a user type declaring no rule when a page reads the session user", %{
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = mentioning_reach([Entity4], false, true)
+      plt_with_unreached_user_entity = with_user_entity(module_info_plt, Entity10)
+
+      sync_constants = build_sync_constants(reach_by_page, %{}, plt_with_unreached_user_entity)
+
+      assert MapSet.member?(sync_constants.entity_types, Entity10)
+      assert Entity10 in sync_constants.synced_types
+      assert sync_constants.user_entity == Entity10
+    end
+
+    # A checking browser answers the user type's rules over the rows they read, as for any type it
+    # holds.
+    test "syncs the types the user type's rules read when a page checking permissions reads the session user",
+         %{module_info_plt: module_info_plt} do
+      reach_by_page = mentioning_reach([Entity4], true, true)
+      plt_with_path_user_entity = with_user_entity(module_info_plt, PathPolicyEntity)
+
+      synced_types =
+        build_sync_constants(reach_by_page, %{}, plt_with_path_user_entity).synced_types
+
+      for synced_type <- [
+            RoleGrant,
+            Entity17,
+            PolicyEntity,
+            PathPolicyEntity,
+            ParentPolicyEntity,
+            DelegationPolicyEntity
+          ] do
+        assert synced_type in synced_types
+      end
+    end
+
+    test "leaves the user type out of the synced types when no page reads the session user", %{
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = mentioning_reach([Entity4], false)
+
+      refute UserEntity in build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types
+    end
+
+    test "syncs no user type for a page reading the session user when the data model designates none",
+         %{module_info_plt: module_info_plt} do
+      reach_by_page = mentioning_reach([Entity4], false, true)
+      plt_without_user_entity = without_user_entity(module_info_plt)
+
+      assert build_sync_constants(reach_by_page, %{}, plt_without_user_entity).synced_types == [
+               Entity4
+             ]
     end
 
     # No user entity type, no grant store to check permissions against, so no page checks them.
