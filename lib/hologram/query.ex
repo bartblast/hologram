@@ -341,8 +341,10 @@ defmodule Hologram.Query do
   one side of `and` or `or` or as a quantifier's condition, when a quantifier has a condition but no
   bound row, a bound row but no condition, or - for `all` - no condition at all, when a quantifier
   binds a name an enclosing one already bound, when its relationship is pinned or not a
-  relationship, when a bound row is compared whole rather than through an attribute, when the
-  predicates name `user_id()`, which only a policy condition can (a user's id is pinned from a
+  relationship, when a bound row is compared whole rather than through an attribute, when a
+  comparison or a search reads the same attribute of the same row on both sides - which tells
+  nothing about the row but whether the attribute is set, and the error says what it answers - when
+  the predicates name `user_id()`, which only a policy condition can (a user's id is pinned from a
   variable holding it: `^user_id`), or when the predicates take any other form - a bare name where
   only a value goes (a keyword value, a membership element, a range bound) is most likely a
   forgotten pin, and the error says so.
