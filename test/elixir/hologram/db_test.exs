@@ -189,7 +189,7 @@ defmodule Hologram.DBTest do
     end
 
     test "applies the session settings as each pool connection connects" do
-      {:ok, {_flags, [%{start: {_pool, :start_link, [{Postgrex.Protocol, opts}]}}]}} = init([])
+      {:ok, {_flags, [%{start: {_pool, :start_link, [{Hologram.DB.Protocol, opts}]}}]}} = init([])
 
       assert opts[:after_connect] == {Hologram.DB, :apply_session_settings, []}
     end
@@ -197,7 +197,7 @@ defmodule Hologram.DBTest do
     test "leaves the given after_connect in place" do
       after_connect = {IO, :inspect, []}
 
-      {:ok, {_flags, [%{start: {_pool, :start_link, [{Postgrex.Protocol, opts}]}}]}} =
+      {:ok, {_flags, [%{start: {_pool, :start_link, [{Hologram.DB.Protocol, opts}]}}]}} =
         init(after_connect: after_connect)
 
       assert opts[:after_connect] == after_connect

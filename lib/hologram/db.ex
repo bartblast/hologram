@@ -12,6 +12,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Mapper
+  alias Hologram.DB.Protocol
   alias Hologram.DB.QueryRunner
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.SQLQuery
@@ -881,7 +882,8 @@ defmodule Hologram.DB do
         opts
       )
 
-    pool_child = {Postgrex, postgrex_opts}
+    # TODO(#1696): {Postgrex, postgrex_opts} again, see Hologram.DB.Protocol.
+    pool_child = {Protocol, postgrex_opts}
 
     # The environment selects the schema mechanism: dev converges from the model, test
     # manages its schema from the test helpers, and every other env applies the
