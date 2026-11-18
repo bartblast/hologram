@@ -23,11 +23,15 @@ defmodule Hologram.Sync.Carry do
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
+  alias Hologram.Query
   alias Hologram.Sync.Frame
 
   @key {__MODULE__, :entities}
   @counts_key {__MODULE__, :counts}
   @grant_scopes_key {__MODULE__, :grant_scopes}
+
+  # The largest integer a JavaScript Number holds exactly, Number.MAX_SAFE_INTEGER.
+  @max_safe_integer 9_007_199_254_740_991
 
   @doc """
   Clears what a previous render gathered and returns :ok.
@@ -162,6 +166,44 @@ defmodule Hologram.Sync.Carry do
     scopes
   end
 
+  # Spells the given normalized query term as text, the way the client spells its own normalized
+  # term of the same query (QuerySpelling.spell in query_spelling.mjs), so an answer the server
+  # carries can be looked up by the query that gave it. The query holds every value it reads, so a
+  # changed value is a changed spelling, where a row argument spelled by its type and id is not.
+  #
+  # The two terms aren't one shape, so neither is spelled as it stands. What's spelled is what both
+  # hold: the term's fields but its source and trust, which a client term doesn't have, and every
+  # value as the client holds it - an enum and a date as their wire text, and a boolean as its
+  # text too, since an enum may declare true and the client holds that as a string. The attribute
+  # a value is compared with tells what it is, so nothing two values spell alike can be confused.
+  #
+  # A filter is spelled with its clauses sorted by their spelling, all the way down, rather than
+  # in the order the normalizer put them in: the two tiers' normalizers sort by different keys. A
+  # number whole and within a JavaScript Number's exact range is spelled as an integer, since the
+  # client holds 3 and 3.0 as one Number, any other float by its bits, and an integer past that
+  # range in full, which the client never spells, since it holds no such integer exactly.
+  #
+  # Every way the two could still differ has to make the spellings differ, never agree: a count
+  # whose key misses is counted on the client, one whose key hits wrongly shows a number for
+  # another query. So a shape this doesn't know is spelled by inspect/1 behind a mark the client
+  # never writes. So is a term the client can't hold at all: a trusted one, whose answer reads past
+  # the policies, and one with a source, which only an entity's derived field reads.
+  @doc false
+  @spec spell_query(Query.t()) :: String.t()
+  def spell_query(%Query{source: nil, trust: false} = term) do
+    spell_object([
+      {"cardinality", spell_value(term.cardinality)},
+      {"entity", spell_value(term.entity)},
+      {"filter", spell_clauses(term.filter)},
+      {"include", spell_include(term.include)},
+      {"skip", spell_value(term.skip)},
+      {"sort", spell_sort(term.sort)},
+      {"take", spell_value(term.take)}
+    ])
+  end
+
+  def spell_query(term), do: spell_unknown(term)
+
   # WARNING: must match the client's DataLayer.#carriedCount (data_layer.mjs).
   defp count_key(module, name, args) do
     "#{inspect(module)}/#{name}/#{Enum.map_join(args, ",", &spell_key_part/1)}"
@@ -205,9 +247,79 @@ defmodule Hologram.Sync.Carry do
   # tells two apart is the pair of what they are and which one they are.
   defp key(%entity_type{id: id}), do: {entity_type, id}
 
+  defp spell_alternatives(alternatives) do
+    spelled_alternatives =
+      alternatives
+      |> Enum.map(&spell_clauses/1)
+      |> Enum.sort()
+      |> Enum.join(",")
+
+    spell_object([{"or", "[#{spelled_alternatives}]"}])
+  end
+
+  defp spell_clause({:or, alternatives}) when is_list(alternatives) do
+    if List.improper?(alternatives) do
+      spell_unknown(alternatives)
+    else
+      spell_alternatives(alternatives)
+    end
+  end
+
+  defp spell_clause({quantifier, {source, clauses}}) when quantifier in [:all, :any, :none] do
+    spell_object([
+      {"filter", spell_clauses(clauses)},
+      {"quantifier", spell_value(quantifier)},
+      {"source", spell_value(source)}
+    ])
+  end
+
+  defp spell_clause({name, operator, operand}) when is_atom(operator) do
+    "[#{spell_value(name)},#{spell_value(operator)},#{spell_value(operand)}]"
+  end
+
+  defp spell_clause(clause), do: spell_unknown(clause)
+
+  defp spell_clause_list(clauses) do
+    spelled_clauses =
+      clauses
+      |> Enum.map(&spell_clause/1)
+      |> Enum.sort()
+      |> Enum.join(",")
+
+    "[#{spelled_clauses}]"
+  end
+
+  # WARNING: must match the client's QuerySpelling.#spellClauses (query_spelling.mjs).
+  defp spell_clauses(clauses) when is_list(clauses) do
+    if List.improper?(clauses) do
+      spell_unknown(clauses)
+    else
+      spell_clause_list(clauses)
+    end
+  end
+
+  defp spell_clauses(clauses), do: spell_unknown(clauses)
+
   defp spell_entity_id(id) when is_binary(id), do: id
 
   defp spell_entity_id(id), do: spell_key_part(id)
+
+  defp spell_include(include) when is_map(include) and not is_struct(include) do
+    names = Map.keys(include)
+
+    if Enum.all?(names, &is_atom/1) do
+      include
+      |> Enum.map(fn
+        {name, nil} -> {Atom.to_string(name), "null"}
+        {name, sub_term} -> {Atom.to_string(name), spell_query(sub_term)}
+      end)
+      |> spell_object()
+    else
+      spell_unknown(include)
+    end
+  end
+
+  defp spell_include(include), do: spell_unknown(include)
 
   # A row is told apart by the metadata every entity struct carries, rather than by its type, so a
   # row of a type the client's model doesn't bake is spelled the same way there.
@@ -270,4 +382,112 @@ defmodule Hologram.Sync.Carry do
     do: [spell_key_part(item) | spell_list_items(rest)]
 
   defp spell_list_items([item | tail]), do: ["#{spell_key_part(item)} | #{spell_key_part(tail)}"]
+
+  # WARNING: must match the client's QuerySpelling.#spellNumber (query_spelling.mjs).
+  defp spell_number(number) when is_integer(number), do: Integer.to_string(number)
+
+  defp spell_number(number) when is_float(number) do
+    if number == Float.round(number) and abs(number) <= @max_safe_integer do
+      number
+      |> trunc()
+      |> Integer.to_string()
+    else
+      <<bits::binary-size(8)>> = <<number::float-64>>
+
+      "float:#{Base.encode16(bits, case: :lower)}"
+    end
+  end
+
+  # The members are named by plain strings, so they are sorted as they are written, and quoted the
+  # way a string value is.
+  #
+  # WARNING: must match the client's QuerySpelling.#spellObject (query_spelling.mjs).
+  defp spell_object(members) do
+    spelled_members =
+      members
+      |> Enum.sort_by(fn {key, _spelled_value} -> key end)
+      |> Enum.map_join(",", fn {key, spelled_value} -> "#{spell_string(key)}:#{spelled_value}" end)
+
+    "{#{spelled_members}}"
+  end
+
+  defp spell_sort(sort) when is_list(sort) do
+    if List.improper?(sort) do
+      spell_unknown(sort)
+    else
+      spell_sort_entries(sort)
+    end
+  end
+
+  defp spell_sort(sort), do: spell_unknown(sort)
+
+  defp spell_sort_entries(sort) do
+    spelled_entries =
+      Enum.map_join(sort, ",", fn
+        {name, direction} -> "[#{spell_value(name)},#{spell_value(direction)}]"
+        entry -> spell_unknown(entry)
+      end)
+
+    "[#{spelled_entries}]"
+  end
+
+  # Only the quote and the backslash are escaped, which is all it takes to tell where a string
+  # ends. The key travels in the page's JSON, which escapes everything else.
+  #
+  # WARNING: must match the client's QuerySpelling.#spellString (query_spelling.mjs).
+  defp spell_string(text) do
+    escaped =
+      text
+      |> String.replace("\\", "\\\\")
+      |> String.replace("\"", "\\\"")
+
+    ~s("#{escaped}")
+  end
+
+  # Never what the client spells: what it spells starts with a quote, a bracket, a brace, a digit,
+  # a minus, `float:` or `null`.
+  defp spell_unknown(term), do: "?" <> inspect(term, limit: :infinity, printable_limit: :infinity)
+
+  # A value as the client holds it once its stage has unboxed it (see Model.unbox in model.mjs),
+  # read off the value's shape: a value has the shape of its attribute's type, since the stages
+  # refuse one that doesn't. A name, a path and a quantifier's source are atoms and lists of them,
+  # spelled as the client's strings and arrays of them.
+  #
+  # WARNING: must match the client's QuerySpelling.#spellValue (query_spelling.mjs).
+  defp spell_value(nil), do: "null"
+
+  defp spell_value(boolean) when is_boolean(boolean), do: spell_string(Atom.to_string(boolean))
+
+  defp spell_value(atom) when is_atom(atom), do: spell_string(Codec.encode_enum_value(atom))
+
+  defp spell_value(number) when is_number(number), do: spell_number(number)
+
+  defp spell_value(text) when is_binary(text), do: spell_string(text)
+
+  defp spell_value(%Date{} = date), do: spell_string(Codec.encode_json(date, :date))
+
+  defp spell_value(%DateTime{} = datetime),
+    do: spell_string(Codec.encode_json(datetime, :datetime))
+
+  defp spell_value(%Time{} = time), do: spell_string(Codec.encode_json(time, :time))
+
+  defp spell_value(list) when is_list(list) do
+    if List.improper?(list) do
+      spell_unknown(list)
+    else
+      "[#{Enum.map_join(list, ",", &spell_value/1)}]"
+    end
+  end
+
+  defp spell_value({:attribute, name}), do: spell_object([{"attribute", spell_value(name)}])
+
+  defp spell_value({:outer, levels, name}) when is_integer(levels) do
+    spell_object([{"name", spell_value(name)}, {"outer", spell_number(levels)}])
+  end
+
+  defp spell_value({:placeholder, name}) when is_atom(name) do
+    spell_object([{"placeholder", spell_string(Atom.to_string(name))}])
+  end
+
+  defp spell_value(value), do: spell_unknown(value)
 end
