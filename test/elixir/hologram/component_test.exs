@@ -148,7 +148,7 @@ defmodule Hologram.ComponentTest do
 
           prop :b, :string
 
-          derived :entities, [Entity2], fn -> filter(Entity2, b == true) end
+          derived :entities, [Entity2], fn -> filter(Entity2, b == 1) end
 
           def template do
             ~HOLO""
@@ -156,7 +156,7 @@ defmodule Hologram.ComponentTest do
         end
         """)
 
-      assert module.__derived_entities__() == filter(Entity2, b == true)
+      assert module.__derived_entities__() == filter(Entity2, b == 1)
     end
 
     test "reads a bare name inside a piped query as the queried row's" do
@@ -170,7 +170,7 @@ defmodule Hologram.ComponentTest do
 
           prop :b, :string
 
-          derived :entities, [Entity2], fn -> Entity2 |> filter(b == true) |> sort(b) end
+          derived :entities, [Entity2], fn -> Entity2 |> filter(b == 1) |> sort(b) end
 
           def template do
             ~HOLO""
@@ -180,7 +180,7 @@ defmodule Hologram.ComponentTest do
 
       assert module.__derived_entities__() ==
                Entity2
-               |> filter(b == true)
+               |> filter(b == 1)
                |> sort(b)
     end
 
@@ -196,7 +196,7 @@ defmodule Hologram.ComponentTest do
 
           prop :b, :string
 
-          derived :entities, [Entity2], fn -> Q.filter(Entity2, b == true) end
+          derived :entities, [Entity2], fn -> Q.filter(Entity2, b == 1) end
 
           def template do
             ~HOLO""
@@ -204,7 +204,7 @@ defmodule Hologram.ComponentTest do
         end
         """)
 
-      assert module.__derived_entities__() == filter(Entity2, b == true)
+      assert module.__derived_entities__() == filter(Entity2, b == 1)
     end
 
     test "reads a bare name inside a query macro the body imports as the queried row's" do
@@ -220,7 +220,7 @@ defmodule Hologram.ComponentTest do
           derived :entities, [Entity2], fn ->
             import Hologram.Query, only: [filter: 2]
 
-            filter(Entity2, b == true)
+            filter(Entity2, b == 1)
           end
 
           def template do
@@ -229,7 +229,7 @@ defmodule Hologram.ComponentTest do
         end
         """)
 
-      assert module.__derived_entities__() == filter(Entity2, b == true)
+      assert module.__derived_entities__() == filter(Entity2, b == 1)
     end
 
     test "reads a bare name inside a query through an alias the body declares as the queried row's" do
@@ -245,7 +245,7 @@ defmodule Hologram.ComponentTest do
           derived :entities, [Entity2], fn ->
             require Hologram.Query, as: Q
 
-            Q.filter(Entity2, b == true)
+            Q.filter(Entity2, b == 1)
           end
 
           def template do
@@ -254,7 +254,7 @@ defmodule Hologram.ComponentTest do
         end
         """)
 
-      assert module.__derived_entities__() == filter(Entity2, b == true)
+      assert module.__derived_entities__() == filter(Entity2, b == 1)
     end
 
     test "reads a bare name inside a query through an alias the body declares with as: after another option as the queried row's" do
@@ -270,7 +270,7 @@ defmodule Hologram.ComponentTest do
           derived :entities, [Entity2], fn ->
             require Hologram.Query, warn: false, as: Q
 
-            Q.filter(Entity2, b == true)
+            Q.filter(Entity2, b == 1)
           end
 
           def template do
@@ -279,7 +279,7 @@ defmodule Hologram.ComponentTest do
         end
         """)
 
-      assert module.__derived_entities__() == filter(Entity2, b == true)
+      assert module.__derived_entities__() == filter(Entity2, b == 1)
     end
 
     test "reads a bare name inside a query through a multi-alias the body declares as the queried row's" do
@@ -296,7 +296,7 @@ defmodule Hologram.ComponentTest do
             alias Hologram.{Query}
             require Query
 
-            Query.filter(Entity2, b == true)
+            Query.filter(Entity2, b == 1)
           end
 
           def template do
@@ -305,7 +305,7 @@ defmodule Hologram.ComponentTest do
         end
         """)
 
-      assert module.__derived_entities__() == filter(Entity2, b == true)
+      assert module.__derived_entities__() == filter(Entity2, b == 1)
     end
 
     test "reads a capture of a function named like a prop as no variable" do

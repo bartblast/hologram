@@ -873,7 +873,10 @@ describe("Renderer derived fields", () => {
               filter(
                 Type.alias(ROW),
                 Type.list([
-                  Type.tuple([Type.atom("id"), Type.bitstring("absent")]),
+                  Type.tuple([
+                    Type.atom("id"),
+                    Type.bitstring("018f0000-0000-7000-8000-0000000000ff"),
+                  ]),
                 ]),
               ),
             ),

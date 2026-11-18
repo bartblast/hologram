@@ -28,6 +28,7 @@ defmodule HologramFeatureTests.MutationsPage do
       <button $click={command: :create_restock_job}> Create restock job </button>
       <button $click={command: :log_in}> Log in </button>
       <button $click="put_author"> Put author </button>
+      <button $click="read_mistyped_filter"> Read mistyped filter </button>
       <button $click="read_query_by_id"> Read query by id </button>
       <button $click={command: :restock_item}> Restock item </button>
     </p>
@@ -45,6 +46,19 @@ defmodule HologramFeatureTests.MutationsPage do
     [body: "unsaved"]
     |> Note.new()
     |> put_attribute(:author, nil)
+
+    component
+  end
+
+  # A string is compared with a boolean attribute, so the filter refuses it in the browser - before
+  # the read answers the rows the string unboxes to. The value goes through wrap_term/1, so neither
+  # the type checker nor Dialyzer flags it.
+  def action(:read_mistyped_filter, _params, component) do
+    value = wrap_term("yes")
+
+    Note
+    |> filter(pinned: ^value)
+    |> DB.read()
 
     component
   end
