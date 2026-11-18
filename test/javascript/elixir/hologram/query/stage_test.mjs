@@ -4066,6 +4066,219 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    // A hint as the query macros leave one inside a quantifier: no fix, and the spelling that reads
+    // the name on each row in scope, nearest first.
+    const spelled = (position, depth, name, spellings) =>
+      Type.list([
+        Type.tuple([
+          Type.atom(position),
+          Type.integer(depth),
+          name,
+          Type.nil(),
+          Type.list(spellings.map(Type.bitstring)),
+        ]),
+      ]);
+
+    it("names the spelling that reads a field only the bound row declares", () => {
+      const outerPosition = outer(1, "position");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            Type.list([
+              Type.tuple([
+                Type.atom("any"),
+                Type.tuple([
+                  path("messages"),
+                  Type.list([
+                    Type.tuple([outerPosition, op(">", Type.integer(1))]),
+                  ]),
+                ]),
+              ]),
+            ]),
+            spelled("key", 1, outerPosition, ["message.position", "position"]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :position in MyApp.Channel - known attributes: :id, :name, :owner_id - MyApp.Message declares position, read as message.position",
+      );
+    });
+
+    it("names the spelling that reads a field only the queried row declares", () => {
+      const name = Type.atom("name");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified("messages", "name", Type.bitstring("x")),
+            spelled("key", 1, name, ["message.name", "name"]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :name in MyApp.Message - known attributes: :body, :channel_id, :id, :position - MyApp.Channel declares name, read as name",
+      );
+    });
+
+    it("names the spelling that reads an operand only the bound row declares", () => {
+      const outerPosition = outer(1, "position");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified(
+              "messages",
+              "position",
+              op(">", attribute(outerPosition)),
+            ),
+            spelled("operand", 1, outerPosition, [
+              "message.position",
+              "position",
+            ]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :position in MyApp.Channel - known attributes: :id, :name, :owner_id - MyApp.Message declares position, read as message.position",
+      );
+    });
+
+    it("names the nearest row declaring a field inside nested quantifiers", () => {
+      const outerName = outer(2, "name");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            user,
+            Type.list([
+              Type.tuple([
+                Type.atom("any"),
+                Type.tuple([
+                  path("projects"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("any"),
+                      Type.tuple([
+                        path("tasks"),
+                        Type.list([
+                          Type.tuple([outerName, Type.bitstring("x")]),
+                        ]),
+                      ]),
+                    ]),
+                  ]),
+                ]),
+              ]),
+            ]),
+            spelled("key", 2, outerName, ["task.name", "project.name", "name"]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :name in MyApp.User - known attributes: :active, :email, :ends_on, :id, :level, :logins, :manager_id, :starts_on - MyApp.Project declares name, read as project.name",
+      );
+    });
+
+    it("names the fix ahead of the spelling a row gives", () => {
+      const outerPosition = outer(1, "position");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified("messages", "body", op("==", attribute(outerPosition))),
+            Type.list([
+              Type.tuple([
+                Type.atom("operand"),
+                Type.integer(1),
+                outerPosition,
+                Type.bitstring(fix),
+                Type.list([
+                  Type.bitstring("message.position"),
+                  Type.bitstring("position"),
+                ]),
+              ]),
+            ]),
+          ),
+        "Hologram.MisuseError",
+        `unknown attribute :position in MyApp.Channel - known attributes: :id, :name, :owner_id - ${fix}`,
+      );
+    });
+
+    it("leaves out a spelling when no row in scope declares the field", () => {
+      const outerNope = outer(1, "nope");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            Type.list([
+              Type.tuple([
+                Type.atom("any"),
+                Type.tuple([
+                  path("messages"),
+                  Type.list([
+                    Type.tuple([outerNope, op(">", Type.integer(1))]),
+                  ]),
+                ]),
+              ]),
+            ]),
+            spelled("key", 1, outerNope, ["message.nope", "nope"]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :nope in MyApp.Channel - known attributes: :id, :name, :owner_id",
+      );
+    });
+
+    it("refuses an unknown left side ahead of an operand another row declares", () => {
+      const outerPosition = outer(1, "position");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified("messages", "nope", op("==", attribute(outerPosition))),
+            spelled("operand", 1, outerPosition, [
+              "message.position",
+              "position",
+            ]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :nope in MyApp.Message - known attributes: :body, :channel_id, :id, :position",
+      );
+    });
+
+    it("refuses a left side that can't be ordered ahead of an operand another row declares", () => {
+      const outerPosition = outer(1, "position");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified(
+              "messages",
+              "channel_id",
+              op(">", attribute(outerPosition)),
+            ),
+            spelled("operand", 1, outerPosition, [
+              "message.position",
+              "position",
+            ]),
+          ),
+        "Hologram.MisuseError",
+        "operator :> requires an orderable attribute - attribute :channel_id in MyApp.Message has type :uuid, and boolean and uuid attributes have no order to compare by",
+      );
+    });
+
+    // An operand read on a row out of the scope's reach is refused where the triple is built, after
+    // the predicate's own name.
+    it("refuses an unknown left side ahead of an operand on a row out of reach", () => {
+      assertBoxedError(
+        () =>
+          filter(
+            Type.alias(CHANNEL),
+            predicates([["nope", op("==", attribute(outer(1, "name")))]]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :nope in MyApp.Channel - known attributes: :id, :name, :owner_id",
+      );
+    });
+
     it("leaves out a hint of another depth", () => {
       const outerSearch = outer(1, "search");
 

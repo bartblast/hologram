@@ -758,9 +758,10 @@ defmodule Hologram.Query.ExpressionTest do
                "any(message <- messages, since <= message.created_at)",
                [:since]
              ) == [
+               {:operand, 1, :created_at, nil, ["message.created_at", "created_at"]},
                {:key, 1, {:outer, 1, :since},
                 "a value from the surrounding code is pinned, on the right side: message.created_at >= ^since",
-                []}
+                ["message.since", "since"]}
              ]
     end
 
@@ -808,15 +809,54 @@ defmodule Hologram.Query.ExpressionTest do
                &predicate_hints/2,
                "any(message <- messages, message.created_at > search)",
                [:search]
-             ) == [{:operand, 1, {:outer, 1, :search}, @fix, []}]
+             ) == [
+               {:operand, 1, {:outer, 1, :search}, @fix, ["message.search", "search"]},
+               {:key, 1, :created_at, nil, ["message.created_at", "created_at"]}
+             ]
     end
 
-    test "hints nothing for a name a quantifier binds, though a variable holds it too" do
+    test "spells a name inside nested quantifiers on each row, nearest first" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(channel <- channels, any(message <- channel.messages, body == \"x\"))",
+               []
+             ) == [
+               {:key, 2, {:outer, 2, :body}, nil, ["message.body", "channel.body", "body"]}
+             ]
+    end
+
+    test "spells a membership's and a search's left side inside a quantifier" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(message <- messages, position in [1, 2] and contains(body, \"x\"))",
+               []
+             ) == [
+               {:key, 1, {:outer, 1, :position}, nil, ["message.position", "position"]},
+               {:key, 1, {:outer, 1, :body}, nil, ["message.body", "body"]}
+             ]
+    end
+
+    test "spells nothing for a path inside a quantifier" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(message <- messages, message.author.name == \"x\")",
+               []
+             ) == []
+    end
+
+    test "spells nothing at the top of a filter" do
+      assert hints_of(&predicate_hints/2, "title == name and position in [1]", []) == []
+    end
+
+    test "spells a name a quantifier binds on each row, though a variable holds it too" do
       assert hints_of(
                &predicate_hints/2,
                "any(message <- messages, created_at > message.edited_at)",
                [:message]
-             ) == []
+             ) == [
+               {:operand, 1, :edited_at, nil, ["message.edited_at", "edited_at"]},
+               {:key, 1, {:outer, 1, :created_at}, nil, ["message.created_at", "created_at"]}
+             ]
     end
 
     test "hints each side of and and or" do

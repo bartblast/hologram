@@ -317,7 +317,10 @@ defmodule Hologram.Query.Expression do
   a variable of, or names an argument of a derived field (see `mark_pinnable/1`), gets the pin it
   most likely forgot. So does a comparison's left side when its right side is a name or a path too,
   the pinned value moved to the right side - `search == title` is most likely `title == ^search`.
-  A name bound by a quantifier around it is that row, and gets none.
+  A name bound by a quantifier around it is that row, and gets no pin. A name written inside a
+  quantifier - either side of a comparison, a search's attribute and term, a membership's
+  attribute - also carries how it is spelled to read it on each row in scope, so a refusal can name
+  the row that declares it. A path gets none.
 
   Takes predicates `predicates/2` lowered without raising.
   """
@@ -453,15 +456,24 @@ defmodule Hologram.Query.Expression do
   end
 
   # The hints of a condition the lowering took, walked the way predicate_list!/3 walks it - the
-  # bindings being the rows the quantifiers around it bound, nearest first. A membership's right side
-  # is a value, never a name.
+  # bindings being the rows the quantifiers around it bound, nearest first. A membership's right
+  # side is a value, never a name.
   defp clause_hints({operator, _meta, [left, right]}, bindings, env) when operator in [:and, :or],
     do: clause_hints(left, bindings, env) ++ clause_hints(right, bindings, env)
 
   defp clause_hints({operator, _meta, [left, right]}, bindings, env)
        when operator in @comparison_operators do
-    operand_hints(right, bindings, env) ++ key_hints(operator, left, right, bindings, env)
+    operand_hint = name_hint(:operand, right, bindings, pin_fix(right, bindings, env, :operand))
+    key_hint = name_hint(:key, left, bindings, key_fix(operator, left, right, bindings, env))
+
+    Enum.reject([operand_hint, key_hint], &is_nil/1)
   end
+
+  defp clause_hints({:not, _meta, [{:in, _in_meta, [left, _right]}]}, bindings, _env),
+    do: membership_hints(left, bindings)
+
+  defp clause_hints({:in, _meta, [left, _right]}, bindings, _env),
+    do: membership_hints(left, bindings)
 
   defp clause_hints(
          {quantifier, _meta,
@@ -473,9 +485,13 @@ defmodule Hologram.Query.Expression do
     clause_hints(condition, [name | bindings], env)
   end
 
-  defp clause_hints({operator, _meta, [_left, right | _opts]}, bindings, env)
-       when operator in @search_operators,
-       do: operand_hints(right, bindings, env)
+  defp clause_hints({operator, _meta, [left, right | _opts]}, bindings, env)
+       when operator in @search_operators do
+    operand_hint = name_hint(:operand, right, bindings, pin_fix(right, bindings, env, :operand))
+    key_hint = name_hint(:key, left, bindings, nil)
+
+    Enum.reject([operand_hint, key_hint], &is_nil/1)
+  end
 
   defp clause_hints(_ast, _bindings, _env), do: []
 
@@ -666,17 +682,16 @@ defmodule Hologram.Query.Expression do
 
   # A value of the surrounding code goes on the right side of a comparison, so a left side reading
   # one, compared with a name, is most likely the two swapped - the operator flipped with them. A
-  # right side reading one too forgot its own pin, which its own hint names, so the key gets none.
-  defp key_hints(operator, left, right, bindings, env) do
+  # right side reading one too forgot its own pin, which its own hint names, so the key gets no fix.
+  defp key_fix(operator, left, right, bindings, env) do
     with right_name when right_name != nil <- written_name(right, bindings),
          nil <- pin_fix(right, bindings, env, :operand),
-         name when name != nil <- written_name(left, bindings),
          fix when fix != nil <- pin_fix(left, bindings, env, :key) do
       swapped = Macro.to_string({flipped(operator), [], [right, {:^, [], [left]}]})
 
-      [{:key, length(bindings), name, "#{fix}, on the right side: #{swapped}", []}]
+      "#{fix}, on the right side: #{swapped}"
     else
-      _no_hint -> []
+      _no_fix -> nil
     end
   end
 
@@ -831,6 +846,12 @@ defmodule Hologram.Query.Expression do
     )
   end
 
+  defp membership_hints(left, bindings) do
+    key_hint = name_hint(:key, left, bindings, nil)
+
+    if key_hint, do: [key_hint], else: []
+  end
+
   defp merge_includes(elements) do
     elements
     |> Enum.reduce([], fn
@@ -862,6 +883,42 @@ defmodule Hologram.Query.Expression do
       ast,
       env
     )
+  end
+
+  # The hint for a name written in the given position - nil when it is no name, or when it has
+  # neither a fix nor a row of its own to be read on differently.
+  defp name_hint(position, ast, bindings, fix) do
+    with name when name != nil <- written_name(ast, bindings) do
+      spellings = row_spellings(ast, bindings)
+
+      if fix != nil or spellings != [] do
+        {position, length(bindings), name, fix, spellings}
+      end
+    end
+  end
+
+  # A name's pin fix: none for a row a quantifier binds, the argument for a derived field's, the
+  # pin for a variable's.
+  defp name_pin_fix(ast, bindings, env, position) do
+    {root, meta, _context} = root_node = root_name(ast)
+    pinned = if position == :key, do: "read pinned", else: "read pinned: #{pin_hint(ast)}"
+
+    cond do
+      root in bindings ->
+        nil
+
+      Keyword.get(meta, @pinnable_key, false) ->
+        "#{root} is an argument of the derived field's function, #{pinned}"
+
+      variable?(root_node, env) and position == :key ->
+        "a value from the surrounding code is pinned"
+
+      variable?(root_node, env) ->
+        "a value from the surrounding code is pinned: #{pin_hint(ast)}"
+
+      true ->
+        nil
+    end
   end
 
   @spec narrowed_include_error!(atom, Macro.t(), Macro.Env.t()) :: no_return
@@ -908,15 +965,6 @@ defmodule Hologram.Query.Expression do
       ast,
       env
     )
-  end
-
-  defp operand_hints(right, bindings, env) do
-    with name when name != nil <- written_name(right, bindings),
-         fix when fix != nil <- pin_fix(right, bindings, env, :operand) do
-      [{:operand, length(bindings), name, fix, []}]
-    else
-      nil -> []
-    end
   end
 
   defp option_value!({:^, _meta, [expr]}, _env), do: expr
@@ -969,25 +1017,7 @@ defmodule Hologram.Query.Expression do
   # or a variable of the surrounding code rather than a row a quantifier binds - nil otherwise. The
   # key's fix names where the pinned value goes after it.
   defp pin_fix(ast, bindings, env, position) do
-    {root, meta, _context} = root_node = root_name(ast)
-    pinned = if position == :key, do: "read pinned", else: "read pinned: #{pin_hint(ast)}"
-
-    cond do
-      root in bindings ->
-        nil
-
-      Keyword.get(meta, @pinnable_key, false) ->
-        "#{root} is an argument of the derived field's function, #{pinned}"
-
-      variable?(root_node, env) and position == :key ->
-        "a value from the surrounding code is pinned"
-
-      variable?(root_node, env) ->
-        "a value from the surrounding code is pinned: #{pin_hint(ast)}"
-
-      true ->
-        nil
-    end
+    if hops(ast), do: name_pin_fix(ast, bindings, env, position)
   end
 
   # ^ binds looser than a call or a dot, and tighter than any other operator, so only an operator
@@ -1219,6 +1249,26 @@ defmodule Hologram.Query.Expression do
       index -> {:bound, index}
     end
   end
+
+  # How a name inside a quantifier is spelled to read it on each row in scope, nearest first -
+  # through the name each quantifier bound its row to, then bare for the queried row - so the stage
+  # can name the spelling for the row that declares it, when the one written doesn't. A path, and a
+  # name at the top of a filter, get none.
+  defp row_spellings(ast, [_binding | _bindings] = bindings) do
+    [root | rest] = hops = hops(ast)
+
+    case if(root in bindings, do: rest, else: hops) do
+      [name] ->
+        bindings
+        |> Enum.map(&"#{&1}.#{name}")
+        |> List.insert_at(-1, Atom.to_string(name))
+
+      _path ->
+        []
+    end
+  end
+
+  defp row_spellings(_ast, []), do: []
 
   # A name of the row the condition is about stands as it is, and one of a row above is wrapped with
   # how many quantifiers out it lies.

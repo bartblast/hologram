@@ -670,10 +670,14 @@ defmodule Hologram.Query.Stage do
 
   defp attribute_operand(_value), do: nil
 
+  defp attribute_operator({:attribute, _other}), do: :==
+
+  defp attribute_operator({operator, {:attribute, _other}}), do: operator
+
   # The operand may be read on another row than the predicate's own name - inside a quantifier, one
   # side can be the related row's and the other a row's above it - so each is looked up where it
   # lives.
-  defp attribute_triple!(name, operator, other, entity_type, scope) do
+  defp attribute_triple!(name, operator, other, entity_type, scope, hint \\ nil) do
     if operator in @ordering_operators do
       validate_orderable_attribute!(name, entity_type, operator)
     end
@@ -684,7 +688,7 @@ defmodule Hologram.Query.Stage do
 
     other_type = name_type!(scope, other)
 
-    validate_operand_name!(other, other_type)
+    validate_operand_name!(other, other_type, hint)
     validate_comparable_attributes!(name, other, operator, entity_type, other_type)
 
     # Two compared attributes share a type, so the operand is orderable or searchable when the name
@@ -703,23 +707,36 @@ defmodule Hologram.Query.Stage do
     {name, operator, {:attribute, other}}
   end
 
-  # A name the query macros left a hint for is refused with it - the operand's ahead of the key and
-  # of where the triple checks it again, which then passes, since the macros leave a key no hint
-  # when the operand has one. A key's hint is about a comparison with a name, the only one the
-  # macros leave it for, so a membership of the same name doesn't take it.
+  # A name the query macros left a fix for, or one another row in scope declares, is refused with
+  # what reads it. An operand's fix comes ahead of the key - the macros leave a key no fix when the
+  # operand has one, and the forgotten pin is the likelier mistake - and any other refusal in the
+  # order the triple makes it, an operand's row hint handed to the triple. A key's fix is about a
+  # comparison with a name, the only one the macros leave it for, so a membership of the same name
+  # doesn't take it.
   defp attribute_triples!(scope, {name, value}, name_hints) do
     entity_type = name_type!(scope, name)
     other = attribute_operand(value)
-    key_hint = if other, do: name_hint(name_hints, :key, name, scope)
+    key_fix = if other, do: name_hint(name_hints, :key, name, scope)
 
-    with true <- other != nil,
-         hint when hint != nil <- name_hint(name_hints, :operand, other, scope) do
-      validate_operand_name!(other, name_type!(scope, other), hint)
+    # A row out of the scope's reach is the triple's to refuse, after the key, as it always was.
+    other_type = if other != nil, do: name_type(scope, other)
+    operand_fix = validate_fixed_operand!(other, other_type, name_hints, scope)
+
+    validate_predicate_name!(
+      local_name(name),
+      entity_type,
+      key_fix || row_hint(name_hints, :key, name, entity_type, scope)
+    )
+
+    # An operand another row declares is refused where the triple checks it, with that row's hint.
+    case operand_fix == nil and other_type != nil and
+           row_hint(name_hints, :operand, other, other_type, scope) do
+      hint when is_binary(hint) ->
+        [attribute_triple!(name, attribute_operator(value), other, entity_type, scope, hint)]
+
+      _no_hint ->
+        predicate_triples!(name, value, entity_type, scope)
     end
-
-    validate_predicate_name!(local_name(name), entity_type, key_hint)
-
-    predicate_triples!(name, value, entity_type, scope)
   end
 
   # Names reach type lookups already validated, so a name matching no attribute definition
@@ -1033,6 +1050,10 @@ defmodule Hologram.Query.Stage do
     end)
   end
 
+  defp name_level({:outer, levels, _name}), do: levels
+
+  defp name_level(_name), do: 0
+
   # The relationships a resolved name follows - none for an attribute of the queried row, a
   # placeholder or no name at all.
   defp name_relationships([_hop, _name | _rest] = path) do
@@ -1040,6 +1061,13 @@ defmodule Hologram.Query.Stage do
   end
 
   defp name_relationships(_name), do: []
+
+  # name_type!/2 without the refusal - nil for a row out of the scope's reach.
+  defp name_type(scope, {:outer, levels, _name}) do
+    if is_integer(levels) and levels >= 1 and levels < length(scope), do: Enum.at(scope, levels)
+  end
+
+  defp name_type(scope, _name), do: hd(scope)
 
   # The type a name is declared on: the row the clauses are about, or for {:outer, levels, name} the
   # row that many quantifiers out, which the scope holds after it.
@@ -1212,6 +1240,24 @@ defmodule Hologram.Query.Stage do
 
     {name, operator, operand}
   end
+
+  # The query reads the owning row's fields through the function's arguments, pinned - which only
+  # the right side of a comparison takes.
+  defp owner_row_hint(scope, position, name, 1) do
+    owner = List.last(scope)
+
+    if name in filterable_names(owner) do
+      fix =
+        if position == :operand,
+          do: "add it to the function's head and pin it: ^#{name}",
+          else:
+            "its fields are read through the function's arguments, pinned on the right side of a comparison"
+
+      "#{inspect(owner)}, the row the derived field is computed for, declares #{name} - #{fix}"
+    end
+  end
+
+  defp owner_row_hint(_scope, _position, _name, 0), do: nil
 
   # The skip a page produces depends on both options, so a placeholder in either makes it one too -
   # named for whichever option it varies with, page first.
@@ -1665,6 +1711,30 @@ defmodule Hologram.Query.Stage do
     attribute_triple!(name, operator, row_field_name!(row_field, scope), entity_type, scope)
   end
 
+  # Where a name is no field of the row it is read on, but another row in scope declares it: the
+  # spelling the query macros left for that row - the nearest such - or, for a derived field's
+  # owning row, which its query reads only through an argument, the argument that reads it. Only an
+  # attribute name is looked for elsewhere, and only when the macros left hints or the term holds a
+  # row outside its own.
+  defp row_hint(%{entries: [], outer_rows: 0}, _position, _name, _row_type, _scope), do: nil
+
+  defp row_hint(%{entries: entries, outer_rows: outer_rows}, position, name, row_type, scope) do
+    local = local_name(name)
+
+    if is_atom(local) and local not in filterable_names(row_type) do
+      depth = length(scope) - 1 - outer_rows
+
+      spellings =
+        Enum.find_value(entries, [], fn
+          {^position, ^depth, ^name, _fix, [_spelling | _spellings] = spellings} -> spellings
+          _entry -> nil
+        end)
+
+      spelled_row_hint(scope, local, name_level(name), spellings) ||
+        owner_row_hint(scope, position, local, outer_rows)
+    end
+  end
+
   defp rows_spelled(0), do: "no row"
 
   defp rows_spelled(1), do: "1 row"
@@ -1770,6 +1840,18 @@ defmodule Hologram.Query.Stage do
     validate_source_shape!(hops, hops)
 
     {hd(scope), hops}
+  end
+
+  defp spelled_row_hint(scope, name, own_level, spellings) do
+    spellings
+    |> Enum.with_index()
+    |> Enum.find_value(fn {spelling, level} ->
+      row_type = Enum.at(scope, level)
+
+      if level != own_level and name in filterable_names(row_type) do
+        "#{inspect(row_type)} declares #{name}, read as #{spelling}"
+      end
+    end)
   end
 
   # Where a name is declared: an attribute on the queried type, a path's last name on the type its
@@ -2018,6 +2100,20 @@ defmodule Hologram.Query.Stage do
     end
   end
 
+  # Refuses an operand the query macros left a fix for, returning the fix - nil when there is none,
+  # or no operand on a row in reach.
+  defp validate_fixed_operand!(nil, _other_type, _name_hints, _scope), do: nil
+
+  defp validate_fixed_operand!(_other, nil, _name_hints, _scope), do: nil
+
+  defp validate_fixed_operand!(other, other_type, name_hints, scope) do
+    fix = name_hint(name_hints, :operand, other, scope)
+
+    if fix, do: validate_operand_name!(other, other_type, fix)
+
+    fix
+  end
+
   # A value compared with a name fits the type of what the name reads, refused where it is written
   # rather than where it is run: the database driver refuses it too, but only once the statement
   # reaches it, and by then nothing can name the filter it came from. An enum's value is one of the
@@ -2170,7 +2266,7 @@ defmodule Hologram.Query.Stage do
   # What an attribute operand names - another attribute of the row, or a path to one - refused in
   # the words a predicate's own name is.
   # The operand is quoted as it was written, a row above's wrapper included.
-  defp validate_operand_name!(operand_name, entity_type, hint \\ nil) do
+  defp validate_operand_name!(operand_name, entity_type, hint) do
     case local_name(operand_name) do
       name when is_atom(name) ->
         validate_filtered_name!(name, entity_type, hint)

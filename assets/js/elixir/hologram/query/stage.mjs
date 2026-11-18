@@ -90,7 +90,14 @@ function attributeOperand(value) {
 // Another attribute as a predicate's operand, checked the way the server checks it - an ordering
 // comparison needs an orderable attribute, the other one has to be filterable, and the two have to
 // compare. Inside a quantifier the two can live on two rows, so each is looked up where it lives.
-function attributeTriple(name, operator, other, entityType, scope) {
+function attributeTriple(
+  name,
+  operator,
+  other,
+  entityType,
+  scope,
+  hint = null,
+) {
   if (ORDERING_OPERATORS.includes(operator)) {
     validateOrderableAttribute(name, entityType, operator);
   }
@@ -101,7 +108,7 @@ function attributeTriple(name, operator, other, entityType, scope) {
 
   const otherType = nameTypeOf(scope, other);
 
-  validateOperandName(other, otherType);
+  validateOperandName(other, otherType, hint);
   validateComparableAttributes(name, other, operator, entityType, otherType);
 
   // Two compared attributes share a type, so the operand is orderable or searchable when the name
@@ -265,10 +272,12 @@ function entityTypeOf(entity, stage) {
 // The scope is the type of the row the predicates are about, then the type of each row above it,
 // nearest first - the queried type last.
 //
-// A name the query macros left a hint for is refused with it - the operand's ahead of the key and
-// of where the triple checks it again, which then passes, since the macros leave a key no hint
-// when the operand has one. A key's hint is about a comparison with a name, the only one the
-// macros leave it for, so a membership of the same name doesn't take it.
+// A name the query macros left a fix for, or one another row in scope declares, is refused with
+// what reads it. An operand's fix comes ahead of the key - the macros leave a key no fix when the
+// operand has one, and the forgotten pin is the likelier mistake - and any other refusal in the
+// order the triple makes it, an operand's row hint handed to the triple. A key's fix is about a
+// comparison with a name, the only one the macros leave it for, so a membership of the same name
+// doesn't take it.
 function entryClauses(pair, scope, hints) {
   const [name, value] = pair.data;
 
@@ -292,17 +301,36 @@ function entryClauses(pair, scope, hints) {
   const entityType = nameTypeOf(scope, name);
   const declaredName = localName(name);
   const other = attributeOperand(value);
-  const keyHint = other && nameHint(hints, "key", name, scope);
-  const operandHint = other && nameHint(hints, "operand", other, scope);
+  const keyFix = other && nameHint(hints, "key", name, scope);
 
-  if (operandHint) {
-    validateOperandName(other, nameTypeOf(scope, other), operandHint);
+  // A row out of the scope's reach is the triple's to refuse, after the key, as it always was.
+  const otherType = other && reachedNameType(scope, other);
+  const operandFix = otherType && nameHint(hints, "operand", other, scope);
+
+  if (operandFix) {
+    validateOperandName(other, otherType, operandFix);
   }
+
+  const keyHint = keyFix || rowHint(hints, "key", name, entityType, scope);
 
   if (isPath(declaredName)) {
     validatePath(declaredName, entityType, keyHint);
   } else {
     validateFilteredName(declaredName, entityType, keyHint);
+  }
+
+  // An operand another row declares is refused where the triple checks it, with that row's hint.
+  const operandRowHint =
+    otherType &&
+    !operandFix &&
+    rowHint(hints, "operand", other, otherType, scope);
+
+  if (operandRowHint) {
+    const operator = isAttributeOperand(value) ? "==" : value.data[0].value;
+
+    return [
+      attributeTriple(name, operator, other, entityType, scope, operandRowHint),
+    ];
   }
 
   return predicateTriples(name, value, entityType, scope);
@@ -977,6 +1005,50 @@ function rangeTriples(name, range, entityType) {
   ];
 }
 
+// Where a name is no field of the row it is read on, but another row in scope declares it: the
+// spelling the query macros left for that row - the nearest such. Only an attribute name is looked
+// for elsewhere. The browser builds no derived field's query, so it has no owning row to name.
+function rowHint(hints, position, name, rowType, scope) {
+  const local = localName(name);
+
+  if (
+    hints.data.length === 0 ||
+    !Type.isAtom(local) ||
+    filterableNames(rowType).includes(local.value)
+  ) {
+    return null;
+  }
+
+  const depth = scope.length - 1;
+
+  const entry = hints.data.find(
+    (hint) =>
+      isHintTuple(hint) &&
+      hint.data[0].value === position &&
+      Number(hint.data[1].value) === depth &&
+      Interpreter.isStrictlyEqual(hint.data[2], name) &&
+      Type.isList(hint.data[4]) &&
+      hint.data[4].data.length > 0,
+  );
+
+  if (!entry) {
+    return null;
+  }
+
+  const ownLevel = isOuterTuple(name) ? Number(name.data[1].value) : 0;
+
+  for (const [level, spelling] of entry.data[4].data.entries()) {
+    if (
+      level !== ownLevel &&
+      filterableNames(scope[level]).includes(local.value)
+    ) {
+      return `${scope[level]} declares ${local.value}, read as ${Bitstring.toText(spelling)}`;
+    }
+  }
+
+  return null;
+}
+
 function rowsSpelled(count) {
   if (count === 0) {
     return "no row";
@@ -999,6 +1071,20 @@ function settableNames(entityType) {
 
 function structName(value) {
   return field(value, "__struct__").value.replace(/^Elixir\./, "");
+}
+
+// nameTypeOf without the refusal - null for a row out of the scope's reach.
+function reachedNameType(scope, name) {
+  if (!isOuterTuple(name)) {
+    return scope[0];
+  }
+
+  const levelsTerm = name.data[1];
+  const levels = Type.isInteger(levelsTerm) ? Number(levelsTerm.value) : null;
+
+  return levels !== null && levels >= 1 && levels < scope.length
+    ? scope[levels]
+    : null;
 }
 
 function referenceFieldNames(entityType) {

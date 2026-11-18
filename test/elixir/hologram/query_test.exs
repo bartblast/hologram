@@ -163,6 +163,42 @@ defmodule Hologram.QueryTest do
       end
     end
 
+    test "names how to read a field only the bound row declares when the query is built" do
+      expected_msg =
+        "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :updated_at - Hologram.Test.Fixtures.Entity.Module33 declares position, read as message.position"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module32, any(message <- messages, position > 1))
+      end
+    end
+
+    test "names how to read a field only the queried row declares when the query is built" do
+      expected_msg =
+        "unknown attribute :name in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :tier, :updated_at - Hologram.Test.Fixtures.Entity.Module32 declares name, read as name"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module32, any(message <- messages, message.name == "general"))
+      end
+    end
+
+    test "names how to read a membership's field only the bound row declares when the query is built" do
+      expected_msg =
+        "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :updated_at - Hologram.Test.Fixtures.Entity.Module33 declares position, read as message.position"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module32, any(message <- messages, position in [1, 2]))
+      end
+    end
+
+    test "names how to read a search's field only the queried row declares when the query is built" do
+      expected_msg =
+        "unknown attribute :name in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :tier, :updated_at - Hologram.Test.Fixtures.Entity.Module32 declares name, read as name"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module32, any(message <- messages, contains(message.name, "gen")))
+      end
+    end
+
     test "compares a derived value" do
       assert filter(Module32, message_count > 3).filter == [{:message_count, :>, 3}]
     end
