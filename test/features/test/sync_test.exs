@@ -56,29 +56,6 @@ defmodule HologramFeatureTests.SyncTest do
     end
   end
 
-  # The page shows what its database held when the button was last clicked, so the read is asked
-  # again until it answers as expected - the change reaches the browser on its own time.
-  defp await_local_folder(session, expected, attempts_left \\ 100)
-
-  defp await_local_folder(session, expected, 0) do
-    flunk(
-      "the local folder read never answered #{inspect(expected)}, last: " <>
-        inspect(local_folder(session))
-    )
-  end
-
-  defp await_local_folder(session, expected, attempts_left) do
-    clicked = click(session, button("Read folder locally"))
-
-    Process.sleep(50)
-
-    if local_folder(clicked) == expected do
-      clicked
-    else
-      await_local_folder(clicked, expected, attempts_left - 1)
-    end
-  end
-
   # The stream is cut when the test ends, taking the server-side session and its evaluators with
   # it - a connection left open would keep them alive into the next test, serving stale rounds.
   defp connect(opts \\ []) do
@@ -114,13 +91,6 @@ defmodule HologramFeatureTests.SyncTest do
 
       drain_initial_sync(next_client)
     end
-  end
-
-  defp local_folder(session) do
-    script_result(
-      session,
-      "return document.getElementById('local_folder')?.textContent ?? null;"
-    )
   end
 
   feature "fills a connecting client with the rows it may read", %{session: _session} do
@@ -233,10 +203,10 @@ defmodule HologramFeatureTests.SyncTest do
     assert patched_id == folder.id
   end
 
-  # The other half of reach: a row no window roots, held only through an include, leaves the
-  # browser's database once nothing the client holds includes it any more. The document stays -
-  # it is public - while the folder it pointed at is reached by nothing, on the same page load.
-  feature "drops a row once no include reaches it", %{session: session} do
+  # Sync goes by what a user may read, not by what a page's queries reach: a public folder stays in
+  # the browser's database once the document that pointed at it points at none, on the same page
+  # load. The document's folder reading none is what says the change arrived.
+  feature "keeps a row its user may read once nothing points at it", %{session: session} do
     folder =
       %{name: "kept_folder", public: true}
       |> Folder.new()
@@ -252,14 +222,73 @@ defmodule HologramFeatureTests.SyncTest do
       |> visit(SyncPage)
       |> await_local_fill()
       |> mark_this_page_load()
-      |> click(button("Read folder locally"))
-      |> assert_text(css("#local_folder"), ~r/^kept_folder$/)
+      |> click(button("Read the document's folder locally"))
+      |> assert_text(css("#local_document_folder"), ~r/^linked$/)
 
     DB.update!(Document, document.id, folder_id: nil)
 
+    # The folder is read only once the change has arrived, so what shows is that read's answer.
     session
-    |> await_local_folder("none")
+    |> await_local_read("Read the document's folder locally", "local_document_folder", "none")
+    |> click(button("Read folder locally"))
+    |> assert_text(css("#local_folder"), ~r/^kept_folder$/)
     |> assert_same_page_load()
+  end
+
+  # The client holds the document through its folder's rule, so the folder going private takes
+  # the document away while the stream stays attached, with no reconnect.
+  feature "takes a row away live once its user may no longer read it", %{session: _session} do
+    folder =
+      %{name: "folder_shut_while_watching", public: true}
+      |> Folder.new()
+      |> DB.create!()
+
+    document =
+      %{folder_id: folder.id, public: false, title: "held_while_its_folder_is_open"}
+      |> Document.new()
+      |> DB.create!()
+
+    {_fill_data, filling_client} =
+      await_deltas_carrying(connect(), ~s["title":"held_while_its_folder_is_open"])
+
+    client = drain_initial_sync(filling_client)
+
+    update(Folder, folder.id, %{public: false})
+
+    {data, _client} = await_deltas_carrying(client, document.id)
+
+    unsynced_ids =
+      data
+      |> Jason.decode!()
+      |> get_in(["deltas", "unsync_entity", "HologramFeatureTests.Entities.Document"])
+
+    assert unsynced_ids == [document.id]
+  end
+
+  # No page's query reads folders, so only what the client's user may read says the client holds
+  # this one - and that it may no longer once the folder goes private.
+  feature "takes a row no query reads away live once its user may no longer read it",
+          %{session: _session} do
+    folder =
+      %{name: "lone_folder_shut_while_watching", public: true}
+      |> Folder.new()
+      |> DB.create!()
+
+    {_fill_data, filling_client} =
+      await_deltas_carrying(connect(), ~s["name":"lone_folder_shut_while_watching"])
+
+    client = drain_initial_sync(filling_client)
+
+    update(Folder, folder.id, %{public: false})
+
+    {data, _client} = await_deltas_carrying(client, folder.id)
+
+    unsynced_ids =
+      data
+      |> Jason.decode!()
+      |> get_in(["deltas", "unsync_entity", "HologramFeatureTests.Entities.Folder"])
+
+    assert unsynced_ids == [folder.id]
   end
 
   feature "delivers a row created while the client watches, whole", %{session: _session} do
