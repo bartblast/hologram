@@ -121,9 +121,13 @@ defmodule HologramFeatureTests.FieldRulesTest do
     assert [%Bulletin{title: "original"}] = DB.read(Bulletin)
   end
 
+  # The server's render already hides the control, so the check waits for a render the browser
+  # made after the fill: the local check's answer is one, and it shows the member's grant is there.
   feature "hides a control can? refuses from a member", %{session: session, bulletin: bulletin} do
     session
     |> sign_in_as(bulletin, :member)
+    |> click(button("Check fields locally"))
+    |> assert_text(css("#result"), "topic:true,title:false,both:false")
     |> refute_has(button("Rename bulletin"))
   end
 
