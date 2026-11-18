@@ -7,15 +7,16 @@ import Type from "../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
 
-// A form-associated custom element or a formdata listener can add entries under any name. jsdom
-// supports neither, so FormData adds the entry here.
-function buildWithExtraEntry(formContent, [entryName, entryValue]) {
+// A formdata listener runs inside the FormData constructor, once the form's entries are in, and can
+// change them or the form. A form-associated custom element can also add entries under any name.
+// jsdom supports neither, so a FormData subclass runs the listener here.
+function buildWithFormDataListener(formContent, listener) {
   const OriginalFormData = globalThis.FormData;
 
   globalThis.FormData = class extends OriginalFormData {
     constructor(form) {
       super(form);
-      this.append(entryName, entryValue);
+      listener(this, form);
     }
   };
 
@@ -257,9 +258,21 @@ describe("SubmitEvent", () => {
 
     describe("entries added under a checkbox's name by something other than the checkbox", () => {
       it("keeps the values when the checkbox is checked", () => {
-        const result = buildWithExtraEntry(
+        const result = buildWithFormDataListener(
           `<input type="checkbox" name="flag" checked>`,
-          ["flag", "custom"],
+          (formData) => formData.append("flag", "custom"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.map([[Type.bitstring("flag"), Type.bitstring("custom")]]),
+        );
+      });
+
+      it("keeps the value set in place of the checkbox's", () => {
+        const result = buildWithFormDataListener(
+          `<input type="checkbox" name="flag" checked>`,
+          (formData) => formData.set("flag", "custom"),
         );
 
         assert.deepStrictEqual(
@@ -269,9 +282,9 @@ describe("SubmitEvent", () => {
       });
 
       it("keeps the value when the checkbox is unchecked", () => {
-        const result = buildWithExtraEntry(
+        const result = buildWithFormDataListener(
           `<input type="checkbox" name="flag">`,
-          ["flag", "on"],
+          (formData) => formData.append("flag", "on"),
         );
 
         assert.deepStrictEqual(
@@ -281,16 +294,66 @@ describe("SubmitEvent", () => {
       });
 
       it("keeps the value when the checkbox is disabled", () => {
-        const result = buildWithExtraEntry(
+        const result = buildWithFormDataListener(
           `<input type="checkbox" name="flag" checked disabled>`,
-          ["flag", "custom"],
+          (formData) => formData.append("flag", "on"),
         );
 
         assert.deepStrictEqual(
           result,
-          Type.map([[Type.bitstring("flag"), Type.bitstring("custom")]]),
+          Type.map([[Type.bitstring("flag"), Type.bitstring("on")]]),
         );
       });
+
+      it("keeps the value when the checkbox is in a disabled fieldset", () => {
+        const result = buildWithFormDataListener(
+          `<fieldset disabled><input type="checkbox" name="flag" checked></fieldset>`,
+          (formData) => formData.append("flag", "on"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.map([[Type.bitstring("flag"), Type.bitstring("on")]]),
+        );
+      });
+
+      it("keeps the value when the checkbox has an empty name", () => {
+        const result = buildWithFormDataListener(
+          `<input type="checkbox" name="" checked>`,
+          (formData) => formData.append("", "on"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.map([[Type.bitstring(""), Type.bitstring("on")]]),
+        );
+      });
+
+      it("keeps the value when the checkbox is in a datalist", () => {
+        const result = buildWithFormDataListener(
+          `<datalist><input type="checkbox" name="flag" checked></datalist>`,
+          (formData) => formData.append("flag", "on"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.map([[Type.bitstring("flag"), Type.bitstring("on")]]),
+        );
+      });
+    });
+
+    it("handles a checkbox a formdata listener unchecks as checked", () => {
+      const result = buildWithFormDataListener(
+        `<input type="checkbox" name="flag" checked>`,
+        (_formData, form) => {
+          form.querySelector("input").checked = false;
+        },
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.bitstring("flag"), Type.boolean(true)]]),
+      );
     });
 
     it("handles text inputs with a dirname", () => {
