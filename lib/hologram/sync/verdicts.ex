@@ -79,7 +79,10 @@ defmodule Hologram.Sync.Verdicts do
   @doc """
   Returns the rows among the given ones whose verdicts for the given user differ from what was
   told, each with its verdicts now, in the order given. Only rows of a type with a deciding
-  quantifier are worked out: the rest are sent with none.
+  quantifier are worked out: a row of any other type is left out, whatever was told of it, so a
+  caller can't rely on this to clear verdicts told before - and a session has none of it to clear:
+  such a row is put with none (see `Hologram.Sync.Frame.row_verdicts/2`), and no rule reads any a
+  client holds of it from an earlier build.
 
   For the rows a returning client may hold verdicts of from before this session - a batch's rows
   come with theirs worked out (see `moved/2`).
