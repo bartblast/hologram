@@ -40,6 +40,29 @@ defmodule Hologram.Job.RunnerClaimFailureTest do
     ]
   end
 
+  # Stands in for a run lock connection that takes every lock and is gone by the time one is given
+  # back - killed for a call the server left unanswered.
+  defmodule VanishingRunLock do
+    @moduledoc false
+
+    use GenServer
+
+    @spec start_link(keyword) :: GenServer.on_start()
+    def start_link(_opts), do: GenServer.start_link(__MODULE__, nil)
+
+    @impl GenServer
+    def init(nil), do: {:ok, nil}
+
+    @impl GenServer
+    def handle_call({{:query, "SELECT pg_try_advisory_lock" <> _key}, _caller}, _from, state) do
+      {:reply, [%Postgrex.Result{rows: [["t"]]}], state}
+    end
+
+    def handle_call({{:query, _statement}, _caller}, _from, state) do
+      {:stop, :killed, state}
+    end
+  end
+
   # On the scratch database: advisory locks are per database.
   defp start_run_lock(scratch_opts) do
     start_supervised!(Supervisor.child_spec({RunLock, scratch_opts}, id: make_ref()))
@@ -68,6 +91,43 @@ defmodule Hologram.Job.RunnerClaimFailureTest do
     )
 
     assert_claim_given_back(context)
+  end
+
+  # The lock went with the connection, and the error worth reporting is the claim's.
+  test "raises the claim's error when giving the lock back exits", context do
+    Postgrex.query!(
+      context.scratch,
+      "CREATE TRIGGER refuse_claim BEFORE UPDATE ON #{context.table} FOR EACH ROW EXECUTE FUNCTION public.refuse_claim()",
+      []
+    )
+
+    run_lock =
+      start_supervised!(
+        Supervisor.child_spec(VanishingRunLock, id: make_ref(), restart: :temporary)
+      )
+
+    capture_log(fn ->
+      assert_raise Postgrex.Error, ~r/claim refused/, fn ->
+        route(context.scratch, fn -> claim(Module1, context.job.id, run_lock) end)
+      end
+    end)
+  end
+
+  # A run whose lock connection is gone by the time its outcome is recorded still answers what
+  # run/1 did - the lock went with the connection.
+  test "answers what the run did when giving the lock back exits", context do
+    run_lock =
+      start_supervised!(
+        Supervisor.child_spec(VanishingRunLock, id: make_ref(), restart: :temporary)
+      )
+
+    # The stand-in stopping logs it.
+    capture_log(fn ->
+      assert route(context.scratch, fn -> process(Module1, context.job.id, run_lock) end) == :done
+    end)
+
+    row = route(context.scratch, fn -> EntityOperations.get(Module1, context.job.id) end)
+    assert row.status == :done
   end
 
   test "gives the run lock back when the claim's commit fails", context do
