@@ -1701,11 +1701,23 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
+  # nil, true and false are atoms, but each already stands for something wherever a name is read -
+  # no value, a flag. A role named nil encodes to no value at all, which the role name checks
+  # crashed on before this refused it.
   defp validate_name_type!(module, kind, name) do
-    if not is_atom(name) do
-      raise Hologram.CompileError,
-        message:
-          "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - declaration names must be atoms"
+    cond do
+      not is_atom(name) ->
+        raise Hologram.CompileError,
+          message:
+            "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - declaration names must be atoms"
+
+      name in [nil, true, false] ->
+        raise Hologram.CompileError,
+          message:
+            "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - nil, true and false already stand for no value and for flags, so they can't name a declaration"
+
+      true ->
+        :ok
     end
   end
 

@@ -1905,6 +1905,19 @@ defmodule Hologram.Entity.ValidatorTest do
                [{:slug, :string, [default: nil, optional: true, unique: true]}]
     end
 
+    test "rejects an attribute named nil" do
+      expected_msg =
+        "invalid name nil used for attribute in Hologram.Entity.ValidatorTest.NilAttributeFixture - nil, true and false already stand for no value and for flags, so they can't name a declaration"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilAttributeFixture do
+          use Hologram.Entity
+
+          attribute nil, :string
+        end
+      end
+    end
+
     test "rejects non-atom attribute name" do
       expected_msg =
         "invalid name \"title\" used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture15 - declaration names must be atoms"
@@ -3235,6 +3248,32 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           role :owner, granted_to: false
+        end
+      end
+    end
+
+    test "rejects a role named true" do
+      expected_msg =
+        "invalid name true used for role in Hologram.Entity.ValidatorTest.TrueRoleFixture - nil, true and false already stand for no value and for flags, so they can't name a declaration"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule TrueRoleFixture do
+          use Hologram.Entity
+
+          role true
+        end
+      end
+    end
+
+    test "rejects a role named nil" do
+      expected_msg =
+        "invalid name nil used for role in Hologram.Entity.ValidatorTest.NilRoleFixture - nil, true and false already stand for no value and for flags, so they can't name a declaration"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilRoleFixture do
+          use Hologram.Entity
+
+          role nil
         end
       end
     end
