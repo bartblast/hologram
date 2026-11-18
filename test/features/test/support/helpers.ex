@@ -411,15 +411,65 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Holds every read and write of this browser's local store, in every tab, until `unblock_store/1`,
-  then returns the `session`. Armed again while it holds, it holds on as it is.
+  Blocks until a read of the whole local store, by any tab, is waiting behind what
+  `block_store/1` holds, then returns the `session`. Run in the tab the block was armed in.
+
+  A read of the whole store spans `queue` as well, which the block leaves free, so a read-write
+  transaction on `queue` alone starts at once - until such a read is created, and then it waits
+  behind it. So this asks for one again and again until one stays waiting. Nothing else may write
+  the queue meanwhile: a batch being filed would look the same.
+
+  What it buys a test: knowing a starting tab has got as far as reading the store, which nothing
+  in a tab that has not finished booting says.
+  """
+  @spec await_store_read_waiting(Wallaby.Session.t()) :: Wallaby.Session.t()
+  def await_store_read_waiting(session) do
+    script = """
+    const gate = globalThis.__hologramStoreBlock;
+
+    gate.readWaiting = false;
+
+    const probe = () => {
+      const transaction = gate.db.transaction(["queue"], "readwrite");
+
+      let done = false;
+
+      transaction.oncomplete = () => {
+        done = true;
+      };
+
+      transaction.objectStore("queue").get(0);
+
+      // A transaction nothing waits behind completes within a millisecond or two.
+      setTimeout(() => {
+        if (done) {
+          probe();
+        } else {
+          gate.readWaiting = true;
+        }
+      }, 100);
+    };
+
+    probe();
+    """
+
+    Browser.execute_script(session, script)
+
+    await_script_result(session, "return globalThis.__hologramStoreBlock.readWaiting === true;")
+  end
+
+  @doc """
+  Holds every read and write of this browser's local store that touches its rows or its place, in
+  every tab, until `unblock_store/1`, then returns the `session`. Armed again while it holds, it
+  holds on as it is.
 
   Opens a connection of its own to the store from the tab the `session` shows, and keeps a
-  read-write transaction over all of its object stores alive with a chain of reads. IndexedDB
-  starts a transaction only once the overlapping read-write ones created before it have finished,
-  across tabs, so every transaction created after this one waits: a starting tab's read of the
-  store, and the writes of the frames the leading tab stores. Closing the tab that holds it lets go
-  of it as well.
+  read-write transaction over the `entities` and `meta` object stores alive with a chain of reads.
+  IndexedDB starts a transaction only once the overlapping read-write ones created before it have
+  finished, across tabs, so every such transaction created after this one waits: a starting tab's
+  read of the store, and the writes of the frames the leading tab stores. The `queue` store alone
+  is left free, which is what `await_store_read_waiting/1` looks through. Closing the tab that
+  holds it lets go of it as well.
 
   What it buys a test: a window, as long as the test wants, between a tab's read of the store being
   created and that read answering. That window is a few milliseconds in the wild.
@@ -445,8 +495,10 @@ defmodule HologramFeatureTests.Helpers do
       opening.onsuccess = () => {
         const db = opening.result;
 
+        gate.db = db;
+
         const meta = db
-          .transaction(Array.from(db.objectStoreNames), "readwrite")
+          .transaction(["entities", "meta"], "readwrite")
           .objectStore("meta");
 
         // A transaction commits once it has no request left, so the next read is asked for in the

@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.MultiTabTest do
-  # async: false - each test truncates the shared table.
+  # async: false - each test truncates the shared table, and one the operations log.
   use HologramFeatureTests.TestCase, async: false
 
   alias Hologram.DB
@@ -272,21 +272,77 @@ defmodule HologramFeatureTests.MultiTabTest do
 
     second = tab_handle(starting)
 
-    # Long enough for its boot to reach the read of the store, which the block holds. Only a run
-    # without the fix needs it: with it, a frame posted before the tab listened is in the store
-    # it reads, whenever the read starts.
-    Process.sleep(1_000)
+    # Its read of the store is under way, and held, before the row exists.
+    starting
+    |> focus_tab(first)
+    |> await_store_read_waiting()
 
     %{title: "alpha"}
     |> Todo.new()
     |> DB.create!()
 
     starting
-    |> focus_tab(first)
     |> assert_text(css("#todos"), "alpha 0")
     |> unblock_store()
     |> focus_tab(second)
     |> await_page_mount(WriteQueuePage)
+    |> assert_text(css("#todos"), "alpha 0")
+  end
+
+  # The same gap in the middle of a fill, where it also decides what a tab is told is complete. The
+  # leading tab is filled again with every frame of the fill held, the second tab starts and its
+  # read of the emptied store is blocked, and then the fill is let through: its rows and its marker
+  # are stored after that read. A tab that missed them would still hear the group's state, which
+  # says everything is complete, and would sweep the row its own page carried.
+  #
+  # Emptying the operations log is the lever for the refill, as in the resync tests.
+  feature "holds every row of a fill it started in the middle of", %{session: session} do
+    %{title: "alpha"}
+    |> Todo.new()
+    |> DB.create!()
+
+    leading =
+      session
+      |> visit(WriteQueuePage)
+      |> await_local_fill()
+      |> hold_sync_frames()
+
+    truncate_oplog()
+    simulate_sse_disconnect(current_instance_id(leading))
+
+    # The fill is under way and held, and the start-over before it, which is not held, emptied the
+    # store.
+    first =
+      leading
+      |> await_held_sync_frame()
+      |> assert_no_place()
+      |> tab_handle()
+
+    starting =
+      leading
+      |> block_store()
+      |> open_tab_unmounted(WriteQueuePage)
+
+    second = tab_handle(starting)
+
+    starting
+    |> focus_tab(first)
+    |> await_store_read_waiting()
+    |> release_sync_frames()
+    |> await_local_fill()
+    |> unblock_store()
+    |> focus_tab(second)
+    |> await_page_mount(WriteQueuePage)
+    |> await_local_fill()
+    |> assert_text(css("#todos"), "alpha 0")
+
+    %{title: "beta"}
+    |> Todo.new()
+    |> DB.create!()
+
+    # Beta first: a render that shows it comes after any sweep of the row the page carried.
+    starting
+    |> assert_text(css("#todos"), "beta 0")
     |> assert_text(css("#todos"), "alpha 0")
   end
 end
