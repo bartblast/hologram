@@ -1794,14 +1794,11 @@ describe("Tabs", () => {
         return hasHeard;
       };
 
-      // What a sibling has heard, kept in the order it heard it.
-      const listen = (group) => {
-        const heard = [];
-
-        sibling(group).onmessage = (event) => heard.push(event.data);
-
-        return heard;
-      };
+      // What any channel posts, seen as it posts it - the channel of a visit that has ended too: a
+      // channel delivers on a task of its own, so a sibling having heard nothing yet says nothing
+      // about whether anything was posted.
+      const watchPosts = () =>
+        sinon.spy(BroadcastChannel.prototype, "postMessage");
 
       beforeEach(() => {
         write = new Promise((resolve) => (finishWrite = resolve));
@@ -1814,18 +1811,18 @@ describe("Tabs", () => {
 
         await Tabs.join(group, stubs());
 
-        const heard = listen(group);
+        const posting = watchPosts();
 
         Tabs.post({kind: "frame"}, write);
 
         await waitForEventLoop();
 
-        assert.deepStrictEqual(heard, []);
+        sinon.assert.notCalled(posting);
 
-        finishWrite();
-        await waitForEventLoop();
+        const heard = await hear(group, 1, finishWrite);
 
         assert.deepStrictEqual(heard, [{kind: "frame"}]);
+        sinon.assert.calledOnce(posting);
       });
 
       // A state naming a place, or a marker, must not reach a tab ahead of the rows it vouches for.
@@ -1834,17 +1831,16 @@ describe("Tabs", () => {
 
         await Tabs.join(group, stubs());
 
-        const heard = listen(group);
+        const posting = watchPosts();
 
         Tabs.post({kind: "frame"}, write);
         Tabs.post({kind: "state"});
 
         await waitForEventLoop();
 
-        assert.deepStrictEqual(heard, []);
+        sinon.assert.notCalled(posting);
 
-        finishWrite();
-        await waitForEventLoop();
+        const heard = await hear(group, 2, finishWrite);
 
         assert.deepStrictEqual(heard, [{kind: "frame"}, {kind: "state"}]);
       });
@@ -1854,22 +1850,16 @@ describe("Tabs", () => {
 
         await Tabs.join(group, stubs());
 
-        const heard = listen(group);
+        await hear(group, 1, () => {
+          Tabs.post({kind: "frame"}, write);
+          finishWrite();
+        });
 
-        Tabs.post({kind: "frame"}, write);
-
-        finishWrite();
-        await waitForEventLoop();
-
-        const posting = sinon.spy(BroadcastChannel.prototype, "postMessage");
+        const posting = watchPosts();
 
         Tabs.post({kind: "state"});
 
         sinon.assert.calledOnceWithExactly(posting, {kind: "state"});
-
-        await waitForEventLoop();
-
-        assert.deepStrictEqual(heard, [{kind: "frame"}, {kind: "state"}]);
       });
 
       // Its channel is closed by then, and posting on a closed channel throws.
@@ -1909,7 +1899,7 @@ describe("Tabs", () => {
         await Tabs.leave();
         await Tabs.join(group, stubs());
 
-        const posting = sinon.spy(BroadcastChannel.prototype, "postMessage");
+        const posting = watchPosts();
 
         Tabs.post({kind: "state"});
 
@@ -1927,7 +1917,7 @@ describe("Tabs", () => {
         await Tabs.leave();
         await Tabs.join(group, stubs());
 
-        const heard = listen(group);
+        const posting = watchPosts();
 
         Tabs.post({kind: "frame"}, new Promise(() => {}));
 
@@ -1937,7 +1927,7 @@ describe("Tabs", () => {
         Tabs.post({kind: "state"});
         await waitForEventLoop();
 
-        assert.deepStrictEqual(heard, []);
+        sinon.assert.notCalled(posting);
       });
 
       // A write that fails still lets its message go, and the ones behind it.
@@ -1961,7 +1951,6 @@ describe("Tabs", () => {
 
         await Tabs.join(group, stubs());
 
-        const heard = listen(group);
         const native = BroadcastChannel.prototype.postMessage;
 
         const posting = sinon
@@ -1981,11 +1970,8 @@ describe("Tabs", () => {
 
         sinon.assert.calledOnce(posting);
         sinon.assert.calledOnce(Logger.debug);
-        assert.deepStrictEqual(heard, []);
 
-        finishWrite();
-        await waitForEventLoop();
-        await waitForEventLoop();
+        const heard = await hear(group, 1, finishWrite);
 
         assert.deepStrictEqual(heard, [{kind: "frame", later: true}]);
       });
@@ -2039,8 +2025,6 @@ describe("Tabs", () => {
 
         await Tabs.join(group, stubs());
 
-        const heard = listen(group);
-
         Tabs.post({kind: "frame"}, write);
 
         await Tabs.leave();
@@ -2048,10 +2032,12 @@ describe("Tabs", () => {
         // Joined again, so a channel is there to post on - it is another visit's.
         await Tabs.join(group, stubs());
 
+        const posting = watchPosts();
+
         finishWrite();
         await waitForEventLoop();
 
-        assert.notDeepInclude(heard, {kind: "frame"});
+        sinon.assert.notCalled(posting);
       });
     });
   });
