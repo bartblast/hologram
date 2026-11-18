@@ -76,7 +76,8 @@ defmodule HologramFeatureTests.PermissionChecksTest do
   end
 
   # The document is private, so the user may read it only once the grant is given - and the
-  # browser, holding nothing of it, is handed it whole while the stream stays attached.
+  # browser, holding nothing of it, is handed it whole while the stream stays attached. The held
+  # documents say it arrived, rather than a check moving on a row the browser already had.
   feature "brings a row a grant given on the stream lets its user read", %{session: session} do
     document =
       %{public: false, title: "grimoire"}
@@ -89,12 +90,20 @@ defmodule HologramFeatureTests.PermissionChecksTest do
     |> assert_text(css("#result"), "logged_in")
     |> reload()
     |> await_local_fill()
-    |> assert_text(css("#managed_documents"), ~r/^$/)
     |> mark_this_page_load()
+
+    # Only the stream brings it, so it shows only on a render of the browser's own database - which
+    # would list the private document beside it if the browser already held that.
+    create_document("almanac")
+
+    session
+    |> assert_text(css("#held_documents"), ~r/^almanac$/)
+    |> assert_text(css("#managed_documents"), ~r/^$/)
 
     Auth.grant_role(session_user(), :owner, document)
 
     session
+    |> assert_text(css("#held_documents"), ~r/^almanac,grimoire$/)
     |> assert_text(css("#managed_documents"), ~r/^grimoire$/)
     |> assert_same_page_load()
   end
