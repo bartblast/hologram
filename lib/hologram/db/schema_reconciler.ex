@@ -5,6 +5,7 @@ defmodule Hologram.DB.SchemaReconciler do
 
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Preflight
@@ -148,7 +149,10 @@ defmodule Hologram.DB.SchemaReconciler do
   the op stream, and refresh the marker (last_reconciled_at, hologram_version). After the
   transaction commits, each destructive action and each join table rename is logged as
   one concise line. The context carries :mapping plus the guard facts (:otp_app, :env)
-  and the marker diagnostics (:hologram_version, :timestamp).
+  and the marker diagnostics (:hologram_version, :timestamp), and optionally :plan, the
+  indexes the model leaves to `Hologram.DB.IndexPlan` - the target holds them beside the
+  model's own, and they go through the same diff, alien check and registry. Without one, the
+  plan is the framework's own lookups'.
   """
   @spec reconcile(%{atom => any}) :: %{atom => any}
   def reconcile(context) do
@@ -160,7 +164,7 @@ defmodule Hologram.DB.SchemaReconciler do
         status = ensure_managed!(context)
 
         actual = Introspection.schema()
-        target = Schema.from_mapping(context.mapping)
+        target = Schema.from_mapping(context.mapping, index_plan(context))
 
         {renames, changes} =
           actual
@@ -336,6 +340,12 @@ defmodule Hologram.DB.SchemaReconciler do
   end
 
   defp apply_op(op, _mapping), do: execute_statements(DDL.statements(op))
+
+  # The indexes the model leaves to the plan, which the context carries - or, for a caller giving
+  # none, the ones the framework's own lookups need.
+  defp index_plan(%{plan: plan}), do: plan
+
+  defp index_plan(context), do: IndexPlan.framework_plan(context.mapping)
 
   defp apply_ops(ops, mapping) do
     Enum.each(ops, &apply_op(&1, mapping))

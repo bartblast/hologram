@@ -872,7 +872,6 @@ defmodule Hologram.MigratorTest do
         normalize_newlines("""
         schema drift detected - the database does not match the model:
           * column "title_$sort" on table "my_app_task" declared by the model is missing
-          * index "my_app_task_title_$sort_$idx" declared by the model is missing
         hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
         """)
 
@@ -1006,7 +1005,7 @@ defmodule Hologram.MigratorTest do
     end
   end
 
-  describe "repair_indexes/1" do
+  describe "repair_indexes/2" do
     setup do
       ensure_managed!(@context)
 
@@ -1030,8 +1029,9 @@ defmodule Hologram.MigratorTest do
       [mapping: Mapper.derive_from_model!(model)]
     end
 
+    # No index plan: these apply files without a boot, and the plan's indexes are its own to build.
     test "passes a database carrying every index the model derives", %{mapping: mapping} do
-      assert repair_indexes(mapping) == :ok
+      assert repair_indexes(mapping, %{}) == :ok
     end
 
     test "leaves a table the database does not have to the drift check", %{mapping: mapping} do
@@ -1039,7 +1039,7 @@ defmodule Hologram.MigratorTest do
 
       # Its indexes went with it. Creating them here would raise a relation error before
       # check_drift!/1 reports the missing table, which is the cause worth naming.
-      assert repair_indexes(mapping) == :ok
+      assert repair_indexes(mapping, %{}) == :ok
     end
   end
 

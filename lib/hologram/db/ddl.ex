@@ -520,7 +520,9 @@ defmodule Hologram.DB.DDL do
   end
 
   def statements(%{op: :drop_index} = op) do
-    ["DROP INDEX #{qualified(op.index)}"]
+    concurrently_sql = if Map.get(op, :concurrently, false), do: "CONCURRENTLY ", else: ""
+
+    ["DROP INDEX #{concurrently_sql}#{qualified(op.index)}"]
   end
 
   def statements(%{op: :drop_table} = op) do

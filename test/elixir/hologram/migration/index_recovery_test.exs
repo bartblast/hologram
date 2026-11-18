@@ -23,6 +23,7 @@ defmodule Hologram.Migration.IndexRecoveryTest do
 
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
 
@@ -124,7 +125,7 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     [mapping: Mapper.derive_from_model!(model), model: model]
   end
 
-  describe "repair_indexes/1" do
+  describe "repair_indexes/2" do
     test "builds an index the deploy never got to", %{mapping: mapping, scratch: scratch} do
       route(scratch, fn ->
         # What a node killed before its build began leaves: the file is recorded applied,
@@ -133,7 +134,7 @@ defmodule Hologram.Migration.IndexRecoveryTest do
 
         assert index_validity() == :absent
 
-        assert repair_indexes(mapping) == :ok
+        assert repair_indexes(mapping, IndexPlan.framework_plan(mapping)) == :ok
 
         assert index_validity() == true
       end)
@@ -170,7 +171,7 @@ defmodule Hologram.Migration.IndexRecoveryTest do
 
         assert grant_count() == 1
 
-        assert repair_indexes(mapping) == :ok
+        assert repair_indexes(mapping, IndexPlan.framework_plan(mapping)) == :ok
 
         assert index_validity() == true
       end)

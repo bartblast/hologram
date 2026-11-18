@@ -98,6 +98,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.CompileInputs
   alias Hologram.Compiler.DataModelInputs
   alias Hologram.Compiler.Tracer
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Derived.Validator, as: DerivedValidator
@@ -2555,8 +2556,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     EntityValidator.validate_model!(entity_types)
     PolicyValidator.validate_model!(entity_types, role_modules)
 
-    # The mapping value is discarded - only the fail-fast derivation checks matter here.
-    Mapper.derive!(entity_types, role_modules)
+    # The mapping and the plan are discarded - only the fail-fast derivation checks matter here, the
+    # plan's that no two of the indexes the framework's lookups need derive one name.
+    entity_types
+    |> Mapper.derive!(role_modules)
+    |> IndexPlan.framework_plan()
 
     :ok
   end

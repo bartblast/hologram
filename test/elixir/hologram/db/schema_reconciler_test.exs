@@ -10,6 +10,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Connection
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Schema
@@ -101,14 +102,11 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     rows
   end
 
-  # Module27's mapping as it would stand if its channel reference were not unique: the plain
-  # reference index the column otherwise carries, and no unique one.
+  # Module27's mapping as it would stand if its channel reference were not unique: no unique index,
+  # so the index plan gives the reference column its plain one.
   defp non_unique_channel_context do
     [Module26, Module27]
     |> reconcile_context()
-    |> update_mapping_column(Module27, "channel_id", fn column ->
-      %{column | index: "test_fixtures_entity_module27_channel_id_$idx"}
-    end)
     |> update_mapping_indexes(Module27, fn indexes ->
       Map.delete(indexes, "test_fixtures_entity_module27_channel_id_$uidx")
     end)
@@ -226,6 +224,12 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       )
   end
 
+  # What a reconciliation converges to: the model's schema with the index plan the context leaves to
+  # the reconciler, the framework's own lookups'.
+  defp expected_schema(context) do
+    Schema.from_mapping(context.mapping, IndexPlan.framework_plan(context.mapping))
+  end
+
   defp reconcile_context(entity_types) do
     mapping =
       entity_types
@@ -252,7 +256,6 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       null: null,
       references: nil,
       fk_constraint: nil,
-      index: nil,
       source: {:attribute, :z}
     }
 
@@ -301,7 +304,6 @@ defmodule Hologram.DB.SchemaReconcilerTest do
           null: true,
           references: nil,
           fk_constraint: nil,
-          index: nil,
           source: {:attribute, attribute}
         }
       end)
@@ -342,7 +344,6 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       null: null,
       references: nil,
       fk_constraint: nil,
-      index: nil,
       source: {:attribute, :z}
     }
 
@@ -712,7 +713,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       result = reconcile(context)
 
       assert result.status == :claimed
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
       assert {:table, "", "test_fixtures_entity_module1"} in registry()
       assert read_marker().last_reconciled_at == @context.timestamp
     end
@@ -732,7 +733,32 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
+    end
+
+    test "builds the indexes of the plan the context carries, and drops one it no longer names" do
+      context = reconcile_context([Module1, Module2, Module3])
+      table = "test_fixtures_entity_module3"
+      wide = %{table: table, eq: MapSet.new(["b_id", "c_id"]), range: nil, order: []}
+
+      plan_with_wide =
+        context.mapping
+        |> IndexPlan.framework_needs()
+        |> Enum.concat([wide])
+        |> IndexPlan.select(context.mapping)
+
+      reconcile(Map.put(context, :plan, plan_with_wide))
+
+      # The wider index serves the lookup by b_id the framework needs, so b_id gets no index of its
+      # own, while c_id, which it doesn't lead with, keeps one.
+      assert Map.keys(Introspection.schema().tables[table].indexes) == [
+               "test_fixtures_entity_module3_b_id_c_id_$idx",
+               "test_fixtures_entity_module3_c_id_$idx"
+             ]
+
+      ExUnit.CaptureLog.capture_log(fn -> reconcile(context) end)
+
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges a unique attribute's index" do
@@ -740,7 +766,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges the index of each key declared with unique" do
@@ -748,7 +774,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       assert Introspection.schema().tables["test_fixtures_entity_module52"].indexes[
                "test_fixtures_entity_module52_workspace_id_slug_$uidx"
@@ -768,7 +794,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       result = reconcile(context)
 
       assert result.ops == [%{op: :rename_index, table: table, from: old_name, to: new_name}]
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       assert {:index, table, new_name} in registry()
       refute {:index, table, old_name} in registry()
@@ -834,7 +860,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges a unique to-one's reference index" do
@@ -842,7 +868,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       assert channel_indexes() == %{
                "test_fixtures_entity_module27_channel_id_$uidx" => %{
@@ -860,7 +886,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       assert channel_indexes() == %{
                "test_fixtures_entity_module27_channel_id_$uidx" => %{
@@ -880,7 +906,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       assert channel_indexes() == %{
                "test_fixtures_entity_module27_channel_id_$idx" => %{
@@ -898,7 +924,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges a new optional unique column on a table with rows" do
@@ -915,7 +941,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       {:ok, %{rows: rows}} = Connection.query(select_statement)
 
       assert rows == [[nil], [nil]]
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges enum types" do
@@ -923,7 +949,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges a role type with no values and finds it converged on the next run" do
@@ -934,12 +960,12 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       result = reconcile(context)
 
       assert result.ops == []
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges additive model changes" do
@@ -949,7 +975,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       result = reconcile(context)
 
       assert result.status == :managed
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges destructive model changes and cleans the registry" do
@@ -958,7 +984,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
       refute {:table, "", "test_fixtures_entity_module4"} in registry()
       refute {:enum_type, "", "test_fixtures_entity_module4_c_$enum"} in registry()
     end
@@ -974,7 +1000,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges an enum value removal when no rows hold it" do
@@ -987,7 +1013,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "fills NULLs with the declared default when making a column required" do
@@ -1007,7 +1033,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       {:ok, %{rows: rows}} = Connection.query(select_statement)
 
       assert rows == [[42]]
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "fills the sort and search keys of a string it fills when making the string required" do
@@ -1052,7 +1078,6 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         null: false,
         references: nil,
         fk_constraint: nil,
-        index: nil,
         source: {:attribute, :z}
       }
 
@@ -1069,7 +1094,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       {:ok, %{rows: rows}} = Connection.query(select_statement)
 
       assert rows == [[7]]
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "fills the sort-key companion of a column it adds" do
@@ -1082,7 +1107,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       reconcile(context)
 
       assert module2_sort_pairs() == [["apple", "apple"], ["Zürich", "zurich"]]
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "fills a companion whose source is cast to text in the same run" do
@@ -1139,7 +1164,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                  "keeping its links. If relationship :a of Hologram.Test.Fixtures.Entity.Module3 " <>
                  "is a new relationship, not a rename, delete its links or reset the database"
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       {:ok, %{rows: rows}} =
         Connection.query(
@@ -1155,7 +1180,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       refute Enum.any?(registry, fn {_kind, parent, name} -> old_name in [parent, name] end)
     end
 
-    test "renames a join table with its constraints and reverse index, registry included" do
+    test "renames a join table with its constraints, registry included" do
       reconcile(reconcile_context([Module1, Module2, Module3]))
       insert_module3_link()
 
@@ -1169,7 +1194,6 @@ defmodule Hologram.DB.SchemaReconcilerTest do
             %{
               join_table
               | name: new_name,
-                reverse_index: "#{new_name}_target_id_source_id_$idx",
                 pk_constraint: "#{new_name}_$pk",
                 source_fk_constraint: "#{new_name}_source_id_$fk",
                 target_fk_constraint: "#{new_name}_target_id_$fk"
@@ -1182,14 +1206,13 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
         assert op_kinds == [
                  :rename_table,
-                 :rename_index,
                  :rename_constraint,
                  :rename_constraint,
                  :rename_constraint
                ]
       end)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       {:ok, %{rows: rows}} =
         Connection.query(
@@ -1209,7 +1232,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                {:constraint, new_name, "#{new_name}_$pk"},
                {:constraint, new_name, "#{new_name}_source_id_$fk"},
                {:constraint, new_name, "#{new_name}_target_id_$fk"},
-               {:index, new_name, "#{new_name}_target_id_source_id_$idx"},
+               {:index, new_name,
+                "test_fixtures_entity_module3_a_$join_target_id_source_id_$idx"},
                {:table, "", new_name}
              ]
     end
@@ -1349,7 +1373,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         reconcile(context)
       end
 
-      assert Introspection.schema() == Schema.from_mapping(unique_c_context().mapping)
+      assert Introspection.schema() == expected_schema(unique_c_context())
     end
 
     test "raises when a type change makes rows repeat a key" do
@@ -1477,7 +1501,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "raises when making a column required while rows hold NULL" do
@@ -1513,7 +1537,6 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         null: false,
         references: nil,
         fk_constraint: nil,
-        index: nil,
         source: {:attribute, :z}
       }
 
@@ -1568,7 +1591,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                %{op: :rename_enum_type, from: old_name, to: enum_type}
              ]
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       {:ok, %{rows: rows}} =
         Connection.query(~s(SELECT "c"::text FROM "hologram_data"."test_fixtures_entity_module4"))
@@ -1619,7 +1642,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
       assert Introspection.schema().enum_types[enum_type] == ["x", "y", "z"]
 
       {:ok, %{rows: rows}} =
@@ -1642,7 +1665,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       ExUnit.CaptureLog.capture_log(fn -> reconcile(context) end)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
       assert Introspection.schema().enum_types[enum_type] == ["x"]
 
       {:ok, %{rows: rows}} =
@@ -1747,7 +1770,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       context = key_over_added_column_context("en", false)
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "builds a key over a column added without a default over rows repeating the rest" do
@@ -1757,7 +1780,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       context = key_over_added_column_context(nil, true)
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     # An optional column's default fills no existing row, so the rows hold NULL in it.
@@ -1768,7 +1791,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       context = key_over_added_column_context("en", true)
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "raises when a key meets rows that repeat it once a tightened column is filled" do
@@ -1799,7 +1822,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       end
 
       assert Introspection.schema() ==
-               Schema.from_mapping(key_over_b_c_context([Module2]).mapping)
+               expected_schema(key_over_b_c_context([Module2]))
     end
 
     test "raises when a filled row would repeat the key of a row holding the default" do
@@ -1863,7 +1886,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       {:ok, %{rows: rows}} =
         Connection.query(

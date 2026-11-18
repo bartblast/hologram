@@ -6,6 +6,7 @@ defmodule Hologram.Migrator do
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Preflight
@@ -17,7 +18,7 @@ defmodule Hologram.Migrator do
   alias Hologram.Reflection
 
   # The ops the boot applies when the database holds an object under a name the current naming
-  # rule no longer derives - see heal_renames/3.
+  # rule no longer derives - see apply_renames/1.
   @rename_ops [:rename_constraint, :rename_enum_type, :rename_index, :rename_table]
 
   # Fixed application-defined key for the migration lock - serializes the whole boot
@@ -133,10 +134,21 @@ defmodule Hologram.Migrator do
   declares hand-dropped. One rule, no classifying - hologram_data is model-managed
   everywhere, and the wrong-database cases never reach this check (the marker refused
   them).
+
+  The indexes the model leaves to the index plan are the one exception: a plain btree index
+  named `...$idx` that isn't unique is the plan's (see `Hologram.DB.IndexPlan`), which converges
+  them by itself, so this check neither asks for one nor refuses one. An index added by hand
+  under any other name is still drift.
   """
   @spec check_drift!(%{module => %{atom => any}}) :: :ok
   def check_drift!(mapping) do
-    drift_ops = Schema.diff(Introspection.schema(), Schema.from_mapping(mapping))
+    actual = Introspection.schema()
+    plan_names = plan_index_names(actual)
+
+    drift_ops =
+      actual
+      |> Schema.diff(Schema.from_mapping(mapping))
+      |> Enum.reject(&(&1.op == :drop_index and MapSet.member?(plan_names, &1.index)))
 
     if drift_ops != [] do
       lines = Enum.map_join(drift_ops, "\n", &"  * #{describe_difference(&1)}")
@@ -290,8 +302,8 @@ defmodule Hologram.Migrator do
   end
 
   @doc """
-  Converges the indexes the given mapping derives - rebuilding the ones PostgreSQL left
-  invalid and creating the ones that are absent - and returns :ok.
+  Converges the indexes the given mapping and index plan derive - rebuilding the ones PostgreSQL
+  left invalid and creating the ones that are absent - and returns :ok.
 
   Index builds are the one part of a migration that cannot ride its transaction, so they
   run after the file commits. A node dying in that window leaves the file recorded as
@@ -312,14 +324,18 @@ defmodule Hologram.Migrator do
 
   A node that dies here strands nobody: the lock frees with its session, and the half-built
   index it leaves reads as invalid and is rebuilt by whoever takes the lock next.
+
+  The index plan's indexes converge here too, first: one standing under another name with the
+  plan's definition is renamed - a migration renaming a relationship or an entity leaves its
+  plain index under the old name - and one the plan no longer names, or names with another
+  definition, is dropped, so a stale one costs no write and frees its name for the one the plan
+  wants. An index named outside the plan's scheme is the drift check's to report.
   """
-  @spec repair_indexes(%{module => %{atom => any}}) :: :ok
-  def repair_indexes(mapping) do
-    if invalid_indexes() == [] and missing_indexes(mapping) == [] do
-      :ok
-    else
-      rebuild_and_create_indexes(mapping)
-    end
+  @spec repair_indexes(%{module => %{atom => any}}, %{String.t() => %{String.t() => map}}) :: :ok
+  def repair_indexes(mapping, plan) do
+    rename_plan_indexes(mapping, plan)
+    drop_stray_plan_indexes(plan)
+    build_indexes(mapping, plan)
   end
 
   @doc """
@@ -662,20 +678,37 @@ defmodule Hologram.Migrator do
   # else it finds is the pending files' to change, the index repair's to rebuild, or the drift
   # check's to refuse.
   #
-  # Only a node whose chain holds every applied version heals. One that lacks some is an
-  # older release booting after a newer one migrated the database, which the drift check
-  # refuses anyway, so renaming the newer release's objects back would gain nothing. An
-  # older release that differs only by its naming rule does rename back, which is what it
-  # needs to boot once the newer nodes are stopped. Old and new nodes running against one
-  # database at once is a separate matter, not supported yet (#1627).
-  defp heal_renames(migrations, applied, pre_model) do
+  # Only a node whose chain holds every applied version heals. One that lacks some is an older
+  # release booting after a newer one migrated the database, which the drift check refuses
+  # anyway, so renaming the newer release's objects back would gain nothing. The plan's indexes
+  # are the repair's to rename (see converge_for_unknown_chain/4). An older release that
+  # differs only by its naming rule does rename back, which is what it needs to boot once the
+  # newer nodes are stopped. Old and new nodes running against one database at once is a
+  # separate matter, not supported yet (#1627).
+  # A node whose chain lacks an applied version runs older code than the database, or the version
+  # was removed from the chain. Its plan would drop the indexes a newer release needs and rename
+  # theirs back, so it does neither. Most such gaps change the schema, and the drift check refuses
+  # them - before any build, which could name a column the database no longer has. One that left
+  # the schema alone, like a role's change, passes it: the node then still builds the indexes its
+  # plan is missing and rebuilds invalid ones, and says which versions it doesn't know.
+  defp converge_for_unknown_chain(migrations, applied, mapping, plan) do
+    check_drift!(mapping)
+
+    known_versions = MapSet.new(migrations, & &1.version)
+    unknown_versions = Enum.reject(applied, &MapSet.member?(known_versions, &1))
+
+    Logger.warning(
+      "Hologram: the database has applied migrations this release doesn't hold " <>
+        "(#{Enum.join(unknown_versions, ", ")}), so it leaves indexes it doesn't plan in place"
+    )
+
+    build_indexes(mapping, plan)
+  end
+
+  defp known_chain?(migrations, applied) do
     known_versions = MapSet.new(migrations, & &1.version)
 
-    if Enum.all?(applied, &MapSet.member?(known_versions, &1)) do
-      apply_renames(pre_model)
-    else
-      :ok
-    end
+    Enum.all?(applied, &MapSet.member?(known_versions, &1))
   end
 
   defp hologram_schemas do
@@ -711,6 +744,59 @@ defmodule Hologram.Migrator do
     )
   end
 
+  # Renames run in one transaction: ALTER INDEX ... RENAME takes no long lock, and a node dying
+  # halfway would otherwise leave a pair of names to untangle.
+  defp rename_plan_indexes(mapping, plan) do
+    actual = Introspection.schema()
+    plan_names = plan_index_names(actual)
+
+    renames =
+      actual
+      |> Schema.diff(Schema.from_mapping(mapping, plan))
+      |> Enum.filter(&(&1.op == :rename_index and MapSet.member?(plan_names, &1.from)))
+
+    if renames != [] do
+      {:ok, _result} =
+        Connection.transaction(fn ->
+          Enum.each(renames, &execute_statements(DDL.statements(&1)))
+        end)
+
+      Enum.each(renames, &log_rename/1)
+    end
+
+    :ok
+  end
+
+  # Dropped CONCURRENTLY, outside any transaction, like the builds: a plain DROP INDEX takes an
+  # exclusive lock on the table while it waits for every reader.
+  defp drop_stray_plan_indexes(plan) do
+    actual = Introspection.schema()
+    plan_names = plan_index_names(actual)
+
+    for {table, definition} <- Enum.sort(actual.tables),
+        {name, index} <- Enum.sort(definition.indexes),
+        MapSet.member?(plan_names, name),
+        get_in(plan, [table, name]) != Map.take(index, [:columns, :nulls_distinct, :unique]) do
+      execute_statements(DDL.statements(%{op: :drop_index, index: name, concurrently: true}))
+
+      Logger.info(~s(Hologram: dropped index "#{name}", which no query and no lookup needs))
+    end
+
+    :ok
+  end
+
+  # The names of the indexes standing that the index plan owns: plain btree ones named `...$idx`
+  # that aren't unique. Introspection marks any other shape with :non_plain.
+  defp plan_index_names(actual) do
+    for {_table, definition} <- actual.tables,
+        {name, index} <- definition.indexes,
+        String.ends_with?(name, "$idx"),
+        not index.unique,
+        not Map.has_key?(index, :non_plain),
+        into: MapSet.new(),
+        do: name
+  end
+
   defp raise_not_managed! do
     raise "the configured database contains Hologram schemas but no managed-database " <>
             "marker - it is not managed by migrations - drop the " <>
@@ -726,7 +812,7 @@ defmodule Hologram.Migrator do
   # before check_drift!/1 gets to name the missing table as the cause. So is a name an index
   # already holds, whatever its definition, and an index the diff recognises as renamed:
   # building the derived one beside it would leave two, and the drift check names both.
-  defp missing_indexes(mapping) do
+  defp missing_indexes(mapping, plan) do
     actual = Introspection.schema()
 
     held_names =
@@ -735,18 +821,26 @@ defmodule Hologram.Migrator do
       |> MapSet.new()
 
     actual
-    |> Schema.diff(Schema.from_mapping(mapping))
+    |> Schema.diff(Schema.from_mapping(mapping, plan))
     |> Enum.filter(fn op ->
       op.op == :create_index and Map.has_key?(actual.tables, op.table) and
         not MapSet.member?(held_names, op.index)
     end)
   end
 
-  defp rebuild_and_create_indexes(mapping) do
+  defp build_indexes(mapping, plan) do
+    if invalid_indexes() == [] and missing_indexes(mapping, plan) == [] do
+      :ok
+    else
+      rebuild_and_create_indexes(mapping, plan)
+    end
+  end
+
+  defp rebuild_and_create_indexes(mapping, plan) do
     Enum.each(invalid_indexes(), &rebuild_index/1)
 
     mapping
-    |> missing_indexes()
+    |> missing_indexes(plan)
     |> Enum.each(&create_index_concurrently/1)
 
     :ok
@@ -783,7 +877,9 @@ defmodule Hologram.Migrator do
         |> Enum.filter(&(&1.version in applied))
         |> Enum.reduce(Model.empty(), &Model.fold(&2, &1.ops))
 
-      heal_renames(migrations, applied, pre_model)
+      chain_known? = known_chain?(migrations, applied)
+
+      if chain_known?, do: apply_renames(pre_model)
 
       migrations
       |> pending(applied)
@@ -791,9 +887,14 @@ defmodule Hologram.Migrator do
 
       mapping = Mapper.derive_from_model!(current_model)
 
-      repair_indexes(mapping)
+      plan = IndexPlan.framework_plan(mapping)
 
-      check_drift!(mapping)
+      if chain_known? do
+        repair_indexes(mapping, plan)
+        check_drift!(mapping)
+      else
+        converge_for_unknown_chain(migrations, applied, mapping, plan)
+      end
     end)
 
     :ok

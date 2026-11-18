@@ -31,19 +31,17 @@ defmodule Hologram.DB.Mapper do
   never a DB DEFAULT), :null (true only for optional
   declarations), :references (the referenced table name for to-one relationship columns,
   nil otherwise), :fk_constraint (the derived `<table>_<column>_$fk` constraint name for
-  reference columns, nil otherwise), :index (the derived index name for the columns that
-  carry one - `<table>_<column>_$idx` on a to-one reference, which PostgreSQL never indexes
-  automatically (a unique to-one carries none here, its unique index serving instead), and
-  `<table>_<attribute>_$sort_$idx` on a sort-key companion, so an ordering or a comparison on
-  the attribute is served from the key rather than from a sort - nil otherwise), and :source (:system, :revisions, or the declaration the column is derived from).
-  To-many relationships derive no columns - they live in join tables.
+  reference columns, nil otherwise), and :source (:system, :revisions, or the declaration the
+  column is derived from). To-many relationships derive no columns - they live in join tables.
+  No column carries a plain index here: the indexes beyond the primary key and the unique ones
+  are derived from what the server reads (see `Hologram.DB.IndexPlan`).
 
   Each :string attribute derives a nullable `<attribute>_$sort` companion column (source
   `{:sort_key, name}`) holding the attribute's derived sort key - the order both executors
   sort and compare the attribute by. It is a column like any other the mapping derives:
   migrations create, rename and drop it with its attribute.
 
-  Each :string attribute also derives a nullable, unindexed `<attribute>_$search` companion
+  Each :string attribute also derives a nullable `<attribute>_$search` companion
   (source `{:search_key, name}`) holding the attribute's search key: the whole folded value when
   it is longer than the sort key keeps, nil otherwise. A loose search reads it, or the sort key
   when it is nil, so a short string's folded value is stored once.
@@ -86,7 +84,8 @@ defmodule Hologram.DB.Mapper do
   `<table>_<attribute>_$uidx` entry per `unique: true` attribute, a `<table>_<column>_$uidx`
   entry per `unique: true` to-one over its reference column, a `<table>_<columns>_$uidx` entry
   per key declared with unique over its fields' columns in declared order, plus the role grant
-  store's two framework-owned ones), and :join_tables (as returned by join_tables/1).
+  store's framework-owned one - the other indexes come from `Hologram.DB.IndexPlan`), and
+  :join_tables (as returned by join_tables/1).
   """
   @spec derive!(list(module), list(module)) :: %{module => %{atom => any}}
   def derive!(entity_types, role_modules) do
@@ -202,8 +201,7 @@ defmodule Hologram.DB.Mapper do
 
   Each definition is a map with :name (the join table name - `<source_table>_<relationship>_$join`
   per the derived-name system), :relationship (the declaring relationship name), :source_table,
-  :target_table, :reverse_index (the name of the index over (target_id, source_id)),
-  :pk_constraint, :source_fk_constraint, and :target_fk_constraint (the derived constraint
+  :target_table, :pk_constraint, :source_fk_constraint, and :target_fk_constraint (the derived constraint
   names). Join table columns are fixed: source_id/target_id uuid NOT NULL, composite primary
   key (source_id, target_id), both columns FK ON DELETE RESTRICT. To-one relationships derive
   no join tables - they live as reference columns on the owning row.
@@ -378,7 +376,6 @@ defmodule Hologram.DB.Mapper do
           null: Keyword.get(opts, :optional) == true,
           references: nil,
           fk_constraint: nil,
-          index: nil,
           source: {:attribute, name}
         }
       end)
@@ -388,14 +385,6 @@ defmodule Hologram.DB.Mapper do
       |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
       |> Enum.map(fn {name, target, opts} ->
         column_name = reference_column_name(name)
-
-        # A unique reference is indexed by its unique index instead (see entity_index_entries/3).
-        index =
-          if Keyword.get(opts, :unique) == true do
-            nil
-          else
-            fit_identifier(segments, [column_name], "$idx")
-          end
 
         %{
           name: column_name,
@@ -407,12 +396,11 @@ defmodule Hologram.DB.Mapper do
           null: Keyword.get(opts, :optional) == true,
           references: table_name(target),
           fk_constraint: fit_identifier(segments, [column_name], "$fk"),
-          index: index,
           source: {:relationship, name}
         }
       end)
 
-    sort_columns = sort_key_columns(segments, entry.attributes)
+    sort_columns = sort_key_columns(entry.attributes)
     search_columns = search_key_columns(entry.attributes)
 
     columns =
@@ -434,8 +422,8 @@ defmodule Hologram.DB.Mapper do
   # One entry per key declared with unique, over its fields' columns in the order the declaration
   # names them - an attribute's own column, a to-one's reference column. Nulls stay distinct, as
   # for a unique attribute: a row holding nil in a field of the key repeats no other row. A to-one
-  # in a key keeps its plain index, since this one serves a lookup by the reference only when the
-  # reference leads it.
+  # leading a key needs no plain index of its own, since this one serves a lookup by the
+  # reference, and the index plan counts it (see Hologram.DB.IndexPlan.select/2).
   defp key_entries(entity_type, entry, segments) do
     relationship_names = Enum.map(entry.relationships, fn {name, _type, _opts} -> name end)
 
@@ -520,9 +508,8 @@ defmodule Hologram.DB.Mapper do
   # none: uniqueness is over the values an attribute holds, and nil is the absence of one.
   #
   # A unique to-one's reference column gets one too, under the same rule - an optional one admits
-  # any number of rows referencing nothing. It stands in for the plain index the column would
-  # otherwise carry: every lookup that one served, this one serves, and a second index over the
-  # same column would only cost each write.
+  # any number of rows referencing nothing. It serves every lookup by the reference, so the index
+  # plan gives the column no plain index beside it (see Hologram.DB.IndexPlan.select/2).
   #
   # The index is over the raw column, so a string value is bounded by the btree entry limit -
   # the validator refuses a unique string above it, so the engine never gets to. The sort-key
@@ -603,31 +590,22 @@ defmodule Hologram.DB.Mapper do
     end
   end
 
-  # The role grant store carries the two indexes no declaration derives, named like any other
-  # index over several columns.
+  # The role grant store carries a unique index no declaration derives, named like any other index
+  # over several columns. Its reads that carry no user_id - who holds a role on a given entity -
+  # get theirs from the index plan (see Hologram.DB.IndexPlan.framework_needs/1).
   #
   # The unique one is over the grant fact, with nulls compared as values - entity_type and
   # entity_id nils encode the type-wide and global grant shapes, so identical rows with nils must
   # still collide. Its columns are the store's own identity list, which its id derivation reads
   # too - one list, so the two cannot disagree on what a grant is. It leads with user_id, which
   # serves asking whether one user holds a role.
-  #
-  # The second serves the reads that carry no user_id: who holds a role on a given entity - what
-  # the sync recheck asks of every row a change touches, for every user on a node at once, and an
-  # app's members list. Every such read fixes both entity columns, so their order costs nothing
-  # there; the identity list's order also serves a read by type alone. Nulls stay distinct, as on
-  # every non-unique index - introspection reads the flag as such, and any other value would be
-  # drift on every boot.
   defp framework_index_entries(Hologram.Auth.RoleGrant) do
     segments = table_segments(RoleGrant)
-    entity_columns = ["entity_type", "entity_id", "role"]
 
     [
       {fit_identifier(segments, RoleGrant.identity_columns(), "$uidx"),
        %{columns: RoleGrant.identity_columns(), nulls_distinct: false, unique: true},
-       "the role grant store"},
-      {fit_identifier(segments, entity_columns, "$idx"),
-       %{columns: entity_columns, nulls_distinct: true, unique: false}, "the role grant store"}
+       "the role grant store"}
     ]
   end
 
@@ -644,7 +622,6 @@ defmodule Hologram.DB.Mapper do
       null: false,
       references: nil,
       fk_constraint: nil,
-      index: nil,
       source: :system
     }
   end
@@ -652,18 +629,11 @@ defmodule Hologram.DB.Mapper do
   # Index names live in one namespace per schema, across tables, and a primary key is backed by
   # an index of its own name - so they are checked against each other. Foreign key names need no
   # check: PostgreSQL scopes them to their table, where they come from distinct column names. A
-  # join table's own index and primary key are listed too, since a cut can leave them in the same
-  # shape as an entity's - each carries its join table's name, so a collision that only repeats
-  # one between the join tables themselves is left to that report.
+  # join table's primary key is listed too, since a cut can leave it in the same shape as an
+  # entity's - it carries its join table's name, so a collision that only repeats one between the
+  # join tables themselves is left to that report. The index plan's names end in a kind no name
+  # here does, and it checks them among themselves (see Hologram.DB.IndexPlan.select/2).
   defp index_name_entries(entity_type, entity_mapping, entity_index_entries) do
-    column_entries =
-      entity_mapping.columns
-      |> Enum.filter(& &1.index)
-      |> Enum.map(fn %{index: index, source: {kind, declaration_name}} ->
-        declaration_kind = if kind == :relationship, do: "relationship", else: "attribute"
-        {index, "#{declaration_kind} #{inspect(declaration_name)} in #{inspect(entity_type)}"}
-      end)
-
     own_entries =
       Enum.map(entity_index_entries, fn {name, _definition, declaration} ->
         {name, declaration}
@@ -672,23 +642,19 @@ defmodule Hologram.DB.Mapper do
     pk_entry = {entity_mapping.pk_constraint, "the primary key of #{inspect(entity_type)}"}
 
     entity_entries =
-      Enum.map([pk_entry | column_entries ++ own_entries], fn {name, declaration} ->
+      Enum.map([pk_entry | own_entries], fn {name, declaration} ->
         %{kind: "index", derived_name: name, declaration: declaration, join_table: nil}
       end)
 
     join_table_entries =
-      Enum.flat_map(entity_mapping.join_tables, fn join_table ->
-        declaration =
-          "relationship #{inspect(join_table.relationship)} in #{inspect(entity_type)}"
-
-        Enum.map([join_table.reverse_index, join_table.pk_constraint], fn name ->
-          %{
-            kind: "index",
-            derived_name: name,
-            declaration: declaration,
-            join_table: join_table.name
-          }
-        end)
+      Enum.map(entity_mapping.join_tables, fn join_table ->
+        %{
+          kind: "index",
+          derived_name: join_table.pk_constraint,
+          declaration:
+            "relationship #{inspect(join_table.relationship)} in #{inspect(entity_type)}",
+          join_table: join_table.name
+        }
       end)
 
     entity_entries ++ join_table_entries
@@ -718,7 +684,6 @@ defmodule Hologram.DB.Mapper do
         relationship: name,
         source_table: table_name(entity_type),
         target_table: table_name(target),
-        reverse_index: fit_identifier(join_segments, ["target_id", "source_id"], "$idx"),
         pk_constraint: fit_identifier(join_segments, [], "$pk"),
         source_fk_constraint: fit_identifier(join_segments, ["source_id"], "$fk"),
         target_fk_constraint: fit_identifier(join_segments, ["target_id"], "$fk")
@@ -797,9 +762,8 @@ defmodule Hologram.DB.Mapper do
   # column itself accepts, which is why PostgreSQL's own advice for long text is an index over a
   # bounded prefix. The key IS that prefix, stored as a column. The raw column does tie-work only:
   # the planner serves a bound as a range over the key with the pair rechecked on what it returns,
-  # and the ordering as an incremental sort within each equal-key group. It rides the column so
-  # that creation, rename and drop follow the column through the machinery the reference index
-  # already uses.
+  # and the ordering as an incremental sort within each equal-key group. The index plan gives the key
+  # an index when a query sorts or compares by the attribute (see Hologram.DB.IndexPlan).
   # Framework-owned, on every table: the revision each settable column was last set at. The
   # default fills existing rows through the reconciler's add-nullable-fill-tighten path, and is
   # never a DB DEFAULT - a row written after this reads its revisions from whoever wrote it.
@@ -814,7 +778,6 @@ defmodule Hologram.DB.Mapper do
       null: false,
       references: nil,
       fk_constraint: nil,
-      index: nil,
       source: :revisions
     }
   end
@@ -837,13 +800,12 @@ defmodule Hologram.DB.Mapper do
         null: true,
         references: nil,
         fk_constraint: nil,
-        index: nil,
         source: {:search_key, name}
       }
     end)
   end
 
-  defp sort_key_columns(segments, attributes) do
+  defp sort_key_columns(attributes) do
     attributes
     |> Enum.filter(fn {_name, type, _opts} -> type == :string end)
     |> Enum.sort()
@@ -860,7 +822,6 @@ defmodule Hologram.DB.Mapper do
         null: true,
         references: nil,
         fk_constraint: nil,
-        index: fit_identifier(segments, [column_name], "$idx"),
         source: {:sort_key, name}
       }
     end)
@@ -901,7 +862,6 @@ defmodule Hologram.DB.Mapper do
         null: false,
         references: nil,
         fk_constraint: nil,
-        index: nil,
         source: :system
       }
     end)

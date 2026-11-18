@@ -116,7 +116,6 @@ defmodule Hologram.Migration.RendererTest do
       result = render(ops, pre)
 
       assert result.transactional == [
-               %{op: :drop_index, index: "my_app_task_legacy_$sort_$idx"},
                %{op: :drop_column, table: "my_app_task", column: "legacy"},
                %{op: :drop_column, table: "my_app_task", column: "legacy_$search"},
                %{op: :drop_column, table: "my_app_task", column: "legacy_$sort"}
@@ -138,7 +137,7 @@ defmodule Hologram.Migration.RendererTest do
       assert result.post_model == model(%{MyApp.Task => %{}, UserEntity => %{}})
     end
 
-    test "renders a to-one relationship as its reference column, constraint, and index" do
+    test "renders a to-one relationship as its reference column and constraint" do
       pre = model(%{MyApp.Task => %{}, MyApp.User => %{}})
 
       ops = [
@@ -154,11 +153,9 @@ defmodule Hologram.Migration.RendererTest do
 
       result = render(ops, pre)
 
+      # Its plain index is the index plan's, built beside the migrations.
       assert op_kinds(result.transactional) == [:add_column, :add_foreign_key]
-      assert [create_index] = result.tail
-
-      assert create_index.index == "my_app_task_author_id_$idx"
-      assert create_index.concurrently == true
+      assert result.tail == []
     end
 
     test "renders a to-many relationship as its join table" do
@@ -177,18 +174,14 @@ defmodule Hologram.Migration.RendererTest do
 
       result = render(ops, pre)
 
-      # The join table is born here, so its reverse index builds inside the transaction.
+      # Its reverse index is the index plan's, built beside the migrations.
       assert result.tail == []
 
       assert op_kinds(result.transactional) == [
                :create_table,
                :add_foreign_key,
-               :add_foreign_key,
-               :create_index
+               :add_foreign_key
              ]
-
-      assert Enum.find(result.transactional, &(&1.op == :create_index)).table ==
-               "my_app_task_tags_$join"
     end
 
     test "builds indexes of tables born in the file inside the transaction" do
@@ -200,7 +193,7 @@ defmodule Hologram.Migration.RendererTest do
           entity: MyApp.Task,
           name: :author,
           type: MyApp.User,
-          opts: [],
+          opts: [unique: true],
           line: 5
         }
       ]
@@ -394,9 +387,7 @@ defmodule Hologram.Migration.RendererTest do
       assert create_index.index == "my_app_task_parent_id_$uidx"
       assert create_index.unique == true
       assert create_index.concurrently == true
-
-      assert %{index: "my_app_task_parent_id_$idx"} =
-               Enum.find(result.transactional, &(&1.op == :drop_index))
+      refute Enum.any?(result.transactional, &(&1.op == :drop_index))
     end
 
     test "defers the referencing ops past the objects they name" do
@@ -462,11 +453,6 @@ defmodule Hologram.Migration.RendererTest do
                  to: "my_app_sketch_author_id_$fk"
                },
                %{
-                 op: :rename_index,
-                 from: "my_app_draft_author_id_$idx",
-                 to: "my_app_sketch_author_id_$idx"
-               },
-               %{
                  op: :rename_table,
                  from: "my_app_draft_tags_$join",
                  to: "my_app_sketch_tags_$join"
@@ -490,11 +476,6 @@ defmodule Hologram.Migration.RendererTest do
                  to: "my_app_sketch_tags_$join_target_id_$fk"
                },
                %{
-                 op: :rename_index,
-                 from: "my_app_draft_tags_$join_target_id_source_id_$idx",
-                 to: "my_app_sketch_tags_$join_target_id_source_id_$idx"
-               },
-               %{
                  op: :rename_enum_value,
                  enum_type: "hologram_role_grant_entity_type_$enum",
                  from: "MyApp.Draft",
@@ -513,11 +494,6 @@ defmodule Hologram.Migration.RendererTest do
       assert result.transactional == [
                %{op: :rename_column, table: "my_app_task", from: "title", to: "name"},
                %{op: :rename_column, table: "my_app_task", from: "title_$sort", to: "name_$sort"},
-               %{
-                 op: :rename_index,
-                 from: "my_app_task_title_$sort_$idx",
-                 to: "my_app_task_name_$sort_$idx"
-               },
                %{
                  op: :rename_column,
                  table: "my_app_task",
@@ -564,11 +540,6 @@ defmodule Hologram.Migration.RendererTest do
                  table: "my_app_task",
                  from: "my_app_task_author_id_$fk",
                  to: "my_app_task_creator_id_$fk"
-               },
-               %{
-                 op: :rename_index,
-                 from: "my_app_task_author_id_$idx",
-                 to: "my_app_task_creator_id_$idx"
                }
              ]
     end
@@ -581,11 +552,6 @@ defmodule Hologram.Migration.RendererTest do
       result = render(ops, pre)
 
       assert Enum.filter(result.transactional, &(&1.op == :rename_index)) == [
-               %{
-                 op: :rename_index,
-                 from: "my_app_task_slug_$sort_$idx",
-                 to: "my_app_task_handle_$sort_$idx"
-               },
                %{
                  op: :rename_index,
                  from: "my_app_task_slug_$uidx",
@@ -668,11 +634,6 @@ defmodule Hologram.Migration.RendererTest do
       result = render(ops, pre)
 
       assert Enum.filter(result.transactional, &(&1.op == :rename_index)) == [
-               %{
-                 op: :rename_index,
-                 from: "my_app_task_owner_id_$idx",
-                 to: "my_app_task_author_id_$idx"
-               },
                %{
                  op: :rename_index,
                  from: "my_app_task_owner_id_slug_$uidx",
@@ -769,11 +730,6 @@ defmodule Hologram.Migration.RendererTest do
       assert Enum.filter(result.transactional, &(&1.op == :rename_index)) == [
                %{
                  op: :rename_index,
-                 from: "my_app_task_slug_$sort_$idx",
-                 to: "my_app_ticket_slug_$sort_$idx"
-               },
-               %{
-                 op: :rename_index,
                  from: "my_app_task_slug_$uidx",
                  to: "my_app_ticket_slug_$uidx"
                }
@@ -798,11 +754,6 @@ defmodule Hologram.Migration.RendererTest do
                  table: "my_app_task",
                  from: "slug_$sort",
                  to: "handle_$sort"
-               },
-               %{
-                 op: :rename_index,
-                 from: "my_app_task_slug_$sort_$idx",
-                 to: "my_app_task_handle_$sort_$idx"
                },
                %{
                  op: :rename_column,
@@ -836,11 +787,6 @@ defmodule Hologram.Migration.RendererTest do
                  table: "my_app_task",
                  from: "my_app_task_author_id_$fk",
                  to: "my_app_task_creator_id_$fk"
-               },
-               %{
-                 op: :rename_index,
-                 from: "my_app_task_author_id_$idx",
-                 to: "my_app_task_creator_id_$idx"
                }
              ]
     end
@@ -882,11 +828,6 @@ defmodule Hologram.Migration.RendererTest do
                  table: "my_app_task_labels_$join",
                  from: "my_app_task_tags_$join_target_id_$fk",
                  to: "my_app_task_labels_$join_target_id_$fk"
-               },
-               %{
-                 op: :rename_index,
-                 from: "my_app_task_tags_$join_target_id_source_id_$idx",
-                 to: "my_app_task_labels_$join_target_id_source_id_$idx"
                }
              ]
     end
@@ -902,8 +843,7 @@ defmodule Hologram.Migration.RendererTest do
                :rename_table,
                :rename_constraint,
                :rename_constraint,
-               :rename_constraint,
-               :rename_index
+               :rename_constraint
              ]
 
       assert hd(result.transactional) == %{
@@ -1275,9 +1215,6 @@ defmodule Hologram.Migration.RendererTest do
                :create_table,
                :add_foreign_key,
                :add_foreign_key,
-               :create_index,
-               :create_index,
-               :create_index,
                :create_index
              ]
 

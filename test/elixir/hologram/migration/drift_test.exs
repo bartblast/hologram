@@ -25,6 +25,8 @@ defmodule Hologram.Migration.DriftTest do
   import Hologram.Migrator
 
   alias Hologram.DB.Connection
+  alias Hologram.DB.IndexPlan
+  alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
 
@@ -35,7 +37,8 @@ defmodule Hologram.Migration.DriftTest do
     timestamp: ~U[2026-08-13 09:15:22.000000Z]
   }
 
-  # Derived for the relationship the chain declares - the model's only index here.
+  # The index plan's for the reference the chain declares - the only index here besides the
+  # primary key.
   @index "my_app_task_author_id_$idx"
 
   defp index_validity do
@@ -125,18 +128,18 @@ defmodule Hologram.Migration.DriftTest do
   describe "run/3 with an object under a name the naming rule no longer derives" do
     @old_index "my_app_task_old_$idx"
 
-    defp index_names do
+    defp index_names(table \\ "my_app_task") do
       statement = """
       SELECT ic."relname"
       FROM pg_catalog.pg_index i
       JOIN pg_catalog.pg_class ic ON ic.oid = i."indexrelid"
       JOIN pg_catalog.pg_class c ON c.oid = i."indrelid"
       JOIN pg_catalog.pg_namespace n ON n.oid = c."relnamespace"
-      WHERE n."nspname" = 'hologram_data' AND c."relname" = 'my_app_task' AND NOT i."indisprimary"
+      WHERE n."nspname" = 'hologram_data' AND c."relname" = $1 AND NOT i."indisprimary"
       ORDER BY ic."relname"
       """
 
-      {:ok, %{rows: rows}} = Connection.query(statement)
+      {:ok, %{rows: rows}} = Connection.query(statement, [table])
 
       Enum.map(rows, fn [name] -> name end)
     end
@@ -206,13 +209,13 @@ defmodule Hologram.Migration.DriftTest do
       route(scratch, fn ->
         rename_index_to_old_name()
 
-        hand_made = ~s{CREATE INDEX "rogue_$idx" ON "hologram_data"."my_app_task" ("created_at")}
+        hand_made = ~s{CREATE INDEX "rogue_index" ON "hologram_data"."my_app_task" ("created_at")}
         {:ok, _result} = Connection.query(hand_made)
 
         expected_msg =
           normalize_newlines("""
           schema drift detected - the database does not match the model:
-            * index "rogue_$idx" is not derived from the model
+            * index "rogue_index" is not derived from the model
           hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
           """)
 
@@ -220,7 +223,7 @@ defmodule Hologram.Migration.DriftTest do
           assert_error RuntimeError, expected_msg, fn -> run(chain, model, @context) end
         end)
 
-        assert index_names() == [@index, "rogue_$idx"]
+        assert index_names() == [@index, "rogue_index"]
       end)
     end
 
@@ -313,46 +316,211 @@ defmodule Hologram.Migration.DriftTest do
     } do
       newer =
         migration("20260814091522", [
-          %{op: :create_entity, entity: MyApp.Project, line: 3}
+          %{op: :create_entity, entity: MyApp.Project, line: 3},
+          %{
+            op: :add_relationship,
+            entity: MyApp.Project,
+            name: :owner,
+            type: MyApp.User,
+            opts: [optional: true],
+            line: 4
+          }
         ])
 
       route(scratch, fn ->
         :ok = run(Enum.concat(chain, [newer]), Model.fold(model, newer.ops), @context)
 
-        rename_index_to_old_name()
+        rename_pk =
+          ~s{ALTER TABLE "hologram_data"."my_app_task" RENAME CONSTRAINT "my_app_task_$pk" TO "my_app_task_old_$pk"}
+
+        {:ok, _result} = Connection.query(rename_pk)
 
         ExUnit.CaptureLog.capture_log(fn ->
-          assert_raise RuntimeError, fn -> run(chain, model, @context) end
+          assert_raise RuntimeError, ~r/schema drift detected/, fn ->
+            run(chain, model, @context)
+          end
         end)
 
-        assert index_names() == [@old_index]
+        {:ok, %{rows: rows}} =
+          Connection.query("""
+          SELECT con."conname"
+          FROM pg_catalog.pg_constraint con
+          JOIN pg_catalog.pg_class c ON c.oid = con."conrelid"
+          WHERE c."relname" = 'my_app_task' AND con."contype" = 'p'
+          """)
+
+        assert rows == [["my_app_task_old_$pk"]]
+
+        # Nor does it converge the plan: the newer release's index stays, as does the older one.
+        assert index_names("my_app_project") == ["my_app_project_owner_id_$idx"]
+        assert index_names() == [@index]
       end)
     end
   end
 
-  describe "repair_indexes/1" do
-    test "builds no second copy of an index standing under another name", %{
+  describe "run/3 with an applied version the chain doesn't hold that left the schema alone" do
+    test "still builds the plan's missing indexes, and says which versions it doesn't know", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      reverted = migration("20260814091522", [])
+
+      route(scratch, fn ->
+        :ok = run(Enum.concat(chain, [reverted]), model, @context)
+
+        {:ok, _result} = Connection.query(~s{DROP INDEX "hologram_data"."#{@index}"})
+
+        log =
+          ExUnit.CaptureLog.capture_log(fn ->
+            assert run(chain, model, @context) == :ok
+          end)
+
+        assert log =~ "20260814091522"
+        assert index_validity() == true
+      end)
+    end
+  end
+
+  describe "repair_indexes/2" do
+    test "renames an index the plan names standing under another name, building no copy", %{
       mapping: mapping,
       scratch: scratch
     } do
       route(scratch, fn ->
         rename = ~s{ALTER INDEX "hologram_data"."#{@index}" RENAME TO "my_app_task_old_$idx"}
         {:ok, _result} = Connection.query(rename)
+        oid = index_oid("my_app_task_old_$idx")
 
-        assert repair_indexes(mapping) == :ok
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert repair_indexes(mapping, IndexPlan.framework_plan(mapping)) == :ok
+        end)
 
-        {:ok, %{rows: rows}} =
-          Connection.query("""
-          SELECT ic."relname"
-          FROM pg_catalog.pg_index i
-          JOIN pg_catalog.pg_class ic ON ic.oid = i."indexrelid"
-          JOIN pg_catalog.pg_class c ON c.oid = i."indrelid"
-          WHERE c."relname" = 'my_app_task' AND NOT i."indisprimary"
-          """)
-
-        assert rows == [["my_app_task_old_$idx"]]
+        assert plan_index_names() == [@index]
+        assert index_oid(@index) == oid
       end)
     end
+
+    test "drops an index the plan doesn't name", %{mapping: mapping, scratch: scratch} do
+      route(scratch, fn ->
+        stray =
+          ~s{CREATE INDEX "my_app_task_created_at_$idx" ON "hologram_data"."my_app_task" ("created_at")}
+
+        {:ok, _result} = Connection.query(stray)
+
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert repair_indexes(mapping, IndexPlan.framework_plan(mapping)) == :ok
+        end)
+
+        assert plan_index_names() == [@index]
+      end)
+    end
+
+    test "rebuilds an index the plan names that stands with another definition", %{
+      mapping: mapping,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        {:ok, _result} = Connection.query(~s{DROP INDEX "hologram_data"."#{@index}"})
+
+        {:ok, _result} =
+          Connection.query(
+            ~s{CREATE INDEX "#{@index}" ON "hologram_data"."my_app_task" ("created_at")}
+          )
+
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert repair_indexes(mapping, IndexPlan.framework_plan(mapping)) == :ok
+        end)
+
+        assert Introspection.schema().tables["my_app_task"].indexes[@index].columns == [
+                 "author_id"
+               ]
+      end)
+    end
+  end
+
+  describe "run/3 with a file renaming a to-one and adding one under its old name" do
+    test "converges both reference indexes in the same boot", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      reshuffle =
+        migration("20260814091522", [
+          %{op: :rename_relationship, entity: MyApp.Task, from: :author, to: :creator, line: 3},
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :author,
+            type: MyApp.User,
+            opts: [optional: true],
+            line: 4
+          }
+        ])
+
+      route(scratch, fn ->
+        oid = index_oid(@index)
+
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert run(Enum.concat(chain, [reshuffle]), Model.fold(model, reshuffle.ops), @context) ==
+                   :ok
+        end)
+
+        # The renamed relationship's index is renamed with it, not rebuilt.
+        assert index_oid("my_app_task_creator_id_$idx") == oid
+
+        assert plan_index_names() == ["my_app_task_author_id_$idx", "my_app_task_creator_id_$idx"]
+      end)
+    end
+  end
+
+  describe "check_drift!/1 with a hand-made unique index under the plan's kind" do
+    test "refuses it, since the plan builds no unique index", %{
+      mapping: mapping,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        unique =
+          ~s{CREATE UNIQUE INDEX "rogue_$idx" ON "hologram_data"."my_app_task" ("id", "created_at")}
+
+        {:ok, _result} = Connection.query(unique)
+
+        expected_msg =
+          normalize_newlines("""
+          schema drift detected - the database does not match the model:
+            * index "rogue_$idx" is not derived from the model
+          hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
+          """)
+
+        assert_error RuntimeError, expected_msg, fn -> check_drift!(mapping) end
+      end)
+    end
+  end
+
+  defp index_oid(name) do
+    {:ok, %{rows: [[oid]]}} =
+      Connection.query(
+        ~s{SELECT c.oid FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c."relnamespace" WHERE n."nspname" = 'hologram_data' AND c."relname" = $1},
+        [name]
+      )
+
+    oid
+  end
+
+  defp plan_index_names do
+    statement = """
+    SELECT ic."relname"
+    FROM pg_catalog.pg_index i
+    JOIN pg_catalog.pg_class ic ON ic.oid = i."indexrelid"
+    JOIN pg_catalog.pg_class c ON c.oid = i."indrelid"
+    JOIN pg_catalog.pg_namespace n ON n.oid = c."relnamespace"
+    WHERE n."nspname" = 'hologram_data' AND c."relname" = 'my_app_task' AND NOT i."indisprimary"
+    ORDER BY ic."relname"
+    """
+
+    {:ok, %{rows: rows}} = Connection.query(statement)
+
+    Enum.map(rows, fn [name] -> name end)
   end
 
   describe "run/3 with an index nothing derives" do
@@ -373,7 +541,6 @@ defmodule Hologram.Migration.DriftTest do
           normalize_newlines("""
           schema drift detected - the database does not match the model:
             * index "#{@index}" is not derived from the model (it has a predicate)
-            * index "#{@index}" declared by the model is missing
           hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
           """)
 
@@ -383,7 +550,7 @@ defmodule Hologram.Migration.DriftTest do
   end
 
   describe "check_drift!/1" do
-    test "describes an index standing under another name as a rename", %{
+    test "leaves the index plan's index to the plan, under whatever name it stands", %{
       mapping: mapping,
       scratch: scratch
     } do
@@ -391,14 +558,11 @@ defmodule Hologram.Migration.DriftTest do
         rename = ~s{ALTER INDEX "hologram_data"."#{@index}" RENAME TO "my_app_task_old_$idx"}
         {:ok, _result} = Connection.query(rename)
 
-        expected_msg =
-          normalize_newlines("""
-          schema drift detected - the database does not match the model:
-            * index "my_app_task_old_$idx" on table "my_app_task" is named outside the derived scheme - the model derives "#{@index}"
-          hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
-          """)
+        assert check_drift!(mapping) == :ok
 
-        assert_error RuntimeError, expected_msg, fn -> check_drift!(mapping) end
+        {:ok, _result} = Connection.query(~s{DROP INDEX "hologram_data"."my_app_task_old_$idx"})
+
+        assert check_drift!(mapping) == :ok
       end)
     end
   end

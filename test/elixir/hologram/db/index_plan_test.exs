@@ -57,7 +57,6 @@ defmodule Hologram.DB.IndexPlanTest do
   @module2 "test_fixtures_entity_module2"
   @module26 "test_fixtures_entity_module26"
   @module28 "test_fixtures_entity_module28"
-  @module29 "test_fixtures_entity_module29"
   @module3 "test_fixtures_entity_module3"
   @module33 "test_fixtures_entity_module33"
   @module38 "test_fixtures_entity_module38"
@@ -1034,9 +1033,9 @@ defmodule Hologram.DB.IndexPlanTest do
     test "needs the grant store's lookup of the grants on an entity" do
       mapping = Mapper.derive!([Module14], [])
 
-      assert need("hologram_role_grant", ["entity_type"], nil, ["entity_id", "role"]) in framework_needs(
-               mapping
-             )
+      grant_need = need("hologram_role_grant", ["entity_type"], nil, ["entity_id", "role"])
+
+      assert grant_need in framework_needs(mapping)
     end
   end
 
@@ -1227,7 +1226,8 @@ defmodule Hologram.DB.IndexPlanTest do
         |> select(mapping)
 
       assert plan[join_table.name] == %{
-               join_table.reverse_index => index(["target_id", "source_id"])
+               "test_fixtures_entity_module3_a_$join_target_id_source_id_$idx" =>
+                 index(["target_id", "source_id"])
              }
     end
 
@@ -1245,6 +1245,25 @@ defmodule Hologram.DB.IndexPlanTest do
                  index(["entity_type", "entity_id", "role"]),
                "hologram_role_grant_granted_by_id_$idx" => index(["granted_by_id"])
              }
+    end
+
+    test "keeps the grant store's index beside an app's reads of the store" do
+      mapping = Mapper.derive!([Module14], [])
+
+      app_needs = [
+        need("hologram_role_grant", ["entity_id", "entity_type"]),
+        need("hologram_role_grant", ["entity_id", "entity_type"], nil, ["created_at"]),
+        need("hologram_role_grant", ["entity_type"], nil, ["created_at"])
+      ]
+
+      plan =
+        mapping
+        |> framework_needs()
+        |> Enum.concat(app_needs)
+        |> select(mapping)
+
+      assert plan["hologram_role_grant"]["hologram_role_grant_entity_type_entity_id_role_$idx"] ==
+               index(["entity_type", "entity_id", "role"])
     end
 
     test "leaves out a need naming a table or a column the mapping doesn't hold" do
@@ -1267,6 +1286,29 @@ defmodule Hologram.DB.IndexPlanTest do
       assert definition == index(expected_columns)
     end
 
+    test "raises on two reference columns deriving the same index name" do
+      defmodule Ref do
+        use Hologram.Entity
+
+        relationship :b_c, Module1
+      end
+
+      defmodule RefB do
+        use Hologram.Entity
+
+        relationship :c, Module1
+      end
+
+      mapping = Mapper.derive!([Module1, Ref, RefB], [])
+
+      message = """
+      colliding derived names - rename the declarations so that every derived name is unique:
+        * index "db_index_plan_test_ref_b_c_id_$idx" is derived from an index on Hologram.DB.IndexPlanTest.Ref by b_c_id, an index on Hologram.DB.IndexPlanTest.RefB by c_id\
+      """
+
+      assert_raise Hologram.CompileError, message, fn -> framework_plan(mapping) end
+    end
+
     test "raises on two tables deriving the same index name" do
       defmodule Foo do
         use Hologram.Entity
@@ -1286,7 +1328,7 @@ defmodule Hologram.DB.IndexPlanTest do
 
       message = """
       colliding derived names - rename the declarations so that every derived name is unique:
-        * index "db_index_plan_test_foo_bar_baz_$idx" is derived from the queries on Hologram.DB.IndexPlanTest.Foo by bar_baz, the queries on Hologram.DB.IndexPlanTest.FooBar by baz\
+        * index "db_index_plan_test_foo_bar_baz_$idx" is derived from an index on Hologram.DB.IndexPlanTest.Foo by bar_baz, an index on Hologram.DB.IndexPlanTest.FooBar by baz\
       """
 
       assert_raise Hologram.CompileError, message, fn ->

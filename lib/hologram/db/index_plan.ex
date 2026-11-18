@@ -48,6 +48,18 @@ defmodule Hologram.DB.IndexPlan do
         }
 
   @doc """
+  Returns the index plan of the lookups the framework itself makes over the tables of the given
+  mapping - `select/2` over `framework_needs/1` - what every database the mapping describes
+  carries whatever its queries read. Raises as `select/2` does.
+  """
+  @spec framework_plan(%{module => %{atom => any}}) :: %{String.t() => %{String.t() => map}}
+  def framework_plan(mapping) do
+    mapping
+    |> framework_needs()
+    |> select(mapping)
+  end
+
+  @doc """
   Returns the access needs of the lookups the framework itself makes, whatever the queries: each
   reference column, which a delete checks and the sync's backwards search and recheck follow from
   the row it names; each join table's reverse direction, from the target back to its sources, which
@@ -305,7 +317,7 @@ defmodule Hologram.DB.IndexPlan do
       entity_entry = %{
         columns: MapSet.new(entity_mapping.columns, & &1.name),
         raw_strings: raw_strings,
-        declaration: "the queries on #{inspect(entity_type)}",
+        declaration: "an index on #{inspect(entity_type)}",
         keys: keys,
         segments: segments
       }
@@ -418,6 +430,10 @@ defmodule Hologram.DB.IndexPlan do
     |> Enum.join(", ")
   end
 
+  # The grant store's reads that carry no user - the type-wide and entity grant checks, and the sync
+  # recheck asking of every row a change touches - all fix the type first, then the id, then the
+  # role, so its need pins that order: an app's read of the store by a prefix of it shares the index,
+  # and the index keeps its name whatever else the app reads there.
   defp grant_store_needs(Hologram.Auth.RoleGrant, entity_mapping) do
     [
       %{

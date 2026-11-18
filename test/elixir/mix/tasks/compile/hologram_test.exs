@@ -153,6 +153,120 @@ defmodule Mix.Tasks.Compile.HologramTest do
     def new(values \\ []), do: Entity.new(__MODULE__, values)
   end
 
+  # Two entity types whose reference columns derive one plain index name - the plan's collision,
+  # which no mapping check sees.
+  defmodule PlanCollisionEntityFixture do
+    defstruct __meta__: %Metadata{},
+              created_at: nil,
+              id: nil,
+              b_c: %NotIncluded{relationship: :b_c},
+              b_c_id: nil,
+              updated_at: nil
+
+    @spec __attributes__() :: list({atom, atom, keyword})
+    def __attributes__, do: []
+
+    @spec __derived__() :: list({atom, atom | module | list(module), keyword})
+    def __derived__, do: []
+
+    @spec __derived_builder_calls__() :: list(atom)
+    def __derived_builder_calls__, do: []
+
+    @spec __derived_locations__() :: %{atom => {String.t(), pos_integer}}
+    def __derived_locations__, do: %{}
+
+    @spec __inverse_relationships__() :: list({atom, module | list(module), keyword})
+    def __inverse_relationships__, do: []
+
+    @spec __is_hologram_entity__() :: boolean
+    def __is_hologram_entity__, do: true
+
+    @spec __policies__() :: list({Entity.operation(), term, atom | nil, keyword})
+    def __policies__, do: []
+
+    @spec __policy_sources__() :: list(module)
+    def __policy_sources__, do: []
+
+    @spec __relationship_locations__() :: %{atom => {String.t(), pos_integer}}
+    def __relationship_locations__, do: %{}
+
+    @spec __relationships__() :: list({atom, module | list(module), keyword})
+    def __relationships__, do: [{:b_c, Entity1, []}]
+
+    @spec __role_declarations__() :: list({atom, keyword, module})
+    def __role_declarations__, do: []
+
+    @spec __roles__() :: list({atom, keyword})
+    def __roles__, do: []
+
+    @spec __system_attributes__() :: list({atom, atom, keyword})
+    def __system_attributes__ do
+      [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
+    end
+
+    @spec __uniques__() :: list(list(atom))
+    def __uniques__, do: []
+
+    @spec new(%{optional(atom) => any} | keyword) :: struct
+    def new(values \\ []), do: Entity.new(__MODULE__, values)
+  end
+
+  defmodule PlanCollisionEntityFixtureB do
+    defstruct __meta__: %Metadata{},
+              created_at: nil,
+              id: nil,
+              c: %NotIncluded{relationship: :c},
+              c_id: nil,
+              updated_at: nil
+
+    @spec __attributes__() :: list({atom, atom, keyword})
+    def __attributes__, do: []
+
+    @spec __derived__() :: list({atom, atom | module | list(module), keyword})
+    def __derived__, do: []
+
+    @spec __derived_builder_calls__() :: list(atom)
+    def __derived_builder_calls__, do: []
+
+    @spec __derived_locations__() :: %{atom => {String.t(), pos_integer}}
+    def __derived_locations__, do: %{}
+
+    @spec __inverse_relationships__() :: list({atom, module | list(module), keyword})
+    def __inverse_relationships__, do: []
+
+    @spec __is_hologram_entity__() :: boolean
+    def __is_hologram_entity__, do: true
+
+    @spec __policies__() :: list({Entity.operation(), term, atom | nil, keyword})
+    def __policies__, do: []
+
+    @spec __policy_sources__() :: list(module)
+    def __policy_sources__, do: []
+
+    @spec __relationship_locations__() :: %{atom => {String.t(), pos_integer}}
+    def __relationship_locations__, do: %{}
+
+    @spec __relationships__() :: list({atom, module | list(module), keyword})
+    def __relationships__, do: [{:c, Entity1, []}]
+
+    @spec __role_declarations__() :: list({atom, keyword, module})
+    def __role_declarations__, do: []
+
+    @spec __roles__() :: list({atom, keyword})
+    def __roles__, do: []
+
+    @spec __system_attributes__() :: list({atom, atom, keyword})
+    def __system_attributes__ do
+      [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
+    end
+
+    @spec __uniques__() :: list(list(atom))
+    def __uniques__, do: []
+
+    @spec new(%{optional(atom) => any} | keyword) :: struct
+    def new(values \\ []), do: Entity.new(__MODULE__, values)
+  end
+
   # This project's components include the ones the extractor and the validators exist to REFUSE -
   # a derived field whose helper recurses, one that reads a field off an integer, a query on a
   # type declaring no allow lines. A real app has none, so the task sweeps every component there and the
@@ -1537,6 +1651,25 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         run(opts)
       end
+    end
+
+    test "fails the build on index plan errors even when compilation is skipped", %{opts: opts} do
+      System.delete_env("HOLOGRAM_START")
+
+      load_entity_fixture_app(:hologram_plan_collision_entity_fixture_app, [
+        PlanCollisionEntityFixture,
+        PlanCollisionEntityFixtureB
+      ])
+
+      error = assert_raise Hologram.CompileError, fn -> run(opts) end
+
+      assert error.message =~ "colliding derived names"
+
+      assert error.message =~
+               "an index on Mix.Tasks.Compile.HologramTest.PlanCollisionEntityFixture by b_c_id"
+
+      assert error.message =~
+               "an index on Mix.Tasks.Compile.HologramTest.PlanCollisionEntityFixtureB by c_id"
     end
 
     test "fails the build on mapping errors even when compilation is skipped", %{opts: opts} do

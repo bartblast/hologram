@@ -9,6 +9,7 @@ defmodule Hologram.DBTest do
   alias Hologram.AccessDeniedError
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Connection
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Schema
@@ -586,7 +587,8 @@ defmodule Hologram.DBTest do
 
       assert reload(Reflection.list_entities(), Reflection.list_roles()) == :ok
 
-      assert Introspection.schema() == Schema.from_mapping(mapping())
+      assert Introspection.schema() ==
+               Schema.from_mapping(mapping(), IndexPlan.framework_plan(mapping()))
     end
 
     test "derives the mapping from the given modules" do
