@@ -1297,8 +1297,8 @@ defmodule Hologram.MutationTest do
       |> DB.create!()
 
       writes = [
-        readable_write(Module53, Entity.generate_id(), %{"a" => "free_a", "b" => "free_b"}),
-        readable_write(Module53, Entity.generate_id(), %{"a" => "taken_a", "b" => "taken_b"})
+        create_write(Module53, Entity.generate_id(), %{"a" => "free_a", "b" => "free_b"}),
+        create_write(Module53, Entity.generate_id(), %{"a" => "taken_a", "b" => "taken_b"})
       ]
 
       assert run(envelope(writes), server()) ==
@@ -1318,10 +1318,7 @@ defmodule Hologram.MutationTest do
         |> DB.create!()
 
       write =
-        update_write(Module53, row.id, %{"b" => "held_b"},
-          claim: ["authorize", "update"],
-          stamp: stamp_above(row)
-        )
+        update_write(Module53, row.id, %{"b" => "held_b"}, stamp: stamp_above(row))
 
       assert run(envelope([write]), server()) ==
                rejected(0, %{a: [unique: [:a, :b]], b: [unique: [:a, :b]]})
