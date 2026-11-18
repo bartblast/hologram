@@ -67,13 +67,12 @@ defmodule HologramFeatureTests.SyncedTypesTest do
       |> visit(SyncedTypesPage)
       |> await_local_fill()
       |> mark_this_page_load()
-      |> click(button("Read the bookmark"))
-      |> assert_text(css("#result"), "missing")
+      |> await_local_read("Read the labels", "labels", "draft")
 
     DB.update!(Bookmark, bookmark.id, label: "pinned")
 
     session
-    |> await_local_read("Read the bookmark", "result", "found_pinned")
+    |> await_local_read("Read the labels", "labels", "pinned")
     |> assert_same_page_load()
   end
 
