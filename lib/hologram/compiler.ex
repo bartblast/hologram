@@ -2400,13 +2400,14 @@ defmodule Hologram.Compiler do
   read and the pages' client code mentions, as for `:entity_types`, and, when the build checks
   permissions on the client (see `permission_checking?/2`), the types every rule of those types
   reads through relationships, with the grant type. Read rules count too, since the browser decides
-  them in `can?`. They are followed one step: client code checks only rows of types it
-  queries or mentions, and a rule's chains already follow its delegations. That is at least what
-  the windows download, which follow the rules of a query's own type and its includes only - bar
-  a type the model leaves out, which declares no rule, so no read rule admits its rows. A
-  type only server code names, like an audit log, is left out, rules or not, and never reaches a
-  browser. The server reads the list (see `Hologram.DB.QueryCache.synced_types/0`), the client
-  does not.
+  them in `can?`. They are followed one step: client code checks only rows of types it queries or
+  mentions, and a rule's chains already follow its delegations. A chain's types stop before its
+  first type no session may read (see `Hologram.Policy.readable_prefix/2`), since no client gets
+  a row of it, nor any row reached through it. That is at least what the windows download, which
+  follow the rules of a query's own type and its includes only - bar a type the model leaves out,
+  which declares no rule, so no read rule admits its rows. A type only server code names, like an
+  audit log, is left out, rules or not, and never reaches a browser. The server reads the list
+  (see `Hologram.DB.QueryCache.synced_types/0`), the client does not.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
@@ -4409,9 +4410,11 @@ defmodule Hologram.Compiler do
 
   # The entity types sync sends rows of (see build_sync_constants/3): the reached ones, and in a
   # build checking permissions on the client, the types their rules read rows of through
-  # relationships and the grant type. Kept to the types of the client's model: a row of a type the
-  # model does not name cannot be read back. What that drops is a type declaring no rule, like
-  # one a read rule delegates to, whose rows no one may read anyway.
+  # relationships and the grant type. A chain's types stop before its first type no session may
+  # read (see `Hologram.Policy.readable_prefix/2`): no client gets such a row, nor any row reached
+  # through it. Kept to the types of the client's model: a row of a type the model does not name
+  # cannot be read back. What that drops is a type declaring no rule, like one a read rule
+  # delegates to, whose rows no one may read anyway.
   defp synced_types(reached_entity_types, model_entity_types, reach_by_page, module_info_plt) do
     types =
       if permission_checking?(reach_by_page, module_info_plt) do
@@ -4419,7 +4422,7 @@ defmodule Hologram.Compiler do
         |> Enum.flat_map(fn entity_type ->
           entity_type
           |> Policy.related_chains()
-          |> Enum.flat_map(&chain_types(entity_type, &1))
+          |> Enum.flat_map(&chain_types(entity_type, Policy.readable_prefix(entity_type, &1)))
         end)
         |> MapSet.new()
         |> MapSet.union(reached_entity_types)

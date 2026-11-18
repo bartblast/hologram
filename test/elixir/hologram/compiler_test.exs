@@ -97,6 +97,10 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module2, as: ParentPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module20, as: TaskPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module24, as: ShelfPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module36, as: OwnerPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module37, as: VaultPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module38, as: CratePolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module39, as: ParcelPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module5, as: DelegationPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
@@ -2564,6 +2568,34 @@ defmodule Hologram.CompilerTest do
 
       assert ProjectPolicyEntity in synced_types
       refute MemberPolicyEntity in synced_types
+    end
+
+    # The parcel's read rule reads `shelf.vault.owner`, and no rule lets anyone read a vault. No
+    # browser holds a vault row, so neither it nor the owner past it is synced: the server's
+    # verdict answers the rule. The crate before the vault is.
+    test "syncs no type of a rule's chain from the first one nobody may read", %{
+      module_info_plt: module_info_plt
+    } do
+      sync_constants =
+        build_sync_constants(mentioning_reach([ParcelPolicyEntity], true), %{}, module_info_plt)
+
+      assert CratePolicyEntity in sync_constants.synced_types
+      refute VaultPolicyEntity in sync_constants.synced_types
+      refute OwnerPolicyEntity in sync_constants.synced_types
+    end
+
+    # The cut drops only what the chain alone would add: a type the page reaches itself is synced,
+    # readable or not.
+    test "syncs a type past a rule's cut chain that the page reaches itself", %{
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page =
+        mentioning_reach([ParcelPolicyEntity, VaultPolicyEntity, OwnerPolicyEntity], true)
+
+      synced_types = build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types
+
+      assert VaultPolicyEntity in synced_types
+      assert OwnerPolicyEntity in synced_types
     end
 
     # Entity51's read rule delegates to Entity50, which declares no rule, so no one may read an

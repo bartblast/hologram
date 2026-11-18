@@ -594,6 +594,22 @@ defmodule Hologram.Policy do
   end
 
   @doc """
+  Returns the relationships of the given chain, read from a row of the given entity type, before
+  its first hop to a type no session may read (see `readable_type?/1`): the part of it a client can
+  hold rows along. Past that type no client gets a row, and the server's verdict answers what a
+  read rule's conditions read of it.
+  """
+  @spec readable_prefix(module, list(atom)) :: list(atom)
+  def readable_prefix(entity_type, chain) do
+    chain
+    |> Enum.scan({entity_type, nil}, fn name, {type, _name} ->
+      {Entity.related_type(type, name), name}
+    end)
+    |> Enum.take_while(fn {type, _name} -> readable_type?(type) end)
+    |> Enum.map(fn {_type, name} -> name end)
+  end
+
+  @doc """
   Returns the chains of relationship names whose rows the given entity type's rules read, across
   every operation, sorted: every row along a path in a condition, every set a quantifier reads and
   the rows along its source - a to-many or an inverse holding them all - the rows before the last

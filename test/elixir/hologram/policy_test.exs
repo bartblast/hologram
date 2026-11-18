@@ -20,6 +20,7 @@ defmodule Hologram.PolicyTest do
       operations: 1,
       read_roles_qualifying_role_modules: 1,
       read_roles_qualifying_roles: 1,
+      readable_prefix: 2,
       readable_type?: 1,
       related_chains: 1,
       related_chains: 2,
@@ -1743,6 +1744,21 @@ defmodule Hologram.PolicyTest do
     # The framework supplies the grant store's read rules.
     test "holds for the grant store" do
       assert readable_type?(RoleGrant)
+    end
+  end
+
+  describe "readable_prefix/2" do
+    # Module37 (the vault) has no read rule.
+    test "stops a chain before its first type no session may read" do
+      assert readable_prefix(Policy.Module39, [:shelf, :vault, :owner]) == [:shelf]
+    end
+
+    test "keeps a chain through readable types whole" do
+      assert readable_prefix(Policy.Module39, [:shelf]) == [:shelf]
+    end
+
+    test "keeps nothing of a chain whose first hop is to a type no session may read" do
+      assert readable_prefix(Policy.Module38, [:vault, :owner]) == []
     end
   end
 
