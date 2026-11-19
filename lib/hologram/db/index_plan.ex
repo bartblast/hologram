@@ -32,6 +32,9 @@ defmodule Hologram.DB.IndexPlan do
   # write, and a statement with that many alternatives is better served by what's ANDed with them.
   @max_or_needs 8
 
+  # PostgreSQL's limit on the columns of an index (INDEX_MAX_KEYS).
+  @max_columns 32
+
   @range_operators [:<, :<=, :>, :>=]
 
   # A condition Postgres can match against an index. An equality on a value (`=`) fixes its column,
@@ -255,6 +258,8 @@ defmodule Hologram.DB.IndexPlan do
         |> Enum.sort_by(&need_rank/1)
         |> Enum.reduce([], &place_need(&1, &2, table_info.keys))
         |> Enum.reverse()
+        |> Enum.map(&within_column_limit/1)
+        |> Enum.uniq()
         |> without_prefixes()
         |> Enum.map(& &1.columns)
         |> name_indexes(table, table_info)
@@ -436,6 +441,11 @@ defmodule Hologram.DB.IndexPlan do
         [extend(%{columns: []}, need) | chosen]
     end
   end
+
+  # PostgreSQL builds an index of at most 32 columns and refuses a wider one, which would then fail
+  # every build. An index's leading columns serve what the whole would, as far as they go, so a
+  # wider one keeps its first 32 - only a query naming that many columns at once gets there.
+  defp within_column_limit(index), do: %{index | columns: Enum.take(index.columns, @max_columns)}
 
   # An index whose columns lead another's serves nothing the longer one doesn't, since a need reads
   # only an index's leading columns - as when two needs fix the same columns and their orders nest.

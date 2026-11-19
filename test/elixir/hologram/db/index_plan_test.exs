@@ -1385,6 +1385,58 @@ defmodule Hologram.DB.IndexPlanTest do
       assert_raise Hologram.CompileError, message, fn -> framework_plan(mapping) end
     end
 
+    test "keeps an index to the first 32 columns, PostgreSQL's limit" do
+      defmodule Wide do
+        use Hologram.Entity
+
+        for name <- [
+              :a01,
+              :a02,
+              :a03,
+              :a04,
+              :a05,
+              :a06,
+              :a07,
+              :a08,
+              :a09,
+              :a10,
+              :a11,
+              :a12,
+              :a13,
+              :a14,
+              :a15,
+              :a16,
+              :a17,
+              :a18,
+              :a19,
+              :a20,
+              :a21,
+              :a22,
+              :a23,
+              :a24,
+              :a25,
+              :a26,
+              :a27,
+              :a28,
+              :a29,
+              :a30,
+              :a31,
+              :a32,
+              :a33
+            ] do
+          attribute name, :integer
+        end
+      end
+
+      mapping = Mapper.derive!([Wide], [])
+      table = mapping[Wide].table
+      columns = for n <- 1..33, do: "a#{String.pad_leading(Integer.to_string(n), 2, "0")}"
+
+      assert %{^table => indexes} = select([need(table, columns)], mapping)
+      assert [%{columns: index_columns}] = Map.values(indexes)
+      assert index_columns == Enum.take(columns, 32)
+    end
+
     test "gives the later of two indexes of one table deriving one name a digest of its columns" do
       defmodule Pub do
         use Hologram.Entity
