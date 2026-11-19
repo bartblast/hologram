@@ -87,7 +87,8 @@ defmodule Hologram.DB.IndexBuilderTest do
   end
 
   # Whether the given session takes the migration lock within the given wall-clock time, trying
-  # until then.
+  # until then. A lock taken late is let go and counts as not taken: a try that resumes after the
+  # deadline can catch, in the moment it lets the lock go, a builder that held it through the pause.
   defp take_lock_within(session, timeout_ms) do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
 
@@ -98,10 +99,21 @@ defmodule Hologram.DB.IndexBuilderTest do
     %{rows: [[locked?]]} =
       Postgrex.query!(session, "SELECT pg_try_advisory_lock($1)", [@migration_lock_key])
 
+    late? = System.monotonic_time(:millisecond) > deadline
+
     cond do
-      locked? -> true
-      System.monotonic_time(:millisecond) > deadline -> false
-      true -> try_until(session, deadline)
+      locked? and late? ->
+        Postgrex.query!(session, "SELECT pg_advisory_unlock($1)", [@migration_lock_key])
+        false
+
+      locked? ->
+        true
+
+      late? ->
+        false
+
+      true ->
+        try_until(session, deadline)
     end
   end
 
