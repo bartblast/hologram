@@ -718,6 +718,75 @@ describe("Deltas", () => {
     });
   });
 
+  describe("apply() - keep_hashed", () => {
+    const SALT = "q3Vx";
+
+    const keepList = (type, ids) => ({
+      keep_hashed: {
+        [type]: [
+          {hashes: ids.map((id) => DropHash.hash(SALT, id)), salt: SALT},
+        ],
+      },
+    });
+
+    beforeEach(() => {
+      Deltas.apply({
+        put_entity: {
+          [PROJECT]: [{id: "p1", name: "Website", tasks: ["t1", "t2"]}],
+          [TASK]: [
+            {done: false, id: "t1", owners: ["p1"], title: "Draft copy"},
+            {done: false, id: "t2", owners: ["p1"], title: "Review copy"},
+          ],
+        },
+      });
+    });
+
+    it("keeps the held rows of the type it lists and drops the rest", () => {
+      Deltas.apply(keepList(TASK, ["t2", "t9"]));
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+      assert.isNotNull(LocalDatabase.getRow(TASK, "t2"));
+    });
+
+    it("leaves the rows of other types alone", () => {
+      Deltas.apply(keepList(TASK, []));
+
+      assert.isNotNull(LocalDatabase.getRow(PROJECT, "p1"));
+    });
+
+    it("takes a row it drops out of the sets of the rows it still holds", () => {
+      Deltas.apply(keepList(TASK, ["t2"]));
+
+      assert.deepEqual(
+        LocalDatabase.getTargetIds(PROJECT, "tasks", "p1"),
+        new Set(["t2"]),
+      );
+    });
+
+    // The catch-up's hashes of the type were worked out before the row was filed.
+    it("judges a row filed after the catch-up's hashes of its type were worked out", () => {
+      Deltas.apply({
+        unsync_hashed: {
+          [TASK]: [{hashes: [DropHash.hash(SALT, "t9")], salt: SALT}],
+        },
+      });
+
+      Deltas.apply({
+        put_entity: {[TASK]: [{done: false, id: "t3", title: "Ship copy"}]},
+      });
+
+      Deltas.apply(keepList(TASK, ["t1", "t2"]));
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t3"));
+    });
+
+    it("answers the rows it dropped and the rows whose sets it changed as written", () => {
+      const written = Deltas.apply(keepList(TASK, ["t2"]));
+
+      assert.deepEqual(written, new Set([`${TASK} t1`, `${PROJECT} p1`]));
+    });
+  });
+
   // Never sent in v1 - a row gone and a row out of reach are both told as unsync until offline
   // writes need them apart.
   describe("apply() - del_entity", () => {

@@ -20,6 +20,8 @@ defmodule Hologram.Sync.Session do
 
   use GenServer, restart: :temporary
 
+  alias Hologram.Auth
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Oplog
   alias Hologram.DB.QueryCache
   alias Hologram.Entity
@@ -404,22 +406,45 @@ defmodule Hologram.Sync.Session do
   # got. Every chunk's rows are read after the gap was, so they hold every later chunk's effects too:
   # a row an earlier chunk settled - handed over or dropped - is passed over by the later ones, and a
   # row written many times while the client was away goes out once.
+  #
+  # A type a grant moved whole for the user is read again once, in the chunk that first names it:
+  # read after the gap, it holds every later grant change too. When the gap takes a grant of the
+  # user's away, the rows it hid can't be listed without reading the whole type, so the client is
+  # told which rows of the type it may keep instead, by hash (see `reread_type/5`).
   defp tell_gap(state, gap, edge) do
-    edges = Edges.index()
-    synced_types = QueryCache.synced_types()
+    context = %{
+      edge: edge,
+      edges: Edges.index(),
+      keep_salt: if(grant_lost?(gap, state.actor_user_id), do: state.drop_salt),
+      synced_types: QueryCache.synced_types()
+    }
 
-    {told, _settled} =
+    {told, _settled, _reread} =
       gap
       |> Enum.chunk_every(Catchup.rows_per_frame())
-      |> Enum.reduce_while({state, Held.new()}, fn chunk, {acc, settled} ->
+      |> Enum.reduce_while({state, Held.new(), MapSet.new()}, fn chunk, {acc, settled, reread} ->
         if acc.cut do
-          {:halt, {acc, settled}}
+          {:halt, {acc, settled, reread}}
         else
-          {:cont, tell_chunk(acc, settled, chunk, {edges, synced_types, edge})}
+          {:cont, tell_chunk(acc, {settled, reread}, chunk, context)}
         end
       end)
 
     told
+  end
+
+  # Whether the gap deletes a grant held by the given user. Grants are only ever created and
+  # deleted, never patched, so a deleted one is all that takes one away. Its payload is read for
+  # the gap's grant deletes alone.
+  defp grant_lost?(_gap, nil), do: false
+
+  defp grant_lost?(gap, actor_user_id) do
+    user_id = Auth.canonical_id(actor_user_id)
+
+    gap
+    |> Enum.filter(&(&1.op == :del_entity and &1.type == RoleGrant))
+    |> with_data()
+    |> Enum.any?(&(Auth.canonical_id(&1.data["user_id"]) == user_id))
   end
 
   # The chunk's rows are read after the gap, so they can hold a batch of this client's in a
@@ -427,18 +452,37 @@ defmodule Hologram.Sync.Session do
   # highest included - and the frames have to claim it (see `tell_part/3`). They can also hold a
   # batch in the chunk's highest transaction whose effects a later chunk holds, so that transaction
   # counts too.
-  defp tell_chunk(state, settled, chunk, {edges, synced_types, edge}) do
+  defp tell_chunk(state, {settled, reread}, chunk, context) do
     effects = with_data(chunk)
-    place = chunk_place(chunk, edge)
+    place = chunk_place(chunk, context.edge)
     %{tx: highest_tx} = Enum.max_by(chunk, & &1.tx)
-    overtaken_above = min(highest_tx, edge) - 1
+    overtaken_above = min(highest_tx, context.edge) - 1
 
-    part =
-      effects
-      |> state.read_part.(state.actor_user_id, edges, synced_types, place, overtaken_above)
-      |> without_settled(settled)
+    read =
+      state.read_part.(
+        effects,
+        state.actor_user_id,
+        context.edges,
+        context.synced_types,
+        place,
+        overtaken_above
+      )
 
-    {tell_part(state, part, trust_held?: false), settle(settled, part, state.pot)}
+    part = %{
+      without_settled(read, settled)
+      | whole_types: Enum.reject(read.whole_types, &MapSet.member?(reread, &1))
+    }
+
+    told = tell_part(state, part, trust_held?: false, keep_salt: context.keep_salt)
+
+    # A type read again is settled whole: every row of it the user may read went out, and the
+    # session takes the client to hold exactly those.
+    reread_settled =
+      Enum.reduce(part.whole_types, settle(settled, part, state.pot), fn entity_type, acc ->
+        Held.add(acc, entity_type, Held.ids(told.pot.held, entity_type))
+      end)
+
+    {told, reread_settled, MapSet.union(reread, MapSet.new(part.whole_types))}
   end
 
   # The gap is read without payloads, which keeps its size a count (see `Hologram.Sync.Catchup`),
@@ -624,7 +668,14 @@ defmodule Hologram.Sync.Session do
   # A type read again whole for this user, because a grant moved what it may read of every row of
   # it, and what that tells the client - in frames of its own, after the batch's, since a frame's
   # deltas are applied grouped by kind rather than in the order they were worked out.
-  defp reread_type(entity_type, state, synced_types, trust_held?) do
+  #
+  # Given a salt, the client is also told every row of the type it may keep, by hash, and drops the
+  # rest: for a returning client whose user lost a grant, where a row the grant hid can be held
+  # without the session knowing. One list, in a frame of its own claiming no number - a client
+  # dropping every row missing from part of a list would drop the rest of it. A row of the type the
+  # client's own batch creates after the read, its answer filing it before this frame lands, goes
+  # with the rest until that batch is told, once the catch-up is over.
+  defp reread_type(entity_type, state, synced_types, trust_held?, keep_salt) do
     {rows, read_seq} =
       state.read_fill.(entity_type, state.actor_user_id, state.replica_id, synced_types)
 
@@ -635,8 +686,20 @@ defmodule Hologram.Sync.Session do
 
     # Read after the batch, so its rows can hold batches of this client's the session hasn't told:
     # their frames claim the number the read found, and the session keeps its own (see
-    # `tell_part/2`).
-    send_news(%{state | pot: pot}, news, %{}, higher_seq(state.applied_seq, read_seq))
+    # `tell_part/3`).
+    %{state | pot: pot}
+    |> send_news(news, %{}, higher_seq(state.applied_seq, read_seq))
+    |> send_keep(entity_type, keep_salt, rows)
+  end
+
+  defp send_keep(state, _entity_type, nil, _rows), do: state
+
+  defp send_keep(state, entity_type, salt, rows) do
+    keep = Frame.keep_hashed(entity_type, salt, Enum.map(rows, & &1.id))
+
+    state
+    |> send_unsent(nil)
+    |> Map.put(:unsent, {[keep], nil})
   end
 
   # Frames carrying the given news, the rows handed over split across them by the frame size and
@@ -772,8 +835,10 @@ defmodule Hologram.Sync.Session do
     # batch of this client's that overtook the part leaves its rows as true as they are.
     reread_trust? = trust_given? and trusts_held?(placed, part)
 
+    keep_salt = Keyword.get(opts, :keep_salt)
+
     part.whole_types
-    |> Enum.reduce(told, &reread_type(&1, &2, part.synced_types, reread_trust?))
+    |> Enum.reduce(told, &reread_type(&1, &2, part.synced_types, reread_trust?, keep_salt))
     |> flush_frames()
   end
 

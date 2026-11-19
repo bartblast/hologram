@@ -350,6 +350,20 @@ defmodule Hologram.Sync.FrameTest do
              }
     end
 
+    test "carries a keep list as its salt and hashes, under its type" do
+      id = Entity.generate_id()
+
+      envelope = encode_deltas_envelope(42, @cursor, [keep_hashed(Module2, "q3Vx", [id])], nil)
+
+      assert decoded_deltas(envelope) == %{
+               "keep_hashed" => %{
+                 "Hologram.Test.Fixtures.Entity.Module2" => [
+                   %{"hashes" => [drop_hash("q3Vx", id)], "salt" => "q3Vx"}
+                 ]
+               }
+             }
+    end
+
     test "wraps the deltas in a sync_deltas SSE event envelope" do
       row = Module2.new(a: true, c: "first")
 
@@ -662,6 +676,18 @@ defmodule Hologram.Sync.FrameTest do
       assert unsync_entity(id, Module2) == %{
                id: id,
                op: :unsync_entity,
+               type: "Hologram.Test.Fixtures.Entity.Module2"
+             }
+    end
+  end
+
+  describe "keep_hashed/3" do
+    test "names the given rows of the given type to keep by their hashes under the given salt" do
+      id = Entity.generate_id()
+
+      assert keep_hashed(Module2, "q3Vx", [id]) == %{
+               data: %{hashes: [drop_hash("q3Vx", id)], salt: "q3Vx"},
+               op: :keep_hashed,
                type: "Hologram.Test.Fixtures.Entity.Module2"
              }
     end

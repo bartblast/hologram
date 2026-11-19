@@ -269,6 +269,25 @@ defmodule Hologram.Sync.Frame do
   end
 
   @doc """
+  Returns the delta telling a client to keep only the given rows of the given entity type, each
+  named by its hash under the given salt (see `drop_hash/2`), and to drop every other row of the
+  type it holds.
+
+  For a returning client whose user lost a grant reaching every row of a type: the rows the grant
+  hid can't be listed without reading the whole type, while the rows the user may still read are
+  what the session reads anyway. Named by hash for the same reason a drop is, and whole - a client
+  keeping only part of the list would drop the rest.
+  """
+  @spec keep_hashed(module, String.t(), list(String.t())) :: map
+  def keep_hashed(entity_type, salt, ids) do
+    %{
+      data: %{hashes: Enum.map(ids, &drop_hash(salt, &1)), salt: salt},
+      op: :keep_hashed,
+      type: Codec.encode_enum_value(entity_type)
+    }
+  end
+
+  @doc """
   Returns the delta telling a client to drop whichever of the given rows of the given entity type
   it holds, each named by its hash under the given salt rather than by its id (see `drop_hash/2`).
 
@@ -336,7 +355,7 @@ defmodule Hologram.Sync.Frame do
     %{scope: :types, types: Enum.map(types, &Codec.encode_enum_value/1)}
   end
 
-  defp payload(op, delta) when op in [:put_entity, :unsync_hashed], do: delta.data
+  defp payload(op, delta) when op in [:keep_hashed, :put_entity, :unsync_hashed], do: delta.data
 
   defp payload(:unsync_entity, delta), do: delta.id
 

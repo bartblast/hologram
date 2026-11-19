@@ -55,8 +55,13 @@ export default class Deltas {
 
     for (const [op, byType] of Object.entries(deltas)) {
       for (const [type, items] of Object.entries(byType)) {
-        if (op === "unsync_hashed") {
-          for (const key of Deltas.#dropHashed(type, items)) {
+        if (op === "unsync_hashed" || op === "keep_hashed") {
+          const keys =
+            op === "unsync_hashed"
+              ? Deltas.#dropHashed(type, items)
+              : Deltas.#keepHashed(type, items);
+
+          for (const key of keys) {
             written.add(key);
           }
 
@@ -141,17 +146,42 @@ export default class Deltas {
       }
     }
 
-    if (dropped.size === 0) {
+    return Deltas.#dropRows(type, dropped);
+  }
+
+  // The server tells a client which rows of a type it may keep, by hash, when its user lost a grant
+  // reaching every row of the type: the rows the grant hid can't be named, the rows still readable
+  // can. So every held row of the type whose id hashes to none of them goes, as a hashed drop takes
+  // a row. Hashed here rather than looked up in the catch-up's hashes, which can miss rows filed
+  // since they were worked out - and every one of those has to be judged against the list.
+  static #keepHashed(type, items) {
+    const dropped = new Set();
+
+    for (const {hashes, salt} of items) {
+      const kept = new Set(hashes);
+
+      for (const id of Object.keys(LocalDatabase.baseTable(type))) {
+        if (!kept.has(DropHash.hash(salt, id))) {
+          dropped.add(id);
+        }
+      }
+    }
+
+    return Deltas.#dropRows(type, dropped);
+  }
+
+  static #dropRows(type, ids) {
+    if (ids.size === 0) {
       return [];
     }
 
-    for (const id of dropped) {
+    for (const id of ids) {
       LocalDatabase.deleteRow(type, id);
     }
 
-    const written = Array.from(dropped, (id) => `${type} ${id}`);
+    const written = Array.from(ids, (id) => `${type} ${id}`);
 
-    return written.concat(Deltas.#deleteFactsNaming(type, dropped));
+    return written.concat(Deltas.#deleteFactsNaming(type, ids));
   }
 
   // Every pair filed under a held row that names one of the given rows of the given type: in a

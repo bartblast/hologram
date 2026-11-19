@@ -537,13 +537,16 @@ defmodule Hologram.Sync.SessionTest do
 
       session = start_session!(gap: [], read_ids: read_ids_routing)
 
-      assert_receive :reading
+      assert_receive :reading, 1_000
       DB.update!(Module2, task.id, c: "after")
       route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})], {1, 0})
       send(session, :routed)
 
-      assert_receive {:sync_synced, :all, _cursor}
-      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert_receive {:sync_synced, :all, _cursor}, 1_000
+
+      assert_receive {:sync_deltas, _cursor, [%{data: data, id: id, op: :put_entity}], _seq},
+                     1_000
+
       assert id == task.id
       assert data.c == "after"
     end
@@ -761,6 +764,146 @@ defmodule Hologram.Sync.SessionTest do
       refute Enum.any?(frames, fn {deltas, _seq} ->
                Enum.any?(deltas, &(&1.op == :unsync_entity))
              end)
+    end
+  end
+
+  describe "start_link/1 - coming back to a type-wide grant" do
+    setup do
+      user =
+        %{email: "resumed@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      windows(%{})
+
+      readable =
+        [public: true]
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      hidden = DB.create!(PolicyModule1.new())
+
+      %{hidden: hidden, readable: readable, user: user}
+    end
+
+    defp type_grant(user) do
+      %{
+        "entity_id" => nil,
+        "entity_type" => "Hologram.Test.Fixtures.Policy.Module1",
+        "id" => Entity.generate_id(),
+        "role" => "viewer",
+        "user_id" => user.id
+      }
+    end
+
+    test "hands over every row of a type a grant given while away opens, once", %{
+      hidden: hidden,
+      readable: readable,
+      user: user
+    } do
+      # A chunk per grant effect, each naming the type.
+      put_app_env(:sync, rows_per_frame: 1)
+
+      Auth.grant_role(user, :viewer, PolicyModule1)
+
+      grant = type_grant(user)
+
+      start_session!(
+        actor_user_id: user.id,
+        gap: [
+          logged(:put_entity, RoleGrant, grant["id"], grant, {300, 1}),
+          logged(:put_entity, RoleGrant, grant["id"], grant, {300, 2})
+        ]
+      )
+
+      deltas = await_fill()
+
+      put_ids =
+        for %{op: :put_entity, type: "Hologram.Test.Fixtures.Policy.Module1", id: id} <- deltas,
+            do: id
+
+      assert Enum.sort(put_ids) == Enum.sort([readable.id, hidden.id])
+      refute Enum.any?(deltas, &(&1.op == :keep_hashed))
+    end
+
+    test "tells the client which rows of a type to keep once a grant on all of it is gone", %{
+      readable: readable,
+      user: user
+    } do
+      grant = type_grant(user)
+
+      start_session!(
+        actor_user_id: user.id,
+        gap: [logged(:del_entity, RoleGrant, grant["id"], grant, {300, 1})]
+      )
+
+      frames = await_frames()
+
+      keeps = for {deltas, _seq} <- frames, %{op: :keep_hashed} = keep <- deltas, do: keep
+      kept_types = Enum.map(keeps, & &1.type)
+
+      # The child reads through its parent, so the grant reached every row of it too.
+      assert Enum.sort(kept_types) == [
+               "Hologram.Test.Fixtures.Policy.Module1",
+               "Hologram.Test.Fixtures.Policy.Module5"
+             ]
+
+      keep = Enum.find(keeps, &(&1.type == "Hologram.Test.Fixtures.Policy.Module1"))
+
+      assert keep.data.hashes == [Frame.drop_hash(keep.data.salt, readable.id)]
+
+      for {deltas, seq} <- frames, Enum.any?(deltas, &(&1.op == :keep_hashed)) do
+        assert seq == nil
+      end
+    end
+
+    test "tells no keep list once a grant of another user's on all of a type is gone", %{
+      user: user
+    } do
+      other =
+        %{email: "other@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      grant = type_grant(other)
+
+      start_session!(
+        actor_user_id: user.id,
+        gap: [logged(:del_entity, RoleGrant, grant["id"], grant, {300, 1})]
+      )
+
+      refute Enum.any?(await_frames(), fn {deltas, _seq} ->
+               Enum.any?(deltas, &(&1.op == :keep_hashed))
+             end)
+    end
+
+    # The reread hands every row of the type over, so a later chunk writing one of them sends it no
+    # second time.
+    test "hands a row of a type read again whole over once, whatever later chunks write", %{
+      hidden: hidden,
+      readable: readable,
+      user: user
+    } do
+      put_app_env(:sync, rows_per_frame: 1)
+
+      Auth.grant_role(user, :viewer, PolicyModule1)
+
+      grant = type_grant(user)
+
+      start_session!(
+        actor_user_id: user.id,
+        gap: [
+          logged(:put_entity, RoleGrant, grant["id"], grant, {300, 1}),
+          logged(:patch_entity, PolicyModule1, hidden.id, %{"priority" => 4}, {300, 2})
+        ]
+      )
+
+      put_ids =
+        for %{op: :put_entity, type: "Hologram.Test.Fixtures.Policy.Module1", id: id} <-
+              await_fill(),
+            do: id
+
+      assert Enum.sort(put_ids) == Enum.sort([readable.id, hidden.id])
     end
   end
 
@@ -1502,7 +1645,7 @@ defmodule Hologram.Sync.SessionTest do
         live_effect(:patch_entity, Module2, task.id, %{"c" => "after"}, ref(@other_replica, 9))
       ])
 
-      assert_receive {:sync_deltas, _cursor, _deltas, 5}
+      assert_receive {:sync_deltas, _cursor, _deltas, 5}, 1_000
 
       DB.update!(Module2, task.id, c: "again")
 
@@ -1510,7 +1653,7 @@ defmodule Hologram.Sync.SessionTest do
         live_effect(:patch_entity, Module2, task.id, %{"c" => "again"}, ref(@replica_id, 2))
       ])
 
-      assert_receive {:sync_deltas, _cursor, _deltas, 5}
+      assert_receive {:sync_deltas, _cursor, _deltas, 5}, 1_000
     end
 
     test "tells a batch with a transaction at the fill's place" do
@@ -1681,7 +1824,7 @@ defmodule Hologram.Sync.SessionTest do
 
       send(session, {:live, part})
 
-      assert_receive {:DOWN, ^ref, :process, ^session, {:shutdown, :model_held}}
+      assert_receive {:DOWN, ^ref, :process, ^session, {:shutdown, :model_held}}, 1_000
     end
 
     test "stops when its client ends" do
