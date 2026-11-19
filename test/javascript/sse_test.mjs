@@ -284,6 +284,35 @@ describe("Sse", () => {
       assert.equal(Sse.reconnectAttempts, 0);
     });
 
+    // Until the new stream opens there is none, and a page that says otherwise lets a test that
+    // waits for the connection go on too early.
+    //
+    // On a fake clock: the opened stream sets the heartbeat watchdog and the stability timer, and a
+    // failed assertion would leave them running into the tests after this one.
+    it("says the page is not connected until the new stream opens", async () => {
+      const timers = sinon.useFakeTimers();
+
+      try {
+        stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+        sinon.stub(Logger, "debug");
+
+        await Sse.connect();
+        Sse.eventSource.onopen({});
+
+        assert.isTrue(GlobalRegistry.get("sseConnected?"));
+
+        fetchStub.returns(new Promise(() => {}));
+
+        const setting = sinon.spy(GlobalRegistry, "set");
+
+        Sse.reconnect();
+
+        sinon.assert.calledOnceWithExactly(setting, "sseConnected?", false);
+      } finally {
+        timers.restore();
+      }
+    });
+
     it("opens a stream when there is none to close", async () => {
       stubHandshakeResponse({handshakeId: "abc-handshake-id"});
       sinon.stub(Logger, "debug");
@@ -674,11 +703,13 @@ describe("Sse", () => {
     });
 
     it("flips the sseConnected? signal to false on the global registry", async () => {
-      const globalRegistrySetSpy = sinon.spy(GlobalRegistry, "set");
-
       stubHandshakeResponse();
 
       await Sse.connect();
+
+      // After the connect, which says so itself before the stream opens.
+      const globalRegistrySetSpy = sinon.spy(GlobalRegistry, "set");
+
       Sse.eventSource.onerror({type: "error"});
 
       sinon.assert.calledWith(globalRegistrySetSpy, "sseConnected?", false);
@@ -745,6 +776,39 @@ describe("Sse", () => {
       // A stream loss logs, and the log is kept in session storage, which a run of this file
       // alone has none of.
       sinon.stub(Logger, "debug");
+    });
+
+    // A stream replaced before it had lasted has earned nothing, and the count belongs to the one
+    // replacing it.
+    it("clears nothing for a stream replaced before it lasted", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      fetchStub.returns(new Promise(() => {}));
+
+      Sse.reconnect();
+      Sse.reconnectAttempts = 3;
+
+      clock.tick(Sse.STABLE_CONNECTION_MS);
+
+      assert.equal(Sse.reconnectAttempts, 3);
+    });
+
+    // The same for a stream another connect closed: the count belongs to the one that stands.
+    it("clears nothing for a stream another connect closed before it lasted", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      await Sse.connect();
+      Sse.reconnectAttempts = 3;
+
+      clock.tick(Sse.STABLE_CONNECTION_MS);
+
+      assert.equal(Sse.reconnectAttempts, 3);
     });
 
     // A batch whose send got no answer is still pending, and this is the one signal that means
@@ -876,6 +940,50 @@ describe("Sse", () => {
       sinon.assert.calledOnce(mockEventSource.close);
     });
 
+    // The stream it watched is closed, and a new handshake may still be on its way.
+    it("is cancelled when the stream is replaced on purpose", async () => {
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      fetchStub.returns(new Promise(() => {}));
+
+      Sse.reconnect();
+
+      assert.doesNotThrow(() =>
+        clock.tick(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS * 2),
+      );
+
+      sinon.assert.calledOnce(mockEventSource.close);
+      sinon.assert.calledTwice(fetchStub);
+      assert.equal(Sse.reconnectAttempts, 0);
+    });
+
+    // Left armed, it would end the replacement at the old stream's deadline.
+    it("leaves alone the stream that replaced the one it watched", async () => {
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      await Sse.reconnect();
+
+      clock.tick(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS);
+
+      sinon.assert.calledOnce(mockEventSource.close);
+      assert.equal(Sse.reconnectAttempts, 0);
+    });
+
+    // Two connects in flight: the second closes the first's stream, whose watchdog must not go on
+    // to end the second's.
+    it("is cancelled when another connect closes the stream", async () => {
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      await Sse.connect();
+
+      clock.tick(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS);
+
+      sinon.assert.calledOnce(mockEventSource.close);
+    });
+
     it("leaves the stream alone until the timeout has fully elapsed", async () => {
       await Sse.connect();
       Sse.eventSource.onopen({});
@@ -901,10 +1009,11 @@ describe("Sse", () => {
     });
 
     it("reconnects the way a browser-reported error does", async () => {
-      const globalRegistrySetSpy = sinon.spy(GlobalRegistry, "set");
-
       await Sse.connect();
       Sse.eventSource.onopen({});
+
+      // After the stream opened, so what it records is the loss.
+      const globalRegistrySetSpy = sinon.spy(GlobalRegistry, "set");
 
       clock.tick(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS);
 

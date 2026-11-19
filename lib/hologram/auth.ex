@@ -28,7 +28,7 @@ defmodule Hologram.Auth do
 
   # The shape refusal can?/3 shares with its client twin (operationKey in
   # assets/js/elixir/hologram/auth.mjs) - a hand-ported pair, pinned on both tiers.
-  @operation_shape_message "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
+  @operation_shape_message "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
   @doc """
   Returns the window a client checking permissions locally downloads: every grant row, narrowed
@@ -62,9 +62,6 @@ defmodule Hologram.Auth do
   window is, so the build (which decides which pages subscribe to it) and the query cache (which
   resolves the id back to a term) name one window and not two.
   """
-  # TODO: when #1603 removes windows, the session user's row has to keep syncing - the user type
-  # must stay among the types browser code reads (#1600) whenever a page reads {Hologram, :user},
-  # or every from_context {Hologram, :user} prop goes stale again (#1450).
   @spec user_window(module, boolean) :: Query.t()
   def user_window(user_entity, permission_checking?) do
     user_entity
@@ -106,14 +103,21 @@ defmodule Hologram.Auth do
   Hologram generates names no user entity, so it is answered as an anonymous session too - as
   somebody holding nothing, an inequality on the acting user would grant it every row it doesn't
   own. A framework operation the entity type declares no rule for is
-  denied; an operation nothing on the entity type declares is refused with Hologram.MisuseError -
-  see Hologram.Policy.validate_operation!/2.
+  denied; an atom that is neither a framework operation nor a name an allow line on the entity type
+  carries is refused with Hologram.MisuseError - see Hologram.Policy.validate_operation!/2.
 
   The operation is an atom, or `{:grant_role, role}` / `{:revoke_role, role}` asking about one role -
   the bare `:grant_role` or `:revoke_role` asks whether the user may grant or revoke some role at all.
   A tuple naming several roles raises: can? asks about one role at a time.
+
+  `{:update, field}` asks whether the user may change that field: some update line covering it
+  holds, a line limited with `only:` or `except:` or one covering the whole row. `{:update, fields}`
+  asks the same of every field in the list, each covered by some line that holds - what an update
+  changing them all needs. The bare `:update` counts only the lines covering the whole row. A field
+  is one of `Hologram.Policy.update_fields/1`, a to-one by its relationship name.
   """
-  @spec can?(struct | Server.identity_id() | nil, atom | {atom, atom}, struct) :: boolean
+  @spec can?(struct | Server.identity_id() | nil, atom | {atom, atom | list(atom)}, struct) ::
+          boolean
   def can?(user_or_id, operation, entity) do
     evaluate(user_or_id, operation, entity, :stored)
   end
@@ -136,13 +140,46 @@ defmodule Hologram.Auth do
   @doc false
   @spec can?(
           struct | Server.identity_id() | nil,
-          atom | {atom, atom},
+          atom | {atom, atom | list(atom)},
           struct,
           list(struct) | :held
         ) ::
           boolean
   def can?(user_or_id, operation, entity, source) do
     evaluate(user_or_id, operation, entity, source)
+  end
+
+  # The fields among the given ones of an update of the given row that no update rule holding for the
+  # given user covers, sorted - none when the user may change them all. A field is covered by the
+  # field-limited lines covering it and by every line covering the whole row (see
+  # Hologram.Policy.field_rules/2). Each rule is evaluated once however many fields it covers, with
+  # the grants taken from the given source as can?/4 takes them. The fields are not validated: the
+  # Writer passes what a write changed, and can? what it validated.
+  @doc false
+  @spec uncovered_fields(
+          struct | Server.identity_id() | nil,
+          struct,
+          list(atom),
+          list(struct) | :held | :stored
+        ) :: list(atom)
+  def uncovered_fields(user_or_id, %entity_type{} = row, fields, source) do
+    policy = Policy.build(entity_type)
+    checker = &check_requirement(&1, &2, &3, source)
+    actor_user_id = acting_user_id(user_or_id)
+
+    {uncovered, _held_by_rule} =
+      fields
+      |> Enum.uniq()
+      |> Enum.reduce({[], %{}}, fn field, {uncovered, held_by_rule} ->
+        rules = Policy.field_rules(policy, field)
+
+        case covered?(rules, row, actor_user_id, checker, held_by_rule) do
+          {true, held_by_rule} -> {uncovered, held_by_rule}
+          {false, held_by_rule} -> {[field | uncovered], held_by_rule}
+        end
+      end)
+
+    Enum.sort(uncovered)
   end
 
   # The id of the row a chain of to-one relationships ends at, or nil when any hop along the way
@@ -469,11 +506,12 @@ defmodule Hologram.Auth do
   defdelegate user_id, to: Context, as: :actor_user_id
 
   @doc """
-  Returns the server's verdict on each deciding clause of the given row's type (see
+  Returns the server's verdict on each deciding item of the given row's type (see
   `Hologram.Policy.deciding_quantifiers/1`) for the given user, keyed by its verdict key: whether
-  the clause holds for the row, read as stored - what a client answers such a clause by, since the
-  rows it holds of a set can't decide one for certain, and it never holds a server-only value. Empty
-  for a type with none. Takes nil for an anonymous session. A clause several keys share - one
+  the item holds for the row, read as stored, as the rule `Hologram.Policy.verdict_rule/1` gives
+  it - what a client answers such an item by, since the rows it holds of a set can't decide one for
+  certain, it never holds a server-only value, and it never holds a row of a type nobody may read.
+  Empty for a type with none. Takes nil for an anonymous session. An item several keys share - one
   written for several operations, or a grant lifecycle line expanded per role - is answered once.
   """
   @spec verdicts(Server.identity_id() | nil, struct) :: %{String.t() => boolean}
@@ -482,9 +520,10 @@ defmodule Hologram.Auth do
 
     entity_type
     |> Policy.deciding_quantifiers()
-    |> Enum.group_by(fn {_key, clause} -> clause end, fn {key, _clause} -> key end)
-    |> Enum.flat_map(fn {clause, keys} ->
-      holds? = Evaluator.clause_holds?(clause, row, canonical_id(actor_user_id), checker)
+    |> Enum.group_by(fn {_key, item} -> item end, fn {key, _item} -> key end)
+    |> Enum.flat_map(fn {item, keys} ->
+      rule = Policy.verdict_rule(item)
+      holds? = Evaluator.rule_matches?(rule, row, canonical_id(actor_user_id), checker)
 
       Enum.map(keys, &{&1, holds?})
     end)
@@ -708,6 +747,27 @@ defmodule Hologram.Auth do
     end)
   end
 
+  # Whether one of the given rules holds, reusing the answers already known for rules other fields
+  # share - a rule covering several fields reads the grants and rows it rests on once.
+  defp covered?([], _row, _actor_user_id, _checker, held_by_rule), do: {false, held_by_rule}
+
+  defp covered?([rule | later_rules], row, actor_user_id, checker, held_by_rule) do
+    {holds?, held_by_rule} =
+      case Map.fetch(held_by_rule, rule) do
+        {:ok, holds?} ->
+          {holds?, held_by_rule}
+
+        :error ->
+          holds? = Evaluator.rule_matches?(rule, row, actor_user_id, checker)
+
+          {holds?, Map.put(held_by_rule, rule, holds?)}
+      end
+
+    if holds?,
+      do: {true, held_by_rule},
+      else: covered?(later_rules, row, actor_user_id, checker, held_by_rule)
+  end
+
   defp delegates?(nil, _actor_user_id, _operation, _source), do: false
 
   defp delegates?(target, actor_user_id, operation, source) do
@@ -772,9 +832,6 @@ defmodule Hologram.Auth do
   # An own-scope check matches the row naming the entity AND the type-wide row, which is why
   # nil rides in the id list beside the ids - the store keeps the two apart by that column being
   # null, and a membership list holding nil compiles to "= ANY(...) OR IS NULL".
-  # The DSL takes a list of roles as sugar for one line per role, so there is no rule keyed by a
-  # list to answer - and "all of them" and "any of them" are each other's opposite, so neither is
-  # chosen silently.
   defp entity_reference(entity) when is_struct(entity) do
     {entity.__struct__, validate_id!(entity.id, "entity")}
   end
@@ -783,9 +840,25 @@ defmodule Hologram.Auth do
 
   defp entity_type_value(entity_type), do: Codec.encode_enum_value(entity_type)
 
-  defp evaluate(_user_or_id, {_name, role_names} = operation, _entity, _source)
-       when is_list(role_names) do
+  # The DSL takes a list of roles as sugar for one line per role, so there is no rule keyed by a
+  # list to answer - and "all of them" and "any of them" are each other's opposite, so neither is
+  # chosen silently.
+  defp evaluate(_user_or_id, {name, role_names} = operation, _entity, _source)
+       when name in [:grant_role, :revoke_role] and is_list(role_names) do
     raise MisuseError, "can? asks about one role - #{inspect(operation)} names several"
+  end
+
+  # A field is covered by its own key's rules and the whole row's, so it is answered through the
+  # coverage the Writer judges an update by rather than through one key's rules.
+  defp evaluate(user_or_id, {:update, field_names} = operation, entity, source)
+       when is_atom(field_names) or is_list(field_names) do
+    if is_list(field_names) and List.improper?(field_names) do
+      raise MisuseError, @operation_shape_message
+    end
+
+    Policy.validate_operation!(entity.__struct__, operation)
+
+    uncovered_fields(user_or_id, entity, List.wrap(field_names), source) == []
   end
 
   defp evaluate(_user_or_id, {name, role_name}, _entity, _source)

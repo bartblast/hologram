@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.MultiTabTest do
-  # async: false - each test truncates the shared table.
+  # async: false - each test truncates the shared table, and one the operations log.
   use HologramFeatureTests.TestCase, async: false
 
   alias Hologram.DB
@@ -248,5 +248,101 @@ defmodule HologramFeatureTests.MultiTabTest do
     |> release_mutations()
 
     assert [%Todo{title: "alpha"}] = await_server_todos(1)
+  end
+
+  # A starting tab learns what the group holds two ways: from the store it reads, and from the
+  # frames the leading tab posts once it is listening. A frame stored after its read and posted
+  # before it listened would reach it neither way, so it joins the group before it reads.
+  #
+  # The store block holds the second tab's read, and the leading tab's write of the frame behind
+  # it, for as long as the test wants - so the frame is certainly stored after the read. The second
+  # tab's page is rendered before the row exists, so no row the page carried hides a miss.
+  feature "shows a row sent while a new tab was reading the store", %{session: session} do
+    leading =
+      session
+      |> visit(WriteQueuePage)
+      |> await_local_fill()
+
+    first = tab_handle(leading)
+
+    starting =
+      leading
+      |> block_store()
+      |> open_tab_unmounted(WriteQueuePage)
+
+    second = tab_handle(starting)
+
+    # Its read of the store is under way, and held, before the row exists.
+    starting
+    |> focus_tab(first)
+    |> await_store_read_waiting()
+
+    %{title: "alpha"}
+    |> Todo.new()
+    |> DB.create!()
+
+    starting
+    |> assert_text(css("#todos"), "alpha 0")
+    |> unblock_store()
+    |> focus_tab(second)
+    |> await_page_mount(WriteQueuePage)
+    |> assert_text(css("#todos"), "alpha 0")
+  end
+
+  # The same gap in the middle of a fill, where it also decides what a tab is told is complete. The
+  # leading tab is filled again with every frame of the fill held, the second tab starts and its
+  # read of the emptied store is blocked, and then the fill is let through: its rows and its marker
+  # are stored after that read. A tab that missed them would still hear the group's state, which
+  # says everything is complete, and would sweep the row its own page carried.
+  #
+  # Emptying the operations log is the lever for the refill, as in the resync tests.
+  feature "holds every row of a fill it started in the middle of", %{session: session} do
+    %{title: "alpha"}
+    |> Todo.new()
+    |> DB.create!()
+
+    leading =
+      session
+      |> visit(WriteQueuePage)
+      |> await_local_fill()
+      |> hold_sync_frames()
+
+    truncate_oplog()
+    simulate_sse_disconnect(current_instance_id(leading))
+
+    # The fill is under way and held, and the start-over before it, which is not held, emptied the
+    # store.
+    first =
+      leading
+      |> await_held_sync_frame()
+      |> assert_no_place()
+      |> tab_handle()
+
+    starting =
+      leading
+      |> block_store()
+      |> open_tab_unmounted(WriteQueuePage)
+
+    second = tab_handle(starting)
+
+    starting
+    |> focus_tab(first)
+    |> await_store_read_waiting()
+    |> release_sync_frames()
+    |> await_local_fill()
+    |> unblock_store()
+    |> focus_tab(second)
+    |> await_page_mount(WriteQueuePage)
+    |> await_local_fill()
+    |> assert_text(css("#todos"), "alpha 0")
+
+    %{title: "beta"}
+    |> Todo.new()
+    |> DB.create!()
+
+    # Beta first: a render that shows it comes after any sweep of the row the page carried.
+    starting
+    |> assert_text(css("#todos"), "beta 0")
+    |> assert_text(css("#todos"), "alpha 0")
   end
 end

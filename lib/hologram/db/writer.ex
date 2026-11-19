@@ -3,9 +3,11 @@ defmodule Hologram.DB.Writer do
 
   # The executors behind the DB verbs' struct forms: resolve a struct's claim, evaluate it
   # inside the transaction against the row as it stands, and apply the pending write through
-  # EntityOperations. The evaluation holds the grant rows its answer rests on, and the related
-  # rows its delegations read, until the transaction ends, so the authority a write was judged on
-  # is still there when it commits.
+  # EntityOperations. An update is judged by the fields it changes: each has to be covered by an
+  # update rule that holds - a field-limited line covering it, or a line covering the whole row. The
+  # evaluation holds the grant rows its answer rests on, and the related rows its delegations read,
+  # until the transaction ends, so the authority a write was judged on is still there when it
+  # commits.
   # A transaction the verb opens and PostgreSQL aborts as a deadlock victim is run again, so the
   # verb answers the way it would have a moment later. Inside a caller's transaction the error
   # propagates to it instead.
@@ -98,11 +100,13 @@ defmodule Hologram.DB.Writer do
     entity_type = entity.__struct__
     {attribute_changes, attribute_deltas} = split_attribute_ops(attribute_ops)
 
+    fields = changed_fields(entity_type, Map.keys(attribute_ops), Map.keys(relationship_ops))
+
     {:ok, applied} =
       Connection.retry_on_deadlock(fn ->
         row = lock_row!(entity_type, entity.id, "update")
 
-        evaluate!(entity, :update, row)
+        evaluate_update!(entity, row, fields)
 
         apply_update(
           entity_type,
@@ -118,7 +122,7 @@ defmodule Hologram.DB.Writer do
   end
 
   # The type-indexed twin of update/1: no struct, so no recorded changes and no claim - the
-  # changes are given outright and the operation is the verb's own. Without an actor the row is
+  # changes are given outright and judged by the fields they name. Without an actor the row is
   # updated raw, inside a transaction of the verb's own, so a deadlock PostgreSQL resolves against
   # it is rerun like any other.
   @doc false
@@ -126,11 +130,16 @@ defmodule Hologram.DB.Writer do
           :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity_type, id, changes) do
     if Context.actor_user_id() do
+      EntityOperations.validate_update!(entity_type, changes)
+
+      names = Enum.map(changes, fn {name, _value} -> name end)
+      fields = changed_fields(entity_type, names, [])
+
       {:ok, applied} =
         Connection.retry_on_deadlock(fn ->
           row = lock_row!(entity_type, id, "update")
 
-          evaluate_operation!(:update, row)
+          check_fields!(row, fields)
 
           EntityOperations.update(entity_type, id, changes)
         end)
@@ -143,6 +152,21 @@ defmodule Hologram.DB.Writer do
       applied
     end
   end
+
+  @doc false
+  @spec check_delete!(struct) :: :ok
+  # The delete verb's own check, for the batch applier to make before the merge: a delete the merge
+  # drops still answers with the row it lost to, which is an answer for whoever may delete it. The
+  # write is a client's, so it is judged whether or not anyone is signed in.
+  def check_delete!(row), do: evaluate_operation!(:delete, row)
+
+  @doc false
+  @spec check_update!(struct, list(atom)) :: :ok
+  # The update verb's own check of the fields a client's write names, for the batch applier to make
+  # before the merge: whether a write is refused must not turn on which of its values lose to
+  # another writer's, and a write whose every value loses still answers with the columns it lost
+  # to. Judged whether or not anyone is signed in, as every client write is.
+  def check_update!(row, names), do: check_fields!(row, changed_fields(row.__struct__, names, []))
 
   defp apply_relationship_op(:add, entity_type, id, relationship_name, target_id) do
     EntityOperations.add_relationship(entity_type, id, relationship_name, target_id)
@@ -179,21 +203,21 @@ defmodule Hologram.DB.Writer do
     %{entity | __meta__: %Metadata{stamp: entity.__meta__.stamp}}
   end
 
-  # Which authority the write is on, and for which operation. A trust claim is the server's own
-  # and evaluates nothing. An authorize claim names an operation and is evaluated whether or not
-  # an actor is set - without one the evaluator's anonymous semantics apply, which is what a seed
-  # claiming a user's authority gets. No claim under an actor is the verb's own operation on the
-  # acting user's authority, which is what keeps every write under an actor evaluated. No claim
-  # and no actor is the trusted tier, and writes raw.
-  defp evaluate!(%{__meta__: %Metadata{claim: :trust}}, _default_operation, _row), do: :ok
+  # Which authority the write is on. A trust claim is the server's own and evaluates nothing. A
+  # client claim is a write a browser sent, the verb's own operation evaluated whether or not an
+  # actor is set: a client is never the trusted tier, so an anonymous session's write is judged
+  # with the anonymous semantics. No claim under an actor is the verb's own operation on the acting
+  # user's authority, which is what keeps every write under an actor evaluated. No claim and no
+  # actor is the trusted tier, and writes raw.
+  defp evaluate!(%{__meta__: %Metadata{claim: :trust}}, _operation, _row), do: :ok
 
-  defp evaluate!(%{__meta__: %Metadata{claim: {:authorize, operation}}}, _default_operation, row) do
+  defp evaluate!(%{__meta__: %Metadata{claim: :client}}, operation, row) do
     evaluate_operation!(operation, row)
   end
 
-  defp evaluate!(_entity, default_operation, row) do
+  defp evaluate!(_entity, operation, row) do
     if Context.actor_user_id() do
-      evaluate_operation!(default_operation, row)
+      evaluate_operation!(operation, row)
     else
       :ok
     end
@@ -207,6 +231,51 @@ defmodule Hologram.DB.Writer do
     else
       raise Hologram.AccessDeniedError,
         message: "not allowed to #{operation} #{inspect(row.__struct__)} #{inspect(row.id)}"
+    end
+  end
+
+  # The fields an update changes, as allow lines name them: an attribute by its name, a to-one by
+  # its relationship's rather than its reference field's, a to-many by its own.
+  defp changed_fields(entity_type, attribute_names, relationship_op_keys) do
+    reference_names =
+      for {name, type, _opts} <- entity_type.__relationships__(),
+          not is_list(type),
+          into: %{},
+          do: {String.to_existing_atom("#{name}_id"), name}
+
+    attribute_fields = Enum.map(attribute_names, &Map.get(reference_names, &1, &1))
+    relationship_fields = Enum.map(relationship_op_keys, fn {name, _target_id} -> name end)
+
+    Enum.uniq(attribute_fields ++ relationship_fields)
+  end
+
+  # Asked with :held, as an operation is, so what the answer rests on stays as read until the write
+  # commits. A refusal names every field no rule lets the acting user change.
+  defp check_fields!(row, fields) do
+    case Auth.uncovered_fields(Context.actor_user_id(), row, fields, :held) do
+      [] ->
+        :ok
+
+      uncovered ->
+        raise Hologram.AccessDeniedError,
+          message:
+            "not allowed to update #{inspect(row.__struct__)} #{inspect(row.id)} - no allow line that holds covers #{Enum.map_join(uncovered, ", ", &inspect/1)}"
+    end
+  end
+
+  # An update is judged as any write is - by its claim, on the trusted tier not at all - but by
+  # the fields it changes rather than the operation alone.
+  defp evaluate_update!(%{__meta__: %Metadata{claim: :trust}}, _row, _fields), do: :ok
+
+  defp evaluate_update!(%{__meta__: %Metadata{claim: :client}}, row, fields) do
+    check_fields!(row, fields)
+  end
+
+  defp evaluate_update!(_entity, row, fields) do
+    if Context.actor_user_id() do
+      check_fields!(row, fields)
+    else
+      :ok
     end
   end
 

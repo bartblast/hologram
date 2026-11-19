@@ -15,6 +15,9 @@ import fakeIndexedDB from "../../assets/node_modules/fake-indexeddb/build/esm/fa
 // store it wants, and jsdom puts no IDBKeyRange on the global any more than it puts indexedDB there.
 import FDBKeyRange from "../../assets/node_modules/fake-indexeddb/build/esm/FDBKeyRange.js";
 
+// Its prototype is where a test makes a read fail: the module's own connection is private.
+import FDBDatabase from "../../assets/node_modules/fake-indexeddb/build/esm/FDBDatabase.js";
+
 import {
   assert,
   defineRuntimeGlobals,
@@ -298,6 +301,7 @@ describe("Durability", () => {
   describe("batchesAbove()", () => {
     it("answers the records above the number, oldest first", async () => {
       await Durability.open();
+      await Durability.load();
       await writeBatches([batchRecord(9), batchRecord(2), batchRecord(5)]);
 
       assert.deepStrictEqual(await Durability.batchesAbove(2), [
@@ -308,6 +312,7 @@ describe("Durability", () => {
 
     it("answers nothing for a number nothing was filed above", async () => {
       await Durability.open();
+      await Durability.load();
       await writeBatches([batchRecord(2), batchRecord(5)]);
 
       assert.deepStrictEqual(await Durability.batchesAbove(5), []);
@@ -322,6 +327,7 @@ describe("Durability", () => {
     // send asks again - so it does not take the storage down the way a failed WRITE does.
     it("answers nothing when the store cannot be read, and goes on storing", async () => {
       await Durability.open();
+      await Durability.load();
       await writeBatches([batchRecord(2)]);
 
       const range = globalThis.IDBKeyRange;
@@ -341,6 +347,7 @@ describe("Durability", () => {
   describe("clear()", () => {
     it("drops the rows and the place, and keeps what this browser did", async () => {
       await Durability.open();
+      await Durability.load();
       await Durability.persistFrame(
         [taskRecord("t1", "Draft copy")],
         "place-1",
@@ -370,6 +377,7 @@ describe("Durability", () => {
     // server holds, so the server replacing everything it says leaves it where it was.
     it("keeps the stored batches", async () => {
       await Durability.open();
+      await Durability.load();
       await writeBatches([batchRecord(1)]);
 
       await Durability.clear();
@@ -394,6 +402,7 @@ describe("Durability", () => {
   describe("a write that fails", () => {
     it("drops the rows and the place, and stops storing for this page", async () => {
       await Durability.open();
+      await Durability.load();
       await Durability.persistFrame(
         [taskRecord("t1", "Draft copy")],
         "place-1",
@@ -419,6 +428,7 @@ describe("Durability", () => {
       const posting = sinon.stub(Tabs, "post");
 
       await Durability.open();
+      await Durability.load();
       await Durability.persistFrame([unstorableRecord()], "place-2");
 
       sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
@@ -426,6 +436,7 @@ describe("Durability", () => {
 
     it("drops the identity and the counter, which have stopped being true", async () => {
       await Durability.open();
+      await Durability.load();
       await storeBatch(41);
       await Durability.persistReplica({id: "r1", token: "statement"});
 
@@ -440,6 +451,7 @@ describe("Durability", () => {
     // restarted low writes revisions the server reads as moved.
     it("keeps the clock", async () => {
       await Durability.open();
+      await Durability.load();
       await storeBatch(41);
 
       await Durability.persistFrame([unstorableRecord()], "place-1");
@@ -450,6 +462,7 @@ describe("Durability", () => {
 
     it("leaves nothing in flight", async () => {
       await Durability.open();
+      await Durability.load();
       await Durability.persistFrame([unstorableRecord()], "place-1");
 
       assert.equal(Durability.inFlight, 0);
@@ -460,6 +473,7 @@ describe("Durability", () => {
     // unfinished work, and a later page load is the only thing that can still deliver it.
     it("keeps the stored batches", async () => {
       await Durability.open();
+      await Durability.load();
       await writeBatches([batchRecord(1)]);
 
       await Durability.persistFrame([unstorableRecord()], "place-1");
@@ -478,6 +492,7 @@ describe("Durability", () => {
       await seedPreviousLoad();
       await writeBatches([batchRecord(7)]);
       await Durability.open();
+      await Durability.load();
 
       Durability.detach();
 
@@ -493,6 +508,7 @@ describe("Durability", () => {
   describe("forgetBatch()", () => {
     it("deletes the record of the given number and no other", async () => {
       await Durability.open();
+      await Durability.load();
       await storeBatch(7);
       await storeBatch(8);
 
@@ -568,17 +584,6 @@ describe("Durability", () => {
         (await readAll("queue")).map((record) => record.seq),
         [2, 9],
       );
-    });
-
-    it("counts the stored batches when it opens", async () => {
-      await createSchema();
-      await writeBatches([batchRecord(1), batchRecord(2)]);
-
-      assert.equal(Durability.storedBatches, 0);
-
-      await Durability.open();
-
-      assert.equal(Durability.storedBatches, 2);
     });
 
     it("stays in memory mode when the browser has no IndexedDB", async () => {
@@ -691,6 +696,104 @@ describe("Durability", () => {
     });
   });
 
+  describe("load()", () => {
+    it("counts the stored batches", async () => {
+      await createSchema();
+      await writeBatches([batchRecord(1), batchRecord(2)]);
+
+      await Durability.open();
+
+      assert.equal(Durability.storedBatches, 0);
+
+      await Durability.load();
+
+      assert.equal(Durability.storedBatches, 2);
+    });
+
+    // The tab joins its group between the two, so what the store holds is read only once it is
+    // listening (see DataLayer.boot).
+    it("reads nothing until asked", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+
+      assert.isNull(Durability.restore(true));
+
+      await Durability.load();
+
+      assert.equal(Durability.restore(true).cursor, "place-1");
+    });
+
+    it("does nothing in memory mode", async () => {
+      await seedPreviousLoad();
+      await Durability.load();
+
+      assert.equal(Durability.mode, "memory");
+      assert.isNull(Durability.restore(true));
+      assert.notInclude(Logger.getLogs() ?? "", "read failed");
+    });
+
+    it("stays in memory mode when the read fails", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+
+      sinon
+        .stub(FDBDatabase.prototype, "transaction")
+        .throws(new DOMException("The read was refused.", "UnknownError"));
+
+      await Durability.load();
+
+      assert.equal(Durability.mode, "memory");
+      assert.isNull(Durability.restore(true));
+      assert.include(Logger.getLogs(), "no durable storage (read failed");
+    });
+
+    // A store let go while it was read - another tab could not write, or needs a new version -
+    // leaves this tab leading itself, and the stored identity and queue are the group leader's.
+    it("keeps nothing it read once the store was let go meanwhile", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+
+      const loading = Durability.load();
+
+      Durability.detach();
+
+      await loading;
+
+      assert.equal(Durability.mode, "memory");
+      assert.isNull(Durability.restore(true));
+    });
+
+    // Another tab moving the database on makes nothing stored untrue, and this tab stays in its
+    // group - so what it read is taken up as it would have been.
+    it("keeps what it read when the database closes for a new version before the restore", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      // The seed's own connections would block the upgrade.
+      raw.forEach((connection) => connection.close());
+
+      const {db} = await rawOpen(2);
+
+      db.close();
+
+      assert.equal(Durability.mode, "memory");
+      assert.equal(Durability.restore(true).cursor, "place-1");
+    });
+
+    // The group ends with a store failure another tab reported, and a follower that took a fresh
+    // identity and let its batches go would take both back.
+    it("keeps nothing it read once the store was let go before the restore", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      Durability.detach();
+
+      assert.isNull(Durability.restore(true));
+    });
+  });
+
   describe("asking the browser to keep the data", () => {
     let persistStub, previousNavigator;
 
@@ -725,6 +828,7 @@ describe("Durability", () => {
       equipBrowser("granted");
 
       await Durability.open();
+      await Durability.load();
       await Durability.fileBatch(unfiledBatch());
       await waitForEventLoop();
 
@@ -736,6 +840,7 @@ describe("Durability", () => {
       equipBrowser("granted");
 
       await Durability.open();
+      await Durability.load();
       await Durability.fileBatch(unfiledBatch());
       await Durability.fileBatch(unfiledBatch());
       await waitForEventLoop();
@@ -749,6 +854,7 @@ describe("Durability", () => {
       equipBrowser("prompt");
 
       await Durability.open();
+      await Durability.load();
       await Durability.fileBatch(unfiledBatch());
       await waitForEventLoop();
 
@@ -762,6 +868,7 @@ describe("Durability", () => {
       equipBrowser(null);
 
       await Durability.open();
+      await Durability.load();
       await Durability.fileBatch(unfiledBatch());
       await waitForEventLoop();
 
@@ -773,6 +880,7 @@ describe("Durability", () => {
       persistStub.resolves(false);
 
       await Durability.open();
+      await Durability.load();
       await Durability.fileBatch(unfiledBatch());
       await waitForEventLoop();
 
@@ -795,6 +903,7 @@ describe("Durability", () => {
   describe("fileBatch()", () => {
     it("writes the batch, its number and the clock together", async () => {
       await Durability.open();
+      await Durability.load();
 
       Clock.observe(1_756_100_000_123_004);
 
@@ -814,6 +923,7 @@ describe("Durability", () => {
     // the batch and its number went in a single transaction rather than two.
     it("answers a promise that settles once the batch is stored", async () => {
       await Durability.open();
+      await Durability.load();
 
       const batch = unfiledBatch();
       const filing = Durability.fileBatch(batch);
@@ -828,6 +938,7 @@ describe("Durability", () => {
 
     it("numbers the batch above the stored counter", async () => {
       await Durability.open();
+      await Durability.load();
       await storeBatch(4);
 
       const batch = unfiledBatch();
@@ -844,6 +955,7 @@ describe("Durability", () => {
     // answered - so it would answer the new batch from the record of an old one.
     it("numbers the batch above the counter when the queue is empty", async () => {
       await Durability.open();
+      await Durability.load();
       await storeBatch(9);
       await Durability.forgetBatch(9);
 
@@ -860,6 +972,7 @@ describe("Durability", () => {
     // would then overwrite it.
     it("numbers the batch above every stored batch when the counter was dropped", async () => {
       await Durability.open();
+      await Durability.load();
       await writeBatches([batchRecord(7)]);
 
       const batch = unfiledBatch();
@@ -874,6 +987,7 @@ describe("Durability", () => {
     // second read the first one's number rather than the number they both started from.
     it("numbers two batches filed at once apart", async () => {
       await Durability.open();
+      await Durability.load();
 
       const first = unfiledBatch();
       const second = unfiledBatch();
@@ -905,6 +1019,7 @@ describe("Durability", () => {
   describe("persistFrame()", () => {
     it("puts a held row's record and deletes a gone row's", async () => {
       await Durability.open();
+      await Durability.load();
       await Durability.persistFrame(
         [taskRecord("t1", "Draft copy"), taskRecord("t2", "Ship it")],
         "place-1",
@@ -925,6 +1040,7 @@ describe("Durability", () => {
     // would be missing for good.
     it("writes a frame's rows and the place they are dated at", async () => {
       await Durability.open();
+      await Durability.load();
       await Durability.persistFrame(
         [taskRecord("t1", "Draft copy")],
         "place-1",
@@ -941,6 +1057,7 @@ describe("Durability", () => {
     // were there before the fill started.
     it("leaves the stored place alone for a frame naming none", async () => {
       await Durability.open();
+      await Durability.load();
       await Durability.persistFrame([], "place-1");
       await Durability.persistFrame([], null);
 
@@ -949,6 +1066,7 @@ describe("Durability", () => {
 
     it("writes where the clock stands", async () => {
       await Durability.open();
+      await Durability.load();
 
       Clock.observe(1_756_100_000_123_004);
 
@@ -959,6 +1077,7 @@ describe("Durability", () => {
 
     it("counts a transaction in flight until it completes", async () => {
       await Durability.open();
+      await Durability.load();
 
       const writing = Durability.persistFrame([taskRecord("t1", "Draft")], "p");
 
@@ -987,6 +1106,7 @@ describe("Durability", () => {
   describe("persistLanded()", () => {
     it("rewrites the record with the marks", async () => {
       await Durability.open();
+      await Durability.load();
 
       const batch = sealedBatch(7);
 
@@ -1007,6 +1127,7 @@ describe("Durability", () => {
     // backwards, onto a number a later batch has already spent.
     it("leaves the counter where it was", async () => {
       await Durability.open();
+      await Durability.load();
       await storeBatch(7);
       await storeBatch(8);
 
@@ -1019,6 +1140,7 @@ describe("Durability", () => {
   describe("persistReplica()", () => {
     it("writes the pair", async () => {
       await Durability.open();
+      await Durability.load();
       await Durability.persistReplica({id: "r1", token: "statement"});
 
       assert.deepStrictEqual(await readMeta("replica"), {
@@ -1032,13 +1154,14 @@ describe("Durability", () => {
     it("writes nothing when the store already holds the place", async () => {
       await seedPreviousLoad();
       await Durability.open();
+      await Durability.load();
 
       const repairing = Durability.repair(
         [taskRecord("t2", "in memory")],
         "place-1",
       );
 
-      await repairing;
+      assert.isFalse(await repairing);
 
       assert.equal(Durability.inFlight, 0);
 
@@ -1048,9 +1171,10 @@ describe("Durability", () => {
       );
     });
 
-    it("rewrites the rows and the place when the store is behind", async () => {
+    it("rewrites the rows and the place when the store names another", async () => {
       await seedPreviousLoad();
       await Durability.open();
+      await Durability.load();
 
       Clock.observe(1_756_100_000_999_000);
 
@@ -1068,24 +1192,87 @@ describe("Durability", () => {
       assert.equal(await readMeta("clock"), 1_756_100_000_999_000);
     });
 
-    // A store with no place at all is behind any memory that has one - the rows it holds were left
-    // by a fill that never finished, and the memory's are dated.
-    it("rewrites a store holding no place", async () => {
+    // A store with no place may have been cleared by a start-over nobody heard of, and whatever
+    // emptied it, the rows the tab holds are not what it vouches for - so the tab starts over.
+    it("writes nothing and says so when the store holds no place", async () => {
       await seedPreviousLoad({cursor: undefined});
       await Durability.open();
+      await Durability.load();
 
-      await Durability.repair([taskRecord("t2", "second")], "place-2");
+      assert.isTrue(
+        await Durability.repair([taskRecord("t2", "second")], "place-2"),
+      );
 
       assert.deepStrictEqual(
         (await readAll("entities")).map((record) => record.id),
-        ["t2"],
+        ["t1"],
       );
 
-      assert.equal(await readMeta("cursor"), "place-2");
+      assert.isUndefined(await readMeta("cursor"));
+    });
+
+    it("says the store held a place when it rewrote it", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.isFalse(
+        await Durability.repair([taskRecord("t2", "second")], "place-2"),
+      );
+    });
+
+    // A tab handed the lead while starting asks for the repair from its restore, and its page opens
+    // the stream right after - so the stream's first frame can be stored while the repair is still
+    // deciding, and has to land on top of it rather than under it.
+    it("keeps a frame stored while it runs", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const repairing = Durability.repair(
+        [taskRecord("t2", "in memory")],
+        "place-2",
+      );
+
+      const persisting = Durability.persistFrame(
+        [taskRecord("t3", "from the new stream")],
+        "place-3",
+      );
+
+      await Promise.all([repairing, persisting]);
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t2", "t3"],
+      );
+
+      assert.equal(await readMeta("cursor"), "place-3");
+    });
+
+    // Skipped, the repair would leave the store naming another place with nothing to say so.
+    it("stops storing when the store cannot be read", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      sinon
+        .stub(FDBDatabase.prototype, "transaction")
+        .throws(new DOMException("The read was refused.", "UnknownError"));
+
+      assert.isFalse(
+        await Durability.repair([taskRecord("t2", "second")], "place-2"),
+      );
+
+      assert.equal(Durability.mode, "memory");
+      sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
     });
 
     it("does nothing in memory mode", async () => {
-      await Durability.repair([taskRecord("t2", "second")], "place-2");
+      assert.isFalse(
+        await Durability.repair([taskRecord("t2", "second")], "place-2"),
+      );
 
       assert.equal(Durability.mode, "memory");
       assert.equal(Durability.inFlight, 0);
@@ -1096,6 +1283,7 @@ describe("Durability", () => {
     it("fills the database with the stored rows and answers the place they are dated at", async () => {
       await seedPreviousLoad();
       await Durability.open();
+      await Durability.load();
 
       const resumed = Durability.restore(true);
 
@@ -1110,6 +1298,7 @@ describe("Durability", () => {
     it("adopts the stored identity over the page's", async () => {
       await seedPreviousLoad();
       await Durability.open();
+      await Durability.load();
 
       Durability.restore(true);
 
@@ -1127,6 +1316,7 @@ describe("Durability", () => {
 
       await seedPreviousLoad({clock: stored});
       await Durability.open();
+      await Durability.load();
 
       const resumed = Durability.restore(true);
 
@@ -1147,6 +1337,7 @@ describe("Durability", () => {
         batchRecord(8, "u2"),
       ]);
       await Durability.open();
+      await Durability.load();
 
       assert.deepStrictEqual(
         Durability.restore(true).batches.map((record) => record.seq),
@@ -1162,6 +1353,7 @@ describe("Durability", () => {
       await seedPreviousLoad();
       await writeBatches([batchRecord(7), batchRecord(8, "u2")]);
       await Durability.open();
+      await Durability.load();
 
       LocalDatabase.actorUserId = "u2";
 
@@ -1180,6 +1372,7 @@ describe("Durability", () => {
       await seedPreviousLoad({actorUserId: null});
       await writeBatches([batchRecord(7, null)]);
       await Durability.open();
+      await Durability.load();
 
       LocalDatabase.actorUserId = null;
 
@@ -1198,6 +1391,7 @@ describe("Durability", () => {
       await seedPreviousLoad({cursor: null});
       await writeBatches([batchRecord(7)]);
       await Durability.open();
+      await Durability.load();
 
       const resumed = Durability.restore(true);
 
@@ -1219,6 +1413,7 @@ describe("Durability", () => {
       LocalDatabase.actorUserId = "u1";
 
       await Durability.open();
+      await Durability.load();
 
       assert.equal(Durability.restore(true).seq, 4);
     });
@@ -1232,6 +1427,7 @@ describe("Durability", () => {
 
       await seedPreviousLoad({cursor: undefined});
       await Durability.open();
+      await Durability.load();
 
       Durability.restore(true);
 
@@ -1252,6 +1448,7 @@ describe("Durability", () => {
 
       await seedPreviousLoad();
       await Durability.open();
+      await Durability.load();
 
       LocalDatabase.actorUserId = "u2";
 
@@ -1269,6 +1466,7 @@ describe("Durability", () => {
 
       await seedPreviousLoad();
       await Durability.open();
+      await Durability.load();
 
       Durability.restore(true);
 
@@ -1285,6 +1483,7 @@ describe("Durability", () => {
 
         await seedPreviousLoad({cursor: undefined});
         await Durability.open();
+        await Durability.load();
 
         const resumed = Durability.restore(false);
 
@@ -1300,6 +1499,7 @@ describe("Durability", () => {
       it("takes the rows when somebody else is signed in, and clears nothing", async () => {
         await seedPreviousLoad();
         await Durability.open();
+        await Durability.load();
 
         LocalDatabase.actorUserId = "u2";
 
@@ -1316,6 +1516,7 @@ describe("Durability", () => {
       it("adopts a stored identity", async () => {
         await seedPreviousLoad();
         await Durability.open();
+        await Durability.load();
 
         Durability.restore(false);
 
@@ -1325,6 +1526,7 @@ describe("Durability", () => {
       it("writes no identity when none is stored", async () => {
         await seedPreviousLoad({replica: undefined});
         await Durability.open();
+        await Durability.load();
 
         Durability.restore(false);
 
@@ -1335,6 +1537,7 @@ describe("Durability", () => {
       it("writes no owner", async () => {
         await seedPreviousLoad({actorUserId: "u2"});
         await Durability.open();
+        await Durability.load();
 
         Durability.restore(false);
 
@@ -1346,6 +1549,7 @@ describe("Durability", () => {
 
         await seedPreviousLoad({cursor: undefined});
         await Durability.open();
+        await Durability.load();
 
         Durability.restore(false);
 
@@ -1358,6 +1562,7 @@ describe("Durability", () => {
 
       await seedPreviousLoad({cursor: undefined});
       await Durability.open();
+      await Durability.load();
 
       const resumed = Durability.restore(true);
 
@@ -1375,6 +1580,7 @@ describe("Durability", () => {
       globalThis.Hologram.sync = {modelHash: "model-b"};
 
       await Durability.open();
+      await Durability.load();
 
       const resumed = Durability.restore(true);
 
@@ -1395,6 +1601,7 @@ describe("Durability", () => {
       LocalDatabase.actorUserId = "u2";
 
       await Durability.open();
+      await Durability.load();
 
       Durability.restore(true);
 
@@ -1410,6 +1617,7 @@ describe("Durability", () => {
       LocalDatabase.actorUserId = null;
 
       await Durability.open();
+      await Durability.load();
 
       const resumed = Durability.restore(true);
 
@@ -1420,6 +1628,7 @@ describe("Durability", () => {
     it("writes the page's pair when none was stored", async () => {
       await seedPreviousLoad({replica: undefined});
       await Durability.open();
+      await Durability.load();
 
       Durability.restore(true);
 
@@ -1441,6 +1650,7 @@ describe("Durability", () => {
       LocalDatabase.actorUserId = "u1";
 
       await Durability.open();
+      await Durability.load();
 
       Durability.restore(true);
 
@@ -1458,6 +1668,7 @@ describe("Durability", () => {
     it("answers nothing the second time it is asked", async () => {
       await seedPreviousLoad();
       await Durability.open();
+      await Durability.load();
 
       Durability.restore(true);
 
@@ -1468,6 +1679,7 @@ describe("Durability", () => {
   describe("reset()", () => {
     it("deletes the database", async () => {
       await Durability.open();
+      await Durability.load();
       await Durability.reset();
 
       const {db, upgraded} = await rawOpen();

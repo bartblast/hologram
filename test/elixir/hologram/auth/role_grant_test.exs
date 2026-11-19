@@ -11,6 +11,7 @@ defmodule Hologram.Auth.RoleGrantTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Job
+  alias Hologram.Test.Fixtures.Mutation
   alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Role
 
@@ -83,6 +84,10 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Job.Module1,
                     Job.Module2,
                     Job.Module3,
+                    Mutation.Module1,
+                    Mutation.Module2,
+                    Mutation.Module3,
+                    Mutation.Module4,
                     Policy.Module1,
                     Policy.Module10,
                     Policy.Module11,
@@ -112,7 +117,17 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Policy.Module33,
                     Policy.Module34,
                     Policy.Module35,
+                    Policy.Module36,
+                    Policy.Module37,
+                    Policy.Module38,
+                    Policy.Module39,
                     Policy.Module4,
+                    Policy.Module40,
+                    Policy.Module41,
+                    Policy.Module42,
+                    Policy.Module43,
+                    Policy.Module44,
+                    Policy.Module45,
                     Policy.Module5,
                     Policy.Module6,
                     Policy.Module7,
@@ -130,6 +145,16 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Policy.Readers.Module18,
                     Policy.Readers.Module19,
                     Policy.Readers.Module2,
+                    Policy.Readers.Module20,
+                    Policy.Readers.Module21,
+                    Policy.Readers.Module22,
+                    Policy.Readers.Module23,
+                    Policy.Readers.Module24,
+                    Policy.Readers.Module25,
+                    Policy.Readers.Module26,
+                    Policy.Readers.Module27,
+                    Policy.Readers.Module28,
+                    Policy.Readers.Module29,
                     Policy.Readers.Module3,
                     Policy.Readers.Module4,
                     Policy.Readers.Module5,

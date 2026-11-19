@@ -8,6 +8,10 @@ defmodule Hologram.Test.Fixtures.Policy.Module28 do
 
   relationship :space, Module26, optional: true
 
-  allow :close, when: any(comment <- space.comments, comment.flagged == true)
+  allow :update,
+    as: :close,
+    only: [:space],
+    when: any(comment <- space.comments, comment.flagged == true)
+
   allow :update, when: none(comment <- space.comments, comment.flagged == true)
 end

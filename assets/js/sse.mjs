@@ -102,6 +102,19 @@ export default class Sse {
     ]);
   }
 
+  // Closes the stream there is, and stops the clocks it was keeping: the heartbeat watchdog, which
+  // would otherwise end whatever stream stands in its place at its deadline, and the stability
+  // timer, which would clear the failure count on the strength of a stream that is gone. And the
+  // page no longer says it is connected until the stream that replaces it opens.
+  static closeStream() {
+    clearTimeout($.heartbeatTimer);
+    clearTimeout($.stabilityTimer);
+
+    $.eventSource?.close();
+
+    GlobalRegistry.set("sseConnected?", false);
+  }
+
   static async connect() {
     const runId = $.runId;
     const isStale = () => runId !== $.runId;
@@ -156,7 +169,7 @@ export default class Sse {
       // by a dying stream, and a deliberate restart under a new identity - and the second to
       // arrive would otherwise leave the first's stream open with nothing referring to it,
       // delivering every action and every frame a second time.
-      $.eventSource?.close();
+      $.closeStream();
 
       $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
 
@@ -275,13 +288,9 @@ export default class Sse {
   // A stream is over whether the browser reported it or the heartbeat watchdog did:
   // stop trusting it, close it, and re-run the handshake protocol after a backoff.
   static handleStreamLoss(reason) {
-    clearTimeout($.heartbeatTimer);
-    clearTimeout($.stabilityTimer);
-
     Logger.debug(`SSE stream lost: ${reason}`);
-    GlobalRegistry.set("sseConnected?", false);
-    $.eventSource.close();
 
+    $.closeStream();
     $.scheduleReconnect();
   }
 
@@ -306,7 +315,7 @@ export default class Sse {
     clearTimeout($.reconnectTimer);
     $.reconnectTimer = null;
 
-    $.eventSource?.close();
+    $.closeStream();
     $.eventSource = null;
 
     return $.connect();
@@ -360,17 +369,11 @@ export default class Sse {
     $.isSuspended = true;
     $.runId++;
 
-    clearTimeout($.heartbeatTimer);
     clearTimeout($.reconnectTimer);
-    clearTimeout($.stabilityTimer);
 
     $.reconnectAttempts = 0;
 
-    if ($.eventSource !== null) {
-      $.eventSource.close();
-    }
-
-    GlobalRegistry.set("sseConnected?", false);
+    $.closeStream();
   }
 }
 

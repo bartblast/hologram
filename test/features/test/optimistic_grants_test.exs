@@ -82,16 +82,16 @@ defmodule HologramFeatureTests.OptimisticGrantsTest do
   # The operation the action asks about is computed, so no build check can read it - this is the
   # tier the runtime refusal exists for, and the assertion is that it reaches the browser rather
   # than being answered false and passed over.
-  feature "refuses an operation the entity type never declared", %{
+  feature "refuses an operation that is neither the framework's nor a name", %{
     session: session,
     document: document
   } do
     session = sign_in_as(session, document, :owner)
 
     expected_msg =
-      "unknown operation :no_such for HologramFeatureTests.Entities.Document - its allow lines " <>
-        "declare no operation of their own, and the framework's own operations are :create, " <>
-        ":delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+      "unknown operation :no_such for HologramFeatureTests.Entities.Document - the framework's " <>
+        "operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and " <>
+        ":update, and its allow lines carry no name"
 
     assert_client_error session, Hologram.MisuseError, expected_msg, fn ->
       click(session, button("Ask about a computed operation"))

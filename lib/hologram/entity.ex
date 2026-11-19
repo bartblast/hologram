@@ -27,7 +27,8 @@ defmodule Hologram.Entity do
   @type id :: String.t()
 
   @typedoc """
-  An entity operation - an atom, or a grant lifecycle operation naming the role (or roles) it covers.
+  An entity operation - an atom, a grant lifecycle operation naming the role (or roles) it covers, or
+  an update naming the field (or fields) it changes.
   """
   @type operation :: atom | {atom, atom | list(atom)}
 
@@ -137,11 +138,14 @@ defmodule Hologram.Entity do
         def __attributes__, do: Enum.sort(@__attributes__)
 
         @doc """
-        Returns the list of policy definitions for the compiled entity type, in declaration order.
+        Returns the list of policy definitions for the compiled entity type, in declaration order, each as {operation, to, via, predicates, name, fields}: name is the line's as: option or nil, and fields is {:only, names} or {:except, names} for an update line limited to some fields, or nil for a line covering the whole row.
         Policy rules are OR'd, so the order carries no semantics - it is preserved to keep reflection output readable against the source.
         """
         @spec __policies__() ::
-                list({Hologram.Entity.operation(), term, atom | {atom, atom} | nil, keyword})
+                list(
+                  {Hologram.Entity.operation(), term, atom | {atom, atom} | nil, keyword,
+                   atom | nil, {:only | :except, list(atom)} | nil}
+                )
         def __policies__, do: Enum.reverse(@__policies__)
 
         @doc false
@@ -179,8 +183,27 @@ defmodule Hologram.Entity do
   @doc """
   Accumulates the given policy definition in __policies__ module attribute.
 
-  An allow line grants the given operation, and every key on it is an option:
+  An allow line grants the given operation, one of the framework's: `:create`, `:read`,
+  `:update`, `:delete`, `:grant_role`, `:revoke_role` or `:read_roles`. A word of the app's own,
+  like `:archive`, is a name on a line (`as:`), not an operation - any other atom fails the build.
+  Every key on the line is an option:
 
+    * `as:` - a name for the line, an atom: `allow :update, as: :archive, to: :owner`. The line
+      still grants its operation, and the name lets `can?` ask about it alone,
+      `can?(user, :archive, channel)`, and a `via:` delegate to it, `via: {:archive, channel}`.
+      The name labels the line, it doesn't narrow it - a named update line grants every update
+      its other options allow. Several lines of one operation may share a name, and `can?` is true
+      when any of them holds. A name can't be a framework operation, and one name can't label lines
+      of two operations (`allow :grant_role` and `allow {:grant_role, role}` are one operation).
+    * `only:` / `except:` - on an update line, the fields it covers: `only: [:topic]` covers the
+      listed fields, `except: [:project]` every field but the listed ones, fields added to the
+      entity type later included. A field is an attribute or a relationship, a to-one by its
+      relationship name (`:project`, not `:project_id`). An update passes when every field it
+      changes is covered by some update line that holds - a line without either option covers
+      every field. `can?(user, :update, row)` and `via: {:update, relationship}` count only the
+      lines without either. A line covering a relationship lets its holders point the row at any
+      row of the related type: a condition reads the row as stored, so it can't say anything about
+      the row the change points it at.
     * `to:` - who holds the operation: a role name (`:editor`), a global role module (`Admin`), a
       role held on the row a to-one relationship, or a path of them, points at as
       `{role, relationship}` (`{:editor, project}`, `{:owner, trip.user}`), a role held on a whole
@@ -239,9 +262,11 @@ defmodule Hologram.Entity do
 
   So a rule that reads a related row through an entity type with no read rules fails the build: no
   client ever holds such a row, and the browser would answer no where the server may answer yes. A
-  rule for `:read` itself is exempt, since a row reaches a client only once the server's read rules
-  admitted it, and a client never decides them. A quantifier the server answers is exempt too,
-  since its answer stands in for the rows it reads.
+  quantifier the server answers is exempt, since its answer stands in for the rows it reads. So are
+  a condition, a role reference and a delegation in a rule for `:read`: the server answers each for
+  every row it sends too, and the browser checks a read rule only on rows as they were sent. A rule
+  for any other operation is checked on rows an action changed, which the server's answer for the
+  stored row doesn't cover.
   """
   @spec allow(operation, T.opts()) :: Macro.t()
   defmacro allow(operation, spec \\ []) do
@@ -486,12 +511,21 @@ defmodule Hologram.Entity do
     Validator.validate_allow!(module, operation, spec)
 
     policy =
-      {operation, Keyword.get(spec, :to), Keyword.get(spec, :via), Keyword.get(spec, :when, [])}
+      {operation, Keyword.get(spec, :to), Keyword.get(spec, :via), Keyword.get(spec, :when, []),
+       Keyword.get(spec, :as), fields(spec)}
 
     Module.put_attribute(module, :__policies__, policy)
     Module.put_attribute(module, :__policy_sources__, source)
 
     :ok
+  end
+
+  defp fields(spec) do
+    cond do
+      Keyword.has_key?(spec, :only) -> {:only, Keyword.fetch!(spec, :only)}
+      Keyword.has_key?(spec, :except) -> {:except, Keyword.fetch!(spec, :except)}
+      true -> nil
+    end
   end
 
   # An inverse goes into a list of its own: every reader of the stored relationships reads what a
@@ -1002,6 +1036,7 @@ defmodule Hologram.Entity do
   end
 
   defp derived_declaration(name, type, opts, definition, env) do
+    Validator.validate_derived_name!(name, env)
     Validator.validate_derived_capture!(name, definition, env)
 
     definition = Hologram.Derived.function(name, definition, env)

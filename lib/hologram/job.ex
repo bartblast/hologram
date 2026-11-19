@@ -122,10 +122,9 @@ defmodule Hologram.Job do
   reference that broke its declaration - the same answers, and the same checks, as writing any
   other row.
 
-  With an acting user set, the write is evaluated for :create, or for the operation named by the
-  :authorize option. The :trust option claims the server's own authority instead, which is what a
-  webhook, a seed or a job enqueuing another job does. The two are the only options, and asking
-  for both raises.
+  With an acting user set, the write is evaluated for :create. The :trust option claims the
+  server's own authority instead, which is what a webhook, a seed or a job enqueuing another job
+  does. It is the only option.
 
   Raises Hologram.MisuseError for a module that is not a job type, for an unknown option, and for a
   value of an attribute the framework sets. Raises Hologram.AccessDeniedError when a user is acting
@@ -170,8 +169,6 @@ defmodule Hologram.Job do
 
   defp apply_claim(job, :none), do: job
 
-  defp apply_claim(job, {:authorize, operation}), do: Query.authorize(job, operation)
-
   defp apply_claim(job, :trust), do: Query.trust(job)
 
   # The job the enqueue writes: constructed the way any entity is, then carrying whatever authority
@@ -194,13 +191,11 @@ defmodule Hologram.Job do
   # the function does not take. The raise is what answers options built at run time.
   defp parse_claim!([]), do: :none
 
-  defp parse_claim!(authorize: operation) when is_atom(operation), do: {:authorize, operation}
-
   defp parse_claim!(trust: true), do: :trust
 
   defp parse_claim!(opts) do
     raise MisuseError,
-      message: "Job.create takes authorize: operation or trust: true, got: #{inspect(opts)}"
+      message: "Job.create takes trust: true as its only option, got: #{inspect(opts)}"
   end
 
   # A job type declaring nothing is server-side work: no rule grants its create, so a user acting
