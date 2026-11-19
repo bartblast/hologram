@@ -6,7 +6,6 @@ defmodule Hologram.DB.WriterTest do
   import Hologram.Query,
     only: [
       add_relationship: 3,
-      authorize: 2,
       decrement: 3,
       delete_relationship: 3,
       increment: 3,
@@ -35,6 +34,10 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.Test.Fixtures.Policy.Module10, as: PolicyModule10
   alias Hologram.Test.Fixtures.Policy.Module11, as: PolicyModule11
   alias Hologram.Test.Fixtures.Policy.Module2
+  alias Hologram.Test.Fixtures.Policy.Module36
+  alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
+  alias Hologram.Test.Fixtures.Policy.Module39, as: ChannelMessage
+  alias Hologram.Test.Fixtures.Policy.Module40
 
   defp create_user(email) do
     %{email: email}
@@ -94,57 +97,13 @@ defmodule Hologram.DB.WriterTest do
     end
 
     test "evaluates a type-wide role's rule for the acting user" do
-      user = create_user("admin@example.com")
-      Auth.grant_role(user, :admin, Module2)
+      user = create_user("editor@example.com")
+      Auth.grant_role(user, :editor, Module40)
 
-      entity = authorize(Module2.new(), :update)
+      entity = Module40.new()
 
-      assert {:ok, %Module2{}} = as_user(user, fn -> create(entity) end)
-      assert DB.read(Module2, entity.id) != nil
-    end
-
-    test "evaluates an explicit claim without an acting user with the anonymous semantics" do
-      granted_entity =
-        %{public: true}
-        |> Module2.new()
-        |> authorize(:publish)
-
-      assert {:ok, %Module2{}} = create(granted_entity)
-
-      denied_entity =
-        %{public: true}
-        |> Module2.new()
-        |> authorize(:update)
-
-      expected_msg =
-        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module2 "#{denied_entity.id}")
-
-      assert_error AccessDeniedError, expected_msg, fn -> create(denied_entity) end
-    end
-
-    test "evaluates the operation the entity claims against the row being inserted" do
-      user = create_user("publisher@example.com")
-
-      granted_entity =
-        %{public: true}
-        |> Module2.new()
-        |> authorize(:publish)
-
-      assert {:ok, %Module2{}} = as_user(user, fn -> create(granted_entity) end)
-
-      denied_entity =
-        %{public: false}
-        |> Module2.new()
-        |> authorize(:publish)
-
-      expected_msg =
-        ~s(not allowed to publish Hologram.Test.Fixtures.Policy.Module2 "#{denied_entity.id}")
-
-      assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(user, fn -> create(denied_entity) end)
-      end
-
-      assert DB.read(Module2, denied_entity.id) == nil
+      assert {:ok, %Module40{}} = as_user(user, fn -> create(entity) end)
+      assert DB.read(Module40, entity.id) != nil
     end
 
     # The related type's create rule is open, so a create asking it would pass - the delegation asks
@@ -279,7 +238,7 @@ defmodule Hologram.DB.WriterTest do
       assert DB.read(Module1, entity.id) == nil
     end
 
-    test "evaluates the claim against the row as it stands, not the struct in hand" do
+    test "evaluates the rules against the row as it stands, not the struct in hand" do
       user = create_user("mover@example.com")
 
       granting_parent = DB.create!(Module2.new())
@@ -304,20 +263,6 @@ defmodule Hologram.DB.WriterTest do
       end
 
       assert DB.read(Module1, entity.id) != nil
-    end
-
-    test "evaluates the operation the entity claims" do
-      user = create_user("archiver@example.com")
-
-      entity =
-        %{author_id: user.id}
-        |> Module1.new()
-        |> DB.create!()
-
-      claimed_entity = authorize(entity, :archive)
-
-      assert as_user(user, fn -> delete(claimed_entity) end) == :ok
-      assert DB.read(Module1, entity.id) == nil
     end
 
     test "skips evaluation for a trust claim" do
@@ -394,7 +339,7 @@ defmodule Hologram.DB.WriterTest do
   end
 
   describe "update/1" do
-    test "a denied claim rolls back the writes made before it" do
+    test "a denied write rolls back the writes made before it" do
       user = create_user("roller@example.com")
       earlier_entity = Module1.new()
 
@@ -404,7 +349,7 @@ defmodule Hologram.DB.WriterTest do
         |> DB.create!()
 
       expected_msg =
-        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{target.id}")
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{target.id}" - no allow line that holds covers :public)
 
       assert_error AccessDeniedError, expected_msg, fn ->
         as_user(user, fn ->
@@ -496,7 +441,7 @@ defmodule Hologram.DB.WriterTest do
       EntityOperations.update(Module1, entity.id, priority: 1)
 
       expected_msg =
-        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}" - no allow line that holds covers :public)
 
       assert_error AccessDeniedError, expected_msg, fn ->
         as_user(user, fn ->
@@ -507,36 +452,6 @@ defmodule Hologram.DB.WriterTest do
       end
 
       assert DB.read(Module1, entity.id).public == true
-    end
-
-    test "evaluates the operation the entity claims" do
-      user = create_user("archivist@example.com")
-
-      own_entity =
-        %{author_id: user.id}
-        |> Module1.new()
-        |> DB.create!()
-
-      assert as_user(user, fn ->
-               own_entity
-               |> put_attribute(:public, true)
-               |> authorize(:archive)
-               |> update()
-             end) == :ok
-
-      other_entity = DB.create!(Module1.new())
-
-      expected_msg =
-        ~s(not allowed to archive Hologram.Test.Fixtures.Policy.Module1 "#{other_entity.id}")
-
-      assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(user, fn ->
-          other_entity
-          |> put_attribute(:public, true)
-          |> authorize(:archive)
-          |> update()
-        end)
-      end
     end
 
     test "skips evaluation for a trust claim" do
@@ -714,6 +629,219 @@ defmodule Hologram.DB.WriterTest do
     end
   end
 
+  # Policy.Module38 lets anyone set the topic and the tags while a channel isn't archived, its owner
+  # rename it and move it to a parent, anyone change all but :archived and :owner on a channel named
+  # "open", and its owner change anything once it is archived.
+  describe "update/1 of the fields a line covers" do
+    defp create_channel(values) do
+      values
+      |> Channel.new()
+      |> DB.create!()
+    end
+
+    defp denied_fields(channel, fields) do
+      ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module38 "#{channel.id}" - no allow line that holds covers #{fields})
+    end
+
+    test "lands a change of a field a holding line covers" do
+      member = create_user("field-member-1@example.com")
+      channel = create_channel(name: "general")
+
+      assert as_user(member, fn ->
+               channel
+               |> put_attribute(:topic, "news")
+               |> update()
+             end) ==
+               :ok
+
+      assert DB.read(Channel, channel.id).topic == "news"
+    end
+
+    test "refuses a change of a field no holding line covers, naming it" do
+      member = create_user("field-member-2@example.com")
+      channel = create_channel(name: "general")
+
+      assert_error AccessDeniedError, denied_fields(channel, ":name"), fn ->
+        as_user(member, fn ->
+          channel
+          |> put_attribute(:name, "mine")
+          |> update()
+        end)
+      end
+
+      assert DB.read(Channel, channel.id).name == "general"
+    end
+
+    test "refuses a write mixing covered and uncovered fields, naming the uncovered ones" do
+      member = create_user("field-member-3@example.com")
+      channel = create_channel(name: "general")
+
+      assert_error AccessDeniedError, denied_fields(channel, ":name, :parent"), fn ->
+        as_user(member, fn ->
+          channel
+          |> put_attribute(:topic, "news")
+          |> put_attribute(:name, "mine")
+          |> put_attribute(:parent_id, nil)
+          |> update()
+        end)
+      end
+
+      assert DB.read(Channel, channel.id).topic == nil
+    end
+
+    test "lands a write whose fields different lines cover" do
+      owner = create_user("field-owner-1@example.com")
+      channel = create_channel(name: "general", owner_id: owner.id)
+
+      assert as_user(owner, fn ->
+               channel
+               |> put_attribute(:topic, "news")
+               |> put_attribute(:name, "renamed")
+               |> update()
+             end) == :ok
+
+      assert %{name: "renamed", topic: "news"} = DB.read(Channel, channel.id)
+    end
+
+    test "covers a to-one's reference field by its relationship's name" do
+      owner = create_user("field-owner-2@example.com")
+      member = create_user("field-member-4@example.com")
+
+      parent =
+        []
+        |> Module36.new()
+        |> DB.create!()
+
+      channel = create_channel(name: "general", owner_id: owner.id)
+
+      assert as_user(owner, fn ->
+               channel
+               |> put_attribute(:parent_id, parent.id)
+               |> update()
+             end) == :ok
+
+      assert_error AccessDeniedError, denied_fields(channel, ":parent"), fn ->
+        as_user(member, fn ->
+          channel
+          |> put_attribute(:parent_id, nil)
+          |> update()
+        end)
+      end
+    end
+
+    test "covers an edge of a to-many by its relationship's name" do
+      member = create_user("field-member-5@example.com")
+
+      tag =
+        [token: "t"]
+        |> Module15.new()
+        |> DB.create!()
+
+      open = create_channel(name: "general")
+      archived = create_channel(name: "general", archived: true)
+
+      assert as_user(member, fn ->
+               open
+               |> add_relationship(:tags, tag.id)
+               |> update()
+             end) == :ok
+
+      assert_error AccessDeniedError, denied_fields(archived, ":tags"), fn ->
+        as_user(member, fn ->
+          archived
+          |> add_relationship(:tags, tag.id)
+          |> update()
+        end)
+      end
+    end
+
+    test "covers a counter moved by an amount" do
+      member = create_user("field-member-6@example.com")
+      open = create_channel(name: "open")
+      general = create_channel(name: "general")
+
+      assert as_user(member, fn ->
+               open
+               |> increment(:sent_count, 1)
+               |> update()
+             end) == :ok
+
+      assert DB.read(Channel, open.id).sent_count == 1
+
+      assert_error AccessDeniedError, denied_fields(general, ":sent_count"), fn ->
+        as_user(member, fn ->
+          general
+          |> increment(:sent_count, 1)
+          |> update()
+        end)
+      end
+    end
+
+    test "covers every field but the ones an except line lists" do
+      member = create_user("field-member-7@example.com")
+      channel = create_channel(name: "open")
+
+      assert as_user(member, fn ->
+               channel
+               |> put_attribute(:name, "lobby")
+               |> update()
+             end) ==
+               :ok
+
+      lobby = DB.read(Channel, channel.id)
+      reopened = create_channel(name: "open")
+
+      assert_error AccessDeniedError, denied_fields(reopened, ":archived"), fn ->
+        as_user(member, fn ->
+          reopened
+          |> put_attribute(:archived, true)
+          |> update()
+        end)
+      end
+
+      assert lobby.name == "lobby"
+    end
+
+    test "covers every field with a line covering the whole row" do
+      owner = create_user("field-owner-3@example.com")
+      other = create_user("field-other-1@example.com")
+      channel = create_channel(name: "general", owner_id: owner.id, archived: true)
+
+      assert as_user(owner, fn ->
+               channel
+               |> put_attribute(:archived, false)
+               |> put_attribute(:owner_id, other.id)
+               |> update()
+             end) == :ok
+
+      assert %{archived: false, owner_id: owner_id} = DB.read(Channel, channel.id)
+      assert owner_id == other.id
+    end
+
+    # Module39 delegates its update to the channel's :update, which the lines covering the whole row
+    # answer alone - so setting a channel's topic grants nothing on its messages.
+    test "counts no field-limited line for a delegation asking :update" do
+      member = create_user("field-member-8@example.com")
+      channel = create_channel(name: "general")
+
+      message =
+        [channel_id: channel.id]
+        |> ChannelMessage.new()
+        |> DB.create!()
+
+      expected_msg =
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module39 "#{message.id}" - no allow line that holds covers :body)
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(member, fn ->
+          message
+          |> put_attribute(:body, "hi")
+          |> update()
+        end)
+      end
+    end
+  end
+
   describe "update/3" do
     test "raises for a role grant without an acting user" do
       expected_msg =
@@ -721,6 +849,17 @@ defmodule Hologram.DB.WriterTest do
 
       assert_error MisuseError, expected_msg, fn ->
         update(RoleGrant, Entity.generate_id(), %{role: :editor})
+      end
+    end
+
+    test "raises for a role grant under an acting user" do
+      user = create_user("grant-updater@example.com")
+
+      expected_msg =
+        "cannot update Hologram.Auth.RoleGrant - a role grant is never changed in place, revoke the role and grant the new one instead"
+
+      assert_error MisuseError, expected_msg, fn ->
+        as_user(user, fn -> update(RoleGrant, Entity.generate_id(), %{role: :editor}) end)
       end
     end
 
@@ -743,7 +882,7 @@ defmodule Hologram.DB.WriterTest do
         |> DB.create!()
 
       expected_msg =
-        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}" - no allow line that holds covers :public)
 
       assert_error AccessDeniedError, expected_msg, fn ->
         as_user(user, fn -> update(Module1, entity.id, public: true) end)
@@ -755,6 +894,40 @@ defmodule Hologram.DB.WriterTest do
 
       assert as_user(user, fn -> update(Module1, entity.id, public: true) end) == :ok
       assert DB.read(Module1, entity.id).public == true
+    end
+
+    test "judges the fields it changes, a reference field by its relationship's name" do
+      member = create_user("type-indexed-member@example.com")
+
+      channel =
+        [name: "general"]
+        |> Channel.new()
+        |> DB.create!()
+
+      assert as_user(member, fn -> update(Channel, channel.id, topic: "news") end) == :ok
+
+      expected_msg =
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module38 "#{channel.id}" - no allow line that holds covers :name, :parent)
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(member, fn -> update(Channel, channel.id, name: "mine", parent_id: nil) end)
+      end
+    end
+
+    test "refuses a misspelt field as misuse before judging it" do
+      member = create_user("type-indexed-typo@example.com")
+
+      channel =
+        [name: "general"]
+        |> Channel.new()
+        |> DB.create!()
+
+      expected_msg =
+        "invalid changes for Hologram.Test.Fixtures.Policy.Module38 - only declared attributes and to-one relationships can be updated: :titel"
+
+      assert_error MisuseError, expected_msg, fn ->
+        as_user(member, fn -> update(Channel, channel.id, titel: "x") end)
+      end
     end
 
     test "raises when the row does not exist" do

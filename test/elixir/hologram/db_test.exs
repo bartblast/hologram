@@ -20,6 +20,8 @@ defmodule Hologram.DBTest do
   alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.SQLError
+  alias Hologram.Test.ClosingTCP
+  alias Hologram.Test.CountingListener
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module13
@@ -189,7 +191,7 @@ defmodule Hologram.DBTest do
     end
 
     test "applies the session settings as each pool connection connects" do
-      {:ok, {_flags, [%{start: {_pool, :start_link, [{Postgrex.Protocol, opts}]}}]}} = init([])
+      {:ok, {_flags, [%{start: {_pool, :start_link, [{Hologram.DB.Protocol, opts}]}}]}} = init([])
 
       assert opts[:after_connect] == {Hologram.DB, :apply_session_settings, []}
     end
@@ -197,7 +199,7 @@ defmodule Hologram.DBTest do
     test "leaves the given after_connect in place" do
       after_connect = {IO, :inspect, []}
 
-      {:ok, {_flags, [%{start: {_pool, :start_link, [{Postgrex.Protocol, opts}]}}]}} =
+      {:ok, {_flags, [%{start: {_pool, :start_link, [{Hologram.DB.Protocol, opts}]}}]}} =
         init(after_connect: after_connect)
 
       assert opts[:after_connect] == after_connect
@@ -374,6 +376,39 @@ defmodule Hologram.DBTest do
 
       assert log =~ "the database cannot be reached yet"
       assert log =~ "the database system is starting up"
+    end
+
+    # As a peer that resets the connection right after accepting it can make the probe fail.
+    test "waits while the connections it probes with fail as they open" do
+      peer = start_supervised!(CountingListener)
+
+      connection_opts =
+        Config.connection_opts(
+          port: CountingListener.port(peer),
+          socket_options: ClosingTCP.socket_options()
+        )
+
+      log =
+        capture_log(fn ->
+          pool = start_unreachable_pool()
+
+          {pid, monitor_ref} =
+            spawn_monitor(fn ->
+              Connection.with_connection(pool, fn ->
+                await_database(connection_opts: connection_opts, retry_interval_ms: 10)
+              end)
+            end)
+
+          wait_until(fn -> CountingListener.accepted(peer) >= 2 end)
+
+          refute_received {:DOWN, ^monitor_ref, :process, ^pid, _reason}
+
+          stop_waiter(pid)
+          stop_unreachable_pool()
+        end)
+
+      assert log =~ "the database cannot be reached yet"
+      assert log =~ "tcp setopts: invalid argument - :einval"
     end
 
     # A server that is down and settings that are wrong look the same through the pool, and only
@@ -1162,7 +1197,7 @@ defmodule Hologram.DBTest do
         |> create()
 
       expected_msg =
-        ~s(not allowed to update Hologram.Test.Fixtures.Entity.Module2 "#{entity.id}")
+        ~s(not allowed to update Hologram.Test.Fixtures.Entity.Module2 "#{entity.id}" - no allow line that holds covers :c)
 
       assert_error AccessDeniedError, expected_msg, fn ->
         as_user(Entity.generate_id(), fn ->

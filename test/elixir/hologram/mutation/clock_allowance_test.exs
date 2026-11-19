@@ -9,7 +9,7 @@ defmodule Hologram.Mutation.ClockAllowanceTest do
   alias Hologram.Entity.Model
   alias Hologram.Runtime.Serializer
   alias Hologram.Server
-  alias Hologram.Test.Fixtures.Policy.Module2
+  alias Hologram.Test.Fixtures.Mutation.Module2
 
   defp envelope(stamp) do
     %{
@@ -23,7 +23,6 @@ defmodule Hologram.Mutation.ClockAllowanceTest do
           "type" => inspect(Module2),
           "id" => Entity.generate_id(),
           "data" => %{"public" => true},
-          "claim" => ["authorize", "publish"],
           "stamp" => stamp
         }
       ]

@@ -7,6 +7,7 @@ defmodule Hologram.Sync.Scoper do
   # every rule here errs towards including.
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Policy.Edges
   alias Hologram.Query
   alias Hologram.Query.Registry
 
@@ -34,9 +35,8 @@ defmodule Hologram.Sync.Scoper do
   says either of those happened. A session learns of the first from its own identity changing,
   and of the second from the model hash it was greeted with.
   """
-  @spec affected(list({non_neg_integer, list(map)}), list({any, Query.t()}), %{
-          {module, atom} => list(tuple)
-        }) :: list(any)
+  @spec affected(list({non_neg_integer, list(map)}), list({any, Query.t()}), Edges.t()) ::
+          list(any)
   def affected(transactions, windows, edges) do
     changed = changed_types(transactions)
 
@@ -66,7 +66,7 @@ defmodule Hologram.Sync.Scoper do
     read_types = Registry.entity_types(term)
 
     Enum.reduce(read_types, read_types, fn entity_type, types ->
-      [:read, :verdicts]
+      [:read, {:verdicts}]
       |> Enum.flat_map(&Map.get(edges, {entity_type, &1}, []))
       |> Enum.reduce(types, &add_edge_types/2)
     end)

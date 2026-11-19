@@ -77,8 +77,8 @@ defmodule Hologram.Entity.DerivedExpression do
   call into Elixir's or Erlang's own modules, an imported one included, a function of
   Hologram.Query that is no stage a derived body calls, a query builder of another module where a
   value goes, a query starting from an entity type, a condition anywhere but the body and `if`, a
-  comparison of something that is no field, `user_id()` in a query, and a name no argument binds,
-  located at the head.
+  comparison of something that is no field, a comparison of a field with itself (naming what it
+  always answers), `user_id()` in a query, and a name no argument binds, located at the head.
   """
   @spec function(Macro.t(), Macro.t(), Macro.Env.t()) :: {list(atom), Macro.t(), boolean}
   def function(name, {:fn, meta, [{:->, arrow_meta, [args, body]}]}, env) do
@@ -620,9 +620,22 @@ defmodule Hologram.Entity.DerivedExpression do
   defp predicates({:in, _meta, [left, right]} = ast, state),
     do: [{condition_name!(left, ast, state), {:in, membership!(right, ast, state)}}]
 
+  # Both sides naming the same field tell nothing about the row but whether the field is set,
+  # refused in the words a filter's comparison is.
   defp predicates({operator, _meta, [left, right]} = ast, state)
        when operator in @comparison_operators do
-    [{condition_name!(left, ast, state), {operator, condition_operand!(right, ast, state)}}]
+    name = condition_name!(left, ast, state)
+    operand = condition_operand!(right, ast, state)
+
+    if operand == {:attribute, name} do
+      compile_error!(
+        "#{state.field} #{Expression.self_comparison(operator, Macro.to_string(left))}",
+        ast,
+        state
+      )
+    end
+
+    [{name, {operator, operand}}]
   end
 
   defp predicates(ast, state) do
@@ -648,6 +661,14 @@ defmodule Hologram.Entity.DerivedExpression do
 
   defp query_position({:__aliases__, _meta, _segments} = ast, state) do
     Macro.expand(ast, state.env)
+  end
+
+  # An argument read in a query, unpinned, is the queried row's name - the argument itself is read
+  # pinned. The definition function binds no variable to it, so it is marked for the query macros,
+  # whose refusal of a forgotten pin then names it as it names a variable's.
+  defp query_position({name, _meta, context} = ast, state)
+       when is_atom(name) and is_atom(context) do
+    if name in state.names, do: Expression.mark_pinnable(ast), else: ast
   end
 
   defp query_position({head, meta, args}, state) when is_list(args) do

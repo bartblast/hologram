@@ -1,8 +1,10 @@
 "use strict";
 
+import Bitstring from "../../../bitstring.mjs";
 import Interpreter from "../../../interpreter.mjs";
 import Model from "../../../model.mjs";
 import Type from "../../../type.mjs";
+import {typeValid} from "../entity.mjs";
 
 // The query stages, hand-written for the client the way the low-level Erlang functions are.
 //
@@ -36,6 +38,18 @@ const SEARCH_OPERATORS = [
   "starts_with",
   "starts_with_exact",
 ];
+
+// What a value of each type is, as the refusal of a value that doesn't fit it says.
+const TYPE_VALUES = {
+  boolean: "true or false",
+  date: "a Date",
+  datetime: "a DateTime",
+  float: "a float, or an integer that fits in 64 bits",
+  integer: "an integer that fits in 64 bits",
+  string: "a UTF-8 string",
+  time: "a Time",
+  uuid: 'a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001"',
+};
 
 // The type pairs whose attributes compare though their types differ, compared on the wider type -
 // Hologram.Query.Stage's @widenings, and the two must agree.
@@ -87,7 +101,9 @@ function attributeType(entityType, name) {
   const derived = Model.derivedField(entityType, name);
   const derivedType = derived?.kind === "scalar" ? derived.type : null;
 
-  return Model.entry(entityType).attributes[name] ?? derivedType ?? "uuid";
+  return (
+    Model.own(Model.entry(entityType).attributes, name) ?? derivedType ?? "uuid"
+  );
 }
 
 function byKey(keyOf) {
@@ -263,7 +279,7 @@ function entryClauses(pair, scope) {
 // The values an enum declares, in their declared order: an enum attribute's, or a derived enum's.
 function enumValues(entityType, name) {
   return (
-    Model.entry(entityType).enumValues[name] ??
+    Model.own(Model.entry(entityType).enumValues, name) ??
     Model.derivedField(entityType, name).values
   );
 }
@@ -599,6 +615,8 @@ function localName(name) {
 }
 
 function membershipValues(values, name, entityType) {
+  values.forEach((value) => validateOperandValue(name, value, entityType));
+
   return values.map((value) =>
     isStruct(value, "Hologram.Query.Placeholder")
       ? placeholderLeaf(value)
@@ -737,6 +755,7 @@ function operatorTriples(name, tuple, entityType, scope) {
 
   if (EQUALITY_OPERATORS.includes(operator)) {
     validateScalarOperand(name, operator, operand);
+    validateOperandValue(name, operand, entityType);
 
     return [
       [
@@ -762,7 +781,7 @@ function operatorTriples(name, tuple, entityType, scope) {
   if (ORDERING_OPERATORS.includes(operator)) {
     validateOrderableAttribute(name, entityType, operator);
     validateScalarOperand(name, operator, operand, true);
-    validateEnumOperand(name, operand, entityType);
+    validateOperandValue(name, operand, entityType);
 
     return [
       [
@@ -813,6 +832,8 @@ function predicateTriples(name, value, entityType, scope) {
   if (Type.isList(value)) {
     return listTriples(name, value, entityType, scope);
   }
+
+  validateOperandValue(name, value, entityType);
 
   return [
     [nameValue(name), "==", Model.unbox(value, nameType(entityType, name))],
@@ -930,7 +951,7 @@ function relationshipNames(entityType) {
 function searchTriple(name, operator, operand, entityType) {
   validateSearchableAttribute(name, entityType, operator);
 
-  if (!Type.isBinary(operand)) {
+  if (!Type.isBinary(operand) || !Bitstring.isText(operand)) {
     Interpreter.raiseMisuseError(
       `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${inspectName(name)} - a search term is a string`,
     );
@@ -1092,26 +1113,6 @@ function toTerm(query) {
     sort: [],
     take: null,
   };
-}
-
-// A second claim is refused where it is written: a struct carrying two authorities would have to
-// pick one at the write, silently.
-function putClaim(entity, claim, stage) {
-  const entityType = entityTypeOf(entity, stage);
-  const metadata = field(entity, "__meta__");
-  const recorded = field(metadata, "claim");
-
-  if (!Type.isNil(recorded)) {
-    Interpreter.raiseMisuseError(
-      `${entityType} already carries a claim (${Interpreter.inspect(recorded)}) - a write claims exactly one authority`,
-    );
-  }
-
-  return putField(
-    entity,
-    Type.atom("__meta__"),
-    putField(metadata, Type.atom("claim"), claim),
-  );
 }
 
 // The two counter stages share everything but the sign they record. A sum that reaches zero is
@@ -1359,7 +1360,10 @@ function validateFilteredName(name, entityType) {
     return;
   }
 
-  const relationship = Model.entry(entityType).relationships[name.value];
+  const relationship = Model.own(
+    Model.entry(entityType).relationships,
+    name.value,
+  );
 
   if (relationship && !relationship.toMany) {
     Interpreter.raiseMisuseError(
@@ -1386,24 +1390,6 @@ function validateFilteredName(name, entityType) {
   Interpreter.raiseMisuseError(
     `unknown attribute ${Interpreter.inspect(name)} in ${entityType} - known attributes: ${known}`,
   );
-}
-
-// A comparison operand on an enum is one of the values it declares, refused where it is written
-// rather than where it is run: the database refuses an undeclared label too, but only once the
-// statement reaches it, and by then nothing can name the values there were to choose from.
-function validateEnumOperand(name, operand, entityType) {
-  if (nameType(entityType, name) !== "enum") {
-    return;
-  }
-
-  const declared = subject(entityType, name);
-  const values = enumValues(declared.entityType, declared.name);
-
-  if (!values.includes(Model.unbox(operand, "enum"))) {
-    Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(operand)} is not a value of attribute ${inspectName(name)} in ${entityType} - the values are ${inspectEnumValues(values)}`,
-    );
-  }
 }
 
 // A stored relationship or an inverse - a set of either is included as a to-many, a single
@@ -1492,6 +1478,9 @@ function validateMembershipRange(range, name, entityType) {
       `range ${Interpreter.inspect(range)} for attribute ${inspectName(name)} is empty - it would match nothing`,
     );
   }
+
+  validateOperandValue(name, field(range, "first"), entityType);
+  validateOperandValue(name, field(range, "last"), entityType);
 }
 
 // A derived field holds no reference, so no relationship goes through it - a related row it holds
@@ -1522,6 +1511,50 @@ function validateOperandName(operandName, entityType) {
   }
 
   validatePath(name, entityType);
+}
+
+// A value compared with a name fits the type of what the name reads, refused where it is written
+// rather than where it is run, as on the server: the browser would otherwise unbox it into a value
+// that compares as something else, like "yes" against a boolean matching the false rows. An enum's
+// value is one of the values it declares, which the refusal lists. Nil and a placeholder's value
+// are judged elsewhere, nil by the operator taking it and a placeholder's when the query is built
+// with real values. A float takes an integer too, the same number when compared.
+function validateOperandValue(name, value, entityType) {
+  if (Type.isNil(value) || isStruct(value, "Hologram.Query.Placeholder")) {
+    return;
+  }
+
+  const type = nameType(entityType, name);
+
+  if (type === "enum") {
+    const declared = subject(entityType, name);
+    const values = enumValues(declared.entityType, declared.name);
+
+    // Compared as atoms, as on the server: a label unboxes the module Status.Done and the plain
+    // atom :"Status.Done" alike.
+    const declaredValue =
+      Type.isAtom(value) &&
+      values.some((label) => Model.boxEnumValue(label).value === value.value);
+
+    if (!declaredValue) {
+      Interpreter.raiseMisuseError(
+        `${Interpreter.inspect(value)} is not a value of attribute ${inspectName(name)} in ${entityType} - the values are ${inspectEnumValues(values)}`,
+      );
+    }
+
+    return;
+  }
+
+  const fits =
+    type === "float"
+      ? Type.isFloat(value) || typeValid(value, "integer")
+      : typeValid(value, type);
+
+  if (!fits) {
+    Interpreter.raiseMisuseError(
+      `${Interpreter.inspect(value)} is not a value of attribute ${inspectName(name)} in ${entityType} - the attribute has type :${type}, which takes ${TYPE_VALUES[type]}`,
+    );
+  }
 }
 
 // The types an ordering line can be drawn through: every type but boolean and uuid has an order
@@ -1563,7 +1596,10 @@ function validatePathHop(hop, entityType) {
     );
   }
 
-  const relationship = Model.entry(entityType).relationships[hop.value];
+  const relationship = Model.own(
+    Model.entry(entityType).relationships,
+    hop.value,
+  );
 
   if (relationship && relationship.toMany) {
     Interpreter.raiseMisuseError(
@@ -1674,7 +1710,7 @@ function validateSourceSet(name, entityType) {
     );
   }
 
-  const relationship = Model.relationships(entityType)[name.value];
+  const relationship = Model.own(Model.relationships(entityType), name.value);
 
   if (relationship && relationship.toMany) {
     return relationship.type;
@@ -1872,23 +1908,6 @@ const Elixir_Hologram_Query_Stage = {
       "add_relationship",
     ),
 
-  "authorize/2": (entity, operation) => {
-    if (!Type.isAtom(operation)) {
-      Interpreter.raiseMisuseError(
-        `authorize takes an operation atom, got: ${Interpreter.inspect(operation)}`,
-      );
-    }
-
-    // The entity refusal wins, then the operation's, then the double-claim's - the server's order.
-    Model.validateOperation(entityTypeOf(entity, "authorize"), operation);
-
-    return putClaim(
-      entity,
-      Type.tuple([Type.atom("authorize"), operation]),
-      "authorize",
-    );
-  },
-
   "count/1": (query) => setCardinality(query, "count"),
 
   "decrement/3": (entity, name, amount) =>
@@ -1981,7 +2000,7 @@ const Elixir_Hologram_Query_Stage = {
   "take/2": (query, value) => setViewBound(query, "take", value),
 
   // Both forms the server accepts - an entity struct and a query - are refused here, in the wire's
-  // own words. Trust is the SERVER's authority: a batch claiming it is refused by name, and a read
+  // own words. Trust is the SERVER's authority: a batch carries no claim at all, and a read
   // claiming it would be asking this client's copy of the data to answer past the policies that
   // decided what it holds. A helper reaching for it learns at its own line that it is server code.
   "trust/1": (_subject) => {

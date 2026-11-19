@@ -9,6 +9,7 @@ defmodule Hologram.Test.DatabaseBootstrap.Connection do
 
   @behaviour Postgrex.SimpleConnection
 
+  alias Hologram.DB
   alias Postgrex.SimpleConnection
 
   @impl SimpleConnection
@@ -58,7 +59,8 @@ defmodule Hologram.Test.DatabaseBootstrap.Connection do
     trap_exit? = Process.flag(:trap_exit, true)
 
     try do
-      SimpleConnection.start_link(__MODULE__, nil, opts)
+      # TODO(#1696): SimpleConnection.start_link/3 again, see Hologram.DB.SimpleConnection.
+      DB.SimpleConnection.start_link(__MODULE__, nil, opts)
     after
       Process.flag(:trap_exit, trap_exit?)
 

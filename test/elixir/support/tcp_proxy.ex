@@ -11,10 +11,9 @@ defmodule Hologram.Test.TCPProxy do
   # can be taken meanwhile by anything else binding one - another test's proxy among them.
   #
   # Refusing means accepting a connection, reading the client's startup message, then closing it.
-  # The client sees a connect that failed, as it would a refused one. Closing straight after
-  # accepting would race Postgrex, which raises rather than failing the connect when the peer is
-  # gone before its handshake reads the peer's address (#1667). The whole message is read, so
-  # nothing unread makes the close a reset, and the client always fails the same way.
+  # The client sees a connect that failed, as it would a refused one. The whole message is read
+  # first, so the close always lands at the same point of the client's connect and nothing unread
+  # makes it a reset: every refused connect fails the same way, with tcp recv (idle): closed.
 
   use GenServer
 

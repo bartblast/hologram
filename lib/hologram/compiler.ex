@@ -79,14 +79,9 @@ defmodule Hologram.Compiler do
     {Hologram.DB, :table_name, 1}
   ]
 
-  # The four calls an app spells an entity operation at, each with where the operation is read
-  # from: the argument's position, or the option an enqueue's keyword list names it under.
-  @operation_asks %{
-    {Hologram.Auth, :can?, 3} => 1,
-    {Hologram.Job, :create, 3} => {:option, 2, :authorize},
-    {Hologram.Job, :create!, 3} => {:option, 2, :authorize},
-    {Hologram.Query, :authorize, 2} => 1
-  }
+  # The calls an app spells an entity operation at, each with the position of the argument the
+  # operation is read from.
+  @operation_asks %{{Hologram.Auth, :can?, 3} => 1}
 
   # The modules the runtime entry file always imports, by class and file under the js dir.
   @runtime_imports [
@@ -444,18 +439,17 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns every place the build spells an entity operation at, sorted by the calling function:
-  each call of `Hologram.Auth.can?/3`, `Hologram.Query.authorize/2`, `Hologram.Job.create/3` or
-  `Hologram.Job.create!/3` found in the IR of the functions the call graph names as their
-  callers, with the line of the call and the operation it names - a literal atom, a literal
-  `{name, role}` tuple of atoms, or `:dynamic` when the operation is computed and the build cannot
-  read it. An enqueue claiming the server's authority (`trust: true`) names no operation and is
-  left out.
+  each call of `Hologram.Auth.can?/3` found in the IR of the functions the call graph names as
+  its callers, with the line of the call and the operation it names - a literal atom, a literal
+  `{name, role}` tuple of atoms, a literal `{:update, field}` or `{:update, fields}` tuple, or
+  `{:dynamic}` when the operation is computed and the build cannot read it - a tuple rather than an
+  atom, so a name an allow line carries, `:dynamic` included, is never mistaken for it.
 
-  Takes the UNSPLIT call graph - `can?/3` and the two enqueues are hand-ported, so the runtime
-  graph no longer holds the vertices whose callers this reads. The IR of a caller whose module the call
-  graph's module info PLT holds is built into the IR PLT when it is missing (the compile task
-  builds IR as it is read, see `build_missing_ir!/2`); a caller the IR PLT does not hold after
-  that is skipped, as `validate_prop_usages/2` skips one.
+  Takes the UNSPLIT call graph - `can?/3` is hand-ported, so the runtime graph no longer holds the
+  vertices whose callers this reads. The IR of a caller whose module the call graph's module info
+  PLT holds is built into the IR PLT when it is missing (the compile task builds IR as it is read,
+  see `build_missing_ir!/2`); a caller the IR PLT does not hold after that is skipped, as
+  `validate_prop_usages/2` skips one.
 
   ## Options
 
@@ -463,7 +457,7 @@ defmodule Hologram.Compiler do
       already; every caller is read without it (default: none).
   """
   @spec operation_asks(CallGraph.t(), PLT.t(), T.opts()) ::
-          list(%{mfa: mfa, line: integer | nil, operation: Entity.operation() | :dynamic})
+          list(%{mfa: mfa, line: integer | nil, operation: Entity.operation() | {:dynamic}})
   def operation_asks(call_graph, ir_plt, opts \\ []) do
     callers =
       @operation_asks
@@ -2831,13 +2825,16 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Refuses an entity operation the build asks about that nothing declares, or returns :ok.
+  Refuses an entity operation the build asks about that is neither a framework operation nor a
+  name some allow line carries, or returns :ok.
 
-  Every literal ask `operation_asks/2` reads is judged against the build's whole vocabulary - the
-  framework's operations and every operation an allow line on any of the given entity types
-  names - because the entity argument's type is not known at the ask. A role tuple's role has to
-  be one some entity type declares. A computed operation passes here and is judged at run time,
-  by `Hologram.Policy.validate_operation!/2` and its client twin, which know the type.
+  Every literal ask `operation_asks/3` reads is judged against the build's whole vocabulary - the
+  framework's operations and every name an allow line on any of the given entity types carries -
+  because the entity argument's type is not known at the ask. A role tuple's role has to be one
+  some entity type declares, and every field an `{:update, field}` or `{:update, fields}` tuple
+  names a field some entity type's update sets (`Hologram.Policy.update_fields/1`). A computed
+  operation passes here and is judged at run time, by `Hologram.Policy.validate_operation!/2` and
+  its client twin, which know the type.
 
   Raises Hologram.CompileError naming the ask's function and line, the operation, and what the
   build does declare - so a typo or a renamed operation fails the build at the line that asks,
@@ -2866,9 +2863,16 @@ defmodule Hologram.Compiler do
       |> Enum.uniq()
       |> Enum.sort()
 
+    field_names =
+      entity_types
+      |> Enum.flat_map(&Policy.update_fields/1)
+      |> MapSet.new()
+
+    declared = %{field_names: field_names, role_names: role_names, vocabulary: vocabulary}
+
     call_graph
     |> operation_asks(ir_plt, opts)
-    |> Enum.each(&validate_operation_ask!(&1, vocabulary, role_names))
+    |> Enum.each(&validate_operation_ask!(&1, declared))
   end
 
   @doc """
@@ -2970,9 +2974,13 @@ defmodule Hologram.Compiler do
          acc
        ) do
     case Map.fetch(@operation_asks, {module, function, length(args)}) do
-      {:ok, source} ->
-        acc = record_operation_ask(read_operation_ask(args, source), mfa, line, acc)
-        collect_operation_asks(args, mfa, acc)
+      {:ok, position} ->
+        operation =
+          args
+          |> Enum.at(position)
+          |> literal_operation()
+
+        collect_operation_asks(args, mfa, [%{line: line, mfa: mfa, operation: operation} | acc])
 
       :error ->
         collect_operation_asks(Map.from_struct(call), mfa, acc)
@@ -3083,7 +3091,9 @@ defmodule Hologram.Compiler do
     Enum.filter(callers, fn {module, _function, _arity} -> MapSet.member?(module_set, module) end)
   end
 
-  # A literal atom or a literal {name, role} tuple of atoms is read; anything else is computed.
+  # A literal atom, a literal {name, role} tuple of atoms, or a literal {:update, fields} tuple
+  # whose list holds only atoms is read; anything else is computed. A list is read only under
+  # :update - can? refuses one naming roles whatever it holds, so a role list is left to it.
   defp literal_operation(%IR.AtomType{value: operation}), do: operation
 
   defp literal_operation(%IR.TupleType{
@@ -3091,37 +3101,17 @@ defmodule Hologram.Compiler do
        }),
        do: {name, role_name}
 
-  defp literal_operation(_ir), do: :dynamic
-
-  # An operation read by position, or from a literal keyword list's entry - a list that is not a
-  # literal keyword list is computed, and one without the entry names no operation.
-  defp read_operation_ask(args, position) when is_integer(position) do
-    args
-    |> Enum.at(position)
-    |> literal_operation()
-  end
-
-  defp read_operation_ask(args, {:option, position, key}) do
-    case Enum.at(args, position) do
-      %IR.ListType{data: entries} ->
-        Enum.find_value(entries, :none, &keyword_operation(&1, key))
-
-      _ir ->
-        :dynamic
+  defp literal_operation(%IR.TupleType{
+         data: [%IR.AtomType{value: :update}, %IR.ListType{data: field_irs}]
+       }) do
+    if Enum.all?(field_irs, &match?(%IR.AtomType{}, &1)) do
+      {:update, Enum.map(field_irs, & &1.value)}
+    else
+      {:dynamic}
     end
   end
 
-  defp keyword_operation(%IR.TupleType{data: [%IR.AtomType{value: key}, value]}, key) do
-    literal_operation(value)
-  end
-
-  defp keyword_operation(_entry, _key), do: nil
-
-  defp record_operation_ask(:none, _mfa, _line, acc), do: acc
-
-  defp record_operation_ask(operation, mfa, line, acc) do
-    [%{line: line, mfa: mfa, operation: operation} | acc]
-  end
+  defp literal_operation(_ir), do: {:dynamic}
 
   # One branch of a block renders, so an atom ref counts as often as the branch that renders it the
   # most times. The other branches' refs still name refs the page can render, so they stay for the
@@ -5205,7 +5195,8 @@ defmodule Hologram.Compiler do
   # type, the ingest and read paths already fetch the entry, and every type named here is one the
   # model names anyway.
   #
-  # A per-role grant lifecycle operation is keyed the way the client spells it when asking -
+  # A per-role grant lifecycle operation and a field of an update are keyed the way the client
+  # spells them when asking -
   # Policy.operation_key/1 here and operationKey in assets/js/elixir/hologram/auth.mjs are a
   # hand-ported pair, so the two must agree.
   defp render_policy(entity_type) do
@@ -5845,13 +5836,16 @@ defmodule Hologram.Compiler do
     started_at
   end
 
-  defp declared_operations_description(vocabulary) do
+  defp carried_names_description(vocabulary) do
     case vocabulary -- Policy.framework_operations() do
       [] ->
-        "this build declares no operation beside the framework's own"
+        "no allow line in this build carries a name"
+
+      [name] ->
+        "the name this build's allow lines carry is #{inspect(name)}"
 
       names ->
-        "the operations this build declares are #{spoken_names(names)}, beside the framework's own"
+        "the names this build's allow lines carry are #{spoken_names(names)}"
     end
   end
 
@@ -6102,19 +6096,16 @@ defmodule Hologram.Compiler do
     end)
   end
 
-  # A registered query is read for the session user on the server and replayed on the client from
-  # its own database - there is no server authority to claim on the client, and a claim the server
-  # honored would hand the client rows it may not hold.
-  defp validate_operation_ask!(%{operation: :dynamic}, _vocabulary, _role_names), do: :ok
+  defp validate_operation_ask!(%{operation: {:dynamic}}, _declared), do: :ok
 
-  defp validate_operation_ask!(%{operation: operation} = ask, vocabulary, _role_names)
+  defp validate_operation_ask!(%{operation: operation} = ask, %{vocabulary: vocabulary})
        when is_atom(operation) do
     if operation in vocabulary do
       :ok
     else
       raise Hologram.CompileError,
         message:
-          "unknown operation #{inspect(operation)} in #{ask_location(ask)} - no entity type declares an allow line for it; #{declared_operations_description(vocabulary)}"
+          "unknown operation #{inspect(operation)} in #{ask_location(ask)} - it is neither a framework operation nor a name an allow line carries; #{carried_names_description(vocabulary)}"
     end
   end
 
@@ -6122,8 +6113,7 @@ defmodule Hologram.Compiler do
   # there reads and this build-wide one mirrors.
   defp validate_operation_ask!(
          %{operation: {name, role_name} = operation} = ask,
-         _vocabulary,
-         role_names
+         %{role_names: role_names}
        )
        when name in [:grant_role, :revoke_role] do
     if role_name in role_names do
@@ -6135,12 +6125,41 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp validate_operation_ask!(%{operation: operation} = ask, _vocabulary, _role_names) do
+  defp validate_operation_ask!(%{operation: {:update, []} = operation} = ask, _declared) do
     raise Hologram.CompileError,
       message:
-        "unknown operation #{inspect(operation)} in #{ask_location(ask)} - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+        "unknown operation #{inspect(operation)} in #{ask_location(ask)} - {:update, fields} names at least one field"
   end
 
+  defp validate_operation_ask!(
+         %{operation: {:update, field_names} = operation} = ask,
+         %{field_names: declared_field_names}
+       )
+       when is_atom(field_names) or is_list(field_names) do
+    # Not List.wrap/1 or Enum.find/2: both take a field named nil for no field at all, while the
+    # run-time check judges it like any other name.
+    field_names = if is_list(field_names), do: field_names, else: [field_names]
+
+    case Enum.reject(field_names, &MapSet.member?(declared_field_names, &1)) do
+      [] ->
+        :ok
+
+      [field_name | _later_names] ->
+        raise Hologram.CompileError,
+          message:
+            "unknown field #{inspect(field_name)} in #{inspect(operation)} in #{ask_location(ask)} - no entity type has a field an update sets by that name"
+    end
+  end
+
+  defp validate_operation_ask!(%{operation: operation} = ask, _declared) do
+    raise Hologram.CompileError,
+      message:
+        "unknown operation #{inspect(operation)} in #{ask_location(ask)} - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
+  end
+
+  # A registered query is read for the session user on the server and replayed on the client from
+  # its own database - there is no server authority to claim on the client, and a claim the server
+  # honored would hand the client rows it may not hold.
   defp validate_untrusted_queries!({module, module_terms}) do
     Enum.each(module_terms, fn term ->
       if term.trust do

@@ -299,6 +299,26 @@ defmodule Hologram.Sync.SearchTest do
       assert candidates(linked, edges).rows == %{PolicyModule17 => ids([other_project])}
     end
 
+    # A line named :verdicts is keyed by its name, as an operation is, and a browser answers it from
+    # the rows it holds - so its edges are not the verdicts' and lead to no check.
+    test "follows no edges of a line named :verdicts" do
+      project = create!(PolicyModule17)
+      label = create!(PolicyModule19)
+      link!(project, :labels, label)
+
+      derived = Edges.derive([PolicyModule17, PolicyModule18])
+      verdict_edges = Map.fetch!(derived, {PolicyModule17, {:verdicts}})
+
+      edges =
+        derived
+        |> Map.delete({PolicyModule17, {:verdicts}})
+        |> Map.put({PolicyModule17, :verdicts}, verdict_edges)
+
+      renamed = [effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"})]
+
+      assert candidates(renamed, edges) == %{rows: %{}, whole_types: %{}}
+    end
+
     # The row is created outside the set, so only what the put recorded names the project.
     test "lists the row whose set a new row joins" do
       project = create!(PolicyModule17)

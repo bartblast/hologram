@@ -103,7 +103,6 @@ defmodule HologramFeatureTests.Policies.Page6 do
       try do
         leg
         |> put_attribute(:name, "#{leg_name}_renamed")
-        |> authorize(:rename)
         |> DB.update!()
 
         "renamed_#{leg_name}"

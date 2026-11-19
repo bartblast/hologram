@@ -41,6 +41,7 @@ defmodule Hologram.Sync.Session do
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Held
   alias Hologram.Sync.Live
+  alias Hologram.Sync.Outbox
   alias Hologram.Sync.PackedIds
   alias Hologram.Sync.PageWindows
   alias Hologram.Sync.Pot
@@ -123,6 +124,9 @@ defmodule Hologram.Sync.Session do
   name effects whose rounds have not reached it yet, and a frame dating those would let a client
   cut off right then come back past changes it never held.
 
+  `:outbox` holds the options of the outbox frames go out through, none by default (see
+  `Hologram.Sync.Outbox.new/2`).
+
   `:edges` is the policy dependency index, given to a returning client alone - what each rule
   reads besides the row it judges, so a row the gap never names can be judged again when the row
   DECIDING it moved. A rule saying `via:` reads a related row, and that row going private hides
@@ -145,6 +149,7 @@ defmodule Hologram.Sync.Session do
     # gap to read, and two reads of the same option are two chances for them to say different
     # things.
     read_gap = Keyword.get(opts, :read_gap)
+    client = Keyword.fetch!(opts, :client)
 
     state = %{
       actor_user_id: Keyword.get(opts, :actor_user_id),
@@ -152,8 +157,6 @@ defmodule Hologram.Sync.Session do
       applied_seq: Keyword.get(opts, :applied_seq),
       arrived: MapSet.new(),
       catching_up: read_gap != nil,
-      client: Keyword.fetch!(opts, :client),
-      client_ref: nil,
       cut: nil,
       departed: %{},
       edges: Keyword.get(opts, :edges),
@@ -162,6 +165,7 @@ defmodule Hologram.Sync.Session do
       # A client arriving with nothing is synced by read access from the start; a returning one is
       # caught up through the windows first, and then leaves them.
       live?: read_gap == nil,
+      outbox: Outbox.new(client, Keyword.get(opts, :outbox, [])),
       page: Keyword.fetch!(opts, :page),
       page_types: MapSet.new(),
       page_windows: MapSet.new(),
@@ -185,10 +189,10 @@ defmodule Hologram.Sync.Session do
       window_refs: %{}
     }
 
-    # Watched as well as linked: a link takes this session down only with a client that crashes,
-    # and one that ends normally would leave it among the node's sessions, judged for and sent every
-    # batch for nobody.
-    {:ok, %{state | client_ref: Process.monitor(state.client)}, {:continue, :subscribe}}
+    # Watched as well as linked, through the outbox: a link takes this session down only with a
+    # client that crashes, and one that ends normally would leave it among the node's sessions,
+    # judged for and sent every batch for nobody.
+    {:ok, state, {:continue, :subscribe}}
   end
 
   # A client arriving with nothing joins the sessions every batch is judged for before anything is
@@ -288,7 +292,9 @@ defmodule Hologram.Sync.Session do
     Hologram.StaleModelError -> {:stop, {:shutdown, :model_held}, state}
   end
 
-  def handle_info({:DOWN, ref, :process, _client, _reason}, %{client_ref: ref} = state) do
+  # The client went (see `Hologram.Sync.Outbox`), and there is no one left to tell anything.
+  def handle_info({:DOWN, ref, :process, _client, _reason}, state)
+      when ref == state.outbox.client_ref do
     {:stop, :normal, state}
   end
 
@@ -298,6 +304,13 @@ defmodule Hologram.Sync.Session do
   # whole sync unit going down with the database - takes the registry and the stored rows too, so
   # there is nothing left to rejoin. The client comes back through the doors instead, where its
   # model, its place and the size of its gap are all read again rather than assumed.
+  #
+  # A session already cut ends for the reason it was cut, whatever stopped meanwhile.
+  def handle_info({:DOWN, _ref, :process, _evaluator, _reason}, %{cut: cut} = state)
+      when cut != nil do
+    {:stop, cut, state}
+  end
+
   def handle_info({:DOWN, _ref, :process, _evaluator, _reason}, state) do
     {:stop, :evaluator_gone, state}
   end
@@ -322,6 +335,18 @@ defmodule Hologram.Sync.Session do
     events = Enum.flat_map(transactions, fn {_tx, events} -> events end)
 
     after_catching_up(state, deliver(remember_applied(state, events), window_id, version))
+  end
+
+  # The stream serving this client replaced it on a change of identity. It asks rather than stops
+  # it, since this session may be waiting on that very stream (see `Hologram.Sync.Outbox.put/2`),
+  # and a session waiting there takes the ask itself.
+  def handle_info(:sync_stop, state) do
+    {:stop, :normal, state}
+  end
+
+  # The stream wrote a chunk while nothing here was waiting to hear it.
+  def handle_info(:sync_written, state) do
+    {:noreply, %{state | outbox: Outbox.written(state.outbox)}}
   end
 
   # The callback that catches the client up hibernates the session after it: what the catch-up
@@ -388,9 +413,7 @@ defmodule Hologram.Sync.Session do
     if Enum.empty?(state.pending) and not MapSet.member?(state.announced, :all) do
       announced = %{state | announced: MapSet.put(state.announced, :all)}
 
-      send(announced.client, {:sync_synced, :all, cursor(announced)})
-
-      announced
+      tell_client(announced, {:sync_synced, :all, cursor(announced)})
     else
       state
     end
@@ -415,9 +438,14 @@ defmodule Hologram.Sync.Session do
 
     fill_order = page_types ++ (synced_types -- page_types)
 
+    # A session cut while filling reads no further type: nothing it reads would reach the client.
     {filled, named} =
-      Enum.reduce(fill_order, {state, %{}}, fn entity_type, {acc, named} ->
-        fill_type(acc, named, entity_type, synced_types)
+      Enum.reduce_while(fill_order, {state, %{}}, fn entity_type, {acc, named} ->
+        if acc.cut do
+          {:halt, {acc, named}}
+        else
+          {:cont, fill_type(acc, named, entity_type, synced_types)}
+        end
       end)
 
     pot =
@@ -450,19 +478,22 @@ defmodule Hologram.Sync.Session do
     told =
       rows
       |> Enum.chunk_every(Catchup.rows_per_frame())
-      |> Enum.reduce(%{state | applied_seq: applied_seq}, fn chunk, acc ->
+      |> Enum.reduce_while(%{state | applied_seq: applied_seq}, fn chunk, acc ->
         deltas = Enum.map(chunk, &Frame.put_entity(&1, Frame.row_verdicts(acc.actor_user_id, &1)))
 
-        send(acc.client, {:sync_deltas, nil, deltas, applied_seq})
+        told_chunk =
+          acc
+          |> tell_client({:sync_deltas, nil, deltas, applied_seq})
+          |> remember_verdicts(deltas)
 
-        remember_verdicts(acc, deltas)
+        if told_chunk.cut, do: {:halt, told_chunk}, else: {:cont, told_chunk}
       end)
 
-    send(told.client, {:sync_synced, {:types, [entity_type]}, nil})
+    marked = tell_client(told, {:sync_synced, {:types, [entity_type]}, nil})
 
-    pot = Pot.hand_over(told.pot, entity_type, Enum.map(rows, & &1.id))
+    pot = Pot.hand_over(marked.pot, entity_type, Enum.map(rows, & &1.id))
 
-    {%{told | pot: pot}, name_set_members(rows, named)}
+    {%{marked | pot: pot}, name_set_members(rows, named)}
   end
 
   # The rows the sets of the given rows name, added to the given ones per entity type - kept packed,
@@ -580,6 +611,23 @@ defmodule Hologram.Sync.Session do
     send(self(), {:cut, reason})
 
     %{state | cut: reason}
+  end
+
+  # Every frame and marker goes out through the outbox, which encodes it for the client's stream and
+  # waits while the client is behind (see `Hologram.Sync.Outbox`).
+  #
+  # A session cut tells nothing more: it stops once the cut message is read, and the client is told
+  # again, filled or caught up, when it comes back through the doors. A client that took nothing
+  # for as long as the outbox waits is cut, and a stream asking the session to stop has it end as
+  # it would have between messages.
+  defp tell_client(%{cut: cut} = state, _message) when cut != nil, do: state
+
+  defp tell_client(state, message) do
+    case Outbox.put(state.outbox, message) do
+      {:ok, outbox} -> %{state | outbox: outbox}
+      :stalled -> cut(state, :client_stalled)
+      :stopped -> cut(state, :normal)
+    end
   end
 
   # Judged against each window's last round, one window's rows read at a time: which of them the
@@ -740,6 +788,10 @@ defmodule Hologram.Sync.Session do
       |> tell_shift(judged)
       |> tell_verdicts(judged)
 
+    # The rows read and the frames encoded from them are garbage now, the way a fill's are, and a
+    # session caught up can sit idle for as long as its client stays.
+    :erlang.garbage_collect()
+
     %{
       caught_up
       | arrived: MapSet.new(),
@@ -801,9 +853,8 @@ defmodule Hologram.Sync.Session do
     |> Enum.concat(unsyncs)
     |> Enum.chunk_every(Catchup.rows_per_frame())
     |> Enum.reduce(state, fn deltas, acc ->
-      send(acc.client, {:sync_deltas, nil, deltas, acc.applied_seq})
-
       acc
+      |> tell_client({:sync_deltas, nil, deltas, acc.applied_seq})
       |> remember_verdicts(deltas)
       |> remember_held(deltas)
     end)
@@ -891,9 +942,8 @@ defmodule Hologram.Sync.Session do
     |> Enum.concat(unsyncs)
     |> Enum.chunk_every(Catchup.rows_per_frame())
     |> Enum.reduce(state, fn deltas, acc ->
-      send(acc.client, {:sync_deltas, batch_cursor(acc, judged.gap), deltas, acc.applied_seq})
-
       acc
+      |> tell_client({:sync_deltas, batch_cursor(acc, judged.gap), deltas, acc.applied_seq})
       |> remember_verdicts(deltas)
       |> remember_held(deltas)
     end)
@@ -919,9 +969,9 @@ defmodule Hologram.Sync.Session do
       news = %{appeared: [], edges: [], patched: patched, unsynced: []}
       deltas = Frame.deltas(news, acc.actor_user_id)
 
-      send(acc.client, {:sync_deltas, batch_cursor(acc, judged.gap), deltas, acc.applied_seq})
-
-      remember_verdicts(acc, deltas)
+      acc
+      |> tell_client({:sync_deltas, batch_cursor(acc, judged.gap), deltas, acc.applied_seq})
+      |> remember_verdicts(deltas)
     end)
   end
 
@@ -971,11 +1021,17 @@ defmodule Hologram.Sync.Session do
   defp tell_batch(state, judged, effects) do
     deltas = Catchup.deltas(effects, judged.touched, state.actor_user_id)
 
-    if deltas != [] do
-      send(state.client, {:sync_deltas, batch_cursor(state, effects), deltas, state.applied_seq})
-    end
+    told =
+      if deltas == [] do
+        state
+      else
+        tell_client(
+          state,
+          {:sync_deltas, batch_cursor(state, effects), deltas, state.applied_seq}
+        )
+      end
 
-    state
+    told
     |> remember_verdicts(deltas)
     |> remember_held(deltas)
   end
@@ -1414,9 +1470,7 @@ defmodule Hologram.Sync.Session do
   defp send_unsent(%{unsent: nil} = state, _cursor), do: state
 
   defp send_unsent(%{unsent: {deltas, claim}} = state, cursor) do
-    send(state.client, {:sync_deltas, cursor, deltas, claim})
-
-    %{state | unsent: nil}
+    tell_client(%{state | unsent: nil}, {:sync_deltas, cursor, deltas, claim})
   end
 
   # What one batch tells this client: where it leaves it, how far its own batches are in, what the

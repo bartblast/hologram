@@ -968,6 +968,19 @@ defmodule Hologram.DB.QueryRunnerTest do
       end
     end
 
+    # The uuid pattern alone takes a trailing newline, which the encoder refuses.
+    test "raises on an id placeholder value followed by a newline" do
+      term = %{Stage.normalize(Module2) | filter: [{:id, :==, {:placeholder, :entity_id}}]}
+      value = "018f0000-0000-7000-8000-000000000001\n"
+
+      expected_msg =
+        ~s(invalid value "018f0000-0000-7000-8000-000000000001\\n" for placeholder :entity_id - expected a :uuid value)
+
+      assert_error MisuseError, expected_msg, fn ->
+        run(term, @mapping, %{entity_id: value})
+      end
+    end
+
     test "raises on a membership binding that is not a list" do
       term = %{Stage.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
 
@@ -1246,6 +1259,21 @@ defmodule Hologram.DB.QueryRunnerTest do
       query = filter(Module40, note_weight > 1.5)
 
       assert derived_query_results(query, :name) == ["full"]
+    end
+
+    # A float compares with an integer as the same number, as a filter value does.
+    test "takes an integer bound to a float placeholder" do
+      create_module_40_entity("full", [true, true])
+      create_module_40_entity("sparse", [true])
+
+      results =
+        Module40
+        |> filter(note_weight > ^%Placeholder{name: :weight})
+        |> Stage.normalize()
+        |> run(@derived_mapping, %{weight: 1})
+        |> Enum.map(& &1.name)
+
+      assert results == ["full"]
     end
 
     test "matches a quantifier's rows to a derived set's bounded rows" do

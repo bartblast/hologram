@@ -127,16 +127,16 @@ defmodule Hologram.EntityTest do
 
     test "returns policy definitions in declaration order, splitting grant references off the predicates" do
       assert Module13.__policies__() == [
-               {:read, nil, nil, [public: {:==, true}]},
-               {:read, [:editor, :owner], nil, []},
-               {:publish, nil, nil, [public: {:==, true}]},
-               {:triage, nil, nil, [priority: {:>=, 3}]},
-               {:unlink, nil, nil, [parent_id: {:==, nil}]}
+               {:read, nil, nil, [public: {:==, true}], nil, nil},
+               {:read, [:editor, :owner], nil, [], nil, nil},
+               {:update, nil, nil, [public: {:==, true}], :publish, {:only, [:title]}},
+               {:update, nil, nil, [priority: {:>=, 3}], :triage, {:only, [:title]}},
+               {:update, nil, nil, [parent_id: {:==, nil}], :unlink, {:only, [:parent]}}
              ]
     end
 
     test "keeps a delegation naming its operation as written" do
-      assert PolicyModule11.__policies__() == [{:create, nil, {:update, :parent}, []}]
+      assert PolicyModule11.__policies__() == [{:create, nil, {:update, :parent}, [], nil, nil}]
     end
   end
 
@@ -155,8 +155,8 @@ defmodule Hologram.EntityTest do
       end
 
       assert PolicySourcesEntityFixture.__policies__() == [
-               {:read, :viewer, nil, []},
-               {:delete, :viewer, nil, []}
+               {:read, :viewer, nil, [], nil, nil},
+               {:delete, :viewer, nil, [], nil, nil}
              ]
 
       assert PolicySourcesEntityFixture.__policy_sources__() == [
@@ -395,7 +395,7 @@ defmodule Hologram.EntityTest do
       end
 
       assert InlineEntityFixture5.__policies__() == [
-               {:update, nil, nil, [guests: {:<=, {:attribute, :capacity}}]}
+               {:update, nil, nil, [guests: {:<=, {:attribute, :capacity}}], nil, nil}
              ]
     end
 
@@ -411,7 +411,8 @@ defmodule Hologram.EntityTest do
       end
 
       assert InlineEntityFixture4.__policies__() == [
-               {:read, nil, nil, [or: [[author_id: {:==, {:actor}}], [shared: {:==, true}]]]}
+               {:read, nil, nil, [or: [[author_id: {:==, {:actor}}], [shared: {:==, true}]]], nil,
+                nil}
              ]
     end
 
@@ -422,7 +423,9 @@ defmodule Hologram.EntityTest do
         allow :read, when: id == user_id()
       end
 
-      assert InlineEntityFixture1.__policies__() == [{:read, nil, nil, [id: {:==, {:actor}}]}]
+      assert InlineEntityFixture1.__policies__() == [
+               {:read, nil, nil, [id: {:==, {:actor}}], nil, nil}
+             ]
     end
 
     test "stores every option of one line" do
@@ -439,7 +442,7 @@ defmodule Hologram.EntityTest do
       end
 
       assert InlineEntityFixture2.__policies__() == [
-               {:update, :editor, :parent, [archived: {:==, false}]}
+               {:update, :editor, :parent, [archived: {:==, false}], nil, nil}
              ]
     end
   end
@@ -478,6 +481,26 @@ defmodule Hologram.EntityTest do
         end)
 
       assert diagnostics == []
+    end
+
+    test "names the pin on an argument a derived query compares a field with itself beside" do
+      code = """
+      defmodule Hologram.EntityTest.InlineEntityFixture175 do
+        use Hologram.Entity
+
+        attribute :points, :integer
+
+        relationship :mentors, [Hologram.Test.Fixtures.Entity.Module34]
+
+        derived :higher_count, :integer, fn mentors, points ->
+          count(filter(mentors, points >= points))
+        end
+      end
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:9: points >= points compares points with itself, which only says points isn't nil - a value from the surrounding code is pinned: ^points",
+                   fn -> Code.eval_string(code) end
     end
 
     test "raises on a capture of a zero-arity function of the entity type's own" do
@@ -954,7 +977,7 @@ defmodule Hologram.EntityTest do
       end
 
       assert TakingEntityFixture.__roles__() == [{:viewer, []}]
-      assert TakingEntityFixture.__policies__() == [{:read, :viewer, nil, []}]
+      assert TakingEntityFixture.__policies__() == [{:read, :viewer, nil, [], nil, nil}]
     end
 
     test "keeps the entity's own declarations beside the taken ones, taken first" do
@@ -971,8 +994,8 @@ defmodule Hologram.EntityTest do
       assert CoexistEntityFixture.__roles__() == [{:owner, []}, {:viewer, []}]
 
       assert CoexistEntityFixture.__policies__() == [
-               {:read, :viewer, nil, []},
-               {:delete, :owner, nil, []}
+               {:read, :viewer, nil, [], nil, nil},
+               {:delete, :owner, nil, [], nil, nil}
              ]
     end
 

@@ -69,7 +69,6 @@ defmodule HologramFeatureTests.MutationsTest do
       "type" => inspect(RestockItem),
       "id" => Entity.generate_id(),
       "data" => %{"amount" => amount, "item_id" => item_id},
-      "claim" => nil,
       "stamp" => System.os_time(:millisecond) * 1024
     }
   end
@@ -80,7 +79,6 @@ defmodule HologramFeatureTests.MutationsTest do
       "type" => inspect(KillWorker),
       "id" => Entity.generate_id(),
       "data" => %{"label" => label},
-      "claim" => nil,
       "stamp" => System.os_time(:millisecond) * 1024
     }
   end
@@ -91,7 +89,6 @@ defmodule HologramFeatureTests.MutationsTest do
       "type" => inspect(Note),
       "id" => Entity.generate_id(),
       "data" => %{"body" => body, "author_id" => author_id},
-      "claim" => nil,
       "stamp" => System.os_time(:millisecond) * 1024
     }
   end
@@ -121,7 +118,6 @@ defmodule HologramFeatureTests.MutationsTest do
       "type" => inspect(Item),
       "id" => id,
       "deltas" => %{"stock" => amount},
-      "claim" => nil,
       "stamp" => System.os_time(:millisecond) * 1024
     }
   end
@@ -133,7 +129,6 @@ defmodule HologramFeatureTests.MutationsTest do
       "id" => id,
       "data" => %{"pinned" => true},
       "based_on" => %{},
-      "claim" => ["authorize", "pin"],
       "stamp" => System.os_time(:millisecond) * 1024
     }
   end
@@ -548,6 +543,20 @@ defmodule HologramFeatureTests.MutationsTest do
       session
       |> visit(MutationsPage)
       |> click(button("Put author"))
+    end
+  end
+
+  feature "refuses a filter value that doesn't fit the attribute's type in the browser", %{
+    session: session
+  } do
+    expected_msg =
+      ~s("yes" is not a value of attribute :pinned in HologramFeatureTests.Entities.Note - ) <>
+        "the attribute has type :boolean, which takes true or false"
+
+    assert_client_error session, Hologram.MisuseError, expected_msg, fn ->
+      session
+      |> visit(MutationsPage)
+      |> click(button("Read mistyped filter"))
     end
   end
 

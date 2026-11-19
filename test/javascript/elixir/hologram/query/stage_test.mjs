@@ -8,6 +8,7 @@ import {
   narrowedInclude,
 } from "../../../support/helpers.mjs";
 
+import Bitstring from "../../../../../assets/js/bitstring.mjs";
 import Elixir_Hologram_Query_Stage from "../../../../../assets/js/elixir/hologram/query/stage.mjs";
 import Model from "../../../../../assets/js/model.mjs";
 import Type from "../../../../../assets/js/type.mjs";
@@ -25,6 +26,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const ITEM = "MyApp.Item";
   const LABEL = "MyApp.Label";
   const MESSAGE = "MyApp.Message";
+  const ORDER = "MyApp.Order";
   const TOPIC = "MyApp.Topic";
   const GADGET = "MyApp.Gadget";
   const POST = "MyApp.Post";
@@ -43,7 +45,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const user = Type.alias(USER);
 
   const addRelationship = Elixir_Hologram_Query_Stage["add_relationship/3"];
-  const authorize = Elixir_Hologram_Query_Stage["authorize/2"];
   const count = Elixir_Hologram_Query_Stage["count/1"];
   const deleteRelationship =
     Elixir_Hologram_Query_Stage["delete_relationship/3"];
@@ -338,6 +339,13 @@ describe("Elixir_Hologram_Query_Stage", () => {
         [GADGET]: {
           attributes: {id: "uuid", priority: "enum"},
           enumValues: {priority: ["low", "medium", "high"]},
+          relationships: {},
+          serverOnly: [],
+        },
+        // An enum declaring a module as a value, beside a plain atom.
+        [ORDER]: {
+          attributes: {id: "uuid", state: "enum"},
+          enumValues: {state: ["open", "Status.Done"]},
           relationships: {},
           serverOnly: [],
         },
@@ -1311,103 +1319,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
-  describe("authorize/2", () => {
-    const claim = (struct) => field(field(struct, "__meta__"), "claim");
-
-    it("keeps the rest of the metadata", () => {
-      const result = authorize(
-        addRelationship(
-          putAttribute(
-            entity(PROJECT),
-            predicates([["name", Type.bitstring("x")]]),
-          ),
-          Type.atom("tasks"),
-          Type.bitstring("t1"),
-        ),
-        Type.atom("archive"),
-      );
-
-      assert.deepStrictEqual(
-        ops(result),
-        Type.map([
-          [
-            Type.atom("name"),
-            Type.tuple([Type.atom("put"), Type.bitstring("x")]),
-          ],
-        ]),
-      );
-
-      assert.deepStrictEqual(
-        edgeOps(result),
-        Type.map([
-          [
-            Type.tuple([Type.atom("tasks"), Type.bitstring("t1")]),
-            Type.atom("add"),
-          ],
-        ]),
-      );
-
-      assert.deepStrictEqual(
-        claim(result),
-        Type.tuple([Type.atom("authorize"), Type.atom("archive")]),
-      );
-    });
-
-    it("records the claim for the operation", () => {
-      const result = authorize(entity(TASK), Type.atom("update"));
-
-      assert.deepStrictEqual(
-        claim(result),
-        Type.tuple([Type.atom("authorize"), Type.atom("update")]),
-      );
-    });
-
-    it("records an operation an allow line on the entity type names", () => {
-      const result = authorize(entity(PROJECT), Type.atom("archive"));
-
-      assert.deepStrictEqual(
-        claim(result),
-        Type.tuple([Type.atom("authorize"), Type.atom("archive")]),
-      );
-    });
-
-    it("raises when the entity is not an entity struct", () => {
-      assertBoxedError(
-        () => authorize(Type.bitstring("x"), Type.atom("archive")),
-        "Hologram.MisuseError",
-        'authorize takes an entity struct, got: "x"',
-      );
-    });
-
-    it("raises when the operation is not an atom", () => {
-      assertBoxedError(
-        () => authorize(entity(TASK), Type.bitstring("archive")),
-        "Hologram.MisuseError",
-        'authorize takes an operation atom, got: "archive"',
-      );
-    });
-
-    it("raises when the struct already carries a claim", () => {
-      assertBoxedError(
-        () =>
-          authorize(
-            authorize(entity(TASK), Type.atom("update")),
-            Type.atom("delete"),
-          ),
-        "Hologram.MisuseError",
-        "MyApp.Task already carries a claim ({:authorize, :update}) - a write claims exactly one authority",
-      );
-    });
-
-    it("raises when the operation is one the entity type never declared", () => {
-      assertBoxedError(
-        () => authorize(entity(TASK), Type.atom("archive")),
-        "Hologram.MisuseError",
-        "unknown operation :archive for MyApp.Task - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
-      );
-    });
-  });
-
   // The server records a claim here and the client refuses one, so these have no twin in
   // query/stage_test.exs. Trust is the SERVER's authority on either half - a write claiming it is
   // refused by the wire, and a read claiming it would ask this client's copy of the data to
@@ -1633,10 +1544,14 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("filters by the reference field of a to-one relationship", () => {
       const query = filter(
         Type.alias(PROJECT),
-        predicates([["owner_id", Type.bitstring("u1")]]),
+        predicates([
+          ["owner_id", Type.bitstring("018f0000-0000-7000-8000-000000000001")],
+        ]),
       );
 
-      assert.deepStrictEqual(query.filter, [["owner_id", "==", "u1"]]);
+      assert.deepStrictEqual(query.filter, [
+        ["owner_id", "==", "018f0000-0000-7000-8000-000000000001"],
+      ]);
     });
 
     it("reads a placeholder as the leaf a binding fills", () => {
@@ -1919,6 +1834,27 @@ describe("Elixir_Hologram_Query_Stage", () => {
         () => filter(task, predicates([["x", Type.integer(1)]])),
         "Hologram.MisuseError",
         "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
+      );
+    });
+
+    // A name an object inherits is no relationship - only the ones the model bakes are.
+    it("raises on a name every object inherits as an unknown attribute", () => {
+      assertBoxedError(
+        () => filter(task, predicates([["constructor", Type.integer(1)]])),
+        "Hologram.MisuseError",
+        "unknown attribute :constructor in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
+      );
+    });
+
+    it("raises on a path through a name every object inherits", () => {
+      assertBoxedError(
+        () =>
+          filter(
+            Type.alias(CHANNEL),
+            pathPredicates(["constructor", "body"], Type.bitstring("x")),
+          ),
+        "Hologram.MisuseError",
+        "unknown relationship :constructor in MyApp.Channel - known relationships: :owner",
       );
     });
 
@@ -2547,6 +2483,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    // The baked model is a plain object, so a name spelled like one of Object.prototype's
+    // properties must read the derived field rather than the property.
+    it("raises on a value a derived enum named like a prototype property does not declare", () => {
+      const derived = globalThis.Hologram.sync.model[POST].derived;
+      derived.toString = derived.tier;
+
+      assertBoxedError(
+        () => filter(post, pairs([["toString", op(">", Type.atom("mid"))]])),
+        "Hologram.MisuseError",
+        ":mid is not a value of attribute :toString in MyApp.Post - the values are [:low, :high]",
+      );
+    });
+
     it("compares a derived string for equality", () => {
       const query = filter(
         post,
@@ -3119,6 +3068,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
         "unknown relationship :posts in MyApp.Channel - known relationships: :messages, :owner, :topic",
       ],
       [
+        "raises on a source naming a name every object inherits",
+        () => filter(channel, entry("any", atoms("constructor"), [])),
+        "unknown relationship :constructor in MyApp.Channel - known relationships: :messages, :owner, :topic",
+      ],
+      [
         "raises on a source naming an attribute",
         () => filter(channel, entry("any", atoms("name"), [])),
         ":name is an attribute in MyApp.Channel - a quantifier's source names relationships",
@@ -3529,6 +3483,279 @@ describe("Elixir_Hologram_Query_Stage", () => {
         "invalid operand {:a, :b} for operator :starts_with on attribute :title - a search term is a string",
       );
     });
+
+    it("raises on a search term that isn't valid UTF-8", () => {
+      const term = Bitstring.fromBytes([255]);
+
+      assertBoxedError(
+        () => filter(task, predicates([["title", search("contains", term)]])),
+        "Hologram.MisuseError",
+        "invalid operand <<255>> for operator :contains on attribute :title - a search term is a string",
+      );
+    });
+  });
+
+  describe("filter/2 - value types", () => {
+    const UUID_VALUES =
+      'a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001"';
+
+    const date = Type.map([
+      [Type.atom("__struct__"), Type.alias("Date")],
+      [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+      [Type.atom("day"), Type.integer(1)],
+      [Type.atom("month"), Type.integer(1)],
+      [Type.atom("year"), Type.integer(2026)],
+    ]);
+
+    const range = (first, last) =>
+      Type.map([
+        [Type.atom("__struct__"), Type.alias("Range")],
+        [Type.atom("first"), Type.integer(first)],
+        [Type.atom("last"), Type.integer(last)],
+        [Type.atom("step"), Type.integer(1)],
+      ]);
+
+    const placeholder = (name) =>
+      Type.map([
+        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
+        [Type.atom("name"), Type.atom(name)],
+      ]);
+
+    const tuple = (operator, operand) =>
+      Type.tuple([Type.atom(operator), operand]);
+
+    // Each row: what it refuses, the entity type, the name, the value and the message - the
+    // server's cases, in its order.
+    const refusals = [
+      [
+        "a value that isn't a string for a string attribute",
+        TASK,
+        "title",
+        Type.integer(5),
+        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+      ],
+      [
+        "a binary that isn't valid UTF-8 for a string attribute",
+        TASK,
+        "title",
+        Bitstring.fromBytes([255]),
+        "<<255>> is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+      ],
+      [
+        "a value that isn't a boolean for a boolean attribute",
+        TASK,
+        "done",
+        Type.bitstring("yes"),
+        '"yes" is not a value of attribute :done in MyApp.Task - the attribute has type :boolean, which takes true or false',
+      ],
+      [
+        "a value that isn't an integer for an integer attribute",
+        TASK,
+        "position",
+        Type.bitstring("3"),
+        '"3" is not a value of attribute :position in MyApp.Task - the attribute has type :integer, which takes an integer that fits in 64 bits',
+      ],
+      [
+        "an integer past 64 bits for an integer attribute",
+        TASK,
+        "position",
+        Type.integer(9223372036854775808n),
+        "9223372036854775808 is not a value of attribute :position in MyApp.Task - the attribute has type :integer, which takes an integer that fits in 64 bits",
+      ],
+      [
+        "a value that isn't a number for a float attribute",
+        BOOKING,
+        "rating",
+        Type.bitstring("1.5"),
+        '"1.5" is not a value of attribute :rating in MyApp.Booking - the attribute has type :float, which takes a float, or an integer that fits in 64 bits',
+      ],
+      [
+        "an integer past 64 bits for a float attribute",
+        BOOKING,
+        "rating",
+        Type.integer(9223372036854775808n),
+        "9223372036854775808 is not a value of attribute :rating in MyApp.Booking - the attribute has type :float, which takes a float, or an integer that fits in 64 bits",
+      ],
+      [
+        "a value that isn't a date for a date attribute",
+        TASK,
+        "due_on",
+        Type.bitstring("2026-01-01"),
+        '"2026-01-01" is not a value of attribute :due_on in MyApp.Task - the attribute has type :date, which takes a Date',
+      ],
+      [
+        "a value that isn't a datetime for a datetime attribute",
+        TASK,
+        "created_at",
+        date,
+        // The browser's inspect spells a struct as a map, where the server's prints ~D[2026-01-01].
+        "%{__struct__: Date, calendar: Calendar.ISO, day: 1, month: 1, year: 2026} is not a value of attribute :created_at in MyApp.Task - the attribute has type :datetime, which takes a DateTime",
+      ],
+      [
+        "a value that isn't a time for a time attribute",
+        TASK,
+        "starts_at",
+        Type.bitstring("09:00"),
+        '"09:00" is not a value of attribute :starts_at in MyApp.Task - the attribute has type :time, which takes a Time',
+      ],
+      [
+        "a value that isn't a uuid for a reference field",
+        BOOKING,
+        "owner_id",
+        Type.integer(5),
+        `5 is not a value of attribute :owner_id in MyApp.Booking - the attribute has type :uuid, which takes ${UUID_VALUES}`,
+      ],
+      [
+        "an uppercase uuid",
+        TASK,
+        "id",
+        Type.bitstring("018F0000-0000-7000-8000-000000000001"),
+        `"018F0000-0000-7000-8000-000000000001" is not a value of attribute :id in MyApp.Task - the attribute has type :uuid, which takes ${UUID_VALUES}`,
+      ],
+      [
+        "a uuid followed by a newline",
+        TASK,
+        "id",
+        Type.bitstring("018f0000-0000-7000-8000-000000000001\n"),
+        `"018f0000-0000-7000-8000-000000000001\\n" is not a value of attribute :id in MyApp.Task - the attribute has type :uuid, which takes ${UUID_VALUES}`,
+      ],
+      [
+        "a uuid without hyphens",
+        TASK,
+        "id",
+        Type.bitstring("018f0000000070008000000000000001"),
+        `"018f0000000070008000000000000001" is not a value of attribute :id in MyApp.Task - the attribute has type :uuid, which takes ${UUID_VALUES}`,
+      ],
+      [
+        "an undeclared value for an enum attribute",
+        TASK,
+        "status",
+        Type.atom("z"),
+        ":z is not a value of attribute :status in MyApp.Task - the values are [:open, :blocked, :done]",
+      ],
+      [
+        "a plain atom spelled like a module an enum declares",
+        ORDER,
+        "state",
+        Type.atom("Status.Done"),
+        ':"Status.Done" is not a value of attribute :state in MyApp.Order - the values are [:open, Status.Done]',
+      ],
+      [
+        "a value that doesn't fit a derived field's type",
+        ROOM,
+        "message_count",
+        Type.bitstring("3"),
+        '"3" is not a value of attribute :message_count in MyApp.Room - the attribute has type :integer, which takes an integer that fits in 64 bits',
+      ],
+      [
+        "a value that doesn't fit the attribute a path ends at",
+        BOOKING,
+        Type.list([Type.atom("owner"), Type.atom("ends_on")]),
+        Type.bitstring("2026-01-01"),
+        '"2026-01-01" is not a value of attribute owner.ends_on in MyApp.Booking - the attribute has type :date, which takes a Date',
+      ],
+      [
+        "a mistyped value in an equality operator tuple",
+        TASK,
+        "title",
+        tuple("!=", Type.integer(5)),
+        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+      ],
+      [
+        "a mistyped value in an ordering operator tuple",
+        TASK,
+        "position",
+        tuple(">", Type.bitstring("3")),
+        '"3" is not a value of attribute :position in MyApp.Task - the attribute has type :integer, which takes an integer that fits in 64 bits',
+      ],
+      [
+        "a mistyped element of a membership list",
+        TASK,
+        "title",
+        Type.list([Type.bitstring("a"), Type.integer(5)]),
+        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+      ],
+      [
+        "a mistyped element of an :in operand",
+        TASK,
+        "title",
+        tuple("in", Type.list([Type.bitstring("a"), Type.integer(5)])),
+        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+      ],
+      [
+        "a mistyped element of a :not_in operand",
+        TASK,
+        "title",
+        tuple("not_in", Type.list([Type.bitstring("a"), Type.integer(5)])),
+        "5 is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+      ],
+      [
+        "an undeclared enum value in a membership list",
+        TASK,
+        "status",
+        Type.list([Type.atom("open"), Type.atom("z")]),
+        ":z is not a value of attribute :status in MyApp.Task - the values are [:open, :blocked, :done]",
+      ],
+      [
+        "a range bound past 64 bits",
+        TASK,
+        "position",
+        range(1, 9223372036854775808n),
+        "9223372036854775808 is not a value of attribute :position in MyApp.Task - the attribute has type :integer, which takes an integer that fits in 64 bits",
+      ],
+    ];
+
+    refusals.forEach(([what, entityType, name, value, message]) => {
+      it(`refuses ${what}`, () => {
+        const key = typeof name === "string" ? Type.atom(name) : name;
+        const predicateList = Type.list([Type.tuple([key, value])]);
+
+        assertBoxedError(
+          () => filter(Type.alias(entityType), predicateList),
+          "Hologram.MisuseError",
+          message,
+        );
+      });
+    });
+
+    it("accepts nil as an equality value", () => {
+      const query = filter(task, predicates([["title", Type.nil()]]));
+
+      assert.deepStrictEqual(query.filter, [["title", "==", null]]);
+    });
+
+    it("accepts nil in a membership list", () => {
+      const values = Type.list([Type.bitstring("a"), Type.nil()]);
+      const query = filter(task, predicates([["title", values]]));
+
+      assert.deepStrictEqual(query.filter, [["title", "in", ["a", null]]]);
+    });
+
+    it("accepts a module an enum declares", () => {
+      const query = filter(
+        Type.alias(ORDER),
+        predicates([["state", Type.alias("Status.Done")]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [["state", "==", "Status.Done"]]);
+    });
+
+    it("accepts an integer for a float attribute", () => {
+      const query = filter(
+        booking,
+        predicates([["rating", tuple(">", Type.integer(0))]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [["rating", ">", 0]]);
+    });
+
+    it("accepts a placeholder whatever the attribute's type", () => {
+      const query = filter(task, predicates([["title", placeholder("title")]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["title", "==", {placeholder: "title"}],
+      ]);
+    });
   });
 
   describe("include/2", () => {
@@ -3901,6 +4128,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
       const outerKey = (name) =>
         Type.tuple([Type.atom("outer"), Type.integer(1), Type.atom(name)]);
 
+      const valueOf = (key) =>
+        key === "owner_id" ? "018f0000-0000-7000-8000-000000000001" : "x";
+
       const nested = (keys) =>
         Type.list([
           Type.tuple([
@@ -3909,7 +4139,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
               Type.list([Type.atom("messages")]),
               Type.list(
                 keys.map((key) =>
-                  Type.tuple([outerKey(key), Type.bitstring("x")]),
+                  Type.tuple([outerKey(key), Type.bitstring(valueOf(key))]),
                 ),
               ),
             ]),
@@ -3927,7 +4157,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
       assert.deepStrictEqual(first.filter[0].filter, [
         [{name: "name", outer: 1}, "==", "x"],
-        [{name: "owner_id", outer: 1}, "==", "x"],
+        [
+          {name: "owner_id", outer: 1},
+          "==",
+          "018f0000-0000-7000-8000-000000000001",
+        ],
       ]);
     });
 
@@ -4055,7 +4289,12 @@ describe("Elixir_Hologram_Query_Stage", () => {
                   "or",
                   disjunction(
                     [["name", Type.bitstring("Site")]],
-                    [["id", Type.bitstring("p1")]],
+                    [
+                      [
+                        "id",
+                        Type.bitstring("018f0000-0000-7000-8000-000000000001"),
+                      ],
+                    ],
                   ),
                 ],
               ]),

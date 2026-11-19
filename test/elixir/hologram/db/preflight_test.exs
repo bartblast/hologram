@@ -3,6 +3,7 @@ defmodule Hologram.DB.PreflightTest do
 
   import Hologram.DB.Preflight
 
+  alias Hologram.DB.Connection
   alias Hologram.Test.Fixtures.Entity.Module1
 
   defp alter_column_op(before_type, after_type) do
@@ -22,6 +23,52 @@ defmodule Hologram.DB.PreflightTest do
         columns: [%{name: "estimate", type: :integer, default: default}]
       }
     }
+  end
+
+  describe "check!/1" do
+    # Reads the catalog before it raises, which is why it needs the database.
+    @tag :database
+    test "raises on a cast with no supported conversion" do
+      expected_msg =
+        ~s(changing column "estimate" on table "task" from uuid to int8 is not supported - ) <>
+          "remove the attribute and re-add it with the new type"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        check!(alter_column_op("uuid", "int8"))
+      end
+    end
+
+    # Run against a connection that does not exist, so an op that read the schema would exit
+    # here rather than pass.
+    test "passes ops the checks cannot refuse without reading the schema" do
+      ops = [
+        %{op: :rename_column, table: "task", from: "estimate", to: "effort"},
+        %{
+          op: :create_index,
+          table: "task",
+          index: "task_estimate_$idx",
+          columns: ["estimate"],
+          nulls_distinct: true,
+          unique: false
+        },
+        %{
+          op: :add_column,
+          table: "task",
+          column: "estimate",
+          definition: %{type: "int8", null: false, collation: nil},
+          backfill: 7
+        },
+        alter_column_op("int8", "float8"),
+        "int8"
+        |> alter_column_op("int8")
+        |> put_in([:before, :null], true)
+        |> Map.put(:fill, 7)
+      ]
+
+      Connection.with_connection(:no_connection, fn ->
+        Enum.each(ops, &assert(check!(&1) == :ok))
+      end)
+    end
   end
 
   describe "fill_value/3" do
@@ -44,6 +91,22 @@ defmodule Hologram.DB.PreflightTest do
       ops = [alter_column_op("int8", "float8")]
 
       assert run!(ops, %{}, mapping(nil)) == :ok
+    end
+
+    # The table stands in the schema, so a NULL count would run - and exit here, without a
+    # connection, if the stamp did not count as the fill.
+    test "passes a tightening that carries its fill without counting the NULLs" do
+      op =
+        "int8"
+        |> alter_column_op("int8")
+        |> put_in([:before, :null], true)
+        |> Map.put(:fill, 7)
+
+      actual = %{tables: %{"task" => %{columns: %{"estimate" => %{}}}}}
+
+      Connection.with_connection(:no_connection, fn ->
+        assert run!([op], actual, mapping(nil)) == :ok
+      end)
     end
 
     test "passes ops that transform nothing" do

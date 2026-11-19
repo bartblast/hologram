@@ -15,8 +15,8 @@ import Type from "../../type.mjs";
 // Enqueuing a job, hand-written for the client the way the data verbs are.
 //
 // On the wire a job is an ORDINARY CREATE of one of its rows - there is no enqueue op and no
-// job-shaped branch in the batch path - so this is Entity.new plus whatever authority the call
-// claimed, written through the same create every other verb goes through. What makes it its own
+// job-shaped branch in the batch path - so this is Entity.new written through the same create
+// every other verb goes through, and the server judges it by its :create rules like any other. What makes it its own
 // verb is that a job's create schedules work to run after the batch commits, which is why
 // DB.create refuses a job type and points here.
 //
@@ -33,14 +33,11 @@ function applyClaim(job, claim) {
 
   // trust/1 raises on this tier: the server's authority is not a client's to claim. A job
   // enqueued from server code is where trust: true belongs.
-  return claim === "trust"
-    ? Elixir_Hologram_Query_Stage["trust/1"](job)
-    : Elixir_Hologram_Query_Stage["authorize/2"](job, claim);
+  return Elixir_Hologram_Query_Stage["trust/1"](job);
 }
 
-// The job the enqueue writes: constructed the way any entity is, then carrying whatever authority
-// the call claimed. Built here rather than in each verb so the bang has the job in hand and can
-// name the values a refusal objected to.
+// The job the enqueue writes: constructed the way any entity is. Built here rather than in each
+// verb so the bang has the job in hand and can name the values a refusal objected to.
 function build(jobType, values, opts) {
   validateJobType(jobType);
 
@@ -50,7 +47,7 @@ function build(jobType, values, opts) {
   );
 }
 
-// null for no claim, "trust", or the operation atom a claim named.
+// null for no claim, or "trust".
 function parseClaim(opts) {
   if (Type.isList(opts) && opts.data.length === 0) {
     return null;
@@ -59,17 +56,13 @@ function parseClaim(opts) {
   if (Type.isList(opts) && Type.isKeywordList(opts) && opts.data.length === 1) {
     const [key, value] = opts.data[0].data;
 
-    if (key.value === "authorize" && Type.isAtom(value)) {
-      return value;
-    }
-
     if (key.value === "trust" && Type.isTrue(value)) {
       return "trust";
     }
   }
 
   Interpreter.raiseMisuseError(
-    `Job.create takes authorize: operation or trust: true, got: ${Interpreter.inspect(opts)}`,
+    `Job.create takes trust: true as its only option, got: ${Interpreter.inspect(opts)}`,
   );
 }
 

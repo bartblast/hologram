@@ -14,6 +14,7 @@ defmodule Hologram.Query.StageTest do
   alias Hologram.Test.Fixtures.Entity.Module16
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module22
+  alias Hologram.Test.Fixtures.Entity.Module23
   alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Entity.Module25
   alias Hologram.Test.Fixtures.Entity.Module26
@@ -26,7 +27,6 @@ defmodule Hologram.Query.StageTest do
   alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
-  alias Hologram.Test.Fixtures.Policy
 
   defp assert_actor_refused(predicates) do
     expected_msg =
@@ -184,87 +184,6 @@ defmodule Hologram.Query.StageTest do
 
       assert_error MisuseError, expected_msg, fn ->
         add_relationship(Module32.new(), :recent_messages, Entity.generate_id())
-      end
-    end
-  end
-
-  describe "authorize/2" do
-    test "keeps the rest of the metadata" do
-      target_id = Entity.generate_id()
-      entity = Module3.new()
-
-      result =
-        entity
-        |> put_attribute(c_id: target_id)
-        |> add_relationship(:a, target_id)
-        |> authorize(:update)
-
-      assert result.__meta__.attribute_ops == %{c_id: {:put, target_id}}
-      assert result.__meta__.relationship_ops == %{{:a, target_id} => :add}
-      assert result.__meta__.claim == {:authorize, :update}
-    end
-
-    test "records the claim for the operation" do
-      entity = Module2.new(c: "x")
-
-      result = authorize(entity, :update)
-
-      assert result.__meta__ == %Metadata{claim: {:authorize, :update}}
-    end
-
-    test "records an operation an allow line on the entity type names" do
-      result = authorize(Policy.Module1.new(), :archive)
-
-      assert result.__meta__.claim == {:authorize, :archive}
-    end
-
-    test "raises when the entity is not an entity struct" do
-      assert_error MisuseError, ~s(authorize takes an entity struct, got: "x"), fn ->
-        authorize(wrap_term("x"), :archive)
-      end
-    end
-
-    test "raises when the operation is not an atom" do
-      entity = Module2.new(c: "x")
-      expected_msg = ~s(authorize takes an operation atom, got: "archive")
-
-      assert_error MisuseError, expected_msg, fn ->
-        authorize(entity, wrap_term("archive"))
-      end
-    end
-
-    test "raises when the struct already carries an authorize claim" do
-      entity = Module2.new(c: "x")
-
-      expected_msg =
-        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim ({:authorize, :update}) - a write claims exactly one authority"
-
-      assert_error MisuseError, expected_msg, fn ->
-        entity
-        |> authorize(:update)
-        |> authorize(:delete)
-      end
-    end
-
-    test "raises when the struct already carries a trust claim" do
-      entity = Module2.new(c: "x")
-
-      expected_msg =
-        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim (:trust) - a write claims exactly one authority"
-
-      assert_error MisuseError, expected_msg, fn ->
-        entity
-        |> trust()
-        |> authorize(:update)
-      end
-    end
-
-    test "raises when the operation is one the entity type never declared" do
-      expected_msg =
-        "unknown operation :archive for Hologram.Test.Fixtures.Entity.Module2 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
-
-      assert_error MisuseError, expected_msg, fn ->
-        authorize(Module2.new(c: "x"), :archive)
       end
     end
   end
@@ -2153,6 +2072,224 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  describe "filter/2 - value types" do
+    defp assert_value_refused(entity_type, predicates, expected_msg) do
+      assert_error MisuseError, expected_msg, fn -> filter(entity_type, predicates) end
+    end
+
+    test "refuses a value that isn't a string for a string attribute" do
+      assert_value_refused(
+        Module2,
+        [c: 5],
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+      )
+    end
+
+    test "refuses a binary that isn't valid UTF-8 for a string attribute" do
+      assert_value_refused(
+        Module2,
+        [c: <<0xFF>>],
+        ~s(<<255>> is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string)
+      )
+    end
+
+    test "refuses a value that isn't a boolean for a boolean attribute" do
+      assert_value_refused(
+        Module2,
+        [a: "yes"],
+        ~s("yes" is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :boolean, which takes true or false)
+      )
+    end
+
+    test "refuses a value that isn't an integer for an integer attribute" do
+      assert_value_refused(
+        Module2,
+        [b: "3"],
+        ~s("3" is not a value of attribute :b in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :integer, which takes an integer that fits in 64 bits)
+      )
+    end
+
+    test "refuses an integer past 64 bits for an integer attribute" do
+      assert_value_refused(
+        Module2,
+        [b: 9_223_372_036_854_775_808],
+        "9223372036854775808 is not a value of attribute :b in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :integer, which takes an integer that fits in 64 bits"
+      )
+    end
+
+    test "refuses a value that isn't a number for a float attribute" do
+      assert_value_refused(
+        Module4,
+        [d: "1.5"],
+        ~s("1.5" is not a value of attribute :d in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :float, which takes a float, or an integer that fits in 64 bits)
+      )
+    end
+
+    test "refuses an integer past 64 bits for a float attribute" do
+      assert_value_refused(
+        Module4,
+        [d: 9_223_372_036_854_775_808],
+        "9223372036854775808 is not a value of attribute :d in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :float, which takes a float, or an integer that fits in 64 bits"
+      )
+    end
+
+    test "refuses a value that isn't a date for a date attribute" do
+      assert_value_refused(
+        Module4,
+        [a: "2026-01-01"],
+        ~s("2026-01-01" is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :date, which takes a Date)
+      )
+    end
+
+    test "refuses a value that isn't a datetime for a datetime attribute" do
+      assert_value_refused(
+        Module4,
+        [b: ~D[2026-01-01]],
+        "~D[2026-01-01] is not a value of attribute :b in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :datetime, which takes a DateTime"
+      )
+    end
+
+    test "refuses a value that isn't a time for a time attribute" do
+      assert_value_refused(
+        Module22,
+        [opens_at: "09:00"],
+        ~s("09:00" is not a value of attribute :opens_at in Hologram.Test.Fixtures.Entity.Module22 - the attribute has type :time, which takes a Time)
+      )
+    end
+
+    test "refuses a value that isn't a uuid for a reference field" do
+      assert_value_refused(
+        Module3,
+        [c_id: 5],
+        ~s(5 is not a value of attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 - the attribute has type :uuid, which takes a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
+      )
+    end
+
+    test "refuses an uppercase uuid" do
+      assert_value_refused(
+        Module3,
+        [id: "018F0000-0000-7000-8000-000000000001"],
+        ~s("018F0000-0000-7000-8000-000000000001" is not a value of attribute :id in Hologram.Test.Fixtures.Entity.Module3 - the attribute has type :uuid, which takes a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
+      )
+    end
+
+    test "refuses a uuid followed by a newline" do
+      assert_value_refused(
+        Module3,
+        [id: "018f0000-0000-7000-8000-000000000001\n"],
+        ~s("018f0000-0000-7000-8000-000000000001\\n" is not a value of attribute :id in Hologram.Test.Fixtures.Entity.Module3 - the attribute has type :uuid, which takes a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
+      )
+    end
+
+    # The database reads this spelling, but the browser compares ids as strings, so it would match
+    # on the server only.
+    test "refuses a uuid without hyphens" do
+      assert_value_refused(
+        Module3,
+        [id: "018f0000000070008000000000000001"],
+        ~s("018f0000000070008000000000000001" is not a value of attribute :id in Hologram.Test.Fixtures.Entity.Module3 - the attribute has type :uuid, which takes a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
+      )
+    end
+
+    test "refuses an undeclared value for an enum attribute" do
+      assert_value_refused(
+        Module4,
+        [c: :z],
+        ":z is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module4 - the values are [:x, :y]"
+      )
+    end
+
+    test "refuses a value that doesn't fit a derived field's type" do
+      assert_value_refused(
+        Module32,
+        [message_count: "3"],
+        ~s("3" is not a value of attribute :message_count in Hologram.Test.Fixtures.Entity.Module32 - the attribute has type :integer, which takes an integer that fits in 64 bits)
+      )
+    end
+
+    test "refuses a value that doesn't fit the attribute a path ends at" do
+      assert_value_refused(
+        Module23,
+        [{[:a, :opens_at], "09:00"}],
+        ~s("09:00" is not a value of attribute a.opens_at in Hologram.Test.Fixtures.Entity.Module23 - the attribute has type :time, which takes a Time)
+      )
+    end
+
+    test "refuses a mistyped value in an equality operator tuple" do
+      assert_value_refused(
+        Module2,
+        [c: {:!=, 5}],
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+      )
+    end
+
+    test "refuses a mistyped value in an ordering operator tuple" do
+      assert_value_refused(
+        Module2,
+        [b: {:>, "3"}],
+        ~s("3" is not a value of attribute :b in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :integer, which takes an integer that fits in 64 bits)
+      )
+    end
+
+    test "refuses a mistyped element of a membership list" do
+      assert_value_refused(
+        Module2,
+        [c: ["a", 5]],
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+      )
+    end
+
+    test "refuses a mistyped element of an :in operand" do
+      assert_value_refused(
+        Module2,
+        [c: {:in, ["a", 5]}],
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+      )
+    end
+
+    test "refuses a mistyped element of a :not_in operand" do
+      assert_value_refused(
+        Module2,
+        [c: {:not_in, ["a", 5]}],
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+      )
+    end
+
+    test "refuses an undeclared enum value in a membership list" do
+      assert_value_refused(
+        Module4,
+        [c: [:x, :z]],
+        ":z is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module4 - the values are [:x, :y]"
+      )
+    end
+
+    test "refuses a range bound past 64 bits" do
+      assert_value_refused(
+        Module2,
+        [b: 1..9_223_372_036_854_775_808],
+        "9223372036854775808 is not a value of attribute :b in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :integer, which takes an integer that fits in 64 bits"
+      )
+    end
+
+    test "accepts nil as an equality value" do
+      assert filter(Module2, c: nil).filter == [{:c, :==, nil}]
+    end
+
+    test "accepts nil in a membership list" do
+      assert filter(Module2, c: ["a", nil]).filter == [{:c, :in, ["a", nil]}]
+    end
+
+    test "accepts an integer for a float attribute" do
+      assert filter(Module4, d: {:>, 0}).filter == [{:d, :>, 0}]
+    end
+
+    test "accepts a placeholder whatever the attribute's type" do
+      assert filter(Module2, c: %Placeholder{name: :title}).filter == [
+               {:c, :==, {:placeholder, :title}}
+             ]
+    end
+  end
+
   describe "filter/2 - searches" do
     test "builds a search triple" do
       query = filter(Module2, c: {:starts_with, "ab"})
@@ -2218,6 +2355,15 @@ defmodule Hologram.Query.StageTest do
 
       assert_error MisuseError, expected_msg, fn ->
         filter(Module2, c: {:starts_with, nil})
+      end
+    end
+
+    test "raises on a search term that isn't valid UTF-8" do
+      expected_msg =
+        "invalid operand <<255>> for operator :contains on attribute :c - a search term is a string"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, c: {:contains, <<0xFF>>})
       end
     end
 
@@ -3056,11 +3202,21 @@ defmodule Hologram.Query.StageTest do
     test "sorts a nested quantifier's predicates" do
       query =
         Module26
-        |> filter(any: {[:messages], [any: {[:labels], [name: "b", id: "a"]}]})
+        |> filter(
+          any:
+            {[:messages],
+             [any: {[:labels], [name: "b", id: "018f0000-0000-7000-8000-000000000001"]}]}
+        )
         |> normalize()
 
       assert query.filter == [
-               {:any, {[:messages], [{:any, {[:labels], [{:id, :==, "a"}, {:name, :==, "b"}]}}]}}
+               {:any,
+                {[:messages],
+                 [
+                   {:any,
+                    {[:labels],
+                     [{:id, :==, "018f0000-0000-7000-8000-000000000001"}, {:name, :==, "b"}]}}
+                 ]}}
              ]
 
       assert normalize(query) == query
@@ -3312,6 +3468,14 @@ defmodule Hologram.Query.StageTest do
   # Guards rather than bug tests: a policy condition builds its clauses here, and names the acting
   # user with the actor leaf a filter refuses.
   describe "predicate_triples!/2" do
+    # A bug test, unlike the guards below: a policy condition is refused a mistyped value as a
+    # filter is.
+    test "refuses a mistyped value in a policy condition" do
+      assert_error MisuseError,
+                   "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string",
+                   fn -> predicate_triples!(Module2, c: 5) end
+    end
+
     test "builds an actor triple" do
       assert predicate_triples!(Module3, c_id: {:!=, {:actor}}) == [{:c_id, :!=, {:actor}}]
     end
@@ -4139,19 +4303,6 @@ defmodule Hologram.Query.StageTest do
 
       assert_error MisuseError, expected_msg, fn ->
         trust(wrap_term("x"))
-      end
-    end
-
-    test "raises when the struct already carries an authorize claim" do
-      entity = Module2.new(c: "x")
-
-      expected_msg =
-        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim ({:authorize, :update}) - a write claims exactly one authority"
-
-      assert_error MisuseError, expected_msg, fn ->
-        entity
-        |> authorize(:update)
-        |> trust()
       end
     end
 

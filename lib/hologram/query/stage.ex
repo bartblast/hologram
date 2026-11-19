@@ -11,8 +11,8 @@ defmodule Hologram.Query.Stage do
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Metadata
+  alias Hologram.Entity.Validator
   alias Hologram.MisuseError
-  alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.RowField
@@ -26,6 +26,19 @@ defmodule Hologram.Query.Stage do
   @quantifiers [:all, :any, :none]
   @search_operators [:contains, :contains_exact, :starts_with, :starts_with_exact]
 
+  # What a value of each type is, as a refusal of one that doesn't fit spells it - enum aside,
+  # whose refusal names its declared values.
+  @type_values %{
+    boolean: "true or false",
+    date: "a Date",
+    datetime: "a DateTime",
+    float: "a float, or an integer that fits in 64 bits",
+    integer: "an integer that fits in 64 bits",
+    string: "a UTF-8 string",
+    time: "a Time",
+    uuid: ~s(a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
+  }
+
   # The type pairs whose attributes compare though their types differ, compared on the wider type -
   # a widening keeps the value's meaning. An integer is the same number as a float. A date is not a
   # datetime: it becomes one instant only once a time zone is picked, and a comparison against it
@@ -36,20 +49,6 @@ defmodule Hologram.Query.Stage do
   @spec add_relationship(Entity.t(), atom, Entity.id()) :: Entity.t()
   def add_relationship(entity, relationship_name, target_id) do
     put_relationship_op(entity, relationship_name, target_id, :add, "add_relationship")
-  end
-
-  @doc false
-  @spec authorize(Entity.t(), atom) :: Entity.t()
-  def authorize(entity, operation) when is_atom(operation) do
-    entity_type = entity_type!(entity, "authorize")
-
-    Policy.validate_operation!(entity_type, operation)
-
-    put_claim(entity, {:authorize, operation}, "authorize")
-  end
-
-  def authorize(_entity, operation) do
-    raise MisuseError, message: "authorize takes an operation atom, got: #{inspect(operation)}"
   end
 
   # Returns the polarity of a quantifier's condition, given the quantifier's own: whether the
@@ -130,6 +129,13 @@ defmodule Hologram.Query.Stage do
   # direction goes, or a view bound goes, storing a leaf in its place and skipping the checks that
   # would need a concrete one. A placeholder-keyed predicate leaves its operand unchecked too - the
   # attribute's type is unknown, so nothing about the operand can be judged against it.
+  #
+  # Every concrete value an attribute is compared with - by equality, by an ordering operator, as a
+  # membership list element or a range bound - fits the type of what the name reads, as
+  # value_fits?/3 judges it, and an enum's is one it declares. Nil passes wherever it is taken: it
+  # matches a row with nothing set. A value that doesn't fit would otherwise end on the server in a
+  # database driver error far from the filter, and in the browser in a read answering the wrong
+  # rows, since it unboxes each value to the attribute's type.
   #
   # A leaf names the ARGUMENT a value came from, not the value: a computed operand carries the
   # name of the argument it derives from, so b: ^(n * 2) stores {:placeholder, :n}. Nothing binds a
@@ -528,6 +534,19 @@ defmodule Hologram.Query.Stage do
     %{term | trust: true}
   end
 
+  # Whether the given non-nil value fits an attribute of the given type and declaration options, as
+  # a value a query compares the attribute with - what a write stores, as the entity validator
+  # judges it, except that a float takes an integer too, the same number as a float when compared.
+  # An integer is bounded as an integer attribute's value is: a bigger one is a driver error on the
+  # server and no exact number in the browser.
+  @doc false
+  @spec value_fits?(any, atom, keyword) :: boolean
+  def value_fits?(value, :float, _opts) do
+    is_float(value) or Validator.attribute_value_valid?(value, :integer)
+  end
+
+  def value_fits?(value, type, opts), do: Validator.attribute_value_valid?(value, type, opts)
+
   # Returns every name the given data-form predicates spell, in order, without judging any of them:
   # each key, the name an {:attribute, name} operand carries bare, under an operator or in a list of
   # operator tuples, what the lists of an or: entry spell - a path as its list - and a quantifier's
@@ -786,12 +805,14 @@ defmodule Hologram.Query.Stage do
     Keyword.fetch!(opts, :values)
   end
 
-  defp equality_triple!(name, operator, operand) do
+  defp equality_triple!(name, operator, operand, entity_type) do
     if is_list(operand) or is_tuple(operand) or is_struct(operand, Range) do
       raise MisuseError,
         message:
           "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect_name(name)}"
     end
+
+    validate_operand_value!(name, operand, entity_type)
 
     {name, operator, operand}
   end
@@ -1108,7 +1129,7 @@ defmodule Hologram.Query.Stage do
           "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect_name(name)}"
     end
 
-    validate_enum_operand!(name, operand, entity_type)
+    validate_operand_value!(name, operand, entity_type)
 
     {name, operator, operand}
   end
@@ -1240,10 +1261,11 @@ defmodule Hologram.Query.Stage do
        when is_atom(operator) do
     cond do
       operator in @equality_operators ->
-        [equality_triple!(name, operator, operand)]
+        [equality_triple!(name, operator, operand, entity_type)]
 
       operator in @membership_operators ->
         validate_membership_list!(operand, name, operator)
+        Enum.each(operand, &validate_operand_value!(name, &1, entity_type))
         [{name, operator, normalize_membership_values(operand)}]
 
       operator in @ordering_operators ->
@@ -1273,6 +1295,7 @@ defmodule Hologram.Query.Stage do
 
       Enum.all?(values, &plain_value?/1) ->
         validate_membership_list!(values, name, :in)
+        Enum.each(values, &validate_operand_value!(name, &1, entity_type))
         [{name, :in, normalize_membership_values(values)}]
 
       true ->
@@ -1282,11 +1305,14 @@ defmodule Hologram.Query.Stage do
     end
   end
 
-  defp predicate_triples!(name, value, _entity_type, _scope), do: [{name, :==, value}]
+  defp predicate_triples!(name, value, entity_type, _scope) do
+    validate_operand_value!(name, value, entity_type)
 
-  # The two claim stages share everything but the claim they record. A second claim is refused
-  # here, where it is written - a struct carrying two authorities would have to pick one at the
-  # write, silently.
+    [{name, :==, value}]
+  end
+
+  # A second claim is refused here, where it is written - a struct carrying two authorities would
+  # have to pick one at the write, silently.
   defp put_claim(entity, claim, stage) do
     entity_type = entity_type!(entity, stage)
 
@@ -1601,7 +1627,7 @@ defmodule Hologram.Query.Stage do
   defp search_triple!(name, operator, operand, entity_type) do
     validate_searchable_attribute!(name, entity_type, operator)
 
-    if not is_binary(operand) do
+    if not is_binary(operand) or not String.valid?(operand) do
       raise MisuseError,
         message:
           "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect_name(name)} - a search term is a string"
@@ -1905,23 +1931,41 @@ defmodule Hologram.Query.Stage do
     end
   end
 
-  # A comparison operand on an enum is one of the values it declares, refused where it is written
-  # rather than where it is run: the database refuses an undeclared label too, but only once the
-  # statement reaches it, and by then nothing can name the values there were to choose from.
-  defp validate_enum_operand!(name, operand, entity_type) do
+  # A value compared with a name fits the type of what the name reads, refused where it is written
+  # rather than where it is run: the database driver refuses it too, but only once the statement
+  # reaches it, and by then nothing can name the filter it came from. An enum's value is one of the
+  # values it declares, which the refusal lists. Nil and a placeholder's value are judged elsewhere,
+  # nil by the operator taking it and a placeholder's when the query is built with real values.
+  defp validate_operand_value!(_name, nil, _entity_type), do: :ok
+
+  defp validate_operand_value!(_name, %Placeholder{}, _entity_type), do: :ok
+
+  defp validate_operand_value!(name, value, entity_type) do
     case attribute_definition(entity_type, name) do
       {_name, :enum, opts} ->
         values = Keyword.fetch!(opts, :values)
 
-        if operand not in values do
+        if value not in values do
           raise MisuseError,
             message:
-              "#{inspect(operand)} is not a value of attribute #{inspect_name(name)} in #{inspect(entity_type)} - the values are #{inspect(values)}"
+              "#{inspect(value)} is not a value of attribute #{inspect_name(name)} in #{inspect(entity_type)} - the values are #{inspect(values)}"
         end
 
-      _other ->
-        :ok
+      definition ->
+        {type, opts} =
+          case definition do
+            {_name, type, opts} -> {type, opts}
+            nil -> {:uuid, []}
+          end
+
+        if not value_fits?(value, type, opts) do
+          raise MisuseError,
+            message:
+              "#{inspect(value)} is not a value of attribute #{inspect_name(name)} in #{inspect(entity_type)} - the attribute has type #{inspect(type)}, which takes #{Map.fetch!(@type_values, type)}"
+        end
     end
+
+    :ok
   end
 
   defp validate_filtered_name!(name, entity_type) do
@@ -2021,6 +2065,9 @@ defmodule Hologram.Query.Stage do
         message:
           "range #{inspect(range)} for attribute #{inspect_name(name)} is empty - it would match nothing"
     end
+
+    validate_operand_value!(name, range.first, entity_type)
+    validate_operand_value!(name, range.last, entity_type)
   end
 
   # A derived field holds no reference, so no relationship goes through it - a related row it holds
