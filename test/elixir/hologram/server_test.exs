@@ -182,6 +182,54 @@ defmodule Hologram.ServerTest do
   end
 
   describe "delete_session/2" do
+    test "raises Hologram.MisuseError for the reserved hologram_csrf_token key given as an atom" do
+      assert_error Hologram.MisuseError,
+                   "Session key \"hologram_csrf_token\" is reserved by Hologram",
+                   fn ->
+                     delete_session(%Server{}, :hologram_csrf_token)
+                   end
+    end
+
+    test "raises Hologram.MisuseError for the reserved hologram_csrf_token key given as a string" do
+      assert_error Hologram.MisuseError,
+                   "Session key \"hologram_csrf_token\" is reserved by Hologram",
+                   fn ->
+                     delete_session(%Server{}, "hologram_csrf_token")
+                   end
+    end
+
+    test "raises Hologram.MisuseError for the reserved hologram_user_id key given as an atom" do
+      assert_error Hologram.MisuseError,
+                   "Session key \"hologram_user_id\" is reserved by Hologram - set the user id with put_user_id/2 and clear it with delete_user_id/1",
+                   fn ->
+                     delete_session(%Server{}, :hologram_user_id)
+                   end
+    end
+
+    test "raises Hologram.MisuseError for the reserved hologram_user_id key given as a string" do
+      assert_error Hologram.MisuseError,
+                   "Session key \"hologram_user_id\" is reserved by Hologram - set the user id with put_user_id/2 and clear it with delete_user_id/1",
+                   fn ->
+                     delete_session(%Server{}, "hologram_user_id")
+                   end
+    end
+
+    test "raises Hologram.MisuseError for the reserved hologram_session_id key given as an atom" do
+      assert_error Hologram.MisuseError,
+                   "Session key \"hologram_session_id\" is reserved by Hologram",
+                   fn ->
+                     delete_session(%Server{}, :hologram_session_id)
+                   end
+    end
+
+    test "raises Hologram.MisuseError for the reserved hologram_session_id key given as a string" do
+      assert_error Hologram.MisuseError,
+                   "Session key \"hologram_session_id\" is reserved by Hologram",
+                   fn ->
+                     delete_session(%Server{}, "hologram_session_id")
+                   end
+    end
+
     test "removes an existing session entry from the server struct using atom key" do
       server = %Server{session: %{"theme" => "dark", "user_id" => 123}}
 
@@ -1038,6 +1086,54 @@ defmodule Hologram.ServerTest do
   end
 
   describe "put_session/3" do
+    test "raises Hologram.MisuseError for the reserved hologram_csrf_token key given as an atom" do
+      assert_error Hologram.MisuseError,
+                   "Session key \"hologram_csrf_token\" is reserved by Hologram",
+                   fn ->
+                     put_session(%Server{}, :hologram_csrf_token, "value")
+                   end
+    end
+
+    test "raises Hologram.MisuseError for the reserved hologram_csrf_token key given as a string" do
+      assert_error Hologram.MisuseError,
+                   "Session key \"hologram_csrf_token\" is reserved by Hologram",
+                   fn ->
+                     put_session(%Server{}, "hologram_csrf_token", "value")
+                   end
+    end
+
+    test "raises Hologram.MisuseError for the reserved hologram_user_id key given as an atom" do
+      assert_error Hologram.MisuseError,
+                   "Session key \"hologram_user_id\" is reserved by Hologram - set the user id with put_user_id/2 and clear it with delete_user_id/1",
+                   fn ->
+                     put_session(%Server{}, :hologram_user_id, "user-1")
+                   end
+    end
+
+    test "raises Hologram.MisuseError for the reserved hologram_user_id key given as a string" do
+      assert_error Hologram.MisuseError,
+                   "Session key \"hologram_user_id\" is reserved by Hologram - set the user id with put_user_id/2 and clear it with delete_user_id/1",
+                   fn ->
+                     put_session(%Server{}, "hologram_user_id", "user-1")
+                   end
+    end
+
+    test "raises Hologram.MisuseError for the reserved hologram_session_id key given as an atom" do
+      assert_error Hologram.MisuseError,
+                   "Session key \"hologram_session_id\" is reserved by Hologram",
+                   fn ->
+                     put_session(%Server{}, :hologram_session_id, "value")
+                   end
+    end
+
+    test "raises Hologram.MisuseError for the reserved hologram_session_id key given as a string" do
+      assert_error Hologram.MisuseError,
+                   "Session key \"hologram_session_id\" is reserved by Hologram",
+                   fn ->
+                     put_session(%Server{}, "hologram_session_id", "value")
+                   end
+    end
+
     test "adds a session entry using atom key" do
       result = put_session(%Server{}, :username, "abc123")
 

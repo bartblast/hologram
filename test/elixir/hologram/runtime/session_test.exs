@@ -36,6 +36,12 @@ defmodule Hologram.Runtime.SessionTest do
 
       assert get_session(conn) == %{"role" => "admin"}
     end
+
+    test "strips the CSRF token key while preserving app entries" do
+      conn = conn_with_session(%{"hologram_csrf_token" => "token", "role" => "admin"})
+
+      assert get_session(conn) == %{"role" => "admin"}
+    end
   end
 
   describe "get_session_id/1" do

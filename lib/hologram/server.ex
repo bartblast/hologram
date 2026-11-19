@@ -35,6 +35,8 @@ defmodule Hologram.Server do
 
   @type identity_id :: String.t() | integer | atom
 
+  @reserved_session_keys Session.reserved_keys()
+
   @type t :: %__MODULE__{
           broadcasts: [Broadcast.t()],
           cid: String.t() | nil,
@@ -224,6 +226,10 @@ defmodule Hologram.Server do
 
   Atom keys are automatically converted to string.
 
+  Raises `Hologram.MisuseError` for a key Hologram keeps its own session state under -
+  `:hologram_csrf_token`, `:hologram_session_id` and `:hologram_user_id`. The user id is cleared
+  with `delete_user_id/1`.
+
   ## Parameters
 
     * `server` - The server struct
@@ -234,6 +240,10 @@ defmodule Hologram.Server do
 
   def delete_session(server, key) when is_atom(key) do
     delete_session(server, Atom.to_string(key))
+  end
+
+  def delete_session(_server, key) when key in @reserved_session_keys do
+    raise_reserved_session_key!(key)
   end
 
   def delete_session(server, key) when is_map_key(server.session, key) do
@@ -659,6 +669,10 @@ defmodule Hologram.Server do
   the session is backed by the Phoenix session store, which uses string keys, and recovering
   atom keys would require an unsafe string-to-atom conversion.
 
+  Raises `Hologram.MisuseError` for a key Hologram keeps its own session state under -
+  `:hologram_csrf_token`, `:hologram_session_id` and `:hologram_user_id`. The user id is set with
+  `put_user_id/2`.
+
   ## Parameters
 
     * `server` - The server struct
@@ -670,6 +684,10 @@ defmodule Hologram.Server do
 
   def put_session(server, key, value) when is_atom(key) do
     put_session(server, Atom.to_string(key), value)
+  end
+
+  def put_session(_server, key, _value) when key in @reserved_session_keys do
+    raise_reserved_session_key!(key)
   end
 
   def put_session(server, key, value) when is_binary(key) do
@@ -834,6 +852,15 @@ defmodule Hologram.Server do
   end
 
   defp ensure_not_cookie_header!(_name), do: :ok
+
+  defp raise_reserved_session_key!("hologram_user_id") do
+    raise MisuseError,
+          ~s(Session key "hologram_user_id" is reserved by Hologram - set the user id with put_user_id/2 and clear it with delete_user_id/1)
+  end
+
+  defp raise_reserved_session_key!(key) do
+    raise MisuseError, "Session key #{inspect(key)} is reserved by Hologram"
+  end
 
   # is_list/1 accepts invalid iolists like [999], so validate the contents (not just
   # the shape) here. iolist_size/1 raises on any non-iodata value (and is O(1) for a

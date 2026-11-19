@@ -8,6 +8,7 @@ defmodule Hologram.Runtime.Session do
   # the current body) and Hologram.Runtime.Session.Standalone (already preserved).
   # Today this module only exposes the Phoenix-backed (embedded-mode) path.
 
+  alias Hologram.Runtime.CSRFProtection
   alias Hologram.Server
 
   @session_id_key :hologram_session_id
@@ -15,15 +16,23 @@ defmodule Hologram.Runtime.Session do
 
   @type op :: :delete | {:put, any}
 
+  @doc false
+  # The keys Hologram keeps its own session state under, which the app doesn't write directly - a
+  # value written past Hologram would skip the checks it makes.
+  @spec reserved_keys() :: list(String.t())
+  def reserved_keys do
+    [CSRFProtection.session_key(), Atom.to_string(@session_id_key), Atom.to_string(@user_id_key)]
+  end
+
   @doc """
   Returns the application-level entries from the Phoenix session, with
-  Hologram-managed keys (session_id, user_id) excluded.
+  Hologram-managed keys (CSRF token, session_id, user_id) excluded.
   """
   @spec get_session(Plug.Conn.t()) :: map
   def get_session(conn) do
     conn
     |> Plug.Conn.get_session()
-    |> Map.drop([Atom.to_string(@session_id_key), Atom.to_string(@user_id_key)])
+    |> Map.drop(reserved_keys())
   end
 
   @doc """
