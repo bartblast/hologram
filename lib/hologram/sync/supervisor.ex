@@ -25,6 +25,7 @@ defmodule Hologram.Sync.Supervisor do
   alias Hologram.Sync.Dispatcher
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
+  alias Hologram.Sync.Gate
   alias Hologram.Sync.Live
   alias Hologram.Sync.ReadEdge
   alias Hologram.Sync.ResultStore
@@ -53,6 +54,7 @@ defmodule Hologram.Sync.Supervisor do
       ResultStore,
       Evaluators,
       ReadEdge,
+      Gate,
       Sessions,
       {Listener, name: @notifications},
       dispatcher_child()
@@ -74,6 +76,10 @@ defmodule Hologram.Sync.Supervisor do
     # not read yet, and a session left running would claim a place past them. Replacing the list
     # stops every session that registered in it (see `Hologram.Sync.Sessions`), so its client comes
     # back through the doors and is caught up.
+    #
+    # The gate comes before the session list: a gate replaced forgets whose turn it was, and the
+    # sessions waiting at it stop when it goes (see `Hologram.Sync.Gate`), while the ones caught up
+    # are replaced with the list after it.
     Supervisor.init(children, strategy: :rest_for_one)
   end
 

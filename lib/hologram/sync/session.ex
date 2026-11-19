@@ -15,8 +15,8 @@ defmodule Hologram.Sync.Session do
   # never rows: the ids its client holds, and the ones it told it to drop.
   #
   # A client coming back with a place is caught up from the log (see `catch_up/1`): the effects
-  # since its place, a chunk at a time, each judged the way a live batch is. Then it is synced by
-  # read access like a first arrival.
+  # since its place, a chunk at a time, each judged the way a live batch is, once the node's gate
+  # lets it in (see `Hologram.Sync.Gate`). Then it is synced by read access like a first arrival.
 
   use GenServer, restart: :temporary
 
@@ -31,6 +31,7 @@ defmodule Hologram.Sync.Session do
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Fill
   alias Hologram.Sync.Frame
+  alias Hologram.Sync.Gate
   alias Hologram.Sync.Held
   alias Hologram.Sync.Live
   alias Hologram.Sync.Outbox
@@ -138,6 +139,7 @@ defmodule Hologram.Sync.Session do
       # hash alike, and the client works the hashes of what it holds out once.
       drop_salt: if(resuming, do: Frame.drop_salt()),
       fill_place: Keyword.get(opts, :fill_place),
+      gate_ref: nil,
       outbox: Outbox.new(client, Keyword.get(opts, :outbox, [])),
       page: Keyword.fetch!(opts, :page),
       page_types: MapSet.new(),
@@ -174,11 +176,10 @@ defmodule Hologram.Sync.Session do
     {:noreply, fill(%{state | page_types: page_types(state.page)})}
   end
 
-  # A returning client is caught up at once, and sleeps after it: what the catch-up read is garbage
-  # by then, and a session can sit idle for as long as its client stays, with nothing allocating to
-  # collect it.
+  # A returning client waits its turn at the node's gate. It hasn't joined the node's sessions yet,
+  # so no batch reaches it meanwhile, and waiting costs the node nothing but the wait.
   def handle_continue(:subscribe, state) do
-    {:noreply, catch_up(state), :hibernate}
+    {:noreply, %{state | gate_ref: Gate.ask()}}
   end
 
   # What the process reports of itself - to `:sys.get_status/1`, and in the report a crash or a
@@ -224,6 +225,24 @@ defmodule Hologram.Sync.Session do
   def handle_info({:DOWN, ref, :process, _client, _reason}, state)
       when ref == state.outbox.client_ref do
     {:stop, :normal, state}
+  end
+
+  # The gate went while the client waited its turn, which nothing will now give it. It comes back
+  # through the doors and waits at the gate that replaced this one.
+  def handle_info({:DOWN, ref, :process, _gate, _reason}, state) when ref == state.gate_ref do
+    {:stop, {:shutdown, :gate_gone}, state}
+  end
+
+  # The client's turn to be caught up. It leaves the gate once caught up, and sleeps after it: what
+  # the catch-up read is garbage by then, and a session can sit idle for as long as its client
+  # stays, with nothing allocating to collect it.
+  def handle_info({:gate, :open}, state) do
+    caught_up = catch_up(state)
+
+    Process.demonitor(state.gate_ref, [:flush])
+    :ok = Gate.leave()
+
+    {:noreply, %{caught_up | gate_ref: nil}, :hibernate}
   end
 
   # The stream serving this client replaced it on a change of identity. It asks rather than stops

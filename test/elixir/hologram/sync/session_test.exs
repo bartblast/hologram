@@ -28,6 +28,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Fill
   alias Hologram.Sync.Frame
+  alias Hologram.Sync.Gate
   alias Hologram.Sync.Live
   alias Hologram.Sync.PackedIds
   alias Hologram.Sync.PageWindows
@@ -85,6 +86,9 @@ defmodule Hologram.Sync.SessionTest do
 
     wait_for_process_cleanup(Evaluators)
     start_supervised!(Evaluators)
+
+    wait_for_process_cleanup(Gate)
+    start_supervised!(Gate)
 
     wait_for_process_cleanup(Sessions.registry())
     start_supervised!(Sessions)
@@ -549,6 +553,74 @@ defmodule Hologram.Sync.SessionTest do
 
       assert id == task.id
       assert data.c == "after"
+    end
+  end
+
+  describe "start_link/1 - coming back, at the gate" do
+    setup do
+      windows(%{})
+
+      stop_supervised!(Gate)
+      put_app_env(:sync, catchups_at_once: 1)
+      start_supervised!(Gate)
+
+      test_pid = self()
+
+      holder =
+        spawn_link(fn ->
+          Gate.ask()
+
+          receive do
+            {:gate, :open} -> send(test_pid, :holding)
+          end
+
+          Process.sleep(:infinity)
+        end)
+
+      assert_receive :holding
+
+      %{holder: holder}
+    end
+
+    defp registered?(session) do
+      Enum.any?(Sessions.list(), &(elem(&1, 0) == session))
+    end
+
+    test "catches a client up only once the gate lets it in, and joins the sessions then", %{
+      holder: holder
+    } do
+      session = start_session!(gap: [])
+      :sys.get_state(session)
+
+      refute registered?(session)
+      refute_received {:sync_synced, :all, _cursor}
+
+      Process.unlink(holder)
+      Process.exit(holder, :kill)
+
+      assert_receive {:sync_synced, :all, _cursor}, 1_000
+      assert registered?(session)
+    end
+
+    test "leaves the gate once its client is caught up", %{holder: holder} do
+      start_session!(gap: [])
+
+      Process.unlink(holder)
+      Process.exit(holder, :kill)
+
+      assert_receive {:sync_synced, :all, _cursor}, 1_000
+
+      wait_until(fn -> :sys.get_state(Gate).holders == %{} end)
+    end
+
+    test "stops when the gate goes while it waits" do
+      session = start_session!(gap: [])
+      :sys.get_state(session)
+      ref = Process.monitor(session)
+
+      stop_supervised!(Gate)
+
+      assert_receive {:DOWN, ^ref, :process, ^session, {:shutdown, :gate_gone}}, 1_000
     end
   end
 
