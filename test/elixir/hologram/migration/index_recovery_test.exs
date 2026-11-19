@@ -10,9 +10,14 @@ defmodule Hologram.Migration.IndexRecoveryTest do
   # transaction and waits on every other transaction that could see the table, and the
   # sandbox is made of both. Everything here is a real build against committed rows.
   #
-  # The invalid index is reached the way a crash reaches it, not by writing the catalog:
-  # a unique build over rows that duplicate a key fails, and what it leaves behind is what
-  # a killed build leaves behind.
+  # The invalid index is reached the way a crash reaches it where a build can reach it: a
+  # unique build over rows that duplicate a key fails, and what it leaves behind is what a
+  # killed build leaves behind. Two states are written into the catalog instead (see
+  # set_index_ready/2). An invalid index that still takes writes, which a build leaves only
+  # when a repeat lands between its snapshot and its check of the rows - reaching it for real
+  # takes two writers held across the build's two waits, told apart by its progress. And an
+  # invalid index holding the name of one a file builds over a column it adds, which no build
+  # can leave, since the column isn't there before the file.
   #
   # async: false - every test of the tier opens raw sessions beside its scratch connection,
   # several in the contention suites, so the tier's modules run one at a time to keep the
@@ -47,10 +52,17 @@ defmodule Hologram.Migration.IndexRecoveryTest do
 
   @duplicate_grant_msg ~s{found 1 duplicate key in "hologram_role_grant" over ("user_id", "entity_type", "entity_id", "role") - a unique index cannot be built while rows repeat a key - update the rows or drop the unique declaration}
 
+  @duplicate_slug_msg ~s{found 1 duplicate key in "my_app_task" over ("slug") - a unique index cannot be built while rows repeat a key - update the rows or drop the unique declaration}
+
   @global_grant_statement """
   INSERT INTO "hologram_data"."hologram_role_grant"
     ("id", "user_id", "role", "created_at", "updated_at", "$revisions")
   VALUES (gen_random_uuid(), $1, 'editor', now(), now(), '{}')
+  """
+
+  @task_statement """
+  INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "updated_at", "$revisions")
+  VALUES (gen_random_uuid(), $1, now(), now(), '{}')
   """
 
   defp build_index_concurrently(op \\ @index_op) do
@@ -150,12 +162,7 @@ defmodule Hologram.Migration.IndexRecoveryTest do
   end
 
   defp insert_task(slug) do
-    statement = """
-    INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "updated_at", "$revisions")
-    VALUES (gen_random_uuid(), $1, now(), now(), '{}')
-    """
-
-    {:ok, _result} = Connection.query(statement, [slug])
+    {:ok, _result} = Connection.query(@task_statement, [slug])
   end
 
   defp migration(version, ops) do
@@ -445,6 +452,91 @@ defmodule Hologram.Migration.IndexRecoveryTest do
         assert index_validity(slug_index) == true
       end)
     end
+
+    # The file's check counts the rows before it commits, and nothing enforces the key until
+    # its tail's build finishes, so a running node can write a repeat in between. A write left
+    # open across the check lands exactly there: the build waits for it to end.
+    test "refuses when a key repeats between the file's check and its build", %{
+      chain: chain,
+      model: model,
+      scratch: scratch,
+      scratch_opts: scratch_opts
+    } do
+      add_slug =
+        migration("20260813091523", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            type: :string,
+            opts: [optional: true],
+            line: 3
+          }
+        ])
+
+      make_unique =
+        migration("20260813091524", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [unique: true],
+            line: 3
+          }
+        ])
+
+      slug_chain = Enum.concat(chain, [add_slug])
+      slug_model = Model.fold(model, add_slug.ops)
+      test_pid = self()
+
+      route(scratch, fn ->
+        :ok = run(slug_chain, slug_model, @context)
+        insert_task("taken")
+      end)
+
+      {:ok, writer_connection} = Postgrex.start_link(scratch_opts)
+
+      writer =
+        Task.async(fn ->
+          Postgrex.transaction(writer_connection, fn connection ->
+            Postgrex.query!(connection, @task_statement, ["taken"])
+            send(test_pid, :written)
+
+            receive do
+              :commit -> :ok
+            end
+          end)
+        end)
+
+      assert_receive :written, 5_000
+
+      boot =
+        Task.async(fn ->
+          route(scratch, fn ->
+            assert_error RuntimeError, @duplicate_slug_msg, fn ->
+              run(
+                Enum.concat(slug_chain, [make_unique]),
+                Model.fold(slug_model, make_unique.ops),
+                @context
+              )
+            end
+          end)
+        end)
+
+      wait_for_blocked_sessions(scratch_opts, 1)
+
+      send(writer.pid, :commit)
+      assert {:ok, :ok} = Task.await(writer)
+
+      Task.await(boot)
+
+      # The file committed before its build, which failed holding the name for the next
+      # boot's repair to count.
+      route(scratch, fn ->
+        assert make_unique.version in applied_versions()
+        assert index_validity("my_app_task_slug_$uidx") == false
+      end)
+    end
   end
 
   # A later release meeting the index an interrupted deploy left unfinished: its file renames
@@ -478,8 +570,6 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     }
 
     @checking_slug_msg ~s{found 1 duplicate key in "my_app_task" over ("slug") - the unique index over it is not built yet, but it already checks the rows this file writes - update the rows}
-
-    @duplicate_slug_msg ~s{found 1 duplicate key in "my_app_task" over ("slug") - a unique index cannot be built while rows repeat a key - update the rows or drop the unique declaration}
 
     setup %{chain: chain, model: model, scratch: scratch} do
       # A unique column added to a table that predates the file, so its index builds
@@ -788,9 +878,9 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     # A repeat a running node writes while a concurrent build runs, after the build took its
     # snapshot and before it checked the rows, fails the build in its last phase. The index it
     # leaves is invalid and serves no query, but writes already go through it, and a write
-    # that puts a row with the repeated key back into it fails. Staged in the catalog, since
-    # that window can't be timed from here: the index stops taking writes, the repeat is
-    # written past it, and it takes writes again.
+    # that puts a row with the repeated key back into it fails. Staged in the catalog, which
+    # leaves the same index behind with one writer instead of two: the index stops taking
+    # writes, the repeat is written past it, and it takes writes again.
     test "refuses a pending fill on the table of an invalid index still checking writes", %{
       chain: chain,
       model: model,

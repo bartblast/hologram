@@ -125,10 +125,9 @@ defmodule Hologram.DB.Preflight do
   does when its build failed in its last phase, over a repeat written while it ran: putting
   back a row with the repeated key fails. One that takes no writes, as a build failing in
   its first phase leaves, is passed over. A `{:fill, column}` writes only the rows where the
-  column is NULL, so only a repeated key one of those rows holds counts, and an index over
-  the column is passed over: the rows it writes take a new key there, which check_fill!/1
-  asks about. That only changes the answer for an index comparing nulls as values - one
-  that keeps them distinct holds no row with a NULL in its columns to count.
+  column is NULL, so only a repeated key one of those rows holds counts. In an index over
+  the column that keeps nulls distinct those rows hold no key yet, and the one they take is
+  check_fill!/1's to ask about.
 
   An index introspection marks as not plain is hand-made, and is skipped, as check_cast!/1
   skips it.
@@ -145,11 +144,11 @@ defmodule Hologram.DB.Preflight do
       end
 
     if MapSet.size(invalid_names) > 0 do
-      table
-      |> table_indexes()
+      Introspection.schema().tables[table].indexes
+      |> Enum.sort_by(fn {name, _index} -> name end)
       |> Enum.filter(fn {name, index} ->
         MapSet.member?(invalid_names, name) and index.unique and
-          not Map.has_key?(index, :non_plain) and written_column not in index.columns
+          not Map.has_key?(index, :non_plain)
       end)
       |> Enum.each(fn {_name, index} ->
         statement =
@@ -508,14 +507,6 @@ defmodule Hologram.DB.Preflight do
     |> Enum.reject(fn {name, _index} -> MapSet.member?(skipped_names, name) end)
     |> Enum.map(fn {_name, index} -> index end)
     |> Enum.filter(&(&1.unique and not Map.has_key?(&1, :non_plain) and column in &1.columns))
-  end
-
-  # A table the ops have not created yet has no index to rebuild.
-  defp table_indexes(table) do
-    case Introspection.schema().tables[table] do
-      nil -> []
-      definition -> Enum.sort_by(definition.indexes, fn {name, _index} -> name end)
-    end
   end
 
   # The column indexes a mapping derives are never unique, so the entity's own index entries

@@ -370,7 +370,9 @@ defmodule Hologram.Migrator do
   database lacks built before them, when the node knows every applied file. A unique one
   whose build fails on rows repeating its key is left invalid for the pending files, and
   the repair after them refuses it if they keep it - or the file that changes a type on its
-  table, which rebuilds it, refuses there. The index repair and the drift check come last.
+  table, which rebuilds it, or fills a row repeating its key through it while it takes writes,
+  refuses there, even when a later pending file would remove the index. The index repair and
+  the drift check come last.
   """
   @spec run(list(%{atom => any}), %{atom => any}, %{atom => any}) :: :ok
   def run(migrations, current_model, context) do
@@ -667,8 +669,11 @@ defmodule Hologram.Migrator do
   # that drops the index, or the table it stands on, takes it away, and the boot gets through.
   # One that keeps it leaves it to the repair after the files, which refuses it there, with
   # the pending files applied. A pending type change on its table rebuilds every index there,
-  # this one included, so it refuses at its file instead (see apply_op/1). No count first:
-  # the build is what leaves the name taken, so it runs either way.
+  # this one included, and a pending fill that writes a repeated row through one that takes
+  # writes fails on it, so either refuses at its file instead (see apply_op/1) - even when a
+  # file after it would remove the index, since the change can't apply with the index
+  # standing (#1716). No count first: the build is what leaves the name taken, so it runs
+  # either way.
   #
   # With nothing pending the applied files derive the current model, so the repair after
   # them does the same work. On a history this node does not fully know, what the applied
