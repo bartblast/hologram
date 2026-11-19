@@ -33,6 +33,9 @@ defmodule Hologram.Sync.GateTest do
         Process.sleep(:infinity)
       end)
 
+    # Unlinked, so it would outlive the test.
+    on_exit(fn -> Process.exit(pid, :kill) end)
+
     # The ask is a cast sent before the asker reports it, so once the gate has handled what reached
     # it, one asked after another reaches the gate after it.
     assert_receive {:asked, ^name}
