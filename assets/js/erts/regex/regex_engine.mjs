@@ -11,6 +11,7 @@ import {
   NEWLINE_VERBS,
 } from "./regex_newlines.mjs";
 
+import RegexOffsetMap from "./regex_offset_map.mjs";
 import {startOptionSettings} from "./regex_options.mjs";
 import RegexParseError from "./regex_parse_error.mjs";
 import RegexParser, {scanStartOptions} from "./regex_parser.mjs";
@@ -33,24 +34,34 @@ const ENGINE_OPT_ATOMS = new Set([
 
 const NEWLINE_TYPES = new Set(Object.values(NEWLINE_VERBS));
 
+// Subjects below this byte size aren't cached: converting them costs less
+// than the cache lookup and store. Measured in Node 24 and Chrome.
+const CACHED_SUBJECT_MIN_BYTE_SIZE = 64;
+
 // Facade over the regex machinery: compiles PCRE2 patterns into matchable
 // entries and matches them against JS strings, hiding the native/interpreted
 // engine split. Also bridges boxed Erlang terms to engine inputs: char data
 // conversion and :re compile option parsing.
 export default class RegexEngine {
-  // Converts a UTF-8 byte offset to a JS string index.
-  static byteOffsetToUtf16Index(text, byteOffset) {
-    let currentByteOffset = 0;
-    let utf16Index = 0;
+  // Converted byte mode texts of binary subjects, by binary. Each mode has
+  // its own map, since the texts of one binary differ between the modes.
+  // Each text lives as long as its binary.
+  static #latin1SubjectTexts = new WeakMap();
 
-    while (currentByteOffset < byteOffset && utf16Index < text.length) {
-      const codePoint = text.codePointAt(utf16Index);
-      currentByteOffset += $.#calculateCodePointByteCount(codePoint);
-      utf16Index += codePoint > 0xffff ? 2 : 1;
-    }
+  // Offset maps of the unicode mode texts of binary subjects, by binary.
+  // Each map lives as long as its binary.
+  static #subjectOffsetMaps = new WeakMap();
 
-    return utf16Index;
-  }
+  // Keeps a leading byte order mark, which is data in a binary, where
+  // ERTS.utf8Decoder drops it.
+  static #utf8Decoder = new TextDecoder("utf-8", {
+    fatal: true,
+    ignoreBOM: true,
+  });
+
+  // Converted unicode mode texts of binary subjects, by binary. Each text
+  // lives as long as its binary.
+  static #utf8SubjectTexts = new WeakMap();
 
   // Converts char data (a binary or a possibly nested list of code points
   // and binaries, with an improper binary tail allowed) to a JS string,
@@ -132,16 +143,23 @@ export default class RegexEngine {
   }
 
   // Compiles a PCRE2 pattern from a JS string, converting error positions
-  // from UTF-16 indices to UTF-8 byte offsets.
+  // from UTF-16 indices to UTF-8 byte offsets. PCRE2 reports some errors at
+  // a position past the end of the pattern, and each unit past the end counts
+  // as one byte.
   static compileText(text, opts) {
     const compiled = $.compile(text, opts);
 
     if (compiled.error) {
+      const offsetMap = new RegexOffsetMap(text, null);
+      const position = compiled.error.position;
+
+      const byteOffset =
+        position > text.length
+          ? offsetMap.byteLength() + position - text.length
+          : offsetMap.toByteOffset(position);
+
       return {
-        error: {
-          message: compiled.error.message,
-          position: $.utf16IndexToByteOffset(text, compiled.error.position),
-        },
+        error: {message: compiled.error.message, position: byteOffset},
       };
     }
 
@@ -153,121 +171,13 @@ export default class RegexEngine {
   // input, with the position at the first byte of the invalid character
   // and the message matching PCRE2's UTF-8 error texts.
   static decodeUtf8(bytes) {
-    const codePoints = [];
-    const length = bytes.length;
-    let index = 0;
-
-    while (index < length) {
-      const first = bytes[index];
-
-      if (first < 0x80) {
-        codePoints.push(first);
-        index++;
-        continue;
-      }
-
-      if (first < 0xc0) {
-        return $.#utf8Error("isolated byte with 0x80 bit set", index);
-      }
-
-      if (first >= 0xfe) {
-        return $.#utf8Error("illegal byte (0xfe or 0xff)", index);
-      }
-
-      let additionalByteCount;
-
-      if (first < 0xe0) additionalByteCount = 1;
-      else if (first < 0xf0) additionalByteCount = 2;
-      else if (first < 0xf8) additionalByteCount = 3;
-      else if (first < 0xfc) additionalByteCount = 4;
-      else additionalByteCount = 5;
-
-      const remaining = length - index - 1;
-
-      if (remaining < additionalByteCount) {
-        const missing = additionalByteCount - remaining;
-        const noun = missing === 1 ? "byte" : "bytes";
-        return $.#utf8Error(`${missing} ${noun} missing at end`, index);
-      }
-
-      for (let offset = 1; offset <= additionalByteCount; offset++) {
-        if ((bytes[index + offset] & 0xc0) !== 0x80) {
-          return $.#utf8Error(`byte ${offset + 1} top bits not 0x80`, index);
-        }
-      }
-
-      const second = bytes[index + 1];
-
-      switch (additionalByteCount) {
-        case 1:
-          if ((first & 0x3e) === 0) {
-            return $.#utf8Error("overlong 2-byte sequence", index);
-          }
-          break;
-
-        case 2:
-          if (first === 0xe0 && (second & 0x20) === 0) {
-            return $.#utf8Error("overlong 3-byte sequence", index);
-          }
-
-          if (first === 0xed && second >= 0xa0) {
-            return $.#utf8Error(
-              "code points 0xd800-0xdfff are not defined",
-              index,
-            );
-          }
-          break;
-
-        case 3:
-          if (first === 0xf0 && (second & 0x30) === 0) {
-            return $.#utf8Error("overlong 4-byte sequence", index);
-          }
-
-          if (first > 0xf4 || (first === 0xf4 && second > 0x8f)) {
-            return $.#utf8Error(
-              "code points greater than 0x10ffff are not defined",
-              index,
-            );
-          }
-          break;
-
-        case 4:
-          if (first === 0xf8 && (second & 0x38) === 0) {
-            return $.#utf8Error("overlong 5-byte sequence", index);
-          }
-          return $.#utf8Error(
-            "5-byte character is not allowed (RFC 3629)",
-            index,
-          );
-
-        case 5:
-          if (first === 0xfc && (second & 0x3c) === 0) {
-            return $.#utf8Error("overlong 6-byte sequence", index);
-          }
-          return $.#utf8Error(
-            "6-byte character is not allowed (RFC 3629)",
-            index,
-          );
-      }
-
-      let codePoint = first & (0x3f >> additionalByteCount);
-
-      for (let offset = 1; offset <= additionalByteCount; offset++) {
-        codePoint = (codePoint << 6) | (bytes[index + offset] & 0x3f);
-      }
-
-      codePoints.push(codePoint);
-      index += additionalByteCount + 1;
+    try {
+      return {text: $.#utf8Decoder.decode(bytes)};
+    } catch {
+      // The native decoder rejects exactly what PCRE2 rejects, but reports
+      // neither PCRE2's message nor the position
+      return $.#utf8ErrorOf(bytes);
     }
-
-    let text = "";
-
-    // Chunked to stay within the argument count limit of fromCodePoint()
-    for (let start = 0; start < codePoints.length; start += 4096) {
-      text += String.fromCodePoint(...codePoints.slice(start, start + 4096));
-    }
-
-    return {text: text};
   }
 
   // Reports whether the pattern source enables UTF mode with a (*UTF) or
@@ -501,14 +411,69 @@ export default class RegexEngine {
     return "invalid";
   }
 
+  // Returns the offset map of a subject's unicode mode text. A binary subject
+  // of CACHED_SUBJECT_MIN_BYTE_SIZE bytes and more keeps its map, so later
+  // runs on it reuse the checkpoints laid down so far.
+  static subjectOffsetMap(subject, text) {
+    if (!Type.isBinary(subject)) return new RegexOffsetMap(text, null);
+
+    Bitstring.maybeSetBytesFromText(subject);
+
+    const byteLength = subject.bytes.length;
+
+    if (byteLength < CACHED_SUBJECT_MIN_BYTE_SIZE) {
+      return new RegexOffsetMap(text, byteLength);
+    }
+
+    let offsetMap = $.#subjectOffsetMaps.get(subject);
+
+    if (offsetMap === undefined) {
+      offsetMap = new RegexOffsetMap(text, byteLength);
+      $.#subjectOffsetMaps.set(subject, offsetMap);
+    }
+
+    return offsetMap;
+  }
+
+  // Returns the text a binary subject is matched against: decoded from UTF-8
+  // in unicode mode, or null when it isn't valid UTF-8, and one char per
+  // byte otherwise. Converting the same binary again in the same mode
+  // returns the kept text, for binaries of CACHED_SUBJECT_MIN_BYTE_SIZE
+  // bytes and more.
+  static subjectTextFromBinary(binary, unicode) {
+    Bitstring.maybeSetBytesFromText(binary);
+
+    if (binary.bytes.length < CACHED_SUBJECT_MIN_BYTE_SIZE) {
+      return $.#subjectTextFromBytes(binary.bytes, unicode);
+    }
+
+    const texts = unicode ? $.#utf8SubjectTexts : $.#latin1SubjectTexts;
+    const keptText = texts.get(binary);
+
+    // A text is a string or null, so undefined means none is kept yet
+    if (keptText !== undefined) return keptText;
+
+    const text = $.#subjectTextFromBytes(binary.bytes, unicode);
+    texts.set(binary, text);
+
+    return text;
+  }
+
   // Maps every byte to one JS char, so JS string indices are byte offsets
   // and matching is byte-faithful even for non-UTF-8 binaries.
   static textFromLatin1Bytes(bytes) {
-    let text = "";
+    // ASCII bytes decode to the same chars, so the part before the first
+    // byte above 0x7f decodes natively. There's no native Latin-1 decoder:
+    // "latin1" in TextDecoder is windows-1252, which remaps 0x80-0x9f.
+    const asciiLength = $.#asciiPrefixLength(bytes);
+    let text = $.#utf8Decoder.decode(bytes.subarray(0, asciiLength));
 
     // Chunked to stay within the argument count limit of fromCharCode()
-    for (let start = 0; start < bytes.length; start += 4096) {
-      text += String.fromCharCode(...bytes.subarray(start, start + 4096));
+    for (let start = asciiLength; start < bytes.length; start += 4096) {
+      text += String.fromCharCode.apply(
+        null,
+        bytes.subarray(start, start + 4096),
+      );
     }
 
     return text;
@@ -519,60 +484,13 @@ export default class RegexEngine {
     return NEWLINE_PAIR_CONVENTIONS.has(newlineType);
   }
 
-  // Converts a JS string index to a UTF-8 byte offset.
-  static utf16IndexToByteOffset(text, utf16Index) {
-    let byteOffset = 0;
-
-    for (let i = 0; i < utf16Index;) {
-      const codePoint = text.codePointAt(i);
-      byteOffset += $.#calculateCodePointByteCount(codePoint);
-      i += codePoint > 0xffff ? 2 : 1;
+  // Returns how many bytes at the start are below 0x80.
+  static #asciiPrefixLength(bytes) {
+    for (let index = 0; index < bytes.length; index++) {
+      if (bytes[index] > 0x7f) return index;
     }
 
-    return byteOffset;
-  }
-
-  // Returns a function that converts JS string indices of the text to UTF-8
-  // byte offsets. The byte offsets computed so far are kept, so a series of
-  // conversions walks the text once in total, in any call order, instead of
-  // once per conversion. Indices up to the text length are accepted.
-  static utf16IndexToByteOffsetConverter(text) {
-    // byteOffsets[i] is the byte offset of JS string index i
-    const byteOffsets = [0];
-
-    return (utf16Index) => {
-      while (byteOffsets.length <= utf16Index) {
-        const index = byteOffsets.length - 1;
-        const codePoint = text.codePointAt(index);
-
-        const byteOffset =
-          byteOffsets[index] + $.#calculateCodePointByteCount(codePoint);
-
-        // An index inside a surrogate pair maps to the offset after the
-        // pair, like utf16IndexToByteOffset() does
-        if (codePoint > 0xffff) {
-          byteOffsets.push(byteOffset, byteOffset);
-        } else {
-          byteOffsets.push(byteOffset);
-        }
-      }
-
-      return byteOffsets[utf16Index];
-    };
-  }
-
-  static #calculateCodePointByteCount(codePoint) {
-    // 1-byte: ASCII
-    if (codePoint <= 0x7f) return 1;
-
-    // 2-byte
-    if (codePoint <= 0x7ff) return 2;
-
-    // 3-byte
-    if (codePoint <= 0xffff) return 3;
-
-    // 4-byte
-    return 4;
+    return bytes.length;
   }
 
   static #compileValid(source, opts) {
@@ -650,6 +568,14 @@ export default class RegexEngine {
     }
 
     return compiled.regexpSticky;
+  }
+
+  static #subjectTextFromBytes(bytes, unicode) {
+    if (!unicode) return $.textFromLatin1Bytes(bytes);
+
+    const decoded = $.decodeUtf8(bytes);
+
+    return decoded.error ? null : decoded.text;
   }
 
   // The interpreter's subroutine table, built on first use, as patterns on
@@ -738,6 +664,112 @@ export default class RegexEngine {
 
   static #utf8Error(detail, position) {
     return {error: {message: `UTF-8 error: ${detail}`, position: position}};
+  }
+
+  // Returns the PCRE2 UTF-8 error of bytes that aren't valid UTF-8, as
+  // decodeUtf8() reports it.
+  static #utf8ErrorOf(bytes) {
+    const length = bytes.length;
+    let index = 0;
+
+    while (index < length) {
+      const first = bytes[index];
+
+      if (first < 0x80) {
+        index++;
+        continue;
+      }
+
+      if (first < 0xc0) {
+        return $.#utf8Error("isolated byte with 0x80 bit set", index);
+      }
+
+      if (first >= 0xfe) {
+        return $.#utf8Error("illegal byte (0xfe or 0xff)", index);
+      }
+
+      let additionalByteCount;
+
+      if (first < 0xe0) additionalByteCount = 1;
+      else if (first < 0xf0) additionalByteCount = 2;
+      else if (first < 0xf8) additionalByteCount = 3;
+      else if (first < 0xfc) additionalByteCount = 4;
+      else additionalByteCount = 5;
+
+      const remaining = length - index - 1;
+
+      if (remaining < additionalByteCount) {
+        const missing = additionalByteCount - remaining;
+        const noun = missing === 1 ? "byte" : "bytes";
+        return $.#utf8Error(`${missing} ${noun} missing at end`, index);
+      }
+
+      for (let offset = 1; offset <= additionalByteCount; offset++) {
+        if ((bytes[index + offset] & 0xc0) !== 0x80) {
+          return $.#utf8Error(`byte ${offset + 1} top bits not 0x80`, index);
+        }
+      }
+
+      const second = bytes[index + 1];
+
+      switch (additionalByteCount) {
+        case 1:
+          if ((first & 0x3e) === 0) {
+            return $.#utf8Error("overlong 2-byte sequence", index);
+          }
+          break;
+
+        case 2:
+          if (first === 0xe0 && (second & 0x20) === 0) {
+            return $.#utf8Error("overlong 3-byte sequence", index);
+          }
+
+          if (first === 0xed && second >= 0xa0) {
+            return $.#utf8Error(
+              "code points 0xd800-0xdfff are not defined",
+              index,
+            );
+          }
+          break;
+
+        case 3:
+          if (first === 0xf0 && (second & 0x30) === 0) {
+            return $.#utf8Error("overlong 4-byte sequence", index);
+          }
+
+          if (first > 0xf4 || (first === 0xf4 && second > 0x8f)) {
+            return $.#utf8Error(
+              "code points greater than 0x10ffff are not defined",
+              index,
+            );
+          }
+          break;
+
+        case 4:
+          if (first === 0xf8 && (second & 0x38) === 0) {
+            return $.#utf8Error("overlong 5-byte sequence", index);
+          }
+          return $.#utf8Error(
+            "5-byte character is not allowed (RFC 3629)",
+            index,
+          );
+
+        case 5:
+          if (first === 0xfc && (second & 0x3c) === 0) {
+            return $.#utf8Error("overlong 6-byte sequence", index);
+          }
+          return $.#utf8Error(
+            "6-byte character is not allowed (RFC 3629)",
+            index,
+          );
+      }
+
+      index += additionalByteCount + 1;
+    }
+
+    // Unreachable as long as the native decoder rejects only what this scan
+    // rejects
+    throw new Error("UTF-8 bytes rejected by the native decoder are valid");
   }
 }
 
