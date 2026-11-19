@@ -9,6 +9,7 @@ defmodule HologramClusterTests.MigrationTest do
   alias Hologram.DB.Mapper
   alias Hologram.DB.SchemaReconciler
   alias Hologram.Migrator
+  alias HologramClusterTests.Cluster
 
   # Every scenario claims the migrations database for a production instance, and the
   # bootstrap preparing it before the next run refuses a database another env has
@@ -86,6 +87,23 @@ defmodule HologramClusterTests.MigrationTest do
     end)
   end
 
+  # The given index's validity once it comes out valid, or after about 30 s: true, false, or :absent
+  # (see index_validity/1). The index builder builds a plain index after the boot, a step at a time,
+  # each under the migration lock (see Hologram.DB.IndexBuilder).
+  defp settled_index_validity(index, attempts \\ 300) do
+    case index_validity(index) do
+      true ->
+        true
+
+      validity when attempts == 1 ->
+        validity
+
+      _validity ->
+        Process.sleep(100)
+        settled_index_validity(index, attempts - 1)
+    end
+  end
+
   defp item_count do
     statement = ~s{SELECT COUNT(*) FROM "hologram_data"."entities_item"}
 
@@ -143,9 +161,9 @@ defmodule HologramClusterTests.MigrationTest do
   end
 
   describe "concurrent index build" do
-    test "the tail index is built on a populated table and comes out valid" do
-      # Through f3: the table stands and carries rows, so f4's index cannot be built
-      # inside its transaction and goes to the tail, which builds it concurrently.
+    test "the index builder builds an index on a populated table and it comes out valid" do
+      # Through f3: the table stands and carries rows when f4 adds the reference whose index the
+      # index builder then builds concurrently.
       plant_applied_prefix!(3)
 
       insert_item = """
@@ -167,22 +185,25 @@ defmodule HologramClusterTests.MigrationTest do
 
       # Valid, not merely present: a concurrent build that fails partway leaves the
       # index in the catalog serving no query while every write maintains it.
-      assert index_validity("entities_item_parent_id_$idx") == true
+      assert settled_index_validity("entities_item_parent_id_$idx") == true
 
       assert Enum.map(applied_version_rows(), fn {version, _applied_at} -> version end) ==
                Enum.map(migrations(), & &1.version)
     end
 
-    test "a build interrupted partway is rebuilt by the next boot" do
+    test "a build interrupted partway is rebuilt by the next node's index builder" do
       first_peer = start_migration_peer(1)
-
-      assert serving?(first_peer)
-
       index = "entities_item_parent_id_$idx"
 
-      # What a node killed during its concurrent build leaves behind: the file is
-      # recorded applied - it committed before the build began - while the index stays
-      # in the catalog serving no query and slowing every write.
+      # Built by the first node's index builder. Then the node stops, so that only the next one's
+      # builder can repair the index.
+      assert serving?(first_peer)
+      assert settled_index_validity(index) == true
+
+      Cluster.stop_peer(first_peer)
+
+      # What a node killed during its concurrent build leaves behind: the index stays in the
+      # catalog serving no query and slowing every write.
       invalidate_index(index)
 
       assert index_validity(index) == false
@@ -190,7 +211,7 @@ defmodule HologramClusterTests.MigrationTest do
       next_peer = start_migration_peer(2)
 
       assert serving?(next_peer)
-      assert index_validity(index) == true
+      assert settled_index_validity(index) == true
     end
   end
 
