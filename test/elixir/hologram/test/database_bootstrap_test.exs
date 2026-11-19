@@ -343,6 +343,24 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
       assert hologram_schemas(scratch) == ["hologram_data", "hologram_system"]
     end
 
+    test "holds each run database with a connection that waits out a slow ping", %{
+      scratch_opts: scratch_opts
+    } do
+      run_databases = run_and_drop!(scratch_opts)
+      run_database = run_databases[scratch_opts[:database]]
+
+      {:links, linked_pids} = Process.info(self(), :links)
+
+      [held_connection] =
+        Enum.filter(linked_pids, fn pid ->
+          :proc_lib.get_label(pid) == {Postgrex.Protocol, run_database}
+        end)
+
+      {_state_name, state} = :sys.get_state(held_connection)
+
+      assert state.protocol.ping_timeout == :infinity
+    end
+
     test "marks the run's databases", %{scratch: scratch, scratch_opts: scratch_opts} do
       run_databases = run_and_drop!(scratch_opts, [scratch_opts[:database] <> "_given"])
 

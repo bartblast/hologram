@@ -106,13 +106,18 @@ defmodule Hologram.Test.DatabaseBootstrap do
 
   # No handshake timeout: the handshake starts once the server accepted the TCP connection,
   # and a server that is up either finishes it, however long its cold start takes, or closes
-  # the socket. The TCP connect itself keeps the driver's timeout.
+  # the socket. The TCP connect itself keeps the driver's timeout. No ping timeout either, for the
+  # same reason: a ping left unanswered for the driver's 15 s would stop the connection, and
+  # through the link the whole run - the held connections live as long as it does, and the
+  # maintenance one sits idle while they connect. The pings themselves stay, since they keep the
+  # session from idling out on a server that sets idle_session_timeout.
   defp connection_opts(database_opts, database) do
     [
       database: database,
       handshake_timeout: :infinity,
       hostname: database_opts[:host],
       password: database_opts[:password],
+      ping_timeout: :infinity,
       port: database_opts[:port],
       username: database_opts[:user]
     ]
