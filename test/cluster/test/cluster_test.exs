@@ -5,16 +5,22 @@ defmodule HologramClusterTests.ClusterTest do
 
   alias HologramClusterTests.HTTPClient
 
-  defp close_listener({:ok, socket}), do: :gen_tcp.close(socket)
+  # Listens on the port free_port/0 would hand out next, and returns it with the socket. A port
+  # something else holds is passed over, since that listener could close before free_port/0
+  # looks: the test's own socket stays open for as long as the test needs it.
+  defp listen_on_next_free_port(opts, attempt \\ 1)
 
-  defp close_listener(:busy), do: :ok
+  defp listen_on_next_free_port(_opts, attempt) when attempt > 126 do
+    flunk("something holds the port after each free one of this run's block")
+  end
 
-  # A port something else already holds serves a test that needs a listener there just as
-  # well as one of its own: free_port/0 refuses it either way.
-  defp listen_unless_busy(port, opts) do
+  defp listen_on_next_free_port(opts, attempt) do
+    port = next_free_port()
+
     case :gen_tcp.listen(port, opts) do
-      {:error, :eaddrinuse} -> :busy
-      result -> result
+      {:ok, socket} -> {:ok, port, socket}
+      {:error, :eaddrinuse} -> listen_on_next_free_port(opts, attempt + 1)
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -54,34 +60,30 @@ defmodule HologramClusterTests.ClusterTest do
     end
 
     test "skips a port something listens on" do
-      next_port = next_free_port()
-
-      # With reuseaddr, so the test's own listener gets the port even right after a connection
-      # on it closed.
-      listener = listen_unless_busy(next_port, ip: {127, 0, 0, 1}, reuseaddr: true)
-      refute match?({:error, _reason}, listener)
+      # With reuseaddr, so the test's listener gets the port even right after a connection on
+      # it closed.
+      {:ok, next_port, socket} =
+        listen_on_next_free_port(ip: {127, 0, 0, 1}, reuseaddr: true)
 
       port = free_port()
 
-      close_listener(listener)
+      :gen_tcp.close(socket)
 
       assert port != next_port
     end
 
     test "skips a port something listens on over IPv6 alone" do
-      next_port = next_free_port()
+      case listen_on_next_free_port([:inet6, ip: {0, 0, 0, 0, 0, 0, 0, 1}, reuseaddr: true]) do
+        {:ok, next_port, socket} ->
+          port = free_port()
 
-      case listen_unless_busy(next_port, [:inet6, ip: {0, 0, 0, 0, 0, 0, 0, 1}, reuseaddr: true]) do
+          :gen_tcp.close(socket)
+
+          assert port != next_port
+
         # A machine without IPv6 has no such listeners.
         {:error, reason} ->
           assert reason in [:eaddrnotavail, :eafnosupport, :eprotonosupport]
-
-        listener ->
-          port = free_port()
-
-          close_listener(listener)
-
-          assert port != next_port
       end
     end
   end
