@@ -1370,8 +1370,7 @@ defmodule Hologram.CompilerTest do
       assert page_windows[PageModule20] == [Registry.id(Auth.grants_window())]
     end
 
-    # No user entity type, no grant store: a page checking permissions has nothing to check them
-    # against.
+    # No user entity type, no grant store: there are no grant rows to hold.
     test "leaves the grants window out of a checking page when the data model designates no user entity type",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
       plt_without_user_entity = without_user_entity(module_info_plt)
@@ -1435,6 +1434,23 @@ defmodule Hologram.CompilerTest do
 
       assert page_windows[PageModule21] ==
                Enum.sort([Registry.id(Auth.grants_window()), Registry.id(window)])
+    end
+
+    # No grant store, so no grants window - but the rules still read rows, which the windows embed.
+    test "derives a checking build's window ids from the windows embedding the rows the rules read when the data model designates no user entity type",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      plt_without_user_entity = without_user_entity(module_info_plt)
+
+      page_windows =
+        derive_page_windows([PageModule21], call_graph, plt_without_user_entity, [PageModule21])
+
+      window =
+        TwoHopDelegationPolicyEntity
+        |> sort(created_at)
+        |> Stage.normalize()
+        |> Window.derive(true)
+
+      assert page_windows[PageModule21] == [Registry.id(window)]
     end
 
     test "derives an unchecked build's window ids from the plain windows", %{
@@ -1616,13 +1632,15 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "permission_checking?/2" do
-    test "is true when a page checks permissions on the client and the data model designates a user entity type",
-         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+  describe "permission_checking?/1" do
+    test "is true when a page checks permissions on the client", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
       {reach_by_page, _component_queries} =
         derive_kept_reach([PageModule18], call_graph, module_info_plt, [PageModule18])
 
-      assert permission_checking?(reach_by_page, module_info_plt)
+      assert permission_checking?(reach_by_page)
     end
 
     test "is false when no page checks permissions on the client", %{
@@ -1632,19 +1650,7 @@ defmodule Hologram.CompilerTest do
       {reach_by_page, _component_queries} =
         derive_kept_reach([PageModule18], call_graph, module_info_plt, [])
 
-      refute permission_checking?(reach_by_page, module_info_plt)
-    end
-
-    test "is false when the data model designates no user entity type", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      plt_without_user_entity = without_user_entity(module_info_plt)
-
-      {reach_by_page, _component_queries} =
-        derive_kept_reach([PageModule18], call_graph, plt_without_user_entity, [PageModule18])
-
-      refute permission_checking?(reach_by_page, plt_without_user_entity)
+      refute permission_checking?(reach_by_page)
     end
   end
 
@@ -2628,14 +2634,19 @@ defmodule Hologram.CompilerTest do
              ]
     end
 
-    # No user entity type, no grant store to check permissions against, so no page checks them.
-    test "syncs none of the types the rules read when the data model designates no user entity type",
+    # No user entity type, no grant store, but a page checking permissions still reads the rules'
+    # rows.
+    test "syncs the types the rules read, without the grant type, when the data model designates no user entity type",
          %{module_info_plt: module_info_plt} do
       reach_by_page = mentioning_reach([PathPolicyEntity], true)
       plt_without_user_entity = without_user_entity(module_info_plt)
 
       assert build_sync_constants(reach_by_page, %{}, plt_without_user_entity).synced_types == [
-               PathPolicyEntity
+               Entity17,
+               PolicyEntity,
+               PathPolicyEntity,
+               ParentPolicyEntity,
+               DelegationPolicyEntity
              ]
     end
   end

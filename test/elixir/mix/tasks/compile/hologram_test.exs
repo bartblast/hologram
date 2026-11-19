@@ -1157,7 +1157,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
                 source: {Entity36, [:channel, :messages]}
               }}
 
-    # The fixtures designate a user entity type and hold a page whose template checks permissions.
+    # The fixtures hold a page whose template checks permissions.
     assert queries.permission_checking?
 
     # PageModule18 renders a component querying Entity2, a checking browser holds grant rows, and no

@@ -1342,7 +1342,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     # A checking build's windows download the rows the rules read through relationships, so the
     # registered windows and the ids each page subscribes to are derived with it alike.
-    permission_checking? = Compiler.permission_checking?(reach_by_page, module_info_plt)
+    permission_checking? = Compiler.permission_checking?(reach_by_page)
 
     # Derived from every page's reach rather than from the bundles, so the dumps are whole before
     # the first batch, whatever batch the batches stop at.
