@@ -84,6 +84,12 @@ defmodule Hologram.DB.IndexPlan.PlannerTest do
 
   defp nodes(node), do: [node | Enum.flat_map(node["Plans"] || [], &nodes/1)]
 
+  # The conditions the scans of the given index narrow it by - not the filters applied to the rows
+  # they read.
+  defp index_conds(nodes, index_name) do
+    for %{"Index Name" => ^index_name, "Index Cond" => index_cond} <- nodes, do: index_cond
+  end
+
   defp node_types(nodes), do: Enum.map(nodes, & &1["Node Type"])
 
   defp read_index_names(nodes) do
@@ -114,6 +120,8 @@ defmodule Hologram.DB.IndexPlan.PlannerTest do
     {[index_name], nodes} = explain(filter(Module2, c == "x"))
 
     assert read_index_names(nodes) == [index_name]
+    assert [index_cond] = index_conds(nodes, index_name)
+    assert index_cond =~ ~s{("c_$sort" = }
   end
 
   test "reads a string range through the sort key's index" do
@@ -121,6 +129,8 @@ defmodule Hologram.DB.IndexPlan.PlannerTest do
     {[index_name], nodes} = explain(filter(Module2, c >= "m"))
 
     assert read_index_names(nodes) == [index_name]
+    assert [index_cond] = index_conds(nodes, index_name)
+    assert index_cond =~ ~s{("c_$sort" >= }
   end
 
   # Sorting priced out too: a plan that sorts anyway is one no index gives the order of.
