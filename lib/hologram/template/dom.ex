@@ -37,7 +37,7 @@ defmodule Hologram.Template.DOM do
 
       iex> tags = [{:start_tag, {"div", []}}, {:text, "abc"}, {:end_tag, "div"}]
       iex> build_ast(tags)
-      [{:{}, [line: 1], [:element, "div", [], [{:text, "abc"}]]}]
+      [{:{}, [line: 1], [:element, "div", [{"$key", [text: "kqd760:0"]}], [text: "abc"]]}]
   """
   @spec build_ast(list(Parser.parsed_tag())) :: AST.t()
   def build_ast(tags) do
@@ -142,7 +142,9 @@ defmodule Hologram.Template.DOM do
     if matches_closer?(top, closer) do
       reopen_entry(rest, closer)
     else
-      refuse_closer(top, Enum.find(rest, &matches_closer?(&1, closer)), closer)
+      match = Enum.find(rest, &matches_closer?(&1, closer))
+
+      refuse_closer(top, match, closer)
     end
   end
 
@@ -416,10 +418,12 @@ defmodule Hologram.Template.DOM do
   defp reopen_entry(rest, _closer), do: rest
 
   # Two sources of a dynamic tag name name the same tag when they are the same code, however they
-  # are spaced. A source that isn't valid code can only be the same as itself.
+  # are spaced. A source that isn't valid code can only be the same as itself. Their warnings aren't
+  # reported here: the start tag's source is parsed again when the template's code is built, which
+  # reports them, and the end tag's source is never compiled.
   defp same_expression?(source_1, source_2) do
-    with {:ok, ast_1} <- Code.string_to_quoted(source_1),
-         {:ok, ast_2} <- Code.string_to_quoted(source_2) do
+    with {:ok, ast_1} <- Code.string_to_quoted(source_1, emit_warnings: false),
+         {:ok, ast_2} <- Code.string_to_quoted(source_2, emit_warnings: false) do
       Macro.to_string(ast_1) == Macro.to_string(ast_2)
     else
       _error -> source_1 == source_2

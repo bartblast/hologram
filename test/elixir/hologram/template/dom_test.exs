@@ -2536,6 +2536,18 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
+    test "dynamic tag's expression warns once when compared with its end tag's" do
+      # <{'div'}></{'div'}>
+      tags = [
+        {:start_tag, {{:expression, "{'div'}"}, []}},
+        {:end_tag, {:expression, "{'div'}"}}
+      ]
+
+      {_ast, diagnostics} = Code.with_diagnostics(fn -> build_ast(tags) end)
+
+      assert Enum.map(diagnostics, & &1.severity) == [:warning]
+    end
+
     test "raises on an element left unclosed at the end" do
       # <div>abc
       tags = [{:start_tag, {"div", []}}, {:text, "abc"}]
