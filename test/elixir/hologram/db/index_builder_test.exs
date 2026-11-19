@@ -205,10 +205,16 @@ defmodule Hologram.DB.IndexBuilderTest do
       blocker = start_supervised!({Postgrex, scratch_opts}, id: :blocker)
       builder = start_supervised!({Postgrex, scratch_opts}, id: :builder)
 
-      # A build kept waiting by an open transaction on its table, then cancelled: what a build that
-      # dies partway leaves behind.
+      # A build kept waiting by an open transaction that could write its table, then cancelled: what
+      # a build that dies partway leaves behind. ROW EXCLUSIVE is what a write takes, and a concurrent
+      # build waits for every such holder once its catalog entry, flagged invalid, is committed.
       Postgrex.query!(blocker, "BEGIN", [])
-      Postgrex.query!(blocker, ~s{SELECT COUNT(*) FROM "hologram_data"."my_app_task"}, [])
+
+      Postgrex.query!(
+        blocker,
+        ~s{LOCK TABLE "hologram_data"."my_app_task" IN ROW EXCLUSIVE MODE},
+        []
+      )
 
       build =
         Task.async(fn ->
