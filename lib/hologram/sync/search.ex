@@ -2,10 +2,10 @@ defmodule Hologram.Sync.Search do
   @moduledoc false
 
   # The backwards search: from the rows a batch of effects changed to the rows whose read access or
-  # verdicts the change may have moved, without those rows changing themselves. A read rule, and a
-  # deciding item the server answers for browsers, points forward, from the row it decides about
-  # to the rows it reads, and `Hologram.Policy.Edges` names what it reads. The search follows those
-  # edges the other way.
+  # verdicts the change may have moved, without those rows changing themselves. A read rule, and
+  # the rules of an operation the server answers for browsers, point forward, from the row they
+  # decide about to the rows they read, and `Hologram.Policy.Edges` names what they read. The
+  # search follows those edges the other way.
   #
   # It runs after commit, against the tables as they now stand. Running it inside the write misses
   # rows: one transaction moves a milestone into a project while another adds a member to it, and

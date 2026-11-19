@@ -191,12 +191,12 @@ defmodule Hologram.Sync.Frame do
 
   @doc """
   Returns the delta handing a client a whole row, which is what a client that does not have it
-  needs, with the server's verdicts on the row's deciding quantifiers for the client's user (see
+  needs, with the server's verdicts on the operations of the row's type for the client's user (see
   `row_verdicts/2`).
 
   The verdicts travel beside the row's data as `$verdicts`, a name no attribute can have, the way
-  its revisions travel as `$revisions` - and only when there are some, so a row of a type with no
-  deciding quantifier is spelled as it always was.
+  its revisions travel as `$revisions` - and only when there are some, so a row of a type the
+  server sends no verdict on is spelled as it always was.
   """
   @spec put_entity(struct, %{String.t() => boolean}) :: map
   def put_entity(row, verdicts) do
@@ -207,13 +207,14 @@ defmodule Hologram.Sync.Frame do
   end
 
   @doc """
-  Returns the server's verdicts on the given row's deciding quantifiers for the given user, as a
+  Returns the server's verdicts on the operations of the given row's type for the given user, as a
   put carries them (see `Hologram.Auth.verdicts/2`) - none when the build has no client checking
-  permissions, which never reads one, or the row's type has no deciding quantifier.
+  permissions, which never reads one, or the server sends no verdict on the row's type (see
+  `Hologram.Policy.verdict_operations/1`).
   """
   @spec row_verdicts(String.t() | nil, struct) :: %{String.t() => boolean}
   def row_verdicts(actor_user_id, %entity_type{} = row) do
-    if Policy.deciding_quantifiers(entity_type) != [] and QueryCache.permission_checking?() do
+    if Policy.verdict_operations(entity_type) != [] and QueryCache.permission_checking?() do
       Auth.verdicts(actor_user_id, row)
     else
       %{}

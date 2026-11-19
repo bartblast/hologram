@@ -90,13 +90,14 @@ defmodule Hologram.Sync.Live do
 
   - `readable` - the checked rows the user may read, as they stand now, keyed by id per entity type,
     with an empty map for a checked type the user may read none of
-  - `verdicts` - the server's verdicts for the user on the readable rows of each type with a
-    deciding quantifier, keyed by id per entity type - what `Hologram.Sync.Frame.row_verdicts/2`
-    answers for the user and the row, read in the batch's recheck (see `Hologram.Sync.Recheck`), so
-    no session works one out for a batch's rows - with an empty map for such a type the user may
-    read none of. In a build checking permissions on the client, every readable checked row of such
-    a type has them: given the verdicts' edges, the backwards search finds the rows whose verdicts
-    the batch may have moved together with those whose read access it may have
+  - `verdicts` - the server's verdicts for the user on the readable rows of each type the server
+    sends verdicts on (see `Hologram.Policy.verdict_operations/1`), keyed by id per entity type -
+    what `Hologram.Sync.Frame.row_verdicts/2` answers for the user and the row, read in the batch's
+    recheck (see `Hologram.Sync.Recheck`), so no session works one out for a batch's rows - with an
+    empty map for such a type the user may read none of. In a build checking permissions on the
+    client, every readable checked row of such a type has them: given the verdicts' edges, the
+    backwards search finds the rows whose verdicts the batch may have moved together with those
+    whose read access it may have
   - `written` - per readable row, the names of the attributes the batch's puts and patches wrote, as
     the log spells them - all a patch needs, and only for a row a patch can go out for
   - `whole_types` - the entity types a grant change in the batch may have moved every row of for
@@ -399,11 +400,11 @@ defmodule Hologram.Sync.Live do
     {Enum.min(txs), Enum.max(txs)}
   end
 
-  # Only types with a deciding quantifier send verdicts with their rows - every other row's are
+  # Only types with a verdict operation send verdicts with their rows - every other row's are
   # none, which nothing has to read. Asked of the rows the user may read alone.
   defp verdicts_for(rechecked, readable, canonical_user_id) do
     for {entity_type, rows} <- rechecked,
-        Policy.deciding_quantifiers(entity_type) != [],
+        Policy.verdict_operations(entity_type) != [],
         into: %{} do
       verdicts =
         readable

@@ -67,8 +67,6 @@ defmodule Hologram.Policy do
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
-  @deciding_quantifiers_key {__MODULE__, :deciding_quantifiers}
-
   @hash_bytes 16
 
   @hash_key {__MODULE__, :hash}
@@ -308,14 +306,15 @@ defmodule Hologram.Policy do
   predicate included, reading a server-only attribute - the row's own, one a path or a quantifier's
   set leads to, or one an attribute operand or an outer name reads - or, in a read rule, any clause
   reading a row of a type no session may read (see `readable_type?/1`) along its paths and sets. A
-  client answers such a clause from the server's verdict (see `Hologram.Auth.verdicts/2`), since
-  the rows it holds of a set can't decide one for certain - a bounded or filtered set computed over
-  the rows it holds can hold rows the server's doesn't, so not even an `any` over one, and a count
-  it can't compute at all - it never holds a server-only value, and it never holds a row of a type
-  nobody may read. A rule for any other operation reading such a row fails the build instead,
-  unless the clause is deciding for another reason (see `Hologram.Policy.Validator`): a client
-  checks those on the structs its own actions change, which no verdict on the stored row answers.
-  The name dates from when only quantifiers were. Only the `:read` key counts as a read rule here:
+  client can't answer such a clause, so the server sends its verdict on the operation the clause's
+  rule grants (see `verdict_operations/1` and `Hologram.Auth.verdicts/2`): the rows a client holds
+  of a set can't decide one for certain - a bounded or filtered set computed over the rows it holds
+  can hold rows the server's doesn't, so not even an `any` over one, and a count it can't compute
+  at all - it never holds a server-only value, and it never holds a row of a type nobody may read.
+  A rule for any other operation reading such a row fails the build instead, unless the clause is
+  deciding for another reason (see `Hologram.Policy.Validator`): a client checks those on the
+  structs its own actions change, which no verdict on the stored row answers. The name dates from
+  when only quantifiers were. Only the `:read` key counts as a read rule here:
   a named read line's rules under its name read the rows a browser holds, like any other check.
 
   A read rule's role reference, given as `{:to, reference}`, is a deciding one when it reads a row
@@ -337,41 +336,6 @@ defmodule Hologram.Policy do
     deciding_clause?(clause, [entity_type]) or reads_set_value?(entity_type, clause) or
       reads_server_only?(entity_type, clause) or
       (operation == :read and reads_unreadable_type?(entity_type, clause))
-  end
-
-  @doc """
-  Returns the deciding items of the given entity type's rules, across every operation, as
-  `{key, item}` pairs sorted by key: every clause standing in a rule's predicates - a predicate or
-  a quantifier, at the top or in a disjunction's alternatives, not inside another quantifier -
-  every role reference of a rule's `to`, as `{:to, reference}`, and a rule's delegation, as
-  `{:via, {operation, chain}}`, that is a deciding one (see `deciding_quantifier?/3`), keyed by
-  `verdict_key/3`. An item written the same way twice in one operation is one pair.
-  `verdict_rule/1` gives the rule each one is answered as.
-
-  Cached, with the model facts, for the types of the project's compiled data model - a row's
-  verdicts are worked out for every row a client is sent.
-  """
-  @spec deciding_quantifiers(module) :: list({String.t(), tuple})
-  def deciding_quantifiers(entity_type) do
-    Model.ensure_released!()
-
-    cache =
-      case :persistent_term.get(@deciding_quantifiers_key, nil) do
-        nil ->
-          cache = Map.new(Model.entity_types(), &{&1, derived_deciding_quantifiers(&1)})
-
-          :persistent_term.put(@deciding_quantifiers_key, cache)
-
-          cache
-
-        cache ->
-          cache
-      end
-
-    case Map.fetch(cache, entity_type) do
-      {:ok, pairs} -> pairs
-      :error -> derived_deciding_quantifiers(entity_type)
-    end
   end
 
   @doc """
@@ -778,7 +742,6 @@ defmodule Hologram.Policy do
   @doc false
   @spec reset_model_facts_cache() :: :ok
   def reset_model_facts_cache do
-    :persistent_term.erase(@deciding_quantifiers_key)
     :persistent_term.erase(@hash_key)
     :persistent_term.erase(@locked_set_links_key)
     :persistent_term.erase(@model_facts_key)
@@ -1079,21 +1042,6 @@ defmodule Hologram.Policy do
     |> Enum.sort()
   end
 
-  @doc """
-  Returns the rule the server answers the given deciding item as (see `deciding_quantifiers/1`): a
-  rule requiring the clause alone, or holding the role reference or the delegation alone.
-  """
-  @spec verdict_rule(tuple) :: %{
-          predicates: list(tuple),
-          to: list(tuple) | nil,
-          via: {Entity.operation(), list(atom)} | nil
-        }
-  def verdict_rule({:to, reference}), do: %{predicates: [], to: [reference], via: nil}
-
-  def verdict_rule({:via, via}), do: %{predicates: [], to: nil, via: via}
-
-  def verdict_rule(clause), do: %{predicates: [clause], to: nil, via: nil}
-
   defp build_global_reference([]), do: []
 
   defp build_global_reference(role_modules) do
@@ -1280,20 +1228,6 @@ defmodule Hologram.Policy do
   end
 
   defp definition_inverses(_owner, _definition), do: []
-
-  defp derived_deciding_quantifiers(entity_type) do
-    entity_type
-    |> build()
-    |> Enum.flat_map(fn {operation, rules} ->
-      for rule <- rules,
-          item <-
-            standing_clauses(rule.predicates) ++ reference_items(rule.to) ++ via_items(rule.via),
-          deciding_quantifier?(entity_type, operation, item),
-          do: {verdict_key(entity_type, operation, item), item}
-    end)
-    |> Enum.uniq()
-    |> Enum.sort()
-  end
 
   defp derived_verdict_operations(entity_type) do
     entity_type

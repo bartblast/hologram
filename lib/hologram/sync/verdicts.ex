@@ -78,11 +78,12 @@ defmodule Hologram.Sync.Verdicts do
 
   @doc """
   Returns the rows among the given ones whose verdicts for the given user differ from what was
-  told, each with its verdicts now, in the order given. Only rows of a type with a deciding
-  quantifier are worked out: a row of any other type is left out, whatever was told of it, so a
-  caller can't rely on this to clear verdicts told before - and a session has none of it to clear:
-  such a row is put with none (see `Hologram.Sync.Frame.row_verdicts/2`), and no rule reads any a
-  client holds of it from an earlier build.
+  told, each with its verdicts now, in the order given. Only rows of a type the server sends
+  verdicts on are worked out (see `Hologram.Policy.verdict_operations/1`): a row of any other type
+  is left out, whatever was told of it, so a caller can't rely on this to clear verdicts told
+  before - and a session has none of it to clear: such a row is put with none (see
+  `Hologram.Sync.Frame.row_verdicts/2`), and no rule reads any a client holds of it from an earlier
+  build.
 
   For the rows a returning client may hold verdicts of from before this session - a batch's rows
   come with theirs worked out (see `moved/2`).
@@ -90,7 +91,7 @@ defmodule Hologram.Sync.Verdicts do
   @spec stale(list(struct), %{String.t() => map}, String.t() | nil) :: list({struct, map})
   def stale(rows, told, actor_user_id) do
     rows
-    |> Enum.filter(&(Policy.deciding_quantifiers(&1.__struct__) != []))
+    |> Enum.filter(&(Policy.verdict_operations(&1.__struct__) != []))
     |> Enum.map(&{&1, Frame.row_verdicts(actor_user_id, &1)})
     |> moved(told)
   end

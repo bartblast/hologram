@@ -954,8 +954,8 @@ defmodule Hologram.Sync.Session do
   # things can still leave those verdicts stale with nothing in the gap saying so: a client cut off
   # after the last batch of an earlier catch-up, before its verdicts went out, comes back with an
   # empty gap, and a deploy that starts checking permissions in the browser changes no rule while
-  # the rows it was sent carry no verdicts at all. So every row of a type with a deciding quantifier
-  # that the catch-up did not already hand over with its verdicts is told them, after the rows
+  # the rows it was sent carry no verdicts at all. So every row of a type the server sends verdicts
+  # on that the catch-up did not already hand over with its verdicts is told them, after the rows
   # themselves.
   defp tell_verdicts(state, judged) do
     judged.verdict_rows
@@ -1220,7 +1220,7 @@ defmodule Hologram.Sync.Session do
     %{state | told_verdicts: Verdicts.remember(state.told_verdicts, frame_deltas)}
   end
 
-  # The rows the client may see whose type has a deciding quantifier, from every window, so the
+  # The rows the client may see whose type the server sends verdicts on, from every window, so the
   # verdicts it holds from before this session can be told again once it is caught up. Only the
   # ones this window lets it see: a row hidden here and shown later is taken from the later window,
   # and one shown here and hidden later is dropped once every window is judged.
@@ -1228,7 +1228,7 @@ defmodule Hologram.Sync.Session do
     rows =
       members
       |> Map.take(MapSet.to_list(visible_ids))
-      |> Map.filter(fn {_id, row} -> Policy.deciding_quantifiers(row.__struct__) != [] end)
+      |> Map.filter(fn {_id, row} -> Policy.verdict_operations(row.__struct__) != [] end)
 
     %{judged | verdict_rows: merge_later(judged.verdict_rows, rows)}
   end

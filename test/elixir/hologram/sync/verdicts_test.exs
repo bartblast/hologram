@@ -49,11 +49,7 @@ defmodule Hologram.Sync.VerdictsTest do
   end
 
   defp delete_key do
-    Policy.verdict_key(
-      VerdictTask,
-      :delete,
-      {:none, {[:board, :cards], [{:author_id, :==, {:actor}}]}}
-    )
+    Policy.verdict_key(VerdictTask, :delete)
   end
 
   defp task, do: %{VerdictTask.new() | id: Entity.generate_id()}
@@ -173,15 +169,15 @@ defmodule Hologram.Sync.VerdictsTest do
     end
 
     # The task's read rule holds a role on the team its project names, and no client holds a
-    # project - a task with no project answers no without reading the database.
-    test "returns a row whose role reference verdict differs from what was told" do
+    # project, so the server answers its read rules - true for every reader it sends the row to.
+    test "returns a row whose read verdict was never told" do
       row = %{ReadersTask.new() | id: Entity.generate_id()}
-      key = Policy.verdict_key(ReadersTask, :read, {:to, {:rel, [:project, :team], [:member]}})
+      key = Policy.verdict_key(ReadersTask, :read)
 
-      assert stale([row], %{}, Entity.generate_id()) == [{row, %{key => false}}]
+      assert stale([row], %{}, Entity.generate_id()) == [{row, %{key => true}}]
     end
 
-    test "returns nothing for a row of a type with no deciding quantifier" do
+    test "returns nothing for a row of a type the server sends no verdict on" do
       assert stale([Module2.new(a: true)], %{}, nil) == []
     end
   end

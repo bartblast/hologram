@@ -6,7 +6,6 @@ defmodule Hologram.PolicyTest do
       build: 1,
       dead_entity_types: 1,
       deciding_quantifier?: 3,
-      deciding_quantifiers: 1,
       delegation: 2,
       expand_global_role: 1,
       expand_global_role: 2,
@@ -36,8 +35,7 @@ defmodule Hologram.PolicyTest do
       verdict_key: 3,
       verdict_operations: 1,
       verdict_reads: 2,
-      verdict_related_reads: 2,
-      verdict_rule: 1
+      verdict_related_reads: 2
     ]
 
   alias Hologram.Auth.RoleGrant
@@ -1167,132 +1165,6 @@ defmodule Hologram.PolicyTest do
 
     test "fails for a delegation through types someone may read" do
       refute deciding_quantifier?(Policy.Readers.Module28, :read, {:via, {:read, [:crate]}})
-    end
-  end
-
-  describe "deciding_quantifiers/1" do
-    # The delegation to the crate runs through readable types only.
-    test "lists a read rule's delegations through a type nobody may read" do
-      items =
-        Policy.Readers.Module28
-        |> deciding_quantifiers()
-        |> Enum.map(fn {_key, item} -> item end)
-        |> Enum.sort()
-
-      assert items == [
-               {:via, {:archive, [:vault]}},
-               {:via, {:close, [:vault]}},
-               {:via, {:delete, [:vault]}},
-               {:via, {:read, [:shelf, :crate]}},
-               {:via, {:update, [:vault]}}
-             ]
-    end
-
-    # The one-hop references for read and update read the task alone.
-    test "lists a read rule's role reference reading a type nobody may read" do
-      item = {:to, {:rel, [:project, :team], [:member]}}
-
-      assert deciding_quantifiers(Policy.Readers.Module24) == [
-               {verdict_key(Policy.Readers.Module24, :read, item), item}
-             ]
-    end
-
-    defmodule VerdictProject do
-      use Hologram.Entity
-
-      attribute :name, :string
-
-      relationship :labels, [Hologram.PolicyTest.VerdictLabel]
-      relationship :members, [Hologram.PolicyTest.VerdictMember], inverse: project
-
-      allow :read, when: any(member <- members, member.user_id == user_id())
-      allow :update, when: name == "open" or all(member <- members, member.seat == "full")
-      allow :delete, when: none(labels)
-      allow :update, as: :archive, only: [:name], when: none(labels)
-
-      allow :update,
-        as: :close,
-        only: [:name],
-        when: any(member <- members, none(label <- member.project.labels, label.name == "x"))
-    end
-
-    defmodule VerdictMember do
-      use Hologram.Entity
-
-      attribute :seat, :string
-
-      relationship :project, VerdictProject, optional: true
-      relationship :user, Module14, optional: true
-
-      allow :read
-    end
-
-    defmodule VerdictLabel do
-      use Hologram.Entity
-
-      attribute :name, :string
-
-      allow :read
-    end
-
-    defmodule ServerOnlyReport do
-      use Hologram.Entity
-
-      attribute :reviewed, :boolean, server_only: true
-      attribute :reviewed_on, :date, server_only: true, optional: true
-      attribute :title, :string
-
-      relationship :comments, [Hologram.PolicyTest.ServerOnlyComment], inverse: report
-
-      allow :read, when: reviewed == true or title == "x"
-    end
-
-    defmodule ServerOnlyComment do
-      use Hologram.Entity
-
-      attribute :body, :string
-      attribute :flagged, :boolean, server_only: true
-
-      relationship :report, ServerOnlyReport, optional: true
-
-      allow :read
-    end
-
-    # The read rule's any reads no none or all, so the browser answers it from the rows it holds -
-    # the others are keyed by their operation and clause.
-    test "returns the deciding quantifiers of every operation, keyed" do
-      update_clause = {:all, {[:members], [{:seat, :==, "full"}]}}
-      none_clause = {:none, {[:labels], []}}
-
-      close_clause =
-        {:any, {[:members], [{:none, {[:project, :labels], [{:name, :==, "x"}]}}]}}
-
-      assert deciding_quantifiers(VerdictProject) ==
-               Enum.sort([
-                 {verdict_key(VerdictProject, :archive, none_clause), none_clause},
-                 {verdict_key(VerdictProject, :close, close_clause), close_clause},
-                 {verdict_key(VerdictProject, :delete, none_clause), none_clause},
-                 {verdict_key(VerdictProject, :update, update_clause), update_clause},
-                 {verdict_key(VerdictProject, {:update, :name}, none_clause), none_clause},
-                 {verdict_key(VerdictProject, {:update, :name}, close_clause), close_clause}
-               ])
-    end
-
-    test "returns a read rule's predicate reading a type nobody may read" do
-      clause = {[:project, :archived], :==, false}
-
-      assert deciding_quantifiers(Hologram.PolicyTest.UnreadableReadTask) == [
-               {verdict_key(Hologram.PolicyTest.UnreadableReadTask, :read, clause), clause}
-             ]
-    end
-
-    # The stored alternative beside it is answered from the row the client holds.
-    test "returns a predicate on a server-only attribute standing in an alternative" do
-      clause = {:reviewed, :==, true}
-
-      assert deciding_quantifiers(ServerOnlyReport) == [
-               {verdict_key(ServerOnlyReport, :read, clause), clause}
-             ]
     end
   end
 
@@ -2848,6 +2720,67 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "verdict_operations/1" do
+    defmodule VerdictProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :labels, [Hologram.PolicyTest.VerdictLabel]
+      relationship :members, [Hologram.PolicyTest.VerdictMember], inverse: project
+
+      allow :read, when: any(member <- members, member.user_id == user_id())
+      allow :update, when: name == "open" or all(member <- members, member.seat == "full")
+      allow :delete, when: none(labels)
+      allow :update, as: :archive, only: [:name], when: none(labels)
+
+      allow :update,
+        as: :close,
+        only: [:name],
+        when: any(member <- members, none(label <- member.project.labels, label.name == "x"))
+    end
+
+    defmodule VerdictMember do
+      use Hologram.Entity
+
+      attribute :seat, :string
+
+      relationship :project, VerdictProject, optional: true
+      relationship :user, Module14, optional: true
+
+      allow :read
+    end
+
+    defmodule VerdictLabel do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      allow :read
+    end
+
+    defmodule ServerOnlyReport do
+      use Hologram.Entity
+
+      attribute :reviewed, :boolean, server_only: true
+      attribute :reviewed_on, :date, server_only: true, optional: true
+      attribute :title, :string
+
+      relationship :comments, [Hologram.PolicyTest.ServerOnlyComment], inverse: report
+
+      allow :read, when: reviewed == true or title == "x"
+    end
+
+    defmodule ServerOnlyComment do
+      use Hologram.Entity
+
+      attribute :body, :string
+      attribute :flagged, :boolean, server_only: true
+
+      relationship :report, ServerOnlyReport, optional: true
+
+      allow :read
+    end
+
     defmodule FieldVerdictProject do
       use Hologram.Entity
 
@@ -3081,26 +3014,6 @@ defmodule Hologram.PolicyTest do
                  Hologram.PolicyTest.VerdictMember,
                  Hologram.PolicyTest.VerdictProject
                ])
-    end
-  end
-
-  describe "verdict_rule/1" do
-    test "requires a clause alone" do
-      clause = {:archived, :==, false}
-
-      assert verdict_rule(clause) == %{predicates: [clause], to: nil, via: nil}
-    end
-
-    test "holds a role reference alone" do
-      reference = {:rel, [:project, :team], [:member]}
-
-      assert verdict_rule({:to, reference}) == %{predicates: [], to: [reference], via: nil}
-    end
-
-    test "holds a delegation alone" do
-      via = {:update, [:vault]}
-
-      assert verdict_rule({:via, via}) == %{predicates: [], to: nil, via: via}
     end
   end
 
