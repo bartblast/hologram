@@ -298,7 +298,12 @@ defmodule Hologram.DB.QueryRunner do
 
   defp decode_embedded_value(nil, _type), do: nil
 
-  defp decode_embedded_value(value, :date), do: Date.from_iso8601!(value)
+  # Read the way the codec reads a date it wrote, since Postgres spells a year past 9999 with all
+  # its digits here too and Date.from_iso8601/1 reads no more than four.
+  defp decode_embedded_value(value, :date) do
+    {:ok, date} = Codec.decode_json(value, :date)
+    date
+  end
 
   # JSON writes a fraction without its trailing zeros, so an instant arriving this way carries
   # whatever precision its digits imply, where the same instant read from the column carries all

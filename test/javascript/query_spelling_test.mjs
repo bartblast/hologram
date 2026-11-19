@@ -51,7 +51,18 @@ const date = (year, month, day) =>
     [Type.atom("year"), Type.integer(year)],
   ]);
 
-const datetime = (year, month, day, hour, minute, second, amount, precision) =>
+// In UTC unless a zone is given, as {zone, abbreviation, utcOffset}.
+const datetime = (
+  year,
+  month,
+  day,
+  hour,
+  minute,
+  second,
+  amount,
+  precision,
+  {abbreviation = "UTC", utcOffset = 0, zone = "Etc/UTC"} = {},
+) =>
   Type.struct("DateTime", [
     [Type.atom("calendar"), Type.alias("Calendar.ISO")],
     [Type.atom("day"), Type.integer(day)],
@@ -64,10 +75,10 @@ const datetime = (year, month, day, hour, minute, second, amount, precision) =>
     [Type.atom("month"), Type.integer(month)],
     [Type.atom("second"), Type.integer(second)],
     [Type.atom("std_offset"), Type.integer(0)],
-    [Type.atom("time_zone"), Type.bitstring("Etc/UTC")],
-    [Type.atom("utc_offset"), Type.integer(0)],
+    [Type.atom("time_zone"), Type.bitstring(zone)],
+    [Type.atom("utc_offset"), Type.integer(utcOffset)],
     [Type.atom("year"), Type.integer(year)],
-    [Type.atom("zone_abbr"), Type.bitstring("UTC")],
+    [Type.atom("zone_abbr"), Type.bitstring(abbreviation)],
   ]);
 
 const time = (hour, minute, second) =>
@@ -227,6 +238,29 @@ describe("QuerySpelling", () => {
       assert.equal(
         spell(query),
         String.raw`{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["count","==",3],["held_at","==","2026-01-02T03:04:05.120000Z"],["rating","==",float:4004000000000000],["released_on","==","2026-01-02"]],"include":{},"skip":null,"sort":[],"take":null}`,
+      );
+    });
+
+    // The server spells a datetime outside UTC as the UTC instant it stands for, and a year below 0
+    // with its minus ahead of the padding.
+    it("spells a datetime outside UTC as its instant, and a year below 0 or above 9999 as Date.to_iso8601/1 does", () => {
+      const warsawMidnight = datetime(2026, 3, 1, 0, 0, 0, 0, 0, {
+        abbreviation: "CET",
+        utcOffset: 3600,
+        zone: "Europe/Warsaw",
+      });
+
+      const query = count(
+        filter(module(10), [
+          ["held_at", warsawMidnight],
+          ["released_on", operator(">=", date(-1, 1, 2))],
+          ["released_on", operator("<", date(20250, 1, 2))],
+        ]),
+      );
+
+      assert.equal(
+        spell(query),
+        String.raw`{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["held_at","==","2026-02-28T23:00:00.000000Z"],["released_on","<","20250-01-02"],["released_on",">=","-0001-01-02"]],"include":{},"skip":null,"sort":[],"take":null}`,
       );
     });
 
