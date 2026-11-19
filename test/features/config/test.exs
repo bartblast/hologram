@@ -10,6 +10,9 @@ config :hologram_feature_tests, HologramFeatureTestsWeb.Endpoint,
 # Endpoint.url/0 follows the listener, and Wallaby follows Endpoint.url/0, so nothing
 # else changes.
 #
+# Port 0 has the OS pick a free port, so runs that overlap on one machine never share one. The
+# test helper reads the port the listener got and puts it into the endpoint's URL.
+#
 # The cert is a test-only self-signed pair made with OpenSSL, not `mix phx.gen.cert`:
 #
 #   openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 \
@@ -26,11 +29,11 @@ if System.get_env("HOLOGRAM_FEATURE_TESTS_HTTPS") do
       certfile: Path.expand("../priv/cert/selfsigned.pem", __DIR__),
       ip: {127, 0, 0, 1},
       keyfile: Path.expand("../priv/cert/selfsigned_key.pem", __DIR__),
-      port: 4002
+      port: 0
     ]
 else
   config :hologram_feature_tests, HologramFeatureTestsWeb.Endpoint,
-    http: [ip: {127, 0, 0, 1}, port: 4002]
+    http: [ip: {127, 0, 0, 1}, port: 0]
 end
 
 config :logger, level: :warning

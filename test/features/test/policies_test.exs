@@ -25,6 +25,7 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias HologramFeatureTests.Policies.Page7
   alias HologramFeatureTests.PoliciesPage
   alias HologramFeatureTests.Roles.Admin
+  alias HologramFeatureTestsWeb.Endpoint
 
   # The tables truncate in one statement: the memo, note, project member and role grant tables'
   # foreign keys to the user table, the stop table's to the trip table, the leg table's to the stop
@@ -368,7 +369,7 @@ defmodule HologramFeatureTests.PoliciesTest do
     |> visit(Page3)
     |> assert_text(css("#confirmable_bookings"), ~r/^alpha,charlie,delta$/)
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/policies/3")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(Endpoint.url() <> "/policies/3")
 
     assert html =~ ~r{<strong id="confirmable_bookings"><code>alpha,charlie,delta</code></strong>}
   end

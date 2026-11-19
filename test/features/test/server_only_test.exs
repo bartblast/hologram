@@ -12,6 +12,7 @@ defmodule HologramFeatureTests.ServerOnlyTest do
   alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.PoliciesPage
+  alias HologramFeatureTestsWeb.Endpoint
 
   # All the tables truncate in one statement: the memo, note, project member and role grant tables'
   # foreign keys to the user table make Postgres reject truncating the referenced table alone.
@@ -43,7 +44,7 @@ defmodule HologramFeatureTests.ServerOnlyTest do
     |> visit(PoliciesPage)
     |> assert_text(css("#documents"), "public_document")
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/policies")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(Endpoint.url() <> "/policies")
 
     assert String.contains?(html, "syncRows")
     assert String.contains?(html, "public_document")
