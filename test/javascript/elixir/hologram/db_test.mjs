@@ -207,6 +207,7 @@ describe("Elixir_Hologram_DB", () => {
     Batches.reset();
     Clock.reset();
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
     LocalDatabase.reset();
     Model.reset();
   });
@@ -261,6 +262,7 @@ describe("Elixir_Hologram_DB", () => {
     // are one row. They ride the create's batch, so they land together with it or not at all.
     it("appends the grants a creator takes beside the create", () => {
       LocalDatabase.actorUserId = ACTOR;
+      LocalDatabase.actorEntityId = ACTOR;
 
       create(struct(NOTE, {title: "alpha"}));
 
@@ -298,8 +300,23 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
+    // The server takes a user id no user entity can have as no data-layer user, and grants it
+    // nothing - creator_grants/1's nil clause again.
+    it("appends no grant for a user id no user entity can have", () => {
+      LocalDatabase.actorUserId = 7;
+      LocalDatabase.actorEntityId = null;
+
+      create(struct(NOTE, {title: "alpha"}));
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => write.type),
+        [NOTE],
+      );
+    });
+
     it("appends no grant for a type whose creator takes none", () => {
       LocalDatabase.actorUserId = ACTOR;
+      LocalDatabase.actorEntityId = ACTOR;
 
       create(struct(TASK, {done: false, title: "alpha"}));
 
@@ -313,6 +330,7 @@ describe("Elixir_Hologram_DB", () => {
     // not written a second time.
     it("appends no grant the client already holds", () => {
       LocalDatabase.actorUserId = ACTOR;
+      LocalDatabase.actorEntityId = ACTOR;
 
       LocalDatabase.putRow(ROLE_GRANT, {
         id: deriveGrantId(ACTOR, NOTE, ID_1, "owner"),

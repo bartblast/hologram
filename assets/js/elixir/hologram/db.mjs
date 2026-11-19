@@ -382,11 +382,12 @@ export function createEntity(entity, entityType) {
 // Nothing is asked of the rules: granted_to: :creator is a declaration being copied, not a
 // permission being judged, and the applier admits such a grant without a gate for the same reason.
 //
-// The two answers that write nothing mirror the server's own. Nobody signed in takes no roles,
-// which is creator_grants/1's nil clause, and a grant the client already holds is not written
-// twice, which is grant_role/3's idempotency read off the same derived id.
+// The two answers that write nothing mirror the server's own. Nobody signed in takes no roles, and
+// neither does a user id no user entity can have: creator_grants/1's nil clause. A grant the client
+// already holds is not written twice, which is grant_role/3's idempotency read off the same derived
+// id.
 function appendCreatorGrants(batch, entityType, entityId) {
-  const actorUserId = LocalDatabase.actorUserId;
+  const actorUserId = LocalDatabase.actorEntityId;
 
   if (actorUserId === null) {
     return;

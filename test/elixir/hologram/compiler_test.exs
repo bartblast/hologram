@@ -99,10 +99,21 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module24, as: ShelfPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module36, as: NamedChannel
   alias Hologram.Test.Fixtures.Policy.Module38, as: LimitedChannel
+  alias Hologram.Test.Fixtures.Policy.Module42, as: OwnerPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module43, as: VaultPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module44, as: CratePolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module45, as: ParcelPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module5, as: DelegationPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module8, as: TwoHopDelegationPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Readers.Module22, as: ReadersTeam
+  alias Hologram.Test.Fixtures.Policy.Readers.Module23, as: ReadersProject
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24, as: ReadersTask
+  alias Hologram.Test.Fixtures.Policy.Readers.Module25, as: ReadersVault
+  alias Hologram.Test.Fixtures.Policy.Readers.Module26, as: ReadersCrate
+  alias Hologram.Test.Fixtures.Policy.Readers.Module27, as: ReadersShelf
+  alias Hologram.Test.Fixtures.Policy.Readers.Module28, as: ReadersParcel
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
   alias Hologram.Test.Fixtures.Template.Renderer.Module131, as: SessionUserPage
@@ -1359,8 +1370,7 @@ defmodule Hologram.CompilerTest do
       assert page_windows[PageModule20] == [Registry.id(Auth.grants_window())]
     end
 
-    # No user entity type, no grant store: a page checking permissions has nothing to check them
-    # against.
+    # No user entity type, no grant store: there are no grant rows to hold.
     test "leaves the grants window out of a checking page when the data model designates no user entity type",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
       plt_without_user_entity = without_user_entity(module_info_plt)
@@ -1424,6 +1434,23 @@ defmodule Hologram.CompilerTest do
 
       assert page_windows[PageModule21] ==
                Enum.sort([Registry.id(Auth.grants_window()), Registry.id(window)])
+    end
+
+    # No grant store, so no grants window - but the rules still read rows, which the windows embed.
+    test "derives a checking build's window ids from the windows embedding the rows the rules read when the data model designates no user entity type",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      plt_without_user_entity = without_user_entity(module_info_plt)
+
+      page_windows =
+        derive_page_windows([PageModule21], call_graph, plt_without_user_entity, [PageModule21])
+
+      window =
+        TwoHopDelegationPolicyEntity
+        |> sort(created_at)
+        |> Stage.normalize()
+        |> Window.derive(true)
+
+      assert page_windows[PageModule21] == [Registry.id(window)]
     end
 
     test "derives an unchecked build's window ids from the plain windows", %{
@@ -1605,13 +1632,15 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "permission_checking?/2" do
-    test "is true when a page checks permissions on the client and the data model designates a user entity type",
-         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+  describe "permission_checking?/1" do
+    test "is true when a page checks permissions on the client", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
       {reach_by_page, _component_queries} =
         derive_kept_reach([PageModule18], call_graph, module_info_plt, [PageModule18])
 
-      assert permission_checking?(reach_by_page, module_info_plt)
+      assert permission_checking?(reach_by_page)
     end
 
     test "is false when no page checks permissions on the client", %{
@@ -1621,19 +1650,7 @@ defmodule Hologram.CompilerTest do
       {reach_by_page, _component_queries} =
         derive_kept_reach([PageModule18], call_graph, module_info_plt, [])
 
-      refute permission_checking?(reach_by_page, module_info_plt)
-    end
-
-    test "is false when the data model designates no user entity type", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      plt_without_user_entity = without_user_entity(module_info_plt)
-
-      {reach_by_page, _component_queries} =
-        derive_kept_reach([PageModule18], call_graph, plt_without_user_entity, [PageModule18])
-
-      refute permission_checking?(reach_by_page, plt_without_user_entity)
+      refute permission_checking?(reach_by_page)
     end
   end
 
@@ -2469,8 +2486,8 @@ defmodule Hologram.CompilerTest do
       refute PolicyEntity in sync_constants.synced_types
     end
 
-    # A browser never decides a read rule, and with no page checking permissions it answers no
-    # other rule either, so the rows the rules read are no use to it.
+    # With no page checking permissions the browser decides no rule, so the rows the rules read are
+    # no use to it.
     test "syncs none of the types the rules read when no page checks permissions", %{
       module_info_plt: module_info_plt
     } do
@@ -2509,6 +2526,34 @@ defmodule Hologram.CompilerTest do
 
       assert ProjectPolicyEntity in synced_types
       refute MemberPolicyEntity in synced_types
+    end
+
+    # The parcel's read rule reads `shelf.vault.owner`, and no rule lets anyone read a vault. No
+    # browser holds a vault row, so neither it nor the owner past it is synced: the server's
+    # verdict answers the rule. The crate before the vault is.
+    test "syncs no type of a rule's chain from the first one nobody may read", %{
+      module_info_plt: module_info_plt
+    } do
+      sync_constants =
+        build_sync_constants(mentioning_reach([ParcelPolicyEntity], true), %{}, module_info_plt)
+
+      assert CratePolicyEntity in sync_constants.synced_types
+      refute VaultPolicyEntity in sync_constants.synced_types
+      refute OwnerPolicyEntity in sync_constants.synced_types
+    end
+
+    # The cut drops only what the chain alone would add: a type the page reaches itself is synced,
+    # readable or not.
+    test "syncs a type past a rule's cut chain that the page reaches itself", %{
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page =
+        mentioning_reach([ParcelPolicyEntity, VaultPolicyEntity, OwnerPolicyEntity], true)
+
+      synced_types = build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types
+
+      assert VaultPolicyEntity in synced_types
+      assert OwnerPolicyEntity in synced_types
     end
 
     # Entity51's read rule delegates to Entity50, which declares no rule, so no one may read an
@@ -2589,14 +2634,19 @@ defmodule Hologram.CompilerTest do
              ]
     end
 
-    # No user entity type, no grant store to check permissions against, so no page checks them.
-    test "syncs none of the types the rules read when the data model designates no user entity type",
+    # No user entity type, no grant store, but a page checking permissions still reads the rules'
+    # rows.
+    test "syncs the types the rules read, without the grant type, when the data model designates no user entity type",
          %{module_info_plt: module_info_plt} do
       reach_by_page = mentioning_reach([PathPolicyEntity], true)
       plt_without_user_entity = without_user_entity(module_info_plt)
 
       assert build_sync_constants(reach_by_page, %{}, plt_without_user_entity).synced_types == [
-               PathPolicyEntity
+               Entity17,
+               PolicyEntity,
+               PathPolicyEntity,
+               ParentPolicyEntity,
+               DelegationPolicyEntity
              ]
     end
   end
@@ -3651,6 +3701,22 @@ defmodule Hologram.CompilerTest do
       relationship :report, BakedReport, optional: true
 
       allow :read, when: report.reviewed == true
+    end
+
+    defmodule BakedHiddenProject do
+      use Hologram.Entity
+
+      attribute :archived, :boolean
+
+      allow :update
+    end
+
+    defmodule BakedHiddenTask do
+      use Hologram.Entity
+
+      relationship :project, BakedHiddenProject, optional: true
+
+      allow :read, when: project.archived == false
     end
 
     defp archive_key do
@@ -5080,8 +5146,8 @@ defmodule Hologram.CompilerTest do
 
     # No client holds a server-only value, so a predicate reading one is the key the server's verdict
     # on it is sent under and the types it reads alone - none for the row's own attribute, which no
-    # write of the client's can move, and the types along a path. A stored attribute beside it in an
-    # alternative stays a triple.
+    # write of the client's can move, and the types along a path, without the rule's own. A stored
+    # attribute beside it in an alternative stays a triple.
     test "bakes a predicate on a server-only attribute as its verdict key and the types it reads",
          %{
            ir_plt: ir_plt,
@@ -5116,8 +5182,135 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"reads":["Hologram.CompilerTest.BakedReport","Hologram.CompilerTest.BakedReportNote"],"verdict":"#{note_key}"}],"to":null,"via":null}]/
+               ~s/"read":[{"predicates":[{"reads":["Hologram.CompilerTest.BakedReport"],"verdict":"#{note_key}"}],"to":null,"via":null}]/
              )
+    end
+
+    # No client holds a row of a type nobody may read, so a read rule's predicate reading one is the
+    # key the server's verdict on it is sent under and the types it reads, with its triple for when
+    # the project reference is empty.
+    test "bakes a read rule's predicate reading a type nobody may read with its verdict key and reads",
+         %{
+           ir_plt: ir_plt,
+           runtime_mfas: runtime_mfas
+         } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedHiddenProject, BakedHiddenTask, RoleGrant])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      key =
+        Hologram.Policy.verdict_key(BakedHiddenTask, :read, {[:project, :archived], :==, false})
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"predicate":[["project","archived"],"==",false],"reads":["Hologram.CompilerTest.BakedHiddenProject"],"verdict":"#{key}"}],"to":null,"via":null}]/
+             )
+    end
+
+    # Readers.Module24 reads the team's id off its project, a type nobody may read, so the read
+    # rule's reference carries the key the server's verdict on it is sent under and the types it
+    # reads. A reference one relationship away reads the team's id off the task itself.
+    test "bakes a read rule's role reference reading a type nobody may read with its verdict key and reads",
+         %{
+           ir_plt: ir_plt,
+           runtime_mfas: runtime_mfas
+         } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([ReadersProject, ReadersTask, ReadersTeam, RoleGrant])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      key =
+        Hologram.Policy.verdict_key(
+          ReadersTask,
+          :read,
+          {:to, {:rel, [:project, :team], [:member]}}
+        )
+
+      team_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module22"/
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[],"to":[["rel",["project","team"],#{team_js},["member"],{"reads":["Hologram.Auth.RoleGrant","Hologram.Test.Fixtures.Policy.Readers.Module23"],"verdict":"#{key}"}]],"via":null},{"predicates":[],"to":[["rel",["team"],#{team_js},["member"]]],"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"update":[{"predicates":[],"to":[["rel",["team"],#{team_js},["member"]]],"via":null}]/
+             )
+    end
+
+    # The parcel's vault and shelf have no read rule, so its read rule's delegations through them
+    # carry the key the server's verdict on each is sent under and the types it reads. The one to
+    # the crate runs through readable types alone.
+    test "bakes a read rule's delegation through a type nobody may read with its verdict key and reads",
+         %{
+           ir_plt: ir_plt,
+           runtime_mfas: runtime_mfas
+         } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types:
+            MapSet.new([ReadersCrate, ReadersParcel, ReadersShelf, ReadersVault, RoleGrant])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      vault_key = Hologram.Policy.verdict_key(ReadersParcel, :read, {:via, {:update, [:vault]}})
+
+      shelf_key =
+        Hologram.Policy.verdict_key(ReadersParcel, :read, {:via, {:read, [:shelf, :crate]}})
+
+      vault_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module25"/
+      crate_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module26"/
+      shelf_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module27"/
+
+      assert String.contains?(
+               js,
+               ~s/"via":["update",["vault"],{"reads":[#{vault_js}],"verdict":"#{vault_key}"}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"via":["read",["shelf","crate"],{"reads":[#{crate_js},#{shelf_js}],"verdict":"#{shelf_key}"}]/
+             )
+
+      assert String.contains?(js, ~s/"via":["read",["crate"]]}/)
     end
 
     # Each time is spelled by the type of the attribute it is compared with, on the row that
@@ -10055,7 +10248,7 @@ defmodule Hologram.CompilerTest do
     end
 
     # Rules a deploy added can read a type the client's bundle never held, and the client needs its
-    # entry to hold the rows the rule reads and follow the path to them.
+    # entry to box a row of it and follow a path to it.
     test "renders a type declaring no rule or role that a rule reads through a relationship" do
       label = "Hologram.Test.Fixtures.Entity.Module44"
 

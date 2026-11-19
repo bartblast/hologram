@@ -240,10 +240,13 @@ defmodule Hologram.DB.DDL do
   Returns the pre-flight check statement counting the key groups of the given table's
   columns that hold more than one row - the duplicates that block a unique index build.
 
-  Nulls compare as values when nulls_distinct is false, matching the index being built.
+  Nulls compare as values when nulls_distinct is false, matching the index being built. Given
+  a written column, only the groups holding a row with a NULL there count - the rows a fill
+  of that column writes.
   """
-  @spec duplicate_check_statement(String.t(), list(String.t()), boolean) :: String.t()
-  def duplicate_check_statement(table, columns, nulls_distinct) do
+  @spec duplicate_check_statement(String.t(), list(String.t()), boolean, String.t() | nil) ::
+          String.t()
+  def duplicate_check_statement(table, columns, nulls_distinct, written_column \\ nil) do
     quoted_columns = Enum.map(columns, &Mapper.quote_identifier/1)
     grouped = Enum.join(quoted_columns, ", ")
 
@@ -254,8 +257,15 @@ defmodule Hologram.DB.DDL do
         ""
       end
 
+    written_part =
+      if written_column do
+        " AND COUNT(*) FILTER (WHERE #{Mapper.quote_identifier(written_column)} IS NULL) > 0"
+      else
+        ""
+      end
+
     "SELECT COUNT(*) FROM (SELECT 1 FROM #{qualified(table)}#{not_null_part} " <>
-      "GROUP BY #{grouped} HAVING COUNT(*) > 1) AS duplicates"
+      "GROUP BY #{grouped} HAVING COUNT(*) > 1#{written_part}) AS duplicates"
   end
 
   @doc """
@@ -314,8 +324,8 @@ defmodule Hologram.DB.DDL do
   leftovers of a concurrent build that failed partway.
 
   A concurrent build spans several internal transactions, so PostgreSQL cannot roll one
-  back: the failed index stays in the catalog flagged invalid, unused by queries and
-  maintained by every write, holding its derived name.
+  back: the failed index stays in the catalog flagged invalid, unused by queries, holding
+  its derived name.
   """
   @spec invalid_index_check_statement(String.t()) :: String.t()
   def invalid_index_check_statement(index) do
@@ -329,37 +339,27 @@ defmodule Hologram.DB.DDL do
   end
 
   @doc """
-  Returns the statement listing the names of the invalid indexes of the data schema.
+  Returns the statement listing the invalid indexes of the data schema - each one's name,
+  whether writes go through it, and whether it is live.
 
   A concurrent build that failed partway leaves its index in the catalog flagged
-  invalid: it holds the derived name, serves no query, and every write maintains it.
+  invalid: it holds the derived name and serves no query. Writes go through it when the
+  build failed in its last phase, checking the rows - a unique one then refuses a write
+  repeating its key - and not when it failed in its first, building the index. A concurrent
+  drop that stopped partway can leave its index dead: writes skip it, and so does a table
+  rewrite, unless the rewrite changes the type of a column it covers.
   """
   @spec invalid_indexes_statement() :: String.t()
   def invalid_indexes_statement do
     """
-    SELECT ic.relname
+    SELECT ic.relname, i.indisready, i.indislive
     FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
     JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = '#{Mapper.data_schema()}' AND NOT i.indisvalid\
+    WHERE n.nspname = '#{Mapper.data_schema()}' AND NOT i.indisvalid
+    ORDER BY ic.relname\
     """
-  end
-
-  @doc """
-  Returns the statement rebuilding the given index in place, concurrently.
-
-  Rebuilding is what clears an invalid index: it replaces the failed build without
-  taking the table's writes offline, and without the index ever being absent - which a
-  drop-and-recreate pair could not promise if the node died between the two.
-
-  Runs on a connection with no open transaction, as every concurrent operation must -
-  PostgreSQL rejects one inside a transaction with 25001. The repair holds a
-  session-scoped lock rather than a transactional one for exactly this reason.
-  """
-  @spec reindex_statement(String.t()) :: String.t()
-  def reindex_statement(index) do
-    ~s(REINDEX INDEX CONCURRENTLY "#{Mapper.data_schema()}".#{Mapper.quote_identifier(index)})
   end
 
   @doc """
@@ -384,7 +384,10 @@ defmodule Hologram.DB.DDL do
   :add_foreign_key renders a named ADD CONSTRAINT referencing the target table's id
   column with the delete action - :drop_foreign_key and :rename_constraint render
   their ALTER TABLE forms. :create_index renders a named index over its columns -
-  :drop_index renders the schema-qualified drop (indexes are schema-level objects).
+  :drop_index renders the schema-qualified drop (indexes are schema-level objects). Both
+  render their CONCURRENTLY form for an op carrying `concurrently: true`. :drop_index and
+  :rename_index render their IF EXISTS form for an op carrying `if_exists: true`, which
+  skips an index that is not there instead of failing on it.
 
   The rename ops - :rename_table, :rename_column, :rename_index, :rename_enum_type -
   render their one-statement forms, and :widen_to_many moves the reference values of a
@@ -467,9 +470,10 @@ defmodule Hologram.DB.DDL do
   end
 
   # A `concurrently: true` op must reach the database on a connection with no open
-  # transaction - PostgreSQL rejects a concurrent build inside one with 25001. That is why
-  # such ops are split into the applier's tail and run after their file commits, rather
-  # than being a property of the statement itself.
+  # transaction - PostgreSQL rejects a concurrent build inside one with 25001, and a
+  # concurrent drop the same way. That is why the renderer splits such builds into the
+  # applier's tail, run after their file commits, and the migrator's index repair runs its
+  # own on the migration lock's session, rather than this being a property of the statement.
   def statements(%{op: :create_index} = op) do
     columns = Enum.map_join(op.columns, ", ", &Mapper.quote_identifier/1)
     unique_sql = if op.unique, do: "UNIQUE ", else: ""
@@ -519,8 +523,13 @@ defmodule Hologram.DB.DDL do
     ]
   end
 
+  # Concurrent only from the migrator's index repair and tail, outside any transaction - see
+  # the :create_index clause. IF EXISTS, here and on the rename, only for an op of a migration
+  # file: the boot may have dropped the index the op names before the op applies.
   def statements(%{op: :drop_index} = op) do
-    ["DROP INDEX #{qualified(op.index)}"]
+    concurrently_sql = if op[:concurrently], do: "CONCURRENTLY ", else: ""
+
+    ["DROP INDEX #{concurrently_sql}#{if_exists_sql(op)}#{qualified(op.index)}"]
   end
 
   def statements(%{op: :drop_table} = op) do
@@ -581,7 +590,10 @@ defmodule Hologram.DB.DDL do
   end
 
   def statements(%{op: :rename_index} = op) do
-    ["ALTER INDEX #{qualified(op.from)} RENAME TO #{Mapper.quote_identifier(op.to)}"]
+    [
+      "ALTER INDEX #{if_exists_sql(op)}#{qualified(op.from)} " <>
+        "RENAME TO #{Mapper.quote_identifier(op.to)}"
+    ]
   end
 
   def statements(%{op: :rename_table} = op) do
@@ -633,6 +645,10 @@ defmodule Hologram.DB.DDL do
   defp delete_action(:no_action), do: "NO ACTION"
 
   defp delete_action(:restrict), do: "RESTRICT"
+
+  defp if_exists_sql(op) do
+    if op[:if_exists], do: "IF EXISTS ", else: ""
+  end
 
   defp literal(value) do
     "'#{String.replace(value, "'", "''")}'"

@@ -214,8 +214,9 @@ describe("QueryKernel", () => {
       assert.deepEqual(matchingDated([["rating", "<=", 4.5]]), ["ada", "bob"]);
     });
 
-    // A canonical date is ordered by its characters, which is what makes a comparison here a
-    // comparison of strings rather than a parse.
+    // Untyped, a date compares by its characters, which orders it rightly within years 0 to 9999
+    // - one spelling per day, at one width. Past those years the declared type has to say it is a
+    // date, which "run() - dates and datetimes of any year" covers.
     it("compares dates", () => {
       const filter = [["released_on", ">=", "2027-01-01"]];
 
@@ -2472,8 +2473,8 @@ describe("QueryKernel", () => {
       assert.deepEqual(titlesMatching([["priority", "<", "medium"]]), ["c"]);
     });
 
-    // Compared as labels, "high" sorts before "medium" and would drop out - so only the ranks the
-    // alternative's predicate is collected for keep it.
+    // Compared as labels, "high" sorts before "medium" and would drop out - so only the order the
+    // alternative's predicate is collected for keeps it.
     it("compares an enum inside an alternative by its declared position", () => {
       const filter = [
         {or: [[["priority", ">=", "medium"]], [["title", "==", "d"]]]},
@@ -3598,6 +3599,236 @@ describe("QueryKernel", () => {
         HologramRuntimeError,
         "a filter with a path or a quantifier needs the entity type of the rows it matches",
       );
+    });
+  });
+
+  // A date or datetime is held as the wire spells it, and its year is as wide as it needs and
+  // signed - so past years 0 to 9999 its characters stop ordering it, and the declared type is what
+  // tells the kernel to compare the years as numbers, everywhere a query orders by one. The order
+  // asserted is the server's: Date.compare/2 and DateTime.compare/2, and Postgres.
+  describe("run() - dates and datetimes of any year", () => {
+    const EVENT = "MyApp.Event";
+    const SESSION = "MyApp.Session";
+    const VENUE = "MyApp.Venue";
+
+    const term = (overrides = {}) =>
+      Object.assign(
+        {
+          cardinality: "set",
+          entity: EVENT,
+          filter: [],
+          include: {},
+          skip: null,
+          sort: [["id", "asc"]],
+          take: null,
+        },
+        overrides,
+      );
+
+    const titles = (overrides) =>
+      QueryKernel.run(term(overrides)).map((node) => node.row.title);
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [EVENT]: {
+            attributes: {
+              ends_on: "date",
+              held_at: "datetime",
+              held_on: "date",
+              id: "uuid",
+              title: "string",
+            },
+            derived: {
+              venue_opened_on: {
+                definition: {name: ["venue", "opened_on"]},
+                kind: "scalar",
+                type: "date",
+                values: null,
+              },
+            },
+            enumValues: {},
+            relationships: {
+              sessions: {toMany: true, type: SESSION},
+              venue: {toMany: false, type: VENUE},
+            },
+            serverOnly: [],
+          },
+          [SESSION]: {
+            attributes: {id: "uuid", starts_on: "date"},
+            enumValues: {},
+            relationships: {},
+            serverOnly: [],
+          },
+          [VENUE]: {
+            attributes: {id: "uuid", opened_on: "date"},
+            enumValues: {},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      LocalDatabase.reset();
+      Model.reset();
+
+      LocalDatabase.putRow(VENUE, {id: "v1", opened_on: "10000-01-01"});
+      LocalDatabase.putRow(VENUE, {id: "v2", opened_on: "9999-01-01"});
+
+      LocalDatabase.putRow(SESSION, {id: "s1", starts_on: "10000-01-01"});
+      LocalDatabase.putRow(SESSION, {id: "s2", starts_on: "9999-01-01"});
+
+      for (const [id, title, heldOn, heldAt, endsOn, venueId] of [
+        ["e1", "a", "9999-12-31", "2026-01-01T00:00:00.000000Z", null, "v2"],
+        [
+          "e2",
+          "b",
+          "-0001-06-01",
+          "-0001-06-01T00:00:00.000000Z",
+          "0000-01-01",
+          "v1",
+        ],
+        ["e3", "c", "10000-01-01", null, null, null],
+        [
+          "e4",
+          "d",
+          "-0002-01-01",
+          "0000-01-01T00:00:00.000000Z",
+          "-0001-01-01",
+          null,
+        ],
+        ["e5", "e", "0000-01-01", "-0002-06-01T00:00:00.000000Z", null, null],
+      ]) {
+        LocalDatabase.putRow(EVENT, {
+          ends_on: endsOn,
+          held_at: heldAt,
+          held_on: heldOn,
+          id,
+          title,
+          venue_id: venueId,
+        });
+      }
+
+      LocalDatabase.addFact(EVENT, "sessions", "e1", "s1");
+      LocalDatabase.addFact(EVENT, "sessions", "e2", "s2");
+    });
+
+    it("sorts by a date across year 0 and past 9999", () => {
+      assert.deepEqual(titles({sort: [["held_on", "asc"]]}), [
+        "d",
+        "b",
+        "e",
+        "a",
+        "c",
+      ]);
+
+      assert.deepEqual(titles({sort: [["held_on", "desc"]]}), [
+        "c",
+        "a",
+        "e",
+        "b",
+        "d",
+      ]);
+    });
+
+    it("sorts by a datetime across year 0, an unset one last", () => {
+      assert.deepEqual(titles({sort: [["held_at", "asc"]]}), [
+        "e",
+        "b",
+        "d",
+        "a",
+        "c",
+      ]);
+    });
+
+    it("filters a date by a bound past 9999 and by one below 0", () => {
+      assert.deepEqual(titles({filter: [["held_on", ">", "9999-01-01"]]}), [
+        "a",
+        "c",
+      ]);
+
+      assert.deepEqual(titles({filter: [["held_on", "<=", "-0001-12-31"]]}), [
+        "b",
+        "d",
+      ]);
+
+      assert.deepEqual(titles({filter: [["held_on", ">=", "0000-01-01"]]}), [
+        "a",
+        "c",
+        "e",
+      ]);
+
+      assert.deepEqual(titles({filter: [["held_on", "<", "10000-01-01"]]}), [
+        "a",
+        "b",
+        "d",
+        "e",
+      ]);
+    });
+
+    it("filters a datetime by a bound below 0", () => {
+      const filter = [["held_at", ">", "-0002-01-01T00:00:00.000000Z"]];
+
+      assert.deepEqual(titles({filter}), ["a", "b", "d", "e"]);
+    });
+
+    it("compares a date with another date attribute of the row", () => {
+      const filter = [["held_on", "<", {attribute: "ends_on"}]];
+
+      assert.deepEqual(titles({filter}), ["b", "d"]);
+    });
+
+    it("compares a date a path reaches", () => {
+      const filter = [[["venue", "opened_on"], ">", "9999-12-31"]];
+
+      assert.deepEqual(titles({filter}), ["b"]);
+    });
+
+    it("sorts and filters by a derived date", () => {
+      const sort = [
+        ["venue_opened_on", "asc"],
+        ["id", "asc"],
+      ];
+
+      assert.deepEqual(titles({sort}), ["a", "b", "c", "d", "e"]);
+
+      const filter = [["venue_opened_on", ">", "9999-06-01"]];
+
+      assert.deepEqual(titles({filter}), ["b"]);
+    });
+
+    it("compares a date inside an alternative", () => {
+      const filter = [
+        {or: [[["held_on", ">", "9999-12-31"]], [["title", "==", "e"]]]},
+      ];
+
+      assert.deepEqual(titles({filter}), ["c", "e"]);
+    });
+
+    it("compares the date of the row a quantifier is about", () => {
+      const filter = [
+        {
+          filter: [
+            [{name: "held_on", outer: 1}, "<", {attribute: "starts_on"}],
+          ],
+          quantifier: "any",
+          source: ["sessions"],
+        },
+      ];
+
+      assert.deepEqual(titles({filter}), ["a", "b"]);
+    });
+
+    it("compares a related row's date inside a quantifier", () => {
+      const filter = [
+        {
+          filter: [["starts_on", ">", "9999-12-31"]],
+          quantifier: "any",
+          source: ["sessions"],
+        },
+      ];
+
+      assert.deepEqual(titles({filter}), ["a"]);
     });
   });
 

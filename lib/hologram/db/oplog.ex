@@ -67,7 +67,7 @@ defmodule Hologram.DB.Oplog do
   applies when a row reaches it. Nothing reads a value from here to send it - the readers below
   take the KEYS, to know what moved, and the old references, to know which rows to look at again.
   The acting user is read from the ambient context, so writes made by the framework itself, which
-  have no actor, record none.
+  have no actor, record none, and neither do writes under a user id no user entity can have.
 
   The batch of client writes being applied is read from the ambient context the same way, and an
   effect written outside one records none - a command's write, a seed's, the framework's own. It
@@ -79,7 +79,7 @@ defmodule Hologram.DB.Oplog do
 
   def append(effects) do
     model_hash = Model.hash()
-    actor_id = Codec.encode(Context.actor_user_id(), :uuid)
+    actor_id = Codec.encode(Context.actor_entity_id(), :uuid)
     mutation_ref = Ref.get()
 
     effects

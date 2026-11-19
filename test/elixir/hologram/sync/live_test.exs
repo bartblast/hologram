@@ -162,6 +162,16 @@ defmodule Hologram.Sync.LiveTest do
       )
   end
 
+  # The query cache route/2 reads: the synced types and a window on Module17.
+  defp route_query_cache(permission_checking?) do
+    %{
+      entries: %{},
+      permission_checking?: permission_checking?,
+      synced_types: @synced,
+      windows: %{@project_window => Stage.normalize(PolicyModule17)}
+    }
+  end
+
   defp readable_ids(part, entity_type) do
     part.readable
     |> Map.get(entity_type, %{})
@@ -881,12 +891,7 @@ defmodule Hologram.Sync.LiveTest do
     setup do
       setup_query_cache(QueryCacheStub, false)
 
-      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
-        entries: %{},
-        permission_checking?: true,
-        synced_types: @synced,
-        windows: %{@project_window => Stage.normalize(PolicyModule17)}
-      })
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), route_query_cache(true))
 
       wait_for_process_cleanup(ResultStore)
       start_supervised!(ResultStore)
@@ -931,6 +936,43 @@ defmodule Hologram.Sync.LiveTest do
       assert bob_part.readable[PolicyModule17] == %{}
 
       refute_received {:live, _part}
+    end
+
+    # Module17's archive rule reads none(label <- labels, label.name == "locked"), which no read
+    # rule reads - a none the server answers browsers with its verdict, which reads the labels.
+    test "sends a session the rows the batch may have moved the verdicts of", context do
+      project = create!(PolicyModule17, public: true)
+      label = create!(PolicyModule19)
+      link!(project, :labels, label)
+
+      effect = effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"})
+
+      Sessions.register(context.alice)
+
+      route([{100, [effect]}], @place)
+
+      assert_received {:live, part}
+      assert readable_ids(part, PolicyModule17) == MapSet.new([project.id])
+    end
+
+    # No client checks permissions, so no row carries a verdict, and a change only a verdict reads
+    # moves nothing a client is sent.
+    test "sends a session none of the rows only their verdicts tie to the batch when no client checks permissions",
+         context do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), route_query_cache(false))
+
+      project = create!(PolicyModule17, public: true)
+      label = create!(PolicyModule19)
+      link!(project, :labels, label)
+
+      effect = effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"})
+
+      Sessions.register(context.alice)
+
+      route([{100, [effect]}], @place)
+
+      assert_received {:live, part}
+      refute Map.has_key?(part.readable, PolicyModule17)
     end
 
     test "hands the batch to the windows it could have changed too" do

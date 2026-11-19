@@ -36,9 +36,8 @@ defmodule Hologram.DBReadTest do
   end
 
   describe "read/1" do
-    # A session's user id may be any string, integer or atom, and one that isn't an id Hologram
-    # generates names no user entity, so it reads what a visitor reads. false is an acting user
-    # too, never the trusted tier.
+    # A session's user id may be any string, integer or atom but true and false, and one that isn't
+    # an id Hologram generates names no user entity, so it reads what a visitor reads.
     test "reads under a session user id Hologram doesn't generate as a visitor would" do
       user = create_user("db_read_foreign_id@example.com")
 
@@ -51,7 +50,7 @@ defmodule Hologram.DBReadTest do
         |> PolicyModule6.new()
         |> DB.create!()
 
-      for session_user_id <- [String.replace(user.id, "-", ""), "abc", 7, :admin, false] do
+      for session_user_id <- [String.replace(user.id, "-", ""), "abc", 7, :admin] do
         ids =
           Context.with_actor(session_user_id, fn ->
             PolicyModule6

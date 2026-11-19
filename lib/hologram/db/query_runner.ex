@@ -86,7 +86,7 @@ defmodule Hologram.DB.QueryRunner do
   Decides which of the given users may read each of the rows of the given entity type with the
   given ids, in one statement (see `Hologram.DB.QueryCompiler.recheck/4`), and reads each readable
   row's current values - and, when the given flag asks for them, the server's verdicts on the type's
-  deciding clauses for the users who may read it (see `Hologram.Auth.verdicts/2`).
+  deciding items for the users who may read it (see `Hologram.Auth.verdicts/2`).
 
   Takes the row ids as canonical entity ids, and the users as ids, nil for an anonymous one. A user
   id in any other spelling names no user entity, so it reads as an anonymous one, the way
@@ -101,13 +101,13 @@ defmodule Hologram.DB.QueryRunner do
   The verdicts hold, each keyed by verdict key:
 
     * `:users` - the answers of each signed-in reader tested on the row, by canonical id.
-    * `:others` - the answers of every other signed-in reader: what a clause answering the same
-      for every user answers, and the default of a clause depending on the user (see
-      `Hologram.Policy.Readers.classify_verdicts/1`). Nil when a clause has no default, since every
+    * `:others` - the answers of every other signed-in reader: what an item answering the same
+      for every user answers, and the default of an item depending on the user (see
+      `Hologram.Policy.Readers.classify_verdicts/1`). Nil when an item has no default, since every
       reader is tested then.
     * `:anonymous` - the answers of an anonymous reader, nil when no anonymous user was given.
 
-  With no verdicts asked for, or a type with no deciding clause, every answer set is empty.
+  With no verdicts asked for, or a type with no deciding item, every answer set is empty.
   """
   @spec recheck(module, %{module => %{atom => any}}, Enumerable.t(), list(any), boolean) ::
           %{String.t() => {struct, :all | MapSet.t(), map}}
@@ -298,7 +298,12 @@ defmodule Hologram.DB.QueryRunner do
 
   defp decode_embedded_value(nil, _type), do: nil
 
-  defp decode_embedded_value(value, :date), do: Date.from_iso8601!(value)
+  # Read the way the codec reads a date it wrote, since Postgres spells a year past 9999 with all
+  # its digits here too and Date.from_iso8601/1 reads no more than four.
+  defp decode_embedded_value(value, :date) do
+    {:ok, date} = Codec.decode_json(value, :date)
+    date
+  end
 
   # JSON writes a fraction without its trailing zeros, so an instant arriving this way carries
   # whatever precision its digits imply, where the same instant read from the column carries all

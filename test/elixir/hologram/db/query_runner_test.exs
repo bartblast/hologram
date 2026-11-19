@@ -20,10 +20,14 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module22
   alias Hologram.Test.Fixtures.Entity.Module23
+  alias Hologram.Test.Fixtures.Entity.Module24
+  alias Hologram.Test.Fixtures.Entity.Module25
   alias Hologram.Test.Fixtures.Entity.Module26
   alias Hologram.Test.Fixtures.Entity.Module27
   alias Hologram.Test.Fixtures.Entity.Module28
@@ -738,6 +742,33 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       assert embedded.opens_at == run(direct_term, @time_mapping).opens_at
       assert embedded.opens_at == ~T[11:00:00.000000]
+    end
+
+    # Postgres spells an embedded date with all its year's digits, and a date column holds years far
+    # past the four Date.from_iso8601/1 reads.
+    test "decodes an embedded date with a year past 9999" do
+      day = Date.new!(20_250, 1, 2)
+
+      {:ok, target} =
+        %{a: day, b: ~U[2026-08-16 12:00:00Z], d: 1.5}
+        |> Module4.new()
+        |> create()
+
+      {:ok, source} =
+        %{f_id: target.id}
+        |> Module25.new()
+        |> create()
+
+      term =
+        Module25
+        |> filter(id: ^source.id)
+        |> include(f)
+        |> one()
+        |> Stage.normalize()
+
+      mapping = Mapper.derive!([Module4, Module13, Module15, Module24, Module25], [])
+
+      assert %Module25{f: %Module4{a: ^day}} = run(term, mapping)
     end
 
     test "decodes an embedded time whose fraction JSON stripped to fewer digits" do

@@ -37,7 +37,8 @@ defmodule Hologram.Sync.Frame do
   News may also hold `hidden`, the rows a client may hold that no longer reach it, as
   `{entity_type, salt, ids}` - told by hash rather than by id (see `unsync_hashed/3`).
   """
-  @spec deltas(map, String.t() | nil, %{module => %{String.t() => map}}) :: list(map)
+  @spec deltas(map, Hologram.Server.identity_id() | nil, %{module => %{String.t() => map}}) ::
+          list(map)
   def deltas(news, actor_user_id, verdicts \\ %{}) do
     Enum.concat([
       Enum.map(news.appeared, &put_entity(&1, appeared_verdicts(&1, actor_user_id, verdicts))),
@@ -250,7 +251,7 @@ defmodule Hologram.Sync.Frame do
   put carries them (see `Hologram.Auth.verdicts/2`) - none when the build has no client checking
   permissions, which never reads one, or the row's type has no deciding quantifier.
   """
-  @spec row_verdicts(String.t() | nil, struct) :: %{String.t() => boolean}
+  @spec row_verdicts(Hologram.Server.identity_id() | nil, struct) :: %{String.t() => boolean}
   def row_verdicts(actor_user_id, %entity_type{} = row) do
     if Policy.deciding_quantifiers(entity_type) != [] and QueryCache.permission_checking?() do
       Auth.verdicts(actor_user_id, row)

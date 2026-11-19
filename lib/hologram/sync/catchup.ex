@@ -121,7 +121,7 @@ defmodule Hologram.Sync.Catchup do
   and commit after: a place past it would have a client cut off right then come back past changes
   it never got. Every effect of a transaction below the edge is among the ones returned.
   """
-  @spec gap(term, String.t() | nil, String.t(), String.t()) ::
+  @spec gap(term, Hologram.Server.identity_id() | nil, String.t(), String.t()) ::
           {:ok, list(map), non_neg_integer} | {:full_resync, atom}
   def gap(cursor, _actor_user_id, policy_hash, types_hash) do
     with {:ok, tx, seq, cursor_policy_hash, cursor_types_hash} <- decode_place(cursor),

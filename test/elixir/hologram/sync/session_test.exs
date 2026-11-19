@@ -73,6 +73,7 @@ defmodule Hologram.Sync.SessionTest do
 
     :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
       entries: %{},
+      permission_checking?: true,
       synced_types: [Module2, PolicyModule1, PolicyModule5],
       windows: %{
         @board_window => Stage.normalize(Module2),
@@ -1358,6 +1359,7 @@ defmodule Hologram.Sync.SessionTest do
     test "fills a stream running under the heap cap" do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        permission_checking?: true,
         synced_types: [Module3],
         windows: %{}
       })

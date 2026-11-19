@@ -25,6 +25,8 @@ defmodule Hologram.DB.Writer do
   @doc false
   @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
   def create(entity) do
+    refuse_unrecordable_job!(entity)
+
     stamped = stamp_actor(entity)
 
     {:ok, result} =
@@ -300,13 +302,32 @@ defmodule Hologram.DB.Writer do
     end)
   end
 
+  # A job runs as the user who enqueued it, and one recording nobody runs on the trusted tier. A user
+  # id no user entity can have - an app's own serial id - can't be recorded, so a job enqueued under
+  # one would run unchecked: it is refused, and server code that means it claims the server's
+  # authority instead.
+  defp refuse_unrecordable_job!(%entity_type{__meta__: %Metadata{claim: claim}}) do
+    actor_user_id = Context.actor_user_id()
+
+    if Reflection.job?(entity_type) and claim != :trust and actor_user_id != nil and
+         Context.actor_entity_id() == nil do
+      raise Hologram.AccessDeniedError,
+        message:
+          "cannot create #{inspect(entity_type)} as user #{inspect(actor_user_id)} - the user id isn't a user entity's, so the job would run with no user and skip every rule. Create it with trust: true to run it as the server."
+    end
+
+    :ok
+  end
+
   # A job records who enqueued it, and that is a fact of the write rather than of the struct: the
-  # ambient actor at the moment it is written, and nobody on the trusted tier. Stamped before the
-  # claim is evaluated, so a policy naming the field judges the value the row will hold - and
-  # stamped over whatever the struct carries, the way the executor stamps the timestamps.
+  # ambient actor as a user entity's id at the moment it is written - nobody on the trusted tier,
+  # and nobody for an actor no user entity can be, which only a trust claim gets here. Stamped
+  # before the claim is evaluated, so a policy naming the field judges the value the row will
+  # hold - and stamped over whatever the struct carries, the way the executor stamps the
+  # timestamps.
   defp stamp_actor(entity) do
     if Reflection.job?(entity.__struct__) do
-      %{entity | actor_id: Context.actor_user_id()}
+      %{entity | actor_id: Context.actor_entity_id()}
     else
       entity
     end

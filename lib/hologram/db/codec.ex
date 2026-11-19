@@ -48,10 +48,13 @@ defmodule Hologram.DB.Codec do
 
   def decode_enum_label(label), do: String.to_existing_atom(label)
 
+  # The last day a Postgres date column holds.
+  @last_column_date Date.new!(5_874_897, 12, 31)
+
   @doc """
   Translates a value from its JSON form into the Elixir term held by entity structs, per attribute type - the inverse of encode_json/2, and the way a value written elsewhere is read back.
   Returns {:ok, value}, or :error for a value that is not the given type's JSON form.
-  nil reads back as nil for every type, an ISO 8601 string becomes a :date, a :datetime or a :time, an :enum label becomes the atom or module it names - booleans, maps, numbers and strings are read as they are spelled, and a :uuid stays the string it is, its form being the model's to judge.
+  nil reads back as nil for every type, an ISO 8601 string becomes a :date (of any year a date column holds, as encode_json/2 spells one), a :datetime or a :time, an :enum label becomes the atom or module it names - booleans, maps, numbers and strings are read as they are spelled, and a :uuid stays the string it is, its form being the model's to judge.
   A whole number reads back as a :float value, because a JSON writer spells 1.0 as 1 and the two are one number to it.
   Which type a JSON value carries is not recoverable from the value itself, since a :date, an :enum and a :uuid all arrive as strings - reading one back means knowing the attribute it belongs to, whose type the model states.
   """
@@ -65,6 +68,7 @@ defmodule Hologram.DB.Codec do
   def decode_json(value, :date) when is_binary(value) do
     case Date.from_iso8601(value) do
       {:ok, date} -> {:ok, date}
+      {:error, :invalid_format} -> decode_wide_year_date(value)
       {:error, _reason} -> :error
     end
   end
@@ -149,7 +153,7 @@ defmodule Hologram.DB.Codec do
 
   # A time column is time(6), so a value read back from one always carries six fractional digits
   # while a value the application wrote carries whatever its literal spelled. Those are one time
-  # and must be one wire spelling, the client comparing temporal values as plain strings - so a
+  # and must be one wire spelling, the client comparing times of day as plain strings - so a
   # value goes out at full precision, exactly as a :datetime does. Only the digits it is spelled
   # with change, never the amount.
   def encode(%Time{microsecond: {microsecond, _precision}} = value, :time) do
@@ -209,5 +213,22 @@ defmodule Hologram.DB.Codec do
     value
     |> Atom.to_string()
     |> String.replace_prefix("Elixir.", "")
+  end
+
+  # Date.to_iso8601/1 spells a year past 9999 with all its digits, and Date.from_iso8601/1 reads no
+  # more than four - so encode_json/2 writes dates its own inverse can't read, and a browser writing
+  # one would have it refused. Read here only as far as a date column reaches, 5874897-12-31: the
+  # driver writes a day count into 32 bits and drops what overflows, so a later day would be stored
+  # as some other one, and none below year -9999 fits at all. A datetime needs no such reading:
+  # DateTime.from_unix!/2, which every datetime is stored through, stops at 9999.
+  defp decode_wide_year_date(value) do
+    with [_value | fields] <- Regex.run(~r/\A([1-9]\d{4,6})-(\d{2})-(\d{2})\z/, value),
+         [year, month, day] = Enum.map(fields, &String.to_integer/1),
+         {:ok, date} <- Date.new(year, month, day),
+         true <- Date.compare(date, @last_column_date) != :gt do
+      {:ok, date}
+    else
+      _no_date -> :error
+    end
   end
 end

@@ -439,7 +439,10 @@ defmodule Hologram.Sync.Session do
   defp tell_gap(state, gap, edge) do
     context = %{
       edge: edge,
-      edges: Edges.index(),
+      # As the dispatcher reads its batches (see `Hologram.Sync.Live.route/2`): a build where no
+      # client checks permissions sends rows without verdicts, so the search follows only the read
+      # rules' edges.
+      edges: Edges.index(QueryCache.permission_checking?()),
       keep_salt: if(grant_lost?(gap, state.actor_user_id), do: state.drop_salt),
       synced_types: QueryCache.synced_types()
     }

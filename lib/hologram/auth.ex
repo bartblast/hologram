@@ -82,7 +82,9 @@ defmodule Hologram.Auth do
   """
   @spec carried_grants(MapSet.t({String.t() | nil, tuple | atom})) :: list(struct)
   def carried_grants(scopes) do
-    session_user_id = user_id()
+    # A user id no user entity can have reads as an anonymous session, which no grant row's read
+    # rules admit, so it carries none, as an anonymous session doesn't - without asking.
+    session_user_id = canonical_id(user_id())
 
     if session_user_id && MapSet.size(scopes) > 0 do
       scopes
@@ -475,16 +477,21 @@ defmodule Hologram.Auth do
   `Hologram.Server.put_user_id/2`), an entity id when the app signs its user entity in - or nil
   when the session is anonymous. Framework wrappers set the actor around the work they run, so the
   value always comes from an authenticated session and never from anything a client sends.
+
+  A user id no user entity can have - an app's own serial id, say - is returned as it is. The data
+  layer reads such a session as one with no user: its rules answer it as an anonymous session, and
+  its writes are judged by them rather than trusted.
   """
   @spec user_id() :: Server.identity_id() | nil
   defdelegate user_id, to: Context, as: :actor_user_id
 
   @doc """
-  Returns the server's verdict on each deciding clause of the given row's type (see
+  Returns the server's verdict on each deciding item of the given row's type (see
   `Hologram.Policy.deciding_quantifiers/1`) for the given user, keyed by its verdict key: whether
-  the clause holds for the row, read as stored - what a client answers such a clause by, since the
-  rows it holds of a set can't decide one for certain, and it never holds a server-only value. Empty
-  for a type with none. Takes nil for an anonymous session. A clause several keys share - one
+  the item holds for the row, read as stored, as the rule `Hologram.Policy.verdict_rule/1` gives
+  it - what a client answers such an item by, since the rows it holds of a set can't decide one for
+  certain, it never holds a server-only value, and it never holds a row of a type nobody may read.
+  Empty for a type with none. Takes nil for an anonymous session. An item several keys share - one
   written for several operations, or a grant lifecycle line expanded per role - is answered once.
   """
   @spec verdicts(Server.identity_id() | nil, struct) :: %{String.t() => boolean}
@@ -493,9 +500,10 @@ defmodule Hologram.Auth do
 
     entity_type
     |> Policy.deciding_quantifiers()
-    |> Enum.group_by(fn {_key, clause} -> clause end, fn {key, _clause} -> key end)
-    |> Enum.flat_map(fn {clause, keys} ->
-      holds? = Evaluator.clause_holds?(clause, row, canonical_id(actor_user_id), checker)
+    |> Enum.group_by(fn {_key, item} -> item end, fn {key, _item} -> key end)
+    |> Enum.flat_map(fn {item, keys} ->
+      rule = Policy.verdict_rule(item)
+      holds? = Evaluator.rule_matches?(rule, row, canonical_id(actor_user_id), checker)
 
       Enum.map(keys, &{&1, holds?})
     end)
@@ -1174,10 +1182,18 @@ defmodule Hologram.Auth do
   defp gate_entity(entity_type, entity_id), do: struct(entity_type, id: entity_id)
 
   # The roles the acting user holds that reach the entity, as the gate reads them: on the row
-  # itself or on its whole type, and the global roles held app-wide. Sorted, own names first.
+  # itself or on its whole type, and the global roles held app-wide. Sorted, own names first. No
+  # stored grant names an id no user entity can have, so there is nothing to look up for one.
   defp held_role_names(actor_user_id, entity_type, entity_id) do
+    case canonical_id(actor_user_id) do
+      nil -> []
+      user_id -> stored_role_names(user_id, entity_type, entity_id)
+    end
+  end
+
+  defp stored_role_names(user_id, entity_type, entity_id) do
     RoleGrant
-    |> Query.filter(user_id: ^actor_user_id)
+    |> Query.filter(user_id: ^user_id)
     |> Stage.normalize()
     |> QueryRunner.run(DB.mapping())
     |> Enum.filter(fn grant ->
@@ -1255,7 +1271,7 @@ defmodule Hologram.Auth do
       id: RoleGrant.derive_id(user_id, entity_type, entity_id, role),
       entity_id: entity_id,
       entity_type: entity_type,
-      granted_by_id: Context.actor_user_id(),
+      granted_by_id: Context.actor_entity_id(),
       role: role,
       user_id: user_id
     }

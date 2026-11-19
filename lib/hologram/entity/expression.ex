@@ -37,7 +37,8 @@ defmodule Hologram.Entity.Expression do
   module body does: they may not hold `inverse:` or `sort:`, whose names are written on the line.
 
   Raises Hologram.CompileError, located at the offending node, on an atom or `__MODULE__` where a
-  bare name goes (naming the bare spelling for an atom) and on anything else in a name position.
+  bare name goes (naming the bare spelling for an atom), on a pinned bare name no variable of the
+  surrounding code holds (naming the bare spelling), and on anything else in a name position.
   """
   @spec relationship_opts(Macro.t(), Macro.Env.t()) :: Macro.t()
   def relationship_opts(opts, env) when is_list(opts) do

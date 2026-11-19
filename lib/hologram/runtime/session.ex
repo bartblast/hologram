@@ -8,20 +8,31 @@ defmodule Hologram.Runtime.Session do
   # the current body) and Hologram.Runtime.Session.Standalone (already preserved).
   # Today this module only exposes the Phoenix-backed (embedded-mode) path.
 
+  alias Hologram.Runtime.CSRFProtection
+  alias Hologram.Server
+
   @session_id_key :hologram_session_id
   @user_id_key :hologram_user_id
 
   @type op :: :delete | {:put, any}
 
+  @doc false
+  # The keys Hologram keeps its own session state under, which the app doesn't write directly - a
+  # value written past Hologram would skip the checks it makes.
+  @spec reserved_keys() :: list(String.t())
+  def reserved_keys do
+    [CSRFProtection.session_key(), Atom.to_string(@session_id_key), Atom.to_string(@user_id_key)]
+  end
+
   @doc """
   Returns the application-level entries from the Phoenix session, with
-  Hologram-managed keys (session_id, user_id) excluded.
+  Hologram-managed keys (CSRF token, session_id, user_id) excluded.
   """
   @spec get_session(Plug.Conn.t()) :: map
   def get_session(conn) do
     conn
     |> Plug.Conn.get_session()
-    |> Map.drop([Atom.to_string(@session_id_key), Atom.to_string(@user_id_key)])
+    |> Map.drop(reserved_keys())
   end
 
   @doc """
@@ -35,10 +46,17 @@ defmodule Hologram.Runtime.Session do
   @doc """
   Returns the authenticated Hologram user ID from the Phoenix session, or
   `nil` if absent.
+
+  A boolean reads as `nil`: only a session persisted before `put_user_id/2` refused booleans holds
+  one, and the stale value reads as no user on every request until a sign-in replaces it, rather
+  than failing them.
   """
-  @spec get_user_id(Plug.Conn.t()) :: any
+  @spec get_user_id(Plug.Conn.t()) :: Server.identity_id() | nil
   def get_user_id(conn) do
-    Plug.Conn.get_session(conn, @user_id_key)
+    case Plug.Conn.get_session(conn, @user_id_key) do
+      user_id when is_boolean(user_id) -> nil
+      user_id -> user_id
+    end
   end
 
   @doc """
@@ -79,13 +97,17 @@ defmodule Hologram.Runtime.Session do
   @doc """
   Persists the authenticated Hologram user ID in the Phoenix session under the
   `#{inspect(@user_id_key)}` key, or removes the key when `user_id` is `nil`.
+
+  Raises `Hologram.MisuseError` for a value no user is identified by (see
+  `Hologram.Server.validate_user_id!/1`) - one set on the server struct directly, past
+  `Hologram.Server.put_user_id/2`, is caught here before a later request reads it back.
   """
-  @spec put_user_id(Plug.Conn.t(), any) :: Plug.Conn.t()
+  @spec put_user_id(Plug.Conn.t(), Server.identity_id() | nil) :: Plug.Conn.t()
   def put_user_id(conn, nil) do
     Plug.Conn.delete_session(conn, @user_id_key)
   end
 
   def put_user_id(conn, user_id) do
-    Plug.Conn.put_session(conn, @user_id_key, user_id)
+    Plug.Conn.put_session(conn, @user_id_key, Server.validate_user_id!(user_id))
   end
 end

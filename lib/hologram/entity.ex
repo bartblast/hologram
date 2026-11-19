@@ -86,6 +86,7 @@ defmodule Hologram.Entity do
       register_attributes_accumulator(),
       register_derived_accumulators(),
       register_policies_accumulator(),
+      register_policy_hints_accumulator(),
       register_policy_sources_accumulator(),
       register_role_declarations_accumulator(),
       register_relationships_accumulator(),
@@ -147,6 +148,10 @@ defmodule Hologram.Entity do
                    atom | nil, {:only | :except, list(atom)} | nil}
                 )
         def __policies__, do: Enum.reverse(@__policies__)
+
+        @doc false
+        @spec __policy_hints__() :: list(list(Hologram.Query.Stage.name_hint()))
+        def __policy_hints__, do: Enum.reverse(@__policy_hints__)
 
         @doc false
         @spec __policy_sources__() :: list(module)
@@ -219,8 +224,9 @@ defmodule Hologram.Entity do
       `when: owner_id == nil or owner_id == user_id()`. A bare name is an attribute of the row,
       on either side of a comparison, so `when: guests <= capacity` compares two attributes, `^`
       marks a value from the surrounding code (`^@max_priority`), literals need nothing, and
-      `user_id()` is the acting user's entity id. The operators are `==`, `!=`, `<`, `<=`, `>`,
-      `>=`, `in`, `not in`, `and` and `or`, `and` binding tighter and parentheses grouping. A
+      `user_id()` is the acting user's entity id, which needs a user entity type in the model: a
+      condition naming it fails the build without one. The operators are `==`, `!=`, `<`, `<=`,
+      `>`, `>=`, `in`, `not in`, `and` and `or`, `and` binding tighter and parentheses grouping. A
       dotted name is a path through to-one relationships, read off the row they lead to,
       `when: project.archived == false`, through as many relationships as it names. The rows along
       a path are read as stored, whatever the acting user may read of them. A path that leads
@@ -262,9 +268,11 @@ defmodule Hologram.Entity do
 
   So a rule that reads a related row through an entity type with no read rules fails the build: no
   client ever holds such a row, and the browser would answer no where the server may answer yes. A
-  rule for `:read` itself is exempt, since a row reaches a client only once the server's read rules
-  admitted it, and a client never decides them. A quantifier the server answers is exempt too,
-  since its answer stands in for the rows it reads.
+  quantifier the server answers is exempt, since its answer stands in for the rows it reads. So are
+  a condition, a role reference and a delegation in a rule for `:read`: the server answers each for
+  every row it sends too, and the browser checks a read rule only on rows as they were sent. A rule
+  for any other operation is checked on rows an action changed, which the server's answer for the
+  stored row doesn't cover.
   """
   @spec allow(operation, T.opts()) :: Macro.t()
   defmacro allow(operation, spec \\ []) do
@@ -512,7 +520,9 @@ defmodule Hologram.Entity do
       {operation, Keyword.get(spec, :to), Keyword.get(spec, :via), Keyword.get(spec, :when, []),
        Keyword.get(spec, :as), fields(spec)}
 
+    # Pushed for every line, so the three lists line up.
     Module.put_attribute(module, :__policies__, policy)
+    Module.put_attribute(module, :__policy_hints__, Keyword.get(spec, :__name_hints__, []))
     Module.put_attribute(module, :__policy_sources__, source)
 
     :ok
@@ -725,6 +735,14 @@ defmodule Hologram.Entity do
   def register_policies_accumulator do
     quote do
       Module.register_attribute(__MODULE__, :__policies__, accumulate: true)
+    end
+  end
+
+  @doc false
+  @spec register_policy_hints_accumulator() :: AST.t()
+  def register_policy_hints_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__policy_hints__, accumulate: true)
     end
   end
 

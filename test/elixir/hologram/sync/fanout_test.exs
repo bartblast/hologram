@@ -17,6 +17,8 @@ defmodule Hologram.Sync.FanoutTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyModule17
+  alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
 
   use_module_stub :query_cache
 
@@ -24,18 +26,13 @@ defmodule Hologram.Sync.FanoutTest do
 
   @board_window "w_board"
   @other_window "w_other"
+  @project_window "w_project"
   @place {200, 0}
 
   setup do
     setup_query_cache(QueryCacheStub, false)
 
-    :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
-      entries: %{},
-      windows: %{
-        @board_window => Stage.normalize(Module2),
-        @other_window => Stage.normalize(PolicyModule1)
-      }
-    })
+    :persistent_term.put(QueryCacheStub.persistent_term_key(), query_cache(true))
 
     wait_for_process_cleanup(ResultStore)
     start_supervised!(ResultStore)
@@ -47,6 +44,18 @@ defmodule Hologram.Sync.FanoutTest do
     start_supervised!(Evaluators)
 
     :ok
+  end
+
+  defp query_cache(permission_checking?) do
+    %{
+      entries: %{},
+      permission_checking?: permission_checking?,
+      windows: %{
+        @board_window => Stage.normalize(Module2),
+        @other_window => Stage.normalize(PolicyModule1),
+        @project_window => Stage.normalize(PolicyModule17)
+      }
+    }
   end
 
   defp hold(window_id) do
@@ -109,6 +118,28 @@ defmodule Hologram.Sync.FanoutTest do
       route(transactions(Hologram.Auth.RoleGrant), @place)
 
       assert_receive {:round, @other_window, 1, _transactions, _place}
+    end
+
+    # Module17's archive rule reads none(label <- labels, label.name == "locked"), which no read
+    # rule reads - a none the server answers browsers with its verdict, which reads the labels.
+    test "tells a window whose rows' verdicts read the type that changed" do
+      hold(@project_window)
+
+      route(transactions(PolicyModule19), @place)
+
+      assert_receive {:round, @project_window, 1, _transactions, _place}
+    end
+
+    # No client checks permissions, so no row carries a verdict, and a change only a verdict reads
+    # changes nothing a client holds.
+    test "leaves alone a window only its rows' verdicts tie to the writes when no client checks permissions" do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), query_cache(false))
+
+      hold(@project_window)
+
+      route(transactions(PolicyModule19), @place)
+
+      refute_receive {:round, _window_id, _version, _transactions, _place}, 100
     end
   end
 end

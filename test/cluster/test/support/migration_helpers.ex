@@ -65,11 +65,12 @@ defmodule HologramClusterTests.MigrationHelpers do
   end
 
   @doc """
-  Returns the name of the database the migration scenarios apply their chain to.
+  Returns the name of the database the migration scenarios apply their chain to: this run's
+  own, which the test helper puts in the app env.
   """
   @spec migrations_database() :: String.t()
   def migrations_database do
-    "hologram_cluster_tests_migrations"
+    Application.fetch_env!(:hologram_cluster_tests, :migrations_database)
   end
 
   @doc """

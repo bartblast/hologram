@@ -244,6 +244,7 @@ describe("Elixir_Hologram_Auth", () => {
             archived: "boolean",
             kind: "enum",
             name: "string",
+            opened_on: "date",
           },
           // Shout stands in for Module42's origin row, the server's path end, and late is this side's
           // own, for a string ordered inside a delegated row's definition. Recent documents is a
@@ -821,8 +822,8 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
-    // Temporal values compare as the strings the wire spells them with, whose character order IS
-    // their calendar order - which is what lets one comparison serve every type.
+    // Temporal values are held as the strings the wire spells them with, and within years 0 to 9999
+    // their character order is their calendar order.
     it("orders temporal values by their calendar semantics", () => {
       const entity = document({
         held_at: "2026-07-17T12:00:00.000000Z",
@@ -845,6 +846,60 @@ describe("Elixir_Hologram_Auth", () => {
         reads(
           [rule({predicates: [["released_on", "<", "2027-01-01"]]})],
           entity,
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    // Past years 0 to 9999 the characters stop ordering a date - -2 would sort after -1, and 10000
+    // before 9999 - so a rule compares the years as numbers, as Date.compare/2 and
+    // DateTime.compare/2 do in the reference, in a baked bound and against another attribute alike.
+    it("orders dates and datetimes of a year below 0 or past 9999 by the day or instant", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["released_on", ">", "9999-12-31"]]})],
+          document({released_on: "10000-01-01"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["released_on", ">", "9999-12-31"]]})],
+          document({released_on: "9999-06-01"}),
+        ),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["released_on", "<=", {attribute: "due_on"}]]})],
+          document({due_on: "-0001-01-01", released_on: "-0002-01-01"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [
+            rule({
+              predicates: [["held_at", "<", "-0001-01-01T00:00:00.000000Z"]],
+            }),
+          ],
+          document({held_at: "-0002-06-01T00:00:00.000000Z"}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    // The type is the one the path ends at, declared on the row it reaches.
+    it("orders a date a path reaches by its day", () => {
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, opened_on: "10000-01-01"});
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [[["folder", "opened_on"], ">", "9999-12-31"]]})],
+          document({folder_id: FOLDER_ID}),
         ),
         Type.boolean(true),
       );
@@ -2485,6 +2540,7 @@ describe("Elixir_Hologram_Auth", () => {
     afterEach(() => {
       Batches.reset();
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
     });
 
     it("grants on a true verdict", () => {
@@ -2536,6 +2592,7 @@ describe("Elixir_Hologram_Auth", () => {
 
     it("grants on the session user's verdict asked about the session user", () => {
       LocalDatabase.actorUserId = ALICE;
+      LocalDatabase.actorEntityId = ALICE;
       putFolder({[KEY]: true});
 
       assert.deepStrictEqual(
@@ -2548,6 +2605,7 @@ describe("Elixir_Hologram_Auth", () => {
     // be ones this client does not hold.
     it("grants nothing on the session user's verdict asked about another user", () => {
       LocalDatabase.actorUserId = ALICE;
+      LocalDatabase.actorEntityId = ALICE;
       putFolder({[KEY]: true});
 
       assert.deepStrictEqual(
@@ -2570,8 +2628,20 @@ describe("Elixir_Hologram_Auth", () => {
       assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(true));
     });
 
+    // The server reads a raw user id spelled as a canonical uuid - an atom on the server - as a
+    // visitor when it is no user entity's id, and works the verdicts out for a visitor, so they
+    // answer a visitor's question even though the raw id looks like an entity id.
+    it("grants on the verdict of a session whose user id is no entity id however it is spelled", () => {
+      LocalDatabase.actorUserId = ALICE;
+      LocalDatabase.actorEntityId = null;
+      putFolder({[KEY]: true});
+
+      assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(true));
+    });
+
     it("grants nothing on the session user's verdict asked about a visitor", () => {
       LocalDatabase.actorUserId = ALICE;
+      LocalDatabase.actorEntityId = ALICE;
       putFolder({[KEY]: true});
 
       assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(false));
@@ -2814,6 +2884,267 @@ describe("Elixir_Hologram_Auth", () => {
         Type.boolean(false),
       );
     });
+
+    // In a read rule, a predicate reading a row of a type nobody may read comes with its triple
+    // beside its verdict key and the types it reads: an empty reference reads no row, so this client
+    // answers it itself, and the verdict answers it when the reference names a folder it doesn't hold.
+    describe("on a predicate the build sends with its triple and verdict", () => {
+      const noFolderArchived = {
+        predicate: [["folder", "archived"], "==", null],
+        reads: [FOLDER],
+        verdict: KEY,
+      };
+
+      const documentReads = (userId, entity) => {
+        defineModel({read: [rule({predicates: [noFolderArchived]})]});
+
+        return can(Type.bitstring(userId), Type.atom("read"), entity);
+      };
+
+      beforeEach(() => {
+        LocalDatabase.actorUserId = ALICE;
+        LocalDatabase.actorEntityId = ALICE;
+      });
+
+      // The server worked the verdict out for the session's user only.
+      it("answers itself for another user when the reference is empty", () => {
+        putDocument({$verdicts: {[KEY]: true}, folder_id: null});
+
+        assert.deepStrictEqual(
+          documentReads(BOB, document({folder_id: null})),
+          Type.boolean(true),
+        );
+      });
+
+      // A struct changed in an action is not the row the verdict is about.
+      it("answers itself for a changed struct when the reference is empty", () => {
+        putDocument({$verdicts: {[KEY]: true}, folder_id: null});
+
+        assert.deepStrictEqual(
+          documentReads(ALICE, document({folder_id: null, title: "Renamed"})),
+          Type.boolean(true),
+        );
+      });
+
+      it("answers from the verdict when the reference names a folder it doesn't hold", () => {
+        const folderReads = (verdict, userId) => {
+          putDocument({$verdicts: {[KEY]: verdict}});
+
+          return documentReads(userId, document({folder_id: FOLDER_ID}));
+        };
+
+        assert.deepStrictEqual(folderReads(true, ALICE), Type.boolean(true));
+        assert.deepStrictEqual(folderReads(false, ALICE), Type.boolean(false));
+        assert.deepStrictEqual(folderReads(true, BOB), Type.boolean(false));
+      });
+    });
+
+    // In a read rule, a delegation whose chain passes a row of a type nobody may read comes with
+    // its verdict key and the types it reads: no client holds the folder it asks.
+    describe("on a delegation the build sends with its verdict", () => {
+      const toFolder = ["read", ["folder"], {reads: [FOLDER], verdict: KEY}];
+
+      const documentReads = (userId) => {
+        defineModel({read: [rule({via: toFolder})]}, {read: [rule()]});
+
+        return can(
+          Type.bitstring(userId),
+          Type.atom("read"),
+          document({folder_id: FOLDER_ID}),
+        );
+      };
+
+      beforeEach(() => {
+        LocalDatabase.actorUserId = ALICE;
+        LocalDatabase.actorEntityId = ALICE;
+      });
+
+      it("grants on a true verdict", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(true));
+      });
+
+      // The held folder would grant it, but the verdict alone answers.
+      it("grants nothing on a false verdict", () => {
+        putDocument({$verdicts: {[KEY]: false}});
+        putFolder();
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      // The held folder would grant it from here on, so the verdict path is what refuses.
+      it("grants nothing on a verdict while a pending write names a type it reads", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+        putFolder();
+        pendingWrite(FOLDER, FOLDER_ID);
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      it("grants nothing on the session user's verdict asked about another user", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+        putFolder();
+
+        assert.deepStrictEqual(documentReads(BOB), Type.boolean(false));
+      });
+
+      it("grants nothing on a row the server sent with no verdicts", () => {
+        putDocument({});
+        putFolder();
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      // The delegation reads only the rows its chain leads to, and a changed struct is not the row.
+      it("grants on a verdict while a pending write names another row of the rule's type", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+        pendingWrite(DOCUMENT, OTHER_DOC);
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(true));
+      });
+
+      // A document's update rule asks its folder's read rule, whose delegation to the folder's
+      // parent is answered from the folder row's verdict.
+      it("answers a delegation to the read rule from the related row's verdict", () => {
+        defineModel(
+          {update: [rule({via: ["read", ["folder"]]})]},
+          {
+            read: [
+              rule({
+                via: ["read", ["parent"], {reads: [FOLDER], verdict: KEY}],
+              }),
+            ],
+          },
+        );
+
+        const documentUpdate = () =>
+          can(
+            Type.bitstring(ALICE),
+            Type.atom("update"),
+            document({folder_id: FOLDER_ID}),
+          );
+
+        putFolder({[KEY]: true});
+
+        assert.deepStrictEqual(documentUpdate(), Type.boolean(true));
+
+        putFolder({[KEY]: false});
+
+        assert.deepStrictEqual(documentUpdate(), Type.boolean(false));
+      });
+    });
+
+    // In a read rule, a role reference reading a row of a type nobody may read comes with its
+    // verdict key and the types it reads: no client holds the folder the parent's id is read off.
+    describe("on a role reference the build sends with its verdict", () => {
+      const viaFolderParent = [
+        "rel",
+        ["folder", "parent"],
+        FOLDER,
+        ["admin"],
+        {reads: [FOLDER, GRANT], verdict: KEY},
+      ];
+
+      const documentReads = (userId) => {
+        defineModel({read: [rule({to: [viaFolderParent]})]});
+
+        return can(
+          Type.bitstring(userId),
+          Type.atom("read"),
+          document({folder_id: FOLDER_ID}),
+        );
+      };
+
+      beforeEach(() => {
+        LocalDatabase.actorUserId = ALICE;
+        LocalDatabase.actorEntityId = ALICE;
+      });
+
+      it("grants on a true verdict", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(true));
+      });
+
+      // The held rows would grant it, but the verdict alone answers.
+      it("grants nothing on a false verdict", () => {
+        putDocument({$verdicts: {[KEY]: false}});
+        LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, parent_id: PARENT_ID});
+
+        LocalDatabase.putRow(
+          GRANT,
+          grantRow({entity_id: PARENT_ID, entity_type: FOLDER, role: "admin"}),
+        );
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      it("grants nothing on a verdict while a pending write names the grant store", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+        pendingWrite(GRANT, TAG_ID);
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      it("grants nothing on the session user's verdict asked about another user", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+
+        assert.deepStrictEqual(documentReads(BOB), Type.boolean(false));
+      });
+
+      it("grants nothing on a row the server sent with no verdicts", () => {
+        putDocument({});
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      // A document's update rule asks its folder's read rule, whose reference reads the folder's
+      // parent's parent, answered from the folder row's verdict.
+      it("answers a delegation to the read rule from the related row's verdict", () => {
+        defineModel(
+          {update: [rule({via: ["read", ["folder"]]})]},
+          {
+            read: [
+              rule({
+                to: [
+                  [
+                    "rel",
+                    ["parent", "parent"],
+                    FOLDER,
+                    ["admin"],
+                    {reads: [FOLDER, GRANT], verdict: KEY},
+                  ],
+                ],
+              }),
+            ],
+          },
+        );
+
+        const documentUpdate = () =>
+          can(
+            Type.bitstring(ALICE),
+            Type.atom("update"),
+            document({folder_id: FOLDER_ID}),
+          );
+
+        putFolder({[KEY]: true});
+
+        assert.deepStrictEqual(documentUpdate(), Type.boolean(true));
+
+        pendingWrite(FOLDER, FOLDER_ID);
+
+        assert.deepStrictEqual(documentUpdate(), Type.boolean(false));
+      });
+
+      // The reference reads only the rows its chain leads to, and a changed struct is not the row.
+      it("grants on a verdict while a pending write names another row of the rule's type", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+        pendingWrite(DOCUMENT, OTHER_DOC);
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(true));
+      });
+    });
   });
 
   // Cases this side alone has: no client holds a server-only attribute's value - a struct holds its
@@ -2887,6 +3218,7 @@ describe("Elixir_Hologram_Auth", () => {
 
     afterEach(() => {
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
     });
 
     it("grants nothing on a comparison with a server-only attribute", () => {
@@ -3022,6 +3354,7 @@ describe("Elixir_Hologram_Auth", () => {
       // The server worked the verdict out for the session's user.
       it("grants nothing on the session user's verdict asked about another user", () => {
         LocalDatabase.actorUserId = ALICE;
+        LocalDatabase.actorEntityId = ALICE;
 
         defineServerOnlyModel(
           {},
@@ -3941,6 +4274,7 @@ describe("Elixir_Hologram_Auth", () => {
       });
 
       LocalDatabase.actorUserId = ALICE;
+      LocalDatabase.actorEntityId = ALICE;
       Batches.reset();
       Batches.open("leave");
 
@@ -3963,6 +4297,7 @@ describe("Elixir_Hologram_Auth", () => {
       } finally {
         Batches.reset();
         LocalDatabase.actorUserId = null;
+        LocalDatabase.actorEntityId = null;
       }
     });
 
@@ -4369,6 +4704,7 @@ describe("grant_role/3", () => {
     Clock.reset();
     LocalDatabase.reset();
     LocalDatabase.actorUserId = GATED_ALICE;
+    LocalDatabase.actorEntityId = GATED_ALICE;
     LocalDatabase.putRow(
       GATED_GRANT,
       gatedGrantRow({
@@ -4385,6 +4721,7 @@ describe("grant_role/3", () => {
     timers.restore();
     Batches.reset();
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
   });
 
   it("appends a create of the grant row with the acting user as its granter", () => {
@@ -4517,12 +4854,27 @@ describe("grant_role/3", () => {
 
   it("raises when nobody is signed in", () => {
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
 
     assertBoxedError(
       () => grant(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
       "Hologram.AccessDeniedError",
       "a role is granted only by a signed-in user - nobody is signed in",
     );
+  });
+
+  // The server's batch answers a user id no user entity can have as nobody, so this does too.
+  it("raises for a user id no user entity can have, as for nobody", () => {
+    LocalDatabase.actorUserId = 7;
+    LocalDatabase.actorEntityId = null;
+
+    assertBoxedError(
+      () => grant(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
+      "Hologram.AccessDeniedError",
+      "a role is granted only by a signed-in user - nobody is signed in",
+    );
+
+    assert.deepStrictEqual(Batches.current().writes, []);
   });
 
   it("raises on a user id that is not an entity id", () => {
@@ -4616,6 +4968,7 @@ describe("revoke_role/3", () => {
     Clock.reset();
     LocalDatabase.reset();
     LocalDatabase.actorUserId = GATED_ALICE;
+    LocalDatabase.actorEntityId = GATED_ALICE;
     LocalDatabase.putRow(GATED_GRANT, heldRow(GATED_ALICE, "editor"));
     LocalDatabase.putRow(GATED_GRANT, heldRow(GATED_BOB, "viewer"));
     timers = sinon.useFakeTimers(NOW_MS);
@@ -4626,6 +4979,7 @@ describe("revoke_role/3", () => {
     timers.restore();
     Batches.reset();
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
   });
 
   it("appends a delete of the held row carrying its revisions and its grant", () => {
@@ -4733,6 +5087,18 @@ describe("revoke_role/3", () => {
 
   it("raises when nobody is signed in", () => {
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
+
+    assertBoxedError(
+      () => revoke(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
+      "Hologram.AccessDeniedError",
+      "a role is revoked only by a signed-in user - nobody is signed in",
+    );
+  });
+
+  it("raises for a user id no user entity can have, as for nobody", () => {
+    LocalDatabase.actorUserId = "abc";
+    LocalDatabase.actorEntityId = null;
 
     assertBoxedError(
       () => revoke(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
@@ -4823,16 +5189,19 @@ describe("a creator's own grant", () => {
     Clock.reset();
     LocalDatabase.reset();
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
     Batches.open("notes");
   });
 
   afterEach(() => {
     Batches.reset();
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
   });
 
   it("lets the creator do what the role it takes gates", () => {
     LocalDatabase.actorUserId = OWNER;
+    LocalDatabase.actorEntityId = OWNER;
 
     const created = create(note()).data[1];
 
