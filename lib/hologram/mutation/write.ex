@@ -65,7 +65,7 @@ defmodule Hologram.Mutation.Write do
     values =
       Map.merge(write.data, %{
         __meta__: %Metadata{stamp: write.stamp},
-        granted_by_id: Context.actor_user_id(),
+        granted_by_id: Context.actor_entity_id(),
         id: write.id
       })
 

@@ -16,6 +16,7 @@ defmodule Hologram.Auth.Context do
   # tier, so a gate that denies in the request process permits there instead. Framework code
   # continuing a session's work in another process re-establishes identity with with_actor/2.
 
+  alias Hologram.Auth
   alias Hologram.Server
 
   @actor_key {__MODULE__, :actor_user_id}
@@ -26,6 +27,17 @@ defmodule Hologram.Auth.Context do
   @spec actor_user_id() :: Server.identity_id() | nil
   def actor_user_id do
     Process.get(@actor_key)
+  end
+
+  @doc """
+  Returns the actor's id as the data layer stores a user - the canonical uuid a user entity's id
+  is - or nil when no actor is set and when the actor's id is one no user entity can have, like an
+  app's own serial id. Such an actor is still set, so its work is judged rather than trusted, but
+  the data layer reads it as a session with no user: nothing records it as anyone.
+  """
+  @spec actor_entity_id() :: String.t() | nil
+  def actor_entity_id do
+    Auth.canonical_id(actor_user_id())
   end
 
   @doc false
