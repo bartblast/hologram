@@ -709,9 +709,10 @@ defmodule Hologram.DB.IndexBuilderTest do
     } do
       database = Mapper.quote_identifier(scratch_opts[:database])
 
+      # Long enough for the session's first statement, which clears them, to run under them.
       route(scratch, fn ->
-        query!("ALTER DATABASE #{database} SET statement_timeout = '1ms'")
-        query!("ALTER DATABASE #{database} SET lock_timeout = '1ms'")
+        query!("ALTER DATABASE #{database} SET statement_timeout = '5min'")
+        query!("ALTER DATABASE #{database} SET lock_timeout = '5min'")
 
         assert Migrator.with_migration_connection(fn ->
                  {:ok, %{rows: [[statement_timeout]]}} =
