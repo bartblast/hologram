@@ -357,6 +357,46 @@ defmodule Hologram.DB.OplogTest do
     end
   end
 
+  describe "read_data/1" do
+    test "returns the payload of each effect by its seq" do
+      seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{"c" => "x"})
+
+      seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id, %{"c" => "y"})
+
+      [first_seq, second_seq] =
+        0
+        |> read_after(0, 10)
+        |> Enum.map(& &1.seq)
+
+      assert read_data([first_seq, second_seq]) == %{
+               first_seq => %{"c" => "x"},
+               second_seq => %{"c" => "y"}
+             }
+    end
+
+    test "returns the payload of an edge" do
+      data = %{"relationship" => "a", "target_id" => @target_id}
+
+      seed(200, "add_relationship", "Hologram.Test.Fixtures.Entity.Module3", @entity_id, data)
+
+      [%{seq: seq}] = read_after(0, 0, 10)
+
+      assert read_data([seq]) == %{seq => data}
+    end
+
+    test "leaves out a seq the log doesn't hold" do
+      seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{"c" => "x"})
+
+      [%{seq: seq}] = read_after(0, 0, 10)
+
+      assert read_data([seq, seq + 1]) == %{seq => %{"c" => "x"}}
+    end
+
+    test "returns nothing for no seqs" do
+      assert read_data([]) == %{}
+    end
+  end
+
   describe "read_type_after/4" do
     test "returns nothing when the log holds no effects of the given type" do
       seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module14", @entity_id, %{c: "other"})

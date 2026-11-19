@@ -217,6 +217,30 @@ defmodule Hologram.DB.Oplog do
   end
 
   @doc """
+  Returns the payload of each effect of the given seqs, keyed by seq, as stored: string keys, the
+  values as the write encoded them. Every effect is stored with one (see `append/1`), so only a seq
+  the log doesn't hold is left out.
+
+  What `read_after/3` leaves behind, read back for a few effects at a time: a caller holding a gap
+  counted without its payloads fills them in for the part of it it is working on, so it never holds
+  every payload of a long gap at once.
+  """
+  @spec read_data(list(pos_integer)) :: %{pos_integer => map}
+  def read_data([]), do: %{}
+
+  def read_data(seqs) do
+    statement = """
+    SELECT "seq", "data"
+    FROM "#{Mapper.system_schema()}"."oplog"
+    WHERE "seq" = ANY($1::bigint[])
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [seqs])
+
+    Map.new(rows, fn [seq, data] -> {seq, data} end)
+  end
+
+  @doc """
   Returns the entity the given stored data describes - the inverse of what `append/1` writes, so a
   row read back out of the log is the struct it was.
 
