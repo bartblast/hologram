@@ -81,6 +81,7 @@ defmodule Hologram.Sync.SessionTest do
 
     :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
       entries: %{},
+      permission_checking?: true,
       synced_types: [Module2, PolicyModule1, PolicyModule5],
       windows: %{
         @board_window => Stage.normalize(Module2),
@@ -543,6 +544,7 @@ defmodule Hologram.Sync.SessionTest do
     test "hands over the target of an edge no window carries, with its set" do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        permission_checking?: true,
         synced_types: [Module2, Module28, Module29],
         windows: %{@board_window => Stage.normalize(Module2)}
       })
@@ -586,6 +588,7 @@ defmodule Hologram.Sync.SessionTest do
     test "reads again only the target of an edge that files the edge's set" do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        permission_checking?: true,
         synced_types: [Module2, PolicyModule1, PolicyParent],
         windows: %{@board_window => Stage.normalize(Module2)}
       })
@@ -1658,6 +1661,7 @@ defmodule Hologram.Sync.SessionTest do
     defp start_with_departed_label!(label) do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        permission_checking?: true,
         synced_types: [Module2, Module28, Module29, PolicyModule1],
         windows: %{
           @board_window => Stage.normalize(Module2),
@@ -2174,6 +2178,7 @@ defmodule Hologram.Sync.SessionTest do
     test "tells a row two windows hold as the window that took in its change has it" do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        permission_checking?: true,
         synced_types: [Module2, PolicyModule5],
         windows: %{
           @board_window => Stage.normalize(Module2),
@@ -2663,6 +2668,7 @@ defmodule Hologram.Sync.SessionTest do
     test "fills a stream running under the heap cap" do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        permission_checking?: true,
         synced_types: [Module3],
         windows: %{}
       })
@@ -4102,6 +4108,7 @@ defmodule Hologram.Sync.SessionTest do
     setup do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        permission_checking?: true,
         synced_types: [Module2],
         windows: %{
           @board_window => Stage.normalize(Module2),
@@ -4199,6 +4206,7 @@ defmodule Hologram.Sync.SessionTest do
     setup do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        permission_checking?: true,
         synced_types: [Module2, Module26, Module28, Module29, Module3],
         windows: %{
           @bare_label_window => Stage.normalize(Module29),

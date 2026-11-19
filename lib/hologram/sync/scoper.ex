@@ -18,7 +18,9 @@ defmodule Hologram.Sync.Scoper do
 
   Windows are given as `{key, term}` pairs and the keys come back as they went in - what a key
   identifies is the caller's business. Edges are the policy dependency index, passed in rather
-  than derived here, so a caller reading it once can hand it to every batch.
+  than derived here, so a caller reading it once can hand it to every batch - without the verdicts'
+  in a build where no client checks permissions, whose rows carry none (see
+  `Hologram.Policy.Edges.index/1`).
 
   A window depends on the entity types its query reads, its own and through everything it
   includes - the relationships a filter's paths go through among them - and on the types its

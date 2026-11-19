@@ -1395,6 +1395,25 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a predicate naming a field only the quantifier's row declares, naming how to read it" do
+      defmodule InlinePolicyFixture142 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        relationship :messages, [Module33]
+
+        allow :read, when: any(message <- messages, position > 1)
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture142 - unknown attribute :position in Hologram.Policy.ValidatorTest.InlinePolicyFixture142 - known attributes: :created_at, :id, :updated_at - Hologram.Test.Fixtures.Entity.Module33 declares position, read as message.position"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture142], [])
+      end
+    end
+
     test "rejects a predicate naming an unknown attribute" do
       defmodule InlinePolicyFixture3 do
         use Hologram.Entity

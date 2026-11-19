@@ -86,6 +86,7 @@ defmodule Hologram.Entity do
       register_attributes_accumulator(),
       register_derived_accumulators(),
       register_policies_accumulator(),
+      register_policy_hints_accumulator(),
       register_policy_sources_accumulator(),
       register_role_declarations_accumulator(),
       register_relationships_accumulator(),
@@ -147,6 +148,10 @@ defmodule Hologram.Entity do
                    atom | nil, {:only | :except, list(atom)} | nil}
                 )
         def __policies__, do: Enum.reverse(@__policies__)
+
+        @doc false
+        @spec __policy_hints__() :: list(list(Hologram.Query.Stage.name_hint()))
+        def __policy_hints__, do: Enum.reverse(@__policy_hints__)
 
         @doc false
         @spec __policy_sources__() :: list(module)
@@ -514,7 +519,9 @@ defmodule Hologram.Entity do
       {operation, Keyword.get(spec, :to), Keyword.get(spec, :via), Keyword.get(spec, :when, []),
        Keyword.get(spec, :as), fields(spec)}
 
+    # Pushed for every line, so the three lists line up.
     Module.put_attribute(module, :__policies__, policy)
+    Module.put_attribute(module, :__policy_hints__, Keyword.get(spec, :__name_hints__, []))
     Module.put_attribute(module, :__policy_sources__, source)
 
     :ok
@@ -727,6 +734,14 @@ defmodule Hologram.Entity do
   def register_policies_accumulator do
     quote do
       Module.register_attribute(__MODULE__, :__policies__, accumulate: true)
+    end
+  end
+
+  @doc false
+  @spec register_policy_hints_accumulator() :: AST.t()
+  def register_policy_hints_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__policy_hints__, accumulate: true)
     end
   end
 

@@ -6,6 +6,7 @@ defmodule Hologram.Sync.Fanout do
   # windows a batch of writes could have changed the answer of, and this is where that question is
   # asked and acted on.
 
+  alias Hologram.DB.QueryCache
   alias Hologram.Policy.Edges
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
@@ -26,8 +27,9 @@ defmodule Hologram.Sync.Fanout do
   def route(transactions, place) do
     # Read from the runtime's cache rather than derived per batch: deriving grows with the model,
     # and this runs for every batch before any of it reaches a client. A compile drops the cache, so
-    # a live reload is picked up by the next batch.
-    edges = Edges.index()
+    # a live reload is picked up by the next batch. A build where no client checks permissions
+    # sends its rows without verdicts, so it has none a change could leave stale.
+    edges = Edges.index(QueryCache.permission_checking?())
 
     transactions
     |> Scoper.affected(Evaluators.live(), edges)
