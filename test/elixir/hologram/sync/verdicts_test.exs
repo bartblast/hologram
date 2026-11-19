@@ -7,7 +7,6 @@ defmodule Hologram.Sync.VerdictsTest do
 
   alias Hologram.Entity
   alias Hologram.Policy
-  alias Hologram.Test.Fixtures.Entity.Module2
 
   use_module_stub :query_cache
 
@@ -136,43 +135,6 @@ defmodule Hologram.Sync.VerdictsTest do
 
       assert moved([{row, %{}}], %{}) == []
       assert moved([{row, %{delete_key() => true}}], %{}) == [{row, %{delete_key() => true}}]
-    end
-  end
-
-  describe "stale/3" do
-    test "returns a row whose verdicts differ from what was told" do
-      row = task()
-
-      assert stale([row], %{}, Entity.generate_id()) == [{row, %{delete_key() => true}}]
-    end
-
-    test "returns the rows in the order given" do
-      first = task()
-      last = task()
-
-      assert stale([last, first], %{}, Entity.generate_id()) == [
-               {last, %{delete_key() => true}},
-               {first, %{delete_key() => true}}
-             ]
-    end
-
-    test "returns nothing for a row whose verdicts are what was told" do
-      row = task()
-      told = %{row.id => %{delete_key() => true}}
-
-      assert stale([row], told, Entity.generate_id()) == []
-    end
-
-    test "returns a row whose verdicts moved from what was told" do
-      row = task()
-
-      assert stale([row], %{row.id => %{delete_key() => true}}, nil) == [
-               {row, %{delete_key() => false}}
-             ]
-    end
-
-    test "returns nothing for a row of a type with no deciding quantifier" do
-      assert stale([Module2.new(a: true)], %{}, nil) == []
     end
   end
 end

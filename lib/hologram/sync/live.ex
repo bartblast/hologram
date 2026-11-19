@@ -79,7 +79,8 @@ defmodule Hologram.Sync.Live do
   - `own_seqs` - per replica, the highest sequence number among the batches of it the effects came
     from
   - `overtaking_seqs` - per replica, the highest sequence number among its batches in a
-    transaction above the batch's, read in the same snapshot as the rows (see
+    transaction above the batch's (or above a given one, see `part/6`), read in the same snapshot
+    as the rows (see
     `Hologram.DB.Oplog.replica_seqs_after/1`). The rows are read after the effects, so they can
     hold a replica's batch the effects don't - and what the rows have applied of a replica's
     writes is the higher of this and `own_seqs` (see `Hologram.Sync.Session`)
@@ -115,6 +116,77 @@ defmodule Hologram.Sync.Live do
           {non_neg_integer, non_neg_integer}
         ) :: %{(String.t() | nil) => part}
   def parts(effects, sessions, edges, synced_types, place) do
+    {:ok, parts} =
+      Connection.snapshot(fn -> parts_now(effects, sessions, edges, synced_types, place) end)
+
+    parts
+  end
+
+  @doc """
+  Returns the part of the given effects that is the given user's, as `parts/5` works it out for a
+  session of that user - what a returning client's catch-up decides each chunk of its gap with. The
+  user is put into the spelling the node's sessions are listed by (see
+  `Hologram.Auth.canonical_id/1`).
+
+  Its `overtaking_seqs` are of the batches in a transaction above the given one rather than above
+  the effects' highest. A chunk of a gap isn't bounded the way a batch is: the gap holds every
+  effect committed when it was read, so a transaction below the chunk's highest can have been open
+  then, and commit before the chunk's rows are read - and the rows hold it. And a chunk can end
+  inside a transaction, whose batches with effects only in a later chunk the rows hold too.
+  """
+  @spec part(
+          list(map),
+          String.t() | nil,
+          %{{module, atom} => list(tuple)},
+          list(module),
+          {non_neg_integer, non_neg_integer},
+          non_neg_integer
+        ) :: part
+  def part(effects, user_id, edges, synced_types, place, overtaken_above) do
+    {:ok, part} =
+      Connection.snapshot(fn ->
+        part_now(effects, user_id, edges, synced_types, place, overtaken_above)
+      end)
+
+    part
+  end
+
+  @doc """
+  Reads what `part/6` reads in whatever transaction the caller is in, which agrees with itself only
+  when that transaction reads every statement from one snapshot - what `part/6` opens.
+  """
+  @spec part_now(
+          list(map),
+          String.t() | nil,
+          %{{module, atom} => list(tuple)},
+          list(module),
+          {non_neg_integer, non_neg_integer},
+          non_neg_integer
+        ) :: part
+  def part_now(effects, user_id, edges, synced_types, place, overtaken_above) do
+    canonical_user_id = Auth.canonical_id(user_id)
+    sessions = [{self(), canonical_user_id}]
+
+    effects
+    |> parts_now(sessions, edges, synced_types, place, overtaken_above)
+    |> Map.fetch!(canonical_user_id)
+  end
+
+  @doc """
+  Reads what `parts/5` reads in whatever transaction the caller is in, which agrees with itself only
+  when that transaction reads every statement from one snapshot - what `parts/5` opens. Given a
+  transaction id, the overtaking batches are the ones above it (see `part/6`) rather than above the
+  effects' highest.
+  """
+  @spec parts_now(
+          list(map),
+          list({pid, String.t() | nil}),
+          %{{module, atom} => list(tuple)},
+          list(module),
+          {non_neg_integer, non_neg_integer},
+          non_neg_integer | nil
+        ) :: %{(String.t() | nil) => part}
+  def parts_now(effects, sessions, edges, synced_types, place, overtaken_above \\ nil) do
     synced = MapSet.new(synced_types)
     pair_effects = pair_effects(effects, synced)
 
@@ -132,24 +204,20 @@ defmodule Hologram.Sync.Live do
 
     tx_range = tx_range(effects)
 
-    {:ok, {searched, checked, rechecked, pairs, overtaking_seqs}} =
-      Connection.snapshot(fn ->
-        searched = Search.candidates(effects, synced_edges)
+    searched = Search.candidates(effects, synced_edges)
 
-        checked =
-          effects
-          |> own_rows(pair_effects)
-          |> merge_rows(searched.rows)
-          |> Map.filter(fn {entity_type, _ids} -> MapSet.member?(synced, entity_type) end)
+    checked =
+      effects
+      |> own_rows(pair_effects)
+      |> merge_rows(searched.rows)
+      |> Map.filter(fn {entity_type, _ids} -> MapSet.member?(synced, entity_type) end)
 
-        rechecked = recheck(checked, user_ids)
+    rechecked = recheck(checked, user_ids)
 
-        pairs = pairs_touching(checked, synced_types)
+    pairs = pairs_touching(checked, synced_types)
 
-        {_lowest_tx, highest_tx} = tx_range
-
-        {searched, checked, rechecked, pairs, Oplog.replica_seqs_after(highest_tx)}
-      end)
+    {_lowest_tx, highest_tx} = tx_range
+    overtaking_seqs = Oplog.replica_seqs_after(overtaken_above || highest_tx)
 
     shared = %{
       checked: Map.new(checked, fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end),

@@ -571,8 +571,9 @@ defmodule Hologram.Realtime.SSE do
     # Named rather than written inline as `resume? && gap(cursor, user_id, policy_hash)`: that
     # answers FALSE when it does not resume, and everything below reads "no gap" from nil alone.
     # The types this build syncs, which a place names beside the rules: a client filled with others
-    # holds no rows of a type added since.
-    types_hash = Cursor.types_hash(QueryCache.synced_types())
+    # holds no rows of a type added since. And whether its browser checks permissions: a client
+    # filled without the checks holds rows carrying no verdicts.
+    types_hash = Cursor.types_hash(QueryCache.synced_types(), QueryCache.permission_checking?())
 
     {gap, resync_reason} =
       if resume?, do: gap(cursor, user_id, policy_hash, types_hash), else: {nil, nil}
@@ -587,9 +588,8 @@ defmodule Hologram.Realtime.SSE do
     edges = if gap, do: Edges.index()
 
     # The session reads the gap again for itself rather than being handed this one, so only what
-    # this read decided travels on: whether the client resumes at all, from where, and how far
-    # this read reached - a frame names no place past that, since the session's own read can
-    # name effects whose rounds have not reached it yet.
+    # this read decided travels on: whether the client resumes at all, and from where. The rest is
+    # no longer read by the session, which dates its frames by the edge its own read reached.
     start = %{
       cursor: if(gap, do: cursor),
       edges: edges,
@@ -1072,7 +1072,7 @@ defmodule Hologram.Realtime.SSE do
 
   defp gap(cursor, user_id, policy_hash, types_hash) do
     case Catchup.gap(cursor, user_id, policy_hash, types_hash) do
-      {:ok, effects, _grants_then} -> {effects, nil}
+      {:ok, effects, _edge} -> {effects, nil}
       {:full_resync, reason} -> {nil, reason}
     end
   end

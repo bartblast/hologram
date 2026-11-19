@@ -2,97 +2,17 @@ defmodule Hologram.Sync.CatchupTest do
   use Hologram.Test.DatabaseCase, async: true
 
   import Hologram.Sync.Catchup
-  import Hologram.Test.Stubs
-  import Mox
 
-  require Hologram.Query
-
-  alias Hologram.Auth
-  alias Hologram.Auth.RoleGrant
-  alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
-  alias Hologram.DB.QueryRunner
-  alias Hologram.Entity
+  alias Hologram.DB.Oplog
   alias Hologram.Entity.Model
-  alias Hologram.Policy
-  alias Hologram.Query
-  alias Hologram.Query.Stage
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
-  alias Hologram.Sync.WireData
-  alias Hologram.Test.Fixtures.Entity.Module14
-  alias Hologram.Test.Fixtures.Entity.Module2
-  alias Hologram.Test.Fixtures.Entity.Module28
-  alias Hologram.Test.Fixtures.Entity.Module29
-  alias Hologram.Test.Fixtures.Entity.Module3
-  alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
 
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @policy_hash "0123456789abcdef0123456789abcdef"
   @types_hash "00112233445566778899aabbccddeeff"
-  @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
-
-  use_module_stub :query_cache
-
-  # A task may be deleted while its board holds no card by the user - read through the task's
-  # board, so a task with no board has an empty set, answered without reading the database: yes for
-  # a user, and no for a visitor, since the rule asks about the actor.
-  defmodule VerdictBoard do
-    use Hologram.Entity
-
-    relationship :cards, [__MODULE__.Card], inverse: board
-
-    allow :read
-
-    defmodule Card do
-      use Hologram.Entity
-
-      relationship :author, Hologram.Test.Fixtures.Entity.Module14, optional: true
-      relationship :board, Hologram.Sync.CatchupTest.VerdictBoard, optional: true
-
-      allow :read
-    end
-  end
-
-  defmodule VerdictTask do
-    use Hologram.Entity
-
-    relationship :board, VerdictBoard, optional: true
-
-    allow :read
-    allow :delete, when: none(card <- board.cards, card.author_id == user_id())
-  end
-
-  defp delete_key do
-    Policy.verdict_key(
-      VerdictTask,
-      :delete,
-      {:none, {[:board, :cards], [{:author_id, :==, {:actor}}]}}
-    )
-  end
-
-  # A build with a page checking permissions on the client - the only kind whose rows carry
-  # verdicts.
-  defp check_permissions do
-    stub_with(QueryCacheMock, QueryCacheStub)
-    :persistent_term.put(QueryCacheStub.persistent_term_key(), %{permission_checking?: true})
-
-    on_exit(fn -> :persistent_term.erase(QueryCacheStub.persistent_term_key()) end)
-  end
-
-  defp effect(entity_type, entity_id) do
-    %{entity_id: entity_id, op: :patch_entity, type: entity_type}
-  end
-
-  defp edge_effect(op, entity_type, entity_id, relationship, target_id) do
-    %{
-      data: %{"relationship" => relationship, "target_id" => target_id},
-      entity_id: entity_id,
-      op: op,
-      type: entity_type
-    }
-  end
 
   defp places do
     statement = ~s|SELECT "tx", "seq" FROM "hologram_system"."oplog" ORDER BY "tx", "seq"|
@@ -131,174 +51,6 @@ defmodule Hologram.Sync.CatchupTest do
     :ok
   end
 
-  # A grant effect carries the row it names, which is what a revoked grant is rebuilt from.
-  defp seed_grant(tx, op, grant) do
-    statement = """
-    INSERT INTO "hologram_system"."oplog"
-      ("op", "type", "entity_id", "data", "tx", "model_hash")
-    VALUES ($1, 'Hologram.Auth.RoleGrant', $2, $3::jsonb, $4, $5)
-    """
-
-    data = %{
-      "id" => grant.id,
-      "entity_id" => grant.entity_id,
-      "entity_type" => grant.entity_type && Codec.encode_enum_value(grant.entity_type),
-      "role" => Codec.encode_enum_value(grant.role),
-      "user_id" => grant.user_id
-    }
-
-    params = [op, Codec.encode(grant.id, :uuid), data, tx, Model.hash()]
-
-    {:ok, _result} = Connection.query(statement, params)
-
-    :ok
-  end
-
-  # The rows this suite seeds are synthetic, at transaction ids far below any real one - so the
-  # writes that set a test up (a resource, a grant) would sort AFTER them and land in the gap.
-  # Emptying the log once the setup is done leaves the seeds as the whole of it.
-  defp clear_log do
-    {:ok, _result} = Connection.query(~s|TRUNCATE "hologram_system"."oplog"|)
-
-    :ok
-  end
-
-  defp stored_grant(user_id) do
-    RoleGrant
-    |> Query.filter(user_id: ^user_id)
-    |> Stage.normalize()
-    |> QueryRunner.run(DB.mapping())
-    |> hd()
-  end
-
-  defp user(email) do
-    %{email: email}
-    |> Module14.new()
-    |> DB.create!()
-  end
-
-  describe "deltas/3" do
-    test "hands a row over with the given user's verdicts" do
-      check_permissions()
-
-      row = %{VerdictTask.new() | id: @entity_id}
-
-      assert [%{data: %{"$verdicts": verdicts}, op: :put_entity}] =
-               deltas(
-                 [effect(VerdictTask, @entity_id)],
-                 %{@entity_id => row},
-                 Entity.generate_id()
-               )
-
-      assert verdicts == %{delete_key() => true}
-    end
-
-    test "hands over a row the gap touched as it now stands" do
-      row = %Module2{a: true, c: "as it now stands", id: @entity_id}
-
-      assert deltas([effect(Module2, @entity_id)], %{@entity_id => row}, nil) == [
-               %{
-                 data: WireData.row(row),
-                 id: @entity_id,
-                 op: :put_entity,
-                 type: "Hologram.Test.Fixtures.Entity.Module2"
-               }
-             ]
-    end
-
-    test "tells the client to drop a row the gap touched that it may no longer see" do
-      assert deltas([effect(Module2, @entity_id)], %{}, nil) == [
-               %{
-                 id: @entity_id,
-                 op: :unsync_entity,
-                 type: "Hologram.Test.Fixtures.Entity.Module2"
-               }
-             ]
-    end
-
-    test "says one thing about a row the gap touched many times" do
-      row = %Module2{a: true, c: "moved three times", id: @entity_id}
-      effects = [effect(Module2, @entity_id), effect(Module2, @entity_id)]
-
-      assert [%{data: data, op: :put_entity}] = deltas(effects, %{@entity_id => row}, nil)
-      assert data.c == "moved three times"
-    end
-
-    # The label's messages hold the message that gained the label, so the label is handed over too,
-    # with the list as it now stands.
-    test "hands over the target of an edge whose type declares an inverse of it" do
-      message = %Module28{body: "tagged", id: @entity_id}
-      label = %Module29{id: @target_id, messages: [message], name: "urgent"}
-      effects = [edge_effect(:add_relationship, Module28, @entity_id, "labels", @target_id)]
-
-      assert [%{id: @entity_id, op: :put_entity}, %{data: data, id: @target_id, op: :put_entity}] =
-               deltas(effects, %{@entity_id => message, @target_id => label}, nil)
-
-      assert data.messages == [@entity_id]
-    end
-
-    test "hands over the target of several edges once" do
-      label = %Module29{id: @target_id, messages: [], name: "urgent"}
-      other_id = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
-
-      effects = [
-        edge_effect(:del_relationship, Module28, @entity_id, "labels", @target_id),
-        edge_effect(:del_relationship, Module28, other_id, "labels", @target_id)
-      ]
-
-      targets =
-        effects
-        |> deltas(%{@target_id => label}, nil)
-        |> Enum.filter(&(&1.id == @target_id))
-
-      assert length(targets) == 1
-    end
-
-    test "hands over the target of an edge the gap names as well once" do
-      label = %Module29{id: @target_id, messages: [], name: "renamed"}
-
-      effects = [
-        effect(Module29, @target_id),
-        edge_effect(:del_relationship, Module28, @entity_id, "labels", @target_id)
-      ]
-
-      targets =
-        effects
-        |> deltas(%{@target_id => label}, nil)
-        |> Enum.filter(&(&1.id == @target_id))
-
-      assert length(targets) == 1
-    end
-
-    test "says nothing about the target of an edge the client does not hold" do
-      message = %Module28{body: "tagged", id: @entity_id}
-      effects = [edge_effect(:add_relationship, Module28, @entity_id, "labels", @target_id)]
-
-      assert [%{id: @entity_id, op: :put_entity}] = deltas(effects, %{@entity_id => message}, nil)
-    end
-
-    test "says nothing more about the target of an edge whose type declares no inverse of it" do
-      target = %Module2{a: true, c: "a target", id: @target_id}
-      effects = [edge_effect(:add_relationship, Module3, @entity_id, "a", @target_id)]
-
-      assert deltas(effects, %{@target_id => target}, nil) == [
-               %{
-                 id: @entity_id,
-                 op: :unsync_entity,
-                 type: "Hologram.Test.Fixtures.Entity.Module3"
-               }
-             ]
-    end
-
-    test "says nothing about a type this build has never compiled" do
-      assert deltas([effect("MyApp.TypeOnlyThisTestNames", @entity_id)], %{}, nil) == []
-    end
-
-    test "says nothing about a gap that touched nothing" do
-      assert deltas([], %{}, nil) == []
-    end
-  end
-
   describe "gap/4" do
     test "returns the effects written since the client was last told" do
       seed(200)
@@ -306,7 +58,7 @@ defmodule Hologram.Sync.CatchupTest do
 
       [{tx, seq}, _second] = places()
 
-      assert {:ok, [effect], nil} =
+      assert {:ok, [effect], _edge} =
                gap(
                  Cursor.encode(tx, seq, @policy_hash, @types_hash),
                  nil,
@@ -322,12 +74,31 @@ defmodule Hologram.Sync.CatchupTest do
 
       [{tx, seq}] = places()
 
-      assert gap(
-               Cursor.encode(tx, seq, @policy_hash, @types_hash),
-               nil,
-               @policy_hash,
-               @types_hash
-             ) == {:ok, [], nil}
+      assert {:ok, [], _edge} =
+               gap(
+                 Cursor.encode(tx, seq, @policy_hash, @types_hash),
+                 nil,
+                 @policy_hash,
+                 @types_hash
+               )
+    end
+
+    # Read before the effects, so it can never be past what the read saw finish.
+    test "answers the edge below which every transaction had finished before the read" do
+      seed(200)
+
+      [{tx, seq}] = places()
+
+      assert {:ok, [], edge} =
+               gap(
+                 Cursor.encode(tx, seq, @policy_hash, @types_hash),
+                 nil,
+                 @policy_hash,
+                 @types_hash
+               )
+
+      assert is_integer(edge)
+      assert edge <= Oplog.current_xmin()
     end
 
     test "sends everything again to a client whose place cannot be read" do
@@ -452,7 +223,7 @@ defmodule Hologram.Sync.CatchupTest do
 
       [{tx, seq} | _rest] = places()
 
-      assert {:ok, effects, nil} =
+      assert {:ok, effects, _edge} =
                gap(
                  Cursor.encode(tx, seq, @policy_hash, @types_hash),
                  nil,
@@ -481,130 +252,6 @@ defmodule Hologram.Sync.CatchupTest do
                {:full_resync, :model_hash}
     end
 
-    test "answers the grants a client held before one was revoked while it was away" do
-      actor = user("catchup_1@example.com")
-      resource = DB.create!(PolicyModule1.new())
-
-      Auth.grant_role(actor, :viewer, resource)
-      revoked = stored_grant(actor.id)
-      Auth.revoke_role(actor, :viewer, resource)
-
-      clear_log()
-
-      seed(200)
-
-      [{tx, seq}] = places()
-
-      seed_grant(201, "del_entity", revoked)
-
-      assert {:ok, [_effect], [grant]} =
-               gap(
-                 Cursor.encode(tx, seq, @policy_hash, @types_hash),
-                 actor.id,
-                 @policy_hash,
-                 @types_hash
-               )
-
-      assert grant.id == revoked.id
-      assert grant.role == :viewer
-      assert grant.user_id == actor.id
-    end
-
-    test "answers no grants for a client whose own grants did not change" do
-      actor = user("catchup_2@example.com")
-      other = user("catchup_3@example.com")
-      resource = DB.create!(PolicyModule1.new())
-
-      Auth.grant_role(other, :viewer, resource)
-      other_grant = stored_grant(other.id)
-
-      clear_log()
-
-      seed(200)
-
-      [{tx, seq}] = places()
-
-      seed_grant(201, "del_entity", other_grant)
-
-      assert {:ok, [_effect], nil} =
-               gap(
-                 Cursor.encode(tx, seq, @policy_hash, @types_hash),
-                 actor.id,
-                 @policy_hash,
-                 @types_hash
-               )
-    end
-
-    test "answers no grants for an anonymous client" do
-      actor = user("catchup_4@example.com")
-      resource = DB.create!(PolicyModule1.new())
-
-      Auth.grant_role(actor, :viewer, resource)
-      grant = stored_grant(actor.id)
-
-      clear_log()
-
-      seed(200)
-
-      [{tx, seq}] = places()
-
-      seed_grant(201, "del_entity", grant)
-
-      assert {:ok, [_effect], nil} =
-               gap(
-                 Cursor.encode(tx, seq, @policy_hash, @types_hash),
-                 nil,
-                 @policy_hash,
-                 @types_hash
-               )
-    end
-
-    test "answers no grants when the gap holds none" do
-      actor = user("catchup_5@example.com")
-
-      clear_log()
-
-      seed(200)
-      seed(201)
-
-      [{tx, seq}, _second] = places()
-
-      assert {:ok, [_effect], nil} =
-               gap(
-                 Cursor.encode(tx, seq, @policy_hash, @types_hash),
-                 actor.id,
-                 @policy_hash,
-                 @types_hash
-               )
-    end
-
-    # The model door answers first, so a grant effect is never compared as a module against a
-    # label a newer peer wrote.
-    test "refuses a mixed-model gap before looking at grants" do
-      actor = user("catchup_6@example.com")
-      resource = DB.create!(PolicyModule1.new())
-
-      Auth.grant_role(actor, :viewer, resource)
-      grant = stored_grant(actor.id)
-
-      clear_log()
-
-      seed(200)
-
-      [{tx, seq}] = places()
-
-      seed(201, "written under another model")
-      seed_grant(202, "del_entity", grant)
-
-      assert gap(
-               Cursor.encode(tx, seq, @policy_hash, @types_hash),
-               actor.id,
-               @policy_hash,
-               @types_hash
-             ) ==
-               {:full_resync, :model_hash}
-    end
-
     test "replays a gap whose effects were all written under the current model" do
       seed(199, "written under another model")
       seed(200)
@@ -614,7 +261,7 @@ defmodule Hologram.Sync.CatchupTest do
 
       # The effect from before the client's place is of another model and is none of its business:
       # what it was away for is what comes after.
-      assert {:ok, [effect], nil} =
+      assert {:ok, [effect], _edge} =
                gap(
                  Cursor.encode(tx, seq, @policy_hash, @types_hash),
                  nil,

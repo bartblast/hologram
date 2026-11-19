@@ -651,6 +651,37 @@ defmodule Hologram.Sync.LiveTest do
     end
   end
 
+  describe "part/6" do
+    test "answers the part of the given user, as parts/5 answers it for a session of theirs",
+         context do
+      project = create!(PolicyModule17)
+      create!(PolicyModule18, project_id: project.id, user_id: context.alice)
+
+      effects = [effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"})]
+
+      part = part(effects, context.alice, context.edges, @synced, @place, 0)
+
+      assert readable_ids(part, PolicyModule17) == ids([project])
+      assert part.place == @place
+    end
+
+    test "gives each replica's highest batch in a transaction above the given one", context do
+      project = create!(PolicyModule17, public: true)
+      batch_tx = Oplog.current_xmax() + 2
+
+      log_batch(project, batch_tx - 1, "replica_b", 3)
+      log_batch(project, batch_tx + 1, "replica_a", 8)
+
+      effects = [
+        effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"}, tx: batch_tx)
+      ]
+
+      part = part(effects, context.alice, context.edges, @synced, @place, batch_tx - 2)
+
+      assert part.overtaking_seqs == %{"replica_a" => 8, "replica_b" => 3}
+    end
+  end
+
   describe "pairs_touching/2" do
     test "returns the pairs a given row is the source of" do
       project = create!(PolicyModule17)

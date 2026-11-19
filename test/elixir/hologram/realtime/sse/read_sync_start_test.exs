@@ -16,7 +16,7 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @policy_hash "0123456789abcdef0123456789abcdef"
   @synced_types [Module2]
-  @types_hash Cursor.types_hash(@synced_types)
+  @types_hash Cursor.types_hash(@synced_types, false)
 
   use_module_stub :query_cache
 
@@ -28,7 +28,11 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     :persistent_term.put({Policy, :hash}, @policy_hash)
 
     setup_query_cache(QueryCacheStub, false)
-    :persistent_term.put(QueryCacheStub.persistent_term_key(), %{synced_types: @synced_types})
+
+    :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+      permission_checking?: false,
+      synced_types: @synced_types
+    })
 
     :ok
   end
@@ -63,13 +67,13 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     test "hands the session a gap reader that reads past a place filled under the same rules and types" do
       {tx, seq} = seed(200)
 
-      assert gap_reader(Cursor.encode(tx, seq, @policy_hash, @types_hash)).() == {:ok, [], nil}
+      assert {:ok, [], _edge} = gap_reader(Cursor.encode(tx, seq, @policy_hash, @types_hash)).()
     end
 
     test "hands the session a gap reader that refuses a place filled with other types" do
       {tx, seq} = seed(200)
 
-      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([]))
+      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([], false))
 
       assert gap_reader(cursor).() == {:full_resync, :synced_types}
     end
@@ -198,7 +202,7 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     test "sends everything again to a client filled with other types" do
       {tx, seq} = seed(200)
 
-      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([]))
+      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([], false))
 
       assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
                {:ok,

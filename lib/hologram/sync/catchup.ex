@@ -19,18 +19,13 @@ defmodule Hologram.Sync.Catchup do
   # apply, and only judging all of it again under the current ones says what it may keep. The place
   # carries the rules it was judged under, which costs a client nothing when they match.
   #
-  # A grant given or taken away while the client was gone is a change the gap can hold but not speak
-  # of: it moves one row and changes what the client may see of many, which no effect names. So
-  # the gap comes back with the grants as they stood at the client's place beside it, for the
-  # session to judge its rows under both and say what moved between them.
+  # A grant given or taken away while the client was gone is a change the gap holds like any other:
+  # the backwards search reaches every row it moved (see `Hologram.Sync.Search`), so the session
+  # judges those rows as it judges a live batch's.
 
-  alias Hologram.Auth
-  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Oplog
-  alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Sync.Cursor
-  alias Hologram.Sync.Frame
 
   # The most effects a replay will carry, and past it the client is sent everything instead.
   #
@@ -54,9 +49,8 @@ defmodule Hologram.Sync.Catchup do
   # magnitude rather than equal to it. Policy: it trades frames-per-fill against bytes-per-frame,
   # and neither end is dangerous.
   #
-  # A replay frame is cut by the effects it answers rather than by rows, since each claims the
-  # place of its last effect - so one can carry up to twice this, every effect an edge whose target
-  # is handed over beside the row it names.
+  # A catch-up is worked through in chunks of this many effects, each claiming the place of its last
+  # one, so a client cut off mid catch-up resumes after the chunks it got.
   @default_rows_per_frame 500
 
   @doc """
@@ -83,77 +77,44 @@ defmodule Hologram.Sync.Catchup do
   end
 
   @doc """
-  Returns what to tell a returning client about the rows the given gap touched, given the `pot` it
-  may see now - the rows of every window it holds, and the ones no window carries read again
-  through the read rules, keyed by id, already checked against who it is.
-
-  A row the gap touched and the pot still holds is handed over WHOLE and as it now stands, not as
-  the log said it was: the log names which rows to go and look at, and looking is what supplies
-  the values. One that the pot no longer holds is one the client may no longer see.
-
-  A row touched many times while the client was away is spoken of once - it has one current state,
-  however many times it got there.
-
-  An edge moves its target's side too when the target's type declares an inverse of the
-  relationship - a label's messages hold the message that gained the label. So the target is handed
-  over whole as well, when the pot holds it. One it does not hold is a row the client does not
-  hold, and there is nothing to say about it.
-
-  Nothing is said about a type this build has never compiled: a peer running a newer model can
-  write names this build has never heard of, and a client of this build has nowhere to put them.
-
-  A row handed over carries the server's verdicts for the given user (see
-  `Hologram.Sync.Frame.row_verdicts/2`), as every put does.
-  """
-  @spec deltas(list(map), map, String.t() | nil) :: list(map)
-  def deltas(effects, pot, actor_user_id) do
-    known = Enum.filter(effects, &is_atom(&1.type))
-
-    named = Enum.uniq_by(known, & &1.entity_id)
-    named_ids = MapSet.new(named, & &1.entity_id)
-
-    targets =
-      known
-      |> Enum.flat_map(&inverse_target(&1, pot))
-      |> Enum.uniq_by(& &1.id)
-      |> Enum.reject(&MapSet.member?(named_ids, &1.id))
-
-    named
-    |> Enum.map(&delta(&1, pot, actor_user_id))
-    |> Enum.concat(Enum.map(targets, &put_entity(&1, actor_user_id)))
-  end
-
-  @doc """
-  Returns the effects written since the given cursor and the grants the given actor held at it,
-  or why everything must be sent again - a cursor judged under rules other than the given policy
-  hash's (see `Hologram.Policy.hash/0`), and one filled with entity types other than the given
-  types hash's (see `Hologram.Sync.Cursor.types_hash/1`), among the reasons.
+  Returns the effects written since the given cursor, without their payloads (see
+  `Hologram.DB.Oplog.read_after/3`), and the edge below which every transaction had finished
+  before they were read (see `Hologram.DB.Oplog.current_xmin/0`) - or why everything must be sent
+  again: a cursor judged under rules other than the given policy hash's (see
+  `Hologram.Policy.hash/0`), and one filled with entity types other than the given types hash's (see
+  `Hologram.Sync.Cursor.types_hash/2`), among the reasons.
 
   What comes back names WHICH rows moved, never what they now hold - the values come from reading
   those rows as they stand. That is what makes the log safe to read as history: its order is not
   commit order, so folding it would build a past that never happened, while using it as an index
   of ids cannot.
 
-  The grants are nil unless the gap holds a change to this actor's own, which is the only case a
-  row nothing touched can have changed hands in. Nil for an anonymous client too: no grant names
-  it, so nothing about it can have moved.
+  The edge is what a place the catch-up hands over may reach. The log's order is by transaction id,
+  not by commit, so a transaction below an effect the read returned can still have been open then,
+  and commit after: a place past it would have a client cut off right then come back past changes
+  it never got. Every effect of a transaction below the edge is among the ones returned.
   """
   @spec gap(term, String.t() | nil, String.t(), String.t()) ::
-          {:ok, list(map), list(struct) | nil} | {:full_resync, atom}
-  def gap(cursor, actor_user_id, policy_hash, types_hash) do
+          {:ok, list(map), non_neg_integer} | {:full_resync, atom}
+  def gap(cursor, _actor_user_id, policy_hash, types_hash) do
     with {:ok, tx, seq, cursor_policy_hash, cursor_types_hash} <- decode_place(cursor),
          :ok <- check_rules(cursor_policy_hash, policy_hash),
          :ok <- check_types(cursor_types_hash, types_hash),
-         :ok <- check_retention(tx, seq),
-         {:ok, effects} <- read_gap(tx, seq) do
-      {:ok, effects, grants_then(effects, tx, seq, actor_user_id)}
+         :ok <- check_retention(tx, seq) do
+      read_gap(tx, seq)
     end
   end
 
+  # The edge is read first: a transaction it counts as finished had finished before the effects were
+  # read, so the read holds what it wrote.
   defp read_gap(tx, seq) do
-    tx
-    |> Oplog.read_after(seq, gap_limit() + 1)
-    |> check_size()
+    edge = Oplog.current_xmin()
+
+    effects = Oplog.read_after(tx, seq, gap_limit() + 1)
+
+    with {:ok, effects} <- check_size(effects) do
+      {:ok, effects, edge}
+    end
   end
 
   # Read one past the limit, so "too many" is answered without holding them all: the extra row is
@@ -175,25 +136,6 @@ defmodule Hologram.Sync.Catchup do
       {:ok, effects}
     else
       {:full_resync, :model_hash}
-    end
-  end
-
-  # Asked only when the gap holds a grant effect at all, which is a walk of what is already in
-  # memory - an ordinary resume reads nothing extra. Asked AFTER the model door, so every effect
-  # here is this build's own and a type compares as the module it is rather than as a label a
-  # newer peer wrote.
-  #
-  # A gap holding grants that are all somebody else's answers nil the same way an empty one does:
-  # what another user may see is not this client's business, and no rule grants by a grant held
-  # by somebody else.
-  defp grants_then(_effects, _tx, _seq, nil), do: nil
-
-  defp grants_then(effects, tx, seq, actor_user_id) do
-    if Enum.any?(effects, &(&1.type == RoleGrant)) do
-      case Oplog.read_type_after(RoleGrant, tx, seq, %{"user_id" => actor_user_id}) do
-        [] -> nil
-        grant_effects -> Auth.grants_before(actor_user_id, grant_effects)
-      end
     end
   end
 
@@ -228,40 +170,10 @@ defmodule Hologram.Sync.Catchup do
     end
   end
 
-  # A row that is gone and a row that is merely out of reach are both told as `unsync_entity`, the
-  # same as the connected path tells them. Telling them apart would mean asking whether a row the
-  # client may not read exists at all, which answers a question it was not allowed to ask.
-  # TODO: offline mutations need the distinction (a queued write against a deleted row is a
-  # rejection, against an unsynced one it is fine) - it arrives with them, from the effect's own op
-  # rather than from an existence check.
-  defp delta(effect, pot, actor_user_id) do
-    case Map.fetch(pot, effect.entity_id) do
-      {:ok, row} -> put_entity(row, actor_user_id)
-      :error -> Frame.unsync_entity(effect.entity_id, effect.type)
-    end
-  end
-
-  defp inverse_target(%{op: op, data: data, type: type}, pot)
-       when op in [:add_relationship, :del_relationship] do
-    with %{"relationship" => forward_name, "target_id" => target_id} <- data,
-         {:ok, target} <- Map.fetch(pot, target_id),
-         [_name | _more] <- Entity.inverses_of_to_many(target.__struct__, type, forward_name) do
-      [target]
-    else
-      _nothing_to_say -> []
-    end
-  end
-
-  defp inverse_target(_effect, _pot), do: []
-
   defp decode_place(cursor) do
     case Cursor.decode(cursor) do
       {:ok, tx, seq, policy_hash, types_hash} -> {:ok, tx, seq, policy_hash, types_hash}
       :error -> {:full_resync, :cursor}
     end
-  end
-
-  defp put_entity(row, actor_user_id) do
-    Frame.put_entity(row, Frame.row_verdicts(actor_user_id, row))
   end
 end
