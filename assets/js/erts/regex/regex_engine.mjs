@@ -33,11 +33,21 @@ const ENGINE_OPT_ATOMS = new Set([
 
 const NEWLINE_TYPES = new Set(Object.values(NEWLINE_VERBS));
 
+// Subjects below this byte size aren't cached: converting them costs less
+// than the cache lookup and store. Measured in Node 24 and Chrome.
+const CACHED_SUBJECT_MIN_BYTE_SIZE = 64;
+
 // Facade over the regex machinery: compiles PCRE2 patterns into matchable
 // entries and matches them against JS strings, hiding the native/interpreted
 // engine split. Also bridges boxed Erlang terms to engine inputs: char data
 // conversion and :re compile option parsing.
 export default class RegexEngine {
+  // Converted texts of binary subjects, by binary, one map per mode, since
+  // the texts of one binary differ between the modes. A text lives as long
+  // as its binary.
+  static #latin1SubjectTexts = new WeakMap();
+  static #utf8SubjectTexts = new WeakMap();
+
   // Keeps a leading byte order mark, which is data in a binary, where
   // ERTS.utf8Decoder drops it.
   static #utf8Decoder = new TextDecoder("utf-8", {
@@ -400,6 +410,30 @@ export default class RegexEngine {
     return "invalid";
   }
 
+  // Returns the text a binary subject is matched against: decoded from UTF-8
+  // in unicode mode, or null when it isn't valid UTF-8, and one char per
+  // byte otherwise. Converting the same binary again in the same mode
+  // returns the kept text, for binaries of CACHED_SUBJECT_MIN_BYTE_SIZE
+  // bytes and more.
+  static subjectTextFromBinary(binary, unicode) {
+    Bitstring.maybeSetBytesFromText(binary);
+
+    if (binary.bytes.length < CACHED_SUBJECT_MIN_BYTE_SIZE) {
+      return $.#subjectTextFromBytes(binary.bytes, unicode);
+    }
+
+    const texts = unicode ? $.#utf8SubjectTexts : $.#latin1SubjectTexts;
+    const keptText = texts.get(binary);
+
+    // A text is a string or null, so undefined means none is kept yet
+    if (keptText !== undefined) return keptText;
+
+    const text = $.#subjectTextFromBytes(binary.bytes, unicode);
+    texts.set(binary, text);
+
+    return text;
+  }
+
   // Maps every byte to one JS char, so JS string indices are byte offsets
   // and matching is byte-faithful even for non-UTF-8 binaries.
   static textFromLatin1Bytes(bytes) {
@@ -565,6 +599,14 @@ export default class RegexEngine {
     }
 
     return compiled.regexpSticky;
+  }
+
+  static #subjectTextFromBytes(bytes, unicode) {
+    if (!unicode) return $.textFromLatin1Bytes(bytes);
+
+    const decoded = $.decodeUtf8(bytes);
+
+    return decoded.error ? null : decoded.text;
   }
 
   // The interpreter's subroutine table, built on first use, as patterns on

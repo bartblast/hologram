@@ -1183,6 +1183,33 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert :re.run(subject, "(?=\\X)", [:global, :unicode]) == {:match, expected}
     end
 
+    test "matches the same binary subject in byte mode after unicode mode" do
+      subject = String.duplicate("é", 40)
+
+      assert :re.run(subject, ".", [:unicode, {:capture, :first, :binary}]) == {:match, ["é"]}
+      assert :re.run(subject, ".", [{:capture, :first, :binary}]) == {:match, [<<0xC3>>]}
+    end
+
+    test "matches the same binary subject in unicode mode after byte mode" do
+      subject = String.duplicate("é", 40)
+
+      assert :re.run(subject, ".", [{:capture, :first, :binary}]) == {:match, [<<0xC3>>]}
+      assert :re.run(subject, ".", [:unicode, {:capture, :first, :binary}]) == {:match, ["é"]}
+    end
+
+    test "raises on the same invalid UTF-8 binary subject again in unicode mode" do
+      {:ok, compiled} = :re.compile("a", [:unicode])
+      subject = :binary.copy(<<255>>, 64)
+
+      assert_error ArgumentError, "argument error", fn ->
+        :re.run(subject, compiled, [])
+      end
+
+      assert_error ArgumentError, "argument error", fn ->
+        :re.run(subject, compiled, [])
+      end
+    end
+
     test "compile-time firstline pattern applies when running" do
       {:ok, compiled} = :re.compile("b", [:firstline])
 

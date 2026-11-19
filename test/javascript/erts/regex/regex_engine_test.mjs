@@ -1074,6 +1074,83 @@ describe("RegexEngine", () => {
     });
   });
 
+  describe("subjectTextFromBinary()", () => {
+    it("maps every byte to one JS char in byte mode", () => {
+      const binary = Bitstring.fromBytes([0x61, 0xe9, 0xff]);
+
+      assert.equal(RegexEngine.subjectTextFromBinary(binary, false), "aéÿ");
+    });
+
+    it("maps the UTF-8 bytes of a text binary in byte mode", () => {
+      assert.equal(
+        RegexEngine.subjectTextFromBinary(Type.bitstring("é"), false),
+        "\u00c3\u00a9",
+      );
+    });
+
+    it("decodes UTF-8 in unicode mode", () => {
+      assert.equal(
+        RegexEngine.subjectTextFromBinary(Type.bitstring("aé"), true),
+        "aé",
+      );
+    });
+
+    it("returns null for a non-UTF-8 binary in unicode mode", () => {
+      assert.isNull(
+        RegexEngine.subjectTextFromBinary(Bitstring.fromBytes([0xff]), true),
+      );
+    });
+
+    it("returns the same text again for a 64-byte binary in byte mode", () => {
+      const binary = Bitstring.fromBytes(new Array(64).fill(0xe9));
+
+      assert.equal(
+        RegexEngine.subjectTextFromBinary(binary, false),
+        "é".repeat(64),
+      );
+
+      assert.equal(
+        RegexEngine.subjectTextFromBinary(binary, false),
+        "é".repeat(64),
+      );
+    });
+
+    it("returns the same text again for a 64-byte binary in unicode mode", () => {
+      const binary = Type.bitstring("é".repeat(32));
+
+      assert.equal(
+        RegexEngine.subjectTextFromBinary(binary, true),
+        "é".repeat(32),
+      );
+
+      assert.equal(
+        RegexEngine.subjectTextFromBinary(binary, true),
+        "é".repeat(32),
+      );
+    });
+
+    it("returns null again for a 64-byte non-UTF-8 binary in unicode mode", () => {
+      const binary = Bitstring.fromBytes(new Array(64).fill(0xff));
+
+      assert.isNull(RegexEngine.subjectTextFromBinary(binary, true));
+      assert.isNull(RegexEngine.subjectTextFromBinary(binary, true));
+    });
+
+    it("returns each mode's text for the same 64-byte binary", () => {
+      const binary = Type.bitstring("é".repeat(32));
+
+      assert.equal(
+        RegexEngine.subjectTextFromBinary(binary, true),
+        "é".repeat(32),
+      );
+
+      assert.equal(
+        RegexEngine.subjectTextFromBinary(binary, false),
+        "\u00c3\u00a9".repeat(32),
+      );
+    });
+  });
+
   describe("textFromLatin1Bytes()", () => {
     it("maps every byte to one JS char", () => {
       assert.equal(

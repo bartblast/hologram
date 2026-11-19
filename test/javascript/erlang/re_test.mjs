@@ -2474,6 +2474,44 @@ describe("Erlang_Re", () => {
       assert.equal(segmentSpy.callCount, 1);
     });
 
+    it("matches the same binary subject in byte mode after unicode mode", () => {
+      const subject = Type.bitstring("é".repeat(40));
+      const capture = captureOption(Type.atom("first"), "binary");
+
+      const unicodeResult = run(subject, Type.bitstring("."), [
+        Type.atom("unicode"),
+        capture,
+      ]);
+
+      const byteResult = run(subject, Type.bitstring("."), [capture]);
+
+      assert.deepEqual(unicodeResult, matchTuple([Type.bitstring("é")]));
+      assert.deepEqual(byteResult, matchTuple([Bitstring.fromBytes([0xc3])]));
+    });
+
+    it("matches the same binary subject in unicode mode after byte mode", () => {
+      const subject = Type.bitstring("é".repeat(40));
+      const capture = captureOption(Type.atom("first"), "binary");
+
+      const byteResult = run(subject, Type.bitstring("."), [capture]);
+
+      const unicodeResult = run(subject, Type.bitstring("."), [
+        Type.atom("unicode"),
+        capture,
+      ]);
+
+      assert.deepEqual(byteResult, matchTuple([Bitstring.fromBytes([0xc3])]));
+      assert.deepEqual(unicodeResult, matchTuple([Type.bitstring("é")]));
+    });
+
+    it("raises on the same invalid UTF-8 binary subject again in unicode mode", () => {
+      const compiled = compilePattern("a", [Type.atom("unicode")]);
+      const subject = Bitstring.fromBytes(new Array(64).fill(255));
+
+      assertPlainRunError(() => run(subject, compiled));
+      assertPlainRunError(() => run(subject, compiled));
+    });
+
     it("compile-time firstline pattern applies when running", () => {
       const compiled = compilePattern("b", [Type.atom("firstline")]);
 

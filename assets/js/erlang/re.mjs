@@ -782,6 +782,13 @@ const Erlang_Re = {
       return Type.tuple([Type.atom("match"), captured]);
     };
 
+    // Converts the subject char data to text, a binary subject through the
+    // engine's kept subject texts.
+    const subjectCharDataToText = () =>
+      Type.isBinary(subject)
+        ? ERTS.regex.subjectTextFromBinary(subject, true)
+        : ERTS.regex.charDataToText(subject);
+
     // --- Options ---
 
     const {
@@ -898,7 +905,7 @@ const Erlang_Re = {
       acc.engineOpts.unicode = true;
 
       // The subject char data converts before the pattern compiles
-      subjectText = ERTS.regex.charDataToText(subject);
+      subjectText = subjectCharDataToText();
 
       if (subjectText === null) raiseCharDataError(subject);
 
@@ -941,10 +948,14 @@ const Erlang_Re = {
 
     if (subjectText === null) {
       if (entry.unicode) {
-        subjectText = ERTS.regex.charDataToText(subject);
+        subjectText = subjectCharDataToText();
 
         if (subjectText === null) raiseCharDataError(subject);
+      } else if (Type.isBinary(subject)) {
+        subjectText = ERTS.regex.subjectTextFromBinary(subject, false);
       } else {
+        // Only a binary subject keeps its text, as an iolist subject usually
+        // builds a new binary each run
         Bitstring.maybeSetBytesFromText(subjectBinary);
         subjectText = ERTS.regex.textFromLatin1Bytes(subjectBinary.bytes);
       }
