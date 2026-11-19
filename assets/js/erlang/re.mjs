@@ -600,21 +600,11 @@ const Erlang_Re = {
 
       if (offsetOption !== null) {
         if (entry.unicode) {
-          startPosition = ERTS.regex.byteOffsetToUtf16Index(
-            subjectText,
-            offsetOption,
-          );
+          const offsetMap = subjectOffsetMap();
+          startPosition = offsetMap.toIndex(offsetOption);
 
-          if (
-            ERTS.regex.utf16IndexToByteOffset(subjectText, startPosition) !==
-            offsetOption
-          ) {
-            const subjectByteLength = ERTS.regex.utf16IndexToByteOffset(
-              subjectText,
-              subjectText.length,
-            );
-
-            if (offsetOption > subjectByteLength) {
+          if (offsetMap.toByteOffset(startPosition) !== offsetOption) {
+            if (offsetOption > offsetMap.byteLength()) {
               offsetBeyondSubject = true;
             } else {
               raiseArgumentError();
@@ -657,11 +647,9 @@ const Erlang_Re = {
           ? [...groupMap.names.keys()].sort(ERTS.regex.compareByUtf8Bytes)
           : null;
 
-      // In byte mode JS string indices are byte offsets already. In unicode
-      // mode one converter serves all captures, so a global run walks the
-      // subject once instead of once per capture.
+      // In byte mode JS string indices are byte offsets already
       const toByteOffset = entry.unicode
-        ? ERTS.regex.utf16IndexToByteOffsetConverter(subjectText)
+        ? (index) => subjectOffsetMap().toByteOffset(index)
         : (index) => index;
 
       const buildValue = (capture) => {
@@ -788,6 +776,17 @@ const Erlang_Re = {
       Type.isBinary(subject)
         ? ERTS.regex.subjectTextFromBinary(subject, true)
         : ERTS.regex.charDataToText(subject);
+
+    // The offset map of the subject's unicode mode text, made on first use
+    let offsetMapOfSubject = null;
+
+    const subjectOffsetMap = () => {
+      if (offsetMapOfSubject === null) {
+        offsetMapOfSubject = ERTS.regex.subjectOffsetMap(subject, subjectText);
+      }
+
+      return offsetMapOfSubject;
+    };
 
     // --- Options ---
 

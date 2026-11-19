@@ -12,39 +12,6 @@ const match = (source, subject, opts = {}, runOpts = {}) =>
   RegexEngine.match(RegexEngine.compile(source, opts), subject, runOpts);
 
 describe("RegexEngine", () => {
-  describe("byteOffsetToUtf16Index()", () => {
-    // a: 1 byte / 1 UTF-16 unit, é: 2 bytes / 1 unit, €: 3 bytes / 1 unit, 😀: 4 bytes / 2 units
-    const text = "aé€😀";
-
-    it("returns 0 for offset 0", () => {
-      assert.equal(RegexEngine.byteOffsetToUtf16Index(text, 0), 0);
-    });
-
-    it("converts offset after 1-byte code point", () => {
-      assert.equal(RegexEngine.byteOffsetToUtf16Index(text, 1), 1);
-    });
-
-    it("converts offset after 2-byte code point", () => {
-      assert.equal(RegexEngine.byteOffsetToUtf16Index(text, 3), 2);
-    });
-
-    it("converts offset after 3-byte code point", () => {
-      assert.equal(RegexEngine.byteOffsetToUtf16Index(text, 6), 3);
-    });
-
-    it("converts offset after 4-byte code point", () => {
-      assert.equal(RegexEngine.byteOffsetToUtf16Index(text, 10), 5);
-    });
-
-    it("clamps offset past the end of text", () => {
-      assert.equal(RegexEngine.byteOffsetToUtf16Index(text, 11), 5);
-    });
-
-    it("returns 0 for empty text", () => {
-      assert.equal(RegexEngine.byteOffsetToUtf16Index("", 3), 0);
-    });
-  });
-
   describe("charDataToText()", () => {
     it("converts a binary, decoding UTF-8", () => {
       assert.equal(RegexEngine.charDataToText(Type.bitstring("aé")), "aé");
@@ -1074,6 +1041,36 @@ describe("RegexEngine", () => {
     });
   });
 
+  describe("subjectOffsetMap()", () => {
+    it("converts offsets of a binary subject", () => {
+      const offsetMap = RegexEngine.subjectOffsetMap(
+        Type.bitstring("aé"),
+        "aé",
+      );
+
+      assert.equal(offsetMap.toByteOffset(2), 3);
+      assert.equal(offsetMap.byteLength(), 3);
+    });
+
+    it("converts offsets of a char data list subject", () => {
+      const subject = Type.list([Type.integer(97), Type.bitstring("é")]);
+      const offsetMap = RegexEngine.subjectOffsetMap(subject, "aé");
+
+      assert.equal(offsetMap.toByteOffset(2), 3);
+      assert.equal(offsetMap.byteLength(), 3);
+    });
+
+    it("returns the same map again for a 64-byte binary subject", () => {
+      const subject = Type.bitstring("é".repeat(32));
+      const text = "é".repeat(32);
+
+      assert.strictEqual(
+        RegexEngine.subjectOffsetMap(subject, text),
+        RegexEngine.subjectOffsetMap(subject, text),
+      );
+    });
+  });
+
   describe("subjectTextFromBinary()", () => {
     it("maps every byte to one JS char in byte mode", () => {
       const binary = Bitstring.fromBytes([0x61, 0xe9, 0xff]);
@@ -1202,103 +1199,6 @@ describe("RegexEngine", () => {
         RegexEngine.textFromLatin1Bytes(bytes),
         "a".repeat(4999) + "é",
       );
-    });
-  });
-
-  describe("utf16IndexToByteOffset()", () => {
-    // a: 1 byte / 1 UTF-16 unit, é: 2 bytes / 1 unit, €: 3 bytes / 1 unit, 😀: 4 bytes / 2 units
-    const text = "aé€😀";
-
-    it("returns 0 for index 0", () => {
-      assert.equal(RegexEngine.utf16IndexToByteOffset(text, 0), 0);
-    });
-
-    it("converts index after 1-byte code point", () => {
-      assert.equal(RegexEngine.utf16IndexToByteOffset(text, 1), 1);
-    });
-
-    it("converts index after 2-byte code point", () => {
-      assert.equal(RegexEngine.utf16IndexToByteOffset(text, 2), 3);
-    });
-
-    it("converts index after 3-byte code point", () => {
-      assert.equal(RegexEngine.utf16IndexToByteOffset(text, 3), 6);
-    });
-
-    it("converts index after 4-byte code point", () => {
-      assert.equal(RegexEngine.utf16IndexToByteOffset(text, 5), 10);
-    });
-
-    it("returns 0 for empty text", () => {
-      assert.equal(RegexEngine.utf16IndexToByteOffset("", 0), 0);
-    });
-  });
-
-  describe("utf16IndexToByteOffsetConverter()", () => {
-    // a: 1 byte / 1 UTF-16 unit, é: 2 bytes / 1 unit, €: 3 bytes / 1 unit, 😀: 4 bytes / 2 units
-    const text = "aé€😀";
-
-    it("returns 0 for index 0", () => {
-      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
-
-      assert.equal(convert(0), 0);
-    });
-
-    it("converts index after 1-byte code point", () => {
-      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
-
-      assert.equal(convert(1), 1);
-    });
-
-    it("converts index after 2-byte code point", () => {
-      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
-
-      assert.equal(convert(2), 3);
-    });
-
-    it("converts index after 3-byte code point", () => {
-      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
-
-      assert.equal(convert(3), 6);
-    });
-
-    it("converts index after 4-byte code point", () => {
-      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
-
-      assert.equal(convert(5), 10);
-    });
-
-    it("converts index inside a surrogate pair to the offset after the pair", () => {
-      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
-
-      assert.equal(convert(4), 10);
-    });
-
-    it("returns 0 for empty text", () => {
-      const convert = RegexEngine.utf16IndexToByteOffsetConverter("");
-
-      assert.equal(convert(0), 0);
-    });
-
-    it("converts index before an already converted one", () => {
-      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
-
-      assert.equal(convert(5), 10);
-      assert.equal(convert(2), 3);
-    });
-
-    it("converts index after an already converted one", () => {
-      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
-
-      assert.equal(convert(1), 1);
-      assert.equal(convert(5), 10);
-    });
-
-    it("converts the same index twice", () => {
-      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
-
-      assert.equal(convert(3), 6);
-      assert.equal(convert(3), 6);
     });
   });
 });

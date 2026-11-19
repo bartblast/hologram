@@ -12,6 +12,7 @@ import {
 } from "./regex_newlines.mjs";
 
 import {startOptionSettings} from "./regex_options.mjs";
+import RegexOffsetMap from "./regex_offset_map.mjs";
 import RegexParseError from "./regex_parse_error.mjs";
 import RegexParser, {scanStartOptions} from "./regex_parser.mjs";
 import RegexTranslator from "./regex_translator.mjs";
@@ -43,9 +44,10 @@ const CACHED_SUBJECT_MIN_BYTE_SIZE = 64;
 // conversion and :re compile option parsing.
 export default class RegexEngine {
   // Converted texts of binary subjects, by binary, one map per mode, since
-  // the texts of one binary differ between the modes. A text lives as long
-  // as its binary.
+  // the texts of one binary differ between the modes, and the offset maps of
+  // their unicode mode texts. Each lives as long as its binary.
   static #latin1SubjectTexts = new WeakMap();
+  static #subjectOffsetMaps = new WeakMap();
   static #utf8SubjectTexts = new WeakMap();
 
   // Keeps a leading byte order mark, which is data in a binary, where
@@ -54,20 +56,6 @@ export default class RegexEngine {
     fatal: true,
     ignoreBOM: true,
   });
-
-  // Converts a UTF-8 byte offset to a JS string index.
-  static byteOffsetToUtf16Index(text, byteOffset) {
-    let currentByteOffset = 0;
-    let utf16Index = 0;
-
-    while (currentByteOffset < byteOffset && utf16Index < text.length) {
-      const codePoint = text.codePointAt(utf16Index);
-      currentByteOffset += $.#calculateCodePointByteCount(codePoint);
-      utf16Index += codePoint > 0xffff ? 2 : 1;
-    }
-
-    return utf16Index;
-  }
 
   // Converts char data (a binary or a possibly nested list of code points
   // and binaries, with an improper binary tail allowed) to a JS string,
@@ -149,16 +137,23 @@ export default class RegexEngine {
   }
 
   // Compiles a PCRE2 pattern from a JS string, converting error positions
-  // from UTF-16 indices to UTF-8 byte offsets.
+  // from UTF-16 indices to UTF-8 byte offsets. PCRE2 reports some errors at
+  // a position past the end of the pattern, and each unit past the end counts
+  // as one byte.
   static compileText(text, opts) {
     const compiled = $.compile(text, opts);
 
     if (compiled.error) {
+      const offsetMap = new RegexOffsetMap(text, null);
+      const position = compiled.error.position;
+
+      const byteOffset =
+        position > text.length
+          ? offsetMap.byteLength() + position - text.length
+          : offsetMap.toByteOffset(position);
+
       return {
-        error: {
-          message: compiled.error.message,
-          position: $.utf16IndexToByteOffset(text, compiled.error.position),
-        },
+        error: {message: compiled.error.message, position: byteOffset},
       };
     }
 
@@ -410,6 +405,30 @@ export default class RegexEngine {
     return "invalid";
   }
 
+  // Returns the offset map of a subject's unicode mode text. A binary subject
+  // of CACHED_SUBJECT_MIN_BYTE_SIZE bytes and more keeps its map, so later
+  // runs on it reuse the checkpoints laid down so far.
+  static subjectOffsetMap(subject, text) {
+    if (!Type.isBinary(subject)) return new RegexOffsetMap(text, null);
+
+    Bitstring.maybeSetBytesFromText(subject);
+
+    const byteLength = subject.bytes.length;
+
+    if (byteLength < CACHED_SUBJECT_MIN_BYTE_SIZE) {
+      return new RegexOffsetMap(text, byteLength);
+    }
+
+    let offsetMap = $.#subjectOffsetMaps.get(subject);
+
+    if (offsetMap === undefined) {
+      offsetMap = new RegexOffsetMap(text, byteLength);
+      $.#subjectOffsetMaps.set(subject, offsetMap);
+    }
+
+    return offsetMap;
+  }
+
   // Returns the text a binary subject is matched against: decoded from UTF-8
   // in unicode mode, or null when it isn't valid UTF-8, and one char per
   // byte otherwise. Converting the same binary again in the same mode
@@ -459,48 +478,6 @@ export default class RegexEngine {
     return NEWLINE_PAIR_CONVENTIONS.has(newlineType);
   }
 
-  // Converts a JS string index to a UTF-8 byte offset.
-  static utf16IndexToByteOffset(text, utf16Index) {
-    let byteOffset = 0;
-
-    for (let i = 0; i < utf16Index;) {
-      const codePoint = text.codePointAt(i);
-      byteOffset += $.#calculateCodePointByteCount(codePoint);
-      i += codePoint > 0xffff ? 2 : 1;
-    }
-
-    return byteOffset;
-  }
-
-  // Returns a function that converts JS string indices of the text to UTF-8
-  // byte offsets. The byte offsets computed so far are kept, so a series of
-  // conversions walks the text once in total, in any call order, instead of
-  // once per conversion. Indices up to the text length are accepted.
-  static utf16IndexToByteOffsetConverter(text) {
-    // byteOffsets[i] is the byte offset of JS string index i
-    const byteOffsets = [0];
-
-    return (utf16Index) => {
-      while (byteOffsets.length <= utf16Index) {
-        const index = byteOffsets.length - 1;
-        const codePoint = text.codePointAt(index);
-
-        const byteOffset =
-          byteOffsets[index] + $.#calculateCodePointByteCount(codePoint);
-
-        // An index inside a surrogate pair maps to the offset after the
-        // pair, like utf16IndexToByteOffset() does
-        if (codePoint > 0xffff) {
-          byteOffsets.push(byteOffset, byteOffset);
-        } else {
-          byteOffsets.push(byteOffset);
-        }
-      }
-
-      return byteOffsets[utf16Index];
-    };
-  }
-
   // Returns how many bytes at the start are below 0x80.
   static #asciiPrefixLength(bytes) {
     for (let index = 0; index < bytes.length; index++) {
@@ -508,20 +485,6 @@ export default class RegexEngine {
     }
 
     return bytes.length;
-  }
-
-  static #calculateCodePointByteCount(codePoint) {
-    // 1-byte: ASCII
-    if (codePoint <= 0x7f) return 1;
-
-    // 2-byte
-    if (codePoint <= 0x7ff) return 2;
-
-    // 3-byte
-    if (codePoint <= 0xffff) return 3;
-
-    // 4-byte
-    return 4;
   }
 
   static #compileValid(source, opts) {
