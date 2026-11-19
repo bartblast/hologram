@@ -4075,6 +4075,41 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    // The fix is about the name the right side starts at, which a relationship of the row can be too.
+    it("refuses the left side ahead of a right side's later hop", () => {
+      const fix =
+        "a value from the surrounding code is pinned: ^owner.missing.id";
+      const operand = path("owner", "missing", "id");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["search", op("==", attribute(operand))]]),
+            hints(["operand", 0, operand, fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
+      );
+    });
+
+    it("refuses a right side's later hop where the triple checks it", () => {
+      const fix =
+        "a value from the surrounding code is pinned: ^owner.missing.id";
+      const operand = path("owner", "missing", "id");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["note", op("==", attribute(operand))]]),
+            hints(["operand", 0, operand, fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown relationship :missing in MyApp.User - known relationships: :manager, :projects",
+      );
+    });
+
     it("names the fix a left side's hint gives beside a right side that is an attribute", () => {
       const guests = Type.atom("guests");
       const limit = Type.atom("limit");

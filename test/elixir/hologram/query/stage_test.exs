@@ -2662,6 +2662,31 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    # The fix is about the name the right side starts at, which a relationship of the row can be too.
+    test "refuses the left side ahead of a right side's later hop" do
+      expected_msg =
+        "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module3 - known attributes: :b_id, :c_id, :created_at, :id, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module3, [nope: {:==, {:attribute, [:b, :missing, :id]}}], [
+          {:operand, 0, [:b, :missing, :id],
+           "a value from the surrounding code is pinned: ^b.missing.id", []}
+        ])
+      end
+    end
+
+    test "refuses a right side's later hop where the triple checks it" do
+      expected_msg =
+        "unknown relationship :missing in Hologram.Test.Fixtures.Entity.Module2 - known relationships: "
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module3, [c_id: {:==, {:attribute, [:b, :missing, :id]}}], [
+          {:operand, 0, [:b, :missing, :id],
+           "a value from the surrounding code is pinned: ^b.missing.id", []}
+        ])
+      end
+    end
+
     test "names the fix a left side's hint gives beside a right side that is an attribute" do
       expected_msg =
         "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - a value from the surrounding code is pinned, on the right side: c == ^search"

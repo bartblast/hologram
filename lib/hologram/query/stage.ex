@@ -2143,15 +2143,21 @@ defmodule Hologram.Query.Stage do
   end
 
   # Refuses an operand the query macros left a fix for, returning the fix - nil when there is none,
-  # or no operand on a row in reach.
+  # or no operand on a row in reach. The fix is about the name the operand starts at, so of a path
+  # only the first hop is checked here, and the rest where the triple checks it, after the key.
   defp validate_fixed_operand!(nil, _other_type, _name_hints, _scope), do: nil
 
   defp validate_fixed_operand!(_other, nil, _name_hints, _scope), do: nil
 
   defp validate_fixed_operand!(other, other_type, name_hints, scope) do
     fix = name_hint(name_hints, :operand, other, scope)
+    local = local_name(other)
 
-    if fix, do: validate_operand_name!(other, other_type, fix)
+    cond do
+      fix == nil -> :ok
+      path?(local) -> validate_path_hop!(hd(local), other_type, fix)
+      true -> validate_operand_name!(other, other_type, fix)
+    end
 
     fix
   end

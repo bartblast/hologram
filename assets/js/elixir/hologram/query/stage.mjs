@@ -306,8 +306,16 @@ function entryClauses(pair, scope, hints) {
   const otherType = other && reachedNameType(scope, other);
   const operandFix = otherType && nameHint(hints, "operand", other, scope);
 
+  // The fix is about the name the operand starts at, so of a path only the first hop is checked
+  // here, and the rest where the triple checks it, after the key.
   if (operandFix) {
-    validateOperandName(other, otherType, operandFix);
+    const otherName = localName(other);
+
+    if (isPath(otherName)) {
+      validatePathHop(otherName.data[0], otherType, operandFix);
+    } else {
+      validateOperandName(other, otherType, operandFix);
+    }
   }
 
   const keyHint = keyFix || rowHint(hints, "key", name, entityType, scope);
