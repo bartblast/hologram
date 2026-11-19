@@ -9,10 +9,17 @@ export default class ChangeEvent {
 
   static buildOperationParam(event) {
     const target = event.target;
-    const tagName = target.tagName;
+    const tagName = target.localName;
 
-    // Check if this is a form-level change event by examining currentTarget
-    if (event.currentTarget.tagName === "FORM") {
+    // Check if this is a form-level change event by examining currentTarget. Asked through the
+    // object's string tag rather than its tag name: a form control named "localName" or "tagName"
+    // shadows those properties on the form, and a "form" element inside <svg>, which the HTML
+    // parser and the client renderer keep in the SVG namespace, has the local name but isn't a form
+    // FormData can read.
+    if (
+      Object.prototype.toString.call(event.currentTarget) ===
+      "[object HTMLFormElement]"
+    ) {
       const formEvent = {target: event.currentTarget};
       return SubmitEvent.buildOperationParam(formEvent);
     }
@@ -20,9 +27,9 @@ export default class ChangeEvent {
     const type = target.type;
     let value;
 
-    if (tagName === "INPUT" && type === "checkbox") {
+    if (tagName === "input" && type === "checkbox") {
       value = Type.boolean(target.checked);
-    } else if (tagName === "SELECT") {
+    } else if (tagName === "select") {
       if (target.multiple) {
         const selectedOptions = Array.from(target.selectedOptions).map(
           (option) => option.value,
