@@ -122,26 +122,6 @@ defmodule Hologram.Query do
   defdelegate add_relationship(entity, relationship_name, target_id), to: Stage
 
   @doc """
-  Claims the acting user's authority for the given operation on the given entity struct and
-  returns the struct - the DB verb writing it evaluates that operation, against the row, for
-  the acting user, instead of the operation the verb performs on its own.
-
-  The entity is an entity struct - one a query read, or one Entity.new/2 constructed. The
-  operation is an atom naming an entity operation the entity type declares an allow line for -
-  `:pin`, `:publish`, `:archive` - and is recorded in the struct's metadata as the claim the
-  write carries. There is no user argument: the subject of a claim is always the acting user.
-  A write carries exactly one claim - a struct already claiming an authority, through
-  authorize/2 or trust/1, cannot claim another.
-
-  Raises Hologram.MisuseError when the entity is not an entity struct, when the operation is not an
-  atom, when the operation is neither a framework operation nor one an allow line on the entity
-  type names (see Hologram.Policy.validate_operation!/2), or when the struct already carries a
-  claim.
-  """
-  @spec authorize(Entity.t(), atom) :: Entity.t()
-  defdelegate authorize(entity, operation), to: Stage
-
-  @doc """
   Marks the given query as counting and returns the resulting query term.
 
   The query is an entity type module (starting a fresh query term) or an already built
@@ -341,8 +321,10 @@ defmodule Hologram.Query do
   one side of `and` or `or` or as a quantifier's condition, when a quantifier has a condition but no
   bound row, a bound row but no condition, or - for `all` - no condition at all, when a quantifier
   binds a name an enclosing one already bound, when its relationship is pinned or not a
-  relationship, when a bound row is compared whole rather than through an attribute, when the
-  predicates name `user_id()`, which only a policy condition can (a user's id is pinned from a
+  relationship, when a bound row is compared whole rather than through an attribute, when a
+  comparison or a search reads the same attribute of the same row on both sides - which tells
+  nothing about the row but whether the attribute is set, and the error says what it answers - when
+  the predicates name `user_id()`, which only a policy condition can (a user's id is pinned from a
   variable holding it: `^user_id`), or when the predicates take any other form - a bare name where
   only a value goes (a keyword value, a membership element, a range bound) is most likely a
   forgotten pin, and the error says so.
@@ -622,8 +604,7 @@ defmodule Hologram.Query do
   authority is behind: recording what an external system reported, applying what a poller
   fetched. Trust claims authority, it does not skip validation - a trusted write is validated,
   stamped and recorded like any other, and creator roles are granted when an acting user is
-  set. A write carries exactly one claim - a struct already claiming an authority, through
-  authorize/2 or trust/1, cannot claim another.
+  set. A struct already trusted cannot be trusted again.
 
   On a query - an entity type module or a query term - it marks the query as read on the
   server's own authority: DB.read/1 reads it raw whether or not a user is acting. The spelling

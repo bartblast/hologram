@@ -25,6 +25,7 @@ defmodule Hologram.Test.Fixtures.Entity.Module53 do
   unique [:flag, :held_at, :kind, :owner]
   unique [:kind, :slug]
 
+  allow :create
   allow :read
   allow :update
 end

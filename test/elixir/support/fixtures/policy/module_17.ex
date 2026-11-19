@@ -15,10 +15,19 @@ defmodule Hologram.Test.Fixtures.Policy.Module17 do
   relationship :profile, Module25, inverse: project
   relationship :tasks, [Module20], inverse: project
 
-  allow :archive, when: none(label <- labels, label.name == "locked")
-  allow :close, when: any(tag <- tasks.tags, tag.name == "done")
-  allow :feature, when: none(badge <- profile.badges, badge.name == "banned")
-  allow :publish, when: none(card <- tasks.shelf.cards, card.flagged == true)
+  allow :update, as: :archive, only: [:name], when: none(label <- labels, label.name == "locked")
+  allow :update, as: :close, only: [:name], when: any(tag <- tasks.tags, tag.name == "done")
+
+  allow :update,
+    as: :feature,
+    only: [:name],
+    when: none(badge <- profile.badges, badge.name == "banned")
+
+  allow :update,
+    as: :publish,
+    only: [:name],
+    when: none(card <- tasks.shelf.cards, card.flagged == true)
+
   allow :read, when: public == true or any(member <- members, member.user_id == user_id())
   allow :update, when: any(member <- members, member.seat == "full")
 end

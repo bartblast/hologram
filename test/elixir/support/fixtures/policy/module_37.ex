@@ -4,7 +4,11 @@ defmodule Hologram.Test.Fixtures.Policy.Module37 do
 
   alias Hologram.Test.Fixtures.Policy.Module36
 
-  relationship :owner, Module36, optional: true
+  attribute :body, :string, optional: true
 
-  allow :update
+  relationship :channel, Module36
+
+  allow :read
+  allow :update, as: :moderate, via: {:archive, channel}
+  allow :update, as: :edit, via: channel
 end

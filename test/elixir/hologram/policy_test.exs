@@ -11,11 +11,13 @@ defmodule Hologram.PolicyTest do
       delegation: 2,
       expand_global_role: 1,
       expand_global_role: 2,
+      field_rules: 2,
       framework_operations: 0,
       grant_role_qualifying_roles: 1,
       grant_role_qualifying_roles: 2,
       hash: 1,
       held_chains: 2,
+      line_held_chains: 2,
       locked_set_links: 1,
       operation_key: 1,
       operations: 1,
@@ -27,6 +29,7 @@ defmodule Hologram.PolicyTest do
       related_chains: 2,
       revoke_role_qualifying_roles: 1,
       revoke_role_qualifying_roles: 2,
+      update_fields: 1,
       validate_operation!: 2,
       verdict_key: 3,
       verdict_reads: 2,
@@ -37,6 +40,8 @@ defmodule Hologram.PolicyTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Entity.Derived
   alias Hologram.MisuseError
+  alias Hologram.PolicyTest.HeldBoard
+  alias Hologram.PolicyTest.HeldTask
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -145,13 +150,13 @@ defmodule Hologram.PolicyTest do
 
         role :editor
 
-        allow :publish
+        allow :update, as: :publish
       end
 
       assert AllowEntityFixture.__policies__() == [
-               {:read, nil, nil, []},
-               {:update, :editor, nil, []},
-               {:publish, nil, nil, []}
+               {:read, nil, nil, [], nil, nil},
+               {:update, :editor, nil, [], nil, nil},
+               {:update, nil, nil, [], :publish, nil}
              ]
     end
 
@@ -159,7 +164,7 @@ defmodule Hologram.PolicyTest do
       defmodule ActorPolicyFixture do
         use Hologram.Policy
 
-        allow :archive, when: id == user_id()
+        allow :update, as: :archive, when: id == user_id()
       end
 
       defmodule ActorEntityFixture do
@@ -214,14 +219,27 @@ defmodule Hologram.PolicyTest do
       end
 
       assert DuplicateLineEntityFixture.__policies__() == [
-               {:read, nil, nil, []},
-               {:read, nil, nil, []}
+               {:read, nil, nil, [], nil, nil},
+               {:read, nil, nil, [], nil, nil}
              ]
+    end
+
+    test "raises at the policy module's own compile for an operation that is not the framework's" do
+      expected_msg =
+        "unknown operation :archive used for allow in Hologram.PolicyTest.CustomOperationPolicyFixture - an allow line names one of the framework's operations, :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update. To keep :archive as a name can? and via: ask by, put it on a line of the operation the rule grants, like allow :update, as: :archive, only: [...] or allow :delete, as: :archive"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule CustomOperationPolicyFixture do
+          use Hologram.Policy
+
+          allow :archive
+        end
+      end
     end
 
     test "raises at the policy module's own compile for an invalid declaration" do
       expected_msg =
-        "invalid operation 123 used for allow in Hologram.PolicyTest.InvalidAllowPolicyFixture - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+        "invalid operation 123 used for allow in Hologram.PolicyTest.InvalidAllowPolicyFixture - an allow line names a framework operation, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InvalidAllowPolicyFixture do
@@ -284,9 +302,9 @@ defmodule Hologram.PolicyTest do
       assert NestedEntityFixture.__roles__() == [{:viewer, []}]
 
       assert NestedEntityFixture.__policies__() == [
-               {:read, :viewer, nil, []},
-               {:update, :viewer, nil, []},
-               {:delete, :viewer, nil, []}
+               {:read, :viewer, nil, [], nil, nil},
+               {:update, :viewer, nil, [], nil, nil},
+               {:delete, :viewer, nil, [], nil, nil}
              ]
 
       # A line taken through two hops names the module whose body wrote it, not the last hop.
@@ -403,18 +421,16 @@ defmodule Hologram.PolicyTest do
 
     test "builds rules per operation, keeping declaration order" do
       owner_rule = %{predicates: [], to: [{:own, [:owner]}], via: nil}
+      archive_rule = %{predicates: [{:author_id, :==, {:actor}}], to: nil, via: nil}
+      publish_rule = %{predicates: [], to: nil, via: {:publish, [:parent]}}
 
       assert build(Policy.Module1) == %{
-               :archive => [
-                 %{predicates: [{:author_id, :==, {:actor}}], to: nil, via: nil}
-               ],
+               :archive => [archive_rule],
                :delete => [
                  %{predicates: [], to: [{:rel, [:parent], [:admin]}], via: nil}
                ],
                :grant_role => [owner_rule, owner_rule],
-               :publish => [
-                 %{predicates: [], to: nil, via: {:publish, [:parent]}}
-               ],
+               :publish => [publish_rule],
                :read => [
                  %{predicates: [{:public, :==, true}], to: nil, via: nil},
                  %{
@@ -430,7 +446,9 @@ defmodule Hologram.PolicyTest do
                {:grant_role, :editor} => [owner_rule],
                {:grant_role, :owner} => [owner_rule],
                {:revoke_role, :editor} => [owner_rule],
-               {:revoke_role, :owner} => [owner_rule]
+               {:revoke_role, :owner} => [owner_rule],
+               {:update, :author} => [archive_rule],
+               {:update, :parent} => [publish_rule]
              }
     end
 
@@ -441,28 +459,266 @@ defmodule Hologram.PolicyTest do
     end
 
     test "follows a path in a condition, a delegation and a grant reference" do
+      archive_rule = %{predicates: [{[:link, :priority], :==, :high}], to: nil, via: nil}
+      publish_rule = %{predicates: [], to: nil, via: {:publish, [:parent, :parent]}}
+
+      triage_rule = %{
+        predicates: [{[:parent, :parent, :created_at], :>=, ~U[2026-01-01 00:00:00Z]}],
+        to: nil,
+        via: nil
+      }
+
       assert build(Policy.Module12) == %{
-               archive: [%{predicates: [{[:link, :priority], :==, :high}], to: nil, via: nil}],
-               delete: [
+               :archive => [archive_rule],
+               :delete => [
                  %{
                    predicates: [{:level, :<=, {:attribute, [:parent, :parent, :priority]}}],
                    to: nil,
                    via: nil
                  }
                ],
-               publish: [%{predicates: [], to: nil, via: {:publish, [:parent, :parent]}}],
-               read: [
+               :publish => [publish_rule],
+               :read => [
                  %{predicates: [{[:parent, :parent, :public], :==, true}], to: nil, via: nil}
                ],
-               triage: [
-                 %{
-                   predicates: [{[:parent, :parent, :created_at], :>=, ~U[2026-01-01 00:00:00Z]}],
-                   to: nil,
-                   via: nil
-                 }
+               :triage => [triage_rule],
+               :update => [
+                 %{predicates: [], to: [{:rel, [:parent, :parent], [:viewer]}], via: nil}
                ],
-               update: [%{predicates: [], to: [{:rel, [:parent, :parent], [:viewer]}], via: nil}]
+               {:update, :level} => [triage_rule],
+               {:update, :link} => [archive_rule, publish_rule]
              }
+    end
+  end
+
+  describe "build/1 for named lines" do
+    test "keys a named line under its name as well as its operation" do
+      defmodule NamedUpdateLineFixture do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        role :owner
+
+        allow :read
+        allow :update, as: :archive, to: :owner, when: archived == false
+      end
+
+      archive_rule = %{predicates: [{:archived, :==, false}], to: [{:own, [:owner]}], via: nil}
+
+      assert build(NamedUpdateLineFixture) == %{
+               :archive => [archive_rule],
+               :read => [%{predicates: [], to: nil, via: nil}],
+               :update => [archive_rule]
+             }
+    end
+
+    test "keys every line sharing a name under it, in declaration order" do
+      defmodule SharedNameFixture do
+        use Hologram.Entity
+
+        role :admin
+        role :owner
+
+        allow :update, as: :archive, to: :owner
+        allow :update, to: :admin
+        allow :update, as: :archive, to: :admin, when: id != nil
+      end
+
+      owner_rule = %{predicates: [], to: [{:own, [:owner]}], via: nil}
+      admin_rule = %{predicates: [], to: [{:own, [:admin]}], via: nil}
+      conditional_admin_rule = %{predicates: [{:id, :!=, nil}], to: [{:own, [:admin]}], via: nil}
+
+      assert build(SharedNameFixture) == %{
+               :archive => [owner_rule, conditional_admin_rule],
+               :update => [owner_rule, admin_rule, conditional_admin_rule]
+             }
+    end
+
+    test "keys a named read line under its name, beside the read rules queries apply" do
+      defmodule NamedReadLineFixture do
+        use Hologram.Entity
+
+        attribute :draft, :boolean, default: false
+
+        allow :read, when: draft == false
+        allow :read, as: :see_drafts, when: draft == true
+      end
+
+      draft_rule = %{predicates: [{:draft, :==, true}], to: nil, via: nil}
+
+      assert build(NamedReadLineFixture) == %{
+               :read => [%{predicates: [{:draft, :==, false}], to: nil, via: nil}, draft_rule],
+               :see_drafts => [draft_rule]
+             }
+    end
+
+    test "keys named create and delete lines under their names" do
+      defmodule NamedCreateDeleteFixture do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        allow :create, as: :draft
+        allow :delete, as: :purge, when: archived == true
+      end
+
+      purge_rule = %{predicates: [{:archived, :==, true}], to: nil, via: nil}
+
+      assert build(NamedCreateDeleteFixture) == %{
+               :create => [%{predicates: [], to: nil, via: nil}],
+               :delete => [purge_rule],
+               :draft => [%{predicates: [], to: nil, via: nil}],
+               :purge => [purge_rule]
+             }
+    end
+
+    # A bare grant line covers the roles its holders may hand out, and a type declaring none has
+    # none to cover - so the line compiles to no rule, its name to no key, and can? answers no, as
+    # it does for the same line unnamed.
+    test "keys a named grant lifecycle line covering no role under no name" do
+      defmodule UncoveringNamedGrantFixture do
+        use Hologram.Entity
+
+        allow :grant_role, as: :invite, to: Hologram.Test.Fixtures.Role.Module1
+      end
+
+      assert build(UncoveringNamedGrantFixture) == %{}
+      assert :invite in operations(UncoveringNamedGrantFixture)
+    end
+
+    test "keys a named grant lifecycle line's per-role rules under its name, each once" do
+      defmodule NamedGrantLineFixture do
+        use Hologram.Entity
+
+        role :editor
+        role :owner, extends: :editor
+
+        allow :grant_role, as: :invite, to: :owner
+        allow {:grant_role, :editor}, as: :invite, to: :editor
+      end
+
+      owner_rule = %{predicates: [], to: [{:own, [:owner]}], via: nil}
+      editor_rule = %{predicates: [], to: [{:own, [:editor, :owner]}], via: nil}
+
+      assert build(NamedGrantLineFixture)[:invite] == [owner_rule, editor_rule]
+    end
+  end
+
+  describe "build/1 for field-limited lines" do
+    test "keys an only line under each field it lists, and not under :update" do
+      defmodule OnlyLineFixture do
+        use Hologram.Entity
+
+        attribute :name, :string
+        attribute :topic, :string
+
+        role :member
+
+        allow :read
+        allow :update, to: :member, only: [:topic, :name]
+      end
+
+      member_rule = %{predicates: [], to: [{:own, [:member]}], via: nil}
+
+      assert build(OnlyLineFixture) == %{
+               :read => [%{predicates: [], to: nil, via: nil}],
+               {:update, :name} => [member_rule],
+               {:update, :topic} => [member_rule]
+             }
+    end
+
+    test "keys a field listed twice once" do
+      defmodule RepeatedFieldFixture do
+        use Hologram.Entity
+
+        attribute :topic, :string
+
+        allow :update, only: [:topic, :topic]
+      end
+
+      assert build(RepeatedFieldFixture) == %{
+               {:update, :topic} => [%{predicates: [], to: nil, via: nil}]
+             }
+    end
+
+    test "keys an except line under every update field but the listed ones" do
+      defmodule ExceptLineFixture do
+        use Hologram.Entity
+
+        attribute :name, :string
+        attribute :topic, :string
+
+        relationship :parent, Hologram.Test.Fixtures.Entity.Module1, optional: true
+        relationship :tags, [Hologram.Test.Fixtures.Entity.Module2]
+
+        allow :update, except: [:name]
+      end
+
+      rule = %{predicates: [], to: nil, via: nil}
+
+      assert build(ExceptLineFixture) == %{
+               {:update, :parent} => [rule],
+               {:update, :tags} => [rule],
+               {:update, :topic} => [rule]
+             }
+    end
+
+    test "keys a named limited line under its name and its fields, beside a whole-row line" do
+      defmodule NamedLimitedLineFixture do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+        attribute :topic, :string
+
+        role :member
+        role :owner
+
+        allow :update, to: :owner
+        allow :update, as: :set_topic, to: :member, only: [:topic]
+      end
+
+      owner_rule = %{predicates: [], to: [{:own, [:owner]}], via: nil}
+      member_rule = %{predicates: [], to: [{:own, [:member]}], via: nil}
+
+      assert build(NamedLimitedLineFixture) == %{
+               :set_topic => [member_rule],
+               :update => [owner_rule],
+               {:update, :topic} => [member_rule]
+             }
+    end
+  end
+
+  describe "field_rules/2" do
+    test "returns a field's limited rules followed by the whole-row ones" do
+      limited = %{predicates: [], to: [{:own, [:member]}], via: nil}
+      whole = %{predicates: [], to: [{:own, [:owner]}], via: nil}
+      policy = %{:update => [whole], {:update, :topic} => [limited]}
+
+      assert field_rules(policy, :topic) == [limited, whole]
+      assert field_rules(policy, :name) == [whole]
+      assert field_rules(%{}, :name) == []
+    end
+  end
+
+  describe "update_fields/1" do
+    test "returns the attributes and relationships, sorted" do
+      defmodule UpdateFieldsFixture do
+        use Hologram.Entity
+
+        attribute :topic, :string
+
+        relationship :parent, Hologram.Test.Fixtures.Entity.Module1, optional: true
+        relationship :tags, [Hologram.Test.Fixtures.Entity.Module2]
+
+        derived :shout, :string, fn topic -> topic <> "!" end
+      end
+
+      assert update_fields(UpdateFieldsFixture) == [:parent, :tags, :topic]
+    end
+
+    test "leaves out a job type's framework-owned attributes" do
+      assert update_fields(Hologram.Test.Fixtures.Job.Module1) == []
     end
   end
 
@@ -561,7 +817,7 @@ defmodule Hologram.PolicyTest do
       defmodule GlobalReferenceFixture do
         use Hologram.Entity
 
-        allow :archive, to: Hologram.Test.Fixtures.Role.Module1
+        allow :update, as: :archive, to: Hologram.Test.Fixtures.Role.Module1
       end
 
       assert build(GlobalReferenceFixture)[:archive] == [
@@ -608,6 +864,11 @@ defmodule Hologram.PolicyTest do
                      {:named, Policy.Module2, [:admin, :member]},
                      {:global, [Role.Module1, Role.Module2]}
                    ],
+                   via: nil
+                 },
+                 %{
+                   predicates: [{:entity_type, :==, Policy.Module40}],
+                   to: [{:named, Policy.Module40, [:owner]}],
                    via: nil
                  }
                ]
@@ -956,9 +1217,11 @@ defmodule Hologram.PolicyTest do
       allow :read, when: any(member <- members, member.user_id == user_id())
       allow :update, when: name == "open" or all(member <- members, member.seat == "full")
       allow :delete, when: none(labels)
-      allow :archive, when: none(labels)
+      allow :update, as: :archive, only: [:name], when: none(labels)
 
-      allow :close,
+      allow :update,
+        as: :close,
+        only: [:name],
         when: any(member <- members, none(label <- member.project.labels, label.name == "x"))
     end
 
@@ -1018,7 +1281,9 @@ defmodule Hologram.PolicyTest do
                  {verdict_key(VerdictProject, :archive, none_clause), none_clause},
                  {verdict_key(VerdictProject, :close, close_clause), close_clause},
                  {verdict_key(VerdictProject, :delete, none_clause), none_clause},
-                 {verdict_key(VerdictProject, :update, update_clause), update_clause}
+                 {verdict_key(VerdictProject, :update, update_clause), update_clause},
+                 {verdict_key(VerdictProject, {:update, :name}, none_clause), none_clause},
+                 {verdict_key(VerdictProject, {:update, :name}, close_clause), close_clause}
                ])
     end
 
@@ -1441,7 +1706,10 @@ defmodule Hologram.PolicyTest do
       allow :delete,
         when: none(seat <- seats, seat.taken == true) and any(seat <- seats, seat.taken == false)
 
-      allow :archive, when: any(seat <- seats, none(tag <- seat.tags, tag.name == "x"))
+      allow :update,
+        as: :archive,
+        only: [:name],
+        when: any(seat <- seats, none(tag <- seat.tags, tag.name == "x"))
     end
 
     defmodule HeldRoom do
@@ -1466,6 +1734,47 @@ defmodule Hologram.PolicyTest do
 
     test "returns a row a path reads that a deciding quantifier reads a set through too" do
       assert held_chains(HeldRoom, :update) == [[:board]]
+    end
+  end
+
+  describe "line_held_chains/2" do
+    defmodule LineHeldOwner do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      allow :read
+    end
+
+    defmodule LineHeldBanner do
+      use Hologram.Entity
+
+      attribute :title, :string
+
+      relationship :owner, Hologram.PolicyTest.LineHeldOwner, optional: true
+
+      allow :update, only: [:title]
+      allow :update, except: [:owner], when: owner.name == "x"
+    end
+
+    test "tells apart the lines sharing a field's key" do
+      [plain_line, reading_line] = LineHeldBanner.__policies__()
+
+      assert held_chains(LineHeldBanner, {:update, :title}) == [[:owner]]
+      assert line_held_chains(LineHeldBanner, plain_line) == []
+      assert line_held_chains(LineHeldBanner, reading_line) == [[:owner]]
+    end
+
+    test "returns a delegation's chain" do
+      [line] = HeldTask.__policies__()
+
+      assert line_held_chains(HeldTask, line) == [[:project]]
+    end
+
+    test "leaves out the chains of a deciding quantifier" do
+      [_update_line, _delete_line, archive_line] = HeldBoard.__policies__()
+
+      assert line_held_chains(HeldBoard, archive_line) == []
     end
   end
 
@@ -1780,13 +2089,20 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "operations/1" do
-    test "returns the framework's operations and the ones the allow lines name, sorted" do
-      assert operations(Policy.Module1) == [
+    test "returns the names the allow lines carry beside the framework's operations" do
+      defmodule NamedOperationsFixture do
+        use Hologram.Entity
+
+        allow :update, as: :archive
+        allow :delete, as: :purge
+      end
+
+      assert operations(NamedOperationsFixture) == [
                :archive,
                :create,
                :delete,
                :grant_role,
-               :publish,
+               :purge,
                :read,
                :read_roles,
                :revoke_role,
@@ -1802,11 +2118,11 @@ defmodule Hologram.PolicyTest do
       assert operations(RoleGrant) == framework_operations()
     end
 
-    test "includes an operation named by a line taken from a policy module" do
+    test "includes a name carried by a line taken from a policy module" do
       defmodule TakenOperationPolicyFixture do
         use Hologram.Policy
 
-        allow :publish, when: public == true
+        allow :update, as: :publish, when: public == true
       end
 
       defmodule TakenOperationEntityFixture do
@@ -1871,17 +2187,17 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "readable_prefix/2" do
-    # Module37 (the vault) has no read rule.
+    # Module43 (the vault) has no read rule.
     test "stops a chain before its first type no session may read" do
-      assert readable_prefix(Policy.Module39, [:shelf, :vault, :owner]) == [:shelf]
+      assert readable_prefix(Policy.Module45, [:shelf, :vault, :owner]) == [:shelf]
     end
 
     test "keeps a chain through readable types whole" do
-      assert readable_prefix(Policy.Module39, [:shelf]) == [:shelf]
+      assert readable_prefix(Policy.Module45, [:shelf]) == [:shelf]
     end
 
     test "keeps nothing of a chain whose first hop is to a type no session may read" do
-      assert readable_prefix(Policy.Module38, [:vault, :owner]) == []
+      assert readable_prefix(Policy.Module44, [:vault, :owner]) == []
     end
   end
 
@@ -1949,7 +2265,11 @@ defmodule Hologram.PolicyTest do
 
       allow :read, when: any(member <- members, member.seat == "full")
       allow :update, when: any(labels)
-      allow :archive, when: any(member <- first_members, member.seat == "full")
+
+      allow :update,
+        as: :archive,
+        only: [:labels],
+        when: any(member <- first_members, member.seat == "full")
     end
 
     defmodule ChainBoard do
@@ -2074,14 +2394,26 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "validate_operation!/2" do
+    defmodule FieldlessFixture do
+      use Hologram.Entity
+
+      allow :read
+    end
+
     test "passes every framework operation on an entity type declaring nothing" do
       Enum.each(framework_operations(), fn operation ->
         assert validate_operation!(Module1, operation) == :ok
       end)
     end
 
-    test "passes an operation an allow line on the entity type names" do
-      assert validate_operation!(Policy.Module1, :archive) == :ok
+    test "passes a name an allow line on the entity type carries" do
+      defmodule NamedOperationFixture do
+        use Hologram.Entity
+
+        allow :update, as: :archive
+      end
+
+      assert validate_operation!(NamedOperationFixture, :archive) == :ok
     end
 
     test "passes a role tuple naming a role the entity type declares" do
@@ -2089,27 +2421,99 @@ defmodule Hologram.PolicyTest do
       assert validate_operation!(Policy.Module1, {:revoke_role, :viewer}) == :ok
     end
 
+    test "passes an update tuple naming a field an update of the entity type sets" do
+      assert validate_operation!(Policy.Module1, {:update, :public}) == :ok
+      assert validate_operation!(Policy.Module1, {:update, :parent}) == :ok
+    end
+
+    test "passes an update tuple naming a list of fields an update of the entity type sets" do
+      assert validate_operation!(Policy.Module1, {:update, [:public, :parent]}) == :ok
+    end
+
+    test "raises on an update tuple naming a field no update of the entity type sets" do
+      expected_msg =
+        "unknown field :parent_id in {:update, :parent_id} for Hologram.Test.Fixtures.Policy.Module1 - the fields an update sets are :author, :parent, :priority, :public"
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, {:update, :parent_id})
+      end
+    end
+
+    test "raises on an update list naming a field no update of the entity type sets" do
+      expected_msg =
+        "unknown field :updated_at in {:update, [:public, :updated_at]} for Hologram.Test.Fixtures.Policy.Module1 - the fields an update sets are :author, :parent, :priority, :public"
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, {:update, [:public, :updated_at]})
+      end
+    end
+
+    test "raises on an update tuple naming a field that is neither an atom nor a list" do
+      expected_msg =
+        ~s(unknown operation {:update, "public"} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields})
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, {:update, "public"})
+      end
+    end
+
+    test "raises on an update tuple naming an improper list" do
+      expected_msg =
+        "unknown operation {:update, [:public | :parent]} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, wrap_term({:update, [:public | :parent]}))
+      end
+    end
+
+    test "raises on an update list naming no field" do
+      expected_msg =
+        "unknown operation {:update, []} for Hologram.Test.Fixtures.Policy.Module1 - {:update, fields} names at least one field"
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, {:update, []})
+      end
+    end
+
+    test "raises on an update tuple naming a job's framework attribute" do
+      expected_msg =
+        "unknown field :status in {:update, :status} for Hologram.Test.Fixtures.Job.Module3 - the fields an update sets are :outcome"
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(Hologram.Test.Fixtures.Job.Module3, {:update, :status})
+      end
+    end
+
+    test "raises on an update tuple for an entity type no update sets a field of" do
+      expected_msg =
+        "unknown field :title in {:update, :title} for Hologram.PolicyTest.FieldlessFixture - it has no field an update sets"
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(FieldlessFixture, {:update, :title})
+      end
+    end
+
     test "raises on an operation no allow line on the entity type names" do
       expected_msg =
-        "unknown operation :pin for Hologram.Test.Fixtures.Policy.Module1 - its allow lines declare :archive and :publish, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+        "unknown operation :pin for Hologram.Test.Fixtures.Policy.Module1 - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry the names :archive and :publish"
 
       assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module1, :pin)
       end
     end
 
-    test "raises on an operation for an entity type whose allow lines name none of their own" do
+    test "raises on an operation for an entity type whose allow lines carry no name" do
       expected_msg =
-        "unknown operation :archive for Hologram.Test.Fixtures.Entity.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+        "unknown operation :archive for Hologram.Test.Fixtures.Entity.Module1 - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry no name"
 
       assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Module1, :archive)
       end
     end
 
-    test "names a single declared operation without a conjunction" do
+    test "names a single name without a conjunction" do
       expected_msg =
-        "unknown operation :publish for Hologram.Test.Fixtures.Policy.Module4 - its allow lines declare :archive, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+        "unknown operation :publish for Hologram.Test.Fixtures.Policy.Module4 - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry the name :archive"
 
       assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module4, :publish)
@@ -2136,7 +2540,7 @@ defmodule Hologram.PolicyTest do
 
     test "raises on a tuple whose name is not a grant lifecycle operation" do
       expected_msg =
-        "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+        "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
 
       assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module1, {:publish, :editor})
@@ -2145,7 +2549,7 @@ defmodule Hologram.PolicyTest do
 
     test "raises on a tuple that is not a pair" do
       expected_msg =
-        "unknown operation {:grant_role, :editor, :extra} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+        "unknown operation {:grant_role, :editor, :extra} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
 
       assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module1, {:grant_role, :editor, :extra})
@@ -2154,7 +2558,7 @@ defmodule Hologram.PolicyTest do
 
     test "raises on an operation that is neither an atom nor a tuple" do
       expected_msg =
-        ~s(unknown operation "read" for Hologram.Test.Fixtures.Policy.Module1 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role})
+        ~s(unknown operation "read" for Hologram.Test.Fixtures.Policy.Module1 - an entity operation is an atom, {:grant_role, role} / {:revoke_role, role} or {:update, field} / {:update, fields})
 
       assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module1, wrap_term("read"))
@@ -2461,7 +2865,7 @@ defmodule Hologram.PolicyTest do
 
       role :member
 
-      allow :close, to: :member
+      allow :delete, to: :member
     end
 
     defmodule RelayCrate do
@@ -2469,7 +2873,7 @@ defmodule Hologram.PolicyTest do
 
       relationship :vault, RelayVault, optional: true
 
-      allow :read, via: {:close, vault}
+      allow :read, via: {:delete, vault}
     end
 
     defmodule RelayParcel do

@@ -70,6 +70,11 @@ defmodule Hologram.Policy.EdgesTest do
                {Policy.Module1, :update} => [
                  {:attributes, [:priority]},
                  {:own_grants, [:editor, :owner]}
+               ],
+               {Policy.Module1, {:update, :author}} => [{:attributes, [:author_id]}],
+               {Policy.Module1, {:update, :parent}} => [
+                 {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module2, [:public]}
                ]
              }
     end
@@ -145,7 +150,8 @@ defmodule Hologram.Policy.EdgesTest do
                  {:attributes, [:entity_type, :user_id]},
                  {:global_grants, [Role.Module1, Role.Module2]},
                  {:named_grants, Policy.Module1, [:owner]},
-                 {:named_grants, Policy.Module2, [:admin, :member]}
+                 {:named_grants, Policy.Module2, [:admin, :member]},
+                 {:named_grants, Policy.Module40, [:owner]}
                ]
              }
     end
@@ -158,7 +164,7 @@ defmodule Hologram.Policy.EdgesTest do
 
         role :moderator
 
-        allow :publish, to: :moderator, when: approved == true
+        allow :update, as: :publish, to: :moderator, when: approved == true
       end
 
       defmodule ChainFixture2 do
@@ -166,7 +172,7 @@ defmodule Hologram.Policy.EdgesTest do
 
         relationship :c, ChainFixture3
 
-        allow :publish, via: c
+        allow :update, as: :publish, via: {:publish, c}
       end
 
       defmodule ChainFixture1 do
@@ -174,16 +180,20 @@ defmodule Hologram.Policy.EdgesTest do
 
         relationship :b, ChainFixture2
 
-        allow :publish, via: b
+        allow :update, as: :publish, via: {:publish, b}
       end
 
+      # The named line lands under :update as well, so both keys lean on the same chain.
+      chain_edges = [
+        {:attributes, [:b_id]},
+        {:relationship_attributes, [:b], ChainFixture2, [:c_id]},
+        {:relationship_attributes, [:b, :c], ChainFixture3, [:approved]},
+        {:relationship_grants, [:b, :c], ChainFixture3, [:moderator]}
+      ]
+
       assert derive([ChainFixture1]) == %{
-               {ChainFixture1, :publish} => [
-                 {:attributes, [:b_id]},
-                 {:relationship_attributes, [:b], ChainFixture2, [:c_id]},
-                 {:relationship_attributes, [:b, :c], ChainFixture3, [:approved]},
-                 {:relationship_grants, [:b, :c], ChainFixture3, [:moderator]}
-               ]
+               {ChainFixture1, :publish} => chain_edges,
+               {ChainFixture1, :update} => chain_edges
              }
     end
 
@@ -233,6 +243,19 @@ defmodule Hologram.Policy.EdgesTest do
                  {:attributes, [:parent_id]},
                  {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
                  {:relationship_grants, [:parent, :parent], Policy.Module1, [:viewer]}
+               ],
+               {Policy.Module12, {:update, :level}} => [
+                 {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1, [:created_at]}
+               ],
+               {Policy.Module12, {:update, :link}} => [
+                 {:attributes, [:link_id, :parent_id]},
+                 {:relationship_attributes, [:link], Module17, [:priority]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent, :parent], Policy.Module2,
+                  [:public]}
                ]
              }
     end
@@ -291,7 +314,7 @@ defmodule Hologram.Policy.EdgesTest do
       allow :read, when: any(member <- members, member.seat == "full")
       allow :update, when: any(members)
       allow :delete, when: none(label <- labels, label.name == "x")
-      allow :archive, when: any(labels)
+      allow :update, as: :archive, only: [:name], when: any(labels)
     end
 
     defmodule EdgeMember do
@@ -425,9 +448,36 @@ defmodule Hologram.Policy.EdgesTest do
     # Both rules' anys over a derived set are answered by the server's verdict, which reads what the
     # two sets read.
     test "derives the verdict edges of anys over derived sets" do
-      assert derive([EdgeBoard])[{EdgeBoard, :verdicts}] == [
+      assert derive([EdgeBoard])[{EdgeBoard, {:verdicts}}] == [
                {:set_attributes, [:cards], EdgeCard, [:board_id, :id, :rank]},
                {:set_edges, [:cards, :tags], EdgeCard, [:tags]}
+             ]
+    end
+
+    # The verdict edges are keyed by a tuple, so a line named :verdicts keeps its own edges beside
+    # them rather than taking their place.
+    test "keeps a line named verdicts apart from the verdict edges" do
+      defmodule VerdictsNamedProject do
+        use Hologram.Entity
+
+        relationship :labels, [Hologram.Policy.EdgesTest.EdgeLabel]
+
+        allow :read
+        allow :update, as: :verdicts, when: any(labels)
+        allow :delete, when: none(label <- labels, label.name == "x")
+      end
+
+      edges = derive([VerdictsNamedProject])
+
+      assert edges[{VerdictsNamedProject, :verdicts}] == [
+               {:set_edges, [:labels], VerdictsNamedProject, [:labels]}
+             ]
+
+      assert edges[{VerdictsNamedProject, :update}] == edges[{VerdictsNamedProject, :verdicts}]
+
+      assert edges[{VerdictsNamedProject, {:verdicts}}] == [
+               {:set_attributes, [:labels], EdgeLabel, [:name]},
+               {:set_edges, [:labels], VerdictsNamedProject, [:labels]}
              ]
     end
 
@@ -504,29 +554,29 @@ defmodule Hologram.Policy.EdgesTest do
 
     # The delete rule's none is answered from the server's verdict, sent with every project, so what
     # it reads is named apart from the operations - beside the operation's own edges.
-    test "names what the deciding quantifiers read under :verdicts" do
-      assert derive([EdgeProject])[{EdgeProject, :verdicts}] == [
+    test "names what the deciding quantifiers read under {:verdicts}" do
+      assert derive([EdgeProject])[{EdgeProject, {:verdicts}}] == [
                {:set_attributes, [:labels], EdgeLabel, [:name]},
                {:set_edges, [:labels], EdgeProject, [:labels]}
              ]
     end
 
     # No client holds a server-only value, so the read rule's predicate on one is a verdict too.
-    test "names what a predicate on a server-only attribute reads under :verdicts" do
-      assert derive([EdgeReport])[{EdgeReport, :verdicts}] == [{:attributes, [:reviewed]}]
+    test "names what a predicate on a server-only attribute reads under {:verdicts}" do
+      assert derive([EdgeReport])[{EdgeReport, {:verdicts}}] == [{:attributes, [:reviewed]}]
     end
 
     # No client holds a row of a type nobody may read, so the read rules' paths to one are verdicts.
-    test "names what a read rule reads through a type nobody may read under :verdicts" do
-      assert derive([ReadersModule21])[{ReadersModule21, :verdicts}] == [
+    test "names what a read rule reads through a type nobody may read under {:verdicts}" do
+      assert derive([ReadersModule21])[{ReadersModule21, {:verdicts}}] == [
                {:attributes, [:project_id]},
                {:relationship_attributes, [:project], ReadersModule20, [:archived, :steward_id]}
              ]
     end
 
     # The team's id is read off the project, which no client holds, and the role is held on the team.
-    test "names what a read rule's role reference through a type nobody may read reads under :verdicts" do
-      assert derive([ReadersModule24])[{ReadersModule24, :verdicts}] == [
+    test "names what a read rule's role reference through a type nobody may read reads under {:verdicts}" do
+      assert derive([ReadersModule24])[{ReadersModule24, {:verdicts}}] == [
                {:attributes, [:project_id]},
                {:relationship_attributes, [:project], ReadersModule23, [:team_id]},
                {:relationship_grants, [:project, :team], ReadersModule22, [:member]}
@@ -535,8 +585,8 @@ defmodule Hologram.Policy.EdgesTest do
 
     # No client holds a vault or a shelf, so what the delegated rules read through them is read for
     # the verdicts.
-    test "names what a read rule's delegations past an unreadable type read under :verdicts" do
-      assert derive([ReadersModule28])[{ReadersModule28, :verdicts}] == [
+    test "names what a read rule's delegations past an unreadable type read under {:verdicts}" do
+      assert derive([ReadersModule28])[{ReadersModule28, {:verdicts}}] == [
                {:attributes, [:shelf_id, :vault_id]},
                {:relationship_attributes, [:shelf], ReadersModule27, [:crate_id]},
                {:relationship_attributes, [:shelf, :crate], ReadersModule26, [:open]},
@@ -545,10 +595,10 @@ defmodule Hologram.Policy.EdgesTest do
              ]
     end
 
-    test "names no :verdicts edges for a type with no deciding quantifier" do
+    test "names no {:verdicts} edges for a type with no deciding quantifier" do
       refute [EdgeLabel]
              |> derive()
-             |> Map.has_key?({EdgeLabel, :verdicts})
+             |> Map.has_key?({EdgeLabel, {:verdicts}})
     end
 
     test "lifts a set's edges through a delegation" do

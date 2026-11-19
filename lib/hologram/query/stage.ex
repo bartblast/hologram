@@ -13,7 +13,6 @@ defmodule Hologram.Query.Stage do
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
   alias Hologram.MisuseError
-  alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.RowField
@@ -50,20 +49,6 @@ defmodule Hologram.Query.Stage do
   @spec add_relationship(Entity.t(), atom, Entity.id()) :: Entity.t()
   def add_relationship(entity, relationship_name, target_id) do
     put_relationship_op(entity, relationship_name, target_id, :add, "add_relationship")
-  end
-
-  @doc false
-  @spec authorize(Entity.t(), atom) :: Entity.t()
-  def authorize(entity, operation) when is_atom(operation) do
-    entity_type = entity_type!(entity, "authorize")
-
-    Policy.validate_operation!(entity_type, operation)
-
-    put_claim(entity, {:authorize, operation}, "authorize")
-  end
-
-  def authorize(_entity, operation) do
-    raise MisuseError, message: "authorize takes an operation atom, got: #{inspect(operation)}"
   end
 
   # Returns the polarity of a quantifier's condition, given the quantifier's own: whether the
@@ -1326,9 +1311,8 @@ defmodule Hologram.Query.Stage do
     [{name, :==, value}]
   end
 
-  # The two claim stages share everything but the claim they record. A second claim is refused
-  # here, where it is written - a struct carrying two authorities would have to pick one at the
-  # write, silently.
+  # A second claim is refused here, where it is written - a struct carrying two authorities would
+  # have to pick one at the write, silently.
   defp put_claim(entity, claim, stage) do
     entity_type = entity_type!(entity, stage)
 

@@ -5,6 +5,8 @@ defmodule Hologram.Test.DatabaseBootstrap.ConnectionTest do
   import Hologram.Test.DatabaseBootstrap.Connection
 
   alias Hologram.DB.Config
+  alias Hologram.Test.ClosingTCP
+  alias Hologram.Test.CountingListener
 
   # What a run selects the database tests by: they are the ones that need a server.
   @moduletag :database
@@ -118,6 +120,29 @@ defmodule Hologram.Test.DatabaseBootstrap.ConnectionTest do
 
           assert message ==
                    "tcp connect (#{maintenance_opts()[:hostname]}:#{port}): connection refused - :econnrefused"
+        end)
+
+      assert log =~ "failed to connect to Postgres"
+
+      refute_received {:EXIT, _pid, _reason}
+    end
+
+    # What a peer that resets the connection right after accepting it can make Postgrex's next
+    # socket call return - Hologram.DB.await_database/1 waits on such an error.
+    test "returns the error of a connection whose socket fails as it opens, and leaves the caller running" do
+      listener = start_supervised!(CountingListener)
+
+      log =
+        capture_log(fn ->
+          assert {:error, %DBConnection.ConnectionError{message: message}} =
+                   maintenance_opts()
+                   |> Keyword.merge(
+                     port: CountingListener.port(listener),
+                     socket_options: ClosingTCP.socket_options()
+                   )
+                   |> start()
+
+          assert message == "tcp setopts: invalid argument - :einval"
         end)
 
       assert log =~ "failed to connect to Postgres"

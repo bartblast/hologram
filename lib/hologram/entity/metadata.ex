@@ -21,7 +21,7 @@ defmodule Hologram.Entity.Metadata do
 
   @type t :: %__MODULE__{
           attribute_ops: %{atom => attribute_op},
-          claim: {:authorize, atom} | :trust | nil,
+          claim: :client | :trust | nil,
           relationship_ops: %{{atom, Entity.id()} => :add | :delete},
           revisions: %{atom => pos_integer},
           stamp: pos_integer | nil

@@ -136,7 +136,9 @@ defmodule Hologram.Sync.ScoperTest do
 
     test "includes a window whose rows' verdicts read a type when that type changes" do
       edges = %{
-        {Module26, :verdicts} => [{:set_attributes, [:messages], Module28, [:body, :channel_id]}]
+        {Module26, {:verdicts}} => [
+          {:set_attributes, [:messages], Module28, [:body, :channel_id]}
+        ]
       }
 
       windows = [{:channel, term(Module26)}]

@@ -5,5 +5,6 @@ defmodule Hologram.Test.Fixtures.Entity.Module19 do
   attribute :code, :string, optional: true, unique: true
   attribute :slug, :string, unique: true
 
+  allow :create
   allow :read
 end

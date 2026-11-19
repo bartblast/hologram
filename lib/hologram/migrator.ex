@@ -9,6 +9,7 @@ defmodule Hologram.Migrator do
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Preflight
+  alias Hologram.DB.Protocol
   alias Hologram.DB.Schema
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.SortKey
@@ -346,7 +347,9 @@ defmodule Hologram.Migrator do
   The not-covered check runs first, before any database access - then the guard claims
   or verifies the database, objects standing under names the current naming rule no
   longer derives are renamed (one info line each), and the pending files apply from the
-  model the applied ones produce. The index repair and the drift check come last.
+  model the applied ones produce - with the indexes the applied files derive and the
+  database lacks built before them, when the node knows every applied file. The index
+  repair and the drift check come last.
   """
   @spec run(list(%{atom => any}), %{atom => any}, %{atom => any}) :: :ok
   def run(migrations, current_model, context) do
@@ -566,10 +569,45 @@ defmodule Hologram.Migrator do
     count
   end
 
+  # A file builds some of its indexes after it commits, so a node that stopped in between
+  # leaves the file recorded as applied and its index absent. A pending file that renames or
+  # drops that index names one that is not there and fails - on every boot, since the repair
+  # after the pending files never gets to build it. So the indexes the applied files derive
+  # are created first, under the names the pending files expect. For a pending drop that is
+  # a build the file takes back at once - the price of a crash in that window being followed
+  # by a release that drops that very index.
+  #
+  # Creating only, never rebuilding: an invalid index holds its name, so a pending rename or
+  # drop finds it, and the repair after the files rebuilds whatever survives them. Rebuilding
+  # it here would fail on rows repeating its key on every boot, even for a release whose
+  # pending file drops that index. Creating can fail on such rows too, once: the build that
+  # fails leaves the index invalid under its name, so the next boot gets past here (#1700).
+  #
+  # With nothing pending the applied files derive the current model, so the repair after
+  # them does the same work. On a history this node does not fully know, what the applied
+  # files derive is not what the database holds - see heal_renames/3.
+  defp create_applied_indexes(migrations, applied, pending, pre_model) do
+    if pending != [] and known_history?(migrations, applied) do
+      pre_model
+      |> Mapper.derive_from_model!()
+      |> create_missing_indexes()
+    end
+
+    :ok
+  end
+
   defp create_index_concurrently(op) do
     concurrent_op = Map.put(op, :concurrently, true)
 
     execute_statements(DDL.statements(concurrent_op))
+  end
+
+  defp create_missing_indexes(mapping) do
+    mapping
+    |> missing_indexes()
+    |> Enum.each(&create_index_concurrently/1)
+
+    :ok
   end
 
   defp describe_non_plain_reason(:collation), do: "a collation other than its column's"
@@ -710,9 +748,7 @@ defmodule Hologram.Migrator do
   # needs to boot once the newer nodes are stopped. Old and new nodes running against one
   # database at once is a separate matter, not supported yet (#1627).
   defp heal_renames(migrations, applied, pre_model) do
-    known_versions = MapSet.new(migrations, & &1.version)
-
-    if Enum.all?(applied, &MapSet.member?(known_versions, &1)) do
+    if known_history?(migrations, applied) do
       apply_renames(pre_model)
     else
       :ok
@@ -736,6 +772,12 @@ defmodule Hologram.Migrator do
     {:ok, %{rows: rows}} = Connection.query(DDL.invalid_indexes_statement())
 
     Enum.map(rows, fn [index] -> index end)
+  end
+
+  defp known_history?(migrations, applied) do
+    known_versions = MapSet.new(migrations, & &1.version)
+
+    Enum.all?(applied, &MapSet.member?(known_versions, &1))
   end
 
   defp log_rename(op) do
@@ -786,11 +828,7 @@ defmodule Hologram.Migrator do
   defp rebuild_and_create_indexes(mapping) do
     Enum.each(invalid_indexes(), &rebuild_index/1)
 
-    mapping
-    |> missing_indexes()
-    |> Enum.each(&create_index_concurrently/1)
-
-    :ok
+    create_missing_indexes(mapping)
   end
 
   defp rebuild_index(index) do
@@ -826,9 +864,11 @@ defmodule Hologram.Migrator do
 
       heal_renames(migrations, applied, pre_model)
 
-      migrations
-      |> pending(applied)
-      |> apply_pending(pre_model, context)
+      pending = pending(migrations, applied)
+
+      create_applied_indexes(migrations, applied, pending, pre_model)
+
+      apply_pending(pending, pre_model, context)
 
       mapping = Mapper.derive_from_model!(current_model)
 
@@ -856,7 +896,8 @@ defmodule Hologram.Migrator do
   defp with_migration_connection(fun) do
     {:ok, %{rows: [[database]]}} = Connection.query("SELECT current_database()")
     connection_opts = Config.connection_opts(database: database)
-    {:ok, connection_pid} = Postgrex.start_link(connection_opts)
+    # TODO(#1696): Postgrex.start_link/1 again, see Hologram.DB.Protocol.
+    {:ok, connection_pid} = Protocol.start_link(connection_opts)
 
     try do
       Connection.with_connection(connection_pid, fun)

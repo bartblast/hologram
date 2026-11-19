@@ -4,7 +4,10 @@ defmodule Hologram.Test.Fixtures.Policy.Module39 do
 
   alias Hologram.Test.Fixtures.Policy.Module38
 
-  relationship :shelf, Module38, optional: true
+  attribute :body, :string, optional: true
 
-  allow :read, when: shelf.vault.owner.active == true
+  relationship :channel, Module38
+
+  allow :read
+  allow :update, via: {:update, channel}
 end

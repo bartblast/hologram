@@ -18,9 +18,7 @@ defmodule Hologram.Mutation.Envelope do
   alias Hologram.Entity
   alias Hologram.Entity.Validator
   alias Hologram.Job
-  alias Hologram.MisuseError
   alias Hologram.Mutation.Write
-  alias Hologram.Policy
   alias Hologram.Reflection
 
   @ops "create, update, delete, add_relationship, delete_relationship"
@@ -68,35 +66,14 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
-  # An atom the VM has never seen cannot be anything's operation, and one it has seen is judged
-  # against the write's own entity type - the same refusal authorize/2 gives at the stage.
-  # The message spells the operation as the wire sent it: the rescue sees the parameter.
-  defp authorize_claim(operation, entity_type) do
-    operation = String.to_existing_atom(operation)
-
-    Policy.validate_operation!(entity_type, operation)
-
-    {:ok, {:authorize, operation}}
-  rescue
-    [ArgumentError, MisuseError] ->
-      {:error, "claim names no operation #{inspect(entity_type)} declares: #{inspect(operation)}"}
-  end
-
-  defp claim(entry, entity_type) do
+  # A write names no authority. The server judges it by what it does - the verb's own operation -
+  # under the session's own actor, so a claim could only ask for more than that, and is refused by
+  # name rather than ignored. Null is what an older
+  # bundle sent for no claim, and is no claim.
+  defp no_claim(entry) do
     case Map.get(entry, "claim") do
-      nil ->
-        {:ok, nil}
-
-      ["authorize", operation] when is_binary(operation) ->
-        authorize_claim(operation, entity_type)
-
-      # A claim is a request, never a grant, and the server's own authority is not a client's to
-      # request - so this is refused by name rather than evaluated and denied.
-      "trust" ->
-        {:error, "trust is the server's authority - a client cannot claim it"}
-
-      _other ->
-        {:error, ~s(claim must be null or ["authorize", operation])}
+      nil -> :ok
+      _claim -> {:error, "a write claims nothing - the server judges it by what it does"}
     end
   end
 
@@ -275,15 +252,6 @@ defmodule Hologram.Mutation.Envelope do
     if Reflection.job?(entity_type), do: Job.framework_attribute_names(), else: []
   end
 
-  # Every other write may name the operation it wants evaluated. A grant's gate is fixed - the
-  # grant_role and revoke_role rules of the entity's own type - so a claim here would name an
-  # operation nothing consults.
-  defp grant_claim(nil), do: :ok
-
-  defp grant_claim(_claim) do
-    {:error, "a role grant claims nothing - the grant_role and revoke_role rules are its gate"}
-  end
-
   # A grant row is put in whole by grant_role and taken out whole by revoke_role, so those are the
   # two things a client naming the store has to say. An update or an edge is refused rather than
   # evaluated, because neither verb has a rule for one to be judged by.
@@ -408,11 +376,10 @@ defmodule Hologram.Mutation.Envelope do
          {:ok, id} <- id(entry),
          {:ok, data} <- data(entry, entity_type),
          :ok <- no_deltas(entry),
-         {:ok, claim} <- claim(entry, entity_type),
+         :ok <- no_claim(entry),
          {:ok, stamp} <- stamp(entry) do
       {:ok,
        %Write{
-         claim: claim,
          data: data,
          entity_type: entity_type,
          id: id,
@@ -428,12 +395,11 @@ defmodule Hologram.Mutation.Envelope do
          {:ok, data} <- delete_data(entry, entity_type),
          :ok <- no_deltas(entry),
          {:ok, based_on} <- based_on(entry, entity_type),
-         {:ok, claim} <- claim(entry, entity_type),
+         :ok <- no_claim(entry),
          {:ok, stamp} <- stamp(entry) do
       {:ok,
        %Write{
          based_on: based_on,
-         claim: claim,
          data: data,
          entity_type: entity_type,
          id: id,
@@ -451,12 +417,11 @@ defmodule Hologram.Mutation.Envelope do
          :ok <- some_change(data, deltas),
          :ok <- no_overlap(data, deltas),
          {:ok, based_on} <- based_on(entry, entity_type),
-         {:ok, claim} <- claim(entry, entity_type),
+         :ok <- no_claim(entry),
          {:ok, stamp} <- stamp(entry) do
       {:ok,
        %Write{
          based_on: based_on,
-         claim: claim,
          data: data,
          deltas: deltas,
          entity_type: entity_type,
@@ -474,10 +439,9 @@ defmodule Hologram.Mutation.Envelope do
          {:ok, target_id} <- target_id(entry),
          :ok <- no_stamp(entry),
          :ok <- no_deltas(entry),
-         {:ok, claim} <- claim(entry, entity_type) do
+         :ok <- no_claim(entry) do
       {:ok,
        %Write{
-         claim: claim,
          entity_type: entity_type,
          id: id,
          op: op,
@@ -644,7 +608,6 @@ defmodule Hologram.Mutation.Envelope do
   # data, and the id has to derive from it either way.
   defp validate_grant_write(%Write{entity_type: RoleGrant} = write) do
     with :ok <- grant_op(write.op),
-         :ok <- grant_claim(write.claim),
          :ok <- grant_scope(write),
          :ok <- grant_user(write),
          :ok <- declared_role(write),

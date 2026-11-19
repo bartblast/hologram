@@ -15,6 +15,7 @@ import ManuallyPortedElixirHologramJob from "../../assets/js/elixir/hologram/job
 import ManuallyPortedElixirHologramQueryStage from "../../assets/js/elixir/hologram/query/stage.mjs";
 import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
+import QuerySpelling from "../../assets/js/query_spelling.mjs";
 import ReloadNotice from "../../assets/js/reload_notice.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
@@ -80,162 +81,22 @@ describe("DataLayer", () => {
       );
     });
 
-    const MODULE_2 = "Hologram.Test.Fixtures.Entity.Module2";
+    // The page carries a count under the field's name and the query it ran, spelled the way the
+    // server spells it (see the QuerySpelling tests).
+    it("answers a count with the count the page carried under the field's name and its query", () => {
+      const term = DataLayer.normalizeQuery(
+        ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
+      );
 
-    // The same keys as the server's (see the collect_count/4 tests in
-    // test/elixir/hologram/sync/carry_test.exs).
-    const carriedFor = (arg, key) => {
-      globalThis.Hologram.sync.model[MODULE_2] = {
-        attributes: {id: "uuid"},
-        relationships: {},
-        serverOnly: [],
+      LocalDatabase.syncCounts = {
+        'MyApp.Tasks/total/{"cardinality":"count","entity":"MyApp.Task","filter":[],"include":{},"skip":null,"sort":[],"take":null}': 42,
       };
-
-      const term = DataLayer.normalizeQuery(
-        ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
-      );
-
-      LocalDatabase.syncCounts = {[`${MODULE_2}/total/${key}`]: 42};
-
-      return DataLayer.answerDerivedQuery(
-        MODULE_2,
-        Type.atom("total"),
-        [arg],
-        term,
-      );
-    };
-
-    it("spells an entity row in the key by its type and id", () => {
-      const row = Type.struct(MODULE_2, [
-        [Type.atom("__meta__"), Model.emptyMetadata()],
-        [Type.atom("a"), Type.boolean(true)],
-        [
-          Type.atom("id"),
-          Type.bitstring("01a1cbe6-0000-7000-8000-000000000001"),
-        ],
-      ]);
-
-      assert.deepStrictEqual(
-        carriedFor(
-          Type.list([row]),
-          "[Hologram.Test.Fixtures.Entity.Module2#01a1cbe6-0000-7000-8000-000000000001]",
-        ),
-        Type.integer(42),
-      );
-    });
-
-    it("spells a row of a type the model doesn't bake by its type and id", () => {
-      const row = Type.struct("MyApp.Unbaked", [
-        [Type.atom("__meta__"), Model.emptyMetadata()],
-        [Type.atom("id"), Type.bitstring("x")],
-      ]);
-
-      assert.deepStrictEqual(
-        carriedFor(row, "MyApp.Unbaked#x"),
-        Type.integer(42),
-      );
-    });
-
-    it("spells an improper list in the key with its tail after a bar", () => {
-      assert.deepStrictEqual(
-        carriedFor(
-          Type.improperList([Type.integer(1), Type.integer(2)]),
-          "[1 | 2]",
-        ),
-        Type.integer(42),
-      );
-    });
-
-    it("spells a float in the key by its bits", () => {
-      assert.deepStrictEqual(
-        carriedFor(Type.float(1.0e20), "float:4415af1d78b58c40"),
-        Type.integer(42),
-      );
-    });
-
-    it("sorts a map's entries in the key in code point order", () => {
-      const map = Type.map([
-        [Type.bitstring("😀"), Type.integer(2)],
-        [Type.bitstring("！"), Type.integer(1)],
-      ]);
-
-      assert.deepStrictEqual(
-        carriedFor(map, '%{"！" => 1, "😀" => 2}'),
-        Type.integer(42),
-      );
-    });
-
-    it("spells a tuple in the key by its items", () => {
-      assert.deepStrictEqual(
-        carriedFor(
-          Type.tuple([Type.integer(1), Type.bitstring("a")]),
-          '{1, "a"}',
-        ),
-        Type.integer(42),
-      );
-    });
-
-    it("spells a struct in the key by its fields, sorted by name", () => {
-      const date = Type.struct("Date", [
-        [Type.atom("year"), Type.integer(2026)],
-        [Type.atom("month"), Type.integer(1)],
-        [Type.atom("day"), Type.integer(2)],
-        [Type.atom("calendar"), Type.alias("Calendar.ISO")],
-      ]);
-
-      assert.deepStrictEqual(
-        carriedFor(
-          date,
-          "%Date{calendar: Calendar.ISO, day: 2, month: 1, year: 2026}",
-        ),
-        Type.integer(42),
-      );
-    });
-
-    it("spells a map in the key by its entries, sorted by key", () => {
-      const map = Type.map([
-        [Type.atom("b"), Type.integer(1)],
-        [Type.atom("a"), Type.integer(2)],
-      ]);
-
-      assert.deepStrictEqual(
-        carriedFor(map, "%{:a => 2, :b => 1}"),
-        Type.integer(42),
-      );
-    });
-
-    // Two structs of one row are two keys that spell alike.
-    it("spells a map whose keys spell alike in the key by its entries, sorted by value", () => {
-      const row = (a) =>
-        Type.struct(MODULE_2, [
-          [Type.atom("__meta__"), Model.emptyMetadata()],
-          [Type.atom("a"), Type.boolean(a)],
-          [Type.atom("id"), Type.bitstring("x")],
-        ]);
-
-      const map = Type.map([
-        [row(true), Type.integer(2)],
-        [row(false), Type.integer(1)],
-      ]);
-
-      assert.deepStrictEqual(
-        carriedFor(map, `%{${MODULE_2}#x => 1, ${MODULE_2}#x => 2}`),
-        Type.integer(42),
-      );
-    });
-
-    it("answers a count with the count the page carried under the field's name and arguments", () => {
-      const term = DataLayer.normalizeQuery(
-        ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
-      );
-
-      LocalDatabase.syncCounts = {"MyApp.Tasks/total/5": 42};
 
       assert.deepStrictEqual(
         DataLayer.answerDerivedQuery(
           "MyApp.Tasks",
           Type.atom("total"),
-          [Type.integer(5)],
+          [],
           term,
         ),
         Type.integer(42),
@@ -246,15 +107,21 @@ describe("DataLayer", () => {
     const filter = ManuallyPortedElixirHologramQueryStage["filter/2"];
     const sort = ManuallyPortedElixirHologramQueryStage["sort/2"];
 
-    const notDoneCount = () =>
+    const doneCount = (done) =>
       DataLayer.normalizeQuery(
         count(
           filter(
             Type.alias(TASK),
-            Type.list([Type.tuple([Type.atom("done"), Type.boolean(false)])]),
+            Type.list([Type.tuple([Type.atom("done"), Type.boolean(done)])]),
           ),
         ),
       );
+
+    const notDoneCount = () => doneCount(false);
+
+    // The key the page carries the given term's count under.
+    const carriedKey = (module, name, term) =>
+      `${module}/${name}/${QuerySpelling.spell(term)}`;
 
     const sortedByTitle = () =>
       DataLayer.normalizeQuery(sort(Type.alias(TASK), Type.atom("title")));
@@ -283,13 +150,15 @@ describe("DataLayer", () => {
     });
 
     it("counts locally once the whole pot is complete", () => {
-      LocalDatabase.syncCounts = {"MyApp.Complete/count/false": 42};
+      LocalDatabase.syncCounts = {
+        [carriedKey("MyApp.Complete", "count", notDoneCount())]: 42,
+      };
       LocalDatabase.markAllSynced();
 
       const result = DataLayer.answerDerivedQuery(
         "MyApp.Complete",
         Type.atom("count"),
-        [Type.boolean(false)],
+        [],
         notDoneCount(),
       );
 
@@ -304,13 +173,15 @@ describe("DataLayer", () => {
     // marker is a claim about the rows the client holds.
     it("counts locally once every type the count reads is complete", () => {
       countReading("MyApp.NavigatedTo", [TASK, "MyApp.Project"]);
-      LocalDatabase.syncCounts = {"MyApp.NavigatedTo/count/false": 42};
+      LocalDatabase.syncCounts = {
+        [carriedKey("MyApp.NavigatedTo", "count", notDoneCount())]: 42,
+      };
       LocalDatabase.markTypesSynced([TASK, "MyApp.Project"]);
 
       const result = DataLayer.answerDerivedQuery(
         "MyApp.NavigatedTo",
         Type.atom("count"),
-        [Type.boolean(false)],
+        [],
         notDoneCount(),
       );
 
@@ -319,13 +190,15 @@ describe("DataLayer", () => {
 
     it("keeps carrying while a type the count reads is not complete", () => {
       countReading("MyApp.NavigatedTo", [TASK, "MyApp.Project"]);
-      LocalDatabase.syncCounts = {"MyApp.NavigatedTo/count/false": 42};
+      LocalDatabase.syncCounts = {
+        [carriedKey("MyApp.NavigatedTo", "count", notDoneCount())]: 42,
+      };
       LocalDatabase.markTypesSynced([TASK]);
 
       const result = DataLayer.answerDerivedQuery(
         "MyApp.NavigatedTo",
         Type.atom("count"),
-        [Type.boolean(false)],
+        [],
         notDoneCount(),
       );
 
@@ -337,13 +210,15 @@ describe("DataLayer", () => {
     // so the count waits for the types it reads, whatever page the stream was greeted with.
     it("keeps carrying on a page reached by a tab that took over while a type the count reads is not complete", () => {
       countReading("MyApp.TakenOverPage", ["MyApp.Project"]);
-      LocalDatabase.syncCounts = {"MyApp.TakenOverPage/count/false": 42};
+      LocalDatabase.syncCounts = {
+        [carriedKey("MyApp.TakenOverPage", "count", notDoneCount())]: 42,
+      };
       LocalDatabase.markTypesSynced([TASK]);
 
       const result = DataLayer.answerDerivedQuery(
         "MyApp.TakenOverPage",
         Type.atom("count"),
-        [Type.boolean(false)],
+        [],
         notDoneCount(),
       );
 
@@ -352,57 +227,43 @@ describe("DataLayer", () => {
 
     // A field the build listed no types for can only count on the whole pot.
     it("keeps carrying until everything is complete for a count with no types listed", () => {
-      LocalDatabase.syncCounts = {"MyApp.Unlisted/count/false": 42};
+      LocalDatabase.syncCounts = {
+        [carriedKey("MyApp.Unlisted", "count", notDoneCount())]: 42,
+      };
       LocalDatabase.markTypesSynced([TASK]);
 
       const result = DataLayer.answerDerivedQuery(
         "MyApp.Unlisted",
         Type.atom("count"),
-        [Type.boolean(false)],
+        [],
         notDoneCount(),
       );
 
       assert.deepStrictEqual(result, Type.integer(42));
     });
 
-    // Two instances of one component answer two counts, and the arguments their functions were
-    // called with are what tell them apart.
-    it("reads the count of the arguments the function was called with", () => {
+    // Two instances of one component answer two counts, and the queries their functions built are
+    // what tell them apart.
+    it("reads the count of the query the function built", () => {
       LocalDatabase.syncCounts = {
-        "MyApp.TwoInstances/count/false": 42,
-        "MyApp.TwoInstances/count/true": 7,
+        [carriedKey("MyApp.TwoInstances", "count", doneCount(false))]: 42,
+        [carriedKey("MyApp.TwoInstances", "count", doneCount(true))]: 7,
       };
 
       const result = DataLayer.answerDerivedQuery(
         "MyApp.TwoInstances",
         Type.atom("count"),
         [Type.boolean(true)],
-        notDoneCount(),
+        doneCount(true),
       );
 
       assert.deepStrictEqual(result, Type.integer(7));
     });
 
-    // Two arguments are two values, not their concatenation: 1 and 23 must not read the key
-    // 12 and 3 wrote.
-    it("separates the arguments a function reading two fields was called with", () => {
-      LocalDatabase.syncCounts = {
-        "MyApp.TwoArgs/count/1,23": 42,
-        "MyApp.TwoArgs/count/123": 7,
-      };
-
-      const result = DataLayer.answerDerivedQuery(
-        "MyApp.TwoArgs",
-        Type.atom("count"),
-        [Type.integer(1), Type.integer(23)],
-        DataLayer.normalizeQuery(count(Type.alias(TASK))),
-      );
-
-      assert.deepStrictEqual(result, Type.integer(42));
-    });
-
     it("leaves a query that does not count alone", () => {
-      LocalDatabase.syncCounts = {"MyApp.NotCounting/tasks/": 42};
+      LocalDatabase.syncCounts = {
+        [carriedKey("MyApp.NotCounting", "tasks", sortedByTitle())]: 42,
+      };
 
       const result = DataLayer.answerDerivedQuery(
         "MyApp.NotCounting",
@@ -705,7 +566,6 @@ describe("DataLayer", () => {
         globalThis.Elixir_Hologram_Query_Stage.__exports__,
         new Set([
           "add_relationship/3",
-          "authorize/2",
           "count/1",
           "decrement/3",
           "delete_relationship/3",

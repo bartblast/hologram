@@ -235,6 +235,14 @@ defmodule Hologram.Policy do
   A rule grants its operation when its predicates hold, one of its grant references is held, and the
   related row grants the operation its delegation names - and a policy grants its operation when any
   of its rules does.
+  A named line (`as:`) is keyed under its name as well as its operation, so a name is asked the way
+  an operation is - by can?, and by a delegation naming it. For a grant lifecycle line the name
+  holds the line's per-role rules.
+  An update line limited to some fields (`only:` or `except:`) is keyed under `{:update, field}` for
+  each field it covers, and not under :update, which holds the lines covering the whole row - so
+  `can?(user, :update, row)` and a delegation asking :update count those alone. A field key exists
+  only for a field some limited line covers, and holds the limited lines alone: the rules covering a
+  field are its key's together with :update's (see `field_rules/2`).
   The grant lifecycle operations grant_role and revoke_role are compiled per role: a line naming a
   role, or a list of them, yields one {operation, role} key per role, and a bare line yields one per
   declared role its holders may cover - a holder's own role and every role it extends, so nobody is
@@ -258,18 +266,24 @@ defmodule Hologram.Policy do
     Model.ensure_released!()
 
     entity_type.__policies__()
-    |> Enum.map(fn {operation, to, via, predicates} ->
-      rule = %{
-        predicates: Stage.predicate_triples!(entity_type, predicates),
-        to: build_to(entity_type, to),
-        via: delegation(operation, via)
-      }
+    |> Enum.flat_map(fn {operation, to, via, predicates, name, fields} ->
+      rule = line_rule(entity_type, operation, to, via, predicates)
 
-      {operation, rule}
+      keyed_rules = keyed_rules(entity_type, operation, fields, rule)
+
+      keyed_rules ++ named_rules(name, keyed_rules)
     end)
-    |> Enum.flat_map(&expand_role_operation(entity_type, &1))
     |> Enum.group_by(fn {operation, _rule} -> operation end, fn {_operation, rule} -> rule end)
     |> put_role_operation_unions()
+  end
+
+  @doc """
+  Returns the rules of the given compiled policy that cover the given field of an update: the ones
+  of the limited update lines covering it, then the ones covering the whole row.
+  """
+  @spec field_rules(map, atom) :: list(map)
+  def field_rules(policy, field) do
+    Map.get(policy, {:update, field}, []) ++ Map.get(policy, :update, [])
   end
 
   @doc """
@@ -301,7 +315,8 @@ defmodule Hologram.Policy do
   nobody may read. A rule for any other operation reading such a row fails the build instead,
   unless the clause is deciding for another reason (see `Hologram.Policy.Validator`): a client
   checks those on the structs its own actions change, which no verdict on the stored row answers.
-  The name dates from when only quantifiers were.
+  The name dates from when only quantifiers were. Only the `:read` key counts as a read rule here:
+  a named read line's rules under its name read the rows a browser holds, like any other check.
 
   A read rule's role reference, given as `{:to, reference}`, is a deciding one when it reads a row
   of a type no session may read: a reference two or more relationships away reads the rows before
@@ -524,6 +539,22 @@ defmodule Hologram.Policy do
   end
 
   @doc """
+  Returns the chains the rule of one allow line of the given entity type reads that a client
+  answers from the rows it holds, sorted - what `held_chains/2` returns for a key, for one line as
+  `__policies__/0` lists it. Several lines can share a key, like the limited update lines covering
+  one field, and this tells which of them reads a chain.
+
+  Takes a validated data model, for the reason `related_chains/1` does.
+  """
+  @spec line_held_chains(module, tuple) :: list(list(atom))
+  def line_held_chains(entity_type, {operation, to, via, predicates, _name, _fields}) do
+    entity_type
+    |> rule_chains(line_rule(entity_type, operation, to, via, predicates), {:held, operation})
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
   Returns the set links of the project's compiled data model a row joining could turn some rule's
   grant into a refusal through - read by a none or an all whose truth helps the rule, or by an any
   whose truth hurts it, inside a none (see `Hologram.Query.Stage.joining_row_refuses?/2`) - each as
@@ -568,7 +599,7 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns the key the given entity operation is baked under for the client: an atom as its name, and a per-role grant lifecycle operation as the two names joined by a colon, which no role name can contain.
+  Returns the key the given entity operation is baked under for the client: an atom as its name, and a per-role grant lifecycle operation or a field of an update as the two names joined by a colon - a field key always starts with update:, and no role or allow line name can contain a colon, so no two keys spell alike.
 
   The client builds the same key in operationKey in assets/js/elixir/hologram/auth.mjs - a hand-ported pair, so a change here is a change there.
   """
@@ -578,18 +609,40 @@ defmodule Hologram.Policy do
   def operation_key({name, role_name}), do: "#{name}:#{role_name}"
 
   @doc """
-  Returns the operations the given entity type can be asked about, sorted: the framework's own seven, and every operation an allow line on the type names - its own lines and the ones taken from its policy modules alike, since both land in __policies__/0.
-
-  A per-role line (allow {:grant_role, role}) names the framework operation, which is already in the list.
+  Returns the operations the given entity type can be asked about, sorted: the framework's own seven, and every name an allow line carries - its own lines and the ones taken from its policy modules alike, since both land in __policies__/0.
   """
   @spec operations(module) :: list(atom)
   def operations(entity_type) do
     entity_type.__policies__()
-    |> Enum.map(fn {operation, _to, _via, _predicates} -> operation end)
-    |> Enum.filter(&is_atom/1)
+    |> Enum.map(fn {_operation, _to, _via, _predicates, name, _fields} -> name end)
+    |> Enum.reject(&is_nil/1)
     |> Enum.concat(@framework_operations)
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  @doc """
+  Returns the fields an allow line can cover on the given entity type, sorted: its declared
+  attributes, but a job type's framework-owned ones (`Hologram.Job.framework_attribute_names/0`),
+  and its relationships, a to-one by its relationship name - the names `only:` and `except:` take
+  and `can?(user, {:update, field}, row)` asks about. Inverses, derived fields and system
+  attributes are left out, since no update sets them, and so are a job's framework-owned
+  attributes, the framework's to set: an update changing one is covered by the whole-row rules
+  alone.
+  """
+  @spec update_fields(module) :: list(atom)
+  def update_fields(entity_type) do
+    framework_names =
+      if Reflection.job?(entity_type), do: Hologram.Job.framework_attribute_names(), else: []
+
+    attribute_names =
+      for {name, _type, _opts} <- entity_type.__attributes__(),
+          name not in framework_names,
+          do: name
+
+    relationship_names = for {name, _type, _opts} <- entity_type.__relationships__(), do: name
+
+    Enum.sort(attribute_names ++ relationship_names)
   end
 
   @doc """
@@ -638,7 +691,10 @@ defmodule Hologram.Policy do
   def readable_type?(RoleGrant), do: true
 
   def readable_type?(entity_type) do
-    Enum.any?(entity_type.__policies__(), &match?({:read, _to, _via, _predicates}, &1))
+    Enum.any?(
+      entity_type.__policies__(),
+      &match?({:read, _to, _via, _predicates, _name, _fields}, &1)
+    )
   end
 
   @doc """
@@ -675,10 +731,14 @@ defmodule Hologram.Policy do
   """
   @spec related_chains(module) :: list(list(atom))
   def related_chains(entity_type) do
+    # One build, each rule walked once: a rule can sit under several keys - every field a limited
+    # line covers, a line's name, a role operation's union.
     entity_type
     |> build()
-    |> Map.keys()
-    |> Enum.flat_map(&related_chains(entity_type, &1))
+    |> Map.values()
+    |> Enum.concat()
+    |> Enum.uniq()
+    |> Enum.flat_map(&rule_chains(entity_type, &1, :all))
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -738,7 +798,7 @@ defmodule Hologram.Policy do
   @doc """
   Refuses an operation the given entity type cannot be asked about, or returns :ok.
 
-  A framework operation always passes. An atom passes when an allow line on the entity type names it. A {:grant_role, role} or {:revoke_role, role} tuple passes when the entity type declares the role. Anything else raises Hologram.MisuseError naming what the entity type does declare - so a typo or a renamed operation fails at the line that asks, on the tier asking, instead of being denied as if the rules had been consulted.
+  A framework operation always passes. An atom passes when an allow line on the entity type carries it as its name (`as:`). A {:grant_role, role} or {:revoke_role, role} tuple passes when the entity type declares the role, and an {:update, field} or {:update, fields} tuple when every field it names is one of `update_fields/1` - a list naming at least one. Anything else raises Hologram.MisuseError naming what the entity type does declare - so a typo or a renamed operation fails at the line that asks, on the tier asking, instead of being denied as if the rules had been consulted.
 
   The client mirrors the same refusals in validateOperation in assets/js/model.mjs - a hand-ported pair, so a change here is a change there.
   """
@@ -767,19 +827,37 @@ defmodule Hologram.Policy do
     end
   end
 
-  def validate_operation!(entity_type, operation) when is_tuple(operation) do
+  def validate_operation!(entity_type, {:update, []} = operation) do
     raise MisuseError,
       message:
-        "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+        "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - {:update, fields} names at least one field"
   end
 
-  # Nothing production reaches here - can?/3 refuses a shape this far off before asking, and
-  # authorize/2 and the wire only ever pass an atom - but this function is public, and its
-  # docstring promises a Hologram.MisuseError for anything else.
+  def validate_operation!(entity_type, {:update, field_names} = operation)
+      when is_list(field_names) do
+    if List.improper?(field_names) do
+      raise MisuseError, message: unknown_tuple_message(entity_type, operation)
+    end
+
+    Enum.each(field_names, &validate_update_field!(entity_type, operation, &1))
+  end
+
+  def validate_operation!(entity_type, {:update, field_name} = operation)
+      when is_atom(field_name) do
+    validate_update_field!(entity_type, operation, field_name)
+  end
+
+  def validate_operation!(entity_type, operation) when is_tuple(operation) do
+    raise MisuseError, message: unknown_tuple_message(entity_type, operation)
+  end
+
+  # Nothing production reaches here - can?/3 refuses a shape this far off before asking, and a
+  # via: option names an atom - but this function is public, and its docstring promises a
+  # Hologram.MisuseError for anything else.
   def validate_operation!(entity_type, operation) do
     raise MisuseError,
       message:
-        "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role}"
+        "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - an entity operation is an atom, {:grant_role, role} / {:revoke_role, role} or {:update, field} / {:update, fields}"
   end
 
   @doc """
@@ -1367,6 +1445,40 @@ defmodule Hologram.Policy do
     end)
   end
 
+  defp line_rule(entity_type, operation, to, via, predicates) do
+    %{
+      predicates: Stage.predicate_triples!(entity_type, predicates),
+      to: build_to(entity_type, to),
+      via: delegation(operation, via)
+    }
+  end
+
+  # A limited update line is keyed by the fields it covers, any other line by its operation, per
+  # role for a grant lifecycle one.
+  defp keyed_rules(entity_type, :update, fields, rule) when fields != nil do
+    entity_type
+    |> covered_fields(fields)
+    |> Enum.map(&{{:update, &1}, rule})
+  end
+
+  defp keyed_rules(entity_type, operation, nil, rule) do
+    expand_role_operation(entity_type, {operation, rule})
+  end
+
+  defp covered_fields(_entity_type, {:only, names}), do: Enum.uniq(names)
+
+  defp covered_fields(entity_type, {:except, names}), do: update_fields(entity_type) -- names
+
+  # A named line's rules, keyed under its name - each rule once, since a grant lifecycle line
+  # expanded per role can yield the same rule for several roles.
+  defp named_rules(nil, _keyed_rules), do: []
+
+  defp named_rules(name, keyed_rules) do
+    keyed_rules
+    |> Enum.map(fn {_key, rule} -> {name, rule} end)
+    |> Enum.uniq()
+  end
+
   # The quantifier clauses among the given ones, those in a disjunction's alternatives included.
   defp quantifier_clauses(clauses) do
     Enum.flat_map(clauses, fn
@@ -1671,22 +1783,44 @@ defmodule Hologram.Policy do
   end
 
   defp unknown_operation_message(entity_type, operation) do
-    own_operations = operations(entity_type) -- @framework_operations
+    names = operations(entity_type) -- @framework_operations
 
-    declared =
-      case own_operations do
-        [] -> "no operation of their own"
-        names -> join_names(names)
+    carried =
+      case names do
+        [] -> "carry no name"
+        [name] -> "carry the name #{inspect(name)}"
+        _names -> "carry the names #{join_names(names)}"
       end
 
-    "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - its allow lines declare #{declared}, and the framework's own operations are #{join_names(@framework_operations)}"
+    "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - the framework's operations are #{join_names(@framework_operations)}, and its allow lines #{carried}"
   end
+
+  defp unknown_tuple_message(entity_type, operation) do
+    "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
+  end
+
+  defp update_fields_description([]), do: "it has no field an update sets"
+
+  defp update_fields_description(field_names),
+    do: "the fields an update sets are #{Enum.map_join(field_names, ", ", &inspect/1)}"
 
   defp validate_policy_module!(module, policy_module) do
     if not Reflection.policy?(policy_module) do
       raise Hologram.CompileError,
         message:
           "invalid policy #{inspect(policy_module)} taken in #{inspect(module)} - #{inspect(policy_module)} is not a policy module (define it with use Hologram.Policy)"
+    end
+  end
+
+  defp validate_update_field!(entity_type, operation, field_name) do
+    update_fields = update_fields(entity_type)
+
+    if field_name in update_fields do
+      :ok
+    else
+      raise MisuseError,
+        message:
+          "unknown field #{inspect(field_name)} in #{inspect(operation)} for #{inspect(entity_type)} - #{update_fields_description(update_fields)}"
     end
   end
 

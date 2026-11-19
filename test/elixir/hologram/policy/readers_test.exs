@@ -446,7 +446,8 @@ defmodule Hologram.Policy.ReadersTest do
 
       assert keys == [
                Policy.verdict_key(Module15, :archive, clause),
-               Policy.verdict_key(Module15, :update, clause)
+               Policy.verdict_key(Module15, :update, clause),
+               Policy.verdict_key(Module15, {:update, :name}, clause)
              ]
     end
 

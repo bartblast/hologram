@@ -17,6 +17,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Bookmark
+  alias HologramFeatureTests.Entities.Bulletin
   alias HologramFeatureTests.Entities.Cabin
   alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Document
@@ -970,6 +971,7 @@ defmodule HologramFeatureTests.Helpers do
         Account,
         Booking,
         Bookmark,
+        Bulletin,
         Cabin,
         Channel,
         Document,
