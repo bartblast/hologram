@@ -8,22 +8,25 @@ defmodule Hologram.Test.DatabaseBootstrap do
 
   alias Hologram.DB.Config
   alias Hologram.DB.Mapper
-  alias Hologram.Reflection
   alias Hologram.Test.DatabaseBootstrap.Connection
 
   @doc """
-  Prepares the test databases before a suite runs and returns :ok.
+  Creates the databases of this test run, points the app at them and returns a map from each
+  prepared name, the configured test database's and the given ones, to the name of the run's
+  own database.
 
-  Each database is created when absent and has its Hologram schemas dropped, so every
-  run converges from scratch. The configured test database is always prepared - the
-  given names are prepared alongside it, for a suite that exercises more than one
-  (a second mechanism, a second app instance).
+  Every run gets fresh databases, named after the configured one and the given ones with a
+  suffix of the run's own, so two runs against one server, from two checkouts or two in one
+  checkout, never touch each other's tables. The configured database itself is never created
+  or written to. The :hologram app's :database config is rewritten to name the run's database
+  for the configured one, so every connection opened afterwards reaches it - a suite exercising
+  more than one database (a second mechanism, a second app instance) reaches the others by the
+  names returned.
 
-  A database another app or another env has claimed is refused before anything is
-  dropped, and the refusal names the database and whose it is - the claim is the marker
-  row the data layer writes in every database it manages, read here on the same
-  connection the drop would run on. A database nothing has claimed, or one this app's
-  test env has claimed, is dropped whichever mechanism claimed it.
+  Each run database keeps a connection of its own open until the caller ends: linked to it,
+  never stopped. Call this from the test helper, whose process lives as long as the run.
+
+  The configured role must be allowed to create databases, since every run creates its own.
 
   Runs before anything connects a pool, so it holds no assumption about the app being
   up. Each connection opens synchronously: a server slow to answer is waited for, while
@@ -31,12 +34,11 @@ defmodule Hologram.Test.DatabaseBootstrap do
   prints the error with what to check and halts: a usable server is a hard requirement of
   any suite calling this, and every later failure would be noise.
 
-  Refuses to run outside the test environment - the schema drop is what makes this
-  function test-only. When neither HOLOGRAM_ENV nor MIX_ENV is set, environment
-  detection recognizes the test env by the running ExUnit server, so the call belongs
-  after ExUnit.start().
+  Refuses to run outside the test environment. When neither HOLOGRAM_ENV nor MIX_ENV is set,
+  environment detection recognizes the test env by the running ExUnit server, so the call
+  belongs after ExUnit.start().
   """
-  @spec run!(list(String.t())) :: :ok
+  @spec run!(list(String.t())) :: %{String.t() => String.t()}
   def run!(extra_databases \\ []) do
     refuse_outside_test!()
 
@@ -45,14 +47,39 @@ defmodule Hologram.Test.DatabaseBootstrap do
       |> Application.get_env(:database, [])
       |> Config.resolve!(:test)
 
-    claim = %{otp_app: Atom.to_string(Reflection.otp_app()), env: "test"}
+    run_id =
+      4
+      |> :crypto.strong_rand_bytes()
+      |> Base.encode16(case: :lower)
 
-    Enum.each([database_opts[:database] | extra_databases], fn database ->
-      ensure_database!(database_opts, database)
-      drop_schema_layout!(database_opts, database, claim)
+    run_databases =
+      Map.new([database_opts[:database] | extra_databases], fn database ->
+        {database, run_database_name(database, run_id)}
+      end)
+
+    maintenance_pid = start_maintenance_connection!(database_opts)
+
+    try do
+      Enum.each(run_databases, fn {_database, run_database} ->
+        create_database!(maintenance_pid, run_database)
+      end)
+    after
+      Connection.stop(maintenance_pid)
+    end
+
+    Enum.each(run_databases, fn {_database, run_database} ->
+      hold_database!(database_opts, run_database)
     end)
 
-    :ok
+    # The resolved discrete keys, without :url - a configured url would win over the run's
+    # database name.
+    Application.put_env(
+      :hologram,
+      :database,
+      Keyword.put(database_opts, :database, run_databases[database_opts[:database]])
+    )
+
+    run_databases
   end
 
   # No handshake timeout: the handshake starts once the server accepted the TCP connection,
@@ -69,84 +96,20 @@ defmodule Hologram.Test.DatabaseBootstrap do
     ]
   end
 
-  defp create_database_when_absent!(connection_pid, database) do
-    # The simple query protocol takes no parameters, so the name goes in as a literal.
-    database_existence_query =
-      "SELECT 1 FROM pg_database WHERE datname = #{quote_literal(database)}"
-
-    case Connection.query!(connection_pid, database_existence_query) do
-      %{rows: []} ->
-        quoted_database = Mapper.quote_identifier(database)
-        Connection.query!(connection_pid, "CREATE DATABASE #{quoted_database}")
-
-      _result ->
-        :ok
-    end
+  # Created from template0, which holds nothing: template1 may have been customised, and a
+  # database cannot be copied from a template anyone is connected to.
+  defp create_database!(maintenance_pid, database) do
+    quoted_database = Mapper.quote_identifier(database)
+    Connection.query!(maintenance_pid, "CREATE DATABASE #{quoted_database} TEMPLATE template0")
   end
 
-  # The connection is stopped on a refusal too, so a caller rescuing the refusal is not left
-  # linked to a live connection.
-  defp drop_schema_layout!(database_opts, database, claim) do
-    {:ok, connection_pid} =
+  defp hold_database!(database_opts, database) do
+    {:ok, _connection_pid} =
       database_opts
       |> connection_opts(database)
       |> Connection.start()
 
-    try do
-      refuse_claimed_elsewhere!(connection_pid, database, claim)
-      Enum.each(drop_statements(), &Connection.query!(connection_pid, &1))
-    after
-      Connection.stop(connection_pid)
-    end
-  end
-
-  defp drop_statements do
-    [
-      ~s(DROP SCHEMA IF EXISTS "#{Mapper.system_schema()}" CASCADE),
-      ~s(DROP SCHEMA IF EXISTS "#{Mapper.data_schema()}" CASCADE)
-    ]
-  end
-
-  # The maintenance database always exists, so connecting to it doubles as the server
-  # connectivity check.
-  defp ensure_database!(database_opts, database) do
-    connection_result =
-      database_opts
-      |> connection_opts("postgres")
-      |> Connection.start()
-
-    case connection_result do
-      {:ok, connection_pid} ->
-        try do
-          create_database_when_absent!(connection_pid, database)
-        after
-          Connection.stop(connection_pid)
-        end
-
-      {:error, reason} ->
-        print_unusable_server_message(database_opts, reason)
-        System.halt(1)
-    end
-  end
-
-  # Read on this connection: no pool exists yet when this runs, and the marker table may be
-  # absent. A table that is absent, or holds no row, is no claim.
-  defp marker(connection_pid) do
-    system_schema = Mapper.system_schema()
-    existence_query = ~s[SELECT to_regclass('"#{system_schema}"."database"')]
-
-    case Connection.query!(connection_pid, existence_query) do
-      %{rows: [[nil]]} ->
-        nil
-
-      _present ->
-        marker_query = ~s(SELECT "otp_app", "env" FROM "#{system_schema}"."database")
-
-        case Connection.query!(connection_pid, marker_query) do
-          %{rows: []} -> nil
-          %{rows: [[otp_app, env]]} -> %{otp_app: otp_app, env: env}
-        end
-    end
+    :ok
   end
 
   defp print_unusable_server_message(database_opts, reason) do
@@ -172,36 +135,43 @@ defmodule Hologram.Test.DatabaseBootstrap do
     """)
   end
 
-  # Doubles the single quotes. Backslashes stay literal under standard_conforming_strings,
-  # which Postgres has on by default since 9.1.
-  defp quote_literal(value) do
-    "'" <> String.replace(value, "'", "''") <> "'"
-  end
-
-  defp refuse_claimed_elsewhere!(connection_pid, database, claim) do
-    marker = marker(connection_pid)
-
-    if marker != nil and marker != claim do
-      raise ~s(database "#{database}" belongs to the "#{marker.env}" env of app ) <>
-              ~s("#{marker.otp_app}" - Hologram.Test.DatabaseBootstrap.run!/1 drops ) <>
-              "Hologram's schemas only in a database nothing has claimed or the " <>
-              ~s("#{claim.env}" env of app "#{claim.otp_app}" has claimed - point the ) <>
-              "test env's config :hologram, :database at another database"
-    end
-  end
-
   # The prod path this closes is one line in a release console: the :test atom passed to
-  # Config.resolve!/2 supplies defaults only, so the app's real config wins and the drop
-  # statements would land in whatever database it names. A release with no HOLOGRAM_ENV
-  # reports :dev, so it refuses.
+  # Config.resolve!/2 supplies defaults only, so the app's real config wins, and the run's
+  # databases would be created on whatever server it names, with the running app's config
+  # repointed at them. A release with no HOLOGRAM_ENV reports :dev, so it refuses.
   defp refuse_outside_test! do
     env = Hologram.env()
 
     if env != :test do
-      raise "Hologram.Test.DatabaseBootstrap.run!/1 drops Hologram's schemas and runs " <>
-              "in the test env only - the current env is #{inspect(env)}. When neither " <>
-              "HOLOGRAM_ENV nor MIX_ENV is set, the test env is recognized by the " <>
-              "running ExUnit server, so call run!/1 after ExUnit.start()."
+      raise "Hologram.Test.DatabaseBootstrap.run!/1 creates databases and points the " <>
+              "database config at them, so it runs in the test env only - the current env " <>
+              "is #{inspect(env)}. When neither HOLOGRAM_ENV nor MIX_ENV is set, the test env " <>
+              "is recognized by the running ExUnit server, so call run!/1 after ExUnit.start()."
+    end
+  end
+
+  # Fitted rather than concatenated: PostgreSQL truncates an over-long identifier to 63 bytes
+  # without saying so, and a configured name at the limit would lose the run's suffix, so every
+  # run would get the same name.
+  defp run_database_name(database, run_id) do
+    Mapper.fit_identifier([database], [], "run_" <> run_id)
+  end
+
+  # The maintenance database always exists, so connecting to it doubles as the server
+  # connectivity check.
+  defp start_maintenance_connection!(database_opts) do
+    connection_result =
+      database_opts
+      |> connection_opts("postgres")
+      |> Connection.start()
+
+    case connection_result do
+      {:ok, connection_pid} ->
+        connection_pid
+
+      {:error, reason} ->
+        print_unusable_server_message(database_opts, reason)
+        System.halt(1)
     end
   end
 end
