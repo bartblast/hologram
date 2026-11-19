@@ -1615,6 +1615,13 @@ describe("Renderer derived fields", () => {
     const renderUserPage = () =>
       Renderer.renderPage(Type.alias("MyApp.UserPage"), Type.map());
 
+    // LocalDatabase.reset() leaves the acting user alone on purpose, so it is put back here, or it
+    // reaches every suite that runs after this file.
+    afterEach(() => {
+      LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
+    });
+
     beforeEach(() => {
       globalThis.Hologram.sync.model[USER] = {
         attributes: {email: "string", id: "uuid"},
