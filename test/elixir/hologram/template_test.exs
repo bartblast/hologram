@@ -13,6 +13,19 @@ defmodule Hologram.TemplateTest do
     test "trim leading and trailing whitespaces" do
       assert dom_ast("\n\t content \t\n") == [{:text, "content"}]
     end
+
+    test "raises on an element left unclosed inside another element" do
+      markup = """
+      <div>
+        <span>
+        <p>abc</p>
+      </div>
+      """
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the <span> tag isn't closed before </div>, add </span>",
+                   fn -> dom_ast(markup) end
+    end
   end
 
   describe "HOLO sigil" do

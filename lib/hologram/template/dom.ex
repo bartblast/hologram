@@ -35,12 +35,16 @@ defmodule Hologram.Template.DOM do
 
   ## Examples
 
-      iex> tags = [{:start_tag, {"div, []}}, {:text, "abc"}, {:end_tag, "div"}]
+      iex> tags = [{:start_tag, {"div", []}}, {:text, "abc"}, {:end_tag, "div"}]
       iex> build_ast(tags)
-      [{:{}, [line: 1], [:element, "div", [], [{:text, "abc"}]]}]
+      [{:{}, [line: 1], [:element, "div", [{"$key", [text: "kqd760:0"]}], [text: "abc"]]}]
   """
   @spec build_ast(list(Parser.parsed_tag())) :: AST.t()
   def build_ast(tags) do
+    # The code below is built from fragments that pair up only when the tags do, so tags that don't
+    # are refused here, with a message about the template rather than about the generated code.
+    validate_nesting(tags)
+
     # The keys name places in this template, so they are built from the hash of the template as
     # written, before any of them has been added to it.
     hash = template_hash(tags)
@@ -128,6 +132,22 @@ defmodule Hologram.Template.DOM do
     code_acc <> code
   end
 
+  # Closes the innermost open entry with the given closer, or refuses the closer when it can't.
+  defp close_entry([], closer) do
+    raise TemplateSyntaxError,
+      message: "#{describe_closer(closer)} has no matching #{describe_opener(closer)}"
+  end
+
+  defp close_entry([top | rest], closer) do
+    if matches_closer?(top, closer) do
+      reopen_entry(rest, closer)
+    else
+      match = Enum.find(rest, &matches_closer?(&1, closer))
+
+      refuse_closer(top, match, closer)
+    end
+  end
+
   # Splits a "$"-prefixed event attribute name on "." into the bare name and its
   # raw modifier segments. Names without "$" (or without ".") carry no modifiers.
   defp decompose_event_attribute_name("$" <> _rest = name) do
@@ -138,6 +158,37 @@ defmodule Hologram.Template.DOM do
   end
 
   defp decompose_event_attribute_name(name), do: {name, []}
+
+  defp describe_closer({:block_end, block_name}), do: "{/#{block_name}}"
+
+  defp describe_closer({:block_start, "else"}), do: "{%else}"
+
+  defp describe_closer({:end_tag, tag_name}), do: "</#{tag_name_source(tag_name)}>"
+
+  defp describe_closer(:public_comment_end), do: "-->"
+
+  # An {%if} block that has reached its {%else} is still the {%if} block to the person who wrote it.
+  defp describe_entry({:block, "else"}), do: "the {%if} block"
+
+  defp describe_entry({:block, block_name}), do: "the {%#{block_name}} block"
+
+  defp describe_entry(:public_comment), do: "the public comment"
+
+  defp describe_entry({:tag, tag_name}), do: "the <#{tag_name_source(tag_name)}> tag"
+
+  defp describe_entry_closer({:block, "else"}), do: "{/if}"
+
+  defp describe_entry_closer({:block, block_name}), do: "{/#{block_name}}"
+
+  defp describe_entry_closer(:public_comment), do: "-->"
+
+  defp describe_entry_closer({:tag, tag_name}), do: "</#{tag_name_source(tag_name)}>"
+
+  defp describe_opener({:block_end, block_name}), do: "{%#{block_name}}"
+
+  defp describe_opener({:end_tag, tag_name}), do: "<#{tag_name_source(tag_name)}>"
+
+  defp describe_opener(:public_comment_end), do: "<!--"
 
   defp extract_expression_content(expr_str) do
     expr_str
@@ -163,6 +214,22 @@ defmodule Hologram.Template.DOM do
   defp keyable_tag?(tag_name) do
     Helpers.tag_type(tag_name) == :element and tag_name not in @unkeyable_tags
   end
+
+  defp matches_closer?({:block, "else"}, {:block_end, "if"}), do: true
+
+  defp matches_closer?({:block, block_name}, {:block_end, block_name}), do: true
+
+  defp matches_closer?({:block, block_name}, {:block_start, "else"})
+       when block_name in ["if", "else"],
+       do: true
+
+  defp matches_closer?(:public_comment, :public_comment_end), do: true
+
+  defp matches_closer?({:tag, open_tag_name}, {:end_tag, tag_name}) do
+    same_tag_name?(open_tag_name, tag_name)
+  end
+
+  defp matches_closer?(_entry, _closer), do: false
 
   # Wraps implicit keyword list.
   # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
@@ -196,6 +263,34 @@ defmodule Hologram.Template.DOM do
   end
 
   defp normalize_newlines(term), do: term
+
+  # Refuses a closer that doesn't close the innermost open entry, given the deeper entry it closes,
+  # if any.
+  #
+  # Tags inside a public comment are text, so an end tag reaches an open comment only when the
+  # parser didn't end the comment, and is told the comment isn't closed, whether or not it closes
+  # something outside the comment.
+  defp refuse_closer(:public_comment, _match, {:end_tag, _tag_name} = closer) do
+    raise TemplateSyntaxError, message: unclosed_before_message(:public_comment, closer)
+  end
+
+  defp refuse_closer(top, nil, closer) do
+    raise TemplateSyntaxError,
+      message:
+        "#{describe_closer(closer)} has no matching #{describe_opener(closer)} inside #{describe_entry(top)}"
+  end
+
+  # The parser reads block markers inside a public comment, so a commented-out {%else} or {/if}
+  # reaches here as one.
+  defp refuse_closer(:public_comment, match, closer) do
+    raise TemplateSyntaxError,
+      message:
+        "#{describe_closer(closer)} belongs to #{describe_entry(match)} outside the public comment"
+  end
+
+  defp refuse_closer(top, _match, closer) do
+    raise TemplateSyntaxError, message: unclosed_before_message(top, closer)
+  end
 
   defp render_attribute_code({:spread, templ_expr}, _tag_type) do
     "{:spread, #{normalize_implicit_keyword_list(templ_expr)}}"
@@ -318,6 +413,42 @@ defmodule Hologram.Template.DOM do
     inspect(EventModifiers.parse(base_name, modifiers))
   end
 
+  # An {%else} closes the branch of its {%if} block before it and opens the one after it, which can
+  # only be closed by {/if}.
+  defp reopen_entry(rest, {:block_start, "else"}), do: [{:block, "else"} | rest]
+
+  defp reopen_entry(rest, _closer), do: rest
+
+  # Two sources of a dynamic tag name name the same tag when they are the same code, however they
+  # are spaced. A source that isn't valid code can only be the same as itself. Their warnings aren't
+  # reported here: the start tag's source is parsed again when the template's code is built, which
+  # reports them, and the end tag's source is never compiled.
+  defp same_expression?(source_1, source_2) do
+    with {:ok, ast_1} <- Code.string_to_quoted(source_1, emit_warnings: false),
+         {:ok, ast_2} <- Code.string_to_quoted(source_2, emit_warnings: false) do
+      Macro.to_string(ast_1) == Macro.to_string(ast_2)
+    else
+      _error -> source_1 == source_2
+    end
+  end
+
+  defp same_tag_name?({:expression, open_source}, {:expression, source}) do
+    same_expression?(open_source, source)
+  end
+
+  defp same_tag_name?(open_tag_name, tag_name)
+       when is_binary(open_tag_name) and is_binary(tag_name) do
+    # HTML end tags are matched regardless of case, so an element's end tag can be spelled in any
+    # case. A component's name is a module alias, which is spelled one way only.
+    if Helpers.tag_type(open_tag_name) == :element do
+      String.downcase(open_tag_name) == String.downcase(tag_name)
+    else
+      open_tag_name == tag_name
+    end
+  end
+
+  defp same_tag_name?(_open_tag_name, _tag_name), do: false
+
   defp slot_key_attribute(hash, index) do
     {"$key", [{:text, "#{hash}:#{index}"}]}
   end
@@ -339,6 +470,80 @@ defmodule Hologram.Template.DOM do
 
   defp substitute_module_attributes(ast), do: ast
 
+  defp tag_name_source({:expression, source}), do: source
+
+  defp tag_name_source(tag_name), do: tag_name
+
+  defp track_nesting({:block_end, _block_name} = closer, stack) do
+    close_entry(stack, closer)
+  end
+
+  defp track_nesting({:block_start, "else"} = closer, stack) do
+    # Found past the tags and comments open inside it, so that an {%else} in an element in an {%if}
+    # block is told it's inside the element, and one in a {%for} block is told it belongs in an if.
+    innermost_block = Enum.find(stack, &match?({:block, _block_name}, &1))
+
+    cond do
+      innermost_block not in [{:block, "if"}, {:block, "else"}] ->
+        raise TemplateSyntaxError, message: "{%else} can only be used in an {%if} block"
+
+      match?([{:block, "else"} | _rest], stack) ->
+        raise TemplateSyntaxError, message: "the {%if} block has more than one {%else}"
+
+      true ->
+        close_entry(stack, closer)
+    end
+  end
+
+  defp track_nesting({:block_start, "raw"}, stack), do: [{:block, "raw"} | stack]
+
+  defp track_nesting({:block_start, {block_name, _expression}}, stack) do
+    [{:block, block_name} | stack]
+  end
+
+  defp track_nesting({:end_tag, tag_name} = closer, stack) do
+    # The parser reads the start tag of a void element as self-closing, testing the name as written,
+    # so a void element's end tag closes something only when its start tag is spelled in another
+    # case, like <iNPUT></input>. Any other one is refused as an end tag the element can't have.
+    if void_end_tag?(tag_name) and not Enum.any?(stack, &matches_closer?(&1, closer)) do
+      raise TemplateSyntaxError,
+        message: "</#{tag_name}> isn't allowed, since <#{tag_name}> has no end tag"
+    end
+
+    close_entry(stack, closer)
+  end
+
+  defp track_nesting(:public_comment_end = closer, stack) do
+    close_entry(stack, closer)
+  end
+
+  defp track_nesting(:public_comment_start, stack), do: [:public_comment | stack]
+
+  defp track_nesting({:start_tag, {tag_name, _attributes}}, stack) do
+    [{:tag, tag_name} | stack]
+  end
+
+  defp track_nesting(_tag, stack), do: stack
+
+  defp unclosed_before_message(top, closer) do
+    "#{describe_entry(top)} isn't closed before #{describe_closer(closer)}, add #{describe_entry_closer(top)}"
+  end
+
+  defp validate_closed([]), do: :ok
+
+  defp validate_closed([top | _rest]) do
+    raise TemplateSyntaxError,
+      message: "#{describe_entry(top)} isn't closed, add #{describe_entry_closer(top)}"
+  end
+
+  # Checks that every start tag, block and public comment is closed by its own closer, and every
+  # closer closes an open one, innermost first.
+  defp validate_nesting(tags) do
+    tags
+    |> Enum.reduce([], &track_nesting/2)
+    |> validate_closed()
+  end
+
   # The <window> and <document> tags bind events to the window or document and nothing else, so each
   # attribute must be an event binding (a "$"-prefixed name). Any other attribute fails the build.
   defp validate_reserved_tag_attributes(tag_name, attributes) do
@@ -355,5 +560,19 @@ defmodule Hologram.Template.DOM do
               ~s'the <#{tag_name}> tag accepts only event bindings, but got the "#{name}" attribute'
         end
     end)
+  end
+
+  defp void_end_tag?({:expression, _source}), do: false
+
+  # An element's name has no case, so its end tag is void however it's spelled. A component's name
+  # is a module alias, and a component always has an end tag.
+  defp void_end_tag?(tag_name) do
+    if Helpers.tag_type(tag_name) == :element do
+      tag_name
+      |> String.downcase()
+      |> Helpers.void_element?()
+    else
+      false
+    end
   end
 end
