@@ -188,6 +188,8 @@ defmodule Hologram.Template.DOM do
 
   defp describe_opener({:end_tag, tag_name}), do: "<#{tag_name_source(tag_name)}>"
 
+  defp describe_opener(:public_comment_end), do: "<!--"
+
   defp extract_expression_content(expr_str) do
     expr_str
     |> String.slice(1, String.length(expr_str) - 2)

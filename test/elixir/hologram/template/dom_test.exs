@@ -2436,6 +2436,24 @@ defmodule Hologram.Template.DOMTest do
                    fn -> build_ast(tags) end
     end
 
+    test "raises on a stray public comment end" do
+      # -->, which the parser reads as text, so only a hand-built tag list holds it
+      tags = [:public_comment_end]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "--> has no matching <!--",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a stray public comment end inside an element" do
+      # <div>-->, which the parser reads as text, so only a hand-built tag list holds it
+      tags = [{:start_tag, {"div", []}}, :public_comment_end]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "--> has no matching <!-- inside the <div> tag",
+                   fn -> build_ast(tags) end
+    end
+
     test "raises on a public comment left unclosed" do
       # <!-- {%if true}a{/if} -->, which the parser reads with the comment's end as text
       tags = [
