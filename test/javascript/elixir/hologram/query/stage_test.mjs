@@ -4157,6 +4157,22 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    // Where a quantifier binds the name itself, the macros leave no spelling for the queried row.
+    it("names no spelling for a row the macros left none for", () => {
+      const name = Type.atom("name");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified("messages", "name", Type.bitstring("x")),
+            spelled("key", 1, name, ["name.name"]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :name in MyApp.Message - known attributes: :body, :channel_id, :id, :position",
+      );
+    });
+
     it("names the spelling that reads an operand only the bound row declares", () => {
       const outerPosition = outer(1, "position");
 

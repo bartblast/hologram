@@ -193,6 +193,16 @@ defmodule Hologram.QueryTest do
       end
     end
 
+    # Inside the quantifier a bare name reads the row it binds under that name.
+    test "names no bare spelling for a field only the queried row declares where a quantifier binds its name" do
+      expected_msg =
+        "unknown attribute :name in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :tier, :updated_at"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module32, any(name <- messages, name.name == "general"))
+      end
+    end
+
     test "names how to read a membership's field only the bound row declares when the query is built" do
       expected_msg =
         "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :updated_at - Hologram.Test.Fixtures.Entity.Module33 declares position, read as message.position"

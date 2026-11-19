@@ -1337,15 +1337,16 @@ defmodule Hologram.Query.Expression do
   # How a name inside a quantifier is spelled to read it on each row in scope, nearest first -
   # through the name each quantifier bound its row to, then bare for the queried row - so the stage
   # can name the spelling for the row that declares it, when the one written doesn't. A path, and a
-  # name at the top of a filter, get none.
+  # name at the top of a filter, get none. A bare name a quantifier binds reads that row, so where
+  # the name is one, the queried row has no spelling.
   defp row_spellings(ast, [_binding | _bindings] = bindings) do
     [root | rest] = hops = hops(ast)
 
     case if(root in bindings, do: rest, else: hops) do
       [name] ->
-        bindings
-        |> Enum.map(&"#{&1}.#{name}")
-        |> List.insert_at(-1, Atom.to_string(name))
+        bare = if name in bindings, do: [], else: [Atom.to_string(name)]
+
+        Enum.map(bindings, &"#{&1}.#{name}") ++ bare
 
       _path ->
         []

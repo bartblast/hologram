@@ -50,7 +50,7 @@ defmodule Hologram.Query.Stage do
   # can add: where it stands (a comparison's or a search's left side, its right side, a sort or an
   # include name), how many quantifiers its clause is nested in, the name as the data form holds it,
   # the fix to name - a forgotten pin - or nil, and the spelling that reads the name on each row in
-  # scope, nearest first.
+  # scope, nearest first - but none for the queried row where a quantifier binds the name itself.
   @type name_hint ::
           {:include | :key | :operand | :sort, non_neg_integer, Query.name(), String.t() | nil,
            list(String.t())}

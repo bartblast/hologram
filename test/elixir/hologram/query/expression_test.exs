@@ -950,6 +950,14 @@ defmodule Hologram.Query.ExpressionTest do
              ]
     end
 
+    test "spells no bare name for the queried row where a quantifier binds that name" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(role <- members, role.role == \"admin\")",
+               []
+             ) == [{:key, 1, :role, nil, ["role.role"]}]
+    end
+
     test "spells nothing for a path inside a quantifier" do
       assert hints_of(
                &predicate_hints/2,
