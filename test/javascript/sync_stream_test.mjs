@@ -312,6 +312,35 @@ describe("SyncStream", () => {
       }
     });
 
+    // A frame served while the tab settles where its lead starts from would land on a store about
+    // to be cleared; the tab greets again once that is settled.
+    it("says nothing for a tab still settling the lead it took", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      // With no place, too: what a greeting asking for everything does to the store waits for
+      // the greeting that is served.
+      const clearing = sinon.stub(Durability, "clear");
+      const posting = sinon.stub(Tabs, "post");
+      const refilling = sinon.spy(LocalDatabase, "beginRefill");
+
+      SyncStream.syncCursor = null;
+      Tabs.takingLead = true;
+
+      try {
+        assert.deepStrictEqual(SyncStream.buildGreeting(pageModule), {});
+      } finally {
+        Tabs.takingLead = false;
+      }
+
+      assert.isFalse(clearing.called);
+      assert.isFalse(posting.called);
+      assert.isFalse(refilling.called);
+    });
+
     it("says nothing before the page has mounted", () => {
       globalThis.Hologram.sync = {
         modelHash: "a3f9c2",
@@ -674,6 +703,60 @@ describe("SyncStream", () => {
       assert.isTrue(SyncStream.rowsChangedSinceRender);
     });
 
+    // A tab hears its group before it reads the store, so a batch another tab seals can be taken up
+    // before the page mounts - and the mount renders it.
+    it("renders nothing before the first page has mounted", () => {
+      sinon
+        .stub(window, "requestAnimationFrame")
+        .callsFake((callback) => callback());
+      sinon.stub(Hologram, "pageModule").returns(null);
+
+      const rendering = sinon.stub(Hologram, "render");
+
+      SyncStream.scheduleRender();
+
+      sinon.assert.notCalled(rendering);
+      assert.isFalse(SyncStream.renderScheduled);
+    });
+
+    // Run first, it would be the page's first render, and the mount's would be taken for a page
+    // arriving.
+    it("leaves the render to a mount under way", () => {
+      sinon
+        .stub(window, "requestAnimationFrame")
+        .callsFake((callback) => callback());
+      sinon
+        .stub(Hologram, "pageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      const rendering = sinon.stub(Hologram, "render");
+
+      Hologram.isMounting = true;
+
+      try {
+        SyncStream.scheduleRender();
+      } finally {
+        Hologram.isMounting = false;
+      }
+
+      sinon.assert.notCalled(rendering);
+    });
+
+    it("renders once a page has mounted", () => {
+      sinon
+        .stub(window, "requestAnimationFrame")
+        .callsFake((callback) => callback());
+      sinon
+        .stub(Hologram, "pageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
+
+      const rendering = sinon.stub(Hologram, "render");
+
+      SyncStream.scheduleRender();
+
+      sinon.assert.calledOnce(rendering);
+    });
+
     it("marks rows changed while a render is already scheduled", () => {
       SyncStream.renderScheduled = true;
       SyncStream.rowsChangedSinceRender = false;
@@ -814,6 +897,11 @@ describe("SyncStream", () => {
 
     it("schedules a repaint rather than repainting in the handler", () => {
       const renderStub = sinon.stub(Hologram, "render");
+
+      // A page is mounted: before the first mount there is nothing to repaint.
+      sinon
+        .stub(Hologram, "pageModule")
+        .returns(Type.atom("Elixir.MyApp.BoardPage"));
 
       eventSource.listeners.sync_deltas({data: frame()});
 
@@ -1290,16 +1378,55 @@ describe("SyncStream", () => {
       });
     });
 
-    // The order is the whole reason a tab joining the group cannot miss a frame: the write
-    // transaction is created before the message goes out, and IndexedDB orders what follows behind
-    // it - so a tab that reads the store on hearing this reads a store that already holds it.
-    it("writes the frame down before telling anyone about it", () => {
-      const persisting = sinon.stub(Durability, "persistFrame");
+    // The order is the whole reason a tab joining the group cannot miss a frame: the message goes
+    // out once the write has landed, so a tab that reads the store on hearing it reads a store
+    // that already holds it, and a frame the store lost was told to nobody.
+    it("tells the group of a frame once it is written down", () => {
+      const written = Promise.resolve();
+      const persisting = sinon
+        .stub(Durability, "persistFrame")
+        .returns(written);
       const posting = sinon.stub(Tabs, "post");
 
       eventSource.listeners.sync_deltas({data: frame()});
 
       assert.isTrue(persisting.calledBefore(posting));
+      assert.strictEqual(posting.firstCall.args[1], written);
+    });
+
+    it("tells the group of a completeness marker once its place is written down", () => {
+      const written = Promise.resolve();
+
+      sinon.stub(Durability, "persistFrame").returns(written);
+
+      const posting = sinon.stub(Tabs, "post");
+
+      eventSource.listeners.synced({
+        data: JSON.stringify({
+          cursor: "Nzc4LjA",
+          protocol_version: 1,
+          scope: "all",
+        }),
+      });
+
+      assert.strictEqual(posting.firstCall.args[1], written);
+    });
+
+    // Either half lost mends itself: the tabs that heard a resync hold no place, and a store a clear
+    // emptied holds none - and the next tab to lead starts over from either.
+    it("tells the group of a resync without waiting for the clear", () => {
+      sinon.stub(Durability, "clear").returns(new Promise(() => {}));
+
+      const posting = sinon.stub(Tabs, "post");
+
+      eventSource.listeners.sync_resync({
+        data: JSON.stringify({
+          protocol_version: 1,
+          reason: "cursor_unreadable",
+        }),
+      });
+
+      assert.isNull(posting.firstCall.args[1]);
     });
 
     it("hands over a completeness marker, a resync, a stale-bundle notice and the rules too", () => {
@@ -1342,6 +1469,13 @@ describe("SyncStream", () => {
         posting.args.map(([message]) => message.event),
         ["synced", "sync_resync", "sync_reload", "sync_rules"],
       );
+
+      // A marker naming no place writes nothing, and nor does a notice or the rules - so none of
+      // them waits for a write of its own.
+      assert.isNull(posting.args[0][1]);
+      assert.isNull(posting.args[1][1]);
+      assert.isNull(posting.args[2][1]);
+      assert.isNull(posting.args[3][1]);
     });
   });
 });

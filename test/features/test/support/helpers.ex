@@ -21,6 +21,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Cabin
   alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Document
+  alias HologramFeatureTests.Entities.Event
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.Inspection
   alias HologramFeatureTests.Entities.Item
@@ -313,6 +314,36 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Clicks the button with the given text until the element with the given id shows the given text,
+  then returns the `session`.
+
+  For a page that reads the browser's own database when a button is clicked and shows what it
+  found: it shows what the database held at the last click, and a change reaches the browser on its
+  own time, so the read is asked again until it answers as expected.
+  """
+  @spec await_local_read(Wallaby.Session.t(), String.t(), String.t(), String.t(), non_neg_integer) ::
+          Wallaby.Session.t()
+  def await_local_read(session, button_text, element_id, expected, attempts_left \\ 100)
+
+  def await_local_read(session, _button_text, element_id, expected, 0) do
+    raise Wallaby.ExpectationNotMetError,
+          "Timed out waiting for ##{element_id} to read #{inspect(expected)}, it reads " <>
+            inspect(element_text(session, element_id))
+  end
+
+  def await_local_read(session, button_text, element_id, expected, attempts_left) do
+    clicked = Browser.click(session, Query.button(button_text))
+
+    Process.sleep(50)
+
+    if element_text(clicked, element_id) == expected do
+      clicked
+    else
+      await_local_read(clicked, button_text, element_id, expected, attempts_left - 1)
+    end
+  end
+
+  @doc """
   Blocks until the given page has mounted in this browser - the client's first render of it done -
   then returns the `session`.
 
@@ -413,6 +444,121 @@ defmodule HologramFeatureTests.Helpers do
         {:cont, todos}
       end
     end)
+  end
+
+  @doc """
+  Blocks until a read of the whole local store, by any tab, is waiting behind what
+  `block_store/1` holds, then returns the `session`. Run in the tab the block was armed in.
+
+  A read of the whole store spans `queue` as well, which the block leaves free, so a read-write
+  transaction on `queue` alone starts at once - until such a read is created, and then it waits
+  behind it. So this asks for one again and again until one stays waiting. Nothing else may write
+  the queue meanwhile: a batch being filed would look the same.
+
+  What it buys a test: knowing a starting tab has got as far as reading the store, which nothing
+  in a tab that has not finished booting says.
+  """
+  @spec await_store_read_waiting(Wallaby.Session.t()) :: Wallaby.Session.t()
+  def await_store_read_waiting(session) do
+    script = """
+    const gate = globalThis.__hologramStoreBlock;
+
+    gate.readWaiting = false;
+
+    const probe = () => {
+      const transaction = gate.db.transaction(["queue"], "readwrite");
+
+      let done = false;
+
+      transaction.oncomplete = () => {
+        done = true;
+      };
+
+      transaction.objectStore("queue").get(0);
+
+      // A transaction nothing waits behind completes within a millisecond or two.
+      setTimeout(() => {
+        if (done) {
+          probe();
+        } else {
+          gate.readWaiting = true;
+        }
+      }, 100);
+    };
+
+    probe();
+    """
+
+    Browser.execute_script(session, script)
+
+    await_script_result(session, "return globalThis.__hologramStoreBlock.readWaiting === true;")
+  end
+
+  @doc """
+  Holds every read and write of this browser's local store that touches its rows or its place, in
+  every tab, until `unblock_store/1`, then returns the `session`. Armed again while it holds, it
+  holds on as it is.
+
+  Opens a connection of its own to the store from the tab the `session` shows, and keeps a
+  read-write transaction over the `entities` and `meta` object stores alive with a chain of reads.
+  IndexedDB starts a transaction only once the overlapping read-write ones created before it have
+  finished, across tabs, so every such transaction created after this one waits: a starting tab's
+  read of the store, and the writes of the frames the leading tab stores. The `queue` store alone
+  is left free, which is what `await_store_read_waiting/1` looks through. Closing the tab that
+  holds it lets go of it as well.
+
+  What it buys a test: a window, as long as the test wants, between a tab's read of the store being
+  created and that read answering. That window is a few milliseconds in the wild.
+  """
+  @spec block_store(Wallaby.Session.t()) :: Wallaby.Session.t()
+  def block_store(session) do
+    script = """
+    if (globalThis.__hologramStoreBlock?.released === false) {
+      return;
+    }
+
+    const gate = {active: false, released: false};
+
+    globalThis.__hologramStoreBlock = gate;
+
+    indexedDB.databases().then((databases) => {
+      const name = databases
+        .map((database) => database.name)
+        .find((name) => name.startsWith("hologram."));
+
+      const opening = indexedDB.open(name);
+
+      opening.onsuccess = () => {
+        const db = opening.result;
+
+        gate.db = db;
+
+        const meta = db
+          .transaction(["entities", "meta"], "readwrite")
+          .objectStore("meta");
+
+        // A transaction commits once it has no request left, so the next read is asked for in the
+        // callback of the last one, until the test lets go.
+        const read = () => {
+          if (gate.released) {
+            db.close();
+            return;
+          }
+
+          meta.get("cursor").onsuccess = () => {
+            gate.active = true;
+            read();
+          };
+        };
+
+        read();
+      };
+    });
+    """
+
+    Browser.execute_script(session, script)
+
+    await_script_result(session, "return globalThis.__hologramStoreBlock?.active === true;")
   end
 
   @doc """
@@ -710,6 +856,32 @@ defmodule HologramFeatureTests.Helpers do
     Enum.map(rows, fn [result, seq] -> %{result: result, seq: seq} end)
   end
 
+  @doc """
+  Opens `page_module` in a second tab of the same browser, points the session at it, and blocks
+  until its document has loaded - but not until the Hologram client runtime has mounted it.
+
+  For a tab whose start is held on purpose - see `block_store/1` - for which `open_tab/3` would
+  time out waiting.
+  """
+  @spec open_tab_unmounted(Wallaby.Session.t(), module) :: Wallaby.Session.t()
+  def open_tab_unmounted(session, page_module) do
+    path = RouterHelpers.page_path(page_module)
+
+    known =
+      session
+      |> Browser.window_handles()
+      |> MapSet.new()
+
+    Browser.execute_script(session, "window.open(arguments[0]);", [path])
+
+    session
+    |> Browser.focus_window(await_new_tab(session, known))
+    |> await_script_result(
+      # The tab starts on about:blank, whose document is complete too.
+      "return location.pathname === #{Jason.encode!(path)} && document.readyState === 'complete';"
+    )
+  end
+
   def reload(session) do
     Browser.execute_script(session, "document.location.reload();")
   end
@@ -975,6 +1147,7 @@ defmodule HologramFeatureTests.Helpers do
         Cabin,
         Channel,
         Document,
+        Event,
         Folder,
         Inspection,
         Item,
@@ -1015,6 +1188,14 @@ defmodule HologramFeatureTests.Helpers do
     {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
 
     :ok
+  end
+
+  @doc """
+  Lets go of what `block_store/1` holds, from the tab it was armed in, and returns the `session`.
+  """
+  @spec unblock_store(Wallaby.Session.t()) :: Wallaby.Session.t()
+  def unblock_store(session) do
+    Browser.execute_script(session, "globalThis.__hologramStoreBlock.released = true;")
   end
 
   @doc """
@@ -1248,6 +1429,45 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
+  # The handle a window.open() produced, which the browser reports when it feels like it - so this
+  # waits for a handle that was not there before rather than assuming the last one is new.
+  defp await_new_tab(session, known, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    opened =
+      session
+      |> Browser.window_handles()
+      |> Enum.find(&(!MapSet.member?(known, &1)))
+
+    cond do
+      opened ->
+        opened
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError, "Timed out waiting for a new tab to open"
+
+      true ->
+        Process.sleep(50)
+        await_new_tab(session, known, start_time)
+    end
+  end
+
+  defp await_script_result(session, script, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      script_result(session, script) ->
+        session
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError, "Timed out waiting for #{script} to answer true"
+
+      true ->
+        Process.sleep(50)
+        await_script_result(session, script, start_time)
+    end
+  end
+
   defp bound?(entry, channel, cid) do
     Enum.any?(entry.bindings, fn {{ch, c}, _user_id} ->
       ch == channel and (is_nil(cid) or c == cid)
@@ -1419,5 +1639,12 @@ defmodule HologramFeatureTests.Helpers do
       :timer.sleep(100)
       wait_for_js_error(session, start_time)
     end
+  end
+
+  defp element_text(session, element_id) do
+    script_result(
+      session,
+      "return document.getElementById('#{element_id}')?.textContent ?? null;"
+    )
   end
 end

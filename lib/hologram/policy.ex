@@ -69,8 +69,6 @@ defmodule Hologram.Policy do
 
   @deciding_quantifiers_key {__MODULE__, :deciding_quantifiers}
 
-  @deciding_reads_key {__MODULE__, :deciding_reads}
-
   @hash_bytes 16
 
   @hash_key {__MODULE__, :hash}
@@ -371,36 +369,6 @@ defmodule Hologram.Policy do
     case Map.fetch(cache, entity_type) do
       {:ok, pairs} -> pairs
       :error -> derived_deciding_quantifiers(entity_type)
-    end
-  end
-
-  @doc """
-  Returns the entity types the deciding items of the given entity type's rules read through
-  relationships (see `deciding_quantifiers/1` and `verdict_related_reads/2`), sorted: a change to
-  a row of one of them may move a verdict on any row of the type.
-
-  Cached like `deciding_quantifiers/1` - a sync round asks it of every type it holds rows of.
-  """
-  @spec deciding_related_reads(module) :: list(module)
-  def deciding_related_reads(entity_type) do
-    Model.ensure_released!()
-
-    cache =
-      case :persistent_term.get(@deciding_reads_key, nil) do
-        nil ->
-          cache = Map.new(Model.entity_types(), &{&1, derived_deciding_related_reads(&1)})
-
-          :persistent_term.put(@deciding_reads_key, cache)
-
-          cache
-
-        cache ->
-          cache
-      end
-
-    case Map.fetch(cache, entity_type) do
-      {:ok, types} -> types
-      :error -> derived_deciding_related_reads(entity_type)
     end
   end
 
@@ -778,7 +746,6 @@ defmodule Hologram.Policy do
   @spec reset_model_facts_cache() :: :ok
   def reset_model_facts_cache do
     :persistent_term.erase(@deciding_quantifiers_key)
-    :persistent_term.erase(@deciding_reads_key)
     :persistent_term.erase(@hash_key)
     :persistent_term.erase(@locked_set_links_key)
     :persistent_term.erase(@model_facts_key)
@@ -1211,14 +1178,6 @@ defmodule Hologram.Policy do
           deciding_quantifier?(entity_type, operation, item),
           do: {verdict_key(entity_type, operation, item), item}
     end)
-    |> Enum.uniq()
-    |> Enum.sort()
-  end
-
-  defp derived_deciding_related_reads(entity_type) do
-    entity_type
-    |> deciding_quantifiers()
-    |> Enum.flat_map(fn {_key, item} -> verdict_related_reads(entity_type, item) end)
     |> Enum.uniq()
     |> Enum.sort()
   end

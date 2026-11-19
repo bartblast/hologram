@@ -1,9 +1,10 @@
 defmodule Hologram.Sync.Fanout do
   @moduledoc false
 
-  # What the dispatcher hands each window it read something for. Between the log and the
-  # evaluators sits the question of which windows a batch of writes could have changed the answer
-  # of, and this is where that question is asked and acted on.
+  # What each batch the dispatcher reads is handed to for the windows (see
+  # `Hologram.Sync.Live.route/2`). Between the log and the evaluators sits the question of which
+  # windows a batch of writes could have changed the answer of, and this is where that question is
+  # asked and acted on.
 
   alias Hologram.Policy.Edges
   alias Hologram.Sync.Evaluator

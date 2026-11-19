@@ -7,7 +7,6 @@ defmodule Hologram.PolicyTest do
       dead_entity_types: 1,
       deciding_quantifier?: 3,
       deciding_quantifiers: 1,
-      deciding_related_reads: 1,
       delegation: 2,
       expand_global_role: 1,
       expand_global_role: 2,
@@ -1160,22 +1159,6 @@ defmodule Hologram.PolicyTest do
 
     test "fails for a delegation through types someone may read" do
       refute deciding_quantifier?(Policy.Readers.Module28, :read, {:via, {:read, [:crate]}})
-    end
-  end
-
-  describe "deciding_related_reads/1" do
-    # The vault's close rule holds a role, and the crate is read through the shelf.
-    test "returns the types every deciding item reads through relationships" do
-      assert deciding_related_reads(Policy.Readers.Module28) == [
-               RoleGrant,
-               Policy.Readers.Module25,
-               Policy.Readers.Module26,
-               Policy.Readers.Module27
-             ]
-    end
-
-    test "returns none for a type with no deciding item" do
-      assert deciding_related_reads(Policy.Readers.Module26) == []
     end
   end
 

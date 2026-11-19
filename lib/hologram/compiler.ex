@@ -369,8 +369,10 @@ defmodule Hologram.Compiler do
 
   A page reading the session user from the context downloads the user window (see
   `Hologram.Auth.user_window/2`): the client answers the context from its database on every render,
-  so the session user's row has to be held there, and kept current, like any row a query reads. Only
-  when the given module info PLT records a user entity type, for the same reason.
+  so the session user's row has to be held there. The user type is synced for such a page (see
+  `build_sync_constants/3`), which keeps the row current; the window puts it first in a fill and
+  catches a returning client up on it. Only when the given module info PLT records a user entity
+  type, for the same reason.
 
   The window ids are derived with whether the build checks permissions on the client (see
   `permission_checking?/2`), since a checking build's windows download the related rows the rules
@@ -2342,7 +2344,9 @@ defmodule Hologram.Compiler do
   the rules every entity type declares, which the policy hash is taken over.
 
   `:entity_types` are the types a client can ever hold or mention - every window's own type and
-  everything it includes, plus every entity type the pages' client code mentions. A client
+  everything it includes, plus every entity type the pages' client code mentions, and the user
+  entity type when a page reads the session user from the context, which the client answers from
+  its database. A client
   constructs and validates entities as well as reading them, and a type it constructs is one it
   has to be told the declarations of. A type neither queried nor mentioned is left out, which is
   what keeps an app's other tables out of a file every page load serves.
@@ -2380,7 +2384,7 @@ defmodule Hologram.Compiler do
   row from (see `Hologram.Template.Renderer`'s `{Hologram, :user}` context), or nil when the model
   designates none or the client doesn't hold the type. A user entity type declaring no rule is
   one nobody may read, so no row of it ever reaches a client, and the model leaves it out unless a
-  page reaches it.
+  page reaches it or reads the session user.
 
   `:model_hash` is the hash of the project's data model, of every entity type and global role the
   module info PLT records, whatever the pages reach. It is nil when the PLT records no entity type:
@@ -2391,7 +2395,9 @@ defmodule Hologram.Compiler do
   ones it enforces.
 
   `:synced_types` are the entity types sync sends rows of, sorted by name: the types the queries
-  read and the pages' client code mentions, as for `:entity_types`, and, when the build checks
+  read and the pages' client code mentions, and the user type when a page reads the session user,
+  as for `:entity_types` - kept syncing whichever of its rows the read rules let the user hold -
+  and, when the build checks
   permissions on the client (see `permission_checking?/2`), the types every rule of those types
   reads through relationships, with the grant type. Read rules count too, since the browser decides
   them in `can?`. They are followed one step: client code checks only rows of types it queries or
@@ -2446,7 +2452,15 @@ defmodule Hologram.Compiler do
         MapSet.union(types, Registry.entity_types(term))
       end)
 
-    reached_entity_types = MapSet.union(queried_entity_types, mentioned_entity_types)
+    user_entity = Reflection.user_entity(module_info_plt)
+
+    # A page reading the session user from the context answers it from the browser's database on
+    # every render, so the user type is reached like a type a query reads - kept syncing whichever
+    # of its rows the read rules let the user hold - though nothing names it.
+    reached_entity_types =
+      queried_entity_types
+      |> MapSet.union(mentioned_entity_types)
+      |> put_session_user_type(user_entity, reach_by_page)
 
     # Rules and roles are baked for every type declaring a rule or a role, reached or not, and for
     # the types those lead to - the set a server hands a client built with other rules (see
@@ -2459,8 +2473,6 @@ defmodule Hologram.Compiler do
       |> MapSet.union(checked_entity_types(all_entity_types))
       |> put_grant_type(all_entity_types)
       |> rules_entity_types()
-
-    user_entity = Reflection.user_entity(module_info_plt)
 
     %{
       derived_count_types: derived_count_types(component_modules, component_queries),
@@ -2837,7 +2849,7 @@ defmodule Hologram.Compiler do
   def validate_operations!(entity_types, call_graph, ir_plt, opts \\ []) do
     # Seeded with the framework's own rather than left to the types to carry: every type's
     # operations include them, but an app with NO entity type contributes nothing at all, and the
-    # framework's own asks (Diff.deltas/4 asks :read) are in every build's call graph.
+    # framework's own asks (Diff.carried/2 asks :read) are in every build's call graph.
     vocabulary =
       entity_types
       |> Enum.flat_map(&Policy.operations/1)
@@ -5507,8 +5519,8 @@ defmodule Hologram.Compiler do
     |> render_json_object()
   end
 
-  # A page module defines no props, so it never reads anything from the context through one.
-  # TODO: what this decides has to outlive the windows, see the TODO on Auth.user_window/2.
+  # A page module defines no props, so it never reads anything from the context through one. What
+  # this decides also puts the user type among the synced types (see `build_sync_constants/3`).
   defp reads_session_user?(module) do
     Reflection.has_function?(module, :__props__, 0) and
       Enum.any?(module.__props__(), fn {_name, _type, opts} ->
@@ -5969,6 +5981,16 @@ defmodule Hologram.Compiler do
         window = Auth.user_window(user_entity, permission_checking?)
 
         Map.put_new(windows, Registry.id(window), window)
+    end
+  end
+
+  defp put_session_user_type(entity_types, nil, _reach_by_page), do: entity_types
+
+  defp put_session_user_type(entity_types, user_entity, reach_by_page) do
+    if Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.reads_session_user? end) do
+      MapSet.put(entity_types, user_entity)
+    else
+      entity_types
     end
   end
 

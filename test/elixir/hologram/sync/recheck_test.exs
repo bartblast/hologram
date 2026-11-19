@@ -800,6 +800,20 @@ defmodule Hologram.Sync.RecheckTest do
     end
   end
 
+  describe "verdicts_as_canonical/2" do
+    test "answers a tested reader, one the statement didn't test, and an anonymous user" do
+      assert verdicts_as_canonical(@row_verdicts, @alice_id) == %{"archive:a" => false}
+      assert verdicts_as_canonical(@row_verdicts, @bob_id) == %{"archive:a" => true}
+      assert verdicts_as_canonical(@row_verdicts, nil) == %{"archive:a" => false}
+    end
+
+    test "raises for a user it has no verdicts for" do
+      assert_raise ArgumentError, fn ->
+        verdicts_as_canonical(%{@row_verdicts | others: nil}, @bob_id)
+      end
+    end
+  end
+
   describe "reads?/2" do
     test "every user reads a row everyone may read" do
       assert reads?(:all, @alice_id)
@@ -824,6 +838,21 @@ defmodule Hologram.Sync.RecheckTest do
     test "a user id in a spelling Hologram doesn't generate reads as an anonymous user" do
       assert reads?(MapSet.new([nil]), String.upcase(@alice_id))
       refute reads?(MapSet.new([@alice_id]), String.upcase(@alice_id))
+    end
+  end
+
+  describe "reads_as_canonical?/2" do
+    test "every user reads a row everyone may read" do
+      assert reads_as_canonical?(:all, @alice_id)
+      assert reads_as_canonical?(:all, nil)
+    end
+
+    test "a user reads a row when the readers name them" do
+      readers = MapSet.new([@alice_id, nil])
+
+      assert reads_as_canonical?(readers, @alice_id)
+      assert reads_as_canonical?(readers, nil)
+      refute reads_as_canonical?(readers, @bob_id)
     end
   end
 end
