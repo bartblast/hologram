@@ -2399,15 +2399,15 @@ defmodule Hologram.Compiler do
   as for `:entity_types` - kept syncing whichever of its rows the read rules let the user hold -
   and, when the build checks
   permissions on the client (see `permission_checking?/2`), the types every rule of those types
-  reads through relationships, with the grant type. A browser never decides a read rule - a row
-  reaches it only once the server's read rules admitted it - so the rules count only where the
-  browser answers them. They are followed one step: client code checks only rows of types it
-  queries or mentions, and a rule's chains already follow its delegations. That is at least what
-  the windows download, which follow the rules of a query's own type and its includes only - bar
-  a type the model leaves out, which declares no rule, so no read rule admits its rows. A
-  type only server code names, like an audit log, is left out, rules or not, and never reaches a
-  browser. The server reads the list (see `Hologram.DB.QueryCache.synced_types/0`), the client
-  does not.
+  reads through relationships, with the grant type. Read rules count too, since the browser decides
+  them in `can?`. They are followed one step: client code checks only rows of types it queries or
+  mentions, and a rule's chains already follow its delegations. A chain's types stop before its
+  first type no session may read (see `Hologram.Policy.readable_prefix/2`), since no client gets
+  a row of it, nor any row reached through it. That is at least what the windows download, which
+  follow the rules of a query's own type and its includes only - bar a type the model leaves out,
+  which declares no rule, so no read rule admits its rows. A type only server code names, like an
+  audit log, is left out, rules or not, and never reaches a browser. The server reads the list
+  (see `Hologram.DB.QueryCache.synced_types/0`), the client does not.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
@@ -3050,19 +3050,20 @@ defmodule Hologram.Compiler do
   defp quantified_type(hops, [entity_type | _types_above]),
     do: Derived.path_target(entity_type, hops)
 
-  # The verdict key and the read types of a deciding clause standing in a rule's predicates, as
-  # members of its object - none for any other clause.
-  defp render_verdict_members(clause, {entity_type, operation}) do
-    if Policy.deciding_quantifier?(entity_type, clause) do
+  # The verdict key and the read types of a deciding item - a clause standing in a rule's
+  # predicates, a role reference as {:to, reference} or a delegation as {:via, via} - as members of
+  # its object, none for any other.
+  defp render_verdict_members(item, {entity_type, operation}) do
+    if Policy.deciding_quantifier?(entity_type, operation, item) do
       reads_js =
         entity_type
-        |> Policy.verdict_reads(clause)
+        |> Policy.verdict_reads(item)
         |> Enum.map_join(",", &render_entity_type_label/1)
         |> then(&"[#{&1}]")
 
       verdict_js =
         entity_type
-        |> Policy.verdict_key(operation, clause)
+        |> Policy.verdict_key(operation, item)
         |> Jason.encode!()
 
       [{"reads", reads_js}, {"verdict", verdict_js}]
@@ -3071,7 +3072,7 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp render_verdict_members(_clause, nil), do: []
+  defp render_verdict_members(_item, nil), do: []
 
   defp resolve_derived_definition(entity_type, name, ir_plt) do
     if name in entity_type.__derived_builder_calls__() do
@@ -4412,9 +4413,11 @@ defmodule Hologram.Compiler do
 
   # The entity types sync sends rows of (see build_sync_constants/3): the reached ones, and in a
   # build checking permissions on the client, the types their rules read rows of through
-  # relationships and the grant type. Kept to the types of the client's model: a row of a type the
-  # model does not name cannot be read back. What that drops is a type declaring no rule, like
-  # one a read rule delegates to, whose rows no one may read anyway.
+  # relationships and the grant type. A chain's types stop before its first type no session may
+  # read (see `Hologram.Policy.readable_prefix/2`): no client gets such a row, nor any row reached
+  # through it. Kept to the types of the client's model: a row of a type the model does not name
+  # cannot be read back. What that drops is a type declaring no rule, like one a read rule
+  # delegates to, whose rows no one may read anyway.
   defp synced_types(reached_entity_types, model_entity_types, reach_by_page, module_info_plt) do
     types =
       if permission_checking?(reach_by_page, module_info_plt) do
@@ -4422,7 +4425,7 @@ defmodule Hologram.Compiler do
         |> Enum.flat_map(fn entity_type ->
           entity_type
           |> Policy.related_chains()
-          |> Enum.flat_map(&chain_types(entity_type, &1))
+          |> Enum.flat_map(&chain_types(entity_type, Policy.readable_prefix(entity_type, &1)))
         end)
         |> MapSet.new()
         |> MapSet.union(reached_entity_types)
@@ -5219,8 +5222,8 @@ defmodule Hologram.Compiler do
 
     render_json_object([
       {"predicates", render_policy_predicates([entity_type], rule.predicates, verdict_context)},
-      {"to", render_policy_references(entity_type, rule.to)},
-      {"via", render_policy_delegation(rule.via)}
+      {"to", render_policy_references(entity_type, rule.to, verdict_context)},
+      {"via", render_policy_delegation(rule.via, verdict_context)}
     ])
   end
 
@@ -5268,13 +5271,25 @@ defmodule Hologram.Compiler do
     render_json_object(members ++ render_verdict_members(clause, verdict_context))
   end
 
-  # A deciding predicate standing in a rule's predicates - one reading a server-only attribute,
-  # whose value no client holds - is the key the server's verdict on it is sent under and the types it
-  # reads alone, since the client answers it from the verdict and nothing else.
+  # A deciding predicate standing in a rule's predicates is the key the server's verdict on it is
+  # sent under and the types it reads. One reading a server-only attribute, whose value no client
+  # holds, is those alone, since the client answers it from the verdict and nothing else. One that
+  # in a read rule reads a row of a type no client holds carries its triple too: the client answers
+  # it from the rows it holds when they decide it - an empty reference on the path reads no row -
+  # and from the verdict otherwise.
   defp render_policy_clause(types, {_name, _operator, _value} = clause, verdict_context) do
     case render_verdict_members(clause, verdict_context) do
-      [] -> render_policy_triple(types, clause)
-      members -> render_json_object(members)
+      [] ->
+        render_policy_triple(types, clause)
+
+      members ->
+        {entity_type, _operation} = verdict_context
+
+        if Policy.reads_server_only?(entity_type, clause) do
+          render_json_object(members)
+        else
+          render_json_object([{"predicate", render_policy_triple(types, clause)} | members])
+        end
     end
   end
 
@@ -5317,35 +5332,52 @@ defmodule Hologram.Compiler do
   end
 
   # A grant reference names WHERE a role must be held: on the entity itself, on its whole type,
-  # on a related entity, on the entity a grant row names, or nowhere at all (a global role).
-  defp render_policy_references(_entity_type, nil), do: "null"
+  # on a related entity, on the entity a grant row names, or nowhere at all (a global role). The
+  # verdict context is the rule's type and operation.
+  defp render_policy_references(_entity_type, nil, _verdict_context), do: "null"
 
-  defp render_policy_references(entity_type, references) do
+  defp render_policy_references(entity_type, references, verdict_context) do
     references
-    |> Enum.map_join(",", &render_policy_reference(entity_type, &1))
+    |> Enum.map_join(",", &render_policy_reference(entity_type, &1, verdict_context))
     |> then(&"[#{&1}]")
   end
 
-  defp render_policy_reference(_entity_type, {:own, role_names}) do
+  defp render_policy_reference(_entity_type, {:own, role_names}, _verdict_context) do
     render_policy_reference_entry("own", [render_policy_roles(role_names)])
   end
 
-  defp render_policy_reference(_entity_type, {:global, role_modules}) do
+  defp render_policy_reference(_entity_type, {:global, role_modules}, _verdict_context) do
     render_policy_reference_entry("global", [render_policy_roles(role_modules)])
   end
 
-  # The chain a role is held through, spelled the way a delegation spells its chain.
-  defp render_policy_reference(entity_type, {:rel, relationship_names, role_names}) do
+  # The chain a role is held through, spelled the way a delegation spells its chain. A deciding one
+  # - in a read rule, one reading a row of a type no client holds - carries a fifth element, the key
+  # the server's verdict on it is sent under and the types it reads, which the client answers it
+  # from instead.
+  defp render_policy_reference(
+         entity_type,
+         {:rel, relationship_names, role_names} = reference,
+         verdict_context
+       ) do
     target_type = Entity.path_target(entity_type, relationship_names)
 
-    render_policy_reference_entry("rel", [
-      render_policy_name(relationship_names),
-      render_entity_type_label(target_type),
-      render_policy_roles(role_names)
-    ])
+    verdict_entries =
+      case render_verdict_members({:to, reference}, verdict_context) do
+        [] -> []
+        members -> [render_json_object(members)]
+      end
+
+    render_policy_reference_entry(
+      "rel",
+      [
+        render_policy_name(relationship_names),
+        render_entity_type_label(target_type),
+        render_policy_roles(role_names)
+      ] ++ verdict_entries
+    )
   end
 
-  defp render_policy_reference(_entity_type, {kind, target_type, role_names}) do
+  defp render_policy_reference(_entity_type, {kind, target_type, role_names}, _verdict_context) do
     render_policy_reference_entry(Atom.to_string(kind), [
       render_entity_type_label(target_type),
       render_policy_roles(role_names)
@@ -5368,16 +5400,25 @@ defmodule Hologram.Compiler do
     |> then(&"[#{&1}]")
   end
 
-  # Operation first, as the server's tuple holds it - the array shape grant references bake as.
-  defp render_policy_delegation(nil), do: "null"
+  # Operation first, as the server's tuple holds it - the array shape grant references bake as. A
+  # deciding one - in a read rule, one whose chain passes a row of a type no client holds - carries
+  # a third element, the key the server's verdict on it is sent under and the types it reads, which
+  # the client answers it from instead.
+  defp render_policy_delegation(nil, _verdict_context), do: "null"
 
-  defp render_policy_delegation({operation, relationship_names}) do
+  defp render_policy_delegation({operation, relationship_names} = via, verdict_context) do
     operation_js =
       operation
       |> Policy.operation_key()
       |> Jason.encode!()
 
-    "[#{operation_js},#{render_policy_name(relationship_names)}]"
+    verdict_js =
+      case render_verdict_members({:via, via}, verdict_context) do
+        [] -> ""
+        members -> ",#{render_json_object(members)}"
+      end
+
+    "[#{operation_js},#{render_policy_name(relationship_names)}#{verdict_js}]"
   end
 
   # An attribute as its name, and a path or the chain of a delegation or a grant reference as the

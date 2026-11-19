@@ -17,6 +17,15 @@ defmodule Hologram.Policy.EdgesTest do
   alias Hologram.Test.Fixtures.Entity.Module41
   alias Hologram.Test.Fixtures.Entity.Module42
   alias Hologram.Test.Fixtures.Policy
+  alias Hologram.Test.Fixtures.Policy.Readers.Module20, as: ReadersModule20
+  alias Hologram.Test.Fixtures.Policy.Readers.Module21, as: ReadersModule21
+  alias Hologram.Test.Fixtures.Policy.Readers.Module22, as: ReadersModule22
+  alias Hologram.Test.Fixtures.Policy.Readers.Module23, as: ReadersModule23
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24, as: ReadersModule24
+  alias Hologram.Test.Fixtures.Policy.Readers.Module25, as: ReadersModule25
+  alias Hologram.Test.Fixtures.Policy.Readers.Module26, as: ReadersModule26
+  alias Hologram.Test.Fixtures.Policy.Readers.Module27, as: ReadersModule27
+  alias Hologram.Test.Fixtures.Policy.Readers.Module28, as: ReadersModule28
   alias Hologram.Test.Fixtures.Role
 
   @index_key {Hologram.Policy.Edges, :index}
@@ -555,6 +564,35 @@ defmodule Hologram.Policy.EdgesTest do
     # No client holds a server-only value, so the read rule's predicate on one is a verdict too.
     test "names what a predicate on a server-only attribute reads under {:verdicts}" do
       assert derive([EdgeReport])[{EdgeReport, {:verdicts}}] == [{:attributes, [:reviewed]}]
+    end
+
+    # No client holds a row of a type nobody may read, so the read rules' paths to one are verdicts.
+    test "names what a read rule reads through a type nobody may read under {:verdicts}" do
+      assert derive([ReadersModule21])[{ReadersModule21, {:verdicts}}] == [
+               {:attributes, [:project_id]},
+               {:relationship_attributes, [:project], ReadersModule20, [:archived, :steward_id]}
+             ]
+    end
+
+    # The team's id is read off the project, which no client holds, and the role is held on the team.
+    test "names what a read rule's role reference through a type nobody may read reads under {:verdicts}" do
+      assert derive([ReadersModule24])[{ReadersModule24, {:verdicts}}] == [
+               {:attributes, [:project_id]},
+               {:relationship_attributes, [:project], ReadersModule23, [:team_id]},
+               {:relationship_grants, [:project, :team], ReadersModule22, [:member]}
+             ]
+    end
+
+    # No client holds a vault or a shelf, so what the delegated rules read through them is read for
+    # the verdicts.
+    test "names what a read rule's delegations past an unreadable type read under {:verdicts}" do
+      assert derive([ReadersModule28])[{ReadersModule28, {:verdicts}}] == [
+               {:attributes, [:shelf_id, :vault_id]},
+               {:relationship_attributes, [:shelf], ReadersModule27, [:crate_id]},
+               {:relationship_attributes, [:shelf, :crate], ReadersModule26, [:open]},
+               {:relationship_attributes, [:vault], ReadersModule25, [:keeper_id, :open]},
+               {:relationship_grants, [:vault], ReadersModule25, [:member]}
+             ]
     end
 
     test "names no {:verdicts} edges for a type with no deciding quantifier" do

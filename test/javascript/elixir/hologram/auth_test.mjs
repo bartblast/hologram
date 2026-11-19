@@ -2869,6 +2869,264 @@ describe("Elixir_Hologram_Auth", () => {
         Type.boolean(false),
       );
     });
+
+    // In a read rule, a predicate reading a row of a type nobody may read comes with its triple
+    // beside its verdict key and the types it reads: an empty reference reads no row, so this client
+    // answers it itself, and the verdict answers it when the reference names a folder it doesn't hold.
+    describe("on a predicate the build sends with its triple and verdict", () => {
+      const noFolderArchived = {
+        predicate: [["folder", "archived"], "==", null],
+        reads: [FOLDER],
+        verdict: KEY,
+      };
+
+      const documentReads = (userId, entity) => {
+        defineModel({read: [rule({predicates: [noFolderArchived]})]});
+
+        return can(Type.bitstring(userId), Type.atom("read"), entity);
+      };
+
+      beforeEach(() => {
+        LocalDatabase.actorUserId = ALICE;
+      });
+
+      // The server worked the verdict out for the session's user only.
+      it("answers itself for another user when the reference is empty", () => {
+        putDocument({$verdicts: {[KEY]: true}, folder_id: null});
+
+        assert.deepStrictEqual(
+          documentReads(BOB, document({folder_id: null})),
+          Type.boolean(true),
+        );
+      });
+
+      // A struct changed in an action is not the row the verdict is about.
+      it("answers itself for a changed struct when the reference is empty", () => {
+        putDocument({$verdicts: {[KEY]: true}, folder_id: null});
+
+        assert.deepStrictEqual(
+          documentReads(ALICE, document({folder_id: null, title: "Renamed"})),
+          Type.boolean(true),
+        );
+      });
+
+      it("answers from the verdict when the reference names a folder it doesn't hold", () => {
+        const folderReads = (verdict, userId) => {
+          putDocument({$verdicts: {[KEY]: verdict}});
+
+          return documentReads(userId, document({folder_id: FOLDER_ID}));
+        };
+
+        assert.deepStrictEqual(folderReads(true, ALICE), Type.boolean(true));
+        assert.deepStrictEqual(folderReads(false, ALICE), Type.boolean(false));
+        assert.deepStrictEqual(folderReads(true, BOB), Type.boolean(false));
+      });
+    });
+
+    // In a read rule, a delegation whose chain passes a row of a type nobody may read comes with
+    // its verdict key and the types it reads: no client holds the folder it asks.
+    describe("on a delegation the build sends with its verdict", () => {
+      const toFolder = ["read", ["folder"], {reads: [FOLDER], verdict: KEY}];
+
+      const documentReads = (userId) => {
+        defineModel({read: [rule({via: toFolder})]}, {read: [rule()]});
+
+        return can(
+          Type.bitstring(userId),
+          Type.atom("read"),
+          document({folder_id: FOLDER_ID}),
+        );
+      };
+
+      beforeEach(() => {
+        LocalDatabase.actorUserId = ALICE;
+      });
+
+      it("grants on a true verdict", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(true));
+      });
+
+      // The held folder would grant it, but the verdict alone answers.
+      it("grants nothing on a false verdict", () => {
+        putDocument({$verdicts: {[KEY]: false}});
+        putFolder();
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      // The held folder would grant it from here on, so the verdict path is what refuses.
+      it("grants nothing on a verdict while a pending write names a type it reads", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+        putFolder();
+        pendingWrite(FOLDER, FOLDER_ID);
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      it("grants nothing on the session user's verdict asked about another user", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+        putFolder();
+
+        assert.deepStrictEqual(documentReads(BOB), Type.boolean(false));
+      });
+
+      it("grants nothing on a row the server sent with no verdicts", () => {
+        putDocument({});
+        putFolder();
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      // The delegation reads only the rows its chain leads to, and a changed struct is not the row.
+      it("grants on a verdict while a pending write names another row of the rule's type", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+        pendingWrite(DOCUMENT, OTHER_DOC);
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(true));
+      });
+
+      // A document's update rule asks its folder's read rule, whose delegation to the folder's
+      // parent is answered from the folder row's verdict.
+      it("answers a delegation to the read rule from the related row's verdict", () => {
+        defineModel(
+          {update: [rule({via: ["read", ["folder"]]})]},
+          {
+            read: [
+              rule({
+                via: ["read", ["parent"], {reads: [FOLDER], verdict: KEY}],
+              }),
+            ],
+          },
+        );
+
+        const documentUpdate = () =>
+          can(
+            Type.bitstring(ALICE),
+            Type.atom("update"),
+            document({folder_id: FOLDER_ID}),
+          );
+
+        putFolder({[KEY]: true});
+
+        assert.deepStrictEqual(documentUpdate(), Type.boolean(true));
+
+        putFolder({[KEY]: false});
+
+        assert.deepStrictEqual(documentUpdate(), Type.boolean(false));
+      });
+    });
+
+    // In a read rule, a role reference reading a row of a type nobody may read comes with its
+    // verdict key and the types it reads: no client holds the folder the parent's id is read off.
+    describe("on a role reference the build sends with its verdict", () => {
+      const viaFolderParent = [
+        "rel",
+        ["folder", "parent"],
+        FOLDER,
+        ["admin"],
+        {reads: [FOLDER, GRANT], verdict: KEY},
+      ];
+
+      const documentReads = (userId) => {
+        defineModel({read: [rule({to: [viaFolderParent]})]});
+
+        return can(
+          Type.bitstring(userId),
+          Type.atom("read"),
+          document({folder_id: FOLDER_ID}),
+        );
+      };
+
+      beforeEach(() => {
+        LocalDatabase.actorUserId = ALICE;
+      });
+
+      it("grants on a true verdict", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(true));
+      });
+
+      // The held rows would grant it, but the verdict alone answers.
+      it("grants nothing on a false verdict", () => {
+        putDocument({$verdicts: {[KEY]: false}});
+        LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, parent_id: PARENT_ID});
+
+        LocalDatabase.putRow(
+          GRANT,
+          grantRow({entity_id: PARENT_ID, entity_type: FOLDER, role: "admin"}),
+        );
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      it("grants nothing on a verdict while a pending write names the grant store", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+        pendingWrite(GRANT, TAG_ID);
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      it("grants nothing on the session user's verdict asked about another user", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+
+        assert.deepStrictEqual(documentReads(BOB), Type.boolean(false));
+      });
+
+      it("grants nothing on a row the server sent with no verdicts", () => {
+        putDocument({});
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(false));
+      });
+
+      // A document's update rule asks its folder's read rule, whose reference reads the folder's
+      // parent's parent, answered from the folder row's verdict.
+      it("answers a delegation to the read rule from the related row's verdict", () => {
+        defineModel(
+          {update: [rule({via: ["read", ["folder"]]})]},
+          {
+            read: [
+              rule({
+                to: [
+                  [
+                    "rel",
+                    ["parent", "parent"],
+                    FOLDER,
+                    ["admin"],
+                    {reads: [FOLDER, GRANT], verdict: KEY},
+                  ],
+                ],
+              }),
+            ],
+          },
+        );
+
+        const documentUpdate = () =>
+          can(
+            Type.bitstring(ALICE),
+            Type.atom("update"),
+            document({folder_id: FOLDER_ID}),
+          );
+
+        putFolder({[KEY]: true});
+
+        assert.deepStrictEqual(documentUpdate(), Type.boolean(true));
+
+        pendingWrite(FOLDER, FOLDER_ID);
+
+        assert.deepStrictEqual(documentUpdate(), Type.boolean(false));
+      });
+
+      // The reference reads only the rows its chain leads to, and a changed struct is not the row.
+      it("grants on a verdict while a pending write names another row of the rule's type", () => {
+        putDocument({$verdicts: {[KEY]: true}});
+        pendingWrite(DOCUMENT, OTHER_DOC);
+
+        assert.deepStrictEqual(documentReads(ALICE), Type.boolean(true));
+      });
+    });
   });
 
   // Cases this side alone has: no client holds a server-only attribute's value - a struct holds its

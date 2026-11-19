@@ -47,9 +47,10 @@ defmodule Hologram.Policy.Edges do
       entity a grant-store row names, deciding that row's visibility.
 
   Beside the operations, `{entity type, {:verdicts}}` names the edges of the type's deciding
-  quantifiers, when it has any (see `Hologram.Policy.deciding_quantifiers/1`): what the server's
-  verdicts sent with its rows read, whichever operation they decide. It is a tuple rather than an
-  atom so that no operation or allow line name can take its key.
+  items - clauses, role references and delegations - when it has any (see
+  `Hologram.Policy.deciding_quantifiers/1`): what the server's verdicts sent with its rows read,
+  whichever operation they decide. It is a tuple rather than an atom so that no operation or allow
+  line name can take its key.
 
   Delegations expand transitively: a via chain contributes the target policy's edges for the
   operation each delegation names, with the chain prefixed, so every pair's list is complete on
@@ -283,10 +284,10 @@ defmodule Hologram.Policy.Edges do
       via_edges(entity_type, via)
   end
 
-  # What the deciding quantifiers read, as one rule's predicates read it.
+  # What the deciding items read, each as the rule it is answered as reads it.
   defp verdict_edges(entity_type, deciding) do
     deciding
-    |> Enum.flat_map(fn {_key, clause} -> predicate_edges(entity_type, [clause]) end)
+    |> Enum.flat_map(fn {_key, item} -> rule_edges(entity_type, Policy.verdict_rule(item)) end)
     |> merge_edges()
   end
 

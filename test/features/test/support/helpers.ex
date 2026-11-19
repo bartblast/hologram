@@ -32,6 +32,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Message
   alias HologramFeatureTests.Entities.Milestone
   alias HologramFeatureTests.Entities.Note
+  alias HologramFeatureTests.Entities.Parcel
   alias HologramFeatureTests.Entities.Post
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Project
@@ -40,6 +41,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Report
   alias HologramFeatureTests.Entities.ReportNote
   alias HologramFeatureTests.Entities.Review
+  alias HologramFeatureTests.Entities.Shelf
   alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Shop
   alias HologramFeatureTests.Entities.Stop
@@ -48,6 +50,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Topic
   alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTests.Entities.User
+  alias HologramFeatureTests.Entities.Vault
   alias HologramFeatureTests.Jobs.KillWorker
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTestsWeb.Endpoint
@@ -1156,6 +1159,7 @@ defmodule HologramFeatureTests.Helpers do
         Message,
         Milestone,
         Note,
+        Parcel,
         Post,
         Product,
         Project,
@@ -1166,6 +1170,7 @@ defmodule HologramFeatureTests.Helpers do
         RestockItem,
         Review,
         RoleGrant,
+        Shelf,
         Ship,
         Shop,
         Stop,
@@ -1173,7 +1178,8 @@ defmodule HologramFeatureTests.Helpers do
         Todo,
         Topic,
         Trip,
-        User
+        User,
+        Vault
       ]
       |> Enum.map(&Mapper.table_name/1)
       |> Enum.concat([DB.join_table_name(Message, :labels)])

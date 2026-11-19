@@ -59,6 +59,40 @@ defmodule Hologram.Query.WindowTest do
       allow :read
     end
 
+    defmodule WindowVault do
+      use Hologram.Entity
+
+      attribute :open, :boolean
+
+      allow :update
+    end
+
+    defmodule WindowShelf do
+      use Hologram.Entity
+
+      relationship :vault, WindowVault, optional: true
+
+      allow :read
+    end
+
+    defmodule WindowParcel do
+      use Hologram.Entity
+
+      relationship :shelf, WindowShelf, optional: true
+      relationship :vault, WindowVault, optional: true
+
+      allow :read, when: vault.open == true
+      allow :read, when: shelf.vault.open == true
+    end
+
+    defmodule WindowCrate do
+      use Hologram.Entity
+
+      relationship :parcel, WindowParcel, optional: true
+
+      allow :read
+    end
+
     test "downloads the type the query reads" do
       assert derive(Stage.normalize(Module2), false).entity == Module2
     end
@@ -405,6 +439,27 @@ defmodule Hologram.Query.WindowTest do
         |> Stage.normalize()
 
       assert derive(term, true).include.members == %Query{entity: WindowMember}
+    end
+
+    # No client is ever sent a vault, so the rules' chains stop before it - the shelf still comes.
+    test "embeds a rule's chain only up to its first type nobody may read" do
+      assert derive(Stage.normalize(WindowParcel), true).include == %{
+               shelf: %Query{entity: WindowShelf}
+             }
+    end
+
+    test "embeds an included type's rule chain only up to its first type nobody may read" do
+      term =
+        WindowCrate
+        |> include(parcel)
+        |> Stage.normalize()
+
+      assert derive(term, true).include == %{
+               parcel: %Query{
+                 entity: WindowParcel,
+                 include: %{shelf: %Query{entity: WindowShelf}}
+               }
+             }
     end
 
     test "embeds no rule's rows when no client checks permissions" do
@@ -1225,6 +1280,21 @@ defmodule Hologram.Query.WindowTest do
       term = %{base_term | include: %{a: sub_term}}
 
       assert embed(term, false).include.a == %{sub_term | include: %{b: %Query{entity: Module2}}}
+    end
+
+    test "embeds no rule's row of a type nobody may read" do
+      term = Stage.normalize(Hologram.Test.Fixtures.Policy.Readers.Module21)
+
+      assert embed(term, true) == term
+    end
+
+    test "embeds a rule's chain only up to its first type nobody may read" do
+      term = Stage.normalize(Hologram.Query.WindowTest.WindowParcel)
+
+      assert embed(term, true) == %{
+               term
+               | include: %{shelf: %Query{entity: Hologram.Query.WindowTest.WindowShelf}}
+             }
     end
 
     test "embeds the rows the type's rules read beside the term's own clauses" do

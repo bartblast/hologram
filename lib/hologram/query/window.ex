@@ -88,10 +88,12 @@ defmodule Hologram.Query.Window do
   rule may be answered by any of its rows the reader may read. So when the build has a page
   checking permissions on the client, the chains the rules of the type a query returns read (see
   `Hologram.Policy.related_chains/1`) are embedded the way a path's relationships are, and so are
-  those of every type it includes, under that include. A row embedded for a path or for a rule
-  gets no rule chains of its own: the template never sees it, whatever a delegation reads through
-  it is in the delegating type's chains already, and a rule reading a row of its own type would
-  otherwise never stop embedding.
+  those of every type it includes, under that include. A chain stops before its first type no
+  session may read (see `Hologram.Policy.readable_prefix/2`): no client is ever sent such a row,
+  and the server's verdict answers what a read rule's conditions, role references and delegations
+  read of it. A row embedded for a path or for a rule gets no rule chains of its own: the template
+  never sees it, whatever a delegation reads through it is in the delegating type's chains
+  already, and a rule reading a row of its own type would otherwise never stop embedding.
 
   Sort, skip and take are emptied rather than dropped. They shape what a query answers rather
   than what it downloads, so two queries reading the same rows in different orders share one
@@ -574,13 +576,17 @@ defmodule Hologram.Query.Window do
   end
 
   # The chains the rules of the type a chain leads to read, embedded under it when a client checks
-  # permissions.
+  # permissions - each up to its first type no session may read.
   defp put_policy_includes(include, _root, _chain, false), do: include
 
   defp put_policy_includes(include, root, chain, true) do
-    root
-    |> Entity.path_target(chain)
+    target_type = Entity.path_target(root, chain)
+
+    target_type
     |> Policy.related_chains()
+    |> Enum.map(&Policy.readable_prefix(target_type, &1))
+    |> Enum.reject(&(&1 == []))
+    |> Enum.uniq()
     |> Enum.reduce(include, &put_rule_include(&2, root, chain, &1))
   end
 

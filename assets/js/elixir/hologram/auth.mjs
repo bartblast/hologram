@@ -18,7 +18,8 @@ import Type from "../../type.mjs";
 // Hologram.Policy.Evaluator is the reference this mirrors, and Hologram.Auth is where its
 // checker lives on that side. The split is kept: rules are evaluated over plain values, and
 // what a rule REFERENCES - a role held somewhere - is answered by reading grant rows. The
-// server reads them with SELECT EXISTS, this reads them from the pot.
+// server reads them with SELECT EXISTS, this reads them from the pot - bar a read rule's reference
+// or delegation through a row of a type nobody may read, which the server's verdict answers.
 //
 // Both halves of what it needs are compile-time facts the bundle carries: the rules in each
 // type's model entry, and the name the grant store spells that type by. The rows are ordinary
@@ -247,8 +248,10 @@ function alternativesHold(
 }
 
 // A clause is a triple, a disjunction, a quantifier, or a predicate the build sends as its verdict
-// key and the types it reads alone - one reading a server-only attribute, which only the server's
-// verdict answers, since no client holds the value it compares.
+// key and the types it reads. One reading a server-only attribute comes alone, and only the
+// server's verdict answers it, since no client holds the value it compares. One that in a read rule
+// reads a row of a type nobody may read comes with its triple: this client answers it when the rows
+// it holds decide it - an empty reference on its path reads no row - and the verdict otherwise.
 function clauseHolds(entityType, entity, clause, actorUserId, outer) {
   if (Array.isArray(clause)) {
     return predicateHolds(entityType, entity, clause, actorUserId, outer);
@@ -260,6 +263,20 @@ function clauseHolds(entityType, entity, clause, actorUserId, outer) {
 
   if (Object.hasOwn(clause, "quantifier")) {
     return quantifierHolds(entityType, entity, clause, actorUserId, outer);
+  }
+
+  if (Object.hasOwn(clause, "predicate")) {
+    const held = predicateHolds(
+      entityType,
+      entity,
+      clause.predicate,
+      actorUserId,
+      outer,
+    );
+
+    if (held !== UNKNOWN) {
+      return held;
+    }
   }
 
   return verdictHolds(entityType, entity, clause, actorUserId);
@@ -643,9 +660,19 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
     }
 
     // A role held on the row a chain of relationships leads to, named by the id its last
-    // reference holds.
+    // reference holds. In a read rule, one reading a row of a type nobody may read comes with a
+    // fifth element, its verdict key and the types it reads: no client holds the row the id is
+    // read off, so the server's verdict answers it.
     case "rel": {
-      const [_kind, relationshipNames, targetType, roles] = reference;
+      const [_kind, relationshipNames, targetType, roles, verdictEntry] =
+        reference;
+
+      if (verdictEntry !== undefined) {
+        return (
+          verdictHolds(entityType, entity, verdictEntry, actorUserId) === true
+        );
+      }
+
       const targetId = chainTargetId(entityType, entity, relationshipNames);
 
       return (
@@ -771,26 +798,28 @@ function canonicalId(value) {
   return typeof value === "string" && CANONICAL_ID.test(value) ? value : null;
 }
 
-// The server's verdict on a clause this client can't decide - a quantifier the held rows leave
-// open, or a predicate reading a server-only attribute - as the row's last frame carried it. The
+// The server's verdict on a clause, a role reference or a delegation this client can't decide - a
+// quantifier the held rows leave open, a predicate reading a server-only attribute, or a read
+// rule's clause, role reference or delegation reading a row of a type nobody may read - as the
+// row's last frame carried it. The entry is the item's verdict key and the types it reads. The
 // server works verdicts out for the session's user over the row as stored, so any other question
 // is UNKNOWN: one about another user or a visitor, one about a struct whose stored fields differ
 // from the row's - changed in an action and not written yet - and one asked while a write of this
-// client's that the server has not answered names a type the clause reads, since that write may
+// client's that the server has not answered names a type the item reads, since that write may
 // have moved the answer. So is one about a row that came with no verdict.
 //
 // An answer can settle a batch before the frame carrying its round arrives, and between the two
 // the verdict predates the write again. The window closes itself: a write moving a verdict re-runs
 // the windows over the row, whose frame brings the new one, and a write that moves none sends
 // none, since the verdict held stands. Held rows still refute it in between.
-function verdictHolds(entityType, entity, clause, actorUserId) {
+function verdictHolds(entityType, entity, entry, actorUserId) {
   // The server works a session's verdicts out for its user as rules read it, a visitor for an id
   // naming no user entity.
   if (actorUserId !== canonicalId(LocalDatabase.actorUserId)) {
     return UNKNOWN;
   }
 
-  if (clause.reads.some((type) => Overlay.namesType(type))) {
+  if (entry.reads.some((type) => Overlay.namesType(type))) {
     return UNKNOWN;
   }
 
@@ -801,7 +830,7 @@ function verdictHolds(entityType, entity, clause, actorUserId) {
     return UNKNOWN;
   }
 
-  const verdict = row.$verdicts?.[clause.verdict];
+  const verdict = row.$verdicts?.[entry.verdict];
 
   return typeof verdict === "boolean" ? verdict : UNKNOWN;
 }
@@ -809,9 +838,16 @@ function verdictHolds(entityType, entity, clause, actorUserId) {
 // Delegation asks the RELATED entity's policy for the operation the rule names, of the row its
 // chain of relationships leads to, so it needs that row and its rules. A client holds neither for
 // a type its build never syncs, and cannot ask the server mid-render - so the answer is no, the
-// way it is for any rule the rows do not satisfy.
+// way it is for any rule the rows do not satisfy. In a read rule, a delegation whose chain passes
+// a row of a type nobody may read comes with a third element, its verdict key and the types it
+// reads, and the server's verdict answers it.
 function viaHolds(rule, entityType, entity, actorUserId) {
-  const [operation, relationshipNames] = rule.via;
+  const [operation, relationshipNames, verdictEntry] = rule.via;
+
+  if (verdictEntry !== undefined) {
+    return verdictHolds(entityType, entity, verdictEntry, actorUserId) === true;
+  }
+
   const end = chainRow(entityType, entity, relationshipNames);
 
   return (

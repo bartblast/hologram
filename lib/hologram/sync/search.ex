@@ -3,7 +3,7 @@ defmodule Hologram.Sync.Search do
 
   # The backwards search: from the rows a batch of effects changed to the rows whose read access or
   # verdicts the change may have moved, without those rows changing themselves. A read rule, and a
-  # deciding clause the server answers for browsers, points forward, from the row it decides about
+  # deciding item the server answers for browsers, points forward, from the row it decides about
   # to the rows it reads, and `Hologram.Policy.Edges` names what it reads. The search follows those
   # edges the other way.
   #
@@ -467,7 +467,7 @@ defmodule Hologram.Sync.Search do
   defp trigger_type(_edge), do: nil
 
   # The read and verdict edges, keyed by the entity type whose effects can start a walk along them.
-  # A read rule's deciding clause names its edges under both, and walks are grouped by chain (see
+  # A read rule's deciding item names its edges under both, and walks are grouped by chain (see
   # walk_entries/2), so an edge both name walks once.
   defp triggers(edges) do
     edges
