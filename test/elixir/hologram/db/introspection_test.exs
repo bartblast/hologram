@@ -455,8 +455,13 @@ defmodule Hologram.DB.IntrospectionTest do
              }
     end
 
+    # The unique ones alone: the test bootstrap reconciles the index plan too, whose indexes on the
+    # table depend on what the build's queries read.
     test "introspects a unique attribute's index as unique" do
-      indexes = schema().tables["test_fixtures_entity_module19"].indexes
+      indexes =
+        schema().tables["test_fixtures_entity_module19"].indexes
+        |> Enum.filter(fn {_name, index} -> index.unique end)
+        |> Map.new()
 
       assert indexes == %{
                "test_fixtures_entity_module19_code_$uidx" => %{
