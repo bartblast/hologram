@@ -420,7 +420,8 @@ defmodule Hologram.Test.BrowserSession do
     :ok
   end
 
-  # SIGTERM, which Chrome takes as a request to quit.
+  # SIGTERM, which Chrome takes as a request to quit. The pids come from ps.
+  # sobelow_skip ["CI.System"]
   defp kill_processes(pids) do
     case System.find_executable("kill") do
       nil -> :ok
@@ -439,6 +440,7 @@ defmodule Hologram.Test.BrowserSession do
 
   # -ww keeps the command lines whole, on BSD's ps and on Linux's. A ps that takes
   # other flags, like BusyBox's, counts as none.
+  # sobelow_skip ["CI.System"]
   defp list_processes do
     with ps when is_binary(ps) <- System.find_executable("ps"),
          {output, 0} <-

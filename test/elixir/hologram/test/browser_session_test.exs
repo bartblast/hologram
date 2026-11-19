@@ -924,16 +924,34 @@ defmodule Hologram.Test.BrowserSessionTest do
       assert_restarted_once(log_dir, @warm_up_messages)
     end
 
-    test "deletes the log dir of a run whose BEAM is gone, and keeps the log dir of a run whose BEAM is still running",
-         %{opts: opts, runs_log_dir: runs_log_dir} do
-      for run_pid <- ["500", "501"] do
-        run_log_dir = Path.join(runs_log_dir, run_pid)
-        File.mkdir_p!(run_log_dir)
+    test "deletes the log dir of a run whose BEAM is gone, with its logs", %{
+      opts: opts,
+      runs_log_dir: runs_log_dir
+    } do
+      run_log_dir = Path.join(runs_log_dir, "500")
+      File.mkdir_p!(run_log_dir)
 
-        run_log_dir
-        |> Path.join("chromedriver-123.log")
-        |> File.write!("another run")
-      end
+      run_log_dir
+      |> Path.join("chromedriver-123.log")
+      |> File.write!("ended run")
+
+      ps_fn = ps_fn([{System.pid(), @beam_command}])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      assert File.ls!(runs_log_dir) == [System.pid()]
+    end
+
+    test "keeps the log dir of a run whose BEAM is still running, with its logs", %{
+      opts: opts,
+      runs_log_dir: runs_log_dir
+    } do
+      run_log_dir = Path.join(runs_log_dir, "501")
+      File.mkdir_p!(run_log_dir)
+
+      run_log_dir
+      |> Path.join("chromedriver-123.log")
+      |> File.write!("another run")
 
       ps_fn = ps_fn([{"501", @beam_command}, {System.pid(), @beam_command}])
 
@@ -945,13 +963,7 @@ defmodule Hologram.Test.BrowserSessionTest do
         |> Enum.sort()
 
       assert run_log_dirs == Enum.sort(["501", System.pid()])
-
-      kept_logs =
-        runs_log_dir
-        |> Path.join("501")
-        |> File.ls!()
-
-      assert kept_logs == ["chromedriver-123.log"]
+      assert File.ls!(run_log_dir) == ["chromedriver-123.log"]
     end
 
     test "keeps the log dir of a run that starts after the log dirs are read", %{
