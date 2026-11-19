@@ -182,6 +182,16 @@ defmodule Hologram.Migration.IndexRecoveryTest do
       )
   end
 
+  # What a concurrent drop killed after it marked the index dead leaves: writes skip the index
+  # from then on, and so does a table rewrite, unless it converts a column the index covers.
+  defp set_index_dead(index) do
+    {:ok, _result} =
+      Connection.query("""
+      UPDATE pg_catalog.pg_index SET "indisvalid" = false, "indisready" = false, "indislive" = false
+      WHERE "indexrelid" = '"hologram_data"."#{index}"'::regclass
+      """)
+  end
+
   setup %{scratch: scratch} do
     create =
       migration("20260813091522", [
@@ -242,6 +252,18 @@ defmodule Hologram.Migration.IndexRecoveryTest do
         # Dropped and built again under its own name, so no copy is left beside it - a REINDEX
         # CONCURRENTLY builds one, which stays behind when it fails.
         assert index_names("hologram_role_grant") == derived_names
+      end)
+    end
+
+    # The repair's own drop, killed after it marked the index dead: the next boot drops it
+    # again and builds it.
+    test "rebuilds an index a killed drop left dead", %{mapping: mapping, scratch: scratch} do
+      route(scratch, fn ->
+        set_index_dead(@index)
+
+        assert repair_indexes(mapping) == :ok
+
+        assert index_validity() == true
       end)
     end
 
@@ -962,6 +984,70 @@ defmodule Hologram.Migration.IndexRecoveryTest do
         assert run(Enum.concat(chain, pending), post_model, @context) == :ok
 
         assert index_validity(@slug_index) == :absent
+      end)
+    end
+
+    # The rewrite passes over a dead index off the column it converts, and the later file drops
+    # it, so the repeat it never refused doesn't matter.
+    test "boots on the first try when a pending type change meets an index a killed drop left " <>
+           "dead",
+         %{chain: chain, model: model, scratch: scratch} do
+      {extra_chain, extra_model} = apply_extra_attributes(chain, model, scratch)
+
+      change =
+        migration("20260813091525", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [type: :integer],
+            line: 3
+          }
+        ])
+
+      drop_unique = migration("20260813091526", @drop_unique_slug.ops)
+      pending = [change, drop_unique]
+      post_model = Enum.reduce(pending, extra_model, &Model.fold(&2, &1.ops))
+
+      route(scratch, fn ->
+        set_index_dead(@slug_index)
+        insert_task("taken")
+        insert_task("taken")
+
+        assert run(Enum.concat(extra_chain, pending), post_model, @context) == :ok
+
+        assert index_validity(@slug_index) == :absent
+      end)
+    end
+
+    # The type change builds an index over its column again from the definition, a dead one
+    # included, and that build fails over the repeat.
+    test "refuses a pending type change on the column of an index a killed drop left dead", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      change =
+        migration("20260813091524", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [type: :integer],
+            line: 3
+          }
+        ])
+
+      route(scratch, fn ->
+        set_index_dead(@slug_index)
+        insert_task("1")
+        insert_task("1")
+
+        assert_error RuntimeError, @invalid_slug_msg, fn ->
+          run(Enum.concat(chain, [change]), Model.fold(model, change.ops), @context)
+        end
+
+        refute "20260813091524" in applied_versions()
       end)
     end
 

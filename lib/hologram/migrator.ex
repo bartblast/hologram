@@ -450,7 +450,7 @@ defmodule Hologram.Migrator do
   # for the repeats.
   defp apply_op(%{op: :alter_column} = op) do
     if op.before.type != op.after.type do
-      Preflight.check_invalid_unique_indexes!(op.table, :rewrite)
+      Preflight.check_invalid_unique_indexes!(op.table, {:rewrite, [op.column]})
     end
 
     Preflight.check_cast!(op)
@@ -462,9 +462,11 @@ defmodule Hologram.Migrator do
   # on it - see the alter_column clause above.
   defp apply_op(%{op: :rebuild_enum_type} = op) do
     op.columns
-    |> Enum.map(fn {table, _column} -> table end)
-    |> Enum.uniq()
-    |> Enum.each(&Preflight.check_invalid_unique_indexes!(&1, :rewrite))
+    |> Enum.group_by(fn {table, _column} -> table end, fn {_table, column} -> column end)
+    |> Enum.sort()
+    |> Enum.each(fn {table, columns} ->
+      Preflight.check_invalid_unique_indexes!(table, {:rewrite, columns})
+    end)
 
     execute_statements(DDL.statements(op))
   end
@@ -890,7 +892,7 @@ defmodule Hologram.Migrator do
   defp invalid_indexes do
     {:ok, %{rows: rows}} = Connection.query(DDL.invalid_indexes_statement())
 
-    Enum.map(rows, fn [index, _ready?] -> index end)
+    Enum.map(rows, fn [index, _ready?, _live?] -> index end)
   end
 
   defp known_history?(migrations, applied) do

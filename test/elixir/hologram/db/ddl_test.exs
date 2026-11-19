@@ -288,10 +288,10 @@ defmodule Hologram.DB.DDLTest do
   end
 
   describe "invalid_indexes_statement/0" do
-    test "lists the invalid indexes of the data schema, by name, with whether they take writes" do
+    test "lists the invalid indexes of the data schema, by name, with whether they take writes and are live" do
       statement = normalize_newlines(invalid_indexes_statement())
 
-      assert statement =~ "SELECT ic.relname, i.indisready"
+      assert statement =~ "SELECT ic.relname, i.indisready, i.indislive"
       assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid"
       assert statement =~ "ORDER BY ic.relname"
     end

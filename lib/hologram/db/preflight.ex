@@ -105,7 +105,7 @@ defmodule Hologram.DB.Preflight do
   @spec check_fill!(%{atom => any}) :: :ok
   def check_fill!(op) do
     op.table
-    |> standing_unique_indexes(op.column, invalid_indexes(false))
+    |> standing_unique_indexes(op.column, not_ready_invalid_indexes())
     |> check_filled_keys!(op.table, op.column, op.fill)
   end
 
@@ -119,23 +119,27 @@ defmodule Hologram.DB.Preflight do
   them while a file's index builds after its commit. A valid unique index holds no repeated
   key, so only the invalid ones are counted, and the schema is read only when there are any.
 
-  A :rewrite - a type change - rebuilds every index on its table, invalid ones included, and
-  rebuilding a unique one fails on rows that repeat its key. An :update - a fill of every
-  row - puts the rows it writes back into every index that takes writes, which an invalid one
-  does when its build failed in its last phase, over a repeat written while it ran: putting
-  back a row with the repeated key fails. One that takes no writes, as a build failing in
-  its first phase leaves, is passed over. A `{:fill, column}` writes only the rows where the
-  column is NULL, so only a repeated key one of those rows holds counts. In an index over
-  the column that keeps nulls distinct those rows hold no key yet, and the one they take is
-  check_fill!/1's to ask about.
+  A `{:rewrite, columns}` - a type change of those columns - rebuilds every index on its
+  table, invalid ones included, and rebuilding a unique one fails on rows that repeat its key.
+  The one it passes over is a dead index, which a concurrent drop that stopped partway
+  leaves, unless the index covers a converted column: the type change then builds it again
+  from its definition. An :update - a fill of every row - puts the rows it writes back into
+  every index that takes writes, which an invalid one does when its build failed in its last
+  phase, over a repeat written while it ran: putting back a row with the repeated key fails.
+  One that takes no writes, as a build failing in its first phase leaves, is passed over. A
+  `{:fill, column}` writes only the rows where the column is NULL, so only a repeated key one
+  of those rows holds counts. In an index over the column that keeps nulls distinct those
+  rows hold no key yet, and the one they take is check_fill!/1's to ask about.
 
   An index introspection marks as not plain is hand-made, and is skipped, as check_cast!/1
   skips it.
   """
-  @spec check_invalid_unique_indexes!(String.t(), :rewrite | :update | {:fill, String.t()}) ::
-          :ok
+  @spec check_invalid_unique_indexes!(
+          String.t(),
+          {:rewrite, [String.t()]} | :update | {:fill, String.t()}
+        ) :: :ok
   def check_invalid_unique_indexes!(table, change) do
-    invalid_names = invalid_indexes(if change == :rewrite, do: :any, else: true)
+    invalid = invalid_indexes()
 
     written_column =
       case change do
@@ -143,12 +147,12 @@ defmodule Hologram.DB.Preflight do
         _all_rows -> nil
       end
 
-    if MapSet.size(invalid_names) > 0 do
+    if map_size(invalid) > 0 do
       Introspection.schema().tables[table].indexes
       |> Enum.sort_by(fn {name, _index} -> name end)
       |> Enum.filter(fn {name, index} ->
-        MapSet.member?(invalid_names, name) and index.unique and
-          not Map.has_key?(index, :non_plain)
+        Map.has_key?(invalid, name) and index.unique and not Map.has_key?(index, :non_plain) and
+          goes_through?(change, invalid[name], index.columns)
       end)
       |> Enum.each(fn {_name, index} ->
         statement =
@@ -435,12 +439,22 @@ defmodule Hologram.DB.Preflight do
     |> Enum.find(&(&1.table == table))
   end
 
-  # The names of the invalid indexes of the data schema that take writes (true), that don't
-  # (false), or either (:any).
-  defp invalid_indexes(ready) do
+  defp goes_through?({:rewrite, columns}, %{live?: live?}, index_columns) do
+    live? or Enum.any?(index_columns, &(&1 in columns))
+  end
+
+  defp goes_through?(_update_or_fill, %{ready?: ready?}, _index_columns), do: ready?
+
+  # The invalid indexes of the data schema, by name, with whether they take writes and are
+  # live.
+  defp invalid_indexes do
     {:ok, %{rows: rows}} = Connection.query(DDL.invalid_indexes_statement())
 
-    for [index, ready?] <- rows, ready == :any or ready? == ready, into: MapSet.new(), do: index
+    Map.new(rows, fn [index, ready?, live?] -> {index, %{ready?: ready?, live?: live?}} end)
+  end
+
+  defp not_ready_invalid_indexes do
+    for {index, %{ready?: false}} <- invalid_indexes(), into: MapSet.new(), do: index
   end
 
   defp raise_cast_duplicate_keys!(_op, _columns, 0), do: :ok
@@ -470,7 +484,7 @@ defmodule Hologram.DB.Preflight do
     key = Enum.map_join(columns, ", ", &~s("#{&1}"))
 
     reason =
-      if change == :rewrite,
+      if match?({:rewrite, _columns}, change),
         do: "and a type change on the table rebuilds it",
         else: "but it already checks the rows this file writes"
 

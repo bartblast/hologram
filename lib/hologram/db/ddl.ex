@@ -339,18 +339,20 @@ defmodule Hologram.DB.DDL do
   end
 
   @doc """
-  Returns the statement listing the invalid indexes of the data schema - each one's name, and
-  whether writes go through it.
+  Returns the statement listing the invalid indexes of the data schema - each one's name,
+  whether writes go through it, and whether it is live.
 
   A concurrent build that failed partway leaves its index in the catalog flagged
   invalid: it holds the derived name and serves no query. Writes go through it when the
   build failed in its last phase, checking the rows - a unique one then refuses a write
-  repeating its key - and not when it failed in its first, building the index.
+  repeating its key - and not when it failed in its first, building the index. A concurrent
+  drop that stopped partway can leave its index dead: writes skip it, and so does a table
+  rewrite, unless the rewrite changes the type of a column it covers.
   """
   @spec invalid_indexes_statement() :: String.t()
   def invalid_indexes_statement do
     """
-    SELECT ic.relname, i.indisready
+    SELECT ic.relname, i.indisready, i.indislive
     FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
     JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
