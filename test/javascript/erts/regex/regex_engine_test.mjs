@@ -275,6 +275,17 @@ describe("RegexEngine", () => {
       );
     });
 
+    it("decodes long input", () => {
+      const text = "aé€😀".repeat(1500);
+      const bytes = new TextEncoder().encode(text);
+
+      assert.deepEqual(RegexEngine.decodeUtf8(bytes), {text: text});
+    });
+
+    it("keeps a leading byte order mark", () => {
+      assert.deepEqual(decode([0xef, 0xbb, 0xbf, 0x61]), {text: "\ufeffa"});
+    });
+
     it("rejects isolated continuation byte", () => {
       assertError([0x80], "UTF-8 error: isolated byte with 0x80 bit set", 0);
     });
@@ -1073,6 +1084,47 @@ describe("RegexEngine", () => {
 
     it("returns empty text for empty bytes", () => {
       assert.equal(RegexEngine.textFromLatin1Bytes(new Uint8Array([])), "");
+    });
+
+    it("maps ASCII bytes", () => {
+      assert.equal(
+        RegexEngine.textFromLatin1Bytes(new Uint8Array([0x00, 0x61, 0x7f])),
+        "\u0000a\u007f",
+      );
+    });
+
+    it("maps bytes 0x80-0x9f to the same code points", () => {
+      assert.equal(
+        RegexEngine.textFromLatin1Bytes(new Uint8Array([0x80, 0x8a, 0x9f])),
+        "\u0080\u008a\u009f",
+      );
+    });
+
+    it("maps bytes after a non-ASCII byte", () => {
+      assert.equal(
+        RegexEngine.textFromLatin1Bytes(new Uint8Array([0x61, 0xe9, 0x62])),
+        "aéb",
+      );
+    });
+
+    it("maps non-ASCII bytes past the first 4096 bytes", () => {
+      const bytes = new Uint8Array(5000).fill(0xe9);
+      bytes[0] = 0x61;
+
+      assert.equal(
+        RegexEngine.textFromLatin1Bytes(bytes),
+        "a" + "é".repeat(4999),
+      );
+    });
+
+    it("maps a non-ASCII byte past the first 4096 bytes", () => {
+      const bytes = new Uint8Array(5000).fill(0x61);
+      bytes[4999] = 0xe9;
+
+      assert.equal(
+        RegexEngine.textFromLatin1Bytes(bytes),
+        "a".repeat(4999) + "é",
+      );
     });
   });
 

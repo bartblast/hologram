@@ -38,6 +38,13 @@ const NEWLINE_TYPES = new Set(Object.values(NEWLINE_VERBS));
 // engine split. Also bridges boxed Erlang terms to engine inputs: char data
 // conversion and :re compile option parsing.
 export default class RegexEngine {
+  // Keeps a leading byte order mark, which is data in a binary, where
+  // ERTS.utf8Decoder drops it.
+  static #utf8Decoder = new TextDecoder("utf-8", {
+    fatal: true,
+    ignoreBOM: true,
+  });
+
   // Converts a UTF-8 byte offset to a JS string index.
   static byteOffsetToUtf16Index(text, byteOffset) {
     let currentByteOffset = 0;
@@ -153,121 +160,13 @@ export default class RegexEngine {
   // input, with the position at the first byte of the invalid character
   // and the message matching PCRE2's UTF-8 error texts.
   static decodeUtf8(bytes) {
-    const codePoints = [];
-    const length = bytes.length;
-    let index = 0;
-
-    while (index < length) {
-      const first = bytes[index];
-
-      if (first < 0x80) {
-        codePoints.push(first);
-        index++;
-        continue;
-      }
-
-      if (first < 0xc0) {
-        return $.#utf8Error("isolated byte with 0x80 bit set", index);
-      }
-
-      if (first >= 0xfe) {
-        return $.#utf8Error("illegal byte (0xfe or 0xff)", index);
-      }
-
-      let additionalByteCount;
-
-      if (first < 0xe0) additionalByteCount = 1;
-      else if (first < 0xf0) additionalByteCount = 2;
-      else if (first < 0xf8) additionalByteCount = 3;
-      else if (first < 0xfc) additionalByteCount = 4;
-      else additionalByteCount = 5;
-
-      const remaining = length - index - 1;
-
-      if (remaining < additionalByteCount) {
-        const missing = additionalByteCount - remaining;
-        const noun = missing === 1 ? "byte" : "bytes";
-        return $.#utf8Error(`${missing} ${noun} missing at end`, index);
-      }
-
-      for (let offset = 1; offset <= additionalByteCount; offset++) {
-        if ((bytes[index + offset] & 0xc0) !== 0x80) {
-          return $.#utf8Error(`byte ${offset + 1} top bits not 0x80`, index);
-        }
-      }
-
-      const second = bytes[index + 1];
-
-      switch (additionalByteCount) {
-        case 1:
-          if ((first & 0x3e) === 0) {
-            return $.#utf8Error("overlong 2-byte sequence", index);
-          }
-          break;
-
-        case 2:
-          if (first === 0xe0 && (second & 0x20) === 0) {
-            return $.#utf8Error("overlong 3-byte sequence", index);
-          }
-
-          if (first === 0xed && second >= 0xa0) {
-            return $.#utf8Error(
-              "code points 0xd800-0xdfff are not defined",
-              index,
-            );
-          }
-          break;
-
-        case 3:
-          if (first === 0xf0 && (second & 0x30) === 0) {
-            return $.#utf8Error("overlong 4-byte sequence", index);
-          }
-
-          if (first > 0xf4 || (first === 0xf4 && second > 0x8f)) {
-            return $.#utf8Error(
-              "code points greater than 0x10ffff are not defined",
-              index,
-            );
-          }
-          break;
-
-        case 4:
-          if (first === 0xf8 && (second & 0x38) === 0) {
-            return $.#utf8Error("overlong 5-byte sequence", index);
-          }
-          return $.#utf8Error(
-            "5-byte character is not allowed (RFC 3629)",
-            index,
-          );
-
-        case 5:
-          if (first === 0xfc && (second & 0x3c) === 0) {
-            return $.#utf8Error("overlong 6-byte sequence", index);
-          }
-          return $.#utf8Error(
-            "6-byte character is not allowed (RFC 3629)",
-            index,
-          );
-      }
-
-      let codePoint = first & (0x3f >> additionalByteCount);
-
-      for (let offset = 1; offset <= additionalByteCount; offset++) {
-        codePoint = (codePoint << 6) | (bytes[index + offset] & 0x3f);
-      }
-
-      codePoints.push(codePoint);
-      index += additionalByteCount + 1;
+    try {
+      return {text: $.#utf8Decoder.decode(bytes)};
+    } catch {
+      // The native decoder rejects exactly what PCRE2 rejects, but reports
+      // neither PCRE2's message nor the position
+      return $.#utf8ErrorOf(bytes);
     }
-
-    let text = "";
-
-    // Chunked to stay within the argument count limit of fromCodePoint()
-    for (let start = 0; start < codePoints.length; start += 4096) {
-      text += String.fromCodePoint(...codePoints.slice(start, start + 4096));
-    }
-
-    return {text: text};
   }
 
   // Reports whether the pattern source enables UTF mode with a (*UTF) or
@@ -504,11 +403,18 @@ export default class RegexEngine {
   // Maps every byte to one JS char, so JS string indices are byte offsets
   // and matching is byte-faithful even for non-UTF-8 binaries.
   static textFromLatin1Bytes(bytes) {
-    let text = "";
+    // ASCII bytes decode to the same chars, so the part before the first
+    // byte above 0x7f decodes natively. There's no native Latin-1 decoder:
+    // "latin1" in TextDecoder is windows-1252, which remaps 0x80-0x9f.
+    const asciiLength = $.#asciiPrefixLength(bytes);
+    let text = $.#utf8Decoder.decode(bytes.subarray(0, asciiLength));
 
     // Chunked to stay within the argument count limit of fromCharCode()
-    for (let start = 0; start < bytes.length; start += 4096) {
-      text += String.fromCharCode(...bytes.subarray(start, start + 4096));
+    for (let start = asciiLength; start < bytes.length; start += 4096) {
+      text += String.fromCharCode.apply(
+        null,
+        bytes.subarray(start, start + 4096),
+      );
     }
 
     return text;
@@ -559,6 +465,15 @@ export default class RegexEngine {
 
       return byteOffsets[utf16Index];
     };
+  }
+
+  // Returns how many bytes at the start are below 0x80.
+  static #asciiPrefixLength(bytes) {
+    for (let index = 0; index < bytes.length; index++) {
+      if (bytes[index] > 0x7f) return index;
+    }
+
+    return bytes.length;
   }
 
   static #calculateCodePointByteCount(codePoint) {
@@ -738,6 +653,112 @@ export default class RegexEngine {
 
   static #utf8Error(detail, position) {
     return {error: {message: `UTF-8 error: ${detail}`, position: position}};
+  }
+
+  // Returns the PCRE2 UTF-8 error of bytes that aren't valid UTF-8, as
+  // decodeUtf8() reports it.
+  static #utf8ErrorOf(bytes) {
+    const length = bytes.length;
+    let index = 0;
+
+    while (index < length) {
+      const first = bytes[index];
+
+      if (first < 0x80) {
+        index++;
+        continue;
+      }
+
+      if (first < 0xc0) {
+        return $.#utf8Error("isolated byte with 0x80 bit set", index);
+      }
+
+      if (first >= 0xfe) {
+        return $.#utf8Error("illegal byte (0xfe or 0xff)", index);
+      }
+
+      let additionalByteCount;
+
+      if (first < 0xe0) additionalByteCount = 1;
+      else if (first < 0xf0) additionalByteCount = 2;
+      else if (first < 0xf8) additionalByteCount = 3;
+      else if (first < 0xfc) additionalByteCount = 4;
+      else additionalByteCount = 5;
+
+      const remaining = length - index - 1;
+
+      if (remaining < additionalByteCount) {
+        const missing = additionalByteCount - remaining;
+        const noun = missing === 1 ? "byte" : "bytes";
+        return $.#utf8Error(`${missing} ${noun} missing at end`, index);
+      }
+
+      for (let offset = 1; offset <= additionalByteCount; offset++) {
+        if ((bytes[index + offset] & 0xc0) !== 0x80) {
+          return $.#utf8Error(`byte ${offset + 1} top bits not 0x80`, index);
+        }
+      }
+
+      const second = bytes[index + 1];
+
+      switch (additionalByteCount) {
+        case 1:
+          if ((first & 0x3e) === 0) {
+            return $.#utf8Error("overlong 2-byte sequence", index);
+          }
+          break;
+
+        case 2:
+          if (first === 0xe0 && (second & 0x20) === 0) {
+            return $.#utf8Error("overlong 3-byte sequence", index);
+          }
+
+          if (first === 0xed && second >= 0xa0) {
+            return $.#utf8Error(
+              "code points 0xd800-0xdfff are not defined",
+              index,
+            );
+          }
+          break;
+
+        case 3:
+          if (first === 0xf0 && (second & 0x30) === 0) {
+            return $.#utf8Error("overlong 4-byte sequence", index);
+          }
+
+          if (first > 0xf4 || (first === 0xf4 && second > 0x8f)) {
+            return $.#utf8Error(
+              "code points greater than 0x10ffff are not defined",
+              index,
+            );
+          }
+          break;
+
+        case 4:
+          if (first === 0xf8 && (second & 0x38) === 0) {
+            return $.#utf8Error("overlong 5-byte sequence", index);
+          }
+          return $.#utf8Error(
+            "5-byte character is not allowed (RFC 3629)",
+            index,
+          );
+
+        case 5:
+          if (first === 0xfc && (second & 0x3c) === 0) {
+            return $.#utf8Error("overlong 6-byte sequence", index);
+          }
+          return $.#utf8Error(
+            "6-byte character is not allowed (RFC 3629)",
+            index,
+          );
+      }
+
+      index += additionalByteCount + 1;
+    }
+
+    // Unreachable as long as the native decoder rejects only what this scan
+    // rejects
+    throw new Error("UTF-8 bytes rejected by the native decoder are valid");
   }
 }
 
