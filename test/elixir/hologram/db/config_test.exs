@@ -7,7 +7,9 @@ defmodule Hologram.DB.ConfigTest do
     test "returns the configured database as Postgrex options" do
       opts = connection_opts()
 
-      assert opts[:database] == "hologram_test"
+      # The database bootstrap points the config at a database of the run's own, named after
+      # the configured one. A run excluding the database tests doesn't run the bootstrap.
+      assert opts[:database] =~ ~r/\Ahologram_test(_run_[0-9a-f]{8})?\z/
       assert opts[:hostname] == "localhost"
       assert opts[:password] == "postgres"
       assert opts[:port] == 5432

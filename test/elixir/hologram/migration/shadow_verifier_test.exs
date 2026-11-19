@@ -9,10 +9,7 @@ defmodule Hologram.Migration.ShadowVerifierTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
-
-  # A configured name filling the PostgreSQL identifier limit exactly - concatenating the
-  # scratch suffix onto it produces 70 bytes, whose first 63 are the name itself.
-  @limit_database String.pad_trailing("hologram_database_named_at_the_identifier_limit_", 63, "x")
+  alias Hologram.Test.DatabaseBootstrap
 
   @ops [
     %{op: :create_entity, entity: MyApp.Task, line: 3},
@@ -20,6 +17,19 @@ defmodule Hologram.Migration.ShadowVerifierTest do
   ]
 
   @migrations [%{version: "20260813091522", path: "app/migrations/20260813091522.ex", ops: @ops}]
+
+  # A configured name filling the PostgreSQL identifier limit exactly - concatenating the
+  # scratch suffix onto it produces 70 bytes, whose first 63 are the name itself. It carries the
+  # OS process id, so two runs against one server don't create and drop the same database.
+  @limit_database String.pad_trailing("hologram_limit_#{System.pid()}_", 63, "x")
+
+  defp database_exists?(name) do
+    statement = "SELECT 1 FROM pg_database WHERE datname = $1"
+
+    {:ok, %{rows: rows}} = Connection.query(statement, [name])
+
+    rows != []
+  end
 
   defp mismatch_message do
     normalize_newlines("""
@@ -41,14 +51,6 @@ defmodule Hologram.Migration.ShadowVerifierTest do
     Model.empty()
     |> Model.fold(@ops)
     |> Model.fold([done_op])
-  end
-
-  defp database_exists?(name) do
-    statement = "SELECT 1 FROM pg_database WHERE datname = $1"
-
-    {:ok, %{rows: rows}} = Connection.query(statement, [name])
-
-    rows != []
   end
 
   defp shadow_database_exists? do
@@ -126,6 +128,18 @@ defmodule Hologram.Migration.ShadowVerifierTest do
           Postgrex.query!(pid, ~s|DROP DATABASE IF EXISTS "#{@limit_database}" WITH (FORCE)|, [])
         end)
       end)
+
+      # Marked for a later run's database bootstrap to drop, along with the shadow database
+      # named after it, should this run be killed before the drop above. Marked once a
+      # connection to it is up, held for the test, so no bootstrap drops it meanwhile.
+      limit_connection =
+        start_supervised!({Postgrex, Config.connection_opts(database: @limit_database)})
+
+      Postgrex.query!(
+        limit_connection,
+        ~s|COMMENT ON DATABASE "#{@limit_database}" IS '#{DatabaseBootstrap.mark()}'|,
+        []
+      )
 
       original_config = Application.get_env(:hologram, :database, [])
       on_exit(fn -> Application.put_env(:hologram, :database, original_config) end)
