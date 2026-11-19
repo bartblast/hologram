@@ -233,6 +233,17 @@ defmodule Hologram.AuthTest do
       assert carried_grants(scopes) == []
     end
 
+    test "returns nothing for a session whose user id no user entity can have" do
+      user = create_user("foreign_actor_4@example.com")
+      resource = create_resource()
+
+      grant_role(user, :editor, resource)
+
+      scopes = MapSet.new([{user.id, {:own, Module1, resource.id}}])
+
+      assert Context.with_actor(7, fn -> carried_grants(scopes) end) == []
+    end
+
     # The scope says which rows to LOOK FOR, the read policy says which the session user may
     # HOLD - so a question about someone else answers with their row only when the asker's own
     # rules admit it.

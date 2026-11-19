@@ -86,7 +86,9 @@ defmodule Hologram.Auth do
   """
   @spec carried_grants(MapSet.t({String.t() | nil, tuple | atom})) :: list(struct)
   def carried_grants(scopes) do
-    session_user_id = user_id()
+    # A user id no user entity can have reads as an anonymous session, which no grant row's read
+    # rules admit, so it carries none, as an anonymous session doesn't - without asking.
+    session_user_id = canonical_id(user_id())
 
     if session_user_id && MapSet.size(scopes) > 0 do
       scopes
