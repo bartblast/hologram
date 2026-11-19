@@ -67,16 +67,16 @@ export default class Tabs {
 
   static #channel = null;
 
-  // What arrived before this tab had finished starting up and has to wait for it, in the order it
-  // arrived (see #deliver).
+  // What arrived before this tab had finished starting up, or while it reads the store again (see
+  // #takeStore), and has to wait for it, in the order it arrived (see #deliver).
   static #held = [];
 
   // The lock request that IS this tab's leadership - answered once the lock has really been let
   // go, which is what makes leaving something a caller can wait for.
   static #holding = null;
 
-  // Whether the group became this tab's to lead while it was still starting up, so it takes the
-  // lead once it is ready (see #wait).
+  // Whether the group became this tab's to lead while it was still starting up, or reading the
+  // store again, so it takes the lead once it is ready (see #wait).
   static #leadWhenReady = false;
 
   static #onLead = null;
@@ -384,7 +384,8 @@ export default class Tabs {
   // This tab has everything it starts with - the rows its own page carried, and what a previous
   // page load left in the browser - so what the server has said since may land on it now. Whatever
   // was held goes through in the order it arrived, and then a lead the group handed this tab while
-  // it was starting is taken, from the place it now holds.
+  // it was starting is taken, from the place it now holds. The same again once a tab that follows
+  // has read the store again (see #takeStore).
   //
   // Except where that lead starts from NOWHERE. A tab that leads with no place asks the server for
   // everything (see #lead), and what it held is then the tail of a fill that began before it was
@@ -430,8 +431,18 @@ export default class Tabs {
     Tabs.#leadWhenReady = false;
     Tabs.#ready = true;
 
-    for (const message of held) {
+    for (const [index, message] of held.entries()) {
       Tabs.#onMessage(message);
+
+      // A state that sent this tab back to the store (see #takeStore): what follows it is about
+      // what the read brings, so it waits for the read. Only a tab that follows reads it, so there
+      // is no lead to carry over - one the group hands it during the read is taken by the ready()
+      // that ends it (see #wait).
+      if (!Tabs.#ready) {
+        Tabs.#held = held.slice(index + 1);
+
+        return;
+      }
     }
 
     if (lead) {
@@ -455,7 +466,8 @@ export default class Tabs {
 
   // Acted on as it arrives, or held until this tab has taken up what it starts with - the rows its
   // own page carried, which go in at the mount, and the rows and batches the browser had stored,
-  // which go in just after it.
+  // which go in just after it. Held the same way while a tab that follows reads the store again
+  // (see #takeStore).
   //
   // FIVE KINDS WAIT, each because it lands on something that is not there yet, or asks for it:
   //
@@ -663,15 +675,56 @@ export default class Tabs {
   // changed. The identity is taken outright - one browser presents one - and the place only when
   // this tab holds none, since a place it has is one its own reading has already brought it to. A
   // stop is taken whenever the group names one.
+  //
+  // Except where a tab that follows holds another place than the one the group names. Its own
+  // reading did not bring it there: the leader can have brought the store somewhere this tab never
+  // followed it to - a repair over the frames a leader closing wrote down without telling anyone -
+  // and its rows and place are no longer the store's, which the next tab to lead would trust them
+  // to be (see #lead). So it takes up the store again (see #takeStore). A state naming no place
+  // leaves it as it is: the leader is starting over, and the start-over that follows says so.
+  //
+  // A tab that leads is left as it is: once ready it passes over the group's state (see #deliver),
+  // and one handed the lead while starting brings the store to its own memory as it takes it.
   static #takeState(message) {
     if (message.replica?.id) {
       Replica.adopt(message.replica);
+    }
+
+    if (
+      !Tabs.leader &&
+      message.cursor !== null &&
+      message.cursor !== SyncStream.syncCursor
+    ) {
+      Tabs.#takeStore(message);
+
+      return;
     }
 
     if (SyncStream.syncCursor === null && message.cursor !== null) {
       SyncStream.syncCursor = message.cursor;
     }
 
+    Tabs.#takeRules(message);
+    Tabs.#takeCompleteness(message);
+  }
+
+  // A type's completeness is a claim about the rows this browser holds, the same in every tab and
+  // on every page. A tab of an earlier build tells it only as a list of scopes, whose "all" says
+  // the same and whose "page" names no type.
+  static #takeCompleteness(message) {
+    const synced = message.completeness ?? {
+      all: message.synced.includes("all"),
+      types: [],
+    };
+
+    LocalDatabase.markTypesSynced(synced.types);
+
+    if (synced.all) {
+      LocalDatabase.markAllSynced();
+    }
+  }
+
+  static #takeRules(message) {
     // The rows the group holds were judged under the rules the stream was handed, so a tab whose
     // bundle answers by others takes those - a page served by a node still on the old build, say.
     if (
@@ -687,19 +740,80 @@ export default class Tabs {
     if (message.stopReason) {
       SyncStream.receiveFrame("sync_reload", {reason: message.stopReason});
     }
+  }
 
-    // A type's completeness is a claim about the rows this browser holds, the same in every tab
-    // and on every page. A tab of an earlier build tells it only as a list of scopes, whose "all"
-    // says the same and whose "page" names no type.
-    const synced = message.completeness ?? {
-      all: message.synced.includes("all"),
-      types: [],
-    };
+  // The store read again, for a tab that follows and holds another place than its group's state
+  // names (see #takeState) - and the tab starting up again while it reads: what the group says
+  // meanwhile is about the rows and the place the read brings, so it is held, and applied after
+  // in the order it arrived (see ready()). A lead the group hands this tab meanwhile is taken then
+  // too, from the place the read left.
+  //
+  // The read starts as the state arrives, so after every write the state was posted behind: a
+  // leader repairs the store before it says what it holds, and posts frames only once they are
+  // stored (see post). The store can be AHEAD of the state, holding frames stored since - those
+  // reach this tab after the state, and are taken again over rows that already hold them.
+  //
+  // What the store says decides:
+  //
+  // - Its place is this tab's own: its rows are the store's, and only the group's claims are new.
+  // - It holds no place: the leader cleared it to start over, and the start-over that follows
+  //   takes the rows and the place away. Only the rules and a stop are taken - completeness claimed
+  //   over rows that are going would sweep the ones the fill is about to confirm.
+  // - It holds another place: every row the stream vouched for goes, the stored ones come in, and
+  //   the place with them - the rows a page carried stay, as a restore leaves them (see
+  //   LocalDatabase.restore). Then the claims, which are about those rows.
+  // - It cannot be read: the state is taken as it would be by a tab holding its place, which is
+  //   what this tab did before there was a store to read.
+  //
+  // What that costs, a round trip at most. A tab that heard a frame the new leader passed over goes
+  // back to the store's rows until the stream sends that frame again; a batch the dropped frame
+  // landed folds without those writes meanwhile, and a row a confirmed batch promoted is gone
+  // until the frame that stored it is replayed. And a stream reconnecting while a tab handed the
+  // lead still reads greets with sync, which the lead's own reconnect replaces.
+  static async #takeStore(message) {
+    Tabs.#ready = false;
 
-    LocalDatabase.markTypesSynced(synced.types);
+    const token = Tabs.#token;
+    const base = await Durability.readBase(SyncStream.syncCursor);
 
-    if (synced.all) {
-      LocalDatabase.markAllSynced();
+    // Left the group while it read: whatever it holds now is its own.
+    if (Tabs.#token !== token) {
+      return;
+    }
+
+    // Ready again whatever happens below: a tab that never is holds everything the group says for
+    // the rest of its life.
+    try {
+      if (base === null) {
+        if (SyncStream.syncCursor === null) {
+          SyncStream.syncCursor = message.cursor;
+        }
+
+        Tabs.#takeRules(message);
+        Tabs.#takeCompleteness(message);
+      } else if (base.cursor === null) {
+        Tabs.#takeRules(message);
+      } else {
+        if (base.records !== null) {
+          for (const rowKey of LocalDatabase.vouchedRowKeys()) {
+            const separator = rowKey.indexOf(" ");
+
+            LocalDatabase.deleteRow(
+              rowKey.slice(0, separator),
+              rowKey.slice(separator + 1),
+            );
+          }
+
+          LocalDatabase.restore(base.records);
+          SyncStream.syncCursor = base.cursor;
+          SyncStream.scheduleRender();
+        }
+
+        Tabs.#takeRules(message);
+        Tabs.#takeCompleteness(message);
+      }
+    } finally {
+      Tabs.ready();
     }
   }
 

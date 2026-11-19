@@ -1442,7 +1442,8 @@ describe("Tabs", () => {
       sinon.assert.notCalled(LocalDatabase.markAllSynced);
     });
 
-    // Its own reading has already brought it further, or to somewhere else entirely.
+    // Its own reading has already brought it further, or to somewhere else entirely - a tab that
+    // leads itself, as one in no group does. (A tab that follows reads the store again, below.)
     it("keeps a place it already holds", () => {
       SyncStream.syncCursor = "place-2";
 
@@ -1570,6 +1571,428 @@ describe("Tabs", () => {
 
       sinon.assert.calledOnceWithExactly(LocalDatabase.markTypesSynced, []);
       sinon.assert.notCalled(LocalDatabase.markAllSynced);
+    });
+
+    // A tab that follows and holds another place than its group names was not brought there by its
+    // own reading: the leader can have repaired the store somewhere it never followed.
+    describe("the group's state, in a tab that follows", () => {
+      const record = (id, title) => ({
+        facts: {},
+        id,
+        row: {id, title},
+        type: "MyApp.Task",
+      });
+
+      const state = (cursor, extra = {}) => ({
+        completeness: {all: true, types: []},
+        cursor,
+        kind: "state",
+        replica: {id: null, token: null},
+        synced: ["all"],
+        ...extra,
+      });
+
+      // Behind somebody else's lock, and ready, as a tab that has been open a while is.
+      const follow = async (handlers = {}) => {
+        const group = nextGroup();
+        const release = await holdLeaderLock(group);
+
+        await Tabs.join(group, {onLead: () => {}, ...handlers});
+
+        Tabs.ready();
+
+        return {group, release};
+      };
+
+      let rendering;
+
+      beforeEach(() => {
+        rendering = sinon.stub(SyncStream, "scheduleRender");
+
+        LocalDatabase.putRow("MyApp.Task", {id: "t-vouched", title: "held"});
+        LocalDatabase.putRow("MyApp.Task", {id: "t-carried", title: "page"});
+        LocalDatabase.markCarried("MyApp.Task", "t-carried");
+
+        SyncStream.syncCursor = "place-1";
+      });
+
+      it("takes up the store when the group's state names another place", async () => {
+        const reading = sinon.stub(Durability, "readBase").resolves({
+          cursor: "place-2",
+          records: [
+            record("t-stored", "stored"),
+            record("t-carried", "stored"),
+          ],
+        });
+
+        await follow();
+
+        Tabs.receive(state("place-3"));
+        await waitForEventLoop();
+
+        sinon.assert.calledOnceWithExactly(reading, "place-1");
+
+        // What the stream vouched for goes, the store's rows come in, and the page's row keeps
+        // its values, no longer held only because the page carried it.
+        assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t-vouched"));
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseRow("MyApp.Task", "t-stored"),
+          {
+            id: "t-stored",
+            title: "stored",
+          },
+        );
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseRow("MyApp.Task", "t-carried"),
+          {
+            id: "t-carried",
+            title: "page",
+          },
+        );
+
+        assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+
+        assert.equal(SyncStream.syncCursor, "place-2");
+        assert.isTrue(rendering.calledOnce);
+        sinon.assert.calledOnce(LocalDatabase.markAllSynced);
+      });
+
+      // A page-carried row the store holds is unmarked by the restore, so a type marked complete
+      // after it keeps the row; marked before, the sweep would take it.
+      it("takes completeness only after the rows the store holds", async () => {
+        LocalDatabase.markTypesSynced.restore();
+
+        sinon.stub(Durability, "readBase").resolves({
+          cursor: "place-2",
+          records: [record("t-carried", "stored")],
+        });
+
+        await follow();
+
+        Tabs.receive(
+          state("place-2", {
+            completeness: {all: false, types: ["MyApp.Task"]},
+            synced: [],
+          }),
+        );
+
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseRow("MyApp.Task", "t-carried"),
+          {
+            id: "t-carried",
+            title: "page",
+          },
+        );
+      });
+
+      // Before there was a store to read, it took the state's place and swept every row it held.
+      it("takes up the store when it holds no place", async () => {
+        const reading = sinon.stub(Durability, "readBase").resolves({
+          cursor: "place-2",
+          records: [record("t-stored", "stored")],
+        });
+
+        SyncStream.syncCursor = null;
+
+        await follow();
+
+        Tabs.receive(state("place-2"));
+        await waitForEventLoop();
+
+        sinon.assert.calledOnceWithExactly(reading, null);
+        assert.equal(SyncStream.syncCursor, "place-2");
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseRow("MyApp.Task", "t-stored"),
+          {
+            id: "t-stored",
+            title: "stored",
+          },
+        );
+      });
+
+      it("holds what arrives while it reads the store, and replays it after", async () => {
+        let read;
+
+        sinon
+          .stub(Durability, "readBase")
+          .returns(new Promise((resolve) => (read = resolve)));
+
+        const seen = [];
+
+        let arrived;
+
+        const hasArrived = new Promise((resolve) => {
+          arrived = resolve;
+        });
+
+        const {group} = await follow({
+          onMessage: (message) => {
+            seen.push(message.kind);
+
+            if (message.kind === "barrier") {
+              arrived();
+            } else {
+              Tabs.receive(message);
+            }
+          },
+        });
+
+        const other = sibling(group);
+
+        other.postMessage(state("place-2"));
+        other.postMessage({event: "sync_deltas", frame: {}, kind: "frame"});
+        other.postMessage({kind: "barrier"});
+
+        await hasArrived;
+
+        assert.deepStrictEqual(seen, ["state", "barrier"]);
+        assert.isFalse(SyncStream.receiveFrame.called);
+
+        read({cursor: "place-2", records: []});
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(seen, ["state", "barrier", "frame"]);
+        sinon.assert.calledOnceWithExactly(
+          SyncStream.receiveFrame,
+          "sync_deltas",
+          {},
+        );
+      });
+
+      it("keeps its rows when the store names its own place", async () => {
+        sinon
+          .stub(Durability, "readBase")
+          .resolves({cursor: "place-1", records: null});
+
+        await follow();
+
+        Tabs.receive(state("place-2"));
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseRow("MyApp.Task", "t-vouched"),
+          {
+            id: "t-vouched",
+            title: "held",
+          },
+        );
+
+        assert.equal(SyncStream.syncCursor, "place-1");
+        assert.isFalse(rendering.called);
+        sinon.assert.calledOnce(LocalDatabase.markAllSynced);
+      });
+
+      // The leader cleared it to start over: completeness claimed over rows that are going would
+      // sweep the ones the refill is about to confirm.
+      it("takes no place or completeness when the store names none", async () => {
+        sinon
+          .stub(Durability, "readBase")
+          .resolves({cursor: null, records: null});
+
+        await follow();
+
+        Tabs.receive(state("place-2", {stopReason: "model_hash"}));
+        await waitForEventLoop();
+
+        assert.equal(SyncStream.syncCursor, "place-1");
+        sinon.assert.notCalled(LocalDatabase.markAllSynced);
+        sinon.assert.notCalled(LocalDatabase.markTypesSynced);
+
+        sinon.assert.calledOnceWithExactly(
+          SyncStream.receiveFrame,
+          "sync_reload",
+          {
+            reason: "model_hash",
+          },
+        );
+      });
+
+      it("takes the state as before when the store cannot be read", async () => {
+        sinon.stub(Durability, "readBase").resolves(null);
+
+        await follow();
+
+        Tabs.receive(state("place-2"));
+        await waitForEventLoop();
+
+        assert.equal(SyncStream.syncCursor, "place-1");
+        sinon.assert.calledOnce(LocalDatabase.markAllSynced);
+      });
+
+      it("takes the place the state names when the store cannot be read and it holds none", async () => {
+        sinon.stub(Durability, "readBase").resolves(null);
+        SyncStream.syncCursor = null;
+
+        await follow();
+
+        Tabs.receive(state("place-2"));
+        await waitForEventLoop();
+
+        assert.equal(SyncStream.syncCursor, "place-2");
+      });
+
+      // Not ready, it would hold everything its group says for the rest of its life.
+      it("is ready again when taking up the store fails", async () => {
+        sinon
+          .stub(Durability, "readBase")
+          .resolves({cursor: "place-2", records: []});
+
+        rendering.throws(new Error("refused"));
+
+        // The failure goes where any uncaught one does, which here is the test runner's.
+        const listeners = process.listeners("unhandledRejection");
+        const rejected = [];
+
+        process.removeAllListeners("unhandledRejection");
+        process.on("unhandledRejection", (error) => rejected.push(error));
+
+        const seen = [];
+
+        let arrived;
+
+        const hasArrived = new Promise((resolve) => (arrived = resolve));
+
+        try {
+          const {group} = await follow({
+            onMessage: (message) => {
+              seen.push(message.kind);
+
+              if (message.kind === "barrier") {
+                arrived();
+              } else {
+                Tabs.receive(message);
+              }
+            },
+          });
+
+          const other = sibling(group);
+
+          other.postMessage(state("place-2"));
+          await waitForEventLoop();
+
+          other.postMessage({event: "sync_deltas", frame: {}, kind: "frame"});
+          other.postMessage({kind: "barrier"});
+
+          await hasArrived;
+        } finally {
+          process.removeAllListeners("unhandledRejection");
+          listeners.forEach((listener) =>
+            process.on("unhandledRejection", listener),
+          );
+        }
+
+        assert.deepStrictEqual(seen, ["state", "frame", "barrier"]);
+        assert.equal(rejected.length, 1);
+      });
+
+      it("takes a lead handed to it while it read the store", async () => {
+        let read;
+
+        sinon
+          .stub(Durability, "readBase")
+          .returns(new Promise((resolve) => (read = resolve)));
+
+        const led = sinon.spy();
+        const {release} = await follow({onLead: led});
+
+        Tabs.receive(state("place-2"));
+
+        release();
+        await waitForEventLoop();
+
+        assert.isTrue(Tabs.leader);
+        assert.isFalse(led.called);
+
+        read({cursor: "place-2", records: []});
+        await waitForEventLoop();
+
+        assert.isTrue(led.calledOnce);
+        assert.equal(SyncStream.syncCursor, "place-2");
+      });
+
+      it("leaves a store it read after leaving the group alone", async () => {
+        let read;
+
+        sinon
+          .stub(Durability, "readBase")
+          .returns(new Promise((resolve) => (read = resolve)));
+
+        await follow();
+
+        Tabs.receive(state("place-2"));
+
+        await Tabs.leave();
+
+        read({cursor: "place-2", records: [record("t-stored", "stored")]});
+        await waitForEventLoop();
+
+        assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t-stored"));
+        assert.equal(SyncStream.syncCursor, "place-1");
+        sinon.assert.notCalled(LocalDatabase.markAllSynced);
+      });
+
+      it("takes a state naming its own place without reading the store", async () => {
+        const reading = sinon.stub(Durability, "readBase");
+
+        await follow();
+
+        Tabs.receive(state("place-1"));
+
+        assert.isFalse(reading.called);
+        sinon.assert.calledOnce(LocalDatabase.markAllSynced);
+      });
+
+      // The leader is starting over, and the start-over that follows says so.
+      it("takes a state naming no place without reading the store", async () => {
+        const reading = sinon.stub(Durability, "readBase");
+
+        await follow();
+
+        Tabs.receive(state(null));
+
+        assert.isFalse(reading.called);
+        assert.equal(SyncStream.syncCursor, "place-1");
+      });
+
+      // Handed the lead while starting, it brings the store to its own memory as it takes it.
+      it("takes a state naming another place without reading the store, when it leads", async () => {
+        const reading = sinon.stub(Durability, "readBase");
+        const group = nextGroup();
+        const release = await holdLeaderLock(group);
+
+        let arrived;
+
+        const hasArrived = new Promise((resolve) => (arrived = resolve));
+
+        await Tabs.join(group, {
+          onLead: () => {},
+          onMessage: (message) =>
+            message.kind === "barrier" ? arrived() : Tabs.receive(message),
+        });
+
+        const other = sibling(group);
+
+        other.postMessage(state("place-2"));
+        other.postMessage({kind: "barrier"});
+
+        await hasArrived;
+
+        release();
+        await waitForEventLoop();
+
+        assert.isTrue(Tabs.leader);
+
+        Tabs.ready();
+
+        assert.isFalse(reading.called);
+        assert.equal(SyncStream.syncCursor, "place-1");
+        sinon.assert.calledOnce(LocalDatabase.markAllSynced);
+      });
     });
   });
 
@@ -2062,6 +2485,76 @@ describe("Tabs", () => {
       await hasArrived;
 
       assert.deepStrictEqual(seen, [{kind: "storage_failed"}]);
+    });
+
+    // What follows the state is about what the read brings, so applied during the read it would be
+    // overwritten by it.
+    it("stops replaying at a state that sends it back to the store, and replays the rest after", async () => {
+      let read;
+
+      sinon
+        .stub(Durability, "readBase")
+        .returns(new Promise((resolve) => (read = resolve)));
+
+      sinon.stub(LocalDatabase, "markAllSynced");
+      sinon.stub(LocalDatabase, "markTypesSynced");
+      sinon.stub(SyncStream, "receiveFrame");
+      sinon.stub(SyncStream, "scheduleRender");
+
+      const group = nextGroup();
+      const seen = [];
+
+      let arrived;
+
+      const hasArrived = new Promise((resolve) => {
+        arrived = resolve;
+      });
+
+      await holdLeaderLock(group);
+
+      await Tabs.join(group, {
+        onLead: () => {},
+        onMessage: (message) => {
+          seen.push(message.kind);
+
+          if (message.kind === "barrier") {
+            arrived();
+          } else {
+            Tabs.receive(message);
+          }
+        },
+      });
+
+      const other = sibling(group);
+
+      other.postMessage({
+        completeness: {all: false, types: []},
+        cursor: "place-2",
+        kind: "state",
+        replica: {id: null, token: null},
+        synced: [],
+      });
+
+      other.postMessage(frame(1));
+      other.postMessage(barrier);
+
+      await hasArrived;
+
+      try {
+        SyncStream.syncCursor = "place-1";
+
+        Tabs.ready();
+
+        assert.deepStrictEqual(seen, ["barrier", "state"]);
+
+        read({cursor: "place-2", records: []});
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(seen, ["barrier", "state", "frame"]);
+      } finally {
+        LocalDatabase.reset();
+        SyncStream.syncCursor = null;
+      }
     });
   });
 
