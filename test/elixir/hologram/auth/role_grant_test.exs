@@ -165,6 +165,10 @@ defmodule Hologram.Auth.RoleGrantTest do
     assert RoleGrant.__policies__() == []
   end
 
+  test "__policy_hints__/0" do
+    assert RoleGrant.__policy_hints__() == []
+  end
+
   test "__policy_sources__/0" do
     assert RoleGrant.__policy_sources__() == []
   end

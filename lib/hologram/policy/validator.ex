@@ -399,8 +399,8 @@ defmodule Hologram.Policy.Validator do
   end
 
   defp validate_entity_policies!(entity_type) do
-    entity_type.__policies__()
-    |> Enum.zip(entity_type.__policy_sources__())
+    [entity_type.__policies__(), entity_type.__policy_sources__(), entity_type.__policy_hints__()]
+    |> Enum.zip()
     |> Enum.each(&validate_policy_line!(entity_type, &1))
   end
 
@@ -512,23 +512,23 @@ defmodule Hologram.Policy.Validator do
 
   defp validate_operation_name!(_operation, _location), do: :ok
 
-  defp validate_policy_line!(entity_type, {{operation, to, via, predicates}, source}) do
+  defp validate_policy_line!(entity_type, {{operation, to, via, predicates}, source, hints}) do
     location = location(entity_type, source)
 
     validate_operation_name!(operation, location)
     validate_to!(entity_type, operation, to, location)
     validate_via!(entity_type, operation, via, location)
-    validate_predicates!(entity_type, operation, predicates, location)
+    validate_predicates!(entity_type, operation, predicates, hints, location)
     validate_gate_operation!(entity_type, operation, to, via, predicates, location)
   end
 
-  defp validate_predicates!(entity_type, operation, predicates, location) do
+  defp validate_predicates!(entity_type, operation, predicates, hints, location) do
     predicates
     |> unquantified_predicates()
     |> Stage.written_names()
     |> Enum.each(&validate_set_free_name!(entity_type, &1))
 
-    clauses = Stage.predicate_triples!(entity_type, predicates)
+    clauses = Stage.predicate_triples!(entity_type, predicates, hints)
 
     validate_server_only_predicates!(entity_type, operation, clauses, location)
 

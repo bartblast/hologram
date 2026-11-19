@@ -119,6 +119,23 @@ defmodule Hologram.Query.ExpressionTest do
     end
   end
 
+  describe "condition_hints/2" do
+    test "spells a name inside a quantifier on each row" do
+      assert hints_of(&condition_hints/2, "any(member <- members, user_id == user_id())", []) == [
+               {:key, 1, {:outer, 1, :user_id}, nil, ["member.user_id", "user_id"]}
+             ]
+    end
+
+    test "hints nothing at the top of a condition naming no variable" do
+      assert hints_of(&condition_hints/2, "owner_id == assignee_id and status in [:open]", []) ==
+               []
+    end
+
+    test "hints nothing for pinned predicates" do
+      assert hints_of(&condition_hints/2, "^predicates", [:predicates]) == []
+    end
+  end
+
   describe "condition/2" do
     test "lowers a comparison" do
       assert lower_condition("priority < 3") == [priority: {:<, 3}]

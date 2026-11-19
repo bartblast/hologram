@@ -126,6 +126,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
     @spec __policies__() :: list({Entity.operation(), term, atom | nil, keyword})
     def __policies__, do: []
 
+    @spec __policy_hints__() :: list(list(Hologram.Query.Stage.name_hint()))
+    def __policy_hints__, do: []
+
     @spec __policy_sources__() :: list(module)
     def __policy_sources__, do: []
 

@@ -33,6 +33,25 @@ defmodule Hologram.Policy.ExpressionTest do
   end
 
   describe "spec/3" do
+    test "carries the hints of a condition naming a name inside a quantifier" do
+      assert lower_spec("[when: any(member <- members, member.role == :admin)]") == [
+               when: [any: {[:members], [role: {:==, :admin}]}],
+               __name_hints__: [{:key, 1, :role, nil, ["member.role", "role"]}]
+             ]
+    end
+
+    # The declaration refuses such a spec printing it whole, where hints would only show.
+    test "carries no hints in a spec holding anything but options" do
+      assert lower_spec("[:foo, when: any(member <- members, member.role == :admin)]") == [
+               :foo,
+               when: [any: {[:members], [role: {:==, :admin}]}]
+             ]
+    end
+
+    test "carries no hints for a condition with nothing to hint" do
+      assert lower_spec("[when: owner_id == user_id()]") == [when: [owner_id: {:==, {:actor}}]]
+    end
+
     test "keeps __MODULE__ as a role module" do
       assert lower_spec("[to: __MODULE__]") == [to: __MODULE__]
     end

@@ -22,10 +22,6 @@ defmodule Hologram.Query.Stage do
   @directions [:asc, :desc]
   @equality_operators [:!=, :==]
   @membership_operators [:in, :not_in]
-
-  # What a stage takes when nothing was written that a refusal could name instead.
-  @no_name_hints %{entries: [], outer_rows: 0}
-
   @orderable_types [:date, :datetime, :enum, :float, :integer, :string, :time]
   @ordering_operators [:<, :<=, :>, :>=]
   @quantifiers [:all, :any, :none]
@@ -50,11 +46,11 @@ defmodule Hologram.Query.Stage do
   # means the day an instant falls on, which no widening says.
   @widenings [{:float, :integer}, {:integer, :float}]
 
-  # What the query macros saw where a name was written, which a refusal of the name can add: where
-  # it stands (a comparison's or a search's left side, its right side, a sort or an include name),
-  # how many quantifiers its clause is nested in, the name as the data form holds it, the fix to
-  # name - a forgotten pin - or nil, and the spelling that reads the name on each row in scope,
-  # nearest first.
+  # What the query macros or an allow line saw where a name was written, which a refusal of the name
+  # can add: where it stands (a comparison's or a search's left side, its right side, a sort or an
+  # include name), how many quantifiers its clause is nested in, the name as the data form holds it,
+  # the fix to name - a forgotten pin - or nil, and the spelling that reads the name on each row in
+  # scope, nearest first.
   @type name_hint ::
           {:include | :key | :operand | :sort, non_neg_integer, Query.name(), String.t() | nil,
            list(String.t())}
@@ -178,8 +174,8 @@ defmodule Hologram.Query.Stage do
   #
   # The {:actor} leaf user_id() lowers to is refused anywhere in a filter, however it got there: a
   # filter means the same rows whoever asks, and the read policy is what narrows them to each user.
-  # A policy condition names it through predicate_triples!/2 instead. A derived field's query can't
-  # pin the acting user's id either, so its refusal says why its value can't depend on them.
+  # A policy condition names it through predicate_triples!/2 and /3 instead. A derived field's query
+  # can't pin the acting user's id either, so its refusal says why its value can't depend on them.
   @doc false
   @spec filter(module | Query.t(), Query.predicates()) :: Query.t()
   def filter(query, predicates), do: filter(query, predicates, [])
@@ -424,7 +420,13 @@ defmodule Hologram.Query.Stage do
   @doc false
   @spec predicate_triples!(module, Query.predicates()) :: list(Query.clause())
   def predicate_triples!(entity_type, predicates),
-    do: scoped_triples!([entity_type], predicates, @no_name_hints)
+    do: predicate_triples!(entity_type, predicates, [])
+
+  # The hints are filter/3's, about the names a policy condition was written with.
+  @doc false
+  @spec predicate_triples!(module, Query.predicates(), list(name_hint)) :: list(Query.clause())
+  def predicate_triples!(entity_type, predicates, hints) when is_list(hints),
+    do: scoped_triples!([entity_type], predicates, %{entries: hints, outer_rows: 0})
 
   @doc false
   @spec put_attribute(Entity.t(), keyword | map) :: Entity.t()

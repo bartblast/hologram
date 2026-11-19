@@ -140,6 +140,30 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "__policy_hints__/0" do
+    test "returns empty list for entity type with no policy declarations" do
+      assert Module1.__policy_hints__() == []
+    end
+
+    test "lines up with __policies__/0, a line with nothing to hint holding none" do
+      defmodule PolicyHintsEntityFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        relationship :messages, [Module33]
+
+        allow :read, to: :viewer
+        allow :update, to: :viewer, when: any(message <- messages, message.position > 1)
+      end
+
+      assert PolicyHintsEntityFixture.__policy_hints__() == [
+               [],
+               [{:key, 1, :position, nil, ["message.position", "position"]}]
+             ]
+    end
+  end
+
   describe "__policy_sources__/0" do
     test "returns empty list for entity type with no policy declarations" do
       assert Module1.__policy_sources__() == []

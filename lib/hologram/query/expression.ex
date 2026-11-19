@@ -141,6 +141,14 @@ defmodule Hologram.Query.Expression do
   def condition(ast, env), do: predicate_list!(ast, @condition_names, env)
 
   @doc """
+  Returns the hints `Hologram.Query.Stage.predicate_triples!/3` can add to its refusal of a name
+  the given `when:` condition wrote - what `predicate_hints/2` returns for a filter's predicates.
+  Takes a condition `condition/2` lowered without raising.
+  """
+  @spec condition_hints(Macro.t(), Macro.Env.t()) :: list(Hologram.Query.Stage.name_hint())
+  def condition_hints(ast, env), do: predicate_hints(ast, env)
+
+  @doc """
   Returns the relationships a bare name or a path names, in order - nil for anything else.
 
   A path is a dot chain with no parentheses over a bare name, so a call (`tasks.owner()`,

@@ -293,6 +293,37 @@ defmodule Hologram.PolicyTest do
              ]
     end
 
+    test "carries the hints of a condition through a policy taken by a policy into an entity type" do
+      defmodule HintsInnerPolicyFixture do
+        use Hologram.Policy
+
+        allow :read, when: any(message <- messages, message.position > 1)
+      end
+
+      defmodule HintsOuterPolicyFixture do
+        use Hologram.Policy
+
+        policy HintsInnerPolicyFixture
+      end
+
+      defmodule HintsEntityFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        relationship :messages, [Module33]
+
+        policy HintsOuterPolicyFixture
+
+        allow :delete, to: :viewer
+      end
+
+      assert HintsEntityFixture.__policy_hints__() == [
+               [{:key, 1, :position, nil, ["message.position", "position"]}],
+               []
+             ]
+    end
+
     test "raises for a target that is not a policy module" do
       expected_msg =
         "invalid policy Hologram.Test.Fixtures.Entity.Module1 taken in Hologram.PolicyTest.NonPolicyTargetPolicyFixture - Hologram.Test.Fixtures.Entity.Module1 is not a policy module (define it with use Hologram.Policy)"
