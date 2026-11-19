@@ -1132,6 +1132,7 @@ export default class Hologram {
     // as nobody - its queries and checks answered for an anonymous session, its writes made by
     // nobody - and read none of the rows the server just sent.
     Hologram.dataLayer?.ingestMountData({
+      actorEntityId: $.#bootData.actorEntityId,
       actorUserId: $.#bootData.actorUserId,
       syncCounts: $.#bootData.syncCounts,
       syncRows: $.#bootData.syncRows,
@@ -1322,6 +1323,7 @@ export default class Hologram {
     const bootData = $.#bootData;
 
     return {
+      actorEntityId: bootData.actorEntityId,
       actorUserId: bootData.actorUserId,
       componentRegistry: Deserializer.deserialize(bootData.componentRegistry),
       // A loaded document's state was rendered for the identity the document was loaded for.
@@ -2757,6 +2759,7 @@ export default class Hologram {
     // boot data block: the local database reads them, not compiled code. A server that predates
     // them sends none, which the mount reads as nothing to ingest.
     $.#mountData = {
+      actorEntityId: payload.actorEntityId,
       actorUserId: payload.actorUserId,
       componentRegistry: Deserializer.deserialize(payload.componentRegistry),
       identityPeriod: payload.identityPeriod ?? null,

@@ -7937,7 +7937,8 @@ describe("Hologram", () => {
       block.id = "hologram-boot-data";
 
       block.textContent = JSON.stringify({
-        actorUserId: "user-1",
+        actorEntityId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
+        actorUserId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
         syncCounts: {"App.Page/total/": 3},
         syncRows: syncRows,
       });
@@ -7984,7 +7985,8 @@ describe("Hologram", () => {
       Hologram.restoreDocumentSnapshot(pageSnapshot);
 
       sinon.assert.calledOnceWithExactly(ingestMountDataSpy, {
-        actorUserId: "user-1",
+        actorEntityId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
+        actorUserId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
         syncCounts: {"App.Page/total/": 3},
         syncRows: syncRows,
       });

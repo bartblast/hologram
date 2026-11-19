@@ -2485,6 +2485,7 @@ describe("Elixir_Hologram_Auth", () => {
     afterEach(() => {
       Batches.reset();
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
     });
 
     it("grants on a true verdict", () => {
@@ -2536,6 +2537,7 @@ describe("Elixir_Hologram_Auth", () => {
 
     it("grants on the session user's verdict asked about the session user", () => {
       LocalDatabase.actorUserId = ALICE;
+      LocalDatabase.actorEntityId = ALICE;
       putFolder({[KEY]: true});
 
       assert.deepStrictEqual(
@@ -2548,6 +2550,7 @@ describe("Elixir_Hologram_Auth", () => {
     // be ones this client does not hold.
     it("grants nothing on the session user's verdict asked about another user", () => {
       LocalDatabase.actorUserId = ALICE;
+      LocalDatabase.actorEntityId = ALICE;
       putFolder({[KEY]: true});
 
       assert.deepStrictEqual(
@@ -2570,8 +2573,20 @@ describe("Elixir_Hologram_Auth", () => {
       assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(true));
     });
 
+    // The server reads a raw user id spelled as a canonical uuid - an atom on the server - as a
+    // visitor when it is no user entity's id, and works the verdicts out for a visitor, so they
+    // answer a visitor's question even though the raw id looks like an entity id.
+    it("grants on the verdict of a session whose user id is no entity id however it is spelled", () => {
+      LocalDatabase.actorUserId = ALICE;
+      LocalDatabase.actorEntityId = null;
+      putFolder({[KEY]: true});
+
+      assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(true));
+    });
+
     it("grants nothing on the session user's verdict asked about a visitor", () => {
       LocalDatabase.actorUserId = ALICE;
+      LocalDatabase.actorEntityId = ALICE;
       putFolder({[KEY]: true});
 
       assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(false));
@@ -2887,6 +2902,7 @@ describe("Elixir_Hologram_Auth", () => {
 
     afterEach(() => {
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
     });
 
     it("grants nothing on a comparison with a server-only attribute", () => {
@@ -3022,6 +3038,7 @@ describe("Elixir_Hologram_Auth", () => {
       // The server worked the verdict out for the session's user.
       it("grants nothing on the session user's verdict asked about another user", () => {
         LocalDatabase.actorUserId = ALICE;
+        LocalDatabase.actorEntityId = ALICE;
 
         defineServerOnlyModel(
           {},
@@ -3941,6 +3958,7 @@ describe("Elixir_Hologram_Auth", () => {
       });
 
       LocalDatabase.actorUserId = ALICE;
+      LocalDatabase.actorEntityId = ALICE;
       Batches.reset();
       Batches.open("leave");
 
@@ -3963,6 +3981,7 @@ describe("Elixir_Hologram_Auth", () => {
       } finally {
         Batches.reset();
         LocalDatabase.actorUserId = null;
+        LocalDatabase.actorEntityId = null;
       }
     });
 
@@ -4369,6 +4388,7 @@ describe("grant_role/3", () => {
     Clock.reset();
     LocalDatabase.reset();
     LocalDatabase.actorUserId = GATED_ALICE;
+    LocalDatabase.actorEntityId = GATED_ALICE;
     LocalDatabase.putRow(
       GATED_GRANT,
       gatedGrantRow({
@@ -4385,6 +4405,7 @@ describe("grant_role/3", () => {
     timers.restore();
     Batches.reset();
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
   });
 
   it("appends a create of the grant row with the acting user as its granter", () => {
@@ -4517,12 +4538,27 @@ describe("grant_role/3", () => {
 
   it("raises when nobody is signed in", () => {
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
 
     assertBoxedError(
       () => grant(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
       "Hologram.AccessDeniedError",
       "a role is granted only by a signed-in user - nobody is signed in",
     );
+  });
+
+  // The server's batch answers a user id no user entity can have as nobody, so this does too.
+  it("raises for a user id no user entity can have, as for nobody", () => {
+    LocalDatabase.actorUserId = 7;
+    LocalDatabase.actorEntityId = null;
+
+    assertBoxedError(
+      () => grant(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
+      "Hologram.AccessDeniedError",
+      "a role is granted only by a signed-in user - nobody is signed in",
+    );
+
+    assert.deepStrictEqual(Batches.current().writes, []);
   });
 
   it("raises on a user id that is not an entity id", () => {
@@ -4616,6 +4652,7 @@ describe("revoke_role/3", () => {
     Clock.reset();
     LocalDatabase.reset();
     LocalDatabase.actorUserId = GATED_ALICE;
+    LocalDatabase.actorEntityId = GATED_ALICE;
     LocalDatabase.putRow(GATED_GRANT, heldRow(GATED_ALICE, "editor"));
     LocalDatabase.putRow(GATED_GRANT, heldRow(GATED_BOB, "viewer"));
     timers = sinon.useFakeTimers(NOW_MS);
@@ -4626,6 +4663,7 @@ describe("revoke_role/3", () => {
     timers.restore();
     Batches.reset();
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
   });
 
   it("appends a delete of the held row carrying its revisions and its grant", () => {
@@ -4733,6 +4771,18 @@ describe("revoke_role/3", () => {
 
   it("raises when nobody is signed in", () => {
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
+
+    assertBoxedError(
+      () => revoke(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
+      "Hologram.AccessDeniedError",
+      "a role is revoked only by a signed-in user - nobody is signed in",
+    );
+  });
+
+  it("raises for a user id no user entity can have, as for nobody", () => {
+    LocalDatabase.actorUserId = "abc";
+    LocalDatabase.actorEntityId = null;
 
     assertBoxedError(
       () => revoke(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
@@ -4823,16 +4873,19 @@ describe("a creator's own grant", () => {
     Clock.reset();
     LocalDatabase.reset();
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
     Batches.open("notes");
   });
 
   afterEach(() => {
     Batches.reset();
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
   });
 
   it("lets the creator do what the role it takes gates", () => {
     LocalDatabase.actorUserId = OWNER;
+    LocalDatabase.actorEntityId = OWNER;
 
     const created = create(note()).data[1];
 

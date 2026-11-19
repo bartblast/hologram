@@ -570,7 +570,7 @@ defmodule Hologram.ControllerTest do
         identity_tag: "my_identity_tag",
         instance_id: "my_instance_id",
         mount_data: %{
-          actor_user_id: "my_user_id",
+          actor_user_id: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
           component_registry: %{"page" => %{module: Module1, struct: %Component{}}},
           page_module: Module1,
           page_params: %{key: "value"},
@@ -598,6 +598,7 @@ defmodule Hologram.ControllerTest do
              |> build_boot_data()
              |> Map.keys()
              |> Enum.sort() == [
+               :actorEntityId,
                :actorUserId,
                :assetManifest,
                :chunks,
@@ -616,6 +617,13 @@ defmodule Hologram.ControllerTest do
                :syncCounts,
                :syncRows
              ]
+    end
+
+    test "sends a user id no user entity can have with no entity id", %{fields: fields} do
+      boot_data = build_boot_data(put_in(fields.mount_data.actor_user_id, 7))
+
+      assert boot_data.actorEntityId == nil
+      assert boot_data.actorUserId == 7
     end
 
     test "builds the page fields as a navigation's payload does", %{fields: fields} do
@@ -637,7 +645,8 @@ defmodule Hologram.ControllerTest do
       assert decoded["assetManifest"]["hologram/runtime.js"] ==
                "/hologram/runtime-1234567890abcdef.js"
 
-      assert decoded["actorUserId"] == "my_user_id"
+      assert decoded["actorEntityId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
+      assert decoded["actorUserId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
       assert decoded["chunks"] == ["AAAAAAAA"]
       assert decoded["csrfToken"] == "my_csrf_token"
       assert decoded["identityTag"] == "my_identity_tag"
@@ -656,7 +665,7 @@ defmodule Hologram.ControllerTest do
       fields = %{
         chunk_digests: ["AAAAAAAA", "BBBBBBBB"],
         mount_data: %{
-          actor_user_id: "123",
+          actor_user_id: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
           component_registry: %{"page" => %{module: Module1, struct: %Component{}}},
           page_module: Module1,
           page_params: %{},
@@ -717,9 +726,29 @@ defmodule Hologram.ControllerTest do
         |> Jason.encode!()
         |> Jason.decode!()
 
-      assert decoded["actorUserId"] == "123"
+      assert decoded["actorEntityId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
+      assert decoded["actorUserId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
       assert decoded["syncCounts"] == %{"posts" => 2}
       assert decoded["syncRows"] == %{"posts" => []}
+    end
+
+    # The browser's rules read the acting user as the server's data layer does, so a user id no user
+    # entity can have goes as no entity id - an atom spelled as a uuid included, which JSON would
+    # turn into the id itself - while the id as it is still says whose rows and writes they are.
+    test "sends a user id no user entity can have as it is, with no entity id", %{fields: fields} do
+      for user_id <- [7, "abc", :admin, :"0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"] do
+        payload = build_page_data_payload(put_in(fields.mount_data.actor_user_id, user_id))
+
+        assert payload.actorEntityId == nil
+        assert payload.actorUserId == user_id
+      end
+    end
+
+    test "sends no acting user as none", %{fields: fields} do
+      payload = build_page_data_payload(put_in(fields.mount_data.actor_user_id, nil))
+
+      assert payload.actorEntityId == nil
+      assert payload.actorUserId == nil
     end
 
     test "carries what a mount reads beside the tree", %{fields: fields} do
@@ -727,6 +756,7 @@ defmodule Hologram.ControllerTest do
              |> build_page_data_payload()
              |> Map.keys()
              |> Enum.sort() == [
+               :actorEntityId,
                :actorUserId,
                :chunks,
                :componentRegistry,
