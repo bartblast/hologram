@@ -55,6 +55,13 @@ const startsOverForSomebodyElse = (message) =>
   message.event === "sync_resync" &&
   message.frame.reason === "identity";
 
+// A frame posted only once what it says was written down - rows, or a place - rather than at once
+// (see SyncStream.tell): heard, it says the store holds every write made before it.
+const isWrittenFrame = (message) =>
+  message.kind === "frame" &&
+  (message.event === "sync_deltas" ||
+    (message.event === "synced" && Boolean(message.frame.cursor)));
+
 export default class Tabs {
   static leader = true;
 
@@ -387,23 +394,35 @@ export default class Tabs {
   // it was starting is taken, from the place it now holds. The same again once a tab that follows
   // has read the store again (see #takeStore).
   //
-  // Except where that lead starts from NOWHERE. A tab that leads with no place asks the server for
-  // everything (see #lead), and what it held is then the tail of a fill that began before it was
-  // listening - the head of that fill was in the store, which its restore refused for having no
-  // place (or for belonging to somebody else). Replayed, the tail's marker would give it a place
-  // and call the pot complete over the tail's rows alone, and the lead would then write exactly
-  // that to the store. So the frames and the group's state go: the fill repeats the rows, and the
-  // stream repeats a stop and the rules. Three things stay. The batches other tabs filed and the
-  // answers to them are about the queue, which the new fill does not replace. And a start-over
-  // because somebody else signed in is said only once, and drops at once every row the previous
-  // person may see - any this tab's own page carried for them included, which the new fill would
-  // leave readable until it ends.
+  // Except where a tab that leads starts from NOWHERE. A tab that leads with no place asks the
+  // server for everything (see #lead), and what it held is then the tail of a fill that began
+  // before it was listening - the head of that fill was in the store, which its restore refused for
+  // having no place (or for belonging to somebody else). Replayed, the tail's marker would give it
+  // a place and call the pot complete over the tail's rows alone, and the lead would then write
+  // exactly that to the store. So the frames and the group's state go: the fill repeats the rows,
+  // and the stream repeats a stop and the rules. Three things stay. The batches other tabs filed
+  // and the answers to them are about the queue, which the new fill does not replace. And a
+  // start-over because somebody else signed in is said only once, and drops at once every row the
+  // previous person may see - any this tab's own page carried for them included, which the new
+  // fill would leave readable until it ends.
   //
-  // Wherever a lead starts from, the identity the group's state names is taken first, as the state
-  // would have given it: it is the one the queue was numbered under, and the store can lack it -
-  // read before the tab that led had written it down, and then written over by this tab's restore
-  // with its page's pair. A tab that held no state keeps the pair its restore settled on. Either
-  // way #lead writes down the identity before anything is sent under it.
+  // The first tab of a group can hold something too: what the tab before it said, closing while
+  // this one joined, with nobody else waiting for the lock. With no place it starts from nowhere,
+  // as above. With one, its frames go all the same: this tab read the store after that tab let go
+  // of the lock, so after every frame it wrote down - and replayed, an older frame would move the
+  // place back behind the store. The state stays, for what is complete at that place. So does a
+  // start-over because somebody else signed in, unless a frame that was written down follows it:
+  // that tab's clear can have been lost as it closed. A frame with rows or a place was posted once
+  // its write committed, which came after the clear's - so the store holds the fill that followed,
+  // and the place this tab read is that fill's, which a start-over replayed would throw away. A
+  // frame with neither went out at once, and says nothing about the clear.
+  //
+  // Wherever a tab that leads starts from, the identity the group's state names is taken first, as
+  // the state would have given it: it is the one the queue was numbered under, and the store can
+  // lack it - read before the tab that led had written it down, and then written over by this
+  // tab's restore with its page's pair. A tab that held no state keeps the pair its restore settled
+  // on. A tab taking the lead writes the identity down in #lead, and the first tab of a group here,
+  // when the state named another than its restore settled on - before anything is sent under it.
   //
   // A request for the state is never replayed, whoever this tab is. A tab that follows answers
   // none. A tab taking the lead says what it holds once the lead is settled (see #lead) - and a
@@ -413,18 +432,39 @@ export default class Tabs {
   // else prompts it before its stream first serves it.
   static ready() {
     const lead = Tabs.#leadWhenReady;
-    const fromNowhere = lead && SyncStream.syncCursor === null;
+    const fromNowhere = Tabs.leader && SyncStream.syncCursor === null;
+    const first = Tabs.leader && !lead;
 
-    const held = Tabs.#held.filter((message) =>
-      fromNowhere
-        ? message.kind === "answered" ||
+    const lastWritten = Tabs.#held.findLastIndex(isWrittenFrame);
+
+    const held = Tabs.#held.filter((message, index) => {
+      if (fromNowhere) {
+        return (
+          message.kind === "answered" ||
           message.kind === "sealed" ||
           startsOverForSomebodyElse(message)
-        : message.kind !== "joined",
-    );
+        );
+      }
 
-    if (lead) {
+      if (first && message.kind === "frame") {
+        return startsOverForSomebodyElse(message) && index > lastWritten;
+      }
+
+      return message.kind !== "joined";
+    });
+
+    if (Tabs.leader) {
+      const replica = Replica.id;
+
       Tabs.#adoptGroupIdentity(Tabs.#held);
+
+      // An identity the group's state named over the one its restore settled on is the one it now
+      // sends under, and a tab that took no lead has no #lead to write it down. Before the replay,
+      // which can wake the sender - though a send waits for it anyway (see
+      // Durability.replicaWritten), so it is not awaited.
+      if (first && Replica.id !== replica) {
+        Durability.persistReplica(Replica.current());
+      }
     }
 
     Tabs.#held = [];
@@ -432,7 +472,16 @@ export default class Tabs {
     Tabs.#ready = true;
 
     for (const [index, message] of held.entries()) {
-      Tabs.#onMessage(message);
+      // One message that cannot be taken does not cost the tab the rest, or the lead: what it held
+      // is gone from #held already, and a lead not taken leaves the group with nobody sending. The
+      // failure is reported as any uncaught one is, once this is done.
+      try {
+        Tabs.#onMessage(message);
+      } catch (error) {
+        queueMicrotask(() => {
+          throw error;
+        });
+      }
 
       // A state that sent this tab back to the store (see #takeStore): what follows it is about
       // what the read brings, so it waits for the read. Only a tab that follows reads it, so there
@@ -502,9 +551,8 @@ export default class Tabs {
   // past the store its lead brought into step with its memory (see #lead), and the server would
   // never send those rows for the store to hold; a state would hand back a place this tab gave up
   // to start over. Passed over, the server sends the rows again from the place this tab holds, and
-  // the rules and any stop with them. (A tab handed the lead while starting holds them instead,
-  // and takes them before it takes the lead, which then starts from the place they left it at -
-  // see ready().)
+  // the rules and any stop with them. (A tab that leads while starting - handed the lead, or the
+  // first of its group - holds them instead, and ready() decides which it takes.)
   //
   // Except a frame starting over because somebody else signed in, which the server does not send
   // again: it is said once, to the stream it happened on. (Any other start-over the server says
@@ -662,7 +710,7 @@ export default class Tabs {
   }
 
   // The identity the last of the given messages that is the group's state names, taken up - for a
-  // tab about to lead, which writes it down before sending under it (see ready() and #lead).
+  // tab that leads, which writes it down before sending under it (see ready() and #lead).
   static #adoptGroupIdentity(messages) {
     const state = messages.findLast((message) => message.kind === "state");
 
@@ -759,9 +807,9 @@ export default class Tabs {
   // - It holds no place: the leader cleared it to start over, and the start-over that follows
   //   takes the rows and the place away. Only the rules and a stop are taken - completeness claimed
   //   over rows that are going would sweep the ones the fill is about to confirm.
-  // - It holds another place: every row the stream vouched for goes, the stored ones come in, and
-  //   the place with them - the rows a page carried stay, as a restore leaves them (see
-  //   LocalDatabase.restore). Then the claims, which are about those rows.
+  // - It holds another place: every row the stream vouched for goes, and every row the store holds
+  //   comes in as the store holds it, and the place with them. A row only the page carried stays,
+  //   carried, for a completeness claim to judge. Then the claims, which are about those rows.
   // - It cannot be read: the state is taken as it would be by a tab holding its place, which is
   //   what this tab did before there was a store to read.
   //
@@ -804,7 +852,24 @@ export default class Tabs {
             );
           }
 
-          LocalDatabase.restore(base.records);
+          // And the store's rows come in as the store holds them, over any the page carried: the
+          // place taken up is the store's, so the rows held at it have to be the store's - the
+          // server sends again only what changed after it, and an older value the page rendered
+          // would stay for good. The sets a record names are the store's too; a set it says
+          // nothing about is left as the page filed it, which is what a restore does.
+          for (const {facts, id, row, type} of base.records) {
+            if (row === null) {
+              continue;
+            }
+
+            LocalDatabase.putRow(type, row);
+            LocalDatabase.unmarkCarried(type, id);
+
+            for (const [relationship, targetIds] of Object.entries(facts)) {
+              LocalDatabase.replaceFacts(type, relationship, id, targetIds);
+            }
+          }
+
           SyncStream.syncCursor = base.cursor;
           SyncStream.scheduleRender();
         }
