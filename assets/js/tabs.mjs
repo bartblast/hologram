@@ -1,6 +1,7 @@
 "use strict";
 
 import Batches from "./batches.mjs";
+import Clock from "./clock.mjs";
 import Durability from "./durability.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
@@ -872,6 +873,13 @@ export default class Tabs {
           for (const {facts, id, row, type} of base.records) {
             if (row === null) {
               continue;
+            }
+
+            // Its revisions are seen, as a frame's are (see Deltas): the next stamp this tab hands
+            // out has to be above them, or a write made over a value it just took up would weigh
+            // as older than that value.
+            for (const revision of Object.values(row["$revisions"] ?? {})) {
+              Clock.observe(revision);
             }
 
             LocalDatabase.putRow(type, row);

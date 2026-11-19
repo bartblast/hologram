@@ -9,6 +9,7 @@ import {
 } from "./support/helpers.mjs";
 
 import Batches from "../../assets/js/batches.mjs";
+import Clock from "../../assets/js/clock.mjs";
 import Durability from "../../assets/js/durability.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
@@ -1754,6 +1755,38 @@ describe("Tabs", () => {
           [...LocalDatabase.baseTargetIds("MyApp.Task", "labels", "t-carried")],
           ["l1"],
         );
+      });
+
+      // A write made over a value it just took up would otherwise weigh as older than that value.
+      it("sees the revisions of the rows it takes up", async () => {
+        const revision = Date.now() * 1024 * 2;
+
+        sinon.stub(Durability, "readBase").resolves({
+          cursor: "place-2",
+          records: [
+            {
+              facts: {},
+              id: "t-stored",
+              row: {
+                $revisions: {title: revision},
+                id: "t-stored",
+                title: "stored",
+              },
+              type: "MyApp.Task",
+            },
+          ],
+        });
+
+        await follow();
+
+        try {
+          Tabs.receive(state("place-2"));
+          await waitForEventLoop();
+
+          assert.isAbove(Clock.stamp(), revision);
+        } finally {
+          Clock.reset();
+        }
       });
 
       it("takes a set the stored row names over the one the page filed", async () => {
