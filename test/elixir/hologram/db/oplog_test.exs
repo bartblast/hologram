@@ -357,6 +357,38 @@ defmodule Hologram.DB.OplogTest do
     end
   end
 
+  describe "count_after/4" do
+    test "counts the effects written after the given place" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+      seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
+
+      assert count_after(200, 0, 10, "seeded") == {2, false}
+      assert count_after(201, 0, 10, "seeded") == {1, false}
+    end
+
+    test "counts no further than the limit" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+      seed(201, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @target_id)
+
+      assert count_after(0, 0, 1, "seeded") == {1, false}
+    end
+
+    # Every row this suite seeds is written under the model hash "seeded".
+    test "answers whether an effect counted was written under another model" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      assert count_after(0, 0, 10, "current") == {1, true}
+    end
+
+    test "answers nothing counted for a place past every effect" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      [{tx, seq}] = places()
+
+      assert count_after(tx, seq, 10, "seeded") == {0, false}
+    end
+  end
+
   describe "any_data_match?/2" do
     test "answers whether the data of any effect of the given seqs holds the match" do
       seed(200, "del_entity", "Hologram.Auth.RoleGrant", @entity_id, %{"user_id" => "a"})

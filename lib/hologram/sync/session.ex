@@ -17,6 +17,9 @@ defmodule Hologram.Sync.Session do
   # A client coming back with a place is caught up from the log (see `catch_up/1`): the effects
   # since its place, a chunk at a time, each judged the way a live batch is, once the node's gate
   # lets it in (see `Hologram.Sync.Gate`). Then it is synced by read access like a first arrival.
+  #
+  # The fill and the catch-up read through sync's own pool (see `Hologram.Sync.Pool`), so a wave of
+  # them leaves the app's own requests alone.
 
   use GenServer, restart: :temporary
 
@@ -37,6 +40,7 @@ defmodule Hologram.Sync.Session do
   alias Hologram.Sync.Outbox
   alias Hologram.Sync.PackedIds
   alias Hologram.Sync.PageWindows
+  alias Hologram.Sync.Pool
   alias Hologram.Sync.Pot
   alias Hologram.Sync.Sessions
   alias Hologram.Sync.Verdicts
@@ -173,7 +177,7 @@ defmodule Hologram.Sync.Session do
   def handle_continue(:subscribe, %{resuming: false} = state) do
     :ok = Sessions.register(state.actor_user_id)
 
-    {:noreply, fill(%{state | page_types: page_types(state.page)})}
+    {:noreply, Pool.run(fn -> fill(%{state | page_types: page_types(state.page)}) end)}
   end
 
   # A returning client waits its turn at the node's gate. It hasn't joined the node's sessions yet,
@@ -237,7 +241,7 @@ defmodule Hologram.Sync.Session do
   # the catch-up read is garbage by then, and a session can sit idle for as long as its client
   # stays, with nothing allocating to collect it.
   def handle_info({:gate, :open}, state) do
-    caught_up = catch_up(state)
+    caught_up = Pool.run(fn -> catch_up(state) end)
 
     Process.demonitor(state.gate_ref, [:flush])
     :ok = Gate.leave()

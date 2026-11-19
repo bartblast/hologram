@@ -9,7 +9,6 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.LiveReload
   alias Hologram.Mutation.Record
   alias Hologram.Policy
-  alias Hologram.Policy.Edges
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
@@ -550,9 +549,9 @@ defmodule Hologram.Realtime.SSE do
   # Public so tests can start syncing under a hold without standing up a stream to start it on.
   #
   # Everything starting a sync session reads of the data model, read before anything is sent: the
-  # rules to hand a client built with others, whether a returning client can be told what it missed
-  # - or why it is to start over - and what each rule reads besides its own row. The session reads
-  # the gap again for itself, after these are sent. A hold can begin after the
+  # rules to hand a client built with others, and whether a returning client can be told what it
+  # missed - or why it is to start over. The session reads the gap for itself, after these are
+  # sent. A hold can begin after the
   # handshake found none, and every one of these refuses to read under it, so meeting one answers
   # `:held` rather than raising - and with nothing sent yet, the client is told nothing it would
   # have to take back when it is started again.
@@ -565,35 +564,21 @@ defmodule Hologram.Realtime.SSE do
   @doc false
   @spec read_sync_start(String.t() | nil, term | nil, String.t(), boolean, boolean) ::
           {:ok, map} | :held | :rules_changed
-  def read_sync_start(cursor, user_id, policy_hash, stale_rules?, resume?) do
+  def read_sync_start(cursor, _user_id, policy_hash, stale_rules?, resume?) do
     rules = if stale_rules?, do: Rules.rendered()
 
-    # Named rather than written inline as `resume? && gap(cursor, user_id, policy_hash)`: that
-    # answers FALSE when it does not resume, and everything below reads "no gap" from nil alone.
     # The types this build syncs, which a place names beside the rules: a client filled with others
     # holds no rows of a type added since. And whether its browser checks permissions: a client
     # filled without the checks holds rows carrying no verdicts.
     types_hash = Cursor.types_hash(QueryCache.synced_types(), QueryCache.permission_checking?())
 
-    {gap, resync_reason} =
-      if resume?, do: gap(cursor, user_id, policy_hash, types_hash), else: {nil, nil}
+    resumes = resume? and cursor != nil
+    resync_reason = if resumes, do: resync_reason(cursor, policy_hash, types_hash)
 
-    # What a rule reads besides its own row, so a row the gap never names can be judged again
-    # when the row DECIDING it moved. Only for a returning client - one arriving with nothing
-    # is sent every row it may see, so there is nothing to reach back for.
-    #
-    # Read from the runtime's cache rather than derived per resume: deriving grows with the
-    # model. A compile drops the cache, so a live reload is picked up by the next client that
-    # resumes.
-    edges = if gap, do: Edges.index()
-
-    # The session reads the gap again for itself rather than being handed this one, so only what
-    # this read decided travels on: whether the client resumes at all, and from where. The rest is
-    # no longer read by the session, which dates its frames by the edge its own read reached.
+    # Only whether the client resumes at all, and from where, travels on: the session reads the gap
+    # for itself, once its turn comes.
     start = %{
-      cursor: if(gap, do: cursor),
-      edges: edges,
-      gap_end: gap_end(gap),
+      cursor: if(resumes and resync_reason == nil, do: cursor),
       resync_reason: resync_reason,
       rules: rules,
       types_hash: types_hash
@@ -623,9 +608,7 @@ defmodule Hologram.Realtime.SSE do
       actor_user_id: user_id,
       applied_seq: connection.applied_seq,
       client: self(),
-      edges: start.edges,
       fill_place: connection.fill_place,
-      gap_end: start.gap_end,
       page: page,
       policy_hash: policy_hash,
       read_gap: read_gap,
@@ -1068,25 +1051,16 @@ defmodule Hologram.Realtime.SSE do
   # either told what it missed, or told to let go of what it holds - and is then filled the same
   # way a first arrival is. Deciding it here rather than in the session puts the answer beside the
   # reload notice it stands next to, both sent before the session's first frame.
-  defp gap(nil, _user_id, _policy_hash, _types_hash), do: {nil, nil}
-
-  defp gap(cursor, user_id, policy_hash, types_hash) do
-    case Catchup.gap(cursor, user_id, policy_hash, types_hash) do
-      {:ok, effects, _edge} -> {effects, nil}
-      {:full_resync, reason} -> {nil, reason}
+  #
+  # Asked without reading what the client missed (see `Hologram.Sync.Catchup.check/3`): a wave of
+  # clients coming back after a deploy asks this once each, all at once, before any of them waits
+  # its turn to be caught up. A few indexed statements, so on the app's own pool rather than
+  # queued behind the fills and catch-ups on sync's.
+  defp resync_reason(cursor, policy_hash, types_hash) do
+    case Catchup.check(cursor, policy_hash, types_hash) do
+      :ok -> nil
+      {:full_resync, reason} -> reason
     end
-  end
-
-  # The place of the last effect the gap holds, or nil for a gap holding none - which dates
-  # nothing, as a gap of nothing never has.
-  defp gap_end(nil), do: nil
-
-  defp gap_end([]), do: nil
-
-  defp gap_end(effects) do
-    %{seq: seq, tx: tx} = List.last(effects)
-
-    {tx, seq}
   end
 
   defp own_identities(instance_id, session_id, user_id) do

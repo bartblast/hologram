@@ -217,6 +217,32 @@ defmodule Hologram.DB.Oplog do
   end
 
   @doc """
+  Returns how many effects were written after the given place, counting no further than `limit`,
+  and whether any of the ones counted was written under a model other than the given hash's - the
+  two things a returning client's resume is decided by, in one statement, with none of the effects
+  read back.
+  """
+  @spec count_after(non_neg_integer, non_neg_integer, pos_integer, String.t()) ::
+          {non_neg_integer, boolean}
+  def count_after(tx, seq, limit, model_hash) do
+    statement = """
+    SELECT count(*), coalesce(bool_or("model_hash" <> $4), false)
+    FROM (
+      SELECT "model_hash"
+      FROM "#{Mapper.system_schema()}"."oplog"
+      WHERE "tx" > $1 OR ("tx" = $1 AND "seq" > $2)
+      ORDER BY "tx", "seq"
+      LIMIT $3
+    ) AS "gap"
+    """
+
+    {:ok, %Postgrex.Result{rows: [[count, other_model?]]}} =
+      Connection.query(statement, [tx, seq, limit, model_hash])
+
+    {count, other_model?}
+  end
+
+  @doc """
   Returns the payload of each effect of the given seqs, keyed by seq, as stored: string keys, the
   values as the write encoded them. Every effect is stored with one (see `append/1`), so only a seq
   the log doesn't hold is left out.

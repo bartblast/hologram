@@ -51,6 +51,67 @@ defmodule Hologram.Sync.CatchupTest do
     :ok
   end
 
+  describe "check/3" do
+    test "lets a client that missed what fits in a replay resume" do
+      seed(200)
+      seed(201)
+
+      [{tx, seq}, _second] = places()
+
+      assert check(Cursor.encode(tx, seq, @policy_hash, @types_hash), @policy_hash, @types_hash) ==
+               :ok
+    end
+
+    test "sends everything again to a client whose place cannot be read" do
+      assert check("not a cursor", @policy_hash, @types_hash) == {:full_resync, :cursor}
+    end
+
+    test "sends everything again to a client judged under other rules" do
+      seed(200)
+
+      [{tx, seq}] = places()
+      cursor = Cursor.encode(tx, seq, "fedcba9876543210fedcba9876543210", @types_hash)
+
+      assert check(cursor, @policy_hash, @types_hash) == {:full_resync, :policy_hash}
+    end
+
+    test "sends everything again to a client filled with other types" do
+      seed(200)
+
+      [{tx, seq}] = places()
+      cursor = Cursor.encode(tx, seq, @policy_hash, "ffeeddccbbaa99887766554433221100")
+
+      assert check(cursor, @policy_hash, @types_hash) == {:full_resync, :synced_types}
+    end
+
+    test "sends everything again when the client's place predates the log" do
+      seed(200)
+
+      cursor = Cursor.encode(100, 0, @policy_hash, @types_hash)
+
+      assert check(cursor, @policy_hash, @types_hash) == {:full_resync, :retention}
+    end
+
+    test "sends everything again when the gap is too big to be worth replaying" do
+      seed_many(Catchup.gap_limit() + 2)
+
+      [{tx, seq} | _rest] = places()
+      cursor = Cursor.encode(tx, seq, @policy_hash, @types_hash)
+
+      assert check(cursor, @policy_hash, @types_hash) == {:full_resync, :gap_too_large}
+    end
+
+    test "sends everything again when the gap spans a change of model" do
+      seed(200)
+      seed(201, "written under another model")
+
+      [{tx, seq}, _second] = places()
+      cursor = Cursor.encode(tx, seq, @policy_hash, @types_hash)
+
+      assert check(cursor, @policy_hash, @types_hash) == {:full_resync, :model_hash}
+    end
+  end
+
   describe "gap/4" do
     test "returns the effects written since the client was last told" do
       seed(200)

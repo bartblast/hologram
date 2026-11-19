@@ -17,9 +17,11 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Oplog
+  alias Hologram.DB.QueryCache
   alias Hologram.Entity
   alias Hologram.Mutation.Record
   alias Hologram.Policy
+  alias Hologram.Policy.Edges
   alias Hologram.Query
   alias Hologram.Query.Stage
   alias Hologram.Realtime.SSE
@@ -32,6 +34,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Sync.Live
   alias Hologram.Sync.PackedIds
   alias Hologram.Sync.PageWindows
+  alias Hologram.Sync.Pool
   alias Hologram.Sync.ResultStore
   alias Hologram.Sync.Session
   alias Hologram.Sync.Sessions
@@ -459,7 +462,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(applied_seq: 3, gap: gap, replica_id: @replica_id)
 
-      assert_receive {:sync_deltas, _cursor, [%{id: _id}], 9}
+      assert_receive {:sync_deltas, _cursor, [%{id: _id}], 9}, 1_000
     end
 
     # The batch's transaction was open when the gap was read, below the gap's own, and committed
@@ -553,6 +556,102 @@ defmodule Hologram.Sync.SessionTest do
 
       assert id == task.id
       assert data.c == "after"
+    end
+  end
+
+  describe "start_link/1 - sync's own pool" do
+    # Read outside the test's sandbox, so the reader asks the connection who it is rather than
+    # reading rows.
+    test "reads a fill through sync's own pool when it is started" do
+      put_app_env(:sync, pool_size: 1)
+      start_supervised!(Pool.child_spec())
+
+      windows(%{})
+      test_pid = self()
+
+      read_fill = fn _entity_type, _actor_user_id, _replica_id, _synced_types ->
+        {:ok, %Postgrex.Result{rows: [[name]]}} =
+          Connection.query("SELECT current_setting('application_name')")
+
+        send(test_pid, {:read_on, name})
+
+        {[], nil}
+      end
+
+      start_session!(read_fill: read_fill)
+
+      assert_receive {:read_on, "hologram_sync"}, 1_000
+      assert_receive {:sync_synced, :all, _cursor}, 1_000
+    end
+
+    # A grant moving a whole type under a connected client is what keeps it current, which a wave
+    # filling on sync's pool mustn't hold up.
+    test "reads a type again for a connected client on the app's pool" do
+      put_app_env(:sync, pool_size: 1)
+      start_supervised!(Pool.child_spec())
+
+      windows(%{})
+      test_pid = self()
+
+      user =
+        %{email: "connected@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      read_fill = fn _entity_type, _actor_user_id, _replica_id, _synced_types ->
+        {:ok, %Postgrex.Result{rows: [[name]]}} =
+          Connection.query("SELECT current_setting('application_name')")
+
+        send(test_pid, {:read_on, name})
+
+        {[], nil}
+      end
+
+      session = start_session!(actor_user_id: user.id, read_fill: read_fill)
+
+      assert_receive {:sync_synced, :all, _cursor}, 1_000
+      flush_messages()
+
+      grant = %{
+        "entity_id" => nil,
+        "entity_type" => "Hologram.Test.Fixtures.Policy.Module1",
+        "id" => Entity.generate_id(),
+        "role" => "viewer",
+        "user_id" => user.id
+      }
+
+      effects = [logged(:put_entity, RoleGrant, grant["id"], grant, {300, 1})]
+      synced_types = QueryCache.synced_types()
+      part = Live.part_now(effects, user.id, Edges.index(), synced_types, {301, 0}, 300)
+
+      assert PolicyModule1 in part.whole_types
+
+      send(session, {:live, part})
+
+      assert_receive {:read_on, name}, 1_000
+      refute name == "hologram_sync"
+    end
+
+    test "reads a catch-up through sync's own pool when it is started" do
+      put_app_env(:sync, pool_size: 1)
+      start_supervised!(Pool.child_spec())
+
+      windows(%{})
+      test_pid = self()
+
+      read_ids = fn _entity_type, _actor_user_id ->
+        {:ok, %Postgrex.Result{rows: [[name]]}} =
+          Connection.query("SELECT current_setting('application_name')")
+
+        send(test_pid, {:read_on, name})
+
+        ""
+      end
+
+      start_session!(gap: [], read_ids: read_ids)
+
+      assert_receive {:read_on, "hologram_sync"}, 1_000
+      assert_receive {:sync_synced, :all, _cursor}, 1_000
     end
   end
 

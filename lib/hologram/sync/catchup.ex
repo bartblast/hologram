@@ -77,6 +77,33 @@ defmodule Hologram.Sync.Catchup do
   end
 
   @doc """
+  Returns whether a client coming back with the given cursor can be caught up, answering `:ok`, or
+  why everything must be sent again, answering as `gap/4` does - without reading the gap: the
+  effects are counted rather than read, and the model they were written under is asked about
+  rather than compared one by one.
+
+  For the stream deciding whether a returning client resumes, before its session waits its turn
+  (see `Hologram.Sync.Gate`) and reads the gap for itself: a wave of clients coming back after a
+  deploy pays for this once each, all at once. The session's own read answers again, since the log
+  can move in between.
+  """
+  @spec check(term, String.t(), String.t()) :: :ok | {:full_resync, atom}
+  def check(cursor, policy_hash, types_hash) do
+    with {:ok, tx, seq, cursor_policy_hash, cursor_types_hash} <- decode_place(cursor),
+         :ok <- check_rules(cursor_policy_hash, policy_hash),
+         :ok <- check_types(cursor_types_hash, types_hash),
+         :ok <- check_retention(tx, seq) do
+      limit = gap_limit()
+
+      case Oplog.count_after(tx, seq, limit + 1, Model.hash()) do
+        {count, _other_model?} when count > limit -> {:full_resync, :gap_too_large}
+        {_count, true} -> {:full_resync, :model_hash}
+        {_count, false} -> :ok
+      end
+    end
+  end
+
+  @doc """
   Returns the effects written since the given cursor, without their payloads (see
   `Hologram.DB.Oplog.read_after/3`), and the edge below which every transaction had finished
   before they were read (see `Hologram.DB.Oplog.current_xmin/0`) - or why everything must be sent
