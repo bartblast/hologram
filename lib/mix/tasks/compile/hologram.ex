@@ -1774,7 +1774,9 @@ defmodule Mix.Tasks.Compile.Hologram do
   # Hologram.Compiler.CompileInputs), and it can tell before it loads anything. A later run in the
   # same VM does not consult the record, whether it follows a compile or a run that found nothing
   # changed: the record can be another OS process's since, whose modules this VM still runs the old
-  # code of until a compile unloads them (see unload_replaced_modules/3).
+  # code of until a compile unloads them (see unload_replaced_modules/3). The data layer's dumps
+  # have to stand too: the record names the static files, not the dumps the boot reads, and a
+  # missing one is written again only by a compile.
   defp nothing_changed?(opts) do
     if opts[:first_compile?] do
       record =
@@ -1782,7 +1784,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         |> Path.join(Reflection.compile_inputs_dump_file_name())
         |> CompileInputs.load()
 
-      record != nil and CompileInputs.unchanged?(record, opts)
+      record != nil and CompileInputs.unchanged?(record, opts) and data_layer_dumps_exist?(opts)
     else
       false
     end

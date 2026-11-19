@@ -5440,6 +5440,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert run(opts) == :ok
     end
 
+    for dump_file_name <- [
+          Reflection.index_needs_plt_dump_file_name(),
+          Reflection.page_windows_plt_dump_file_name(),
+          Reflection.queries_plt_dump_file_name()
+        ] do
+      test "a new VM whose #{dump_file_name} is gone compiles and writes it again", %{opts: opts} do
+        dump_path = Path.join(opts[:build_dir], unquote(dump_file_name))
+        File.rm!(dump_path)
+
+        assert run(opts) == :ok
+        assert File.exists?(dump_path)
+      end
+    end
+
     test "a new VM with no record compiles", %{opts: opts} do
       File.rm!(@compile_inputs_path)
 
