@@ -79,7 +79,7 @@ defmodule Hologram.Sync.Verdicts do
   @spec stale(
           list(struct),
           %{String.t() => map},
-          String.t() | nil,
+          Hologram.Server.identity_id() | nil,
           MapSet.t(module) | :all,
           MapSet.t(String.t())
         ) :: list({struct, map})

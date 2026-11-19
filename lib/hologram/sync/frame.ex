@@ -33,7 +33,7 @@ defmodule Hologram.Sync.Frame do
   was held under - a row no longer there to be asked is named by the bookkeeping that watched it
   arrive.
   """
-  @spec deltas(map, String.t() | nil) :: list(map)
+  @spec deltas(map, Hologram.Server.identity_id() | nil) :: list(map)
   def deltas(news, actor_user_id) do
     Enum.concat([
       Enum.map(news.appeared, &put_entity(&1, row_verdicts(actor_user_id, &1))),
@@ -210,7 +210,7 @@ defmodule Hologram.Sync.Frame do
   put carries them (see `Hologram.Auth.verdicts/2`) - none when the build has no client checking
   permissions, which never reads one, or the row's type has no deciding quantifier.
   """
-  @spec row_verdicts(String.t() | nil, struct) :: %{String.t() => boolean}
+  @spec row_verdicts(Hologram.Server.identity_id() | nil, struct) :: %{String.t() => boolean}
   def row_verdicts(actor_user_id, %entity_type{} = row) do
     if Policy.deciding_quantifiers(entity_type) != [] and QueryCache.permission_checking?() do
       Auth.verdicts(actor_user_id, row)
