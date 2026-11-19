@@ -1100,7 +1100,7 @@ defmodule Hologram.Query.Expression do
       [_root | _rest] ->
         root_node = root_name(expr)
 
-        if not pinnable?(root_node, env) do
+        if not pinned_value?(root_node, env) do
           {root, _meta, _context} = root_node
 
           compile_error!(
@@ -1118,10 +1118,11 @@ defmodule Hologram.Query.Expression do
   end
 
   # A pinned bare name reads a variable of the surrounding code, so where none of that name is bound
-  # it can only be a name written with a pin it doesn't take - refused with the bare spelling,
-  # before Elixir's refusal of an undefined variable, which says nothing about the query.
+  # it can only be a name written with a pin it doesn't take - unless a macro marked it to fall back
+  # to a call - refused with the bare spelling, before Elixir's refusal of an undefined variable,
+  # which says nothing about the query.
   defp pinned_name!({:^, _meta, [expr]} = ast, names, env) do
-    if bare_name?(expr) and not pinnable?(expr, env) do
+    if bare_name?(expr) and not pinned_value?(expr, env) do
       compile_error!(
         "#{Macro.to_string(ast)} pins #{Macro.to_string(expr)}, which no variable holds here - #{names.stage} names #{names.names} with a bare name, without the pin: #{Macro.to_string(expr)}",
         ast,
@@ -1133,14 +1134,15 @@ defmodule Hologram.Query.Expression do
   end
 
   # A pinned name or path on the right side of a comparison reads a variable of the surrounding
-  # code, so where none is bound under its first name it can only be a field written with a pin it
-  # doesn't take - refused with the spelling that reads the field: bare for the queried row, and
-  # through the bound name for a row a quantifier around it binds. A first name the surrounding code
-  # holds is its variable, even where a quantifier binds the same name.
+  # code, so where none is bound under its first name - and no macro marked it to fall back to a
+  # call - it can only be a field written with a pin it doesn't take - refused with the spelling that
+  # reads the field: bare for the queried row, and through the bound name for a row a quantifier
+  # around it binds. A first name the surrounding code holds is its variable, even where a
+  # quantifier binds the same name.
   defp pinned_operand!({:^, _meta, [expr]} = ast, names, env) do
     case hops(expr) do
       [root | rest] ->
-        if not pinnable?(root_name(expr), env) do
+        if not pinned_value?(root_name(expr), env) do
           compile_error!(extra_pin_message(ast, expr, root, rest, names), ast, env)
         end
 
@@ -1156,6 +1158,12 @@ defmodule Hologram.Query.Expression do
   # - or a name marked pinnable.
   defp pinnable?({_name, meta, _context} = ast, env) do
     Keyword.get(meta, @pinnable_key, false) or variable?(ast, env)
+  end
+
+  # Whether a pinned bare name reads a value: one the surrounding code reads, or one a macro marked
+  # if_undefined: :apply, which Elixir expands to a call of that name where no variable holds it.
+  defp pinned_value?({_name, meta, _context} = ast, env) do
+    Keyword.get(meta, :if_undefined) == :apply or pinnable?(ast, env)
   end
 
   defp predicate_list!({:and, _meta, [left, right]}, names, env) do

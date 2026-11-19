@@ -510,6 +510,14 @@ defmodule Hologram.Query.ExpressionTest do
       assert lower_inclusion("^spec", spec: [project: [:owner]]) == [project: [:owner]]
     end
 
+    # Elixir expands a name a macro marked if_undefined: :apply to a call of that name where no
+    # variable holds it.
+    test "passes a pinned name that falls back to a call through" do
+      name = {:relationship, [if_undefined: :apply, line: 12], nil}
+
+      assert inclusion({:^, [line: 12], [name]}, env()) == name
+    end
+
     test "raises on a call" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: include names a relationship with a bare name or a path, or with a pinned expression when the name comes from the surrounding code, got: Foo.bar() - a value from the surrounding code is pinned: ^Foo.bar()",
@@ -696,6 +704,14 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "passes a pinned spec through" do
       assert lower_ordering("^spec", spec: [{:title, :asc}]) == [title: :asc]
+    end
+
+    # Elixir expands a name a macro marked if_undefined: :apply to a call of that name where no
+    # variable holds it.
+    test "passes a pinned name that falls back to a call through" do
+      name = {:sort_key, [if_undefined: :apply, line: 12], nil}
+
+      assert ordering({:^, [line: 12], [name]}, env()) == name
     end
 
     test "raises on a bare direction" do
@@ -1189,6 +1205,18 @@ defmodule Hologram.Query.ExpressionTest do
                env
              ) ==
                [created_at: {:>, variable}]
+    end
+
+    # Elixir expands a name a macro marked if_undefined: :apply to a call of that name where no
+    # variable holds it.
+    test "lowers a pinned name that falls back to a call" do
+      name = {:since, [if_undefined: :apply, line: 12], nil}
+
+      assert predicates(
+               {:>, [line: 12], [{:created_at, [line: 12], nil}, {:^, [line: 12], [name]}]},
+               env()
+             ) ==
+               [created_at: {:>, name}]
     end
 
     test "lowers a pinned path over a bound row's name a variable also holds" do
