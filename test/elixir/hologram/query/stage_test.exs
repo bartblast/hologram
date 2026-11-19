@@ -2647,15 +2647,30 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
-    # The macros leave the left side no hint when the right side has one, so the right side's comes
-    # first.
+    # An unknown right side reading a variable stays unknown whichever way the two are swapped, so
+    # its fix comes ahead of the left side's.
     test "names the fix a right side's hint gives ahead of refusing the left side" do
       expected_msg =
         "unknown attribute :term in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - a value from the surrounding code is pinned: ^term"
 
       assert_error MisuseError, expected_msg, fn ->
         filter(Module2, [search: {:==, {:attribute, :term}}], [
-          {:operand, 0, :term, "a value from the surrounding code is pinned: ^term", []}
+          {:operand, 0, :term, "a value from the surrounding code is pinned: ^term", []},
+          {:key, 0, :search,
+           "a value from the surrounding code is pinned, on the right side: term == ^search", []}
+        ])
+      end
+    end
+
+    test "names the fix a left side's hint gives beside a right side that is an attribute" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - a value from the surrounding code is pinned, on the right side: c == ^search"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [search: {:==, {:attribute, :c}}], [
+          {:operand, 0, :c, "a value from the surrounding code is pinned: ^c", []},
+          {:key, 0, :search,
+           "a value from the surrounding code is pinned, on the right side: c == ^search", []}
         ])
       end
     end

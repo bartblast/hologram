@@ -151,6 +151,18 @@ defmodule Hologram.QueryTest do
       end
     end
 
+    test "names the left side's forgotten pin beside an attribute a variable is named like" do
+      limit = 1
+      b = 2
+
+      expected_msg =
+        "unknown attribute :limit in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - a value from the surrounding code is pinned, on the right side: b > ^limit"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module2, limit < b and b != ^limit and b != ^b)
+      end
+    end
+
     test "names the right side's forgotten pin when both sides are variables' names" do
       since = 1
       until = 2

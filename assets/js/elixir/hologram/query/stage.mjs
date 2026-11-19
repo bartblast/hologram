@@ -273,11 +273,10 @@ function entityTypeOf(entity, stage) {
 // nearest first - the queried type last.
 //
 // A name the query macros left a fix for, or one another row in scope declares, is refused with
-// what reads it. An operand's fix comes ahead of the key - the macros leave a key no fix when the
-// operand has one, and the forgotten pin is the likelier mistake - and any other refusal in the
-// order the triple makes it, an operand's row hint handed to the triple. A key's fix is about a
-// comparison with a name, the only one the macros leave it for, so a membership of the same name
-// doesn't take it.
+// what reads it. An operand's fix comes ahead of the key - an unknown right side reading a variable
+// stays unknown whichever way the two are swapped - and any other refusal in the order the triple
+// makes it, an operand's row hint handed to the triple. A key's fix is about a comparison with a
+// name, the only one the macros leave it for, so a membership of the same name doesn't take it.
 function entryClauses(pair, scope, hints) {
   const [name, value] = pair.data;
 

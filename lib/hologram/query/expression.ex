@@ -734,10 +734,10 @@ defmodule Hologram.Query.Expression do
 
   # A value of the surrounding code goes on the right side of a comparison, so a left side reading
   # one, compared with a name, is most likely the two swapped - the operator flipped with them. A
-  # right side reading one too forgot its own pin, which its own hint names, so the key gets no fix.
+  # right side reading one too keeps its own fix, which the stage names first when that side is no
+  # attribute either - one that is an attribute leaves the key's fix to name.
   defp key_fix(operator, left, right, bindings, env) do
     with right_name when right_name != nil <- written_name(right, bindings),
-         nil <- pin_fix(right, bindings, env, :operand),
          fix when fix != nil <- pin_fix(left, bindings, env, :key) do
       swapped = Macro.to_string({flipped(operator), [], [right, {:^, [], [left]}]})
 

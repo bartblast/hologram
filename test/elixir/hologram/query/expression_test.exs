@@ -868,10 +868,13 @@ defmodule Hologram.Query.ExpressionTest do
              ]
     end
 
-    # The right side's own hint names its pin - swapping the two would leave it unpinned.
-    test "hints only the right side when both sides are variables' names" do
+    # The stage names the right side's fix first when that side is no attribute either.
+    test "hints both sides when both are variables' names" do
       assert hints_of(&predicate_hints/2, "since < until", [:since, :until]) == [
-               {:operand, 0, :until, "a value from the surrounding code is pinned: ^until", []}
+               {:operand, 0, :until, "a value from the surrounding code is pinned: ^until", []},
+               {:key, 0, :since,
+                "a value from the surrounding code is pinned, on the right side: until > ^since",
+                []}
              ]
     end
 

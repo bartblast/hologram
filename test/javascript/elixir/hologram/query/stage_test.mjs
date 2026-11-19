@@ -4045,8 +4045,8 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
-    // The macros leave the left side no hint when the right side has one, so the right side's comes
-    // first.
+    // An unknown right side reading a variable stays unknown whichever way the two are swapped, so
+    // its fix comes ahead of the left side's.
     it("names the fix a right side's hint gives ahead of refusing the left side", () => {
       const term = Type.atom("term");
 
@@ -4055,15 +4055,52 @@ describe("Elixir_Hologram_Query_Stage", () => {
           filterHinted(
             booking,
             predicates([["search", op("==", attribute(term))]]),
-            hints([
-              "operand",
-              0,
-              term,
-              "a value from the surrounding code is pinned: ^term",
-            ]),
+            hints(
+              [
+                "operand",
+                0,
+                term,
+                "a value from the surrounding code is pinned: ^term",
+              ],
+              [
+                "key",
+                0,
+                search,
+                "a value from the surrounding code is pinned, on the right side: term == ^search",
+              ],
+            ),
           ),
         "Hologram.MisuseError",
         "unknown attribute :term in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - a value from the surrounding code is pinned: ^term",
+      );
+    });
+
+    it("names the fix a left side's hint gives beside a right side that is an attribute", () => {
+      const guests = Type.atom("guests");
+      const limit = Type.atom("limit");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["limit", op("<", attribute(guests))]]),
+            hints(
+              [
+                "operand",
+                0,
+                guests,
+                "a value from the surrounding code is pinned: ^guests",
+              ],
+              [
+                "key",
+                0,
+                limit,
+                "a value from the surrounding code is pinned, on the right side: guests > ^limit",
+              ],
+            ),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :limit in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - a value from the surrounding code is pinned, on the right side: guests > ^limit",
       );
     });
 
