@@ -86,8 +86,7 @@ defmodule Hologram.Migrator do
   Every file is rendered before the first one applies, each from the model the one before it
   leaves: a change that meets an unbuilt unique index over rows repeating its key needs to
   know whether a later op takes that index away (see drop_removed_indexes/3). So a file the
-  renderer refuses is refused with no file applied, where it used to leave the ones before
-  it applied.
+  renderer refuses is refused with no file applied.
 
   The managed-object registry is deliberately left alone - it is schema reconciliation's
   record of what it created, and a migration-managed database has no use for it.

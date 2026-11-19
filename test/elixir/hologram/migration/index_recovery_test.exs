@@ -746,7 +746,7 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     end
 
     # A running node wrote the repeated key while the index was missing. The build before the
-    # pending files fails on it and leaves the name taken, which is what the pending drop needs.
+    # pending files fails on it and leaves the index invalid, which the pending drop takes away.
     test "boots on the first try when a pending file drops a missing index whose key repeats",
          %{chain: chain, model: model, scratch: scratch} do
       drop =
@@ -1124,7 +1124,22 @@ defmodule Hologram.Migration.IndexRecoveryTest do
         insert_task("taken")
         insert_task("taken")
 
-        assert run(Enum.concat(extra_chain, pending), post_model, @context) == :ok
+        # The suite runs at :warning, and the line is an info one. The module is async: false,
+        # so raising the level for one run touches no other test.
+        level = Logger.level()
+        Logger.configure(level: :info)
+
+        log =
+          try do
+            ExUnit.CaptureLog.capture_log([level: :info], fn ->
+              assert run(Enum.concat(extra_chain, pending), post_model, @context) == :ok
+            end)
+          after
+            Logger.configure(level: level)
+          end
+
+        assert log =~
+                 ~s(Hologram: dropping unbuilt unique index "#{@slug_index}" on table "my_app_task" ahead of a change it would fail - a later migration op removes it)
 
         assert index_validity(@slug_index) == :absent
       end)
