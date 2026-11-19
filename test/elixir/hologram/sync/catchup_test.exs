@@ -559,6 +559,39 @@ defmodule Hologram.Sync.CatchupTest do
                )
     end
 
+    # Answered before the log is asked: a grant effect is matched on its user id as stored, so one
+    # naming the session's own spelling would otherwise reach the grant store with an id it can't
+    # look up.
+    for user_id <- [7, "abc"] do
+      test "answers no grants for a user id no user entity can have, #{inspect(user_id)}" do
+        resource = DB.create!(PolicyModule1.new())
+
+        grant = %RoleGrant{
+          id: Entity.generate_id(),
+          entity_id: resource.id,
+          entity_type: PolicyModule1,
+          role: :viewer,
+          user_id: unquote(user_id)
+        }
+
+        clear_log()
+
+        seed(200)
+
+        [{tx, seq}] = places()
+
+        seed_grant(201, "del_entity", grant)
+
+        assert {:ok, [_effect], nil} =
+                 gap(
+                   Cursor.encode(tx, seq, @policy_hash, @types_hash),
+                   unquote(user_id),
+                   @policy_hash,
+                   @types_hash
+                 )
+      end
+    end
+
     test "answers no grants when the gap holds none" do
       actor = user("catchup_5@example.com")
 
