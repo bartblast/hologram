@@ -5259,14 +5259,25 @@ defmodule Hologram.Compiler do
     render_json_object(members ++ render_verdict_members(clause, verdict_context))
   end
 
-  # A deciding predicate standing in a rule's predicates - one reading a server-only attribute, whose
-  # value no client holds, or in a read rule a row of a type no client holds - is the key the
-  # server's verdict on it is sent under and the types it reads alone, since the client answers it
-  # from the verdict and nothing else.
+  # A deciding predicate standing in a rule's predicates is the key the server's verdict on it is
+  # sent under and the types it reads. One reading a server-only attribute, whose value no client
+  # holds, is those alone, since the client answers it from the verdict and nothing else. One that
+  # in a read rule reads a row of a type no client holds carries its triple too: the client answers
+  # it from the rows it holds when they decide it - an empty reference on the path reads no row -
+  # and from the verdict otherwise.
   defp render_policy_clause(types, {_name, _operator, _value} = clause, verdict_context) do
     case render_verdict_members(clause, verdict_context) do
-      [] -> render_policy_triple(types, clause)
-      members -> render_json_object(members)
+      [] ->
+        render_policy_triple(types, clause)
+
+      members ->
+        {entity_type, _operation} = verdict_context
+
+        if Policy.reads_server_only?(entity_type, clause) do
+          render_json_object(members)
+        else
+          render_json_object([{"predicate", render_policy_triple(types, clause)} | members])
+        end
     end
   end
 

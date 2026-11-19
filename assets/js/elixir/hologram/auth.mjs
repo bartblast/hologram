@@ -242,9 +242,10 @@ function alternativesHold(
 }
 
 // A clause is a triple, a disjunction, a quantifier, or a predicate the build sends as its verdict
-// key and the types it reads alone - one reading a server-only attribute, or in a read rule a row of
-// a type nobody may read, which only the server's verdict answers, since no client holds the value
-// it compares.
+// key and the types it reads. One reading a server-only attribute comes alone, and only the
+// server's verdict answers it, since no client holds the value it compares. One that in a read rule
+// reads a row of a type nobody may read comes with its triple: this client answers it when the rows
+// it holds decide it - an empty reference on its path reads no row - and the verdict otherwise.
 function clauseHolds(entityType, entity, clause, actorUserId, outer) {
   if (Array.isArray(clause)) {
     return predicateHolds(entityType, entity, clause, actorUserId, outer);
@@ -256,6 +257,20 @@ function clauseHolds(entityType, entity, clause, actorUserId, outer) {
 
   if (Object.hasOwn(clause, "quantifier")) {
     return quantifierHolds(entityType, entity, clause, actorUserId, outer);
+  }
+
+  if (Object.hasOwn(clause, "predicate")) {
+    const held = predicateHolds(
+      entityType,
+      entity,
+      clause.predicate,
+      actorUserId,
+      outer,
+    );
+
+    if (held !== UNKNOWN) {
+      return held;
+    }
   }
 
   return verdictHolds(entityType, entity, clause, actorUserId);

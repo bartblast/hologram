@@ -5106,8 +5106,9 @@ defmodule Hologram.CompilerTest do
     end
 
     # No client holds a row of a type nobody may read, so a read rule's predicate reading one is the
-    # key the server's verdict on it is sent under and the types it reads alone.
-    test "bakes a read rule's predicate reading a type nobody may read as its verdict key and reads",
+    # key the server's verdict on it is sent under and the types it reads, with its triple for when
+    # the project reference is empty.
+    test "bakes a read rule's predicate reading a type nobody may read with its verdict key and reads",
          %{
            ir_plt: ir_plt,
            runtime_mfas: runtime_mfas
@@ -5134,7 +5135,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"reads":["Hologram.CompilerTest.BakedHiddenProject"],"verdict":"#{key}"}],"to":null,"via":null}]/
+               ~s/"read":[{"predicates":[{"predicate":[["project","archived"],"==",false],"reads":["Hologram.CompilerTest.BakedHiddenProject"],"verdict":"#{key}"}],"to":null,"via":null}]/
              )
     end
 

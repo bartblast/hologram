@@ -2815,6 +2815,59 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    // In a read rule, a predicate reading a row of a type nobody may read comes with its triple
+    // beside its verdict key and the types it reads: an empty reference reads no row, so this client
+    // answers it itself, and the verdict answers it when the reference names a folder it doesn't hold.
+    describe("on a predicate the build sends with its triple and verdict", () => {
+      const noFolderArchived = {
+        predicate: [["folder", "archived"], "==", null],
+        reads: [FOLDER],
+        verdict: KEY,
+      };
+
+      const documentReads = (userId, entity) => {
+        defineModel({read: [rule({predicates: [noFolderArchived]})]});
+
+        return can(Type.bitstring(userId), Type.atom("read"), entity);
+      };
+
+      beforeEach(() => {
+        LocalDatabase.actorUserId = ALICE;
+      });
+
+      // The server worked the verdict out for the session's user only.
+      it("answers itself for another user when the reference is empty", () => {
+        putDocument({$verdicts: {[KEY]: true}, folder_id: null});
+
+        assert.deepStrictEqual(
+          documentReads(BOB, document({folder_id: null})),
+          Type.boolean(true),
+        );
+      });
+
+      // A struct changed in an action is not the row the verdict is about.
+      it("answers itself for a changed struct when the reference is empty", () => {
+        putDocument({$verdicts: {[KEY]: true}, folder_id: null});
+
+        assert.deepStrictEqual(
+          documentReads(ALICE, document({folder_id: null, title: "Renamed"})),
+          Type.boolean(true),
+        );
+      });
+
+      it("answers from the verdict when the reference names a folder it doesn't hold", () => {
+        const folderReads = (verdict, userId) => {
+          putDocument({$verdicts: {[KEY]: verdict}});
+
+          return documentReads(userId, document({folder_id: FOLDER_ID}));
+        };
+
+        assert.deepStrictEqual(folderReads(true, ALICE), Type.boolean(true));
+        assert.deepStrictEqual(folderReads(false, ALICE), Type.boolean(false));
+        assert.deepStrictEqual(folderReads(true, BOB), Type.boolean(false));
+      });
+    });
+
     // In a read rule, a delegation whose chain passes a row of a type nobody may read comes with
     // its verdict key and the types it reads: no client holds the folder it asks.
     describe("on a delegation the build sends with its verdict", () => {
