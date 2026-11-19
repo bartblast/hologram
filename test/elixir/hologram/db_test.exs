@@ -588,8 +588,7 @@ defmodule Hologram.DBTest do
 
       assert reload(Reflection.list_entities(), Reflection.list_roles()) == :ok
 
-      assert Introspection.schema() ==
-               Schema.from_mapping(mapping(), IndexPlan.framework_plan(mapping()))
+      assert Introspection.schema() == Schema.from_mapping(mapping(), IndexPlan.plan(mapping()))
     end
 
     test "derives the mapping from the given modules" do
