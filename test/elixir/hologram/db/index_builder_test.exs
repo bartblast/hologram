@@ -764,7 +764,10 @@ defmodule Hologram.DB.IndexBuilderTest do
           route(scratch, fn ->
             Migrator.with_migration_connection(fn ->
               {:ok, %{rows: [[backend]]}} = Connection.query("SELECT pg_backend_pid()")
-              Postgrex.query!(observer, "SELECT pg_terminate_backend($1, 5000)", [backend])
+
+              # Waits up to 5 s for the backend to end, and answers false if it hasn't by then.
+              %{rows: [[true]]} =
+                Postgrex.query!(observer, "SELECT pg_terminate_backend($1, 5000)", [backend])
 
               # No statement after it runs, on this session or a fresh one, which would hold no
               # lock: each fails or exits.
@@ -779,7 +782,8 @@ defmodule Hologram.DB.IndexBuilderTest do
           end)
         end)
 
-      outcomes = Task.await(outcome)
+      # Past the 5 s the termination can take, with room for the tries after it.
+      outcomes = Task.await(outcome, 15_000)
 
       refute Enum.any?(outcomes, &match?({:ok, _result}, &1))
       assert {:exit, _reason} = List.last(outcomes)
