@@ -46,6 +46,14 @@ defmodule Hologram.Test.BrowserSession do
   # the same.
   @default_warm_up_timeout 180_000
 
+  # A Chrome switch of our own, which Chrome ignores. Its value is the OS pid of the
+  # BEAM whose run started the browser.
+  @run_marker_switch "--hologram-test-run="
+
+  # ChromeDriver starts every Chrome with this switch, so it marks a browser a test
+  # run started, never one a person opened.
+  @test_browser_switch "--test-type=webdriver"
+
   @doc """
   Waits until Wallaby's session store has ended the browser sessions of the given
   test process. If the store doesn't get there within the timeout, it's stuck on a
@@ -136,11 +144,26 @@ defmodule Hologram.Test.BrowserSession do
   Mix starts Wallaby before the test helper runs when it's a runtime dep, so a
   running Wallaby is stopped first, for the changes below to apply.
 
+  First it kills the test browsers left by runs that have ended. A run whose BEAM
+  is killed before its sessions end leaves its browsers running, and such a browser
+  keeps reconnecting to its page's server. When a later run's server listens on the
+  same port, the browser's connection registers there, and a test that waits on
+  every registered connection can pass on a browser that isn't its own. So each
+  run's browsers get a Chrome switch that names the run's BEAM by its OS pid, and
+  the browsers whose BEAM is gone are killed. A browser with no such switch is left
+  alone, and so are the browsers of a run still going, and any process that isn't
+  Chrome or Chromium. The running processes are read with `ps`, and without it
+  nothing is killed.
+
   Wallaby starts ChromeDriver with its log off, so its configured ChromeDriver
   path is pointed at a wrapper script that adds the log flags. Each ChromeDriver
-  process writes `chromedriver-<os pid>.log` in the log dir, with Chrome's own
-  output in it too. The log dir is emptied first, so it holds one run's logs, and
-  it's where the other functions here write `hangs.txt`.
+  process writes `chromedriver-<os pid>.log` in the run's log dir, with Chrome's
+  own output in it too. The run's log dir is a folder of the log dir named after
+  the BEAM's OS pid, so runs that overlap in one checkout keep their logs apart.
+  The folders of runs that have ended are deleted first, so the log dir holds only
+  the logs of this run and of runs still going. Without `ps` every other run
+  counts as ended, so their log dirs are all deleted. The run's log dir is also
+  where the other functions here write `hangs.txt`.
 
   Then it waits until every ChromeDriver Wallaby started is ready. Wallaby's tree
   can go down when they aren't ready in time, failing every test of the run, so
@@ -162,11 +185,18 @@ defmodule Hologram.Test.BrowserSession do
       one Wallaby would run
     * `:create_fn` - creates the warm-up session, defaults to
       `&Wallaby.WebdriverClient.create_session/2`
+    * `:default_capabilities_fn` - gives the capabilities the run's switch is added
+      to when Wallaby's config has none, defaults to
+      `&Wallaby.Chrome.default_capabilities/0`
     * `:delete_fn` - deletes a warm-up session created after its attempt was
       abandoned, given the base URL and the session id
     * `:end_session_fn` - ends the warm-up session, defaults to
       `&Wallaby.end_session/1`
-    * `:log_dir` - defaults to `tmp/chromedriver` in the current dir
+    * `:kill_fn` - kills the processes with the given OS pids, a list of strings
+    * `:log_dir` - the dir that holds each run's log dir, defaults to
+      `tmp/chromedriver` in the current dir
+    * `:ps_fn` - lists the running processes, one per line with the OS pid and then
+      the command line, or returns `nil` when it can't
     * `:put_env_fn` - sets an app env key, defaults to `&Application.put_env/3`
     * `:ready_timeout` - how long to wait for each ChromeDriver, in ms
     * `:start_fn` - starts Wallaby
@@ -179,6 +209,12 @@ defmodule Hologram.Test.BrowserSession do
   @spec start_wallaby(keyword) :: :ok
   def start_wallaby(opts \\ []) do
     chromedriver_path = Keyword.get_lazy(opts, :chromedriver_path, &find_chromedriver!/0)
+
+    default_capabilities_fn =
+      Keyword.get(opts, :default_capabilities_fn, &Wallaby.Chrome.default_capabilities/0)
+
+    kill_fn = Keyword.get(opts, :kill_fn, &kill_processes/1)
+    ps_fn = Keyword.get(opts, :ps_fn, &list_processes/0)
     put_env_fn = Keyword.get(opts, :put_env_fn, &Application.put_env/3)
     start_fn = Keyword.get(opts, :start_fn, &ensure_wallaby_started/0)
     stop_fn = Keyword.get(opts, :stop_fn, fn -> Application.stop(:wallaby) end)
@@ -186,11 +222,24 @@ defmodule Hologram.Test.BrowserSession do
     # Wallaby reads the ChromeDriver path when it starts.
     stop_fn.()
 
-    log_dir =
+    runs_log_dir =
       opts
       |> Keyword.get(:log_dir, "tmp/chromedriver")
       |> Path.expand()
 
+    log_dir = Path.join(runs_log_dir, System.pid())
+
+    # Read before the processes are, so a run that starts in between is a process
+    # with no log dir yet, never a log dir with no process.
+    log_entries = list_dir(runs_log_dir)
+
+    processes = parse_processes(ps_fn.())
+    run_pids = running_beam_pids(processes)
+
+    kill_orphaned_browsers(processes, run_pids, kill_fn)
+    remove_ended_runs_logs(runs_log_dir, log_entries, run_pids)
+
+    # An earlier run may have had this BEAM's pid.
     File.rm_rf!(log_dir)
     File.mkdir_p!(log_dir)
 
@@ -199,6 +248,7 @@ defmodule Hologram.Test.BrowserSession do
     chromedriver_env =
       :wallaby
       |> Application.get_env(:chromedriver, [])
+      |> put_run_marker(default_capabilities_fn)
       |> Keyword.put(:path, wrapper_path)
 
     put_env_fn.(:wallaby, :chromedriver, chromedriver_env)
@@ -244,6 +294,15 @@ defmodule Hologram.Test.BrowserSession do
         Process.sleep(10)
         await_sessions_ended(test_pid, sessions_fn, deadline)
     end
+  end
+
+  # A shell or an editor can have a test browser's switches among its args, so the
+  # program has to be Chrome or Chromium too. Its path may hold spaces, so it's
+  # everything before the first switch.
+  defp chrome?(command) do
+    [program | _switches] = String.split(command, " -", parts: 2)
+
+    program =~ ~r/chrom/i
   end
 
   # A crashed server or a gone tree exits the call. A tree going down mid-lookup
@@ -339,12 +398,105 @@ defmodule Hologram.Test.BrowserSession do
     end
   end
 
+  # A browser's helper processes carry no marker and end with their browser. A
+  # browser gone by the time it's killed is fine. This BEAM has started no browser
+  # yet, so one marked with its pid was left by an earlier run that had the same pid.
+  defp kill_orphaned_browsers(processes, run_pids, kill_fn) do
+    other_run_pids = MapSet.delete(run_pids, System.pid())
+
+    orphan_pids =
+      for {pid, command} <- processes,
+          chrome?(command),
+          switches = String.split(command, " "),
+          @test_browser_switch in switches,
+          run_pid = run_marker_pid(switches),
+          not MapSet.member?(other_run_pids, run_pid),
+          do: pid
+
+    if orphan_pids != [] do
+      kill_fn.(orphan_pids)
+    end
+
+    :ok
+  end
+
+  # SIGTERM, which Chrome takes as a request to quit.
+  defp kill_processes(pids) do
+    case System.find_executable("kill") do
+      nil -> :ok
+      kill -> System.cmd(kill, pids, stderr_to_stdout: true)
+    end
+
+    :ok
+  end
+
+  defp list_dir(dir) do
+    case File.ls(dir) do
+      {:ok, entries} -> entries
+      {:error, _reason} -> []
+    end
+  end
+
+  # -ww keeps the command lines whole, on BSD's ps and on Linux's. A ps that takes
+  # other flags, like BusyBox's, counts as none.
+  defp list_processes do
+    with ps when is_binary(ps) <- System.find_executable("ps"),
+         {output, 0} <-
+           System.cmd(ps, ["-A", "-ww", "-o", "pid=", "-o", "command="], stderr_to_stdout: true) do
+      output
+    else
+      _other -> nil
+    end
+  end
+
   # Rows of Wallaby.SessionStore's table are {{ref, session_id, owner_pid}, session}.
   # The table is gone when Wallaby isn't running.
   defp list_sessions do
     :ets.select(:session_store, [{{{:_, :_, :"$1"}, :"$2"}, [], [{{:"$1", :"$2"}}]}])
   rescue
     ArgumentError -> []
+  end
+
+  # Each line is the pid, right-aligned, then the command line. The pid stays a
+  # string, as System.pid/0 and the log dirs' names give it. No listing counts as no
+  # processes.
+  defp parse_processes(nil), do: []
+
+  defp parse_processes(listing) do
+    for line <- String.split(listing, "\n"),
+        [pid, command] <- [String.split(line, " ", parts: 2, trim: true)],
+        do: {pid, command}
+  end
+
+  # Wallaby reads the capabilities from this config on every session start. A
+  # session started with capabilities of its own gets no marker.
+  defp put_run_marker(chromedriver_env, default_capabilities_fn) do
+    capabilities = Keyword.get_lazy(chromedriver_env, :capabilities, default_capabilities_fn)
+    chrome_options = Map.get(capabilities, :chromeOptions, %{})
+
+    args =
+      chrome_options
+      |> Map.get(:args, [])
+      |> Enum.reject(&String.starts_with?(&1, @run_marker_switch))
+      |> Kernel.++([@run_marker_switch <> System.pid()])
+
+    marked_capabilities =
+      Map.put(capabilities, :chromeOptions, Map.put(chrome_options, :args, args))
+
+    Keyword.put(chromedriver_env, :capabilities, marked_capabilities)
+  end
+
+  # Whatever isn't a running run's log dir goes: the log dir of a run that ended,
+  # and the files of the time the log dir held one run's logs. The log dir itself
+  # stays, since a run starting now may have just put its own in it.
+  defp remove_ended_runs_logs(runs_log_dir, log_entries, run_pids) do
+    for entry <- log_entries, not MapSet.member?(run_pids, entry) do
+      runs_log_dir
+      |> Path.join(entry)
+      |> File.rm_rf!()
+    end
+
+    :ok
   end
 
   # Appends to hangs.txt too, which CI checks to decide whether to upload the
@@ -447,6 +599,28 @@ defmodule Hologram.Test.BrowserSession do
   catch
     kind, reason ->
       {:raised, kind, reason, __STACKTRACE__}
+  end
+
+  # The pid a browser's marker names, as a string, or nil when the switches have no
+  # marker.
+  defp run_marker_pid(switches) do
+    Enum.find_value(switches, fn
+      @run_marker_switch <> run_pid -> if run_pid =~ ~r/^\d+$/, do: run_pid
+      _switch -> nil
+    end)
+  end
+
+  # A pid that names a process other than a BEAM got reused, so the run it named
+  # has ended. Every build of the BEAM is named beam.smp, with the build's type and
+  # flavor before the smp when it has them, like beam.debug.smp. The name is looked
+  # for anywhere in the command line, since the path before it may hold spaces. A
+  # command line that only mentions it then counts as a BEAM, which at worst keeps
+  # an ended run's browsers and logs until that process is gone.
+  defp running_beam_pids(processes) do
+    for {pid, command} <- processes,
+        command =~ ~r/beam(\.\w+)*\.smp( |$)/,
+        into: MapSet.new(),
+        do: pid
   end
 
   defp shell_quote(string) do
