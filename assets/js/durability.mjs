@@ -425,6 +425,69 @@ export default class Durability {
     return Durability.#replicaWrite;
   }
 
+  // The rows the store holds and the place they stand at, read again after the load - for a tab
+  // that follows and hears the group name a place it does not hold. The tab that led can have
+  // brought the store somewhere this tab never followed it to (see repair), and the store is the
+  // one record of where that is, and of the rows that stand there.
+  //
+  // Given the place the tab holds, so the rows are read only when they can be other than the ones
+  // it has. A place is only ever written with its rows, in one transaction, and the rows under a
+  // place that stands change only through frames every tab of the group hears in order - so the
+  // same place is taken for the same rows, which is the equality repair rests on too. A store
+  // holding no place has no rows to take up: they are a fill that never finished, which is why a
+  // restore refuses them. Answers the stored place, with every stored record, or with
+  // `records: null` when the place is the given one or there is none.
+  //
+  // ONE read-only transaction, the rows read in the callback of the place's own request: a write
+  // landing between two transactions could leave the rows of one place beside another.
+  //
+  // A READ, like batchesAbove: not counted as work in flight, and one that fails answers nothing
+  // rather than tearing the storage down. So does memory mode, where there is nothing to read.
+  // Whatever goes wrong, it answers: a tab waits on it before it hears its group again.
+  static async readBase(cursor) {
+    if (Durability.mode === "memory") {
+      return null;
+    }
+
+    try {
+      const transaction = Durability.#db.transaction(
+        [ENTITIES, META],
+        "readonly",
+      );
+
+      return await new Promise((resolve, reject) => {
+        transaction.onabort = () => reject(transaction.error);
+
+        const stored = transaction.objectStore(META).get("cursor");
+
+        stored.onerror = () => reject(stored.error);
+
+        stored.onsuccess = () => {
+          const place = stored.result ?? null;
+
+          if (place === cursor || place === null) {
+            resolve({cursor: place, records: null});
+
+            return;
+          }
+
+          try {
+            Durability.#request(
+              transaction.objectStore(ENTITIES).getAll(),
+            ).then(
+              (records) => resolve({cursor: place, records: records ?? []}),
+              reject,
+            );
+          } catch (error) {
+            reject(error);
+          }
+        };
+      });
+    } catch {
+      return null;
+    }
+  }
+
   // The store brought to what this tab holds in memory, where the two name different places - what
   // a tab does on taking the lead of its group.
   //
@@ -490,8 +553,8 @@ export default class Durability {
   }
 
   // Settles once every identity write started so far has - what a send waits on, so nothing goes
-  // out under an identity still on its way to the store (see Batches.flush). Writes to the same store
-  // commit in the order they were made, so the last one settling means every earlier one has.
+  // out under an identity still on its way to the store (see Batches.flush). Writes to the same
+  // store commit in the order they were made, so the last one settling means every earlier one has.
   //
   // Not every write is awaited where it is made: the restore writes a fresh pair and goes on, and
   // the tab's first send can follow at once. A reload landing between the two would take up yet

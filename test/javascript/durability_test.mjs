@@ -17,6 +17,7 @@ import FDBKeyRange from "../../assets/node_modules/fake-indexeddb/build/esm/FDBK
 
 // Its prototype is where a test makes a read fail: the module's own connection is private.
 import FDBDatabase from "../../assets/node_modules/fake-indexeddb/build/esm/FDBDatabase.js";
+import FDBObjectStore from "../../assets/node_modules/fake-indexeddb/build/esm/FDBObjectStore.js";
 
 import {
   assert,
@@ -1187,6 +1188,128 @@ describe("Durability", () => {
       Durability.persistReplica({id: "r1", token: "statement"});
 
       assert.isTrue(await isSettled(Durability.replicaWritten()));
+    });
+  });
+
+  describe("readBase()", () => {
+    it("answers the stored place and every row, when the place differs", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.deepStrictEqual(await Durability.readBase("place-0"), {
+        cursor: "place-1",
+        records: [taskRecord("t1", "Draft copy")],
+      });
+    });
+
+    // The same place is the same rows: every write of a place writes its rows with it.
+    it("answers the stored place and no rows, when the place is the one given", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.deepStrictEqual(await Durability.readBase("place-1"), {
+        cursor: "place-1",
+        records: null,
+      });
+    });
+
+    it("answers the stored place and every row, when the tab holds no place", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.deepStrictEqual(await Durability.readBase(null), {
+        cursor: "place-1",
+        records: [taskRecord("t1", "Draft copy")],
+      });
+    });
+
+    // Rows with no place are a fill that never finished, which nothing takes up.
+    it("answers no place and no rows, when the store holds no place", async () => {
+      await seedPreviousLoad({cursor: undefined});
+      await Durability.open();
+      await Durability.load();
+
+      assert.deepStrictEqual(await Durability.readBase("place-1"), {
+        cursor: null,
+        records: null,
+      });
+
+      assert.deepStrictEqual(await Durability.readBase(null), {
+        cursor: null,
+        records: null,
+      });
+    });
+
+    // What the tab that led wrote since this tab loaded.
+    it("reads the store as it is now, not as it was loaded", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([taskRecord("t2", "Later")], "place-2");
+
+      assert.deepStrictEqual(await Durability.readBase("place-1"), {
+        cursor: "place-2",
+        records: [taskRecord("t1", "Draft copy"), taskRecord("t2", "Later")],
+      });
+    });
+
+    // A write made right after the read began lands after the whole read, not between the place
+    // and its rows.
+    it("reads the place and its rows as one", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const reading = Durability.readBase("place-0");
+
+      const writing = Durability.persistFrame(
+        [taskRecord("t2", "Later")],
+        "place-2",
+      );
+
+      assert.equal(Durability.inFlight, 1);
+
+      assert.deepStrictEqual(await reading, {
+        cursor: "place-1",
+        records: [taskRecord("t1", "Draft copy")],
+      });
+
+      await writing;
+    });
+
+    it("answers nothing in memory mode", async () => {
+      assert.isNull(await Durability.readBase("place-1"));
+      assert.equal(Durability.mode, "memory");
+    });
+
+    // Nothing has been lost, so it does not take the storage down the way a failed WRITE does.
+    it("answers nothing when the store cannot be read, and goes on storing", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      sinon
+        .stub(FDBDatabase.prototype, "transaction")
+        .throws(new DOMException("The read was refused.", "UnknownError"));
+
+      assert.isNull(await Durability.readBase("place-0"));
+      assert.equal(Durability.mode, "indexeddb");
+    });
+
+    it("answers nothing when the rows cannot be read", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      sinon
+        .stub(FDBObjectStore.prototype, "getAll")
+        .throws(new DOMException("The read was refused.", "UnknownError"));
+
+      assert.isNull(await Durability.readBase("place-0"));
+      assert.equal(Durability.inFlight, 0);
     });
   });
 
