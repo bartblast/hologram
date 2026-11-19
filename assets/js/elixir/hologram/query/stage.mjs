@@ -1838,10 +1838,11 @@ function validatePath(path, entityType, hint = null) {
   validateFilteredName(names[names.length - 1], endType);
 }
 
+// A hint - a forgotten pin the hop's name could also be - follows whichever refusal the hop meets.
 function validatePathHop(hop, entityType, hint = null) {
   if (Object.hasOwn(Model.inverses(entityType), hop.value)) {
     Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(hop)} is an inverse relationship in ${entityType} - a path in a condition goes through to-one relationships that hold their reference`,
+      `${Interpreter.inspect(hop)} is an inverse relationship in ${entityType} - a path in a condition goes through to-one relationships that hold their reference${hintSuffix(hint)}`,
     );
   }
 
@@ -1849,7 +1850,7 @@ function validatePathHop(hop, entityType, hint = null) {
 
   if (relationship && relationship.toMany) {
     Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(hop)} is a to-many relationship in ${entityType} - a path in a condition goes through to-one relationships only`,
+      `${Interpreter.inspect(hop)} is a to-many relationship in ${entityType} - a path in a condition goes through to-one relationships only${hintSuffix(hint)}`,
     );
   }
 
@@ -1859,14 +1860,14 @@ function validatePathHop(hop, entityType, hint = null) {
 
   if (attributeNames(entityType).includes(hop.value)) {
     Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(hop)} is an attribute in ${entityType} - a path goes through relationships, and only its last name is an attribute`,
+      `${Interpreter.inspect(hop)} is an attribute in ${entityType} - a path goes through relationships, and only its last name is an attribute${hintSuffix(hint)}`,
     );
   }
 
   validateNotDerivedHop(
     hop,
     entityType,
-    "a path in a condition goes through to-one relationships that hold their reference",
+    `a path in a condition goes through to-one relationships that hold their reference${hintSuffix(hint)}`,
   );
 
   const known = relationshipNames(entityType)

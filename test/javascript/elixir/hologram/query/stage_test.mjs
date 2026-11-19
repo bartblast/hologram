@@ -4093,6 +4093,92 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    it("names the fix a right side's hint gives where its first hop is an attribute", () => {
+      const fix = "a value from the surrounding code is pinned: ^name.length";
+      const operand = path("name", "length");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["note", op("==", attribute(operand))]]),
+            hints(["operand", 0, operand, fix]),
+          ),
+        "Hologram.MisuseError",
+        `:name is an attribute in MyApp.Booking - a path goes through relationships, and only its last name is an attribute - ${fix}`,
+      );
+    });
+
+    it("names the fix a right side's hint gives where its first hop is a to-many relationship", () => {
+      const fix =
+        "a value from the surrounding code is pinned: ^projects.count";
+      const operand = path("projects", "count");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            user,
+            predicates([["email", op("==", attribute(operand))]]),
+            hints(["operand", 0, operand, fix]),
+          ),
+        "Hologram.MisuseError",
+        `:projects is a to-many relationship in MyApp.User - a path in a condition goes through to-one relationships only - ${fix}`,
+      );
+    });
+
+    it("names the fix a right side's hint gives where its first hop is an inverse relationship", () => {
+      const fix =
+        "a value from the surrounding code is pinned: ^messages.count";
+      const operand = path("messages", "count");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            predicates([["name", op("==", attribute(operand))]]),
+            hints(["operand", 0, operand, fix]),
+          ),
+        "Hologram.MisuseError",
+        `:messages is an inverse relationship in MyApp.Channel - a path in a condition goes through to-one relationships that hold their reference - ${fix}`,
+      );
+    });
+
+    it("names the fix a right side's hint gives where its first hop is a derived field", () => {
+      const fix =
+        "a value from the surrounding code is pinned: ^first_message.body";
+      const operand = path("first_message", "body");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            room,
+            predicates([["name", op("==", attribute(operand))]]),
+            hints(["operand", 0, operand, fix]),
+          ),
+        "Hologram.MisuseError",
+        `:first_message is a derived field in MyApp.Room - a path in a condition goes through to-one relationships that hold their reference - ${fix}`,
+      );
+    });
+
+    it("names the fix a left side's hint gives where its first hop is an attribute", () => {
+      const fix =
+        "a value from the surrounding code is pinned, on the right side: note == ^name.length";
+      const key = path("name", "length");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            Type.list([
+              Type.tuple([key, op("==", attribute(Type.atom("note")))]),
+            ]),
+            hints(["key", 0, key, fix]),
+          ),
+        "Hologram.MisuseError",
+        `:name is an attribute in MyApp.Booking - a path goes through relationships, and only its last name is an attribute - ${fix}`,
+      );
+    });
+
     it("refuses a right side's later hop where the triple checks it", () => {
       const fix =
         "a value from the surrounding code is pinned: ^owner.missing.id";

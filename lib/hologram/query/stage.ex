@@ -2387,20 +2387,21 @@ defmodule Hologram.Query.Stage do
     validate_filtered_name!(name, end_type)
   end
 
+  # A hint - a forgotten pin the hop's name could also be - follows whichever refusal the hop meets.
   defp validate_path_hop!(hop, entity_type, hint \\ nil) do
     definitions = entity_type.__relationships__()
 
     if hop in inverse_relationship_names(entity_type) do
       raise MisuseError,
         message:
-          "#{inspect(hop)} is an inverse relationship in #{inspect(entity_type)} - a path in a condition goes through to-one relationships that hold their reference"
+          "#{inspect(hop)} is an inverse relationship in #{inspect(entity_type)} - a path in a condition goes through to-one relationships that hold their reference#{hint_suffix(hint)}"
     end
 
     case Enum.find(definitions, fn {name, _type, _opts} -> name == hop end) do
       {_name, [_target], _opts} ->
         raise MisuseError,
           message:
-            "#{inspect(hop)} is a to-many relationship in #{inspect(entity_type)} - a path in a condition goes through to-one relationships only"
+            "#{inspect(hop)} is a to-many relationship in #{inspect(entity_type)} - a path in a condition goes through to-one relationships only#{hint_suffix(hint)}"
 
       {_name, target, _opts} ->
         target
@@ -2409,13 +2410,13 @@ defmodule Hologram.Query.Stage do
         if hop in attribute_names(entity_type) do
           raise MisuseError,
             message:
-              "#{inspect(hop)} is an attribute in #{inspect(entity_type)} - a path goes through relationships, and only its last name is an attribute"
+              "#{inspect(hop)} is an attribute in #{inspect(entity_type)} - a path goes through relationships, and only its last name is an attribute#{hint_suffix(hint)}"
         end
 
         validate_not_derived_hop!(
           hop,
           entity_type,
-          "a path in a condition goes through to-one relationships that hold their reference"
+          "a path in a condition goes through to-one relationships that hold their reference#{hint_suffix(hint)}"
         )
 
         known =

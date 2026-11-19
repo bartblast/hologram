@@ -2675,6 +2675,71 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    test "names the fix a right side's hint gives where its first hop is an attribute" do
+      fix = "a value from the surrounding code is pinned: ^b.name"
+
+      expected_msg =
+        ":b is an attribute in Hologram.Test.Fixtures.Entity.Module2 - a path goes through relationships, and only its last name is an attribute - #{fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [c: {:==, {:attribute, [:b, :name]}}], [
+          {:operand, 0, [:b, :name], fix, []}
+        ])
+      end
+    end
+
+    test "names the fix a right side's hint gives where its first hop is a to-many relationship" do
+      fix = "a value from the surrounding code is pinned: ^a.count"
+
+      expected_msg =
+        ":a is a to-many relationship in Hologram.Test.Fixtures.Entity.Module3 - a path in a condition goes through to-one relationships only - #{fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module3, [c_id: {:==, {:attribute, [:a, :count]}}], [
+          {:operand, 0, [:a, :count], fix, []}
+        ])
+      end
+    end
+
+    test "names the fix a right side's hint gives where its first hop is an inverse relationship" do
+      fix = "a value from the surrounding code is pinned: ^messages.count"
+
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module29 - a path in a condition goes through to-one relationships that hold their reference - #{fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module29, [name: {:==, {:attribute, [:messages, :count]}}], [
+          {:operand, 0, [:messages, :count], fix, []}
+        ])
+      end
+    end
+
+    test "names the fix a right side's hint gives where its first hop is a derived field" do
+      fix = "a value from the surrounding code is pinned: ^first_message.body"
+
+      expected_msg =
+        ":first_message is a derived field in Hologram.Test.Fixtures.Entity.Module32 - a path in a condition goes through to-one relationships that hold their reference - #{fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module32, [name: {:==, {:attribute, [:first_message, :body]}}], [
+          {:operand, 0, [:first_message, :body], fix, []}
+        ])
+      end
+    end
+
+    test "names the fix a left side's hint gives where its first hop is an attribute" do
+      fix = "a value from the surrounding code is pinned, on the right side: c == ^b.name"
+
+      expected_msg =
+        ":b is an attribute in Hologram.Test.Fixtures.Entity.Module2 - a path goes through relationships, and only its last name is an attribute - #{fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [{[:b, :name], {:==, {:attribute, :c}}}], [
+          {:key, 0, [:b, :name], fix, []}
+        ])
+      end
+    end
+
     test "refuses a right side's later hop where the triple checks it" do
       expected_msg =
         "unknown relationship :missing in Hologram.Test.Fixtures.Entity.Module2 - known relationships: "
