@@ -5,7 +5,9 @@ defmodule Hologram.Mutation.Write do
   # entity type module, the id of the row it acts on, and what the op carries - values keyed by
   # field and decoded to the terms the model declares, the amounts to move counters by, the
   # revisions the writer saw, and the stamp its writer authored - or, for an
-  # edge, the relationship and the row at the other end.
+  # edge, the relationship and the row at the other end. An edge also says whether it came from the
+  # same call as the write before it: one update/1 sends its values and each of its edges as writes
+  # of their own.
   #
   # Every field is already checked against THIS build's model by the time one of these exists, so
   # what reads it does not check again.
@@ -22,6 +24,7 @@ defmodule Hologram.Mutation.Write do
             id: nil,
             op: nil,
             relationship: nil,
+            same_call: false,
             stamp: nil,
             target_id: nil
 
@@ -33,6 +36,7 @@ defmodule Hologram.Mutation.Write do
           id: String.t() | nil,
           op: :create | :update | :delete | :add_relationship | :delete_relationship | nil,
           relationship: atom | nil,
+          same_call: boolean,
           stamp: pos_integer | nil,
           target_id: String.t() | nil
         }
