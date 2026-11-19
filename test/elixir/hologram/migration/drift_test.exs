@@ -9,7 +9,8 @@ defmodule Hologram.Migration.DriftTest do
   # Anything else that differs is something a hand did, and a hand undoes it.
   #
   # The order is what makes the carve-out work: the repair runs BEFORE the drift check inside one
-  # boot, so a missing index is rebuilt and then found present. Reverse the two and a dropped index
+  # boot, so a missing index is rebuilt and then found present - on a chain holding every applied
+  # version, since one lacking some checks first (see that describe below). Reverse the two and a dropped index
   # refuses the boot it was supposed to survive (see the index recovery tests). The index plan's
   # indexes are neither: the boot leaves them to Hologram.DB.IndexBuilder, which these tests run
   # where a state needs the plan's indexes standing.
@@ -365,6 +366,55 @@ defmodule Hologram.Migration.DriftTest do
   end
 
   describe "run/3 with an applied version the chain doesn't hold" do
+    # A missing unique index can be one a crash left unbuilt or one the newer version dropped on
+    # purpose, and the node can't tell which - so it builds neither, since an index the newer version
+    # dropped would refuse its writes, or fail to build over the duplicates it allowed.
+    test "refuses rather than build a unique index the version it lacks dropped", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      code =
+        migration("20260814091522", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :code,
+            type: :string,
+            opts: [optional: true, unique: true],
+            line: 3
+          }
+        ])
+
+      not_unique =
+        migration("20260815091522", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :code,
+            changes: [unique: false],
+            line: 3
+          }
+        ])
+
+      code_chain = Enum.concat(chain, [code])
+      code_model = Model.fold(model, code.ops)
+      newer_chain = Enum.concat(code_chain, [not_unique])
+      newer_model = Model.fold(code_model, not_unique.ops)
+
+      route(scratch, fn ->
+        :ok = run(newer_chain, newer_model, @context)
+
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert_raise RuntimeError,
+                       ~r/index "my_app_task_code_\$uidx" declared by the model is missing/,
+                       fn -> run(code_chain, code_model, @context) end
+        end)
+
+        refute "my_app_task_code_$uidx" in index_names()
+      end)
+    end
+
     test "refuses with the drift message before building an index on a column it lacks", %{
       chain: chain,
       model: model,
