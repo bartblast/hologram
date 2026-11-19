@@ -37,7 +37,7 @@ export default class Model {
   // asks about, always askable on every type. Pinned on both tiers ("framework_operations/0" in
   // test/elixir/hologram/policy_test.exs, "frameworkOperations" in test/javascript/model_test.mjs).
   // Always update both together. A baked entry's operations list carries these too; this copy
-  // exists so a refusal can say which of a type's operations are its own.
+  // exists so a refusal can say which of a type's operations are the names its lines carry.
   static frameworkOperations = [
     "create",
     "delete",
@@ -49,6 +49,23 @@ export default class Model {
   ];
 
   static #entries = {};
+
+  // A year the way Date.to_iso8601/1 spells one, which is how every date and datetime arrives:
+  // four digits, or more with no leading zero, and a minus before a year below 0 - never before 0
+  // itself. So one year is one spelling, as one day is, and the year of every date the server
+  // accepts reads back - the entity validator asks only that the calendar has the day.
+  static #YEAR = "((?!-0000)-?(?:\\d{4}|[1-9]\\d{4,}))";
+
+  // Signed either way and of any width, since toISOString - which wireDateTime builds on - writes a
+  // year past 9999 as +010000 and one below 0 as -000001. Only the wall clock reaches it, so neither
+  // arrives, but an order that read one wrongly would break the sort it is handed to.
+  static #YEAR_PREFIX = /^[+-]?\d+/;
+
+  static #DATE_PATTERN = new RegExp(`^${Model.#YEAR}-(\\d{2})-(\\d{2})$`);
+
+  static #DATETIME_PATTERN = new RegExp(
+    `^${Model.#YEAR}-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d+))?Z$`,
+  );
 
   // Every relationship of a row is absent from the row itself: a to-many lives in the
   // relationship facts and a to-one behind the reference field, so both are assembled by whoever
@@ -182,6 +199,13 @@ export default class Model {
     return Model.entry(type).derived;
   }
 
+  // The value the given baked object holds under the given name, or undefined. Its own keys only:
+  // the baked model is made of plain objects, so a name like constructor or toString would otherwise
+  // read a property of Object.prototype.
+  static own(object, name) {
+    return Object.hasOwn(object, name) ? object[name] : undefined;
+  }
+
   // The derived field of the given name, or null for a name the type declares no derived field by -
   // its own key only, so a name like constructor is no derived field.
   static derivedField(type, name) {
@@ -262,8 +286,10 @@ export default class Model {
   static pathTarget(type, relationshipNames) {
     return relationshipNames.reduce(
       (current, name) =>
-        (Model.relationships(current)[name] ?? Model.inverses(current)[name])
-          .type,
+        (
+          Model.own(Model.relationships(current), name) ??
+          Model.own(Model.inverses(current), name)
+        ).type,
       type,
     );
   }
@@ -324,16 +350,14 @@ export default class Model {
     return `${name}$sort`;
   }
 
-  // The way back over the same boundary: a value written in a query becomes the way the wire
-  // spells it, because that is what the rows it will be compared against hold. A date written as
-  // a date compares with a date written as a string only if one of them stops being what it was,
-  // and the rows cannot be the ones to change.
   // The client's Hologram.Policy.validate_operation!/2: refuses an operation the given entity type
   // cannot be asked about, with the server's own sentences (pinned as pairs in
   // test/elixir/hologram/policy_test.exs and test/javascript/model_test.mjs). A framework
   // operation always passes. An atom passes when the type's baked operations list names it. A
   // {:grant_role, role} / {:revoke_role, role} tuple - a two-tuple of atoms, which is the caller's
-  // shape check to make - passes when the type's baked roles name the role.
+  // shape check to make - passes when the type's baked roles name the role, and an {:update, field}
+  // or {:update, fields} tuple - a field atom or a proper list - when every field it names is one
+  // of #updateFields, a list naming at least one.
   //
   // Read off the raw baked entry, as can?/3 and the role check read it: entry() normalizes the
   // keys the write path indexes into and carries neither of these. A hand-built entry without them
@@ -352,23 +376,38 @@ export default class Model {
         return;
       }
 
-      const own = operations.filter(
+      const names = operations.filter(
         (candidate) => !Model.frameworkOperations.includes(candidate),
       );
 
-      const declared =
-        own.length === 0 ? "no operation of their own" : Model.#joinNames(own);
+      let carried;
+
+      if (names.length === 0) {
+        carried = "carry no name";
+      } else if (names.length === 1) {
+        carried = `carry the name :${names[0]}`;
+      } else {
+        carried = `carry the names ${Model.#joinNames(names)}`;
+      }
 
       Interpreter.raiseMisuseError(
-        `unknown operation ${Interpreter.inspect(operation)} for ${type} - its allow lines declare ${declared}, and the framework's own operations are ${Model.#joinNames(Model.frameworkOperations)}`,
+        `unknown operation ${Interpreter.inspect(operation)} for ${type} - the framework's operations are ${Model.#joinNames(Model.frameworkOperations)}, and its allow lines ${carried}`,
       );
     }
 
     const [name, role] = operation.data;
 
+    if (
+      name.value === "update" &&
+      (Type.isAtom(role) || Type.isProperList(role))
+    ) {
+      Model.#validateUpdateFields(type, baked, operation);
+      return;
+    }
+
     if (!["grant_role", "revoke_role"].includes(name.value)) {
       Interpreter.raiseMisuseError(
-        `unknown operation ${Interpreter.inspect(operation)} for ${type} - the operation tuples are {:grant_role, role} and {:revoke_role, role}`,
+        `unknown operation ${Interpreter.inspect(operation)} for ${type} - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}`,
       );
     }
 
@@ -386,6 +425,10 @@ export default class Model {
     }
   }
 
+  // The way back over the same boundary: a value written in a query becomes the way the wire
+  // spells it, because that is what the rows it will be compared against hold. A date written as
+  // a date compares with a date written as a string only if one of them stops being what it was,
+  // and the rows cannot be the ones to change.
   static unbox(value, attributeType) {
     if (Type.isNil(value)) {
       return null;
@@ -501,9 +544,47 @@ export default class Model {
     );
   }
 
+  // Two dates, or two datetimes, as the wire spells them, in the order of the days or instants
+  // they name: -1, 0 or 1. Within one year the rest of the spelling is fixed width - every datetime
+  // on the wire is UTC at six fractional digits - so it orders as its characters do, but the year
+  // does not: it is as wide as it needs and signed, so -2 would sort after -1 and 10000 before 9999.
+  // So the years compare as numbers, BigInt for any width, and the rest as the string it is.
+  //
+  // Two values in years 0 to 9999 - nearly every one - both have their first dash at index 4, and
+  // then their characters do order them, so they compare whole and skip the parse: this runs for
+  // every pair a sort or an ordering filter compares.
+  static compareTemporal(left, right) {
+    if (left[4] === "-" && right[4] === "-") {
+      if (left === right) {
+        return 0;
+      }
+
+      return left < right ? -1 : 1;
+    }
+
+    const [leftYear] = left.match(Model.#YEAR_PREFIX);
+    const [rightYear] = right.match(Model.#YEAR_PREFIX);
+
+    const leftNumber = BigInt(leftYear);
+    const rightNumber = BigInt(rightYear);
+
+    if (leftNumber !== rightNumber) {
+      return leftNumber < rightNumber ? -1 : 1;
+    }
+
+    const leftRest = left.slice(leftYear.length);
+    const rightRest = right.slice(rightYear.length);
+
+    if (leftRest === rightRest) {
+      return 0;
+    }
+
+    return leftRest < rightRest ? -1 : 1;
+  }
+
   // A datetime as the wire spells it, from a count of milliseconds - six fractional digits, the
-  // same rule #unboxDateTime follows, so an instant this client derives compares as a plain string
-  // with one the server sent. toISOString writes exactly three, which is all a millisecond has.
+  // same rule #unboxDateTime follows, so an instant this client derives is spelled the way one the
+  // server sent is. toISOString writes exactly three, which is all a millisecond has.
   static wireDateTime(milliseconds) {
     return `${new Date(milliseconds).toISOString().slice(0, -1)}000Z`;
   }
@@ -562,7 +643,7 @@ export default class Model {
   // one down on both tiers, and a date column cannot hold one - so this is the third reader of one
   // rule agreeing with the other two, rather than a gate anything is expected to reach.
   static #boxDate(value) {
-    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const match = value.match(Model.#DATE_PATTERN);
 
     if (!match) {
       throw new HologramRuntimeError(`invalid date on the wire: ${value}`);
@@ -583,12 +664,10 @@ export default class Model {
     ]);
   }
 
-  // Every datetime on the wire is UTC, which is what makes them comparable as plain strings in
-  // the first place - so the zone is the same one every time rather than something to read.
+  // Every datetime on the wire is UTC, which is what gives one instant one spelling - so the zone
+  // is the same one every time rather than something to read.
   static #boxDateTime(value) {
-    const match = value.match(
-      /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z$/,
-    );
+    const match = value.match(Model.#DATETIME_PATTERN);
 
     if (!match) {
       throw new HologramRuntimeError(`invalid datetime on the wire: ${value}`);
@@ -924,18 +1003,60 @@ export default class Model {
     return String(value).padStart(width, "0");
   }
 
-  static #unboxDate(value) {
-    const year = Model.#field(value, "year").value;
-    const month = Model.#field(value, "month").value;
-    const day = Model.#field(value, "day").value;
-
-    return `${Model.#pad(year, 4)}-${Model.#pad(month, 2)}-${Model.#pad(day, 2)}`;
+  // A time of day's clock as the wire spells it, the amount in microseconds always at six digits -
+  // the reason is on #unboxTime.
+  static #spellClock(hour, minute, second, microsecond) {
+    return `${Model.#pad(hour, 2)}:${Model.#pad(minute, 2)}:${Model.#pad(second, 2)}.${Model.#pad(microsecond, 6)}`;
   }
 
-  // The two halves it is made of, spelled by the two that spell them - a datetime and a time
-  // that disagreed on the clock would be a bug nothing here could see.
+  // A day as the wire spells it: the year the way Date.to_iso8601/1 spells it - at least four
+  // digits, and a minus before a year below 0 rather than inside the padding - so one day is one
+  // spelling on both tiers. The year may be a BigInt (a struct's field) or a Number (a Date's).
+  static #spellDate(year, month, day) {
+    const spelledYear =
+      year < 0 ? `-${Model.#pad(-year, 4)}` : Model.#pad(year, 4);
+
+    return `${spelledYear}-${Model.#pad(month, 2)}-${Model.#pad(day, 2)}`;
+  }
+
+  static #unboxDate(value) {
+    return Model.#spellDate(
+      Model.#field(value, "year").value,
+      Model.#field(value, "month").value,
+      Model.#field(value, "day").value,
+    );
+  }
+
+  // The instant the struct stands for, in UTC: its wall clock moved back by the offsets it carries,
+  // which is what the server's codec does before it spells one - so a datetime in any zone is the
+  // instant it names, in a query and in a write alike. The move is a Date's, built through
+  // setUTCFullYear rather than Date.UTC, which maps years 0 to 99 into the 1900s, and a Date
+  // reaches past every year the server can hold a datetime in. Offsets are whole seconds, so the
+  // microseconds never move.
   static #unboxDateTime(value) {
-    return `${Model.#unboxDate(value)}T${Model.#unboxTime(value)}Z`;
+    const part = (name) => Number(Model.#field(value, name).value);
+    const offset = part("utc_offset") + part("std_offset");
+
+    const instant = new Date(0);
+    instant.setUTCFullYear(part("year"), part("month") - 1, part("day"));
+    instant.setUTCHours(part("hour"), part("minute"), part("second") - offset);
+
+    const microsecond = Model.#field(value, "microsecond").data[0].value;
+
+    const date = Model.#spellDate(
+      instant.getUTCFullYear(),
+      instant.getUTCMonth() + 1,
+      instant.getUTCDate(),
+    );
+
+    const clock = Model.#spellClock(
+      instant.getUTCHours(),
+      instant.getUTCMinutes(),
+      instant.getUTCSeconds(),
+      microsecond,
+    );
+
+    return `${date}T${clock}Z`;
   }
 
   // A module travels as its name without the prefix every module atom carries, a plain atom as
@@ -953,13 +1074,54 @@ export default class Model {
   // amount is in microseconds whatever the precision, as Elixir keeps it - half a second is
   // {500000, 1} - so the precision only says how many of the digits were written.
   static #unboxTime(value) {
-    const microsecond = Model.#field(value, "microsecond");
-    const fraction = Number(microsecond.data[0].value);
+    return Model.#spellClock(
+      Model.#field(value, "hour").value,
+      Model.#field(value, "minute").value,
+      Model.#field(value, "second").value,
+      Model.#field(value, "microsecond").data[0].value,
+    );
+  }
 
-    const hour = Model.#pad(Model.#field(value, "hour").value, 2);
-    const minute = Model.#pad(Model.#field(value, "minute").value, 2);
-    const second = Model.#pad(Model.#field(value, "second").value, 2);
+  // The client's Hologram.Policy.update_fields/1, read off the raw baked entry: the declared
+  // attributes but the system ones and a job's framework-owned ones, and every forward
+  // relationship, a to-one by its relationship name - sorted, as the server sorts atoms.
+  static #updateFields(baked) {
+    const frameworkAttributes = baked?.frameworkAttributes ?? [];
 
-    return `${hour}:${minute}:${second}.${Model.#pad(fraction, 6)}`;
+    const attributes = Object.keys(baked?.attributes ?? {}).filter(
+      (name) =>
+        !Model.systemAttributes.includes(name) &&
+        !frameworkAttributes.includes(name),
+    );
+
+    return attributes.concat(Object.keys(baked?.relationships ?? {})).sort();
+  }
+
+  static #validateUpdateFields(type, baked, operation) {
+    const fields = operation.data[1];
+
+    if (Type.isList(fields) && fields.data.length === 0) {
+      Interpreter.raiseMisuseError(
+        `unknown operation ${Interpreter.inspect(operation)} for ${type} - {:update, fields} names at least one field`,
+      );
+    }
+
+    const updateFields = Model.#updateFields(baked);
+    const asked = Type.isList(fields) ? fields.data : [fields];
+
+    const unknown = asked.find(
+      (field) => !Type.isAtom(field) || !updateFields.includes(field.value),
+    );
+
+    if (unknown !== undefined) {
+      const described =
+        updateFields.length === 0
+          ? "it has no field an update sets"
+          : `the fields an update sets are ${updateFields.map((name) => `:${name}`).join(", ")}`;
+
+      Interpreter.raiseMisuseError(
+        `unknown field ${Interpreter.inspect(unknown)} in ${Interpreter.inspect(operation)} for ${type} - ${described}`,
+      );
+    }
   }
 }

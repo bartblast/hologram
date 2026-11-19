@@ -45,7 +45,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const user = Type.alias(USER);
 
   const addRelationship = Elixir_Hologram_Query_Stage["add_relationship/3"];
-  const authorize = Elixir_Hologram_Query_Stage["authorize/2"];
   const count = Elixir_Hologram_Query_Stage["count/1"];
   const deleteRelationship =
     Elixir_Hologram_Query_Stage["delete_relationship/3"];
@@ -1338,103 +1337,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
-  describe("authorize/2", () => {
-    const claim = (struct) => field(field(struct, "__meta__"), "claim");
-
-    it("keeps the rest of the metadata", () => {
-      const result = authorize(
-        addRelationship(
-          putAttribute(
-            entity(PROJECT),
-            predicates([["name", Type.bitstring("x")]]),
-          ),
-          Type.atom("tasks"),
-          Type.bitstring("t1"),
-        ),
-        Type.atom("archive"),
-      );
-
-      assert.deepStrictEqual(
-        ops(result),
-        Type.map([
-          [
-            Type.atom("name"),
-            Type.tuple([Type.atom("put"), Type.bitstring("x")]),
-          ],
-        ]),
-      );
-
-      assert.deepStrictEqual(
-        edgeOps(result),
-        Type.map([
-          [
-            Type.tuple([Type.atom("tasks"), Type.bitstring("t1")]),
-            Type.atom("add"),
-          ],
-        ]),
-      );
-
-      assert.deepStrictEqual(
-        claim(result),
-        Type.tuple([Type.atom("authorize"), Type.atom("archive")]),
-      );
-    });
-
-    it("records the claim for the operation", () => {
-      const result = authorize(entity(TASK), Type.atom("update"));
-
-      assert.deepStrictEqual(
-        claim(result),
-        Type.tuple([Type.atom("authorize"), Type.atom("update")]),
-      );
-    });
-
-    it("records an operation an allow line on the entity type names", () => {
-      const result = authorize(entity(PROJECT), Type.atom("archive"));
-
-      assert.deepStrictEqual(
-        claim(result),
-        Type.tuple([Type.atom("authorize"), Type.atom("archive")]),
-      );
-    });
-
-    it("raises when the entity is not an entity struct", () => {
-      assertBoxedError(
-        () => authorize(Type.bitstring("x"), Type.atom("archive")),
-        "Hologram.MisuseError",
-        'authorize takes an entity struct, got: "x"',
-      );
-    });
-
-    it("raises when the operation is not an atom", () => {
-      assertBoxedError(
-        () => authorize(entity(TASK), Type.bitstring("archive")),
-        "Hologram.MisuseError",
-        'authorize takes an operation atom, got: "archive"',
-      );
-    });
-
-    it("raises when the struct already carries a claim", () => {
-      assertBoxedError(
-        () =>
-          authorize(
-            authorize(entity(TASK), Type.atom("update")),
-            Type.atom("delete"),
-          ),
-        "Hologram.MisuseError",
-        "MyApp.Task already carries a claim ({:authorize, :update}) - a write claims exactly one authority",
-      );
-    });
-
-    it("raises when the operation is one the entity type never declared", () => {
-      assertBoxedError(
-        () => authorize(entity(TASK), Type.atom("archive")),
-        "Hologram.MisuseError",
-        "unknown operation :archive for MyApp.Task - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
-      );
-    });
-  });
-
   // The server records a claim here and the client refuses one, so these have no twin in
   // query/stage_test.exs. Trust is the SERVER's authority on either half - a write claiming it is
   // refused by the wire, and a read claiming it would ask this client's copy of the data to
@@ -1950,6 +1852,27 @@ describe("Elixir_Hologram_Query_Stage", () => {
         () => filter(task, predicates([["x", Type.integer(1)]])),
         "Hologram.MisuseError",
         "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
+      );
+    });
+
+    // A name an object inherits is no relationship - only the ones the model bakes are.
+    it("raises on a name every object inherits as an unknown attribute", () => {
+      assertBoxedError(
+        () => filter(task, predicates([["constructor", Type.integer(1)]])),
+        "Hologram.MisuseError",
+        "unknown attribute :constructor in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
+      );
+    });
+
+    it("raises on a path through a name every object inherits", () => {
+      assertBoxedError(
+        () =>
+          filter(
+            Type.alias(CHANNEL),
+            pathPredicates(["constructor", "body"], Type.bitstring("x")),
+          ),
+        "Hologram.MisuseError",
+        "unknown relationship :constructor in MyApp.Channel - known relationships: :owner",
       );
     });
 
@@ -2578,6 +2501,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    // The baked model is a plain object, so a name spelled like one of Object.prototype's
+    // properties must read the derived field rather than the property.
+    it("raises on a value a derived enum named like a prototype property does not declare", () => {
+      const derived = globalThis.Hologram.sync.model[POST].derived;
+      derived.toString = derived.tier;
+
+      assertBoxedError(
+        () => filter(post, pairs([["toString", op(">", Type.atom("mid"))]])),
+        "Hologram.MisuseError",
+        ":mid is not a value of attribute :toString in MyApp.Post - the values are [:low, :high]",
+      );
+    });
+
     it("compares a derived string for equality", () => {
       const query = filter(
         post,
@@ -3148,6 +3084,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
         "raises on a source going through an unknown relationship, listing every relationship",
         () => filter(channel, entry("any", atoms("posts", "messages"), [])),
         "unknown relationship :posts in MyApp.Channel - known relationships: :messages, :owner, :topic",
+      ],
+      [
+        "raises on a source naming a name every object inherits",
+        () => filter(channel, entry("any", atoms("constructor"), [])),
+        "unknown relationship :constructor in MyApp.Channel - known relationships: :messages, :owner, :topic",
       ],
       [
         "raises on a source naming an attribute",

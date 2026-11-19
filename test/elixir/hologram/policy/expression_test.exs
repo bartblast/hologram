@@ -60,6 +60,58 @@ defmodule Hologram.Policy.ExpressionTest do
       assert lower_spec("[to: {:moderator, __MODULE__}]") == [to: {:moderator, __MODULE__}]
     end
 
+    test "keeps the fields of an only option" do
+      assert lower_spec("[only: [:topic, :project]]") == [only: [:topic, :project]]
+    end
+
+    test "keeps the fields of an except option" do
+      assert lower_spec("[except: [:project]]") == [except: [:project]]
+    end
+
+    test "lowers a pinned field list to its value" do
+      assert lower_spec("[only: ^fields]", fields: [:topic]) == [only: [:topic]]
+    end
+
+    test "keeps a field list that is not a list for the declaration to refuse" do
+      assert lower_spec("[only: :topic]") == [only: :topic]
+    end
+
+    test "raises on a field written as a bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: only names a field with an atom, got: topic - write :topic",
+                   fn -> lower_spec("[only: [topic]]") end
+    end
+
+    test "raises on a repeated except option" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: allow :update takes the except option once - list the fields in one except option",
+                   fn -> lower_spec("[except: [:a], except: [:b]]") end
+    end
+
+    test "keeps a name" do
+      assert lower_spec("[as: :archive]") == [as: :archive]
+    end
+
+    test "lowers a pinned name to its value" do
+      assert lower_spec("[as: ^name]", name: :archive) == [as: :archive]
+    end
+
+    test "keeps a name that is not an atom for the declaration to refuse" do
+      assert lower_spec(~s([as: "archive"])) == [as: "archive"]
+    end
+
+    test "raises on a name written as a bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: as names a rule with an atom, got: archive - write :archive",
+                   fn -> lower_spec("[as: archive]") end
+    end
+
+    test "raises on a repeated name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: allow :update takes the as option once",
+                   fn -> lower_spec("[as: :archive, as: :close]") end
+    end
+
     test "keeps a nil option for the declaration to refuse" do
       assert lower_spec("[to: nil, via: nil]") == [to: nil, via: nil]
     end
@@ -368,31 +420,31 @@ defmodule Hologram.Policy.ExpressionTest do
 
     test "raises on an unknown option" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:7: unknown option :archived for allow :update - the allow options are to, via and when, and a condition goes in when: archived == false",
+                   "lib/my_app/policies.ex:7: unknown option :archived for allow :update - the allow options are as, except, only, to, via and when, and a condition goes in when: archived == false",
                    fn -> lower_spec("[archived: false]") end
     end
 
     test "raises on an unknown option for a grant lifecycle operation" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:7: unknown option :archived for allow {:grant_role, :viewer} - the allow options are to, via and when, and a condition goes in when: archived == false",
+                   "lib/my_app/policies.ex:7: unknown option :archived for allow {:grant_role, :viewer} - the allow options are as, except, only, to, via and when, and a condition goes in when: archived == false",
                    fn -> lower_spec("[archived: false]", [], {:grant_role, :viewer}) end
     end
 
     test "raises on an unknown option with a pinned value" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:12: unknown option :priority for allow :update - the allow options are to, via and when, and a condition goes in when: priority == ^max",
+                   "lib/my_app/policies.ex:12: unknown option :priority for allow :update - the allow options are as, except, only, to, via and when, and a condition goes in when: priority == ^max",
                    fn -> lower_spec("[priority: ^max]") end
     end
 
     test "raises on an unknown option with user_id()" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:12: unknown option :owner_id for allow :update - the allow options are to, via and when, and a condition goes in when: owner_id == user_id()",
+                   "lib/my_app/policies.ex:12: unknown option :owner_id for allow :update - the allow options are as, except, only, to, via and when, and a condition goes in when: owner_id == user_id()",
                    fn -> lower_spec("[owner_id: user_id()]") end
     end
 
     test "raises on an unknown option without an equality to suggest" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:7: unknown option :priority for allow :update - the allow options are to, via and when",
+                   "lib/my_app/policies.ex:7: unknown option :priority for allow :update - the allow options are as, except, only, to, via and when",
                    fn -> lower_spec("[priority: {:>=, 3}]") end
     end
 

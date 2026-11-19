@@ -27,7 +27,6 @@ defmodule Hologram.Query.StageTest do
   alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
-  alias Hologram.Test.Fixtures.Policy
 
   defp assert_actor_refused(predicates) do
     expected_msg =
@@ -185,87 +184,6 @@ defmodule Hologram.Query.StageTest do
 
       assert_error MisuseError, expected_msg, fn ->
         add_relationship(Module32.new(), :recent_messages, Entity.generate_id())
-      end
-    end
-  end
-
-  describe "authorize/2" do
-    test "keeps the rest of the metadata" do
-      target_id = Entity.generate_id()
-      entity = Module3.new()
-
-      result =
-        entity
-        |> put_attribute(c_id: target_id)
-        |> add_relationship(:a, target_id)
-        |> authorize(:update)
-
-      assert result.__meta__.attribute_ops == %{c_id: {:put, target_id}}
-      assert result.__meta__.relationship_ops == %{{:a, target_id} => :add}
-      assert result.__meta__.claim == {:authorize, :update}
-    end
-
-    test "records the claim for the operation" do
-      entity = Module2.new(c: "x")
-
-      result = authorize(entity, :update)
-
-      assert result.__meta__ == %Metadata{claim: {:authorize, :update}}
-    end
-
-    test "records an operation an allow line on the entity type names" do
-      result = authorize(Policy.Module1.new(), :archive)
-
-      assert result.__meta__.claim == {:authorize, :archive}
-    end
-
-    test "raises when the entity is not an entity struct" do
-      assert_error MisuseError, ~s(authorize takes an entity struct, got: "x"), fn ->
-        authorize(wrap_term("x"), :archive)
-      end
-    end
-
-    test "raises when the operation is not an atom" do
-      entity = Module2.new(c: "x")
-      expected_msg = ~s(authorize takes an operation atom, got: "archive")
-
-      assert_error MisuseError, expected_msg, fn ->
-        authorize(entity, wrap_term("archive"))
-      end
-    end
-
-    test "raises when the struct already carries an authorize claim" do
-      entity = Module2.new(c: "x")
-
-      expected_msg =
-        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim ({:authorize, :update}) - a write claims exactly one authority"
-
-      assert_error MisuseError, expected_msg, fn ->
-        entity
-        |> authorize(:update)
-        |> authorize(:delete)
-      end
-    end
-
-    test "raises when the struct already carries a trust claim" do
-      entity = Module2.new(c: "x")
-
-      expected_msg =
-        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim (:trust) - a write claims exactly one authority"
-
-      assert_error MisuseError, expected_msg, fn ->
-        entity
-        |> trust()
-        |> authorize(:update)
-      end
-    end
-
-    test "raises when the operation is one the entity type never declared" do
-      expected_msg =
-        "unknown operation :archive for Hologram.Test.Fixtures.Entity.Module2 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
-
-      assert_error MisuseError, expected_msg, fn ->
-        authorize(Module2.new(c: "x"), :archive)
       end
     end
   end
@@ -5049,19 +4967,6 @@ defmodule Hologram.Query.StageTest do
 
       assert_error MisuseError, expected_msg, fn ->
         trust(wrap_term("x"))
-      end
-    end
-
-    test "raises when the struct already carries an authorize claim" do
-      entity = Module2.new(c: "x")
-
-      expected_msg =
-        "Hologram.Test.Fixtures.Entity.Module2 already carries a claim ({:authorize, :update}) - a write claims exactly one authority"
-
-      assert_error MisuseError, expected_msg, fn ->
-        entity
-        |> authorize(:update)
-        |> trust()
       end
     end
 

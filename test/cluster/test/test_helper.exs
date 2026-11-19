@@ -6,10 +6,18 @@ ExUnit.start()
 
 # Boot the cluster test databases before the app starts: the app declares entities, which
 # activates the Hologram database - the databases themselves must exist before any pool
-# connects, on this node or on a peer. The second database is the one the migration
-# scenarios claim for the production mechanism. Positioned after ExUnit.start - the drop
-# guard recognizes the test env by the running ExUnit server.
-Hologram.Test.DatabaseBootstrap.run!(["hologram_cluster_tests_migrations"])
+# connects, on this node or on a peer. Each run gets databases of its own, so runs that
+# overlap leave each other's tables alone. The second database is the one the migration
+# scenarios claim for the production mechanism, reached by the name this run gave it.
+# Positioned after ExUnit.start - the env guard recognizes the test env by the running
+# ExUnit server.
+databases = Hologram.Test.DatabaseBootstrap.run!(["hologram_cluster_tests_migrations"])
+
+Application.put_env(
+  :hologram_cluster_tests,
+  :migrations_database,
+  databases["hologram_cluster_tests_migrations"]
+)
 
 Hologram.Test.setup()
 

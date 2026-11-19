@@ -130,7 +130,9 @@ function attributeType(entityType, name) {
   const derived = Model.derivedField(entityType, name);
   const derivedType = derived?.kind === "scalar" ? derived.type : null;
 
-  return Model.entry(entityType).attributes[name] ?? derivedType ?? "uuid";
+  return (
+    Model.own(Model.entry(entityType).attributes, name) ?? derivedType ?? "uuid"
+  );
 }
 
 function byKey(keyOf) {
@@ -346,7 +348,7 @@ function entryClauses(pair, scope, hints) {
 // The values an enum declares, in their declared order: an enum attribute's, or a derived enum's.
 function enumValues(entityType, name) {
   return (
-    Model.entry(entityType).enumValues[name] ??
+    Model.own(Model.entry(entityType).enumValues, name) ??
     Model.derivedField(entityType, name).values
   );
 }
@@ -1341,26 +1343,6 @@ function toTerm(query) {
   };
 }
 
-// A second claim is refused where it is written: a struct carrying two authorities would have to
-// pick one at the write, silently.
-function putClaim(entity, claim, stage) {
-  const entityType = entityTypeOf(entity, stage);
-  const metadata = field(entity, "__meta__");
-  const recorded = field(metadata, "claim");
-
-  if (!Type.isNil(recorded)) {
-    Interpreter.raiseMisuseError(
-      `${entityType} already carries a claim (${Interpreter.inspect(recorded)}) - a write claims exactly one authority`,
-    );
-  }
-
-  return putField(
-    entity,
-    Type.atom("__meta__"),
-    putField(metadata, Type.atom("claim"), claim),
-  );
-}
-
 // The two counter stages share everything but the sign they record. A sum that reaches zero is
 // dropped rather than recorded: a delta of nothing is not a change, and the wire refuses one.
 function putDelta(entity, name, amount, sign, stage) {
@@ -1607,7 +1589,10 @@ function validateFilteredName(name, entityType, hint = null) {
     return;
   }
 
-  const relationship = Model.entry(entityType).relationships[name.value];
+  const relationship = Model.own(
+    Model.entry(entityType).relationships,
+    name.value,
+  );
 
   if (relationship && !relationship.toMany) {
     Interpreter.raiseMisuseError(
@@ -1846,7 +1831,10 @@ function validatePathHop(hop, entityType, hint = null) {
     );
   }
 
-  const relationship = Model.entry(entityType).relationships[hop.value];
+  const relationship = Model.own(
+    Model.entry(entityType).relationships,
+    hop.value,
+  );
 
   if (relationship && relationship.toMany) {
     Interpreter.raiseMisuseError(
@@ -1957,7 +1945,7 @@ function validateSourceSet(name, entityType) {
     );
   }
 
-  const relationship = Model.relationships(entityType)[name.value];
+  const relationship = Model.own(Model.relationships(entityType), name.value);
 
   if (relationship && relationship.toMany) {
     return relationship.type;
@@ -2155,23 +2143,6 @@ const Elixir_Hologram_Query_Stage = {
       "add_relationship",
     ),
 
-  "authorize/2": (entity, operation) => {
-    if (!Type.isAtom(operation)) {
-      Interpreter.raiseMisuseError(
-        `authorize takes an operation atom, got: ${Interpreter.inspect(operation)}`,
-      );
-    }
-
-    // The entity refusal wins, then the operation's, then the double-claim's - the server's order.
-    Model.validateOperation(entityTypeOf(entity, "authorize"), operation);
-
-    return putClaim(
-      entity,
-      Type.tuple([Type.atom("authorize"), operation]),
-      "authorize",
-    );
-  },
-
   "count/1": (query) => setCardinality(query, "count"),
 
   "decrement/3": (entity, name, amount) =>
@@ -2281,7 +2252,7 @@ const Elixir_Hologram_Query_Stage = {
   "take/2": (query, value) => setViewBound(query, "take", value),
 
   // Both forms the server accepts - an entity struct and a query - are refused here, in the wire's
-  // own words. Trust is the SERVER's authority: a batch claiming it is refused by name, and a read
+  // own words. Trust is the SERVER's authority: a batch carries no claim at all, and a read
   // claiming it would be asking this client's copy of the data to answer past the policies that
   // decided what it holds. A helper reaching for it learns at its own line that it is server code.
   "trust/1": (_subject) => {

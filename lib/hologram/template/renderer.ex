@@ -1935,8 +1935,8 @@ defmodule Hologram.Template.Renderer do
   end
 
   # Runs the given normalized query term a derived field of the given module is defined by, for the
-  # given name and the arguments its function was called with.
-  defp run_query!(module, name, args, term) do
+  # given name. The arguments its function was called with are in the term, as the values it reads.
+  defp run_query!(module, name, _args, term) do
     # A path reads rows the query does not return, and the client answers the query over what it
     # holds - so the rows along the paths are read with it, the read policy deciding which, and
     # carried beside the rows it returns. A client checking permissions answers each rule over what
@@ -1963,7 +1963,7 @@ defmodule Hologram.Template.Renderer do
     # A count has no rows behind it, so carried rows cannot re-derive one - the number itself is
     # handed over, and the client holds it until its own database is complete enough to count.
     if is_integer(result) do
-      Carry.collect_count(module, name, args, result)
+      Carry.collect_count(module, name, term, result)
     end
 
     if read_term == term, do: result, else: included_as_asked(result, term)

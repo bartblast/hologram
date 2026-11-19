@@ -9,6 +9,7 @@ defmodule Hologram.Sync.Diff do
   alias Hologram.Auth
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
+  alias Hologram.Policy.Edges
 
   @pair_ops [:add_relationship, :del_relationship]
 
@@ -165,9 +166,10 @@ defmodule Hologram.Sync.Diff do
   and what appears is scrubbed against what the client may see NOW, so no id list names a row it
   was not given.
   """
-  @spec reach(%{ids: MapSet.t(), rows: map}, String.t() | nil, list(map), %{
-          {module, atom} => list(tuple)
-        }) :: %{appeared: list(struct), vanished: list(struct)}
+  @spec reach(%{ids: MapSet.t(), rows: map}, String.t() | nil, list(map), Edges.t()) :: %{
+          appeared: list(struct),
+          vanished: list(struct)
+        }
   def reach(result, actor_user_id, named, edges) do
     members = members(result.rows)
 

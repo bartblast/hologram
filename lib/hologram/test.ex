@@ -35,8 +35,8 @@ defmodule Hologram.Test do
       as_user(author, fn -> DB.create(post) end)
 
   That write is evaluated as the user's :create - every write under an acting user is
-  evaluated against the verb's own operation, or against the one the entity claims through
-  authorize/2. A read inside the block is filtered by the user's :read policies the same way.
+  evaluated against the verb's own rules, an update's by the fields it changes. A read inside
+  the block is filtered by the user's :read policies the same way.
 
   Takes the user entity, a bare user id, or nil to run the function anonymously - the spelling
   for a block that must not carry the enclosing actor.
@@ -77,9 +77,9 @@ defmodule Hologram.Test do
 
   # The test env starts the pool and nothing else - dev converges at boot and every other env
   # applies the migration history, while a test app's schema is its helper's to manage. The
-  # database bootstrap drops the layout before this runs, so a run converges from scratch, and
-  # this is the only thing that puts it back. A no-op when the app declares no entities, which
-  # leaves the database unstarted.
+  # database bootstrap gives each run a fresh database before this runs, so a run converges from
+  # scratch, and this is the only thing that builds the layout. A no-op when the app declares no
+  # entities, which leaves the database unstarted.
   defp converge_schema do
     if Process.whereis(DB) do
       SchemaReconciler.reconcile(DB.reconciliation_context())

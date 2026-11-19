@@ -3253,7 +3253,7 @@ defmodule Hologram.ControllerTest do
       :sys.replace_state(pid, fn state ->
         %{
           state
-          | pass: %{ref: pass_ref, registries_reloaded?: true},
+          | pass: %{hold: nil, ref: pass_ref, registries_reloaded?: true},
             pending: MapSet.new([Module14])
         }
       end)
@@ -3267,6 +3267,9 @@ defmodule Hologram.ControllerTest do
       send(pid, {pass_ref, :ok})
 
       assert %Plug.Conn{status: 200} = Task.await(request)
+
+      # The pass ended and answered the request, rather than live reload going away.
+      assert :sys.get_state(pid).pass == nil
     end
 
     test "skips the render and sends the terminal response when page middleware terminates" do

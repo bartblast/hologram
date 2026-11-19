@@ -9,14 +9,20 @@ defmodule Hologram.Sync.CarryTest do
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
   alias Hologram.Policy
+  alias Hologram.Query.Placeholder
+  alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module17
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module22
   alias Hologram.Test.Fixtures.Entity.Module26
   alias Hologram.Test.Fixtures.Entity.Module27
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module38
 
   @module_2_type "Hologram.Test.Fixtures.Entity.Module2"
   @module_3_type "Hologram.Test.Fixtures.Entity.Module3"
@@ -91,6 +97,27 @@ defmodule Hologram.Sync.CarryTest do
     %{c_id: Entity.generate_id()}
     |> Module3.new()
     |> Map.merge(embeds)
+  end
+
+  defp c_count_term(value) do
+    Module2
+    |> Stage.filter(c: value)
+    |> Stage.count()
+    |> Stage.normalize()
+  end
+
+  defp count_key(name, term), do: "#{inspect(Module2)}/#{name}/#{spell_query(term)}"
+
+  defp spell(query) do
+    query
+    |> Stage.normalize()
+    |> spell_query()
+  end
+
+  defp total_term do
+    Module2
+    |> Stage.count()
+    |> Stage.normalize()
   end
 
   describe "collect/1" do
@@ -285,128 +312,46 @@ defmodule Hologram.Sync.CarryTest do
   end
 
   describe "collect_count/4" do
-    test "records a count under the prop that answered it" do
-      collect_count(Module2, :total, [], 7)
-
-      assert take_counts() == %{"Hologram.Test.Fixtures.Entity.Module2/total/" => 7}
-    end
-
-    # Two instances of one component answer two counts, and what tells them apart is what their
-    # builders were called with.
-    test "keys instances apart by the arguments the builder was called with" do
-      collect_count(Module2, :total, ["p1"], 7)
-      collect_count(Module2, :total, ["p2"], 3)
+    test "records a count under the field and the query that answered it" do
+      collect_count(Module2, :total, total_term(), 7)
 
       assert take_counts() == %{
-               ~s(Hologram.Test.Fixtures.Entity.Module2/total/"p1") => 7,
-               ~s(Hologram.Test.Fixtures.Entity.Module2/total/"p2") => 3
-             }
-    end
-
-    test "spells every argument of a multi-argument builder" do
-      collect_count(Module2, :total, ["p1", true], 7)
-
-      assert take_counts() == %{~s(Hologram.Test.Fixtures.Entity.Module2/total/"p1",true) => 7}
-    end
-
-    # The client spells the key with no limit, so a long argument is spelled in full here too.
-    test "spells an argument holding over 50 items in full" do
-      collect_count(Module2, :total, [Enum.to_list(1..51)], 7)
-
-      assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/total/#{inspect(Enum.to_list(1..51), limit: :infinity)}" =>
+               ~S|Hologram.Test.Fixtures.Entity.Module2/total/{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[],"include":{},"skip":null,"sort":[],"take":null}| =>
                  7
              }
     end
 
-    # The rows a derived field passes on are an argument like any other. A row is spelled by its type
-    # and id, the parts both tiers are sure to hold alike, and the client spells the same key (see
-    # the data layer's answerDerivedQuery() tests).
-    test "spells an entity row by its type and id" do
-      row = Module2.new(id: "01a1cbe6-0000-7000-8000-000000000001", a: true, c: "banana")
-
-      collect_count(Module2, :total, [[row]], 7)
+    # Two instances of one component answer two counts, and what tells them apart is the query
+    # each one's builder built.
+    test "keys instances apart by the query their builders built" do
+      collect_count(Module2, :total, c_count_term("p1"), 7)
+      collect_count(Module2, :total, c_count_term("p2"), 3)
 
       assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/total/[Hologram.Test.Fixtures.Entity.Module2#01a1cbe6-0000-7000-8000-000000000001]" =>
-                 7
+               ~S|Hologram.Test.Fixtures.Entity.Module2/total/{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==","p1"]],"include":{},"skip":null,"sort":[],"take":null}| =>
+                 7,
+               ~S|Hologram.Test.Fixtures.Entity.Module2/total/{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==","p2"]],"include":{},"skip":null,"sort":[],"take":null}| =>
+                 3
              }
     end
 
-    test "spells a tuple by its items" do
-      collect_count(Module2, :total, [{1, "a"}], 7)
-
-      assert take_counts() == %{~s(Hologram.Test.Fixtures.Entity.Module2/total/{1, "a"}) => 7}
-    end
-
-    test "spells a struct by its fields, sorted by name" do
-      collect_count(Module2, :total, [~D[2026-01-02]], 7)
+    test "keys fields of one component apart" do
+      collect_count(Module2, :open_total, total_term(), 7)
+      collect_count(Module2, :done_total, total_term(), 3)
 
       assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/total/%Date{calendar: Calendar.ISO, day: 2, month: 1, year: 2026}" =>
-                 7
+               count_key(:open_total, total_term()) => 7,
+               count_key(:done_total, total_term()) => 3
              }
     end
 
-    test "spells a map by its entries, sorted by key" do
-      collect_count(Module2, :total, [%{b: 1, a: 2}], 7)
+    # The same field running the same query twice is one answer, not two - the later one, which is
+    # what a re-render would have produced.
+    test "records one count per field and query" do
+      collect_count(Module2, :total, c_count_term("p1"), 7)
+      collect_count(Module2, :total, c_count_term("p1"), 9)
 
-      assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/total/%{:a => 2, :b => 1}" => 7
-             }
-    end
-
-    # Two structs of one row are two keys that spell alike.
-    test "spells a map whose keys spell alike by its entries, sorted by value" do
-      map = %{Module2.new(id: "x", a: true) => 2, Module2.new(id: "x", a: false) => 1}
-
-      collect_count(Module2, :total, [map], 7)
-
-      assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/total/%{Hologram.Test.Fixtures.Entity.Module2#x => 1, Hologram.Test.Fixtures.Entity.Module2#x => 2}" =>
-                 7
-             }
-    end
-
-    test "spells an improper list with its tail after a bar" do
-      collect_count(Module2, :total, [[1 | 2]], 7)
-
-      assert take_counts() == %{"Hologram.Test.Fixtures.Entity.Module2/total/[1 | 2]" => 7}
-    end
-
-    test "spells a float by its bits" do
-      collect_count(Module2, :total, [1.0e20], 7)
-
-      assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/total/float:4415af1d78b58c40" => 7
-             }
-    end
-
-    test "sorts a map's entries in code point order" do
-      collect_count(Module2, :total, [%{"😀" => 2, "！" => 1}], 7)
-
-      assert take_counts() == %{
-               ~s(Hologram.Test.Fixtures.Entity.Module2/total/%{"！" => 1, "😀" => 2}) => 7
-             }
-    end
-
-    test "keys props of one component apart" do
-      collect_count(Module2, :open_total, [], 7)
-      collect_count(Module2, :done_total, [], 3)
-
-      assert take_counts() == %{
-               "Hologram.Test.Fixtures.Entity.Module2/open_total/" => 7,
-               "Hologram.Test.Fixtures.Entity.Module2/done_total/" => 3
-             }
-    end
-
-    # The same prop of the same instance resolved twice is one answer, not two - the later one,
-    # which is what a re-render would have produced.
-    test "records one count per prop instance" do
-      collect_count(Module2, :total, ["p1"], 7)
-      collect_count(Module2, :total, ["p1"], 9)
-
-      assert take_counts() == %{~s(Hologram.Test.Fixtures.Entity.Module2/total/"p1") => 9}
+      assert take_counts() == %{count_key(:total, c_count_term("p1")) => 9}
     end
   end
 
@@ -448,9 +393,440 @@ defmodule Hologram.Sync.CarryTest do
     end
   end
 
+  # Each spelling here built through the stages is asserted letter for letter in the client's suite
+  # too (test/javascript/query_spelling_test.mjs), over the same query built by the client's stages:
+  # the two tiers agreeing is what lets a page's carried answer be found by its query. The terms
+  # changed by hand after normalizing are server-only - shapes the client's stages never build.
+  describe "spell_query/1" do
+    test "spells a count with no filter" do
+      assert spell(Stage.count(Module2)) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    # A boolean is spelled as text, the way the client holds an enum declaring true.
+    test "spells a boolean as text and nil as null" do
+      query =
+        Module2
+        |> Stage.filter(a: true, b: nil)
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["a","==","true"],["b","==",null]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells a string with its quotes and backslashes escaped and the rest as it is" do
+      query =
+        Module2
+        |> Stage.filter(c: ~S|say "hi" \ żółw|)
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==","say \"hi\" \\ żółw"]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells an integer, a float, a date and a datetime as the client holds them" do
+      query =
+        Module10
+        |> Stage.filter(
+          count: 3,
+          rating: 2.5,
+          released_on: ~D[2026-01-02],
+          held_at: ~U[2026-01-02 03:04:05.12Z]
+        )
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["count","==",3],["held_at","==","2026-01-02T03:04:05.120000Z"],["rating","==",float:4004000000000000],["released_on","==","2026-01-02"]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    # A datetime outside UTC is spelled as the UTC instant it stands for, and a year below 0 with
+    # its minus ahead of the padding - which the client spells alike only once it moves the clock
+    # and signs the year itself. Built by hand, since the suite has no time zone database.
+    test "spells a datetime outside UTC as its instant, and a year below 0 or above 9999 as Date.to_iso8601/1 does" do
+      warsaw_midnight = %DateTime{
+        year: 2026,
+        month: 3,
+        day: 1,
+        hour: 0,
+        minute: 0,
+        second: 0,
+        microsecond: {0, 0},
+        std_offset: 0,
+        time_zone: "Europe/Warsaw",
+        utc_offset: 3600,
+        zone_abbr: "CET"
+      }
+
+      query =
+        Module10
+        |> Stage.filter(
+          held_at: warsaw_midnight,
+          released_on: {:>=, ~D[-0001-01-02]},
+          released_on: {:<, Date.new!(20_250, 1, 2)}
+        )
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["held_at","==","2026-02-28T23:00:00.000000Z"],["released_on","<","20250-01-02"],["released_on",">=","-0001-01-02"]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    # The client holds 2.0 and 2 as one Number, so the two have to spell alike.
+    test "spells a whole float as an integer" do
+      query =
+        Module10
+        |> Stage.filter(rating: {:>=, 2.0})
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["rating",">=",2]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells an enum value as the client holds it" do
+      query =
+        Module17
+        |> Stage.filter(priority: :high)
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module17","filter":[["priority","==","high"]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells a time at full precision" do
+      query =
+        Module22
+        |> Stage.filter(opens_at: ~T[09:30:00])
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module22","filter":[["opens_at","==","09:30:00.000000"]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells a reference as its id" do
+      query =
+        Module28
+        |> Stage.filter(channel_id: "0190e4c1-0000-7000-8000-000000000001")
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[["channel_id","==","0190e4c1-0000-7000-8000-000000000001"]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    # The clauses are sorted by their spelling rather than kept in the normalizer's order, which the
+    # client's normalizer doesn't share.
+    test "spells one filter written in two orders alike" do
+      one_order =
+        Module2
+        |> Stage.filter(a: true, c: "x")
+        |> Stage.count()
+
+      other_order =
+        Module2
+        |> Stage.filter(c: "x", a: true)
+        |> Stage.count()
+
+      assert spell(one_order) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["a","==","true"],["c","==","x"]],"include":{},"skip":null,"sort":[],"take":null}|
+
+      assert spell(other_order) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["a","==","true"],["c","==","x"]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    # A membership list keeps the order it was written in, as both normalizers keep it.
+    test "spells a membership list and a range" do
+      query =
+        Module2
+        |> Stage.filter(c: ["y", "x"], b: 1..3)
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["b","<=",3],["b",">=",1],["c","in",["y","x"]]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    # The normalizer orders 9 before 10, and the spelling orders "10" before "9".
+    test "sorts a disjunction's alternatives by their spelling" do
+      query =
+        Module28
+        |> Stage.filter(or: [[position: 9], [position: 10]])
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[{"or":[[["position","==",10]],[["position","==",9]]]}],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells a path" do
+      query =
+        Module28
+        |> Stage.filter([{[:channel, :name], "general"}])
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[[["channel","name"],"==","general"]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells an attribute compared with another" do
+      query =
+        Module28
+        |> Stage.filter(body: {:attribute, [:channel, :name]})
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[["body","==",{"attribute":["channel","name"]}]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells a quantifier reading the row one level out" do
+      query =
+        Module28
+        |> Stage.filter(any: {[:labels], [name: {:attribute, {:outer, 1, :body}}]})
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[{"filter":[["name","==",{"attribute":{"name":"body","outer":1}}]],"quantifier":"any","source":["labels"]}],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells an include and the view bounds" do
+      query =
+        Module28
+        |> Stage.include(:labels)
+        |> Stage.take(5)
+        |> Stage.skip(2)
+
+      assert spell(query) ==
+               ~S|{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[],"include":{"labels":{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module29","filter":[],"include":{},"skip":null,"sort":[["id","asc"]],"take":null}},"skip":2,"sort":[["id","asc"]],"take":5}|
+    end
+
+    test "spells an include in the order its relationship declares" do
+      query =
+        Module26
+        |> Stage.include(:messages)
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module26","filter":[],"include":{"messages":{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[],"include":{},"skip":null,"sort":[["position","asc"],["id","asc"]],"take":null}},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells a sort" do
+      assert spell(Stage.sort(Module2, :c)) ==
+               ~S|{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[],"include":{},"skip":null,"sort":[["c","asc"],["id","asc"]],"take":null}|
+    end
+
+    # The normalizer orders 9 before 10, and the spelling orders "10" before "9".
+    test "sorts clauses by their spelling rather than as the normalizer does" do
+      query =
+        Module2
+        |> Stage.filter(b: [{:!=, 10}, {:!=, 9}])
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["b","!=",10],["b","!=",9]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    # The normalizer orders a disjunction before a predicate, and the spelling the other way round.
+    test "sorts a disjunction among the clauses by its spelling" do
+      query =
+        Module28
+        |> Stage.filter(position: 1, or: [[body: "a"], [body: "b"]])
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[["position","==",1],{"or":[[["body","==","a"]],[["body","==","b"]]]}],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "sorts the clauses of a disjunction's alternative by their spelling" do
+      query =
+        Module28
+        |> Stage.filter(or: [[position: {:!=, 10}, position: {:!=, 9}], [body: "b"]])
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[{"or":[[["body","==","b"]],[["position","!=",10],["position","!=",9]]]}],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "sorts the clauses of a quantifier's condition by their spelling" do
+      query =
+        Module28
+        |> Stage.filter(any: {[:labels], [name: "x", or: [[name: "y"], [name: "z"]]]})
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[{"filter":[["name","==","x"],{"or":[[["name","==","y"]],[["name","==","z"]]]}],"quantifier":"any","source":["labels"]}],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells all over a set" do
+      query =
+        Module26
+        |> Stage.filter(all: {[:messages], [position: {:>, 0}]})
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module26","filter":[{"filter":[["position",">",0]],"quantifier":"all","source":["messages"]}],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells none over a set and a source starting on the row one level out" do
+      query =
+        Module26
+        |> Stage.filter(none: {[:messages], [any: {{:outer, 1, [:messages]}, [body: "x"]}]})
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module26","filter":[{"filter":[{"filter":[["body","==","x"]],"quantifier":"any","source":{"name":["messages"],"outer":1}}],"quantifier":"none","source":["messages"]}],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells a to-one include with no order and what it includes in turn" do
+      query =
+        Module28
+        |> Stage.include(channel: :messages)
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[],"include":{"channel":{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module26","filter":[],"include":{"messages":{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module28","filter":[],"include":{},"skip":null,"sort":[["position","asc"],["id","asc"]],"take":null}},"skip":null,"sort":[],"take":null}},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells an included derived value as null" do
+      query =
+        Module38
+        |> Stage.include(:sibling_count)
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module38","filter":[],"include":{"sibling_count":null},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells a query answering one row" do
+      query =
+        Module2
+        |> Stage.filter(c: "x")
+        |> Stage.one()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"one","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==","x"]],"include":{},"skip":null,"sort":[["id","asc"]],"take":null}|
+    end
+
+    test "spells nil in a membership list as null" do
+      query =
+        Module2
+        |> Stage.filter(c: ["x", nil])
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","in",["x",null]]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    # The client holds negative zero as a Number that prints as 0.
+    test "spells a negative number with its sign and negative zero as 0" do
+      query =
+        Module10
+        |> Stage.filter(count: {:>, -3}, rating: {:<, -0.0})
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["count",">",-3],["rating","<",0]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    # A float attribute takes an integer too, which the client holds as the same Number.
+    test "spells an integer compared with a float attribute as the whole float would be" do
+      query =
+        Module10
+        |> Stage.filter(rating: 2)
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["rating","==",2]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells a whole float past what a JavaScript Number holds exactly by its bits" do
+      query =
+        Module10
+        |> Stage.filter(rating: 9_007_199_254_740_992.0)
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["rating","==",float:4340000000000000]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    # A character past U+FFFF is two code units in JavaScript, whose own comparison sorts it below
+    # U+FFFD, where code point order puts it above.
+    test "sorts clauses by code point" do
+      query =
+        Module2
+        |> Stage.filter(c: "😀", c: "\u{FFFD}")
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==","| <>
+                 "\u{FFFD}" <>
+                 ~S|"],["c","==","😀"]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells the largest whole float a JavaScript Number holds exactly as an integer" do
+      query =
+        Module10
+        |> Stage.filter(rating: 9_007_199_254_740_991.0)
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["rating","==",9007199254740991]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells a negative fraction by its bits" do
+      query =
+        Module10
+        |> Stage.filter(rating: {:<, -2.5})
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["rating","<",float:c004000000000000]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
+    test "spells a placeholder by its name" do
+      query = Stage.filter(Module2, c: %Placeholder{name: :search})
+
+      assert spell(query) ==
+               ~S|{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==",{"placeholder":"search"}]],"include":{},"skip":null,"sort":[["id","asc"]],"take":null}|
+    end
+
+    # What the client spells never starts with a question mark, so a shape this doesn't know can't
+    # match a key the client builds.
+    test "spells a value of a shape it doesn't know so that no client spelling matches it" do
+      term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:unknown}}]}
+
+      assert spell_query(term) ==
+               ~S|{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==",?{:unknown}]],"include":{},"skip":null,"sort":[["id","asc"]],"take":null}|
+    end
+
+    # A client refuses trust, so no term it builds is trusted, and a carried answer that read past
+    # the policies must not be found for one that didn't.
+    test "spells a trusted term so that no client spelling matches it" do
+      term = %{Stage.normalize(Module2) | trust: true}
+
+      assert spell_query(term) ==
+               "?" <> inspect(term, limit: :infinity, printable_limit: :infinity)
+    end
+
+    test "spells a term with a source so that no client spelling matches it" do
+      term = %{Stage.normalize(Module2) | source: {Module26, [:messages]}}
+
+      assert spell_query(term) ==
+               "?" <> inspect(term, limit: :infinity, printable_limit: :infinity)
+    end
+
+    test "spells an include of a shape it doesn't know so that no client spelling matches it" do
+      term = %{Stage.normalize(Module2) | include: %{1 => nil}}
+
+      assert spell_query(term) ==
+               ~S|{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[],"include":?%{1 => nil},"skip":null,"sort":[["id","asc"]],"take":null}|
+    end
+
+    test "spells an integer past what a JavaScript Number holds exactly in full" do
+      term = %{Stage.normalize(Module2) | filter: [{:b, :==, 9_007_199_254_740_993}]}
+
+      assert spell_query(term) ==
+               ~S|{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["b","==",9007199254740993]],"include":{},"skip":null,"sort":[["id","asc"]],"take":null}|
+    end
+  end
+
   describe "start/0" do
     test "clears the counts a previous render gathered" do
-      collect_count(Module2, :total, [], 7)
+      collect_count(Module2, :total, total_term(), 7)
 
       start()
 
@@ -527,7 +903,7 @@ defmodule Hologram.Sync.CarryTest do
     end
 
     test "leaves nothing behind for the next render" do
-      collect_count(Module2, :total, [], 7)
+      collect_count(Module2, :total, total_term(), 7)
 
       take_counts()
 

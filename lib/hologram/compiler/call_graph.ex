@@ -460,7 +460,6 @@ defmodule Hologram.Compiler.CallGraph do
     {Hologram.Job, :create!, 3},
     {Hologram.Job, :framework_attribute_names, 0},
     {Hologram.Query.Stage, :add_relationship, 3},
-    {Hologram.Query.Stage, :authorize, 2},
     {Hologram.Query.Stage, :count, 1},
     {Hologram.Query.Stage, :decrement, 3},
     {Hologram.Query.Stage, :delete_relationship, 3},

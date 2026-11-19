@@ -21,6 +21,9 @@ defmodule Hologram.Policy.ReadersTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module18
   alias Hologram.Test.Fixtures.Policy.Readers.Module19
   alias Hologram.Test.Fixtures.Policy.Readers.Module2
+  alias Hologram.Test.Fixtures.Policy.Readers.Module21
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24
+  alias Hologram.Test.Fixtures.Policy.Readers.Module28
   alias Hologram.Test.Fixtures.Policy.Readers.Module3
   alias Hologram.Test.Fixtures.Policy.Readers.Module4
   alias Hologram.Test.Fixtures.Policy.Readers.Module5
@@ -351,8 +354,40 @@ defmodule Hologram.Policy.ReadersTest do
                {:listed, {:any, [:cards], {:actor_equal, :author_id}}, true}
     end
 
+    test "a read rule's predicate through a type nobody may read is classified as any other" do
+      assert verdict_class(Module21, {[:project, :archived], :==, false}) == :independent
+
+      assert verdict_class(Module21, {[:project, :steward_id], :==, {:actor}}) ==
+               {:listed, {:actor_equal, [:project, :steward_id]}, false}
+    end
+
     test "an inequality on the acting user is unlisted" do
       assert verdict_class(Module19, {[:report, :steward_id], :!=, {:actor}}) == :unlisted
+    end
+
+    # Only the reference's holders can hold it, and the grant anchor names them.
+    test "a role reference is listed by its holders" do
+      reference = {:rel, [:project, :team], [:member]}
+
+      assert verdict_class(Module24, {:to, reference}) == {:listed, {:grants, [reference]}, false}
+    end
+
+    # The vault's update rule and the crate's read rule name nobody.
+    test "a delegation to rules naming nobody is independent" do
+      assert verdict_class(Module28, {:via, {:update, [:vault]}}) == :independent
+      assert verdict_class(Module28, {:via, {:read, [:shelf, :crate]}}) == :independent
+    end
+
+    test "a delegation to listed rules is listed by their anchors" do
+      assert {:listed, {:via, :archive, [:vault], [{_rule, {:actor_equal, :keeper_id}}]}, false} =
+               verdict_class(Module28, {:via, {:archive, [:vault]}})
+
+      assert {:listed, {:via, :close, [:vault], [{_rule, {:grants, [{:own, [:member]}]}}]}, false} =
+               verdict_class(Module28, {:via, {:close, [:vault]}})
+    end
+
+    test "a delegation to an unlisted rule is unlisted" do
+      assert verdict_class(Module28, {:via, {:delete, [:vault]}}) == :unlisted
     end
 
     test "an any over a derived set naming nobody is independent" do
@@ -411,7 +446,8 @@ defmodule Hologram.Policy.ReadersTest do
 
       assert keys == [
                Policy.verdict_key(Module15, :archive, clause),
-               Policy.verdict_key(Module15, :update, clause)
+               Policy.verdict_key(Module15, :update, clause),
+               Policy.verdict_key(Module15, {:update, :name}, clause)
              ]
     end
 

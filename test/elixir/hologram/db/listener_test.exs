@@ -5,6 +5,8 @@ defmodule Hologram.DB.ListenerTest do
 
   alias Hologram.DB.Config
   alias Hologram.DB.Listener
+  alias Hologram.Test.ClosingTCP
+  alias Hologram.Test.CountingListener
   alias Hologram.Test.TCPProxy
 
   # What a run selects the database tests by: they are the ones that need a server.
@@ -208,6 +210,30 @@ defmodule Hologram.DB.ListenerTest do
   end
 
   describe "while the database refuses connections" do
+    # As a peer that resets the connection right after accepting it can make it fail.
+    test "keeps trying a connect whose socket fails as it opens" do
+      peer = start_supervised!(CountingListener)
+
+      log =
+        capture_log(fn ->
+          listener =
+            start_listener(
+              port: CountingListener.port(peer),
+              socket_options: ClosingTCP.socket_options()
+            )
+
+          ref = Process.monitor(listener)
+
+          wait_until(fn -> CountingListener.accepted(peer) >= 3 end)
+
+          refute_received {:DOWN, ^ref, :process, ^listener, _reason}
+
+          :gen_statem.stop(listener)
+        end)
+
+      assert log =~ "tcp setopts: invalid argument - :einval"
+    end
+
     test "keeps trying rather than ending" do
       capture_log(fn ->
         {_proxy, listener} = start_refused_listener()

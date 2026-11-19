@@ -12,6 +12,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Mapper
+  alias Hologram.DB.Protocol
   alias Hologram.DB.QueryRunner
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.SQLQuery
@@ -60,7 +61,6 @@ defmodule Hologram.DB do
       import Hologram.Query,
         only: [
           add_relationship: 3,
-          authorize: 2,
           count: 1,
           decrement: 3,
           delete_relationship: 3,
@@ -101,16 +101,15 @@ defmodule Hologram.DB do
   the moment it was asked, and a value free then can be taken by the next attempt. A write
   refuses at the first violated database constraint and reports no other of its own.
 
-  With an acting user set, the write is evaluated against that user's policies for :create - or
-  for the operation the entity claims through authorize/2 - against the row being inserted, and
-  raises Hologram.AccessDeniedError when no rule grants it. The grant rows the answer rests on
-  are held until the write commits, so a revocation of one of them lands after the write, and a
-  grant made meanwhile is not seen - the write is refused where a moment later it would pass.
-  Every related row a rule reads - a `via:` target, or a row along a path - is held the same way,
-  so a change to it lands after the write. An entity claiming the server's own authority through
-  trust/1 is written without evaluation. Without an acting user an unclaimed write is raw - the
-  trusted tier - and a claimed operation is evaluated with the anonymous semantics. The returned
-  entity carries no claim and no recorded changes.
+  With an acting user set, the write is evaluated against that user's policies for :create,
+  against the row being inserted, and raises Hologram.AccessDeniedError when no rule grants it.
+  The grant rows the answer rests on are held until the write commits, so a revocation of one of
+  them lands after the write, and a grant made meanwhile is not seen - the write is refused where
+  a moment later it would pass. Every related row a rule reads - a `via:` target, or a row along a
+  path - is held the same way, so a change to it lands after the write. An entity claiming the
+  server's own authority through trust/1 is written without evaluation, and without an acting user
+  the write is raw - the trusted tier. The returned entity carries no claim and no recorded
+  changes.
 
   A write PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -163,13 +162,12 @@ defmodule Hologram.DB do
   other constraint violation raises. Deleting a nonexistent id is a no-op. Returns :ok.
 
   With an acting user set, the delete is evaluated against that user's policies for :delete,
-  against the row as it stands, read FOR UPDATE - naming the row by type and id carries no
-  claim, so delete/1 is the spelling for one on another operation's authority. The grant rows
-  the answer rests on are held until the delete commits, so a revocation of one of them lands
-  after the delete, and a grant made meanwhile is not seen - the delete is refused where a moment
-  later it would pass. Every related row a rule reads - a `via:` target, or a row along a path -
-  is held the same way, so a change to it lands after the delete. Without an acting user the
-  delete is raw.
+  against the row as it stands, read FOR UPDATE - naming the row by type and id carries no claim,
+  so delete/1 is the spelling for a trusted one. The grant rows the answer rests on are held until
+  the delete commits, so a revocation of one of them lands after the delete, and a grant made
+  meanwhile is not seen - the delete is refused where a moment later it would pass. Every related
+  row a rule reads - a `via:` target, or a row along a path - is held the same way, so a change to
+  it lands after the delete. Without an acting user the delete is raw.
 
   A delete PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -191,16 +189,15 @@ defmodule Hologram.DB do
   {:error, %{referenced_by: entity_type, relationship: name}}, and a struct whose id names no
   row is a no-op.
 
-  With an acting user set, the delete is evaluated against that user's policies for :delete -
-  or for the operation the entity claims through authorize/2 - against the row as it stands,
-  read FOR UPDATE, and raises Hologram.AccessDeniedError when no rule grants it. The grant rows
-  the answer rests on are held until the delete commits, so a revocation of one of them lands
-  after the delete, and a grant made meanwhile is not seen - the delete is refused where a moment
-  later it would pass. Every related row a rule reads - a `via:` target, or a row along a path -
-  is held the same way, so a change to it lands after the delete. An entity claiming the server's
-  own authority through trust/1 is deleted without evaluation, and without an acting user an
-  unclaimed delete is raw. A struct whose id names no row is not evaluated at all: there is
-  nothing to authorize against.
+  With an acting user set, the delete is evaluated against that user's policies for :delete,
+  against the row as it stands, read FOR UPDATE, and raises Hologram.AccessDeniedError when no
+  rule grants it. The grant rows the answer rests on are held until the delete commits, so a
+  revocation of one of them lands after the delete, and a grant made meanwhile is not seen - the
+  delete is refused where a moment later it would pass. Every related row a rule reads - a `via:`
+  target, or a row along a path - is held the same way, so a change to it lands after the delete.
+  An entity claiming the server's own authority through trust/1 is deleted without evaluation, and
+  without an acting user an unclaimed delete is raw. A struct whose id names no row is not
+  evaluated at all: there is nothing to authorize against.
 
   A delete PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -218,7 +215,7 @@ defmodule Hologram.DB do
   Like delete/1, raising Hologram.WriteError instead of returning {:error, ...}.
 
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a
-  restriction takes delete/1. A denied claim raises Hologram.AccessDeniedError from either.
+  restriction takes delete/1. A denied write raises Hologram.AccessDeniedError from either.
   """
   @spec delete!(Entity.t()) :: :ok
   def delete!(entity) when is_struct(entity) do
@@ -485,10 +482,10 @@ defmodule Hologram.DB do
   @doc """
   Updates the entity of the given type with the given id, setting exactly the changed
   columns plus updated_at - there is no full-row variant. Changes (a map or keyword list)
-  are keyed by declared attribute and to-one relationship names - a to-one reference is
-  set, reassigned, or cleared (nil) through its relationship name. Changing any other
-  name, system attributes included, raises Hologram.MisuseError - as do empty changes and an
-  id that names no entity.
+  are keyed by declared attribute names and to-one reference fields (`<relationship name>_id`) -
+  a to-one reference is set, reassigned, or cleared (nil) through its reference field. Changing
+  any other name, system attributes included, raises Hologram.MisuseError - as do empty changes
+  and an id that names no entity.
 
   Returns :ok, or {:error, violations} - the map Entity.validate/2 returns, naming each
   field the changes leave breaking a declaration: the declared constraints a changed value
@@ -510,14 +507,16 @@ defmodule Hologram.DB do
   The misuses named above raise rather than returning, as does a constraint violation the
   mapping does not explain.
 
-  With an acting user set, the update is evaluated against that user's policies for :update,
-  against the row as it stands, read FOR UPDATE - naming the row by type and id carries no
-  claim, so update/1 is the spelling for one on another operation's authority. The grant rows
-  the answer rests on are held until the update commits, so a revocation of one of them lands
-  after the update, and a grant made meanwhile is not seen - the update is refused where a moment
-  later it would pass. Every related row a rule reads - a `via:` target, or a row along a path -
-  is held the same way, so a change to it lands after the update. Without an acting user the
-  update is raw.
+  With an acting user set, the update is evaluated against that user's update rules, against the row
+  as it stands, read FOR UPDATE: every field it changes - a reference field counting as its
+  relationship - has to be covered by a rule that holds, a field-limited line covering it (one whose
+  `only:` lists it, or whose `except:` leaves it out) or a line covering the whole row, and
+  Hologram.AccessDeniedError names the fields none covers. Naming the row by type and id carries no
+  claim, so update/1 is the spelling for a trusted one. The grant rows the answer rests on are held
+  until the update commits, so a revocation of one of them lands after the update, and a grant made
+  meanwhile is not seen - the update is refused where a moment later it would pass. Every related
+  row a rule reads - a `via:` target, or a row along a path - is held the same way, so a change to
+  it lands after the update. Without an acting user the update is raw.
 
   An update PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -542,18 +541,20 @@ defmodule Hologram.DB do
   The attribute changes go first and the edges follow, so a refused value leaves the edges unapplied
   and an edge that raises takes the values with it.
 
-  With an acting user set, the write is evaluated against that user's policies for :update - or
-  for the operation the entity claims through authorize/2 - and raises
-  Hologram.AccessDeniedError when no rule grants it. The row is read FOR UPDATE first and the
-  claim is evaluated against it as it stands, before the recorded changes apply, so a rule
-  describing the state a change leaves ("an editor may pin a note that is not pinned") reads
-  the way it reads in a template. Nothing can change the row between the evaluation and the
-  write, and the grant rows the answer rests on are held until the write commits, so a
-  revocation of one of them lands after the write, and a grant made meanwhile is not seen - the
-  write is refused where a moment later it would pass. Every related row a rule reads - a `via:`
-  target, or a row along a path - is held the same way, so a change to it lands after the write.
-  An entity claiming the server's own authority through trust/1 is written without evaluation, and
-  without an acting user an unclaimed write is raw.
+  With an acting user set, the write is evaluated against that user's update rules, and raises
+  Hologram.AccessDeniedError when no rule grants it. Every field it changes - a value put or moved,
+  a to-one's reference field as its relationship, an edge as its to-many relationship - has to be
+  covered by an update rule that holds: a field-limited line covering it (one whose `only:` lists
+  it, or whose `except:` leaves it out) or a line covering the whole row. The refusal names the
+  fields none covers. The row is read FOR UPDATE first and the rules are evaluated against it as it
+  stands, before the recorded changes apply, so a rule describing the state a change leaves ("an
+  editor may pin a note that is not pinned") reads the way it reads in a template. Nothing can
+  change the row between the evaluation and the write, and the grant rows the answer rests on are
+  held until the write commits, so a revocation of one of them lands after the write, and a grant
+  made meanwhile is not seen - the write is refused where a moment later it would pass. Every
+  related row a rule reads - a `via:` target, or a row along a path - is held the same way, so a
+  change to it lands after the write. An entity claiming the server's own authority through trust/1
+  is written without evaluation, and without an acting user an unclaimed write is raw.
 
   An update PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -575,7 +576,7 @@ defmodule Hologram.DB do
   Like update/1, raising Hologram.WriteError instead of returning {:error, ...}.
 
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
-  takes update/1. A denied claim raises Hologram.AccessDeniedError from either.
+  takes update/1. A denied write raises Hologram.AccessDeniedError from either.
   """
   @spec update!(Entity.t()) :: :ok
   def update!(entity) when is_struct(entity) do
@@ -881,7 +882,8 @@ defmodule Hologram.DB do
         opts
       )
 
-    pool_child = {Postgrex, postgrex_opts}
+    # TODO(#1696): {Postgrex, postgrex_opts} again, see Hologram.DB.Protocol.
+    pool_child = {Protocol, postgrex_opts}
 
     # The environment selects the schema mechanism: dev converges from the model, test
     # manages its schema from the test helpers, and every other env applies the

@@ -79,14 +79,9 @@ defmodule Hologram.Compiler do
     {Hologram.DB, :table_name, 1}
   ]
 
-  # The four calls an app spells an entity operation at, each with where the operation is read
-  # from: the argument's position, or the option an enqueue's keyword list names it under.
-  @operation_asks %{
-    {Hologram.Auth, :can?, 3} => 1,
-    {Hologram.Job, :create, 3} => {:option, 2, :authorize},
-    {Hologram.Job, :create!, 3} => {:option, 2, :authorize},
-    {Hologram.Query, :authorize, 2} => 1
-  }
+  # The calls an app spells an entity operation at, each with the position of the argument the
+  # operation is read from.
+  @operation_asks %{{Hologram.Auth, :can?, 3} => 1}
 
   # The modules the runtime entry file always imports, by class and file under the js dir.
   @runtime_imports [
@@ -370,15 +365,18 @@ defmodule Hologram.Compiler do
   A page that checks permissions on the client also downloads the grants window: what a client
   evaluates permissions against is grant rows, so a page that checks them needs them held like any
   other rows it reads. Only when the given module info PLT records a user entity type: a data model
-  without one has no grant store, so no page checks permissions against anything.
+  without one has no grant store, so there are no grant rows to hold. Its pages still check the
+  rules, which name no role.
 
   A page reading the session user from the context downloads the user window (see
   `Hologram.Auth.user_window/2`): the client answers the context from its database on every render,
-  so the session user's row has to be held there, and kept current, like any row a query reads. Only
-  when the given module info PLT records a user entity type, for the same reason.
+  so the session user's row has to be held there. The user type is synced for such a page (see
+  `build_sync_constants/3`), which keeps the row current; the window puts it first in a fill and
+  catches a returning client up on it. Only when the given module info PLT records a user entity
+  type, for the same reason.
 
   The window ids are derived with whether the build checks permissions on the client (see
-  `permission_checking?/2`), since a checking build's windows download the related rows the rules
+  `permission_checking?/1`), since a checking build's windows download the related rows the rules
   read, and a page has to name the windows the registered queries hold.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_windows_3/README.md
@@ -388,7 +386,7 @@ defmodule Hologram.Compiler do
   def build_page_windows(reach_by_page, component_queries, module_info_plt) do
     user_entity = Reflection.user_entity(module_info_plt)
     grant_store? = user_entity != nil
-    permission_checking? = permission_checking?(reach_by_page, module_info_plt)
+    permission_checking? = permission_checking?(reach_by_page)
 
     # Each component's window ids are derived once, however many pages reach it.
     window_ids_by_component =
@@ -442,18 +440,17 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns every place the build spells an entity operation at, sorted by the calling function:
-  each call of `Hologram.Auth.can?/3`, `Hologram.Query.authorize/2`, `Hologram.Job.create/3` or
-  `Hologram.Job.create!/3` found in the IR of the functions the call graph names as their
-  callers, with the line of the call and the operation it names - a literal atom, a literal
-  `{name, role}` tuple of atoms, or `:dynamic` when the operation is computed and the build cannot
-  read it. An enqueue claiming the server's authority (`trust: true`) names no operation and is
-  left out.
+  each call of `Hologram.Auth.can?/3` found in the IR of the functions the call graph names as
+  its callers, with the line of the call and the operation it names - a literal atom, a literal
+  `{name, role}` tuple of atoms, a literal `{:update, field}` or `{:update, fields}` tuple, or
+  `{:dynamic}` when the operation is computed and the build cannot read it - a tuple rather than an
+  atom, so a name an allow line carries, `:dynamic` included, is never mistaken for it.
 
-  Takes the UNSPLIT call graph - `can?/3` and the two enqueues are hand-ported, so the runtime
-  graph no longer holds the vertices whose callers this reads. The IR of a caller whose module the call
-  graph's module info PLT holds is built into the IR PLT when it is missing (the compile task
-  builds IR as it is read, see `build_missing_ir!/2`); a caller the IR PLT does not hold after
-  that is skipped, as `validate_prop_usages/2` skips one.
+  Takes the UNSPLIT call graph - `can?/3` is hand-ported, so the runtime graph no longer holds the
+  vertices whose callers this reads. The IR of a caller whose module the call graph's module info
+  PLT holds is built into the IR PLT when it is missing (the compile task builds IR as it is read,
+  see `build_missing_ir!/2`); a caller the IR PLT does not hold after that is skipped, as
+  `validate_prop_usages/2` skips one.
 
   ## Options
 
@@ -461,7 +458,7 @@ defmodule Hologram.Compiler do
       already; every caller is read without it (default: none).
   """
   @spec operation_asks(CallGraph.t(), PLT.t(), T.opts()) ::
-          list(%{mfa: mfa, line: integer | nil, operation: Entity.operation() | :dynamic})
+          list(%{mfa: mfa, line: integer | nil, operation: Entity.operation() | {:dynamic}})
   def operation_asks(call_graph, ir_plt, opts \\ []) do
     callers =
       @operation_asks
@@ -498,7 +495,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the pages that can check permissions on the CLIENT - the ones whose bundled code
-  reaches one of `permission_mfas/0`: a permission check or a role check, each of which reads grant
+  reaches one of `permission_mfas/0`: a permission check, which reads the rules and the server's
+  verdicts, and the grant rows when the model has a grant store, a role check, which reads grant
   rows, or a grant verb, which asks the same gate locally before it writes - from what each page's
   client code reaches, as `list_reach_by_page/2` lists it.
 
@@ -521,20 +519,23 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns true when some page checks permissions on the client and the data model has a grant
-  store to check them against, or false otherwise - from what the data layer keeps of each page's
-  reach (see `build_kept_page_reach/3`) and the given module info PLT.
+  Returns true when some page checks permissions on the client, or false otherwise - from what the
+  data layer keeps of each page's reach (see `build_kept_page_reach/3`).
 
   What it gates is build-wide: the related rows a checking client's windows download beside the
-  rows its queries return, and the server's verdicts its rows carry. The rules and roles ship
-  with every build that has a data model (see `build_sync_constants/3`).
+  rows its queries return, the types sync sends for the rules to read, and the server's verdicts
+  its rows carry. The rules and roles ship with every build that has a data model (see
+  `build_sync_constants/3`).
+
+  Whether the data model has a grant store is not asked: one with no user entity type has none,
+  but its pages still check rules that name no role - an app with no logins calls `can?/3` for
+  the anonymous session, and the browser answers it from the server's verdicts like any other. What
+  needs the grant store, the grants window and the grant type's rows, checks for it on its own (see
+  `build_page_windows/3`, `build_sync_constants/3`).
   """
-  @spec permission_checking?(%{module => kept_page_reach}, PLT.t()) :: boolean
-  def permission_checking?(reach_by_page, module_info_plt) do
-    # A data model with no user entity type has no grant store, so no page checks permissions
-    # against anything then.
-    Reflection.user_entity(module_info_plt) != nil and
-      Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.checks_permissions? end)
+  @spec permission_checking?(%{module => kept_page_reach}) :: boolean
+  def permission_checking?(reach_by_page) do
+    Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.checks_permissions? end)
   end
 
   @doc false
@@ -921,7 +922,7 @@ defmodule Hologram.Compiler do
   The grants window is among the windows when the given entity types hold the role grant store,
   which a data model does exactly when it designates a user entity type. So is the user window (see
   `Hologram.Auth.user_window/2`). Whether the build has a page checking permissions on the client is
-  given (see `permission_checking?/2`): such a client's windows also download the related rows its
+  given (see `permission_checking?/1`): such a client's windows also download the related rows its
   types' rules read, the user window's among them.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_3/README.md
@@ -2348,7 +2349,9 @@ defmodule Hologram.Compiler do
   the rules every entity type declares, which the policy hash is taken over.
 
   `:entity_types` are the types a client can ever hold or mention - every window's own type and
-  everything it includes, plus every entity type the pages' client code mentions. A client
+  everything it includes, plus every entity type the pages' client code mentions, and the user
+  entity type when a page reads the session user from the context, which the client answers from
+  its database. A client
   constructs and validates entities as well as reading them, and a type it constructs is one it
   has to be told the declarations of. A type neither queried nor mentioned is left out, which is
   what keeps an app's other tables out of a file every page load serves.
@@ -2386,7 +2389,7 @@ defmodule Hologram.Compiler do
   row from (see `Hologram.Template.Renderer`'s `{Hologram, :user}` context), or nil when the model
   designates none or the client doesn't hold the type. A user entity type declaring no rule is
   one nobody may read, so no row of it ever reaches a client, and the model leaves it out unless a
-  page reaches it.
+  page reaches it or reads the session user.
 
   `:model_hash` is the hash of the project's data model, of every entity type and global role the
   module info PLT records, whatever the pages reach. It is nil when the PLT records no entity type:
@@ -2397,17 +2400,19 @@ defmodule Hologram.Compiler do
   ones it enforces.
 
   `:synced_types` are the entity types sync sends rows of, sorted by name: the types the queries
-  read and the pages' client code mentions, as for `:entity_types`, and, when the build checks
-  permissions on the client (see `permission_checking?/2`), the types every rule of those types
-  reads through relationships, with the grant type. A browser never decides a read rule - a row
-  reaches it only once the server's read rules admitted it - so the rules count only where the
-  browser answers them. They are followed one step: client code checks only rows of types it
-  queries or mentions, and a rule's chains already follow its delegations. That is at least what
-  the windows download, which follow the rules of a query's own type and its includes only - bar
-  a type the model leaves out, which declares no rule, so no read rule admits its rows. A
-  type only server code names, like an audit log, is left out, rules or not, and never reaches a
-  browser. The server reads the list (see `Hologram.DB.QueryCache.synced_types/0`), the client
-  does not.
+  read and the pages' client code mentions, and the user type when a page reads the session user, as
+  for `:entity_types` - kept syncing whichever of its rows the read rules let the user hold - and,
+  when the build checks permissions on the client (see `permission_checking?/1`), the types every
+  rule of those types reads through relationships, with the grant type when the model has one. Read
+  rules count too, since the browser decides them in `can?`. They are followed one step: client code
+  checks only rows of types it queries or mentions, and a rule's chains already follow its
+  delegations. A chain's types stop before its first type no session may read (see
+  `Hologram.Policy.readable_prefix/2`), since no client gets a row of it, nor any row reached
+  through it. That is at least what the windows download, which follow the rules of a query's own
+  type and its includes only - bar a type the model leaves out, which declares no rule, so no read
+  rule admits its rows. A type only server code names, like an audit log, is left out, rules or not,
+  and never reaches a browser. The server reads the list (see
+  `Hologram.DB.QueryCache.synced_types/0`), the client does not.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
@@ -2452,7 +2457,15 @@ defmodule Hologram.Compiler do
         MapSet.union(types, Registry.entity_types(term))
       end)
 
-    reached_entity_types = MapSet.union(queried_entity_types, mentioned_entity_types)
+    user_entity = Reflection.user_entity(module_info_plt)
+
+    # A page reading the session user from the context answers it from the browser's database on
+    # every render, so the user type is reached like a type a query reads - kept syncing whichever
+    # of its rows the read rules let the user hold - though nothing names it.
+    reached_entity_types =
+      queried_entity_types
+      |> MapSet.union(mentioned_entity_types)
+      |> put_session_user_type(user_entity, reach_by_page)
 
     # Rules and roles are baked for every type declaring a rule or a role, reached or not, and for
     # the types those lead to - the set a server hands a client built with other rules (see
@@ -2466,8 +2479,6 @@ defmodule Hologram.Compiler do
       |> put_grant_type(all_entity_types)
       |> rules_entity_types()
 
-    user_entity = Reflection.user_entity(module_info_plt)
-
     %{
       derived_count_types: derived_count_types(component_modules, component_queries),
       derived_queries: derived_queries(component_modules, component_queries),
@@ -2475,8 +2486,7 @@ defmodule Hologram.Compiler do
       model_hash: model_hash(all_entity_types, role_modules),
       policy_hash: policy_hash(all_entity_types),
       role_modules: role_modules,
-      synced_types:
-        synced_types(reached_entity_types, entity_types, reach_by_page, module_info_plt),
+      synced_types: synced_types(reached_entity_types, entity_types, reach_by_page),
       user_entity: if(MapSet.member?(entity_types, user_entity), do: user_entity)
     }
   end
@@ -2819,13 +2829,16 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Refuses an entity operation the build asks about that nothing declares, or returns :ok.
+  Refuses an entity operation the build asks about that is neither a framework operation nor a
+  name some allow line carries, or returns :ok.
 
-  Every literal ask `operation_asks/2` reads is judged against the build's whole vocabulary - the
-  framework's operations and every operation an allow line on any of the given entity types
-  names - because the entity argument's type is not known at the ask. A role tuple's role has to
-  be one some entity type declares. A computed operation passes here and is judged at run time,
-  by `Hologram.Policy.validate_operation!/2` and its client twin, which know the type.
+  Every literal ask `operation_asks/3` reads is judged against the build's whole vocabulary - the
+  framework's operations and every name an allow line on any of the given entity types carries -
+  because the entity argument's type is not known at the ask. A role tuple's role has to be one
+  some entity type declares, and every field an `{:update, field}` or `{:update, fields}` tuple
+  names a field some entity type's update sets (`Hologram.Policy.update_fields/1`). A computed
+  operation passes here and is judged at run time, by `Hologram.Policy.validate_operation!/2` and
+  its client twin, which know the type.
 
   Raises Hologram.CompileError naming the ask's function and line, the operation, and what the
   build does declare - so a typo or a renamed operation fails the build at the line that asks,
@@ -2840,7 +2853,7 @@ defmodule Hologram.Compiler do
   def validate_operations!(entity_types, call_graph, ir_plt, opts \\ []) do
     # Seeded with the framework's own rather than left to the types to carry: every type's
     # operations include them, but an app with NO entity type contributes nothing at all, and the
-    # framework's own asks (Diff.deltas/4 asks :read) are in every build's call graph.
+    # framework's own asks (Diff.carried/2 asks :read) are in every build's call graph.
     vocabulary =
       entity_types
       |> Enum.flat_map(&Policy.operations/1)
@@ -2854,9 +2867,16 @@ defmodule Hologram.Compiler do
       |> Enum.uniq()
       |> Enum.sort()
 
+    field_names =
+      entity_types
+      |> Enum.flat_map(&Policy.update_fields/1)
+      |> MapSet.new()
+
+    declared = %{field_names: field_names, role_names: role_names, vocabulary: vocabulary}
+
     call_graph
     |> operation_asks(ir_plt, opts)
-    |> Enum.each(&validate_operation_ask!(&1, vocabulary, role_names))
+    |> Enum.each(&validate_operation_ask!(&1, declared))
   end
 
   @doc """
@@ -2958,9 +2978,13 @@ defmodule Hologram.Compiler do
          acc
        ) do
     case Map.fetch(@operation_asks, {module, function, length(args)}) do
-      {:ok, source} ->
-        acc = record_operation_ask(read_operation_ask(args, source), mfa, line, acc)
-        collect_operation_asks(args, mfa, acc)
+      {:ok, position} ->
+        operation =
+          args
+          |> Enum.at(position)
+          |> literal_operation()
+
+        collect_operation_asks(args, mfa, [%{line: line, mfa: mfa, operation: operation} | acc])
 
       :error ->
         collect_operation_asks(Map.from_struct(call), mfa, acc)
@@ -3030,19 +3054,20 @@ defmodule Hologram.Compiler do
   defp quantified_type(hops, [entity_type | _types_above]),
     do: Derived.path_target(entity_type, hops)
 
-  # The verdict key and the read types of a deciding clause standing in a rule's predicates, as
-  # members of its object - none for any other clause.
-  defp render_verdict_members(clause, {entity_type, operation}) do
-    if Policy.deciding_quantifier?(entity_type, clause) do
+  # The verdict key and the read types of a deciding item - a clause standing in a rule's
+  # predicates, a role reference as {:to, reference} or a delegation as {:via, via} - as members of
+  # its object, none for any other.
+  defp render_verdict_members(item, {entity_type, operation}) do
+    if Policy.deciding_quantifier?(entity_type, operation, item) do
       reads_js =
         entity_type
-        |> Policy.verdict_reads(clause)
+        |> Policy.verdict_reads(item)
         |> Enum.map_join(",", &render_entity_type_label/1)
         |> then(&"[#{&1}]")
 
       verdict_js =
         entity_type
-        |> Policy.verdict_key(operation, clause)
+        |> Policy.verdict_key(operation, item)
         |> Jason.encode!()
 
       [{"reads", reads_js}, {"verdict", verdict_js}]
@@ -3051,7 +3076,7 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp render_verdict_members(_clause, nil), do: []
+  defp render_verdict_members(_item, nil), do: []
 
   defp resolve_derived_definition(entity_type, name, ir_plt) do
     if name in entity_type.__derived_builder_calls__() do
@@ -3071,7 +3096,9 @@ defmodule Hologram.Compiler do
     Enum.filter(callers, fn {module, _function, _arity} -> MapSet.member?(module_set, module) end)
   end
 
-  # A literal atom or a literal {name, role} tuple of atoms is read; anything else is computed.
+  # A literal atom, a literal {name, role} tuple of atoms, or a literal {:update, fields} tuple
+  # whose list holds only atoms is read; anything else is computed. A list is read only under
+  # :update - can? refuses one naming roles whatever it holds, so a role list is left to it.
   defp literal_operation(%IR.AtomType{value: operation}), do: operation
 
   defp literal_operation(%IR.TupleType{
@@ -3079,37 +3106,17 @@ defmodule Hologram.Compiler do
        }),
        do: {name, role_name}
 
-  defp literal_operation(_ir), do: :dynamic
-
-  # An operation read by position, or from a literal keyword list's entry - a list that is not a
-  # literal keyword list is computed, and one without the entry names no operation.
-  defp read_operation_ask(args, position) when is_integer(position) do
-    args
-    |> Enum.at(position)
-    |> literal_operation()
-  end
-
-  defp read_operation_ask(args, {:option, position, key}) do
-    case Enum.at(args, position) do
-      %IR.ListType{data: entries} ->
-        Enum.find_value(entries, :none, &keyword_operation(&1, key))
-
-      _ir ->
-        :dynamic
+  defp literal_operation(%IR.TupleType{
+         data: [%IR.AtomType{value: :update}, %IR.ListType{data: field_irs}]
+       }) do
+    if Enum.all?(field_irs, &match?(%IR.AtomType{}, &1)) do
+      {:update, Enum.map(field_irs, & &1.value)}
+    else
+      {:dynamic}
     end
   end
 
-  defp keyword_operation(%IR.TupleType{data: [%IR.AtomType{value: key}, value]}, key) do
-    literal_operation(value)
-  end
-
-  defp keyword_operation(_entry, _key), do: nil
-
-  defp record_operation_ask(:none, _mfa, _line, acc), do: acc
-
-  defp record_operation_ask(operation, mfa, line, acc) do
-    [%{line: line, mfa: mfa, operation: operation} | acc]
-  end
+  defp literal_operation(_ir), do: {:dynamic}
 
   # One branch of a block renders, so an atom ref counts as often as the branch that renders it the
   # most times. The other branches' refs still name refs the page can render, so they stay for the
@@ -4410,17 +4417,20 @@ defmodule Hologram.Compiler do
 
   # The entity types sync sends rows of (see build_sync_constants/3): the reached ones, and in a
   # build checking permissions on the client, the types their rules read rows of through
-  # relationships and the grant type. Kept to the types of the client's model: a row of a type the
-  # model does not name cannot be read back. What that drops is a type declaring no rule, like
-  # one a read rule delegates to, whose rows no one may read anyway.
-  defp synced_types(reached_entity_types, model_entity_types, reach_by_page, module_info_plt) do
+  # relationships and the grant type. A chain's types stop before its first type no session may
+  # read (see `Hologram.Policy.readable_prefix/2`): no client gets such a row, nor any row reached
+  # through it. Kept to the types of the client's model: a row of a type the model does not name
+  # cannot be read back. What that drops is a type declaring no rule, like one a read rule
+  # delegates to, whose rows no one may read anyway, and the grant type when the model designates
+  # no user entity type, which has no grant store.
+  defp synced_types(reached_entity_types, model_entity_types, reach_by_page) do
     types =
-      if permission_checking?(reach_by_page, module_info_plt) do
+      if permission_checking?(reach_by_page) do
         reached_entity_types
         |> Enum.flat_map(fn entity_type ->
           entity_type
           |> Policy.related_chains()
-          |> Enum.flat_map(&chain_types(entity_type, &1))
+          |> Enum.flat_map(&chain_types(entity_type, Policy.readable_prefix(entity_type, &1)))
         end)
         |> MapSet.new()
         |> MapSet.union(reached_entity_types)
@@ -5193,7 +5203,8 @@ defmodule Hologram.Compiler do
   # type, the ingest and read paths already fetch the entry, and every type named here is one the
   # model names anyway.
   #
-  # A per-role grant lifecycle operation is keyed the way the client spells it when asking -
+  # A per-role grant lifecycle operation and a field of an update are keyed the way the client
+  # spells them when asking -
   # Policy.operation_key/1 here and operationKey in assets/js/elixir/hologram/auth.mjs are a
   # hand-ported pair, so the two must agree.
   defp render_policy(entity_type) do
@@ -5216,8 +5227,8 @@ defmodule Hologram.Compiler do
 
     render_json_object([
       {"predicates", render_policy_predicates([entity_type], rule.predicates, verdict_context)},
-      {"to", render_policy_references(entity_type, rule.to)},
-      {"via", render_policy_delegation(rule.via)}
+      {"to", render_policy_references(entity_type, rule.to, verdict_context)},
+      {"via", render_policy_delegation(rule.via, verdict_context)}
     ])
   end
 
@@ -5265,13 +5276,25 @@ defmodule Hologram.Compiler do
     render_json_object(members ++ render_verdict_members(clause, verdict_context))
   end
 
-  # A deciding predicate standing in a rule's predicates - one reading a server-only attribute,
-  # whose value no client holds - is the key the server's verdict on it is sent under and the types it
-  # reads alone, since the client answers it from the verdict and nothing else.
+  # A deciding predicate standing in a rule's predicates is the key the server's verdict on it is
+  # sent under and the types it reads. One reading a server-only attribute, whose value no client
+  # holds, is those alone, since the client answers it from the verdict and nothing else. One that
+  # in a read rule reads a row of a type no client holds carries its triple too: the client answers
+  # it from the rows it holds when they decide it - an empty reference on the path reads no row -
+  # and from the verdict otherwise.
   defp render_policy_clause(types, {_name, _operator, _value} = clause, verdict_context) do
     case render_verdict_members(clause, verdict_context) do
-      [] -> render_policy_triple(types, clause)
-      members -> render_json_object(members)
+      [] ->
+        render_policy_triple(types, clause)
+
+      members ->
+        {entity_type, _operation} = verdict_context
+
+        if Policy.reads_server_only?(entity_type, clause) do
+          render_json_object(members)
+        else
+          render_json_object([{"predicate", render_policy_triple(types, clause)} | members])
+        end
     end
   end
 
@@ -5314,35 +5337,52 @@ defmodule Hologram.Compiler do
   end
 
   # A grant reference names WHERE a role must be held: on the entity itself, on its whole type,
-  # on a related entity, on the entity a grant row names, or nowhere at all (a global role).
-  defp render_policy_references(_entity_type, nil), do: "null"
+  # on a related entity, on the entity a grant row names, or nowhere at all (a global role). The
+  # verdict context is the rule's type and operation.
+  defp render_policy_references(_entity_type, nil, _verdict_context), do: "null"
 
-  defp render_policy_references(entity_type, references) do
+  defp render_policy_references(entity_type, references, verdict_context) do
     references
-    |> Enum.map_join(",", &render_policy_reference(entity_type, &1))
+    |> Enum.map_join(",", &render_policy_reference(entity_type, &1, verdict_context))
     |> then(&"[#{&1}]")
   end
 
-  defp render_policy_reference(_entity_type, {:own, role_names}) do
+  defp render_policy_reference(_entity_type, {:own, role_names}, _verdict_context) do
     render_policy_reference_entry("own", [render_policy_roles(role_names)])
   end
 
-  defp render_policy_reference(_entity_type, {:global, role_modules}) do
+  defp render_policy_reference(_entity_type, {:global, role_modules}, _verdict_context) do
     render_policy_reference_entry("global", [render_policy_roles(role_modules)])
   end
 
-  # The chain a role is held through, spelled the way a delegation spells its chain.
-  defp render_policy_reference(entity_type, {:rel, relationship_names, role_names}) do
+  # The chain a role is held through, spelled the way a delegation spells its chain. A deciding one
+  # - in a read rule, one reading a row of a type no client holds - carries a fifth element, the key
+  # the server's verdict on it is sent under and the types it reads, which the client answers it
+  # from instead.
+  defp render_policy_reference(
+         entity_type,
+         {:rel, relationship_names, role_names} = reference,
+         verdict_context
+       ) do
     target_type = Entity.path_target(entity_type, relationship_names)
 
-    render_policy_reference_entry("rel", [
-      render_policy_name(relationship_names),
-      render_entity_type_label(target_type),
-      render_policy_roles(role_names)
-    ])
+    verdict_entries =
+      case render_verdict_members({:to, reference}, verdict_context) do
+        [] -> []
+        members -> [render_json_object(members)]
+      end
+
+    render_policy_reference_entry(
+      "rel",
+      [
+        render_policy_name(relationship_names),
+        render_entity_type_label(target_type),
+        render_policy_roles(role_names)
+      ] ++ verdict_entries
+    )
   end
 
-  defp render_policy_reference(_entity_type, {kind, target_type, role_names}) do
+  defp render_policy_reference(_entity_type, {kind, target_type, role_names}, _verdict_context) do
     render_policy_reference_entry(Atom.to_string(kind), [
       render_entity_type_label(target_type),
       render_policy_roles(role_names)
@@ -5365,16 +5405,25 @@ defmodule Hologram.Compiler do
     |> then(&"[#{&1}]")
   end
 
-  # Operation first, as the server's tuple holds it - the array shape grant references bake as.
-  defp render_policy_delegation(nil), do: "null"
+  # Operation first, as the server's tuple holds it - the array shape grant references bake as. A
+  # deciding one - in a read rule, one whose chain passes a row of a type no client holds - carries
+  # a third element, the key the server's verdict on it is sent under and the types it reads, which
+  # the client answers it from instead.
+  defp render_policy_delegation(nil, _verdict_context), do: "null"
 
-  defp render_policy_delegation({operation, relationship_names}) do
+  defp render_policy_delegation({operation, relationship_names} = via, verdict_context) do
     operation_js =
       operation
       |> Policy.operation_key()
       |> Jason.encode!()
 
-    "[#{operation_js},#{render_policy_name(relationship_names)}]"
+    verdict_js =
+      case render_verdict_members({:via, via}, verdict_context) do
+        [] -> ""
+        members -> ",#{render_json_object(members)}"
+      end
+
+    "[#{operation_js},#{render_policy_name(relationship_names)}#{verdict_js}]"
   end
 
   # An attribute as its name, and a path or the chain of a delegation or a grant reference as the
@@ -5475,8 +5524,8 @@ defmodule Hologram.Compiler do
     |> render_json_object()
   end
 
-  # A page module defines no props, so it never reads anything from the context through one.
-  # TODO: what this decides has to outlive the windows, see the TODO on Auth.user_window/2.
+  # A page module defines no props, so it never reads anything from the context through one. What
+  # this decides also puts the user type among the synced types (see `build_sync_constants/3`).
   defp reads_session_user?(module) do
     Reflection.has_function?(module, :__props__, 0) and
       Enum.any?(module.__props__(), fn {_name, _type, opts} ->
@@ -5833,13 +5882,16 @@ defmodule Hologram.Compiler do
     started_at
   end
 
-  defp declared_operations_description(vocabulary) do
+  defp carried_names_description(vocabulary) do
     case vocabulary -- Policy.framework_operations() do
       [] ->
-        "this build declares no operation beside the framework's own"
+        "no allow line in this build carries a name"
+
+      [name] ->
+        "the name this build's allow lines carry is #{inspect(name)}"
 
       names ->
-        "the operations this build declares are #{spoken_names(names)}, beside the framework's own"
+        "the names this build's allow lines carry are #{spoken_names(names)}"
     end
   end
 
@@ -5934,6 +5986,16 @@ defmodule Hologram.Compiler do
         window = Auth.user_window(user_entity, permission_checking?)
 
         Map.put_new(windows, Registry.id(window), window)
+    end
+  end
+
+  defp put_session_user_type(entity_types, nil, _reach_by_page), do: entity_types
+
+  defp put_session_user_type(entity_types, user_entity, reach_by_page) do
+    if Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.reads_session_user? end) do
+      MapSet.put(entity_types, user_entity)
+    else
+      entity_types
     end
   end
 
@@ -6080,19 +6142,16 @@ defmodule Hologram.Compiler do
     end)
   end
 
-  # A registered query is read for the session user on the server and replayed on the client from
-  # its own database - there is no server authority to claim on the client, and a claim the server
-  # honored would hand the client rows it may not hold.
-  defp validate_operation_ask!(%{operation: :dynamic}, _vocabulary, _role_names), do: :ok
+  defp validate_operation_ask!(%{operation: {:dynamic}}, _declared), do: :ok
 
-  defp validate_operation_ask!(%{operation: operation} = ask, vocabulary, _role_names)
+  defp validate_operation_ask!(%{operation: operation} = ask, %{vocabulary: vocabulary})
        when is_atom(operation) do
     if operation in vocabulary do
       :ok
     else
       raise Hologram.CompileError,
         message:
-          "unknown operation #{inspect(operation)} in #{ask_location(ask)} - no entity type declares an allow line for it; #{declared_operations_description(vocabulary)}"
+          "unknown operation #{inspect(operation)} in #{ask_location(ask)} - it is neither a framework operation nor a name an allow line carries; #{carried_names_description(vocabulary)}"
     end
   end
 
@@ -6100,8 +6159,7 @@ defmodule Hologram.Compiler do
   # there reads and this build-wide one mirrors.
   defp validate_operation_ask!(
          %{operation: {name, role_name} = operation} = ask,
-         _vocabulary,
-         role_names
+         %{role_names: role_names}
        )
        when name in [:grant_role, :revoke_role] do
     if role_name in role_names do
@@ -6113,12 +6171,41 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp validate_operation_ask!(%{operation: operation} = ask, _vocabulary, _role_names) do
+  defp validate_operation_ask!(%{operation: {:update, []} = operation} = ask, _declared) do
     raise Hologram.CompileError,
       message:
-        "unknown operation #{inspect(operation)} in #{ask_location(ask)} - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+        "unknown operation #{inspect(operation)} in #{ask_location(ask)} - {:update, fields} names at least one field"
   end
 
+  defp validate_operation_ask!(
+         %{operation: {:update, field_names} = operation} = ask,
+         %{field_names: declared_field_names}
+       )
+       when is_atom(field_names) or is_list(field_names) do
+    # Not List.wrap/1 or Enum.find/2: both take a field named nil for no field at all, while the
+    # run-time check judges it like any other name.
+    field_names = if is_list(field_names), do: field_names, else: [field_names]
+
+    case Enum.reject(field_names, &MapSet.member?(declared_field_names, &1)) do
+      [] ->
+        :ok
+
+      [field_name | _later_names] ->
+        raise Hologram.CompileError,
+          message:
+            "unknown field #{inspect(field_name)} in #{inspect(operation)} in #{ask_location(ask)} - no entity type has a field an update sets by that name"
+    end
+  end
+
+  defp validate_operation_ask!(%{operation: operation} = ask, _declared) do
+    raise Hologram.CompileError,
+      message:
+        "unknown operation #{inspect(operation)} in #{ask_location(ask)} - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
+  end
+
+  # A registered query is read for the session user on the server and replayed on the client from
+  # its own database - there is no server authority to claim on the client, and a claim the server
+  # honored would hand the client rows it may not hold.
   defp validate_untrusted_queries!({module, module_terms}) do
     Enum.each(module_terms, fn term ->
       if term.trust do

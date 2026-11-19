@@ -7,6 +7,8 @@ defmodule Hologram.Job.RunLockTest do
   alias Hologram.DB.Config
   alias Hologram.Entity
   alias Hologram.Job.RunLock
+  alias Hologram.Test.ClosingTCP
+  alias Hologram.Test.CountingListener
   alias Hologram.Test.TCPProxy
   alias Postgrex.SimpleConnection
 
@@ -318,6 +320,31 @@ defmodule Hologram.Job.RunLockTest do
       # Stopping closes the socket, and the server frees the lock once it notices.
       other = start_session()
       wait_until(fn -> acquire(other, id) end)
+    end
+
+    # As a peer that resets the connection right after accepting it can make it fail.
+    test "keeps trying a connect whose socket fails as it opens" do
+      peer = start_supervised!(CountingListener)
+
+      log =
+        capture_log(fn ->
+          session =
+            start_session(
+              port: CountingListener.port(peer),
+              reconnect_backoff: 50,
+              socket_options: ClosingTCP.socket_options()
+            )
+
+          monitor_ref = Process.monitor(session)
+
+          wait_until(fn -> CountingListener.accepted(peer) >= 3 end)
+
+          refute_received {:DOWN, ^monitor_ref, :process, ^session, _reason}
+
+          :gen_statem.stop(session)
+        end)
+
+      assert log =~ "tcp setopts: invalid argument - :einval"
     end
 
     test "keeps trying while the database refuses connections" do
