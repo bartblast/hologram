@@ -309,10 +309,11 @@ defmodule Hologram.Migrator do
   The one state it refuses is rows repeating the key of a unique index it has to build.
   While the index is missing, nothing stops running nodes from writing them, and no build
   can succeed over them. The refusal names the table, the columns and how many keys
-  repeat. The rows are counted before anything is built or dropped, so a refusal changes
-  nothing. A repeat written after the count fails the build instead, which leaves the
-  index invalid under its name - the state the next boot counts and refuses the same way.
-  Either way, the boot after the rows are fixed builds it.
+  repeat. Each index's rows are counted before it is built or dropped, so a refusal leaves
+  that index as it was - the ones repaired before it stay repaired. A repeat written after
+  the count fails the build instead, which leaves the index invalid under its name - the
+  state the next boot counts and refuses the same way. Either way, the boot after the rows
+  are fixed builds it.
 
   An invalid index is dropped and built again rather than rebuilt in place. REINDEX
   CONCURRENTLY builds a copy beside it, and a copy that fails - over repeated keys, or with
