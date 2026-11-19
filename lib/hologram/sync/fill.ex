@@ -34,7 +34,7 @@ defmodule Hologram.Sync.Fill do
   `term/2`), with the highest sequence number at which the given replica has had a batch confirmed,
   both read in one snapshot (see `read_now/4`).
   """
-  @spec read(module, String.t() | nil, String.t() | nil, list(module)) ::
+  @spec read(module, Hologram.Server.identity_id() | nil, String.t() | nil, list(module)) ::
           {list(struct), non_neg_integer | nil}
   def read(entity_type, actor_user_id, replica_id, synced_types) do
     {:ok, read} =
@@ -52,7 +52,7 @@ defmodule Hologram.Sync.Fill do
   A nil user reads as a visitor, through the read rules, never through the trusted tier. A nil
   replica has no number.
   """
-  @spec read_now(module, String.t() | nil, String.t() | nil, list(module)) ::
+  @spec read_now(module, Hologram.Server.identity_id() | nil, String.t() | nil, list(module)) ::
           {list(struct), non_neg_integer | nil}
   def read_now(entity_type, actor_user_id, replica_id, synced_types) do
     applied_seq = replica_id && Record.highest_confirmed_seq(replica_id)
@@ -74,7 +74,7 @@ defmodule Hologram.Sync.Fill do
   Packed by Postgres: a client may hold every row of a big type, and decoding each row to keep its
   id costs several times what reading it does.
   """
-  @spec read_ids(module, String.t() | nil) :: binary
+  @spec read_ids(module, Hologram.Server.identity_id() | nil) :: binary
   def read_ids(entity_type, actor_user_id) do
     packed_ids_sql = PackedIds.ids_sql(~s|"$rows"."id"|)
 
@@ -92,7 +92,7 @@ defmodule Hologram.Sync.Fill do
   """
   @spec read_named(
           %{module => list(String.t())},
-          String.t() | nil,
+          Hologram.Server.identity_id() | nil,
           String.t() | nil,
           list(module)
         ) ::
@@ -113,7 +113,7 @@ defmodule Hologram.Sync.Fill do
   """
   @spec read_named_now(
           %{module => list(String.t())},
-          String.t() | nil,
+          Hologram.Server.identity_id() | nil,
           String.t() | nil,
           list(module)
         ) :: {list(struct), non_neg_integer | nil}

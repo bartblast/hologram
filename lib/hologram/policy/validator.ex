@@ -16,6 +16,8 @@ defmodule Hologram.Policy.Validator do
   # The two gate operations that may name the role (or roles) they cover
   @role_operations [:grant_role, :revoke_role]
 
+  @no_user_entity_message "but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
   @doc """
   Validates the policy declarations of the given entity type modules and the given global role modules as a whole.
 
@@ -25,9 +27,13 @@ defmodule Hologram.Policy.Validator do
   @spec validate_model!(list(module), list(module)) :: :ok
   def validate_model!(entity_types, role_modules) do
     validate_role_modules!(role_modules)
-    validate_user_entity!(entity_types)
+    validate_user_entity!(entity_types, role_modules)
 
     Enum.each(entity_types, &validate_entity_policies!/1)
+
+    # After the lines are validated: the acting user is looked for in the clauses their conditions
+    # build, which only a valid condition builds.
+    validate_actor_requirement!(entity_types)
 
     validate_via_cycles!(entity_types)
 
@@ -84,6 +90,18 @@ defmodule Hologram.Policy.Validator do
     chain
     |> Enum.scan(entity_type, &Entity.related_type(&2, &1))
     |> Enum.with_index()
+  end
+
+  # Where the first line of the given entity type whose condition names the acting user lives,
+  # described as it was written, or nil when none names it.
+  defp actor_line_where(entity_type) do
+    entity_type.__policies__()
+    |> Enum.zip(entity_type.__policy_sources__())
+    |> Enum.find_value(fn {{_operation, _to, _via, predicates, _name, _fields} = policy, source} ->
+      clauses = Stage.predicate_triples!(entity_type, predicates)
+
+      if Stage.names_actor?(clauses), do: line_where(entity_type, policy, source)
+    end)
   end
 
   defp declared_role_names(entity_type) do
@@ -604,22 +622,41 @@ defmodule Hologram.Policy.Validator do
          entity_type,
          {{{operation, to, via, predicates, name, fields}, source}, hints}
        ) do
-    # Every refusal below names the line as written and where it lives, a named line by its name and
-    # a field-limited one with its fields, so two lines of one operation can be told apart:
-    # allow :update, as: :publish, only: [:published] in MyApp.Post. The refusals of the fields
-    # themselves leave the fields out, since they name them.
-    named = if name, do: ", as: #{inspect(name)}", else: ""
-    limited = if fields, do: ", #{elem(fields, 0)}: #{inspect(elem(fields, 1))}", else: ""
-    line = "allow #{inspect(operation)}#{named}"
-    place = location(entity_type, source)
-    where = "#{line}#{limited} in #{place}"
+    # Every refusal below names the line as written and where it lives (line_where/3), so two lines
+    # of one operation can be told apart. The refusals of the fields themselves leave the fields
+    # out, since they name them.
+    policy = {operation, to, via, predicates, name, fields}
+    where = line_where(entity_type, policy, source)
 
-    validate_fields!(entity_type, fields, "#{line} in #{place}")
+    validate_fields!(
+      entity_type,
+      fields,
+      "#{written_line(policy)} in #{location(entity_type, source)}"
+    )
 
     validate_to!(entity_type, to, where)
     validate_via!(entity_type, operation, via, where)
     validate_predicates!(entity_type, operation, name, predicates, hints, where)
     validate_gate_operation!(entity_type, operation, to, via, predicates, where)
+  end
+
+  # The given line of the given entity type as it was written and where it lives, a named line by
+  # its name and a field-limited one with its fields:
+  # allow :update, as: :publish, only: [:published] in MyApp.Post.
+  defp line_where(
+         entity_type,
+         {_operation, _to, _via, _predicates, _name, fields} = policy,
+         source
+       ) do
+    limited = if fields, do: ", #{elem(fields, 0)}: #{inspect(elem(fields, 1))}", else: ""
+
+    "#{written_line(policy)}#{limited} in #{location(entity_type, source)}"
+  end
+
+  defp written_line({operation, _to, _via, _predicates, name, _fields}) do
+    named = if name, do: ", as: #{inspect(name)}", else: ""
+
+    "allow #{inspect(operation)}#{named}"
   end
 
   defp validate_predicates!(entity_type, operation, name, predicates, hints, where) do
@@ -872,7 +909,7 @@ defmodule Hologram.Policy.Validator do
     validate_target_role!(target_type, role_name, where)
   end
 
-  defp validate_user_entity!(entity_types) do
+  defp validate_user_entity!(entity_types, role_modules) do
     designated =
       entity_types
       |> Enum.filter(&Reflection.user_entity?/1)
@@ -887,14 +924,17 @@ defmodule Hologram.Policy.Validator do
             "multiple user entity designations in the data model: #{modules} - exactly one entity type can be designated with use Hologram.Entity, user: true"
 
       designated == [] ->
-        validate_user_entity_requirement!(entity_types)
+        validate_user_entity_requirement!(entity_types, role_modules)
 
       true ->
         :ok
     end
   end
 
-  defp validate_user_entity_requirement!(entity_types) do
+  # A model with no user entity reads every session as a visitor, so everything that tells one
+  # session from another is refused: roles and grant references, a global role, whose grants would
+  # have no store to go in, and a rule naming the acting user (validate_actor_requirement!/1).
+  defp validate_user_entity_requirement!(entity_types, role_modules) do
     entity_type =
       entity_types
       |> Enum.sort_by(&inspect/1)
@@ -903,8 +943,34 @@ defmodule Hologram.Policy.Validator do
     if entity_type do
       raise Hologram.CompileError,
         message:
-          "#{inspect(entity_type)} declares roles or policy grant references, but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+          "#{inspect(entity_type)} declares roles or policy grant references, #{@no_user_entity_message}"
     end
+
+    role_module = Enum.min_by(role_modules, &inspect/1, fn -> nil end)
+
+    if role_module do
+      raise Hologram.CompileError,
+        message: "#{inspect(role_module)} is a global role, #{@no_user_entity_message}"
+    end
+  end
+
+  # The third thing a model with no user entity refuses, apart from the two
+  # validate_user_entity_requirement!/2 checks, since it reads the clauses validated lines build.
+  defp validate_actor_requirement!(entity_types) do
+    if not Enum.any?(entity_types, &Reflection.user_entity?/1) do
+      where =
+        entity_types
+        |> Enum.sort_by(&inspect/1)
+        |> Enum.find_value(&actor_line_where/1)
+
+      if where do
+        raise Hologram.CompileError,
+          message:
+            "invalid predicate for #{where} - it names user_id(), #{@no_user_entity_message}"
+      end
+    end
+
+    :ok
   end
 
   defp validate_via!(_entity_type, _operation, nil, _where), do: :ok

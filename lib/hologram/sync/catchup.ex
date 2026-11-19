@@ -105,7 +105,7 @@ defmodule Hologram.Sync.Catchup do
   A row handed over carries the server's verdicts for the given user (see
   `Hologram.Sync.Frame.row_verdicts/2`), as every put does.
   """
-  @spec deltas(list(map), map, String.t() | nil) :: list(map)
+  @spec deltas(list(map), map, Hologram.Server.identity_id() | nil) :: list(map)
   def deltas(effects, pot, actor_user_id) do
     known = Enum.filter(effects, &is_atom(&1.type))
 
@@ -136,9 +136,10 @@ defmodule Hologram.Sync.Catchup do
 
   The grants are nil unless the gap holds a change to this actor's own, which is the only case a
   row nothing touched can have changed hands in. Nil for an anonymous client too: no grant names
-  it, so nothing about it can have moved.
+  it, so nothing about it can have moved - and for a user id no user entity can have, which no
+  grant names either.
   """
-  @spec gap(term, String.t() | nil, String.t(), String.t()) ::
+  @spec gap(term, Hologram.Server.identity_id() | nil, String.t(), String.t()) ::
           {:ok, list(map), list(struct) | nil} | {:full_resync, atom}
   def gap(cursor, actor_user_id, policy_hash, types_hash) do
     with {:ok, tx, seq, cursor_policy_hash, cursor_types_hash} <- decode_place(cursor),
@@ -146,7 +147,7 @@ defmodule Hologram.Sync.Catchup do
          :ok <- check_types(cursor_types_hash, types_hash),
          :ok <- check_retention(tx, seq),
          {:ok, effects} <- read_gap(tx, seq) do
-      {:ok, effects, grants_then(effects, tx, seq, actor_user_id)}
+      {:ok, effects, grants_then(effects, tx, seq, Auth.canonical_id(actor_user_id))}
     end
   end
 

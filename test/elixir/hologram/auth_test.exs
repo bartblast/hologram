@@ -242,6 +242,17 @@ defmodule Hologram.AuthTest do
       assert carried_grants(scopes) == []
     end
 
+    test "returns nothing for a session whose user id no user entity can have" do
+      user = create_user("foreign_actor_4@example.com")
+      resource = create_resource()
+
+      grant_role(user, :editor, resource)
+
+      scopes = MapSet.new([{user.id, {:own, Module1, resource.id}}])
+
+      assert Context.with_actor(7, fn -> carried_grants(scopes) end) == []
+    end
+
     # The scope says which rows to LOOK FOR, the read policy says which the session user may
     # HOLD - so a question about someone else answers with their row only when the asker's own
     # rules admit it.
@@ -1757,6 +1768,17 @@ defmodule Hologram.AuthTest do
         Context.with_actor(granter.id, fn -> grant_role(user, Role.Module1) end)
       end
     end
+
+    test "raises on a global grant issued under a user id no user entity can have" do
+      user = create_user("foreign_actor_1@example.com")
+
+      expected_msg =
+        "global roles are granted only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(7, fn -> grant_role(user, Role.Module1) end)
+      end
+    end
   end
 
   describe "grant_role/3" do
@@ -1917,6 +1939,20 @@ defmodule Hologram.AuthTest do
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(granter.id, fn -> grant_role(user, :editor, resource) end)
       end
+    end
+
+    test "raises when the acting user id is one no user entity can have" do
+      user = create_user("foreign_actor_2@example.com")
+      resource = create_resource()
+
+      expected_msg =
+        "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)} that may grant :editor"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(7, fn -> grant_role(user, :editor, resource) end)
+      end
+
+      assert grant_rows(user.id) == []
     end
 
     test "raises when the role is above the acting user's own" do
@@ -2655,6 +2691,22 @@ defmodule Hologram.AuthTest do
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(other_user.id, fn -> revoke_role(member, :editor, resource) end)
       end
+    end
+
+    test "raises when the acting user id is one no user entity can have" do
+      member = create_user("foreign_actor_3@example.com")
+      resource = create_resource()
+
+      grant_role(member, :editor, resource)
+
+      expected_msg =
+        "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)} that may revoke :editor"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor("abc", fn -> revoke_role(member, :editor, resource) end)
+      end
+
+      assert [%{role: "editor"}] = grant_rows(member.id)
     end
 
     test "raises when the acting user's role may not revoke it" do

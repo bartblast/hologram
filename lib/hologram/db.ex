@@ -108,8 +108,10 @@ defmodule Hologram.DB do
   a moment later it would pass. Every related row a rule reads - a `via:` target, or a row along a
   path - is held the same way, so a change to it lands after the write. An entity claiming the
   server's own authority through trust/1 is written without evaluation, and without an acting user
-  the write is raw - the trusted tier. The returned entity carries no claim and no recorded
-  changes.
+  the write is raw - the trusted tier. A session user id no user entity can have - an app's own
+  serial id - is still an acting user: its writes are evaluated as an anonymous session's, never
+  raw, so server code writing past the rules claims trust/1. The returned entity carries no claim
+  and no recorded changes.
 
   A write PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -301,8 +303,9 @@ defmodule Hologram.DB do
   With an acting user set, the query is read through that user's :read policies - the rows the
   policies grant, each included relationship filtered by its own type's :read rules, a
   single-result query answering nil and a counting query counting only what the user may read -
-  exactly as a template's registered query is. Without an acting user the query is read raw:
-  the trusted tier, for seeds, tasks and jobs.
+  exactly as a template's registered query is. A session user id no user entity can have - an
+  app's own serial id - reads as an anonymous session would. Without an acting user the query is
+  read raw: the trusted tier, for seeds, tasks and jobs.
 
   A query marked with trust/1 is read raw whether or not a user is acting - the server's own
   authority, the spelling for a read that must see past the acting user's policies.

@@ -31,6 +31,7 @@ defmodule Hologram.MutationTest do
   alias Hologram.Test.Fixtures.Mutation.Module2, as: MutationModule2
   alias Hologram.Test.Fixtures.Mutation.Module3, as: MutationModule3
   alias Hologram.Test.Fixtures.Mutation.Module4, as: MutationModule4
+  alias Hologram.Test.Fixtures.Mutation.Module5, as: MutationModule5
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
 
@@ -1401,6 +1402,89 @@ defmodule Hologram.MutationTest do
 
       assert run(raw, server(user.id)) == rejected(0, :not_found)
       assert EntityOperations.get(MutationModule1, id).priority == 5
+    end
+
+    # A user id no user entity can have - an app's own serial id - is recorded as nobody, a
+    # visitor's batch, since the record's actor is a user as the data layer stores one.
+    test "lands a batch from a user id no user entity can have, recorded with no actor" do
+      replica_id = Entity.generate_id()
+      id = Entity.generate_id()
+      raw = envelope([public_write(id)], replica_id: replica_id)
+
+      assert {:ok, %{"status" => "confirmed"} = answer} = run(raw, server(7))
+
+      assert EntityOperations.get(MutationModule2, id) != nil
+      assert Record.find(replica_id, 1).actor_id == nil
+      assert [%{actor_id: nil}] = oplog_rows(replica_id)
+
+      # Sent again, it is answered from its record rather than applied twice.
+      assert run(raw, server(7)) == {:ok, answer}
+    end
+
+    test "keeps nothing of a batch refused under a user id no user entity can have" do
+      replica_id = Entity.generate_id()
+      id = Entity.generate_id()
+      write = create_write(MutationModule1, id, %{"public" => false})
+
+      message = "not allowed to create Hologram.Test.Fixtures.Mutation.Module1 #{inspect(id)}"
+
+      assert run(envelope([write], replica_id: replica_id), server(7)) ==
+               rejected(0, %Hologram.AccessDeniedError{message: message})
+
+      assert Record.find(replica_id, 1) == nil
+    end
+
+    test "replays a batch of a user id no user entity can have to a visitor, and not to a user" do
+      user = create_user("foreign-replay@example.com")
+      batch = envelope([public_write(Entity.generate_id())])
+
+      assert {:ok, %{"status" => "confirmed"} = answer} = run(batch, server(7))
+
+      assert run(batch, server(user.id)) == rejected(nil, :forged_client)
+      assert run(batch, server()) == {:ok, answer}
+    end
+
+    test "refuses a job create under a user id no user entity can have" do
+      id = Entity.generate_id()
+
+      message =
+        "cannot create Hologram.Test.Fixtures.Job.Module1 as user 7 - the user id isn't a user entity's, so the job would run with no user and skip every rule. Create it with trust: true to run it as the server."
+
+      assert run(envelope([create_write(JobModule1, id, %{})]), server(7)) ==
+               rejected(0, %Hologram.AccessDeniedError{message: message})
+
+      assert EntityOperations.get(JobModule1, id) == nil
+    end
+
+    # A grant naming the session's own user id beside a create would pass as the creator's grant if
+    # the id were compared as sent, and then fail its validation, since no user entity has that id.
+    test "refuses a creator's grant naming a user id no user entity can have" do
+      entity_id = Entity.generate_id()
+
+      writes = [
+        create_write(MutationModule5, entity_id, %{}),
+        grant_write("abc", %MutationModule5{id: entity_id}, :maintainer)
+      ]
+
+      message = "a role is granted only by a signed-in user - nobody is signed in"
+
+      assert run(envelope(writes), server("abc")) ==
+               rejected(1, %Hologram.AccessDeniedError{message: message})
+
+      assert EntityOperations.get(MutationModule5, entity_id) == nil
+    end
+
+    # Revoking one's own role passes the gate, and the id the revocation names is compared with the
+    # session's as the data layer stores a user, so naming the session's own id gets nothing past it.
+    test "refuses a revocation naming a user id no user entity can have as its own" do
+      resource = create_shared()
+
+      write = revocation_write("abc", resource, :member)
+
+      message = "a role is revoked only by a signed-in user - nobody is signed in"
+
+      assert run(envelope([write]), server("abc")) ==
+               rejected(0, %Hologram.AccessDeniedError{message: message})
     end
 
     test "keeps nothing of a batch refused under an anonymous session" do

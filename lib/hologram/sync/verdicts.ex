@@ -87,7 +87,8 @@ defmodule Hologram.Sync.Verdicts do
   For the rows a returning client may hold verdicts of from before this session - a batch's rows
   come with theirs worked out (see `moved/2`).
   """
-  @spec stale(list(struct), %{String.t() => map}, String.t() | nil) :: list({struct, map})
+  @spec stale(list(struct), %{String.t() => map}, Hologram.Server.identity_id() | nil) ::
+          list({struct, map})
   def stale(rows, told, actor_user_id) do
     rows
     |> Enum.filter(&(Policy.deciding_quantifiers(&1.__struct__) != []))

@@ -104,6 +104,7 @@ describe("Durability", () => {
     // does not change who is signed in - so the seed's owner has to be put back by hand, or it
     // reaches every suite that runs after this file.
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
 
     Replica.reset();
     sinon.restore();

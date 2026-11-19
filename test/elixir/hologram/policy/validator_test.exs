@@ -226,7 +226,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :update, when: parent_id != user_id()
       end
 
-      assert validate_model!([InlinePolicyFixture7], []) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture7], []) == :ok
     end
 
     test "returns :ok for a condition comparing two attributes" do
@@ -287,6 +287,133 @@ defmodule Hologram.Policy.ValidatorTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture30], [])
       end
+    end
+
+    test "rejects a condition naming user_id() without a user entity designation" do
+      defmodule InlinePolicyFixture127 do
+        use Hologram.Entity
+
+        attribute :author_id, :uuid
+
+        allow :read, when: author_id == user_id()
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture127 - it names user_id(), but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture127], [])
+      end
+    end
+
+    test "rejects user_id() in an alternative without a user entity designation" do
+      defmodule InlinePolicyFixture128 do
+        use Hologram.Entity
+
+        attribute :author_id, :uuid
+        attribute :shared, :boolean
+
+        allow :update, as: :edit, when: shared == true or author_id == user_id()
+      end
+
+      expected_msg =
+        "invalid predicate for allow :update, as: :edit in Hologram.Policy.ValidatorTest.InlinePolicyFixture128 - it names user_id(), but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture128], [])
+      end
+    end
+
+    test "rejects user_id() in a quantifier nested in another without a user entity designation" do
+      defmodule InlinePolicyFixture129 do
+        use Hologram.Entity
+
+        attribute :author_id, :uuid
+
+        relationship :children, [Hologram.Policy.ValidatorTest.InlinePolicyFixture129],
+          inverse: parent
+
+        relationship :parent, Hologram.Policy.ValidatorTest.InlinePolicyFixture129, optional: true
+
+        allow :delete,
+          when:
+            any(
+              child <- children,
+              none(grandchild <- child.children, grandchild.author_id == user_id())
+            )
+      end
+
+      expected_msg =
+        "invalid predicate for allow :delete in Hologram.Policy.ValidatorTest.InlinePolicyFixture129 - it names user_id(), but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture129], [])
+      end
+    end
+
+    test "rejects user_id() in a quantifier without a user entity designation" do
+      defmodule InlinePolicyFixture131 do
+        use Hologram.Entity
+
+        relationship :children, [Hologram.Policy.ValidatorTest.InlinePolicyFixture131],
+          inverse: parent
+
+        relationship :owner, Hologram.Test.Fixtures.Entity.Module1, optional: true
+
+        relationship :parent, Hologram.Policy.ValidatorTest.InlinePolicyFixture131, optional: true
+
+        allow :read, when: any(child <- children, child.owner_id == user_id())
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture131 - it names user_id(), but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module1, InlinePolicyFixture131], [])
+      end
+    end
+
+    test "rejects a field-limited line naming user_id() without a user entity designation" do
+      defmodule InlinePolicyFixture132 do
+        use Hologram.Entity
+
+        attribute :author_id, :uuid
+        attribute :title, :string
+
+        allow :update, only: [:title], when: author_id == user_id()
+      end
+
+      expected_msg =
+        "invalid predicate for allow :update, only: [:title] in Hologram.Policy.ValidatorTest.InlinePolicyFixture132 - it names user_id(), but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture132], [])
+      end
+    end
+
+    test "accepts a condition naming user_id() with a user entity designation" do
+      defmodule InlinePolicyFixture130 do
+        use Hologram.Entity
+
+        attribute :author_id, :uuid
+
+        allow :read, when: author_id == user_id()
+      end
+
+      assert validate_model!([Module14, InlinePolicyFixture130], []) == :ok
+    end
+
+    test "rejects a global role module without a user entity designation" do
+      expected_msg =
+        "Hologram.Test.Fixtures.Role.Module1 is a global role, but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module2], [Role.Module1])
+      end
+    end
+
+    test "accepts a global role module with a user entity designation" do
+      assert validate_model!([Module14], [Role.Module1]) == :ok
     end
 
     test "rejects an actor leaf on a non-uuid attribute" do
@@ -2591,6 +2718,30 @@ defmodule Hologram.Policy.ValidatorTest do
   # Every message below has a local-line twin in the describe above, asserting the same text
   # WITHOUT the tail - so the pair pins that the tail appears exactly when the line was taken.
   describe "validate_model!/2 for a line taken from a policy" do
+    test "rejects a field-limited line naming user_id() without a user entity designation" do
+      defmodule TakenActorLimitedPolicy do
+        use Hologram.Policy
+
+        allow :update, only: [:title], when: author_id == user_id()
+      end
+
+      defmodule TakenActorLimitedEntity do
+        use Hologram.Entity
+
+        attribute :author_id, :uuid
+        attribute :title, :string
+
+        policy TakenActorLimitedPolicy
+      end
+
+      expected_msg =
+        "invalid predicate for allow :update, only: [:title] in Hologram.Policy.ValidatorTest.TakenActorLimitedEntity, taken from Hologram.Policy.ValidatorTest.TakenActorLimitedPolicy - it names user_id(), but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([TakenActorLimitedEntity], [])
+      end
+    end
+
     test "names the line reading the chain among the limited lines covering a field" do
       defmodule SharedFieldChainTarget do
         use Hologram.Entity
