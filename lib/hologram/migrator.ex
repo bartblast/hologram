@@ -83,12 +83,29 @@ defmodule Hologram.Migrator do
   Index builds that cannot run inside a transaction follow after the commit, under that same
   held lock.
 
+  Every file is rendered before the first one applies, each from the model the one before it
+  leaves: a change that meets an unbuilt unique index over rows repeating its key needs to
+  know whether a later op takes that index away (see drop_removed_indexes/3). So a file the
+  renderer refuses is refused with no file applied, where it used to leave the ones before
+  it applied.
+
   The managed-object registry is deliberately left alone - it is schema reconciliation's
   record of what it created, and a migration-managed database has no use for it.
   """
   @spec apply_pending(list(%{atom => any}), %{atom => any}, %{atom => any}) :: %{atom => any}
   def apply_pending(migrations, pre_model, context) do
-    Enum.reduce(migrations, pre_model, &apply_migration(&1, &2, context))
+    {renders, post_model} =
+      Enum.map_reduce(migrations, pre_model, fn migration, model ->
+        render = Renderer.render(migration.ops, model)
+
+        {render, render.post_model}
+      end)
+
+    migrations
+    |> Enum.zip(renders)
+    |> apply_migrations(context)
+
+    post_model
   end
 
   @doc """
@@ -373,7 +390,10 @@ defmodule Hologram.Migrator do
   whose build fails on rows repeating its key is left invalid for the pending files, and
   the repair after them refuses it if they keep it - or the file that changes a type on its
   table, which rebuilds it, or fills a row repeating its key through it while it takes writes,
-  refuses there, even when a later pending file would remove the index. The index repair and
+  refuses there. When a later op of the pending files removes the index, that file drops it
+  ahead of its change instead and applies - unless the pending files also give the table a
+  unique index, and a type change, fill or enum rebuild among them could change keys the
+  dropped index would have been asked about (see removed_later?/4). The index repair and
   the drift check come last.
   """
   @spec run(list(%{atom => any}), %{atom => any}, %{atom => any}) :: :ok
@@ -386,15 +406,13 @@ defmodule Hologram.Migrator do
   # The re-read inside the transaction stays, and is not redundant with the lock: the lock
   # keeps two nodes from applying at once, and this is what tells a node that WAITED for it
   # that the file it was about to apply is already there.
-  defp apply_migration(migration, model, context) do
-    render = Renderer.render(migration.ops, model)
-
+  defp apply_migration(migration, render, later_ops, context) do
     {:ok, status} =
       Connection.transaction(fn ->
         if migration.version in applied_versions() do
           :skipped
         else
-          apply_transactional(render, migration.version, context)
+          apply_transactional(render, later_ops, migration.version, context)
         end
       end)
 
@@ -402,7 +420,19 @@ defmodule Hologram.Migrator do
       execute_tail_ops(render.tail)
     end
 
-    render.post_model
+    :ok
+  end
+
+  # Each file takes the ops of the files after it, tails included, for the look-ahead of
+  # drop_removed_indexes/3.
+  defp apply_migrations([], _context), do: :ok
+
+  defp apply_migrations([{migration, render} | rest], context) do
+    later_ops =
+      Enum.flat_map(rest, fn {_migration, later} -> later.transactional ++ later.tail end)
+
+    apply_migration(migration, render, later_ops, context)
+    apply_migrations(rest, context)
   end
 
   # Acquired by polling, never by queuing - see @advisory_lock_key. The work behind the lock
@@ -421,9 +451,9 @@ defmodule Hologram.Migrator do
   # when the declaration arrives in one go.
   #
   # The fill writes every row, so an invalid unique index that still checks writes, over
-  # rows repeating its key, is asked about first - see check_invalid_unique_indexes!/2.
-  defp apply_op(%{op: :add_column, backfill: value} = op) do
-    Preflight.check_invalid_unique_indexes!(op.table, :update)
+  # rows repeating its key, is asked about first - see drop_removed_indexes/3.
+  defp apply_op(%{op: :add_column, backfill: value} = op, later_ops) do
+    drop_removed_indexes(op.table, :update, later_ops)
     add_column_filled(op, value)
   end
 
@@ -432,9 +462,9 @@ defmodule Hologram.Migrator do
   # the parameter of an UPDATE that matches no row. Asked before the fill: under a unique
   # index that stands, a fill making rows repeat a key would fail in PostgreSQL - and so would
   # one writing a row that already repeats the key of an invalid one that still checks writes.
-  defp apply_op(%{op: :alter_column, fill: value} = op) do
+  defp apply_op(%{op: :alter_column, fill: value} = op, later_ops) do
     if count_result(DDL.null_check_statement(op.table, op.column)) > 0 do
-      Preflight.check_invalid_unique_indexes!(op.table, {:fill, op.column})
+      drop_removed_indexes(op.table, {:fill, op.column}, later_ops)
       Preflight.check_fill!(op)
       fill_with_companions(op, value)
     end
@@ -449,10 +479,11 @@ defmodule Hologram.Migrator do
   #
   # The change rebuilds every index on the table, so an invalid unique one over rows that
   # already repeat its key is asked about first - the cast's own check would blame the cast
-  # for the repeats.
-  defp apply_op(%{op: :alter_column} = op) do
+  # for the repeats. One a later op removes is dropped here instead, which also keeps it out
+  # of the cast's check.
+  defp apply_op(%{op: :alter_column} = op, later_ops) do
     if op.before.type != op.after.type do
-      Preflight.check_invalid_unique_indexes!(op.table, {:rewrite, [op.column]})
+      drop_removed_indexes(op.table, {:rewrite, [op.column]}, later_ops)
     end
 
     Preflight.check_cast!(op)
@@ -462,18 +493,48 @@ defmodule Hologram.Migrator do
 
   # Converting each column to the rebuilt type rewrites its table, which rebuilds every index
   # on it - see the alter_column clause above.
-  defp apply_op(%{op: :rebuild_enum_type} = op) do
+  defp apply_op(%{op: :rebuild_enum_type} = op, later_ops) do
     op.columns
     |> Enum.group_by(fn {table, _column} -> table end, fn {_table, column} -> column end)
     |> Enum.sort()
     |> Enum.each(fn {table, columns} ->
-      Preflight.check_invalid_unique_indexes!(table, {:rewrite, columns})
+      drop_removed_indexes(table, {:rewrite, columns}, later_ops)
     end)
 
     execute_statements(DDL.statements(op))
   end
 
-  defp apply_op(op), do: execute_statements(DDL.statements(op))
+  # A rename or a drop of an index skips one that is not there: an earlier op of this boot's
+  # pending files may have dropped it ahead of its change - see drop_removed_indexes/3. On a
+  # history this node fully knows nothing else leaves it missing, since the indexes the
+  # applied files derive were created before the pending files (create_applied_indexes/4).
+  #
+  # Every caller of apply_pending/3 gets the skip, on purpose - the applier on a history it
+  # does not fully know and the shadow verifier's replay included, neither of which drops an
+  # index early. A missing index is the one state the boot repairs rather than reports, and a
+  # skipped op cannot hide a wrong result: the repair builds what the model derives and is
+  # missing, and the drift check and the shadow verifier compare the schema the files leave
+  # with the model's.
+  defp apply_op(%{op: kind} = op, _later_ops) when kind in [:drop_index, :rename_index] do
+    op
+    |> Map.put(:if_exists, true)
+    |> DDL.statements()
+    |> execute_statements()
+  end
+
+  defp apply_op(op, _later_ops), do: execute_statements(DDL.statements(op))
+
+  # Each op is checked right before it applies, against the database the ops before it
+  # left: a check read once for the whole file would look for a renamed attribute or entity
+  # under its new name in a database that still has the old one. A refusal takes back the
+  # ops before it with the transaction.
+  defp apply_ops([], _later_ops), do: :ok
+
+  defp apply_ops([op | rest], later_ops) do
+    Preflight.check!(op)
+    apply_op(op, rest ++ later_ops)
+    apply_ops(rest, later_ops)
+  end
 
   # Added nullable, filled, then tightened - the value never travels in the DDL, and the
   # rows that predate the column receive it.
@@ -496,15 +557,10 @@ defmodule Hologram.Migrator do
     end
   end
 
-  # Each op is checked right before it applies, against the database the ops before it
-  # left: a check read once for the whole file would look for a renamed attribute or entity
-  # under its new name in a database that still has the old one. A refusal takes back the
-  # ops before it with the transaction.
-  defp apply_transactional(render, version, context) do
-    Enum.each(render.transactional, fn op ->
-      Preflight.check!(op)
-      apply_op(op)
-    end)
+  # The ops after each one - the rest of the file, its tail, then the later files - are what
+  # drop_removed_indexes/3 looks ahead through.
+  defp apply_transactional(render, later_ops, version, context) do
+    apply_ops(render.transactional, render.tail ++ later_ops)
 
     mapping = Mapper.derive_from_model!(render.post_model)
 
@@ -515,7 +571,7 @@ defmodule Hologram.Migrator do
     # It writes only the rows whose source holds a value. A companion comes with a text
     # attribute, so its source either arrives with this file, holding values only when an add
     # filled them, or turns text with a type change - both of which asked about the invalid
-    # unique indexes on the table already, against these same rows (see apply_op/1).
+    # unique indexes on the table already, against these same rows (see apply_op/2).
     SchemaReconciler.backfill_companions!(render.added_columns, mapping)
 
     # The tail's checks run here, against the schema the statements above just produced and
@@ -656,28 +712,31 @@ defmodule Hologram.Migrator do
   end
 
   # A file builds some of its indexes after it commits, so a node that stopped in between
-  # leaves the file recorded as applied and its index absent. A pending file that renames or
-  # drops that index names one that is not there and fails - on every boot, since the repair
-  # after the pending files never gets to build it. So the indexes the applied files derive
-  # are created first, under the names the pending files expect. For a pending drop that is
-  # a build the file takes back at once - the price of a crash in that window being followed
-  # by a release that drops that very index.
+  # leaves the file recorded as applied and its index absent. A pending type change or fill
+  # asks the unique indexes standing over its column whether it makes keys repeat, and an
+  # absent one is not asked: the change would go through, and the repair after the files
+  # would refuse over keys the change itself made repeat - two values a cast turned into one
+  # included, which nothing tells apart again. So the indexes the applied files derive are
+  # created first, and the pending changes meet every index they have to ask. A pending
+  # rename or drop of one does not need it there, since it skips an index that is missing (see
+  # apply_op/2), so for a pending drop this is a build the file takes back at once - the
+  # price of a crash in that window being followed by a release that drops that very index.
   #
-  # Creating only, never rebuilding: an invalid index holds its name, so a pending rename or
-  # drop finds it, and the repair after the files rebuilds whatever survives them. Rebuilding
-  # it here would refuse rows repeating its key on every boot, even for a release whose
-  # pending file drops that index.
+  # Creating only, never rebuilding: an invalid index holds its name, so the pending files
+  # meet it as it is, and the repair after the files rebuilds whatever survives them.
+  # Rebuilding it here would refuse rows repeating its key on every boot, even for a release
+  # whose pending file drops that index.
   #
   # For the same reason a build that fails on such rows is not refused here. It leaves the
-  # index invalid under its name, which is all a pending rename or drop needs. A pending file
-  # that drops the index, or the table it stands on, takes it away, and the boot gets through.
+  # index invalid under its name, where the pending changes find it. A pending file that
+  # drops the index, or the table it stands on, takes it away, and the boot gets through.
   # One that keeps it leaves it to the repair after the files, which refuses it there, with
   # the pending files applied. A pending type change on its table rebuilds every index there,
   # this one included, and a pending fill that writes a repeated row through one that takes
-  # writes fails on it, so either refuses at its file instead (see apply_op/1) - even when a
-  # file after it would remove the index, since the change can't apply with the index
-  # standing (#1716). No count first: the build is what leaves the name taken, so it runs
-  # either way.
+  # writes fails on it, so either refuses at its file instead - unless the ops after it take
+  # the index away, which is then dropped ahead of the change (see drop_removed_indexes/3).
+  # No count first: the failed build is what leaves the index for those changes to meet, so
+  # it runs either way.
   #
   # With nothing pending the applied files derive the current model, so the repair after
   # them does the same work. On a history this node does not fully know, what the applied
@@ -757,6 +816,41 @@ defmodule Hologram.Migrator do
     end
   end
 
+  # A type change rebuilds every index on its table, and a fill writes through every index
+  # that takes writes, so either fails on an invalid unique index over rows repeating its key -
+  # the one the build before the pending files leaves over such rows (create_applied_indexes/4),
+  # or a tail's build that a running node's write failed. When the index stays, the change is
+  # refused, naming the rows (Preflight.check_invalid_unique_indexes!/3). When an op after
+  # this one takes the index away (removed_later?/4), the rows are about to stop mattering,
+  # so the index is dropped here and the change goes on.
+  #
+  # Dropped inside the file's transaction: a refusal later in the file takes the drop back,
+  # and a node stopping after the commit leaves the index absent under an applied file, which
+  # the next boot builds again before its pending files - invalid over the same rows, taking
+  # no writes - and meets the same way. A plain drop, which locks the table against reads
+  # until the commit. A type change, an enum rebuild and an add take that lock themselves; a
+  # fill takes it only at its tightening, so here it comes ahead of the fill's UPDATE.
+  #
+  # Logged as it runs, like any step of a file, so a refusal later in the file follows a line
+  # about a drop the transaction took back.
+  #
+  # The op that removes the index names one that is gone by then - see the apply_op/2 clause
+  # for :drop_index and :rename_index.
+  defp drop_removed_indexes(table, change, later_ops) do
+    removable? = fn index, covered? -> removed_later?(index, table, covered?, later_ops) end
+
+    table
+    |> Preflight.check_invalid_unique_indexes!(change, removable?)
+    |> Enum.each(fn index ->
+      execute_statements(DDL.statements(%{op: :drop_index, index: index}))
+
+      Logger.info(
+        ~s(Hologram: dropping unbuilt unique index "#{index}" on table "#{table}" ahead of a ) <>
+          "change it would fail - a later migration op removes it"
+      )
+    end)
+  end
+
   defp execute_statements(statements) do
     Enum.each(statements, fn statement ->
       {:ok, _result} = Connection.query(statement)
@@ -827,6 +921,48 @@ defmodule Hologram.Migrator do
 
     {:ok, _result} = Connection.query(statement, Enum.map(assignments, &elem(&1, 1)))
   end
+
+  defp follow_index(
+         %{op: :alter_column, table: table} = op,
+         %{removed?: false, table: table} = walked
+       ) do
+    writes? = Map.has_key?(op, :fill) or op.before.type != op.after.type
+
+    {:cont, %{walked | written?: walked.written? or writes?}}
+  end
+
+  defp follow_index(%{op: :create_index, table: table, unique: true}, %{table: table} = walked) do
+    {:cont, %{walked | unique?: true}}
+  end
+
+  defp follow_index(%{op: :drop_index, index: index}, %{index: index, removed?: false} = walked) do
+    {:cont, %{walked | removed?: true}}
+  end
+
+  # The table's rows go with it, so a table a later op creates under the name starts empty,
+  # and nothing after this matters.
+  defp follow_index(%{op: :drop_table, table: table}, %{table: table} = walked) do
+    {:halt, %{walked | removed?: true}}
+  end
+
+  defp follow_index(%{op: :rebuild_enum_type} = op, %{removed?: false} = walked) do
+    writes? = Enum.any?(op.columns, fn {table, _column} -> table == walked.table end)
+
+    {:cont, %{walked | written?: walked.written? or writes?}}
+  end
+
+  defp follow_index(
+         %{op: :rename_index, from: index} = op,
+         %{index: index, removed?: false} = walked
+       ) do
+    {:cont, %{walked | index: op.to}}
+  end
+
+  defp follow_index(%{op: :rename_table, from: table} = op, %{table: table} = walked) do
+    {:cont, %{walked | table: op.to}}
+  end
+
+  defp follow_index(_op, walked), do: {:cont, walked}
 
   # A database holding an object under a name the current naming rule no longer derives - one
   # a release that changed the rule left behind - can't be fixed by a migration: replay derives
@@ -957,6 +1093,27 @@ defmodule Hologram.Migrator do
     check_unique_keys!(op)
     execute_statements(DDL.statements(%{op: :drop_index, index: op.index, concurrently: true}))
     build_index!(Map.put(op, :concurrently, true))
+  end
+
+  # Whether the ops after a change take the given index away, so the change may go on
+  # without it - see drop_removed_indexes/3. The walk follows the index through the renames of
+  # itself and of its table to the op that drops it, or drops its table.
+  #
+  # Dropping the index early also takes away what it would have told the changes before its
+  # removal: a type change or a fill asks only the unique indexes standing over its column
+  # whether it makes keys repeat (Preflight.check_cast!/1, check_fill!/1), and two values a
+  # cast turns into one cannot be told apart again. That loss is harmless while no unique
+  # index comes back to the table. So when the pending ops also create one there, the index
+  # has to be one no change could have asked: not covering a column the change at hand
+  # converts or fills, and with no type change, fill or enum rebuild on its table before its
+  # removal. Any unique index on the table and any such change count, whatever their columns -
+  # following columns through the renames would buy a release that swaps one unique key for
+  # another while converting one of them, which can update its rows instead.
+  defp removed_later?(index, table, covered?, later_ops) do
+    initial = %{index: index, removed?: false, table: table, unique?: false, written?: covered?}
+    walked = Enum.reduce_while(later_ops, initial, &follow_index/2)
+
+    walked.removed? and not (walked.written? and walked.unique?)
   end
 
   defp run_context do

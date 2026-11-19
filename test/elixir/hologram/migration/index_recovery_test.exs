@@ -591,6 +591,20 @@ defmodule Hologram.Migration.IndexRecoveryTest do
       ]
     }
 
+    @change_amount_type %{
+      version: "20260813091525",
+      path: "app/migrations/20260813091525.ex",
+      ops: [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :amount,
+          changes: [type: :integer],
+          line: 3
+        }
+      ]
+    }
+
     @checking_slug_msg ~s{found 1 duplicate key in "my_app_task" over ("slug") - the unique index over it is not built yet, but it already checks the rows this file writes - update the rows}
 
     setup %{chain: chain, model: model, scratch: scratch} do
@@ -1093,6 +1107,437 @@ defmodule Hologram.Migration.IndexRecoveryTest do
         assert index_validity(@slug_index) == :absent
       end)
     end
+
+    # The pass before the pending files leaves the index invalid over the repeated key, and the
+    # type change would rebuild it. The later file takes the index away, so the first one drops
+    # it ahead of its change.
+    test "boots on the first try when a later pending file drops a missing index whose key " <>
+           "repeats, past a type change on its table",
+         %{chain: chain, model: model, scratch: scratch} do
+      {extra_chain, extra_model} = apply_extra_attributes(chain, model, scratch)
+
+      pending = [@change_amount_type, migration("20260813091526", @drop_unique_slug.ops)]
+      post_model = Enum.reduce(pending, extra_model, &Model.fold(&2, &1.ops))
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+        insert_task("taken")
+        insert_task("taken")
+
+        assert run(Enum.concat(extra_chain, pending), post_model, @context) == :ok
+
+        assert index_validity(@slug_index) == :absent
+      end)
+    end
+
+    # The index is followed through the entity's rename to the file that deletes the entity.
+    # The rename in between names an index the first file already dropped.
+    test "boots on the first try when a later pending file deletes the renamed entity of a " <>
+           "missing index whose key repeats, past an enum rebuild on its table",
+         %{chain: chain, model: model, scratch: scratch} do
+      {extra_chain, extra_model} = apply_extra_attributes(chain, model, scratch)
+
+      pending = [
+        migration("20260813091525", [
+          %{
+            op: :delete_enum_value,
+            entity: MyApp.Task,
+            attribute: :status,
+            value: :done,
+            line: 3
+          }
+        ]),
+        migration("20260813091526", [
+          %{op: :rename_entity, from: MyApp.Task, to: MyApp.Job, line: 3}
+        ]),
+        migration("20260813091527", [%{op: :delete_entity, entity: MyApp.Job, line: 3}])
+      ]
+
+      post_model = Enum.reduce(pending, extra_model, &Model.fold(&2, &1.ops))
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+        insert_task("taken")
+        insert_task("taken")
+
+        assert run(Enum.concat(extra_chain, pending), post_model, @context) == :ok
+
+        assert index_validity(@slug_index) == :absent
+        assert index_validity("my_app_job_slug_$uidx") == :absent
+      end)
+    end
+
+    # One file: the rename starts a part of its own, so the rename and the drop of the index
+    # come after the type change that dropped it.
+    test "boots on the first try when a later part of the file renames and drops a missing " <>
+           "index whose key repeats, past a type change on its column",
+         %{chain: chain, model: model, scratch: scratch} do
+      change =
+        migration("20260813091524", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [type: :integer],
+            line: 3
+          },
+          %{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 4},
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :handle,
+            changes: [unique: false],
+            line: 5
+          }
+        ])
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+        insert_task("1")
+        insert_task("1")
+
+        assert run(Enum.concat(chain, [change]), Model.fold(model, change.ops), @context) == :ok
+
+        assert index_validity(@slug_index) == :absent
+        assert index_validity("my_app_task_handle_$uidx") == :absent
+      end)
+    end
+
+    test "boots on the first try when a later pending file drops an invalid index still " <>
+           "checking writes, past a fill on its table",
+         %{chain: chain, model: model, scratch: scratch} do
+      {extra_chain, extra_model} = apply_extra_attributes(chain, model, scratch)
+
+      fill =
+        migration("20260813091525", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [optional: false, default: "none"],
+            line: 3
+          }
+        ])
+
+      pending = [fill, migration("20260813091526", @drop_unique_slug.ops)]
+
+      assert_boots_past_checking_index(scratch, extra_chain, extra_model, pending)
+    end
+
+    test "boots on the first try when a later pending file drops an invalid index still " <>
+           "checking writes, past a required attribute added to its table",
+         %{chain: chain, model: model, scratch: scratch} do
+      add =
+        migration("20260813091524", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :priority,
+            type: :integer,
+            opts: [default: 5],
+            line: 3
+          }
+        ])
+
+      assert_boots_past_checking_index(scratch, chain, model, [add, @drop_unique_slug])
+    end
+
+    # The later file gives the table another unique index, but no pending change touches the
+    # column of the one dropped early, so nothing it would have refused goes unasked.
+    test "boots on the first try when a later pending file swaps a missing index whose key " <>
+           "repeats for a unique index on another column",
+         %{chain: chain, model: model, scratch: scratch} do
+      {extra_chain, extra_model} = apply_extra_attributes(chain, model, scratch)
+
+      swap =
+        migration("20260813091526", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [unique: false],
+            line: 3
+          },
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [unique: true],
+            line: 4
+          }
+        ])
+
+      pending = [@change_amount_type, swap]
+      post_model = Enum.reduce(pending, extra_model, &Model.fold(&2, &1.ops))
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+        insert_task("taken")
+        insert_task("taken")
+
+        assert run(Enum.concat(extra_chain, pending), post_model, @context) == :ok
+
+        assert index_validity(@slug_index) == :absent
+        assert index_validity("my_app_task_amount_$uidx") == true
+      end)
+    end
+
+    # The later file only renames the index, so it survives the pending files.
+    test "refuses a pending type change on the table of a missing index whose key repeats " <>
+           "when a later pending file renames the index",
+         %{chain: chain, model: model, scratch: scratch} do
+      {extra_chain, extra_model} = apply_extra_attributes(chain, model, scratch)
+
+      rename =
+        migration("20260813091526", [
+          %{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 3}
+        ])
+
+      pending = [@change_amount_type, rename]
+      post_model = Enum.reduce(pending, extra_model, &Model.fold(&2, &1.ops))
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+        insert_task("taken")
+        insert_task("taken")
+
+        assert_error RuntimeError, @invalid_slug_msg, fn ->
+          run(Enum.concat(extra_chain, pending), post_model, @context)
+        end
+
+        refute "20260813091525" in applied_versions()
+        assert index_validity(@slug_index) == false
+      end)
+    end
+
+    # Dropped early, the index would not be there to ask whether the slug's type change makes
+    # keys repeat, and the unique index the last file brings back would be built over whatever
+    # the conversion left.
+    test "refuses a pending type change on the table of a missing index whose key repeats " <>
+           "when the pending files convert its column and bring a unique index back",
+         %{chain: chain, model: model, scratch: scratch} do
+      {extra_chain, extra_model} = apply_extra_attributes(chain, model, scratch)
+
+      change_both =
+        migration("20260813091525", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [type: :integer],
+            line: 3
+          },
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [type: :integer],
+            line: 4
+          }
+        ])
+
+      make_unique =
+        migration("20260813091527", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [unique: true],
+            line: 3
+          }
+        ])
+
+      pending = [change_both, migration("20260813091526", @drop_unique_slug.ops), make_unique]
+      post_model = Enum.reduce(pending, extra_model, &Model.fold(&2, &1.ops))
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+        insert_task("1")
+        insert_task("1")
+
+        assert_error RuntimeError, @invalid_slug_msg, fn ->
+          run(Enum.concat(extra_chain, pending), post_model, @context)
+        end
+
+        refute "20260813091525" in applied_versions()
+        assert index_validity(@slug_index) == false
+      end)
+    end
+
+    # The index covers the converted column, so it is the one the type change asks whether it
+    # makes keys repeat. Dropped early it could not answer, and the unique index the last file
+    # brings back would be built over whatever the conversion left.
+    test "refuses a pending type change on the column of a missing index whose key repeats " <>
+           "when later pending files drop the index and bring a unique index back",
+         %{chain: chain, model: model, scratch: scratch} do
+      change =
+        migration("20260813091524", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [type: :integer],
+            line: 3
+          }
+        ])
+
+      make_unique =
+        migration("20260813091526", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [unique: true],
+            line: 3
+          }
+        ])
+
+      pending = [change, @drop_unique_slug, make_unique]
+      post_model = Enum.reduce(pending, model, &Model.fold(&2, &1.ops))
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+        insert_task("1")
+        insert_task("1")
+
+        assert_error RuntimeError, @invalid_slug_msg, fn ->
+          run(Enum.concat(chain, pending), post_model, @context)
+        end
+
+        refute "20260813091524" in applied_versions()
+        assert index_validity(@slug_index) == false
+      end)
+    end
+
+    # The type change builds a dead index over its column again, so it is dropped ahead of the
+    # change like any other the later file removes.
+    test "boots on the first try when a later pending file drops an index a killed drop left " <>
+           "dead, past a type change on its column",
+         %{chain: chain, model: model, scratch: scratch} do
+      change =
+        migration("20260813091524", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [type: :integer],
+            line: 3
+          }
+        ])
+
+      pending = [change, @drop_unique_slug]
+      post_model = Enum.reduce(pending, model, &Model.fold(&2, &1.ops))
+
+      route(scratch, fn ->
+        set_index_dead(@slug_index)
+        insert_task("1")
+        insert_task("1")
+
+        assert run(Enum.concat(chain, pending), post_model, @context) == :ok
+
+        assert index_validity(@slug_index) == :absent
+      end)
+    end
+
+    # The drop rides the file's transaction: the tightening after the rename refuses over the
+    # rows without an amount, which takes back the type change and the drop before it.
+    test "leaves a missing index whose key repeats as it was when a later part of the file " <>
+           "that dropped it refuses",
+         %{chain: chain, model: model, scratch: scratch} do
+      {extra_chain, extra_model} = apply_extra_attributes(chain, model, scratch)
+
+      change =
+        migration("20260813091525", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [type: :integer],
+            line: 3
+          },
+          %{op: :rename_attribute, entity: MyApp.Task, from: :amount, to: :total, line: 4},
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :total,
+            changes: [optional: false],
+            line: 5
+          }
+        ])
+
+      pending = [change, migration("20260813091526", @drop_unique_slug.ops)]
+      post_model = Enum.reduce(pending, extra_model, &Model.fold(&2, &1.ops))
+
+      expected_msg =
+        ~s(cannot make column "total" on table "my_app_task" required - found 2 rows with NULL - declare default: <value>, keep the attribute optional: true, or fix the data)
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+        insert_task("taken")
+        insert_task("taken")
+
+        assert_error RuntimeError, expected_msg, fn ->
+          run(Enum.concat(extra_chain, pending), post_model, @context)
+        end
+
+        refute "20260813091525" in applied_versions()
+        assert index_validity(@slug_index) == false
+      end)
+    end
+
+    # The first file commits with the index dropped, and the boot stops at the second. The
+    # next boot builds the index again before the pending files, as it does for any index an
+    # applied file derives, which leaves it invalid over the same rows.
+    test "boots after a refusal at a pending file between the type change that dropped a " <>
+           "missing index whose key repeats and the file that removes it",
+         %{chain: chain, model: model, scratch: scratch} do
+      {extra_chain, extra_model} = apply_extra_attributes(chain, model, scratch)
+
+      tighten =
+        migration("20260813091526", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [optional: false],
+            line: 3
+          }
+        ])
+
+      pending = [@change_amount_type, tighten, migration("20260813091527", @drop_unique_slug.ops)]
+      pending_chain = Enum.concat(extra_chain, pending)
+      post_model = Enum.reduce(pending, extra_model, &Model.fold(&2, &1.ops))
+
+      expected_msg =
+        ~s(cannot make column "amount" on table "my_app_task" required - found 2 rows with NULL - declare default: <value>, keep the attribute optional: true, or fix the data)
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+        insert_task("taken")
+        insert_task("taken")
+
+        assert_error RuntimeError, expected_msg, fn ->
+          run(pending_chain, post_model, @context)
+        end
+
+        assert "20260813091525" in applied_versions()
+        refute "20260813091526" in applied_versions()
+        assert index_validity(@slug_index) == :absent
+
+        assert_error RuntimeError, expected_msg, fn ->
+          run(pending_chain, post_model, @context)
+        end
+
+        assert index_validity(@slug_index) == false
+
+        {:ok, _result} =
+          Connection.query(~s{UPDATE "hologram_data"."my_app_task" SET "amount" = 1})
+
+        assert run(pending_chain, post_model, @context) == :ok
+
+        assert index_validity(@slug_index) == :absent
+      end)
+    end
   end
 
   # Two optional attributes the rows leave NULL, which any type change or enum rebuild takes.
@@ -1125,6 +1570,25 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     end)
 
     {extra_chain, extra_model}
+  end
+
+  # The same index as in assert_refused_with_checking_index/4, which the last pending file
+  # takes away.
+  defp assert_boots_past_checking_index(scratch, chain, model, pending) do
+    post_model = Enum.reduce(pending, model, &Model.fold(&2, &1.ops))
+
+    route(scratch, fn ->
+      insert_task("taken")
+      set_index_ready(@slug_index, false)
+      insert_task("taken")
+      set_index_ready(@slug_index, true)
+
+      Enum.each(1..300, &insert_task("filler-#{&1}"))
+
+      assert run(Enum.concat(chain, pending), post_model, @context) == :ok
+
+      assert index_validity(@slug_index) == :absent
+    end)
   end
 
   # The repeat goes in first, so the rows written after it fill its page: a fill of a column no
