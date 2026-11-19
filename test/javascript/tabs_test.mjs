@@ -2736,6 +2736,7 @@ describe("Tabs", () => {
 
     for (const [after, kept] of [
       ["nothing", true],
+      ["nothing but a frame with rows before it", true],
       ["a frame with rows", false],
       ["a marker with a place", false],
       ["rules", true],
@@ -2750,8 +2751,12 @@ describe("Tabs", () => {
           {event: "synced", frame: {cursor: null}, kind: "frame"},
         ],
         nothing: [],
+        "nothing but a frame with rows before it": [],
         rules: [{event: "sync_rules", frame: {}, kind: "frame"}],
       }[after];
+
+      const preceding =
+        after === "nothing but a frame with rows before it" ? [frame(1)] : [];
 
       it(`${kept ? "keeps" : "drops"} a start-over for somebody else signing in followed by ${after}, when it joined as the leader with a place`, async () => {
         const seen = [];
@@ -2776,6 +2781,10 @@ describe("Tabs", () => {
         });
 
         const other = sibling(Tabs.name);
+
+        for (const message of preceding) {
+          other.postMessage(message);
+        }
 
         other.postMessage(resync);
 

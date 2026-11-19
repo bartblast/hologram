@@ -415,7 +415,10 @@ export default class Tabs {
   // that tab's clear can have been lost as it closed. A frame with rows or a place was posted once
   // its write committed, which came after the clear's - so the store holds the fill that followed,
   // and the place this tab read is that fill's, which a start-over replayed would throw away. A
-  // frame with neither went out at once, and says nothing about the clear.
+  // frame with neither went out at once, and says nothing about the clear. (That takes the tab that
+  // posted it to have had a store. One whose database closed under it - another tab needing a new
+  // version, or a failed write whose wipe failed too - posts the same frames having written
+  // nothing, and a tab with no store speaking for its group is the thing to fix there: see #1683.)
   //
   // Wherever a tab that leads starts from, the identity the group's state names is taken first, as
   // the state would have given it: it is the one the queue was numbered under, and the store can
