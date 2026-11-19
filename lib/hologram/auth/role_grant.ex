@@ -163,6 +163,10 @@ defmodule Hologram.Auth.RoleGrant do
   def __policy_sources__, do: []
 
   @doc false
+  @spec __policy_hints__() :: list(list(Hologram.Query.Stage.name_hint()))
+  def __policy_hints__, do: []
+
+  @doc false
   @spec __relationship_locations__() :: %{atom => {String.t(), pos_integer}}
   def __relationship_locations__, do: %{}
 

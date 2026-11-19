@@ -27,12 +27,19 @@ defmodule Hologram.Test.ScratchDatabaseCase do
   # ones answered 1348, 1355 and 1349 - so two `mix test` runs against one server would pick
   # the same name and the second CREATE DATABASE would fail. The OS process id separates
   # them, and it also says which run owns a database, should a killed one leave one behind.
+  #
+  # A killed run's scratch database is dropped by a later run's database bootstrap, which
+  # drops the databases carrying its mark that nothing is connected to. The mark goes on once
+  # the scratch connection is up, so no bootstrap can drop the database before the test
+  # connects - and since one may drop it between the scratch connection going down and the
+  # on_exit drop, that drop takes IF EXISTS.
 
   use ExUnit.CaseTemplate
 
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias Hologram.Test.DatabaseBootstrap
   alias Hologram.Test.Helpers
 
   using do
@@ -57,12 +64,22 @@ defmodule Hologram.Test.ScratchDatabaseCase do
 
     on_exit(fn ->
       with_maintenance_connection(fn connection ->
-        Postgrex.query!(connection, "DROP DATABASE #{quoted_database} WITH (FORCE)", [])
+        Postgrex.query!(
+          connection,
+          "DROP DATABASE IF EXISTS #{quoted_database} WITH (FORCE)",
+          []
+        )
       end)
     end)
 
     scratch_opts = Config.connection_opts(database: database)
     scratch = start_supervised!({Postgrex, scratch_opts})
+
+    Postgrex.query!(
+      scratch,
+      "COMMENT ON DATABASE #{quoted_database} IS '#{DatabaseBootstrap.mark()}'",
+      []
+    )
 
     [scratch: scratch, scratch_opts: scratch_opts]
   end

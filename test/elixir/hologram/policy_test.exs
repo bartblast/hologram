@@ -5,7 +5,7 @@ defmodule Hologram.PolicyTest do
     only: [
       build: 1,
       dead_entity_types: 1,
-      deciding_quantifier?: 2,
+      deciding_quantifier?: 3,
       deciding_quantifiers: 1,
       delegation: 2,
       expand_global_role: 1,
@@ -22,6 +22,8 @@ defmodule Hologram.PolicyTest do
       operations: 1,
       read_roles_qualifying_role_modules: 1,
       read_roles_qualifying_roles: 1,
+      readable_prefix: 2,
+      readable_type?: 1,
       related_chains: 1,
       related_chains: 2,
       revoke_role_qualifying_roles: 1,
@@ -30,7 +32,8 @@ defmodule Hologram.PolicyTest do
       validate_operation!: 2,
       verdict_key: 3,
       verdict_reads: 2,
-      verdict_related_reads: 2
+      verdict_related_reads: 2,
+      verdict_rule: 1
     ]
 
   alias Hologram.Auth.RoleGrant
@@ -308,6 +311,37 @@ defmodule Hologram.PolicyTest do
                Policy.Shared.Module1,
                MiddlePolicyFixture,
                OuterPolicyFixture
+             ]
+    end
+
+    test "carries the hints of a condition through a policy taken by a policy into an entity type" do
+      defmodule HintsInnerPolicyFixture do
+        use Hologram.Policy
+
+        allow :read, when: any(message <- messages, message.position > 1)
+      end
+
+      defmodule HintsOuterPolicyFixture do
+        use Hologram.Policy
+
+        policy HintsInnerPolicyFixture
+      end
+
+      defmodule HintsEntityFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        relationship :messages, [Module33]
+
+        policy HintsOuterPolicyFixture
+
+        allow :delete, to: :viewer
+      end
+
+      assert HintsEntityFixture.__policy_hints__() == [
+               [{:key, 1, :position, nil, ["message.position", "position"]}],
+               []
              ]
     end
 
@@ -889,24 +923,29 @@ defmodule Hologram.PolicyTest do
     end
   end
 
-  describe "deciding_quantifier?/2" do
+  describe "deciding_quantifier?/3" do
     test "holds for a none and an all" do
       project = Hologram.PolicyTest.VerdictProject
 
-      assert deciding_quantifier?(project, {:none, {[:members], []}})
-      assert deciding_quantifier?(project, {:all, {[:members], [{:seat, :==, "full"}]}})
+      assert deciding_quantifier?(project, :update, {:none, {[:members], []}})
+      assert deciding_quantifier?(project, :update, {:all, {[:members], [{:seat, :==, "full"}]}})
     end
 
     test "holds for an any holding a none in an alternative of its condition" do
       inner = [{:or, [[{:seat, :==, "full"}], [{:none, {{:outer, 1, [:labels]}, []}}]]}]
 
-      assert deciding_quantifier?(Hologram.PolicyTest.VerdictProject, {:any, {[:members], inner}})
+      assert deciding_quantifier?(
+               Hologram.PolicyTest.VerdictProject,
+               :update,
+               {:any, {[:members], inner}}
+             )
     end
 
     # A bounded set computed over the rows a client holds can hold rows the server's doesn't.
     test "holds for an any over a derived set" do
       assert deciding_quantifier?(
                Hologram.PolicyTest.LockedBoard,
+               :update,
                {:any, {[:top_cards], [{:rank, :==, 1}]}}
              )
     end
@@ -914,6 +953,7 @@ defmodule Hologram.PolicyTest do
     test "holds for an any holding an any over a derived set" do
       assert deciding_quantifier?(
                Hologram.PolicyTest.LockedTeam,
+               :update,
                {:any, {[:boards], [{:any, {[:top_cards], []}}]}}
              )
     end
@@ -921,6 +961,7 @@ defmodule Hologram.PolicyTest do
     test "holds for an any over a derived set past a relationship to its owner" do
       assert deciding_quantifier?(
                Hologram.PolicyTest.TopCardsRule,
+               :update,
                {:any, {[:board, :top_cards], []}}
              )
     end
@@ -929,19 +970,20 @@ defmodule Hologram.PolicyTest do
     test "holds for an any holding an any over a derived set read on the row above" do
       clause = {:any, {[:cards], [{:any, {{:outer, 1, [:top_cards]}, []}}]}}
 
-      assert deciding_quantifier?(Hologram.PolicyTest.LockedBoard, clause)
+      assert deciding_quantifier?(Hologram.PolicyTest.LockedBoard, :update, clause)
     end
 
     test "fails for an any holding an any over a stored set read on the row above" do
       clause = {:any, {[:cards], [{:any, {{:outer, 1, [:cards]}, []}}]}}
 
-      refute deciding_quantifier?(Hologram.PolicyTest.LockedBoard, clause)
+      refute deciding_quantifier?(Hologram.PolicyTest.LockedBoard, :update, clause)
     end
 
     # A client can't compute the count.
     test "holds for an any whose condition reads a derived field counting a set" do
       assert deciding_quantifier?(
                Hologram.PolicyTest.LockedBoard,
+               :update,
                {:any, {[:cards], [{:tag_count, :<, 2}]}}
              )
     end
@@ -950,13 +992,14 @@ defmodule Hologram.PolicyTest do
     test "holds for a predicate on a server-only attribute" do
       report = Hologram.PolicyTest.ServerOnlyReport
 
-      assert deciding_quantifier?(report, {:reviewed, :==, true})
-      assert deciding_quantifier?(report, {:reviewed_on, :!=, nil})
+      assert deciding_quantifier?(report, :update, {:reviewed, :==, true})
+      assert deciding_quantifier?(report, :update, {:reviewed_on, :!=, nil})
     end
 
     test "holds for a predicate on a server-only attribute a path leads to" do
       assert deciding_quantifier?(
                Hologram.PolicyTest.ServerOnlyComment,
+               :update,
                {[:report, :reviewed], :==, true}
              )
     end
@@ -964,6 +1007,7 @@ defmodule Hologram.PolicyTest do
     test "holds for a predicate whose operand names a server-only attribute" do
       assert deciding_quantifier?(
                Hologram.PolicyTest.ServerOnlyReport,
+               :update,
                {:title, :==, {:attribute, :reviewed}}
              )
     end
@@ -971,6 +1015,7 @@ defmodule Hologram.PolicyTest do
     test "holds for an any whose condition reads a server-only attribute of the set's rows" do
       assert deciding_quantifier?(
                Hologram.PolicyTest.ServerOnlyReport,
+               :update,
                {:any, {[:comments], [{:flagged, :==, true}]}}
              )
     end
@@ -978,22 +1023,203 @@ defmodule Hologram.PolicyTest do
     test "holds for an any whose condition reads a server-only attribute of the row above" do
       clause = {:any, {[:comments], [{:body, :==, {:attribute, {:outer, 1, :reviewed}}}]}}
 
-      assert deciding_quantifier?(Hologram.PolicyTest.ServerOnlyReport, clause)
+      assert deciding_quantifier?(Hologram.PolicyTest.ServerOnlyReport, :update, clause)
     end
 
     test "fails for a predicate on a stored attribute of a type with a server-only one" do
-      refute deciding_quantifier?(Hologram.PolicyTest.ServerOnlyReport, {:title, :==, "x"})
+      refute deciding_quantifier?(
+               Hologram.PolicyTest.ServerOnlyReport,
+               :update,
+               {:title, :==, "x"}
+             )
     end
 
     test "fails for an any alone and for a predicate" do
       project = Hologram.PolicyTest.VerdictProject
 
-      refute deciding_quantifier?(project, {:any, {[:members], [{:seat, :==, "full"}]}})
-      refute deciding_quantifier?(project, {:seat, :==, "full"})
+      refute deciding_quantifier?(project, :update, {:any, {[:members], [{:seat, :==, "full"}]}})
+      refute deciding_quantifier?(project, :update, {:seat, :==, "full"})
+    end
+
+    defmodule UnreadableProject do
+      use Hologram.Entity
+
+      attribute :archived, :boolean
+      attribute :name, :string
+
+      relationship :checks, [Hologram.PolicyTest.UnreadableCheck]
+
+      allow :update
+    end
+
+    defmodule UnreadableCheck do
+      use Hologram.Entity
+
+      attribute :passed, :boolean
+
+      allow :update
+    end
+
+    defmodule ReadableTag do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :project, Hologram.PolicyTest.UnreadableProject, optional: true
+
+      derived :project_open, :boolean, fn project -> project.archived == false end
+
+      allow :read
+    end
+
+    defmodule UnreadableReadTask do
+      use Hologram.Entity
+
+      attribute :title, :string
+
+      relationship :owner_tag, ReadableTag, optional: true
+      relationship :parent, __MODULE__, optional: true
+      relationship :project, UnreadableProject, optional: true
+      relationship :tags, [ReadableTag]
+
+      derived :project_open, :boolean, fn project -> project.archived == false end
+
+      allow :read, when: project.archived == false
+    end
+
+    # No client holds a row of a type nobody may read, so only the server's verdict answers a read
+    # rule reading one. Any other rule reading one fails the build.
+    test "holds for a read rule's path to a type nobody may read" do
+      clause = {[:project, :archived], :==, false}
+
+      assert deciding_quantifier?(UnreadableReadTask, :read, clause)
+      refute deciding_quantifier?(UnreadableReadTask, :update, clause)
+    end
+
+    test "holds for a read rule's operand path to a type nobody may read" do
+      clause = {:title, :==, {:attribute, [:project, :name]}}
+
+      assert deciding_quantifier?(UnreadableReadTask, :read, clause)
+    end
+
+    test "holds for a read rule's derived field reading a type nobody may read" do
+      clause = {:project_open, :==, true}
+
+      assert deciding_quantifier?(UnreadableReadTask, :read, clause)
+      refute deciding_quantifier?(UnreadableReadTask, :update, clause)
+    end
+
+    test "holds for a read rule's any whose source runs through a type nobody may read" do
+      clause = {:any, {[:project, :checks], [{:passed, :==, true}]}}
+
+      assert deciding_quantifier?(UnreadableReadTask, :read, clause)
+      refute deciding_quantifier?(UnreadableReadTask, :update, clause)
+    end
+
+    test "holds for a read rule's any whose condition reads a type nobody may read" do
+      clause = {:any, {[:tags], [{[:project, :archived], :==, false}]}}
+
+      assert deciding_quantifier?(UnreadableReadTask, :read, clause)
+      refute deciding_quantifier?(UnreadableReadTask, :update, clause)
+    end
+
+    # Asked with no definition put, as the validator asks before the build resolves any.
+    test "holds for a read rule's any whose condition reads a derived value reading a type nobody may read" do
+      clause = {:any, {[:tags], [{:project_open, :==, true}]}}
+
+      assert deciding_quantifier?(UnreadableReadTask, :read, clause)
+      refute deciding_quantifier?(UnreadableReadTask, :update, clause)
+    end
+
+    test "holds for a read rule's any whose condition reads a type nobody may read off the row above" do
+      clause = {:any, {[:tags], [{:name, :==, {:attribute, {:outer, 1, [:project, :name]}}}]}}
+
+      assert deciding_quantifier?(UnreadableReadTask, :read, clause)
+      refute deciding_quantifier?(UnreadableReadTask, :update, clause)
+    end
+
+    test "fails for a read rule's path through types someone may read" do
+      refute deciding_quantifier?(UnreadableReadTask, :read, {[:owner_tag, :name], :==, "x"})
+    end
+
+    # Readers.Module24's project (Readers.Module23) has no read rule, and the team's id the role is
+    # held on is read off it.
+    test "holds for a read rule's role reference reading a type nobody may read" do
+      item = {:to, {:rel, [:project, :team], [:member]}}
+
+      assert deciding_quantifier?(Policy.Readers.Module24, :read, item)
+      refute deciding_quantifier?(Policy.Readers.Module24, :update, item)
+    end
+
+    # The team's id is read off the task itself.
+    test "fails for a role reference one relationship away" do
+      refute deciding_quantifier?(
+               Policy.Readers.Module24,
+               :read,
+               {:to, {:rel, [:team], [:member]}}
+             )
+    end
+
+    # Readers.Module13's parent (Policy.Module1) has a read rule.
+    test "fails for a role reference reading types someone may read" do
+      item = {:to, {:rel, [:parent, :parent], [:member]}}
+
+      refute deciding_quantifier?(Policy.Readers.Module13, :read, item)
+    end
+
+    test "fails for a role reference on the row itself" do
+      refute deciding_quantifier?(Policy.Readers.Module24, :read, {:to, {:own, [:member]}})
+    end
+
+    # Readers.Module28's vault (Readers.Module25) has no read rule, so no client holds it.
+    test "holds for a read rule's delegation to a type nobody may read" do
+      item = {:via, {:update, [:vault]}}
+
+      assert deciding_quantifier?(Policy.Readers.Module28, :read, item)
+      refute deciding_quantifier?(Policy.Readers.Module28, :update, item)
+    end
+
+    # The crate is read through the shelf (Readers.Module27), which has no read rule.
+    test "holds for a read rule's delegation through a type nobody may read" do
+      assert deciding_quantifier?(
+               Policy.Readers.Module28,
+               :read,
+               {:via, {:read, [:shelf, :crate]}}
+             )
+    end
+
+    test "fails for a delegation through types someone may read" do
+      refute deciding_quantifier?(Policy.Readers.Module28, :read, {:via, {:read, [:crate]}})
     end
   end
 
   describe "deciding_quantifiers/1" do
+    # The delegation to the crate runs through readable types only.
+    test "lists a read rule's delegations through a type nobody may read" do
+      items =
+        Policy.Readers.Module28
+        |> deciding_quantifiers()
+        |> Enum.map(fn {_key, item} -> item end)
+        |> Enum.sort()
+
+      assert items == [
+               {:via, {:archive, [:vault]}},
+               {:via, {:close, [:vault]}},
+               {:via, {:delete, [:vault]}},
+               {:via, {:read, [:shelf, :crate]}},
+               {:via, {:update, [:vault]}}
+             ]
+    end
+
+    # The one-hop references for read and update read the task alone.
+    test "lists a read rule's role reference reading a type nobody may read" do
+      item = {:to, {:rel, [:project, :team], [:member]}}
+
+      assert deciding_quantifiers(Policy.Readers.Module24) == [
+               {verdict_key(Policy.Readers.Module24, :read, item), item}
+             ]
+    end
+
     defmodule VerdictProject do
       use Hologram.Entity
 
@@ -1073,6 +1299,14 @@ defmodule Hologram.PolicyTest do
                  {verdict_key(VerdictProject, {:update, :name}, none_clause), none_clause},
                  {verdict_key(VerdictProject, {:update, :name}, close_clause), close_clause}
                ])
+    end
+
+    test "returns a read rule's predicate reading a type nobody may read" do
+      clause = {[:project, :archived], :==, false}
+
+      assert deciding_quantifiers(Hologram.PolicyTest.UnreadableReadTask) == [
+               {verdict_key(Hologram.PolicyTest.UnreadableReadTask, :read, clause), clause}
+             ]
     end
 
     # The stored alternative beside it is answered from the row the client holds.
@@ -1433,6 +1667,30 @@ defmodule Hologram.PolicyTest do
 
     test "returns a delegation's chain without the chains its deciding quantifiers read" do
       assert held_chains(HeldTask, :update) == [[:project]]
+    end
+
+    # The server's verdict answers the path over the project as stored.
+    test "leaves out the chain a read rule reads through a type nobody may read" do
+      assert held_chains(Hologram.PolicyTest.UnreadableReadTask, :read) == []
+    end
+
+    # The team's id is read off the project, which has no read rule, so the server's verdict answers
+    # the reference.
+    test "leaves out the chain a read rule's role reference reads through a type nobody may read" do
+      assert related_chains(Policy.Readers.Module24, :read) == [[:project]]
+      assert held_chains(Policy.Readers.Module24, :read) == []
+    end
+
+    # The vault and the shelf have no read rule, so the server's verdicts answer the delegations
+    # through them, while the crate is read through readable types alone.
+    test "leaves out the chains of a read rule's delegations through a type nobody may read" do
+      assert related_chains(Policy.Readers.Module28, :read) == [
+               [:crate],
+               [:shelf, :crate],
+               [:vault]
+             ]
+
+      assert held_chains(Policy.Readers.Module28, :read) == [[:crate]]
     end
 
     defmodule HeldOwner do
@@ -1927,6 +2185,36 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "readable_type?/1" do
+    test "holds for a type with a read rule" do
+      assert readable_type?(Hologram.PolicyTest.ReadableTag)
+    end
+
+    test "fails for a type with no read rule" do
+      refute readable_type?(Hologram.PolicyTest.UnreadableProject)
+    end
+
+    # The framework supplies the grant store's read rules.
+    test "holds for the grant store" do
+      assert readable_type?(RoleGrant)
+    end
+  end
+
+  describe "readable_prefix/2" do
+    # Module43 (the vault) has no read rule.
+    test "stops a chain before its first type no session may read" do
+      assert readable_prefix(Policy.Module45, [:shelf, :vault, :owner]) == [:shelf]
+    end
+
+    test "keeps a chain through readable types whole" do
+      assert readable_prefix(Policy.Module45, [:shelf]) == [:shelf]
+    end
+
+    test "keeps nothing of a chain whose first hop is to a type no session may read" do
+      assert readable_prefix(Policy.Module44, [:vault, :owner]) == []
+    end
+  end
+
   describe "related_chains/1" do
     # [:parent] is the role reference's chain without its last relationship - the id it holds is
     # read off the row before it. The third hop is the publish delegation's: the row two
@@ -2293,6 +2581,14 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "verdict_key/3" do
+    defmodule KeyedParcel do
+      use Hologram.Entity
+
+      relationship :vault, Hologram.PolicyTest.KeyedVault, optional: true
+
+      allow :read, via: {:update, vault}
+    end
+
     defmodule KeyedProject do
       use Hologram.Entity
 
@@ -2374,6 +2670,32 @@ defmodule Hologram.PolicyTest do
       assert verdict_key(KeyedProject, :archive, {:none, {[:members], []}}) != key
     end
 
+    # The vault has no read rule, so the parcel's read rule delegating to it is answered by the
+    # server's verdict, which a changed vault rule moves.
+    test "gives a delegation a new key when a rule it asks changes" do
+      open_key = delegation_key_with_vault("allow :update, when: open == true")
+      closed_key = delegation_key_with_vault("allow :update, when: open == false")
+
+      assert open_key != closed_key
+      assert delegation_key_with_vault("allow :update, when: open == true") == open_key
+    end
+
+    # Its roles are expanded in it, so the reference alone says what it means.
+    test "keys a role reference by its operation and a digest of it" do
+      item = {:to, {:rel, [:project, :team], [:member]}}
+
+      assert verdict_key(Policy.Readers.Module24, :read, item) == "read:407dcd1e54324cb9"
+    end
+
+    test "gives a role reference naming other roles a new key" do
+      key =
+        verdict_key(Policy.Readers.Module24, :read, {:to, {:rel, [:project, :team], [:member]}})
+
+      other_item = {:to, {:rel, [:project, :team], [:member, :owner]}}
+
+      assert verdict_key(Policy.Readers.Module24, :read, other_item) != key
+    end
+
     # The two types declare the same label computed two ways, so the same clause over it means two
     # things - while over an attribute it means one.
     test "gives a clause reading a derived field a new key when the field's definition changes" do
@@ -2417,6 +2739,28 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "verdict_reads/2" do
+    test "returns the types along a delegation's chain" do
+      assert verdict_reads(Policy.Readers.Module28, {:via, {:read, [:shelf, :crate]}}) == [
+               Policy.Readers.Module26,
+               Policy.Readers.Module27
+             ]
+    end
+
+    # The vault's close rule holds a role on the vault.
+    test "returns the grant store for a delegation to a rule holding a role" do
+      assert verdict_reads(Policy.Readers.Module28, {:via, {:close, [:vault]}}) == [
+               RoleGrant,
+               Policy.Readers.Module25
+             ]
+    end
+
+    # A pending grant or revoke names the grant store.
+    test "returns the types a role reference reads before its last relationship and the grant store" do
+      item = {:to, {:rel, [:project, :team], [:member]}}
+
+      assert verdict_reads(Policy.Readers.Module24, item) == [RoleGrant, Policy.Readers.Module23]
+    end
+
     test "returns the rule's type and every type along the clause's sets and paths" do
       clause =
         {:any,
@@ -2478,10 +2822,12 @@ defmodule Hologram.PolicyTest do
       assert verdict_reads(report, {:reviewed_on, :!=, nil}) == []
     end
 
-    test "returns the rule's type for a server-only clause also reading a stored attribute" do
+    # A struct a pending write changed isn't the stored row the verdict is about, so no unanswered
+    # write to the row, or to another row of its type, moves it.
+    test "returns no type for a predicate reading only attributes of the row" do
       report = Hologram.PolicyTest.ServerOnlyReport
 
-      assert verdict_reads(report, {:title, :==, {:attribute, :reviewed}}) == [report]
+      assert verdict_reads(report, {:title, :==, {:attribute, :reviewed}}) == []
     end
 
     # A quantifier reads its set even when its condition names only the row above.
@@ -2493,15 +2839,74 @@ defmodule Hologram.PolicyTest do
                Enum.sort([report, Hologram.PolicyTest.ServerOnlyComment])
     end
 
-    test "returns the types along a path to a server-only attribute" do
+    test "returns the types along a path to a type nobody may read" do
+      task = Hologram.PolicyTest.UnreadableReadTask
+
+      assert verdict_reads(task, {[:project, :archived], :==, false}) == [
+               Hologram.PolicyTest.UnreadableProject
+             ]
+    end
+
+    test "returns the rule's own type for a path leading back to it" do
+      task = Hologram.PolicyTest.UnreadableReadTask
+
+      assert verdict_reads(task, {[:parent, :project, :archived], :==, false}) ==
+               Enum.sort([task, Hologram.PolicyTest.UnreadableProject])
+    end
+
+    test "returns the types along a path to a server-only attribute, without the rule's own" do
       comment = Hologram.PolicyTest.ServerOnlyComment
 
       assert verdict_reads(comment, {[:report, :reviewed], :==, true}) ==
-               Enum.sort([comment, Hologram.PolicyTest.ServerOnlyReport])
+               [Hologram.PolicyTest.ServerOnlyReport]
     end
   end
 
   describe "verdict_related_reads/2" do
+    # A delegation from the parcel to its crate, whose read rule delegates on to the vault through
+    # its parcel's path, reads what both rules read.
+    test "returns what the rules a delegation asks read, through their own delegations" do
+      assert verdict_related_reads(Hologram.PolicyTest.RelayParcel, {:via, {:read, [:crate]}}) ==
+               Enum.sort([
+                 RoleGrant,
+                 Hologram.PolicyTest.RelayCrate,
+                 Hologram.PolicyTest.RelayVault
+               ])
+    end
+
+    defmodule RelayVault do
+      use Hologram.Entity
+
+      role :member
+
+      allow :delete, to: :member
+    end
+
+    defmodule RelayCrate do
+      use Hologram.Entity
+
+      relationship :vault, RelayVault, optional: true
+
+      allow :read, via: {:delete, vault}
+    end
+
+    defmodule RelayParcel do
+      use Hologram.Entity
+
+      relationship :crate, RelayCrate, optional: true
+
+      allow :read, via: crate
+    end
+
+    test "returns the types a role reference reads before its last relationship and the grant store" do
+      item = {:to, {:rel, [:project, :team], [:member]}}
+
+      assert verdict_related_reads(Policy.Readers.Module24, item) == [
+               RoleGrant,
+               Policy.Readers.Module23
+             ]
+    end
+
     test "returns the types the clause reaches through a relationship, leaving out the rule's own type" do
       assert verdict_related_reads(Hologram.PolicyTest.VerdictProject, {:none, {[:labels], []}}) ==
                [Hologram.PolicyTest.VerdictLabel]
@@ -2516,6 +2921,26 @@ defmodule Hologram.PolicyTest do
                  Hologram.PolicyTest.VerdictMember,
                  Hologram.PolicyTest.VerdictProject
                ])
+    end
+  end
+
+  describe "verdict_rule/1" do
+    test "requires a clause alone" do
+      clause = {:archived, :==, false}
+
+      assert verdict_rule(clause) == %{predicates: [clause], to: nil, via: nil}
+    end
+
+    test "holds a role reference alone" do
+      reference = {:rel, [:project, :team], [:member]}
+
+      assert verdict_rule({:to, reference}) == %{predicates: [], to: [reference], via: nil}
+    end
+
+    test "holds a delegation alone" do
+      via = {:update, [:vault]}
+
+      assert verdict_rule({:via, via}) == %{predicates: [], to: nil, via: via}
     end
   end
 
@@ -2540,5 +2965,27 @@ defmodule Hologram.PolicyTest do
     put_derived_definitions([Hologram.PolicyTest.HashedProject])
 
     hash([Hologram.PolicyTest.HashedProject])
+  end
+
+  # The key of KeyedParcel's delegation to its vault, defined with the given rules and no read rule.
+  defp delegation_key_with_vault(rules) do
+    ignore_module_conflict? = Code.get_compiler_option(:ignore_module_conflict)
+    Code.put_compiler_option(:ignore_module_conflict, true)
+
+    try do
+      Code.compile_string("""
+      defmodule Hologram.PolicyTest.KeyedVault do
+        use Hologram.Entity
+
+        attribute :open, :boolean, default: false
+
+      #{rules}
+      end
+      """)
+    after
+      Code.put_compiler_option(:ignore_module_conflict, ignore_module_conflict?)
+    end
+
+    verdict_key(Hologram.PolicyTest.KeyedParcel, :read, {:via, {:update, [:vault]}})
   end
 end

@@ -282,20 +282,28 @@ describe("DataLayer", () => {
       replica: {id: "r1", token: "SFMyNTY.minted"},
     });
 
-    let joining, offering, opening, originalMode;
+    let joining, leaving, loading, offering, opening;
+    let disowning, originalLeader, originalMode, originalName;
 
     beforeEach(() => {
       originalMode = Durability.mode;
+      originalLeader = Tabs.leader;
+      originalName = Tabs.name;
 
       offering = sinon.stub(Replica, "offer");
       opening = sinon.stub(Durability, "open").resolves();
+      loading = sinon.stub(Durability, "load").resolves();
       joining = sinon.stub(Tabs, "join").resolves();
+      leaving = sinon.stub(Tabs, "leave").resolves();
+      disowning = sinon.stub(Batches, "disown");
 
       sinon.stub(Durability, "databaseName").returns("hologram.1.a3f9c2");
     });
 
     afterEach(() => {
       Durability.mode = originalMode;
+      Tabs.leader = originalLeader;
+      Tabs.name = originalName;
 
       delete globalThis.Hologram.durability;
       delete globalThis.Hologram.writes;
@@ -321,6 +329,132 @@ describe("DataLayer", () => {
 
       sinon.assert.calledOnceWithExactly(joining, "hologram.1.a3f9c2.u1", {});
       assert.isTrue(joining.calledAfter(opening));
+    });
+
+    // A frame the tab holding the stream stores and posts while this tab starts is either in the
+    // store this tab reads or a message it hears - but only if it is listening before it reads.
+    it("reads the store once it has joined the group", async () => {
+      Durability.mode = "indexeddb";
+
+      let joined;
+      joining.returns(new Promise((resolve) => (joined = resolve)));
+
+      const booting = DataLayer.boot(identity());
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      sinon.assert.calledOnce(joining);
+      sinon.assert.notCalled(loading);
+
+      joined(false);
+      await booting;
+
+      sinon.assert.calledOnceWithExactly(loading);
+    });
+
+    it("reads the store when it joins no group", async () => {
+      Durability.mode = "memory";
+
+      await DataLayer.boot(identity());
+
+      sinon.assert.calledOnceWithExactly(loading);
+      sinon.assert.notCalled(joining);
+    });
+
+    // The store opened, the group was joined, and then the read failed: nothing is left to share,
+    // so the tab leads itself as it would had the open failed.
+    it("leaves the group when the store could not be read", async () => {
+      Durability.mode = "indexeddb";
+
+      loading.callsFake(async () => {
+        Durability.mode = "memory";
+      });
+
+      joining.callsFake(async (name) => {
+        Tabs.name = name;
+      });
+
+      await DataLayer.boot(identity());
+
+      sinon.assert.calledOnceWithExactly(leaving);
+      assert.isTrue(leaving.calledAfter(loading));
+    });
+
+    // Before its mount a tab has made no batch of its own, so whatever it holds came from the group
+    // and was numbered under the group's identity - whichever role the tab had when it left.
+    for (const leader of [false, true]) {
+      it(`lets go of the batches it holds when it ${leader ? "led" : "followed"}`, async () => {
+        Durability.mode = "indexeddb";
+
+        loading.callsFake(async () => {
+          Durability.mode = "memory";
+        });
+
+        joining.callsFake(async (name) => {
+          Tabs.leader = leader;
+          Tabs.name = name;
+        });
+
+        leaving.callsFake(async () => {
+          Tabs.leader = true;
+          Tabs.name = null;
+        });
+
+        await DataLayer.boot(identity());
+
+        sinon.assert.calledOnceWithExactly(disowning);
+        assert.isTrue(disowning.calledAfter(leaving));
+      });
+    }
+
+    it("stays in the group when the store was read", async () => {
+      Durability.mode = "indexeddb";
+
+      joining.callsFake(async (name) => {
+        Tabs.name = name;
+      });
+
+      await DataLayer.boot(identity());
+
+      sinon.assert.notCalled(leaving);
+    });
+
+    // A store failure another tab reported ends the group (see Tabs.dissolve), and can do it while
+    // this tab is still reading.
+    it("leaves no group when a store failure already ended it", async () => {
+      Durability.mode = "indexeddb";
+
+      joining.callsFake(async (name) => {
+        Tabs.name = name;
+      });
+
+      loading.callsFake(async () => {
+        Durability.mode = "memory";
+        Tabs.name = null;
+      });
+
+      await DataLayer.boot(identity());
+
+      sinon.assert.notCalled(leaving);
+    });
+
+    // The read comes before the mount, which is what lets the restore after it be synchronous.
+    it("resolves only once the store is read", async () => {
+      let finishLoad;
+
+      loading.returns(new Promise((resolve) => (finishLoad = resolve)));
+      Durability.mode = "indexeddb";
+
+      let booted = false;
+      const booting = DataLayer.boot(identity()).then(() => (booted = true));
+
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.isFalse(booted);
+
+      finishLoad();
+      await booting;
+
+      assert.isTrue(booted);
     });
 
     // The join comes before the mount, so boot is not done while the join is still pending.
@@ -570,7 +704,9 @@ describe("DataLayer", () => {
           "decrement/3",
           "delete_relationship/3",
           "filter/2",
+          "filter/3",
           "include/2",
+          "include/3",
           "increment/3",
           "normalize/1",
           "one/1",
@@ -578,6 +714,7 @@ describe("DataLayer", () => {
           "put_attribute/3",
           "skip/2",
           "sort/2",
+          "sort/3",
           "take/2",
           "trust/1",
         ]),

@@ -41,6 +41,15 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module4
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module8
+  alias Hologram.Test.Fixtures.Policy.Readers.Module20, as: ReadersModule20
+  alias Hologram.Test.Fixtures.Policy.Readers.Module21, as: ReadersModule21
+  alias Hologram.Test.Fixtures.Policy.Readers.Module22, as: ReadersModule22
+  alias Hologram.Test.Fixtures.Policy.Readers.Module23, as: ReadersModule23
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24, as: ReadersModule24
+  alias Hologram.Test.Fixtures.Policy.Readers.Module25, as: ReadersModule25
+  alias Hologram.Test.Fixtures.Policy.Readers.Module26, as: ReadersModule26
+  alias Hologram.Test.Fixtures.Policy.Readers.Module27, as: ReadersModule27
+  alias Hologram.Test.Fixtures.Policy.Readers.Module28, as: ReadersModule28
   alias Hologram.Test.Fixtures.Policy.Readers.Module5, as: ReadersModule5
   alias Hologram.Test.Fixtures.Role
 
@@ -2976,6 +2985,92 @@ defmodule Hologram.AuthTest do
 
       assert verdicts(nil, project) ==
                policy_verdicts(archive: false, feature: true, publish: true)
+    end
+
+    # No client holds a row of a type nobody may read, so the server answers the read rule over the
+    # related row as stored.
+    test "answers a read rule's paths through a type nobody may read over the related row" do
+      user_id = Entity.generate_id()
+      archived_clause = {[:project, :archived], :==, false}
+      steward_clause = {[:project, :steward_id], :==, {:actor}}
+      archived_key = Policy.verdict_key(ReadersModule21, :read, archived_clause)
+      steward_key = Policy.verdict_key(ReadersModule21, :read, steward_clause)
+
+      create = fn entity_type, values ->
+        values
+        |> entity_type.new()
+        |> DB.create!()
+      end
+
+      open = create.(ReadersModule20, %{steward_id: user_id})
+      archived = create.(ReadersModule20, %{archived: true})
+      task = create.(ReadersModule21, %{project_id: open.id})
+      other_task = create.(ReadersModule21, %{project_id: archived.id})
+
+      assert verdicts(user_id, task) == %{archived_key => true, steward_key => true}
+      assert verdicts(user_id, other_task) == %{archived_key => false, steward_key => false}
+      assert verdicts(nil, task) == %{archived_key => true, steward_key => false}
+    end
+
+    # The team's id the role is held on is read off the project, which no client holds.
+    test "answers a read rule's role reference through a type nobody may read over the rows" do
+      holder = create_user("verdict_holder@example.com")
+      other_user = create_user("verdict_other@example.com")
+
+      key =
+        Policy.verdict_key(ReadersModule24, :read, {:to, {:rel, [:project, :team], [:member]}})
+
+      create = fn entity_type, values ->
+        values
+        |> entity_type.new()
+        |> DB.create!()
+      end
+
+      team = create.(ReadersModule22, %{})
+      project = create.(ReadersModule23, %{team_id: team.id})
+      task = create.(ReadersModule24, %{project_id: project.id})
+
+      grant_role(holder, :member, team)
+
+      assert verdicts(holder.id, task) == %{key => true}
+      assert verdicts(other_user.id, task) == %{key => false}
+      assert verdicts(nil, task) == %{key => false}
+    end
+
+    # No client holds a vault or a shelf, so the server answers the parcel's delegations to them
+    # over the rows as stored.
+    test "answers a read rule's delegations through a type nobody may read over the rows" do
+      keeper = create_user("verdict_keeper@example.com")
+      other_user = create_user("verdict_stranger@example.com")
+
+      create = fn entity_type, values ->
+        values
+        |> entity_type.new()
+        |> DB.create!()
+      end
+
+      vault = create.(ReadersModule25, %{keeper_id: keeper.id, open: true})
+      crate = create.(ReadersModule26, %{open: false})
+      shelf = create.(ReadersModule27, %{crate_id: crate.id})
+      parcel = create.(ReadersModule28, %{shelf_id: shelf.id, vault_id: vault.id})
+
+      grant_role(keeper, :member, vault)
+
+      key = &Policy.verdict_key(ReadersModule28, :read, {:via, {&1, &2}})
+
+      expected = fn keeper?, stranger? ->
+        %{
+          key.(:archive, [:vault]) => keeper?,
+          key.(:close, [:vault]) => keeper?,
+          key.(:delete, [:vault]) => stranger?,
+          key.(:read, [:shelf, :crate]) => false,
+          key.(:update, [:vault]) => true
+        }
+      end
+
+      assert verdicts(keeper.id, parcel) == expected.(true, false)
+      assert verdicts(other_user.id, parcel) == expected.(false, true)
+      assert verdicts(nil, parcel) == expected.(false, false)
     end
   end
 end

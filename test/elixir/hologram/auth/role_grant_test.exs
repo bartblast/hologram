@@ -124,6 +124,10 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Policy.Module4,
                     Policy.Module40,
                     Policy.Module41,
+                    Policy.Module42,
+                    Policy.Module43,
+                    Policy.Module44,
+                    Policy.Module45,
                     Policy.Module5,
                     Policy.Module6,
                     Policy.Module7,
@@ -141,6 +145,16 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Policy.Readers.Module18,
                     Policy.Readers.Module19,
                     Policy.Readers.Module2,
+                    Policy.Readers.Module20,
+                    Policy.Readers.Module21,
+                    Policy.Readers.Module22,
+                    Policy.Readers.Module23,
+                    Policy.Readers.Module24,
+                    Policy.Readers.Module25,
+                    Policy.Readers.Module26,
+                    Policy.Readers.Module27,
+                    Policy.Readers.Module28,
+                    Policy.Readers.Module29,
                     Policy.Readers.Module3,
                     Policy.Readers.Module4,
                     Policy.Readers.Module5,
@@ -174,6 +188,10 @@ defmodule Hologram.Auth.RoleGrantTest do
 
   test "__policies__/0" do
     assert RoleGrant.__policies__() == []
+  end
+
+  test "__policy_hints__/0" do
+    assert RoleGrant.__policy_hints__() == []
   end
 
   test "__policy_sources__/0" do

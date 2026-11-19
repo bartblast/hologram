@@ -62,9 +62,6 @@ defmodule Hologram.Auth do
   window is, so the build (which decides which pages subscribe to it) and the query cache (which
   resolves the id back to a term) name one window and not two.
   """
-  # TODO: when #1603 removes windows, the session user's row has to keep syncing - the user type
-  # must stay among the types browser code reads (#1600) whenever a page reads {Hologram, :user},
-  # or every from_context {Hologram, :user} prop goes stale again (#1450).
   @spec user_window(module, boolean) :: Query.t()
   def user_window(user_entity, permission_checking?) do
     user_entity
@@ -515,11 +512,12 @@ defmodule Hologram.Auth do
   defdelegate user_id, to: Context, as: :actor_user_id
 
   @doc """
-  Returns the server's verdict on each deciding clause of the given row's type (see
+  Returns the server's verdict on each deciding item of the given row's type (see
   `Hologram.Policy.deciding_quantifiers/1`) for the given user, keyed by its verdict key: whether
-  the clause holds for the row, read as stored - what a client answers such a clause by, since the
-  rows it holds of a set can't decide one for certain, and it never holds a server-only value. Empty
-  for a type with none. Takes nil for an anonymous session. A clause several keys share - one
+  the item holds for the row, read as stored, as the rule `Hologram.Policy.verdict_rule/1` gives
+  it - what a client answers such an item by, since the rows it holds of a set can't decide one for
+  certain, it never holds a server-only value, and it never holds a row of a type nobody may read.
+  Empty for a type with none. Takes nil for an anonymous session. An item several keys share - one
   written for several operations, or a grant lifecycle line expanded per role - is answered once.
   """
   @spec verdicts(Server.identity_id() | nil, struct) :: %{String.t() => boolean}
@@ -528,9 +526,10 @@ defmodule Hologram.Auth do
 
     entity_type
     |> Policy.deciding_quantifiers()
-    |> Enum.group_by(fn {_key, clause} -> clause end, fn {key, _clause} -> key end)
-    |> Enum.flat_map(fn {clause, keys} ->
-      holds? = Evaluator.clause_holds?(clause, row, canonical_id(actor_user_id), checker)
+    |> Enum.group_by(fn {_key, item} -> item end, fn {key, _item} -> key end)
+    |> Enum.flat_map(fn {item, keys} ->
+      rule = Policy.verdict_rule(item)
+      holds? = Evaluator.rule_matches?(rule, row, canonical_id(actor_user_id), checker)
 
       Enum.map(keys, &{&1, holds?})
     end)

@@ -59,14 +59,22 @@ export default class DataLayer {
     // wins, and this is what the client falls back to when the server refuses it.
     Replica.offer(replica);
 
-    // Awaited HERE, before the mount, which is what lets the restore that follows the mount be
-    // synchronous - everything from the mount onwards runs in one continuation, so the first local
-    // write cannot land ahead of what a previous page load left.
+    // Opened here and read below, once the group is joined.
     await Durability.open();
 
     // The group this browser's tabs share, joined before the mount and before the stream opens -
     // which is what lets the tab that leads greet the server with sync on its FIRST connect, and
     // stops a follower opening a sync session it would have to drop a moment later.
+    //
+    // And joined before the store is READ, which is what lets a tab starting while another syncs
+    // miss nothing. The tab holding the stream stores each frame and then posts it to the group, so
+    // a frame posted before this tab was listening was stored before this tab reads, and one posted
+    // after reaches it as a message, held until it has taken up what it read (see Tabs.ready).
+    // Read first and joined after, a frame stored after the read and posted before the join would
+    // reach it neither way. (Between the leader's store and this tab's read, what orders them is
+    // IndexedDB, which starts a read only after the writes created before it; between the leader's
+    // post and this tab's join, it is the lock round trip the join waits out - not a guarantee
+    // anything states, but a margin no post outruns.)
     //
     // Named for the database and for the user this page mounts under. Per database because tabs on
     // different models or sync protocols cannot share a store, and per user because the leader can
@@ -79,6 +87,24 @@ export default class DataLayer {
       const group = `${Durability.databaseName()}.${readActorUserId() ?? "anonymous"}`;
 
       await Tabs.join(group, {});
+    }
+
+    // Awaited HERE, before the mount, which is what lets the restore that follows the mount be
+    // synchronous - everything from the mount onwards runs in one continuation, so the first local
+    // write cannot land ahead of what a previous page load left.
+    await Durability.load();
+
+    // A store that opened and then could not be read, or that another tab took away while it was
+    // being read, leaves nothing to share - so the tab leads itself, as it would had the open
+    // failed. A store failure another tab reported has already ended the group (see Tabs.dissolve).
+    //
+    // And it lets go of every batch it holds. Before its mount a tab has made none of its own, so
+    // each came from the group - handed over while it was reading, or taken from the store by a
+    // tab that leads - and each was numbered under the group's identity, which this tab no longer
+    // sends under (see Batches.disown). The group's leader sends them, or the next page load does.
+    if (Durability.mode === "memory" && Tabs.name !== null) {
+      Tabs.leave();
+      Batches.disown();
     }
 
     // A read-only window onto the write queue. Nothing in the framework reads it - it is for a
@@ -356,9 +382,23 @@ export default class DataLayer {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
+      "filter/3",
+      "public",
+      ManuallyPortedElixirHologramQueryStage["filter/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query.Stage",
       "include/2",
       "public",
       ManuallyPortedElixirHologramQueryStage["include/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query.Stage",
+      "include/3",
+      "public",
+      ManuallyPortedElixirHologramQueryStage["include/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -408,6 +448,13 @@ export default class DataLayer {
       "sort/2",
       "public",
       ManuallyPortedElixirHologramQueryStage["sort/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query.Stage",
+      "sort/3",
+      "public",
+      ManuallyPortedElixirHologramQueryStage["sort/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(

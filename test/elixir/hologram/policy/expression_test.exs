@@ -10,18 +10,48 @@ defmodule Hologram.Policy.ExpressionTest do
   end
 
   # Parses the options of an allow line for the given operation, lowers them and evaluates what they
-  # lowered to in this module, with the given binding standing for the caller's values.
+  # lowered to in this module, with the given binding standing for the caller's variables.
   defp lower_spec(code, binding \\ [], operation \\ :update) do
     {value, _binding} =
       code
       |> Code.string_to_quoted!(line: 12)
-      |> then(&spec(operation, &1, env()))
+      |> then(&spec(operation, &1, env_binding(Keyword.keys(binding))))
       |> Code.eval_quoted(binding, env())
 
     value
   end
 
+  # The env of a line written where variables of the given names are bound, as a pinned name reads
+  # one.
+  defp env_binding(names) do
+    assignments = Enum.map(names, &{:=, [], [{&1, [], nil}, nil]})
+
+    {_value, _binding, env} =
+      Code.eval_quoted_with_env({:__block__, [], [nil | assignments]}, [], env())
+
+    env
+  end
+
   describe "spec/3" do
+    test "carries the hints of a condition naming a name inside a quantifier" do
+      assert lower_spec("[when: any(member <- members, member.role == :admin)]") == [
+               when: [any: {[:members], [role: {:==, :admin}]}],
+               __name_hints__: [{:key, 1, :role, nil, ["member.role", "role"]}]
+             ]
+    end
+
+    # The declaration refuses such a spec printing it whole, where hints would only show.
+    test "carries no hints in a spec holding anything but options" do
+      assert lower_spec("[:foo, when: any(member <- members, member.role == :admin)]") == [
+               :foo,
+               when: [any: {[:members], [role: {:==, :admin}]}]
+             ]
+    end
+
+    test "carries no hints for a condition with nothing to hint" do
+      assert lower_spec("[when: owner_id == user_id()]") == [when: [owner_id: {:==, {:actor}}]]
+    end
+
     test "keeps __MODULE__ as a role module" do
       assert lower_spec("[to: __MODULE__]") == [to: __MODULE__]
     end
@@ -260,6 +290,12 @@ defmodule Hologram.Policy.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/policies.ex:7: the operation comes first in a delegation, got: {trip, :update} - write {:update, trip}",
                    fn -> lower_spec("[via: {trip, :update}]") end
+    end
+
+    test "raises on a pinned delegation no variable holds, naming the bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: ^project pins project, which no variable holds here - via names a relationship with a bare name, without the pin: project",
+                   fn -> lower_spec("[via: ^project]") end
     end
 
     test "raises on a delegation written as an atom" do

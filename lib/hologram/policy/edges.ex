@@ -14,6 +14,8 @@ defmodule Hologram.Policy.Edges do
 
   @index_key {__MODULE__, :index}
 
+  @index_without_verdicts_key {__MODULE__, :index_without_verdicts}
+
   @universal_edges [:auth_change, :deploy]
 
   @doc """
@@ -47,9 +49,10 @@ defmodule Hologram.Policy.Edges do
       entity a grant-store row names, deciding that row's visibility.
 
   Beside the operations, `{entity type, {:verdicts}}` names the edges of the type's deciding
-  quantifiers, when it has any (see `Hologram.Policy.deciding_quantifiers/1`): what the server's
-  verdicts sent with its rows read, whichever operation they decide. It is a tuple rather than an
-  atom so that no operation or allow line name can take its key.
+  items - clauses, role references and delegations - when it has any (see
+  `Hologram.Policy.deciding_quantifiers/1`): what the server's verdicts sent with its rows read,
+  whichever operation they decide. It is a tuple rather than an atom so that no operation or allow
+  line name can take its key.
 
   Delegations expand transitively: a via chain contributes the target policy's edges for the
   operation each delegation names, with the chain prefixed, so every pair's list is complete on
@@ -80,15 +83,23 @@ defmodule Hologram.Policy.Edges do
   end
 
   @doc """
-  Returns the dependency edges of every entity type in the project's compiled data model.
+  Returns the dependency edges of every entity type in the project's compiled data model - without
+  the verdicts' (`{entity type, {:verdicts}}`) when `verdicts?` is false, the operations' kept as
+  they are.
 
-  Cached for the lifetime of the runtime and derived on the first call: deriving grows with the
-  model, tens of milliseconds for hundreds of entity types. Resetting the cache drops it, so a
-  recompiled data model is picked up by the next call. Raises while the data model is under a hold,
-  cached or not (see `Hologram.Entity.Model.ensure_released!/0`).
+  The edges without the verdicts' are the ones to follow in a build where no client checks
+  permissions: its rows carry no verdicts (see `Hologram.Sync.Frame.row_verdicts/2`), so there is
+  none a change could leave stale.
+
+  Cached for the lifetime of the runtime and derived on the first call, each form apart: deriving
+  grows with the model, tens of milliseconds for hundreds of entity types. Resetting the cache drops
+  both, so a recompiled data model is picked up by the next call. Raises while the data model is
+  under a hold, cached or not (see `Hologram.Entity.Model.ensure_released!/0`).
   """
-  @spec index() :: t()
-  def index do
+  @spec index(boolean) :: t()
+  def index(verdicts? \\ true)
+
+  def index(true) do
     Model.ensure_released!()
 
     case :persistent_term.get(@index_key, nil) do
@@ -104,10 +115,30 @@ defmodule Hologram.Policy.Edges do
     end
   end
 
+  def index(false) do
+    Model.ensure_released!()
+
+    case :persistent_term.get(@index_without_verdicts_key, nil) do
+      nil ->
+        index =
+          true
+          |> index()
+          |> Map.reject(&match?({{_entity_type, {:verdicts}}, _edges}, &1))
+
+        :persistent_term.put(@index_without_verdicts_key, index)
+
+        index
+
+      index ->
+        index
+    end
+  end
+
   @doc false
   @spec reset_index_cache() :: :ok
   def reset_index_cache do
     :persistent_term.erase(@index_key)
+    :persistent_term.erase(@index_without_verdicts_key)
 
     :ok
   end
@@ -283,10 +314,10 @@ defmodule Hologram.Policy.Edges do
       via_edges(entity_type, via)
   end
 
-  # What the deciding quantifiers read, as one rule's predicates read it.
+  # What the deciding items read, each as the rule it is answered as reads it.
   defp verdict_edges(entity_type, deciding) do
     deciding
-    |> Enum.flat_map(fn {_key, clause} -> predicate_edges(entity_type, [clause]) end)
+    |> Enum.flat_map(fn {_key, item} -> rule_edges(entity_type, Policy.verdict_rule(item)) end)
     |> merge_edges()
   end
 

@@ -10,13 +10,10 @@ defmodule HologramClusterTests.MigrationTest do
   alias Hologram.DB.SchemaReconciler
   alias Hologram.Migrator
 
-  # Every scenario claims the migrations database for a production instance, and the
-  # bootstrap preparing it before the next run refuses a database another env has
-  # claimed - so a scenario leaves the database virgin, whether it passed or failed.
+  # Every scenario claims the migrations database for a production instance, so each one
+  # starts from a virgin database whatever the scenario before it left behind.
   setup do
     reset_migrations_database!()
-
-    on_exit(fn -> reset_migrations_database!() end)
 
     :ok
   end

@@ -199,7 +199,7 @@ defmodule Hologram.DB.QueryCompiler do
   @doc """
   Compiles the statement deciding, for the rows of the given entity type with the given ids, which
   of the given users may read each one, and returning each readable row's current values - and,
-  when the given verdicts flag asks for them, the server's verdicts on the type's deciding clauses
+  when the given verdicts flag asks for them, the server's verdicts on the type's deciding items
   for the users who may read it (see `Hologram.Auth.verdicts/2`).
 
   Returns a map with :sql and :params as `compile/3` does. Params begin with two markers for the
@@ -232,19 +232,19 @@ defmodule Hologram.DB.QueryCompiler do
   those of the rules a delegation asks, on the row it leads to - and only those of `:users` among
   them are tested. Otherwise every user of `:users` is tested on every row.
 
-  With verdicts asked for and a type with deciding clauses (see
+  With verdicts asked for and a type with deciding items (see
   `Hologram.Policy.Readers.classify_verdicts/1`), the map also holds `:verdict_clauses`, each
-  clause's `{keys, class}` in the order its answers come in - the clauses answering the same for
+  item's `{keys, class}` in the order its answers come in - the items answering the same for
   every user first - and each result row four more, every answer a boolean that is never NULL:
 
-    * `$everyone_verdicts` - the answers of the clauses answering the same for every user, decided
+    * `$everyone_verdicts` - the answers of the items answering the same for every user, decided
       once per row.
     * `$anonymous_verdicts` - the answers of the others for an anonymous user, each folded for
       nobody as the rules are, when the anonymous flag asks for them, and an empty array otherwise.
     * `$verdict_users` and `$user_verdicts` - the users tested on the others, and each one's
       answers on them, in the same order: the readers - every user of `:users` when `$everyone`
-      is true - and, when each of those clauses is listed, only those of them its anchor names.
-      A reader left out answers each clause's default.
+      is true - and, when each of those items is listed, only those of them its anchor names.
+      A reader left out answers each item's default.
   """
   @spec recheck(module, %{module => %{atom => any}}, boolean, boolean) :: %{atom => any}
   def recheck(entity_type, mapping, anonymous?, verdicts? \\ false) do
@@ -1462,17 +1462,17 @@ defmodule Hologram.DB.QueryCompiler do
     {sql, new_params}
   end
 
-  # Each deciding clause's answer, as a flag in an array, in the given order. A clause renders as a
-  # rule of its own requiring it alone, so it is folded for nobody and reads its rows as a rule's
-  # conditions do.
+  # Each deciding item's answer, as a flag in an array, in the given order. An item renders as the
+  # rule of its own Policy.verdict_rule/1 gives it, so it is folded for nobody and reads its rows as
+  # a rule's conditions, references and delegations do.
   defp verdict_flags_sql(_entity_type, _mapping, _policy, [], reversed_params) do
     {"'{}'::boolean[]", reversed_params}
   end
 
   defp verdict_flags_sql(entity_type, mapping, policy, verdict_classes, reversed_params) do
     {flags, new_params} =
-      Enum.map_reduce(verdict_classes, reversed_params, fn {clause, _keys, _class}, acc ->
-        rule = %{predicates: [clause], to: nil, via: nil}
+      Enum.map_reduce(verdict_classes, reversed_params, fn {item, _keys, _class}, acc ->
+        rule = Policy.verdict_rule(item)
 
         recheck_flag_sql(entity_type, mapping, Map.put(policy, :rules, [rule]), acc)
       end)

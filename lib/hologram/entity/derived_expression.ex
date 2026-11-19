@@ -53,6 +53,10 @@ defmodule Hologram.Entity.DerivedExpression do
   # validate_own_builders!/1 looks for then. Its value is where the call stands, :query or :scalar.
   @own_builder_key :hologram_own_builder
 
+  @quantifiers [:all, :any, :none]
+
+  @search_operators [:contains, :starts_with]
+
   # The query stages a derived body reads its rows with, by the number of arguments each takes.
   @stages [count: 1, filter: 2, include: 2, one: 1, skip: 2, sort: 2, take: 2]
 
@@ -78,13 +82,16 @@ defmodule Hologram.Entity.DerivedExpression do
   Hologram.Query that is no stage a derived body calls, a query builder of another module where a
   value goes, a query starting from an entity type, a condition anywhere but the body and `if`, a
   comparison of something that is no field, a comparison of a field with itself (naming what it
-  always answers), `user_id()` in a query, and a name no argument binds, located at the head.
+  always answers), `user_id()` in a query, a pinned name or path on the right side of a query's
+  comparison or search whose first name is a row a quantifier binds or no argument (naming the
+  spelling that reads the field), and a name no argument binds, located at the head.
   """
   @spec function(Macro.t(), Macro.t(), Macro.Env.t()) :: {list(atom), Macro.t(), boolean}
   def function(name, {:fn, meta, [{:->, arrow_meta, [args, body]}]}, env) do
     names = Enum.map(args, fn {arg_name, _meta, _context} -> arg_name end)
 
     state = %{
+      bindings: [],
       env: env,
       field: "derived field #{Macro.to_string(name)} in #{inspect(env.module)}",
       head_line: arrow_meta[:line] || meta[:line] || env.line,
@@ -648,6 +655,50 @@ defmodule Hologram.Entity.DerivedExpression do
 
   defp query_position({:^, meta, [expr]}, state), do: {:^, meta, [pinned!(expr, state)]}
 
+  # A quantifier's condition reads the row it binds through the bound name, which no argument is.
+  defp query_position(
+         {quantifier, meta, [{:<-, arrow_meta, [binding, source]}, condition]},
+         state
+       )
+       when quantifier in @quantifiers do
+    inner_state =
+      case binding do
+        {name, _meta, context} when is_atom(name) and is_atom(context) ->
+          %{state | bindings: [name | state.bindings]}
+
+        _binding ->
+          state
+      end
+
+    {quantifier, meta,
+     [
+       {:<-, arrow_meta, [query_position(binding, state), query_position(source, state)]},
+       query_position(condition, inner_state)
+     ]}
+  end
+
+  # The right side of a comparison is where a bare name reads a field, so a pinned name no argument
+  # binds, or one a quantifier binds, is most likely that field written with a pin it doesn't take.
+  defp query_position({operator, meta, [left, {:^, pin_meta, [expr]} = pin | opts]}, state)
+       when (operator in @comparison_operators and opts == []) or
+              (operator in @search_operators and length(opts) <= 1) do
+    case Expression.hops(expr) do
+      [root | rest] ->
+        if root not in state.names do
+          pinned_field_error!(pin, expr, root, rest, state)
+        end
+
+      nil ->
+        nil
+    end
+
+    {operator, meta,
+     [
+       query_position(left, state),
+       {:^, pin_meta, [pinned!(expr, state)]} | Enum.map(opts, &query_position(&1, state))
+     ]}
+  end
+
   # The filter's own refusal of user_id() would tell the developer to pin a user's id, which a
   # derived query can't do either - its value is the same whoever reads it, the reason the stage
   # gives a pinned actor in a derived query too.
@@ -725,6 +776,34 @@ defmodule Hologram.Entity.DerivedExpression do
     name
     |> Atom.to_string()
     |> String.starts_with?("sigil_")
+  end
+
+  # A pinned name a quantifier binds is that row, whose fields read without a pin, and one no
+  # argument binds is either a field of the row the head forgot or the queried row's field.
+  @spec pinned_field_error!(Macro.t(), Macro.t(), atom, list(atom), map) :: no_return
+  defp pinned_field_error!(pin, expr, root, rest, state) do
+    spelled = Macro.to_string(expr)
+    pinned = if rest == [], do: root, else: "#{root} in #{Macro.to_string(pin)}"
+
+    message =
+      if root in state.bindings do
+        field = if rest == [], do: "#{root}.<attribute>", else: spelled
+
+        "#{state.field} pins #{pinned}, the row a quantifier binds - its fields read without a pin: #{field}"
+      else
+        reading =
+          "#{state.field} pins #{pinned}, which is no argument of its function - add it to the head to read the row's field, or drop the pin to read the queried row's: #{spelled}"
+
+        case state.bindings do
+          [] ->
+            reading
+
+          [binding | _bindings] ->
+            "#{reading} - or the row #{binding} binds, through its name: #{binding}.#{spelled}"
+        end
+      end
+
+    compile_error!(message, pin, state)
   end
 
   # A name no argument binds is a field the head forgot, so the refusal is located at the head.

@@ -439,6 +439,37 @@ defmodule Hologram.Sync.CarryTest do
                ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["count","==",3],["held_at","==","2026-01-02T03:04:05.120000Z"],["rating","==",float:4004000000000000],["released_on","==","2026-01-02"]],"include":{},"skip":null,"sort":[],"take":null}|
     end
 
+    # A datetime outside UTC is spelled as the UTC instant it stands for, and a year below 0 with
+    # its minus ahead of the padding - which the client spells alike only once it moves the clock
+    # and signs the year itself. Built by hand, since the suite has no time zone database.
+    test "spells a datetime outside UTC as its instant, and a year below 0 or above 9999 as Date.to_iso8601/1 does" do
+      warsaw_midnight = %DateTime{
+        year: 2026,
+        month: 3,
+        day: 1,
+        hour: 0,
+        minute: 0,
+        second: 0,
+        microsecond: {0, 0},
+        std_offset: 0,
+        time_zone: "Europe/Warsaw",
+        utc_offset: 3600,
+        zone_abbr: "CET"
+      }
+
+      query =
+        Module10
+        |> Stage.filter(
+          held_at: warsaw_midnight,
+          released_on: {:>=, ~D[-0001-01-02]},
+          released_on: {:<, Date.new!(20_250, 1, 2)}
+        )
+        |> Stage.count()
+
+      assert spell(query) ==
+               ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["held_at","==","2026-02-28T23:00:00.000000Z"],["released_on","<","20250-01-02"],["released_on",">=","-0001-01-02"]],"include":{},"skip":null,"sort":[],"take":null}|
+    end
+
     # The client holds 2.0 and 2 as one Number, so the two have to spell alike.
     test "spells a whole float as an integer" do
       query =

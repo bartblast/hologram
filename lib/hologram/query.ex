@@ -327,28 +327,41 @@ defmodule Hologram.Query do
   the predicates name `user_id()`, which only a policy condition can (a user's id is pinned from a
   variable holding it: `^user_id`), or when the predicates take any other form - a bare name where
   only a value goes (a keyword value, a membership element, a range bound) is most likely a
-  forgotten pin, and the error says so.
+  forgotten pin, and the error says so - or when a pinned name or path on the right side of a
+  comparison or a search starts at a name no variable holds, which is most likely a field written
+  with a pin it doesn't take, and the error names the spelling that reads it.
   Raises Hologram.MisuseError when the query is neither an entity type module nor a query term, when
   pinned predicates are not a list of name and value pairs - a name being an attribute or a path -
   when pinned predicates name the acting user, which only a policy condition can (outside a derived
   field, a user's id is pinned from a variable holding it: `^user_id`), when a predicate names a
-  relationship or an unknown attribute - on the right side of a comparison, which is how a forgotten
-  pin on a variable reads - when a path goes through a to-many relationship, an attribute or an
-  unknown relationship, or ends at a name the related type does not declare, when a quantifier's
-  relationships do not lead through relationships to a to-many relationship, an inverse set or a
-  derived set, when `{:outer, levels, name}` reaches past the queried row, when a disjunction holds
-  fewer than two predicate lists or one of them is empty or not such a list, when a comparison names
-  an attribute with itself or two attributes that do not compare, when a search names an attribute
-  that isn't a string or its term isn't a string, when a value doesn't fit the type of the
-  attribute it's compared with, or when a value is invalid for its operator - a pinned keyword
-  value holding a list, a tuple or a range is refused as an equality operand, since membership and
-  comparisons are written as expressions.
+  relationship or an unknown attribute - which is how a forgotten pin reads (the error names the pin
+  when the name, on the right side of a comparison or a search or on the left side of one compared
+  with a name, is a variable of the surrounding code or a derived field's argument, and inside a
+  quantifier or a derived field's query the row in scope that declares the name, and how to read it
+  there) - when a path goes through a to-many relationship, an attribute or an unknown relationship,
+  or ends at a name the related type does not declare, when a quantifier's relationships do not lead
+  through relationships to a to-many relationship, an inverse set or a derived set, when
+  `{:outer, levels, name}` reaches past the queried row, when a disjunction holds fewer than two
+  predicate lists or one of them is empty or not such a list, when a comparison names an attribute
+  with itself or two attributes that do not compare, when a search names an attribute that isn't a
+  string or its term isn't a string, when a value doesn't fit the type of the attribute it's
+  compared with, or when a value is invalid for its operator - a pinned keyword value holding a
+  list, a tuple or a range is refused as an equality operand, since membership and comparisons are
+  written as expressions.
   """
   defmacro filter(query, predicates) do
     lowered = Expression.predicates(predicates, __CALLER__)
 
-    quote do
-      Stage.filter(unquote(query), unquote(lowered))
+    case Expression.predicate_hints(predicates, __CALLER__) do
+      [] ->
+        quote do
+          Stage.filter(unquote(query), unquote(lowered))
+        end
+
+      hints ->
+        quote do
+          Stage.filter(unquote(query), unquote(lowered), unquote(Macro.escape(hints)))
+        end
     end
   end
 
@@ -388,16 +401,25 @@ defmodule Hologram.Query do
   (`include(:owner)` is refused in favour of `include(owner)`), when a keyword entry nests a
   relationship (`include(tasks: owner)` is refused in favour of `include(tasks.owner)`), when a
   keyword entry pairs a relationship with anything but a pinned nested spec - a narrowed set is a
-  derived field - or when a spec or an entry is anything else. Raises Hologram.MisuseError when the
-  query is neither an entity type module nor a query term, when a spec is invalid or empty, or
-  when a name is not a declared relationship or derived field - which is how a forgotten pin on a
-  variable reads.
+  derived field - when a pinned name or path starts at a name no variable holds, which is most
+  likely a name written with a pin it doesn't take, or when a spec or an entry is anything else.
+  Raises Hologram.MisuseError when the query is neither an entity type module nor a query term,
+  when a spec is invalid or empty, or when a name is not a declared relationship or derived field -
+  which is how a forgotten pin on a variable reads, and the error names the pin.
   """
   defmacro include(query, spec) do
     lowered = Expression.inclusion(spec, __CALLER__)
 
-    quote do
-      Stage.include(unquote(query), unquote(lowered))
+    case Expression.inclusion_hints(spec, __CALLER__) do
+      [] ->
+        quote do
+          Stage.include(unquote(query), unquote(lowered))
+        end
+
+      hints ->
+        quote do
+          Stage.include(unquote(query), unquote(lowered), unquote(Macro.escape(hints)))
+        end
     end
   end
 
@@ -556,18 +578,28 @@ defmodule Hologram.Query do
   which has no stored sort key.
 
   Raises Hologram.CompileError, naming the location, when an attribute is written as an atom
-  (`sort(:priority)` is refused in favour of `sort(priority)`), when a direction is neither an atom
-  nor pinned, or when the spec or an entry is neither a bare name, a pair nor pinned. Raises
+  (`sort(:priority)` is refused in favour of `sort(priority)`), when a pinned name - the spec or an
+  entry - is no variable, which is most likely a name written with a pin it doesn't take, when a
+  direction is neither an atom nor pinned, or when the spec or an entry is neither a bare name, a
+  pair nor pinned. Raises
   Hologram.MisuseError when the query is neither an entity type module nor a query term, when the
   spec is neither an attribute name nor a list, when an entry names a relationship or an unknown
-  attribute - which is how a forgotten pin on a variable reads - or when a direction is neither :asc
-  nor :desc.
+  attribute - which is how a forgotten pin on a variable reads, and the error names the pin - or
+  when a direction is neither :asc nor :desc.
   """
   defmacro sort(query, spec) do
     lowered = Expression.ordering(spec, __CALLER__)
 
-    quote do
-      Stage.sort(unquote(query), unquote(lowered))
+    case Expression.ordering_hints(spec, __CALLER__) do
+      [] ->
+        quote do
+          Stage.sort(unquote(query), unquote(lowered))
+        end
+
+      hints ->
+        quote do
+          Stage.sort(unquote(query), unquote(lowered), unquote(Macro.escape(hints)))
+        end
     end
   end
 

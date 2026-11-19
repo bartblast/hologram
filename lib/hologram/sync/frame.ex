@@ -23,20 +23,22 @@ defmodule Hologram.Sync.Frame do
   Turns what a session worked out for one client into the deltas a frame carries.
 
   A row that appeared travels whole, because a client that did not have it needs all of it, with
-  the server's verdicts for the given user (see `put_entity/2`). A row that changed travels as the
-  attributes that moved, each patch given as `{row, changes, verdicts}` - the verdicts that moved
-  beside them, or nil when none did. A row that left travels as its id, and an
-  edge as the pair it joined or parted.
+  the server's verdicts for the given user (see `put_entity/2`): the ones given for it, per entity
+  type and id - worked out already, as a batch's recheck works them out - and otherwise worked out
+  here (see `row_verdicts/2`). A row that changed travels as the attributes that moved, each patch
+  given as `{row, changes, verdicts}` - the verdicts that moved beside them, or nil when none did.
+  A row that left travels as its id, and an edge as the pair it joined or parted.
 
   Every delta names its own type: an arrived row carries it, an edge carries the type of the row
   the relationship lives on, and a row that left arrives here as its id paired with the type it
   was held under - a row no longer there to be asked is named by the bookkeeping that watched it
   arrive.
   """
-  @spec deltas(map, Hologram.Server.identity_id() | nil) :: list(map)
-  def deltas(news, actor_user_id) do
+  @spec deltas(map, Hologram.Server.identity_id() | nil, %{module => %{String.t() => map}}) ::
+          list(map)
+  def deltas(news, actor_user_id, verdicts \\ %{}) do
     Enum.concat([
-      Enum.map(news.appeared, &put_entity(&1, row_verdicts(actor_user_id, &1))),
+      Enum.map(news.appeared, &put_entity(&1, appeared_verdicts(&1, actor_user_id, verdicts))),
       Enum.map(news.patched, fn {row, patch, verdicts} -> patch_entity(row, patch, verdicts) end),
       Enum.map(news.unsynced, fn {id, entity_type} -> unsync_entity(id, entity_type) end),
       Enum.map(news.edges, &relationship/1)
@@ -228,6 +230,13 @@ defmodule Hologram.Sync.Frame do
   @spec unsync_entity(String.t(), module) :: map
   def unsync_entity(id, entity_type) do
     %{id: id, op: :unsync_entity, type: Codec.encode_enum_value(entity_type)}
+  end
+
+  defp appeared_verdicts(%entity_type{id: id} = row, actor_user_id, verdicts) do
+    case verdicts do
+      %{^entity_type => %{^id => row_verdicts}} -> row_verdicts
+      _not_given -> row_verdicts(actor_user_id, row)
+    end
   end
 
   defp group(deltas) do

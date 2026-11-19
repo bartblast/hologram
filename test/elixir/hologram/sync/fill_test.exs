@@ -9,6 +9,7 @@ defmodule Hologram.Sync.FillTest do
   alias Hologram.DB.Connection
   alias Hologram.Mutation.Record
   alias Hologram.Query.Stage
+  alias Hologram.Sync.PackedIds
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module26
@@ -144,6 +145,32 @@ defmodule Hologram.Sync.FillTest do
       confirmed(@replica_id, 1)
 
       assert read(Module2, nil, nil, [Module2]) == {[], nil}
+    end
+  end
+
+  describe "read_ids/2" do
+    test "answers the ids of the rows of the type the user may read" do
+      user = policy_user("fill_ids@example.com")
+      public = policy_entity(true)
+      granted = policy_entity(false)
+      policy_entity(false)
+
+      Auth.grant_role(user, :viewer, granted)
+
+      assert read_ids(PolicyModule1, user.id) == PackedIds.pack([public.id, granted.id])
+    end
+
+    test "reads a visitor through the read rules" do
+      public = policy_entity(true)
+      policy_entity(false)
+
+      assert read_ids(PolicyModule1, nil) == PackedIds.pack([public.id])
+    end
+
+    test "answers nothing packed when the user may read no row of the type" do
+      policy_entity(false)
+
+      assert read_ids(PolicyModule1, nil) == ""
     end
   end
 

@@ -78,9 +78,9 @@ defmodule Hologram.Test do
 
   # The test env starts the pool and nothing else - dev converges at boot and every other env
   # applies the migration history, while a test app's schema is its helper's to manage. The
-  # database bootstrap drops the layout before this runs, so a run converges from scratch, and
-  # this is the only thing that puts it back. A no-op when the app declares no entities, which
-  # leaves the database unstarted.
+  # database bootstrap gives each run a fresh database before this runs, so a run converges from
+  # scratch, and this is the only thing that builds the layout. A no-op when the app declares no
+  # entities, which leaves the database unstarted.
   defp converge_schema do
     if Process.whereis(DB) do
       SchemaReconciler.reconcile(DB.reconciliation_context())
