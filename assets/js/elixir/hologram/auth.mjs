@@ -510,7 +510,8 @@ function predicateHolds(
 
 // What a rule's operand stands for on this row: the acting user, another attribute of the row read
 // off it or of the row a path leads to, or the value itself. An attribute operand compares by the
-// predicate's attribute's ranks, since two enums compare only when they declare the same list.
+// predicate's attribute's ranks and type, since two enums compare only when they declare the same
+// list, and two temporal values only when they are of one type.
 function operandValue(entityType, entity, value, actorUserId, outer) {
   if (isActorValue(value)) {
     return actorUserId;

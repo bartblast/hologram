@@ -1567,14 +1567,19 @@ describe("Model", () => {
 
   // The order asserted is Date.compare/2's and DateTime.compare/2's over the same values.
   describe("compareTemporal()", () => {
-    it("orders dates by their years as numbers", () => {
+    // Within one year the month and day decide, below 0 and past 9999 as anywhere else, and a year
+    // of four digits against a wider one is a comparison of years rather than characters.
+    it("orders dates by their years as numbers, then by month and day", () => {
       const ordered = [
         "-10000-01-01",
         "-0002-12-31",
-        "-0001-01-01",
+        "-0001-02-01",
+        "-0001-11-30",
         "0000-01-01",
+        "2026-03-01",
         "9999-12-31",
         "10000-01-01",
+        "10000-12-31",
         "20250-01-01",
       ];
 
@@ -1587,12 +1592,6 @@ describe("Model", () => {
           );
         }
       }
-    });
-
-    it("orders dates within one year by month and day", () => {
-      assert.equal(Model.compareTemporal("-0001-02-01", "-0001-11-30"), -1);
-      assert.equal(Model.compareTemporal("10000-12-31", "10000-01-01"), 1);
-      assert.equal(Model.compareTemporal("-0001-06-01", "-0001-06-01"), 0);
     });
 
     // The wall clock's own spelling (toISOString) of a year past 9999 carries a plus and two more

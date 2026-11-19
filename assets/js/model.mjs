@@ -523,7 +523,19 @@ export default class Model {
   // on the wire is UTC at six fractional digits - so it orders as its characters do, but the year
   // does not: it is as wide as it needs and signed, so -2 would sort after -1 and 10000 before 9999.
   // So the years compare as numbers, BigInt for any width, and the rest as the string it is.
+  //
+  // Two values in years 0 to 9999 - nearly every one - both have their first dash at index 4, and
+  // then their characters do order them, so they compare whole and skip the parse: this runs for
+  // every pair a sort or an ordering filter compares.
   static compareTemporal(left, right) {
+    if (left[4] === "-" && right[4] === "-") {
+      if (left === right) {
+        return 0;
+      }
+
+      return left < right ? -1 : 1;
+    }
+
     const [leftYear] = left.match(Model.#YEAR_PREFIX);
     const [rightYear] = right.match(Model.#YEAR_PREFIX);
 

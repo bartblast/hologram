@@ -390,8 +390,8 @@ defmodule Hologram.DB.CodecTest do
     end
 
     # One time of day is one wire spelling, always six fractional digits - the client compares
-    # temporal values as the plain strings they are, so a value written with fewer digits and
-    # left that way would be a second spelling of a time the server already has.
+    # times of day as the plain strings they are, so a value written with fewer digits and left
+    # that way would be a second spelling of a time the server already has.
     test "encodes :time values as ISO 8601 strings at full precision" do
       assert encode_json(~T[11:00:00], :time) == "11:00:00.000000"
       assert encode_json(~T[11:00:00.1], :time) == "11:00:00.100000"
