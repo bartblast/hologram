@@ -304,7 +304,24 @@ defmodule Hologram.Migrator do
   Indexes are the one object this repairs rather than reports. They carry no data, the
   model is their only author, and refusing instead would wedge every node of a fleet
   behind a state nothing can reach on its own. Everything else the drift check still
-  refuses.
+  refuses - an invalid index included, when the model does not derive it under that name
+  and with that definition.
+
+  The one state it refuses is rows repeating the key of a unique index it has to build.
+  While the index is missing, nothing stops running nodes from writing them, and no build
+  can succeed over them. The refusal names the table, the columns and how many keys
+  repeat. Each index's rows are counted before it is built or dropped, so a refusal leaves
+  that index as it was - the ones repaired before it stay repaired. A repeat written after
+  the count fails the build instead, which leaves the index invalid under its name - the
+  state the next boot counts and refuses the same way. Either way, the boot after the rows
+  are fixed builds it.
+
+  An invalid index is dropped and built again rather than rebuilt in place. REINDEX
+  CONCURRENTLY builds a copy beside it, and a copy that fails - over repeated keys, or with
+  the node killed partway - stays behind as one more invalid index the model does not
+  derive. Dropped first, a node killed during the drop or the build leaves the index
+  invalid under its own name, and killed in between leaves it absent, all of which the
+  next boot repairs.
 
   Runs under the migration lock the caller holds, on that lock's own session: a concurrent
   build cannot run inside a transaction, and two nodes building the same index at the same
@@ -317,11 +334,15 @@ defmodule Hologram.Migrator do
   """
   @spec repair_indexes(%{module => %{atom => any}}) :: :ok
   def repair_indexes(mapping) do
-    if invalid_indexes() == [] and missing_indexes(mapping) == [] do
-      :ok
-    else
-      rebuild_and_create_indexes(mapping)
-    end
+    mapping
+    |> invalid_derived_indexes()
+    |> Enum.each(&rebuild_index!/1)
+
+    mapping
+    |> missing_indexes()
+    |> Enum.each(&create_index!/1)
+
+    :ok
   end
 
   @doc """
@@ -348,8 +369,12 @@ defmodule Hologram.Migrator do
   or verifies the database, objects standing under names the current naming rule no
   longer derives are renamed (one info line each), and the pending files apply from the
   model the applied ones produce - with the indexes the applied files derive and the
-  database lacks built before them, when the node knows every applied file. The index
-  repair and the drift check come last.
+  database lacks built before them, when the node knows every applied file. A unique one
+  whose build fails on rows repeating its key is left invalid for the pending files, and
+  the repair after them refuses it if they keep it - or the file that changes a type on its
+  table, which rebuilds it, or fills a row repeating its key through it while it takes writes,
+  refuses there, even when a later pending file would remove the index. The index repair and
+  the drift check come last.
   """
   @spec run(list(%{atom => any}), %{atom => any}, %{atom => any}) :: :ok
   def run(migrations, current_model, context) do
@@ -394,16 +419,22 @@ defmodule Hologram.Migrator do
   # dev: the two mechanisms have to leave the same rows behind, not merely the same columns.
   # The default is the one the add's chunk leaves, which reconciliation's one diff also uses
   # when the declaration arrives in one go.
+  #
+  # The fill writes every row, so an invalid unique index that still checks writes, over
+  # rows repeating its key, is asked about first - see check_invalid_unique_indexes!/2.
   defp apply_op(%{op: :add_column, backfill: value} = op) do
+    Preflight.check_invalid_unique_indexes!(op.table, :update)
     add_column_filled(op, value)
   end
 
   # The NULLs take the declared default before the column tightens over them. Only when
   # there are any: an enum value added in this transaction cannot be used in it, not even as
   # the parameter of an UPDATE that matches no row. Asked before the fill: under a unique
-  # index that stands, a fill making rows repeat a key would fail in PostgreSQL.
+  # index that stands, a fill making rows repeat a key would fail in PostgreSQL - and so would
+  # one writing a row that already repeats the key of an invalid one that still checks writes.
   defp apply_op(%{op: :alter_column, fill: value} = op) do
     if count_result(DDL.null_check_statement(op.table, op.column)) > 0 do
+      Preflight.check_invalid_unique_indexes!(op.table, {:fill, op.column})
       Preflight.check_fill!(op)
       fill_with_companions(op, value)
     end
@@ -415,8 +446,29 @@ defmodule Hologram.Migrator do
   # applies: two values can convert to one, and the names a file's earlier ops leave behind
   # are the ones the database holds at this point. A tightening carrying a fill keeps its
   # type, so the clause above has no cast to ask about.
+  #
+  # The change rebuilds every index on the table, so an invalid unique one over rows that
+  # already repeat its key is asked about first - the cast's own check would blame the cast
+  # for the repeats.
   defp apply_op(%{op: :alter_column} = op) do
+    if op.before.type != op.after.type do
+      Preflight.check_invalid_unique_indexes!(op.table, {:rewrite, [op.column]})
+    end
+
     Preflight.check_cast!(op)
+
+    execute_statements(DDL.statements(op))
+  end
+
+  # Converting each column to the rebuilt type rewrites its table, which rebuilds every index
+  # on it - see the alter_column clause above.
+  defp apply_op(%{op: :rebuild_enum_type} = op) do
+    op.columns
+    |> Enum.group_by(fn {table, _column} -> table end, fn {_table, column} -> column end)
+    |> Enum.sort()
+    |> Enum.each(fn {table, columns} ->
+      Preflight.check_invalid_unique_indexes!(table, {:rewrite, columns})
+    end)
 
     execute_statements(DDL.statements(op))
   end
@@ -460,6 +512,10 @@ defmodule Hologram.Migrator do
     # the diff applies add_column before alter_column, so a source column being cast to
     # text in the same file still holds its old type when its companion lands. The renderer
     # names the added columns as the file leaves them, so a rename after the add is followed.
+    # It writes only the rows whose source holds a value. A companion comes with a text
+    # attribute, so its source either arrives with this file, holding values only when an add
+    # filled them, or turns text with a type change - both of which asked about the invalid
+    # unique indexes on the table already, against these same rows (see apply_op/1).
     SchemaReconciler.backfill_companions!(render.added_columns, mapping)
 
     # The tail's checks run here, against the schema the statements above just produced and
@@ -498,6 +554,32 @@ defmodule Hologram.Migrator do
     :ok
   end
 
+  # A unique_violation is rows repeating the key. A key a running node repeats while the build
+  # runs is the same refusal: a count before the build sees only the rows written by then.
+  defp build_index(op) do
+    [statement] = DDL.statements(op)
+
+    case Connection.query(statement) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, %Postgrex.Error{postgres: %{code: :unique_violation}} = error} ->
+        {:repeated_keys, error}
+
+      {:error, error} ->
+        raise error
+    end
+  end
+
+  # Counted again for the refusal, which names how many keys repeat. Rows fixed between the
+  # failed build and the count leave nothing to name, so the build's own error stands.
+  defp build_index!(op) do
+    with {:repeated_keys, error} <- build_index(op) do
+      Preflight.check_unique_index!(op)
+      raise error
+    end
+  end
+
   defp changes_phrase([_one]), do: "change has"
 
   defp changes_phrase(_differing), do: "changes have"
@@ -532,6 +614,10 @@ defmodule Hologram.Migrator do
         :managed
     end
   end
+
+  defp check_unique_keys!(%{unique: true} = op), do: Preflight.check_unique_index!(op)
+
+  defp check_unique_keys!(_op), do: :ok
 
   # The one path that builds the system tables, and so the one that decides which columns a
   # database has forever: a database already claimed goes through check_marker!/1 above, which
@@ -579,9 +665,19 @@ defmodule Hologram.Migrator do
   #
   # Creating only, never rebuilding: an invalid index holds its name, so a pending rename or
   # drop finds it, and the repair after the files rebuilds whatever survives them. Rebuilding
-  # it here would fail on rows repeating its key on every boot, even for a release whose
-  # pending file drops that index. Creating can fail on such rows too, once: the build that
-  # fails leaves the index invalid under its name, so the next boot gets past here (#1700).
+  # it here would refuse rows repeating its key on every boot, even for a release whose
+  # pending file drops that index.
+  #
+  # For the same reason a build that fails on such rows is not refused here. It leaves the
+  # index invalid under its name, which is all a pending rename or drop needs. A pending file
+  # that drops the index, or the table it stands on, takes it away, and the boot gets through.
+  # One that keeps it leaves it to the repair after the files, which refuses it there, with
+  # the pending files applied. A pending type change on its table rebuilds every index there,
+  # this one included, and a pending fill that writes a repeated row through one that takes
+  # writes fails on it, so either refuses at its file instead (see apply_op/1) - even when a
+  # file after it would remove the index, since the change can't apply with the index
+  # standing (#1716). No count first: the build is what leaves the name taken, so it runs
+  # either way.
   #
   # With nothing pending the applied files derive the current model, so the repair after
   # them does the same work. On a history this node does not fully know, what the applied
@@ -590,24 +686,18 @@ defmodule Hologram.Migrator do
     if pending != [] and known_history?(migrations, applied) do
       pre_model
       |> Mapper.derive_from_model!()
-      |> create_missing_indexes()
+      |> missing_indexes()
+      |> Enum.each(&build_index(Map.put(&1, :concurrently, true)))
     end
 
     :ok
   end
 
-  defp create_index_concurrently(op) do
-    concurrent_op = Map.put(op, :concurrently, true)
-
-    execute_statements(DDL.statements(concurrent_op))
-  end
-
-  defp create_missing_indexes(mapping) do
-    mapping
-    |> missing_indexes()
-    |> Enum.each(&create_index_concurrently/1)
-
-    :ok
+  # Counted before the build, so a refusal leaves nothing behind - a failed build would leave
+  # the index invalid under its name.
+  defp create_index!(op) do
+    check_unique_keys!(op)
+    build_index!(Map.put(op, :concurrently, true))
   end
 
   defp describe_non_plain_reason(:collation), do: "a collation other than its column's"
@@ -657,12 +747,13 @@ defmodule Hologram.Migrator do
   end
 
   # A concurrent build that failed partway leaves the index in the catalog flagged
-  # invalid: it holds the name, serves no query, and every write maintains it. Clearing
-  # it before building makes the tail safe to run again, so a crashed deploy retries
-  # without anyone opening psql.
+  # invalid: it holds the name and serves no query. A file's tail runs only when the file
+  # applies, so the one it meets stood under the name before - the index of a deploy that
+  # crashed after its commit is the repair's to rebuild, since the file is no longer pending.
+  # Dropped concurrently, as it was built - see rebuild_index!/1.
   defp drop_invalid_index(index) do
     if count_result(DDL.invalid_index_check_statement(index)) > 0 do
-      execute_statements(DDL.statements(%{op: :drop_index, index: index}))
+      execute_statements(DDL.statements(%{op: :drop_index, index: index, concurrently: true}))
     end
   end
 
@@ -680,6 +771,11 @@ defmodule Hologram.Migrator do
   # An INVALID one is not that - it is a build that died partway, which the line above drops so
   # this one rebuilds it.
   #
+  # The file's check found no repeated key before it committed, but nothing enforces the key
+  # until this build finishes, so a running node can write one in between. The build then
+  # refuses as the check would have, and leaves the index invalid for the next boot's repair,
+  # which refuses the same way until the rows are fixed.
+  #
   # CONCURRENTLY is not decided here: the renderer decides what belongs in the tail at all, and
   # what it decides IS concurrent - it stamps every op it puts there, because being unable to run
   # inside the migration's transaction is the whole reason the tail exists.
@@ -687,14 +783,14 @@ defmodule Hologram.Migrator do
     drop_invalid_index(op.index)
 
     if count_result(DDL.built_index_check_statement(op.index)) == 0 do
-      execute_statements(DDL.statements(op))
+      build_index!(op)
     end
   end
 
   # Runs on the migration lock's session, which by now holds no open transaction - the file
   # committed above - which is what a concurrent build needs. The lock is already held and has
   # to be: unlocked, a node applying the NEXT file deadlocks against this build outright, and a
-  # node reaching its own repair reads this half-built index as broken and REINDEXes it, which
+  # node reaching its own repair reads this half-built index as broken and rebuilds it, which
   # is two concurrent builds on one relation waiting on each other's virtual transactions.
   defp execute_tail_ops(tail) do
     Enum.each(tail, &execute_tail_op/1)
@@ -768,10 +864,37 @@ defmodule Hologram.Migrator do
     Enum.map(rows, fn [name] -> name end)
   end
 
+  # Only the invalid indexes the model derives under that name, with the definition the
+  # model gives it: the repair builds the model's definition, so rebuilding one that differs
+  # would replace an object nobody derived. Those are drift for the check to report. So is
+  # an invalid index under a name the model doesn't derive, like the copy a REINDEX
+  # CONCURRENTLY run by hand leaves when it fails.
+  defp invalid_derived_indexes(mapping) do
+    case invalid_indexes() do
+      [] -> []
+      invalid -> invalid_derived_indexes(invalid, Introspection.schema(), mapping)
+    end
+  end
+
+  defp invalid_derived_indexes(invalid, actual, mapping) do
+    derived =
+      for {table, table_definition} <- Schema.from_mapping(mapping).tables,
+          {index, definition} <- table_definition.indexes,
+          into: %{} do
+        {index, {table, definition}}
+      end
+
+    for index <- invalid,
+        {table, definition} <- List.wrap(derived[index]),
+        get_in(actual.tables, [table, :indexes, index]) == definition do
+      Map.merge(%{op: :create_index, table: table, index: index}, definition)
+    end
+  end
+
   defp invalid_indexes do
     {:ok, %{rows: rows}} = Connection.query(DDL.invalid_indexes_statement())
 
-    Enum.map(rows, fn [index] -> index end)
+    Enum.map(rows, fn [index, _ready?, _live?] -> index end)
   end
 
   defp known_history?(migrations, applied) do
@@ -825,14 +948,15 @@ defmodule Hologram.Migrator do
     end)
   end
 
-  defp rebuild_and_create_indexes(mapping) do
-    Enum.each(invalid_indexes(), &rebuild_index/1)
-
-    create_missing_indexes(mapping)
-  end
-
-  defp rebuild_index(index) do
-    execute_statements([DDL.reindex_statement(index)])
+  # Counted before the drop, so a refusal leaves the index as it was: a build that failed on
+  # repeated keys enforces nothing, but one killed while validating its rows already refuses
+  # new writes that repeat the key, and dropping it would let them through. Dropped
+  # concurrently, as it was built: a plain drop locks every query on the table out until the
+  # longest transaction reading it ends.
+  defp rebuild_index!(op) do
+    check_unique_keys!(op)
+    execute_statements(DDL.statements(%{op: :drop_index, index: op.index, concurrently: true}))
+    build_index!(Map.put(op, :concurrently, true))
   end
 
   defp run_context do
