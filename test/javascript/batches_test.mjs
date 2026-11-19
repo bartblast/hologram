@@ -173,6 +173,30 @@ describe("Batches", () => {
       }
     });
 
+    // The first tab's restore writes a fresh pair without waiting, and sends right after: a reload
+    // between the two would send the batch again under yet another pair.
+    it("sends nothing until the identity written before it is stored", async () => {
+      let written;
+
+      sinon
+        .stub(Durability, "replicaWritten")
+        .returns(new Promise((resolve) => (written = resolve)));
+
+      sendStub.resolves(confirmed());
+      sealed(creating("t1", "first"));
+
+      const flushing = Batches.flush();
+      await waitForEventLoop();
+
+      assert.isFalse(sendStub.called);
+      assert.equal(Batches.pending.length, 1);
+
+      written();
+      await flushing;
+
+      assert.isTrue(sendStub.calledOnce);
+    });
+
     // The server would refuse them over a mismatch the person did not cause, and roll back what
     // they did.
     it("holds every batch while the server stopped the tab over its model", async () => {

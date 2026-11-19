@@ -274,8 +274,10 @@ export default class Batches {
         }
 
         // Before anything leaves: a batch may not be answered under a number this browser could
-        // hand out again after a reload.
+        // hand out again after a reload, nor under an identity still on its way to the store (see
+        // Durability.replicaWritten).
         await batch.recorded;
+        await Durability.replicaWritten();
 
         // A tab the server stopped over its model holds its writes rather than sending them to be
         // refused: the server would roll back what the person did over a mismatch they did not

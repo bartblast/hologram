@@ -163,6 +163,19 @@ describe("Durability", () => {
     });
   };
 
+  // Whether a promise has settled, without waiting on it: a settled one runs its callback in the
+  // next microtask, and a store write does not complete before the next task.
+  const isSettled = async (promise) => {
+    let settled = false;
+
+    promise.then(() => (settled = true));
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    return settled;
+  };
+
   const readMeta = async (key) => {
     const {db} = await rawOpen();
 
@@ -1148,6 +1161,33 @@ describe("Durability", () => {
         token: "statement",
       });
     });
+
+    // Writes to the store commit in the order they were made, so the last one settled is all of
+    // them settled.
+    it("answers the write for replicaWritten() to wait on", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      Durability.persistReplica({id: "r1", token: "statement"});
+
+      const writing = Durability.persistReplica({
+        id: "r2",
+        token: "statement-2",
+      });
+
+      assert.strictEqual(Durability.replicaWritten(), writing);
+      assert.isFalse(await isSettled(Durability.replicaWritten()));
+
+      await writing;
+
+      assert.isTrue(await isSettled(Durability.replicaWritten()));
+    });
+
+    it("leaves nothing for replicaWritten() to wait on in memory mode", async () => {
+      Durability.persistReplica({id: "r1", token: "statement"});
+
+      assert.isTrue(await isSettled(Durability.replicaWritten()));
+    });
   });
 
   describe("repair()", () => {
@@ -1634,7 +1674,10 @@ describe("Durability", () => {
 
       assert.equal(Replica.id, "r-fresh");
 
-      await Durability.persistReplica(Replica.current());
+      // The first send waits for it.
+      assert.isFalse(await isSettled(Durability.replicaWritten()));
+
+      await Durability.replicaWritten();
 
       assert.deepStrictEqual(await readMeta("replica"), {
         id: "r-fresh",

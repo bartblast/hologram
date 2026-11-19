@@ -95,6 +95,9 @@ export default class Durability {
   // starts, which is what stops two batches stored in the same turn from both asking.
   static #persistenceAsked = false;
 
+  // The last identity write started, for a send to wait on (see replicaWritten).
+  static #replicaWrite = Promise.resolve();
+
   // The batches this browser has filed above a number, oldest first - what a tab reads before it
   // sends, so that what it ships is the queue as the DATABASE holds it rather than as messages
   // happened to reach it.
@@ -415,9 +418,11 @@ export default class Durability {
   // The identity this browser presents, kept so that the next page load can ignore the fresh pair
   // it is offered and go on numbering where this one left off.
   static persistReplica(replica) {
-    return Durability.#write([META], (transaction) => {
+    Durability.#replicaWrite = Durability.#write([META], (transaction) => {
       transaction.objectStore(META).put(replica, "replica");
     });
+
+    return Durability.#replicaWrite;
   }
 
   // The store brought to what this tab holds in memory, where the two name different places - what
@@ -482,6 +487,17 @@ export default class Durability {
     });
 
     return placeless;
+  }
+
+  // Settles once every identity write started so far has - what a send waits on, so nothing goes
+  // out under an identity still on its way to the store (see Batches.flush). Writes to the same store
+  // commit in the order they were made, so the last one settling means every earlier one has.
+  //
+  // Not every write is awaited where it is made: the restore writes a fresh pair and goes on, and
+  // the tab's first send can follow at once. A reload landing between the two would take up yet
+  // another pair, and send the same batch again under it.
+  static replicaWritten() {
+    return Durability.#replicaWrite;
   }
 
   // Takes up what the previous page load left, and answers the three things the runtime resumes
@@ -582,8 +598,9 @@ export default class Durability {
     // load would abandon the numbering its batches are identified by. Somebody else signing in is
     // the one case where the held pair goes too: it was minted for the previous owner, or for a
     // session that is no longer theirs - and the leader writes the page's pair in its place, once
-    // for the group. A follower writes none: it presents no identity of its own to the server, and
-    // the pair the leader settled on reaches it with the group's state.
+    // for the group, which its first send waits for (see replicaWritten). A follower writes none:
+    // it presents no identity of its own to the server, and the pair the leader settled on reaches
+    // it with the group's state.
     if (loaded.replica !== null && !ownerChanged) {
       Replica.adopt(loaded.replica);
     } else if (leader) {
@@ -621,6 +638,7 @@ export default class Durability {
 
     Durability.#loaded = null;
     Durability.#persistenceAsked = false;
+    Durability.#replicaWrite = Promise.resolve();
   }
 
   static #close() {
