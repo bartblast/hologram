@@ -1387,10 +1387,11 @@ defmodule Hologram.DB.IndexPlanTest do
 
       mapping = Mapper.derive!([Module1, Ref, RefB], [])
 
-      message = """
-      colliding derived names - rename the declarations so that every derived name is unique:
-        * index "db_index_plan_test_ref_b_c_id_$idx" is derived from an index on Hologram.DB.IndexPlanTest.Ref by b_c_id, an index on Hologram.DB.IndexPlanTest.RefB by c_id\
-      """
+      message =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "db_index_plan_test_ref_b_c_id_$idx" is derived from an index on Hologram.DB.IndexPlanTest.Ref by b_c_id, an index on Hologram.DB.IndexPlanTest.RefB by c_id\
+        """)
 
       assert_raise Hologram.CompileError, message, fn -> framework_plan(mapping) end
     end
@@ -1486,10 +1487,11 @@ defmodule Hologram.DB.IndexPlanTest do
       foo = mapping[Foo].table
       foo_bar = mapping[FooBar].table
 
-      message = """
-      colliding derived names - rename the declarations so that every derived name is unique:
-        * index "db_index_plan_test_foo_bar_baz_$idx" is derived from an index on Hologram.DB.IndexPlanTest.Foo by bar_baz, an index on Hologram.DB.IndexPlanTest.FooBar by baz\
-      """
+      message =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "db_index_plan_test_foo_bar_baz_$idx" is derived from an index on Hologram.DB.IndexPlanTest.Foo by bar_baz, an index on Hologram.DB.IndexPlanTest.FooBar by baz\
+        """)
 
       assert_raise Hologram.CompileError, message, fn ->
         select([need(foo, ["bar_baz"]), need(foo_bar, ["baz"])], mapping)
