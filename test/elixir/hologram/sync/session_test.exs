@@ -549,6 +549,221 @@ defmodule Hologram.Sync.SessionTest do
     end
   end
 
+  describe "start_link/1 - coming back to rows lost before the held read" do
+    setup do
+      windows(%{})
+
+      parent = DB.create!(PolicyModule1.new())
+
+      child =
+        [parent_id: parent.id]
+        |> PolicyModule5.new()
+        |> DB.create!()
+
+      %{child: child, parent: parent}
+    end
+
+    # Every frame up to the marker saying the client holds everything, each as `{deltas, applied
+    # seq}`.
+    defp await_frames(acc \\ []) do
+      receive do
+        {:sync_deltas, _cursor, deltas, applied_seq} ->
+          await_frames([{deltas, applied_seq} | acc])
+
+        {:sync_synced, :all, _cursor} ->
+          Enum.reverse(acc)
+      after
+        1_000 -> flunk("the client was never told it holds everything")
+      end
+    end
+
+    # The rows the frames told by hash, per type, each checked against the hashes of the given
+    # candidates.
+    defp hashed(frames, candidates) do
+      for {deltas, _seq} <- frames,
+          %{data: %{hashes: hashes, salt: salt}, op: :unsync_hashed, type: type} <- deltas,
+          hash <- hashes,
+          id <- candidates,
+          Frame.drop_hash(salt, id) == hash,
+          do: {type, id}
+    end
+
+    test "drops by hash a row whose parent went private while away", %{
+      child: child,
+      parent: parent
+    } do
+      gap = [logged(:patch_entity, PolicyModule1, parent.id, %{"public" => false}, {300, 1})]
+
+      start_session!(applied_seq: 3, gap: gap, replica_id: @replica_id)
+
+      frames = await_frames()
+
+      hashed_rows =
+        frames
+        |> hashed([child.id, parent.id])
+        |> Enum.sort()
+
+      assert hashed_rows == [
+               {"Hologram.Test.Fixtures.Policy.Module1", parent.id},
+               {"Hologram.Test.Fixtures.Policy.Module5", child.id}
+             ]
+
+      # No number: the client doesn't take a write of its own to a row whose set the drop changes
+      # as being in what it holds.
+      for {deltas, seq} <- frames, Enum.any?(deltas, &(&1.op == :unsync_hashed)) do
+        assert seq == nil
+      end
+
+      refute Enum.any?(frames, fn {deltas, _seq} ->
+               Enum.any?(deltas, &(&1.op == :unsync_entity))
+             end)
+    end
+
+    # The batch is read after the gap, which holds nothing of it, and below the edge read once the
+    # catch-up is over.
+    test "drops by hash a row a batch routed during the catch-up hid", %{
+      child: child,
+      parent: parent
+    } do
+      DB.update!(PolicyModule1, parent.id, public: true)
+
+      test_pid = self()
+      read_ids = read_ids_in_sandbox()
+
+      read_ids_routing = fn entity_type, actor_user_id ->
+        if entity_type == Module2 do
+          send(test_pid, :reading)
+
+          receive do
+            :routed -> :ok
+          end
+        end
+
+        read_ids.(entity_type, actor_user_id)
+      end
+
+      session = start_session!(gap: [], read_ids: read_ids_routing)
+
+      assert_receive :reading
+      DB.update!(PolicyModule1, parent.id, public: false)
+      route([live_effect(:patch_entity, PolicyModule1, parent.id, %{"public" => false})], {1, 0})
+      send(session, :routed)
+
+      assert_receive {:sync_synced, :all, _cursor}
+
+      # The held ids of both types are read after the parent went private, so neither row is held:
+      # the batch tells both by hash, each type in a frame of its own.
+      assert_receive {:sync_deltas, _cursor, first, nil}
+      assert_receive {:sync_deltas, _cursor, second, nil}
+
+      hashed_rows =
+        [{first, nil}, {second, nil}]
+        |> hashed([child.id, parent.id])
+        |> Enum.sort()
+
+      assert hashed_rows == [
+               {"Hologram.Test.Fixtures.Policy.Module1", parent.id},
+               {"Hologram.Test.Fixtures.Policy.Module5", child.id}
+             ]
+    end
+
+    # The chunk's search walks the tables as they stand once the child moved, so it no longer
+    # reaches the child from the parent - and the move's own batch, routed meanwhile, finds the
+    # child hidden and not held.
+    test "drops by hash a row its parent's going private hid that then moved", %{
+      child: child,
+      parent: parent
+    } do
+      other_parent = DB.create!(PolicyModule1.new())
+      read_part = read_part_in_sandbox()
+      test_pid = self()
+
+      read_part_after_move = fn effects, actor_user_id, edges, synced_types, place, above ->
+        send(test_pid, :reading_chunk)
+
+        receive do
+          :moved -> :ok
+        end
+
+        read_part.(effects, actor_user_id, edges, synced_types, place, above)
+      end
+
+      gap = [logged(:patch_entity, PolicyModule1, parent.id, %{"public" => false}, {300, 1})]
+
+      session = start_session!(gap: gap, read_part: read_part_after_move)
+
+      assert_receive :reading_chunk
+      DB.update!(PolicyModule5, child.id, parent_id: other_parent.id)
+
+      moved = %{
+        live_effect(:patch_entity, PolicyModule5, child.id, %{"parent_id" => other_parent.id})
+        | old: %{"parent_id" => parent.id}
+      }
+
+      route([moved], {1, 0})
+      send(session, :moved)
+
+      chunk_frames = await_frames()
+
+      assert hashed(chunk_frames, [child.id]) == []
+
+      assert_receive {:sync_deltas, _cursor, deltas, nil}
+
+      assert hashed([{deltas, nil}], [child.id]) == [
+               {"Hologram.Test.Fixtures.Policy.Module5", child.id}
+             ]
+    end
+
+    # Both chunks reach the rows the parent's going private hid, and the first settles them.
+    test "drops by hash once a row two chunks of the gap reach", %{child: child, parent: parent} do
+      put_app_env(:sync, rows_per_frame: 1)
+
+      gap = [
+        logged(:patch_entity, PolicyModule1, parent.id, %{"public" => false}, {300, 1}),
+        logged(:patch_entity, PolicyModule1, parent.id, %{"public" => false}, {300, 2})
+      ]
+
+      start_session!(gap: gap)
+
+      hashed_rows =
+        await_frames()
+        |> hashed([child.id, parent.id])
+        |> Enum.sort()
+
+      assert hashed_rows == [
+               {"Hologram.Test.Fixtures.Policy.Module1", parent.id},
+               {"Hologram.Test.Fixtures.Policy.Module5", child.id}
+             ]
+    end
+
+    test "tells nothing of a row its user never could read whose rename is in the gap", %{
+      parent: parent
+    } do
+      gap = [logged(:patch_entity, PolicyModule1, parent.id, %{"priority" => 5}, {300, 1})]
+
+      start_session!(gap: gap)
+
+      assert await_frames() == []
+    end
+
+    test "drops by hash, never by id, a row created and hidden in the gap" do
+      created = DB.create!(PolicyModule1.new())
+      data = %{"id" => created.id, "public" => false}
+
+      start_session!(gap: [logged(:put_entity, PolicyModule1, created.id, data, {300, 1})])
+
+      frames = await_frames()
+
+      assert hashed(frames, [created.id]) == [
+               {"Hologram.Test.Fixtures.Policy.Module1", created.id}
+             ]
+
+      refute Enum.any?(frames, fn {deltas, _seq} ->
+               Enum.any?(deltas, &(&1.op == :unsync_entity))
+             end)
+    end
+  end
+
   describe "start_link/1 - coming back to sets" do
     setup do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{

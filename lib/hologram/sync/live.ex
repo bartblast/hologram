@@ -41,6 +41,7 @@ defmodule Hologram.Sync.Live do
 
   @type part :: %{
           checked: %{module => binary},
+          moved: %{module => binary},
           overtaking_seqs: %{String.t() => non_neg_integer},
           own_seqs: %{String.t() => non_neg_integer},
           pair_effects: %{{module, atom, module} => binary},
@@ -70,6 +71,12 @@ defmodule Hologram.Sync.Live do
     `readable` is one the user may not read now, or one that is gone. Packed because it goes to
     every session: a binary that size is shared between the processes it is sent to, where a set
     of ids is copied into each of them.
+  - `moved` - the checked rows whose read access the batch may have moved, per entity type, packed:
+    the rows the backwards search reached, and the batch's own rows it created, deleted, or patched
+    on an attribute their type's read rule reads. The only rows a client can have lost without its
+    session knowing it held them (see `Hologram.Sync.Session`): a row the batch only renamed
+    reads as it did, and a pair moves only the rows whose rules read its set, which the search
+    reaches
   - `pair_effects` - the pairs the batch added or removed, once however many times it moved each,
     keyed by `{source type, relationship name, target type}`, the name an atom, each pair packed as
     its source id and its target id (see `Hologram.Sync.PackedIds.pack_pairs/1`)
@@ -212,6 +219,12 @@ defmodule Hologram.Sync.Live do
       |> merge_rows(searched.rows)
       |> Map.filter(fn {entity_type, _ids} -> MapSet.member?(synced, entity_type) end)
 
+    moved =
+      effects
+      |> moved_rows(synced_edges)
+      |> merge_rows(searched.rows)
+      |> Map.filter(fn {entity_type, _ids} -> MapSet.member?(synced, entity_type) end)
+
     rechecked = recheck(checked, user_ids)
 
     pairs = pairs_touching(checked, synced_types)
@@ -221,6 +234,7 @@ defmodule Hologram.Sync.Live do
 
     shared = %{
       checked: Map.new(checked, fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end),
+      moved: Map.new(moved, fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end),
       overtaking_seqs: overtaking_seqs,
       own_seqs: own_seqs(effects),
       pair_effects: pack_pair_effects(pair_effects),
@@ -332,6 +346,42 @@ defmodule Hologram.Sync.Live do
   defp merge_rows(rows, more_rows) do
     Map.merge(rows, more_rows, fn _entity_type, ids, more_ids -> MapSet.union(ids, more_ids) end)
   end
+
+  # The batch's own rows whose read access it may have moved: one it created or deleted, and one it
+  # patched on an attribute its type's read rule reads - as the log spells the attribute, so nothing
+  # read from it becomes an atom.
+  defp moved_rows(effects, edges) do
+    read_names =
+      effects
+      |> Enum.map(& &1.type)
+      |> Enum.uniq()
+      |> Map.new(&{&1, own_read_names(edges, &1)})
+
+    effects
+    |> Enum.filter(&own_row_moved?(&1, read_names))
+    |> Enum.group_by(& &1.type, & &1.entity_id)
+    |> Map.new(fn {entity_type, ids} -> {entity_type, MapSet.new(ids)} end)
+  end
+
+  defp own_read_names(edges, entity_type) do
+    for {:attributes, names} <- Map.get(edges, {entity_type, :read}, []),
+        name <- names,
+        into: MapSet.new(),
+        do: Atom.to_string(name)
+  end
+
+  defp own_row_moved?(%{op: op}, _read_names) when op in [:del_entity, :put_entity], do: true
+
+  defp own_row_moved?(%{data: data, op: :patch_entity, type: entity_type}, read_names)
+       when is_map(data) do
+    names = Map.get(read_names, entity_type, MapSet.new())
+
+    data
+    |> Map.keys()
+    |> Enum.any?(&MapSet.member?(names, &1))
+  end
+
+  defp own_row_moved?(_effect, _read_names), do: false
 
   defp own_rows(effects, pair_effects) do
     entity_rows =

@@ -66,8 +66,14 @@ defmodule Hologram.Sync.PotTest do
       |> Map.merge(Keyword.get(opts, :unreadable, %{}), fn _type, ids, more -> ids ++ more end)
       |> Map.new(fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end)
 
+    moved =
+      opts
+      |> Keyword.get(:moved, %{})
+      |> Map.new(fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end)
+
     %{
       checked: checked,
+      moved: moved,
       pair_effects: pack_pairs(Keyword.get(opts, :pair_effects, %{})),
       pairs: pack_pairs(Keyword.get(opts, :pairs, %{})),
       readable: readable,
@@ -118,7 +124,7 @@ defmodule Hologram.Sync.PotTest do
 
       {news, told} = decide(pot(%{Project => [@id_1]}), part(readable: [project]))
 
-      assert news == %{appeared: [], edges: [], patched: [], unsynced: []}
+      assert news == %{appeared: [], edges: [], hidden: [], patched: [], unsynced: []}
       assert Held.ids(told.held, Project) == [@id_1]
     end
 
@@ -136,7 +142,7 @@ defmodule Hologram.Sync.PotTest do
 
       {news, told} = decide(Pot.new(), part)
 
-      assert news == %{appeared: [], edges: [], patched: [], unsynced: []}
+      assert news == %{appeared: [], edges: [], hidden: [], patched: [], unsynced: []}
       assert told == Pot.new()
     end
 
@@ -526,6 +532,37 @@ defmodule Hologram.Sync.PotTest do
 
       assert news.unsynced == [{@id_1, Project}]
     end
+
+    test "tells by hash the moved rows the user may not read that the client isn't taken to hold" do
+      part =
+        part(
+          moved: %{Project => [@id_3, @id_1, @id_2]},
+          readable: [%Project{id: @id_2, public: true}],
+          unreadable: %{Project => [@id_1, @id_3]}
+        )
+
+      {news, told} = decide(pot(%{Project => [@id_3]}), part, hidden_salt: "q3Vx")
+
+      assert news.hidden == [{Project, "q3Vx", [@id_1]}]
+      assert news.unsynced == [{@id_3, Project}]
+      assert Held.ids(told.dropped, Project) == [@id_3]
+    end
+
+    test "tells nothing by hash of a row the batch checked but didn't move" do
+      part = part(unreadable: %{Project => [@id_1]})
+
+      {news, _told} = decide(Pot.new(), part, hidden_salt: "q3Vx")
+
+      assert news.hidden == []
+    end
+
+    test "tells nothing by hash without a salt" do
+      part = part(moved: %{Project => [@id_1]}, unreadable: %{Project => [@id_1]})
+
+      {news, _told} = decide(Pot.new(), part)
+
+      assert news.hidden == []
+    end
   end
 
   describe "drop/3 and hand_over/3" do
@@ -599,7 +636,7 @@ defmodule Hologram.Sync.PotTest do
       {news, _told} =
         reread(pot(%{Label => [@id_2]}), Label, rows, fn _ids -> flunk("read pairs") end)
 
-      assert news == %{appeared: [], edges: [], patched: [], unsynced: []}
+      assert news == %{appeared: [], edges: [], hidden: [], patched: [], unsynced: []}
     end
 
     test "hands a row over with its sets holding only the rows the client holds" do

@@ -131,6 +131,10 @@ defmodule Hologram.Sync.Session do
       announced: MapSet.new(),
       applied_seq: Keyword.get(opts, :applied_seq),
       cut: nil,
+      # The salt a returning client's catch-up hashes the rows it may hold and lost by (see
+      # `tell_part/3`), one per session, so every frame of the catch-up and the batches after it
+      # hash alike, and the client works the hashes of what it holds out once.
+      drop_salt: if(resuming, do: Frame.drop_salt()),
       fill_place: Keyword.get(opts, :fill_place),
       outbox: Outbox.new(client, Keyword.get(opts, :outbox, [])),
       page: Keyword.fetch!(opts, :page),
@@ -361,6 +365,10 @@ defmodule Hologram.Sync.Session do
   # read is in the gap or in a batch after it, and either finds it held and takes it away. But what
   # the session takes the client to hold is read, not known - a row the user may read now can be one
   # the client never got - so every row the gap reaches that the user may read is handed over whole.
+  # And a row the client holds that its user lost before the read is missing from it, so every row
+  # the gap may have moved out of the user's reach that the session doesn't take the client to hold
+  # is told by hash (see `Hologram.Sync.Frame.unsync_hashed/3`): the client drops it if it has it,
+  # and learns nothing of it if not.
   #
   # The batches that reach the session meanwhile queue behind this callback, and are told after it
   # (see `trusts_held?/2`).
@@ -464,24 +472,26 @@ defmodule Hologram.Sync.Session do
       Map.reject(rows, fn {id, _value} -> Held.member?(settled, entity_type, id) end)
     end
 
-    checked =
-      Map.new(part.checked, fn {entity_type, packed_ids} ->
+    unsettled_ids = fn packed_by_type ->
+      Map.new(packed_by_type, fn {entity_type, packed_ids} ->
         {_settled, rest} = Held.split(settled, entity_type, packed_ids)
 
         {entity_type, rest}
       end)
+    end
 
     %{
       part
-      | checked: checked,
+      | checked: unsettled_ids.(part.checked),
+        moved: unsettled_ids.(part.moved),
         readable: Map.new(part.readable, fn {type, rows} -> {type, unsettled.(type, rows)} end),
         verdicts: Map.new(part.verdicts, fn {type, rows} -> {type, unsettled.(type, rows)} end)
     }
   end
 
   # What a chunk settled, given what the session took the client to hold before it: every row the
-  # user may read is handed over whole, and every held row it checked that the user may not is
-  # dropped.
+  # user may read is handed over whole, every held row it checked that the user may not is
+  # dropped, and every other row it may have moved out of the user's reach is told by hash.
   defp settle(settled, part, pot) do
     Enum.reduce(part.checked, settled, fn {entity_type, packed_ids}, acc ->
       {held, _not_held} = Held.split(pot.held, entity_type, packed_ids)
@@ -491,7 +501,12 @@ defmodule Hologram.Sync.Session do
         |> Map.get(entity_type, %{})
         |> Map.keys()
 
-      Held.add(acc, entity_type, readable_ids ++ PackedIds.unpack(held))
+      moved_ids =
+        part.moved
+        |> Map.get(entity_type, "")
+        |> PackedIds.unpack()
+
+      Held.add(acc, entity_type, readable_ids ++ PackedIds.unpack(held) ++ moved_ids)
     end)
   end
 
@@ -634,7 +649,19 @@ defmodule Hologram.Sync.Session do
   # pair filed under a row the client already holds: the client takes a pair as a write to that
   # row, which isn't restated. So the pairs go in a frame of their own, under the session's number -
   # a pair applied twice changes nothing.
-  defp send_news(state, %{edges: edges} = news, verdicts, claim)
+  #
+  # The rows told by hash go in frames of their own, claiming no number at all: the client drops
+  # what it holds of them and of the sets naming them under rows these frames don't restate, and a
+  # number would have it take its own writes to those rows as being in what it holds.
+  defp send_news(state, news, verdicts, claim) do
+    {hidden, rows_news} = Map.pop(news, :hidden, [])
+
+    state
+    |> send_rows(rows_news, verdicts, claim)
+    |> send_hidden(hidden)
+  end
+
+  defp send_rows(state, %{edges: edges} = news, verdicts, claim)
        when claim != state.applied_seq and edges != [] do
     state
     |> send_frames(%{news | edges: []}, verdicts, claim)
@@ -645,7 +672,25 @@ defmodule Hologram.Sync.Session do
     )
   end
 
-  defp send_news(state, news, verdicts, claim), do: send_frames(state, news, verdicts, claim)
+  defp send_rows(state, news, verdicts, claim), do: send_frames(state, news, verdicts, claim)
+
+  # Split by the frame size as the rows handed over are, so no frame carries more hashes than it
+  # would rows.
+  defp send_hidden(state, hidden) do
+    hidden
+    |> Enum.flat_map(fn {entity_type, salt, ids} ->
+      ids
+      |> Enum.chunk_every(Catchup.rows_per_frame())
+      |> Enum.map(&{entity_type, salt, &1})
+    end)
+    |> Enum.reduce(state, fn entry, acc ->
+      news = %{appeared: [], edges: [], hidden: [entry], patched: [], unsynced: []}
+
+      acc
+      |> send_unsent(nil)
+      |> Map.put(:unsent, {Frame.deltas(news, acc.actor_user_id), nil})
+    end)
+  end
 
   # Only the batch's last frame carries its place. The client keeps each frame's cursor as the frame
   # lands, so an earlier frame carrying it would have a client cut off after that frame come back
@@ -692,6 +737,11 @@ defmodule Hologram.Sync.Session do
   #
   # Given `trust_held?: false`, every row the user may read is handed over whole whatever the
   # session takes the client to hold - a catch-up's chunk, whose held ids were read rather than told.
+  # A returning client's session also tells such a part's rows the user may have lost by hash, as
+  # it does one with a transaction below the edge read after the catch-up: a change after the gap
+  # was read can take a hidden row out of reach of a chunk's search - a task its project's going
+  # private hid moving to another private project before the chunk walks the tables - and the
+  # change's own batch then finds the row hidden and not held.
   defp tell_part(state, part, opts \\ []) do
     own_seq = state.replica_id && Map.get(part.own_seqs, state.replica_id)
     overtaking_seq = state.replica_id && Map.get(part.overtaking_seqs, state.replica_id)
@@ -705,18 +755,12 @@ defmodule Hologram.Sync.Session do
     overtaken? = overtaken?(placed.applied_seq, overtaking_seq)
     trust_given? = Keyword.get(opts, :trust_held?, true)
     trust_held? = trust_given? and trusts_held?(placed, part) and not overtaken?
-    {news, pot} = Pot.decide(placed.pot, part, trust_held?: trust_held?)
+    hidden_salt = unless trust_given? and trusts_held?(placed, part), do: state.drop_salt
 
-    # A row handed over whole travels with its verdicts, and none held is patched when held isn't
-    # trusted. The verdicts are the part's, read in the batch's recheck.
-    stale =
-      if trust_held? do
-        placed.pot
-        |> Pot.verdict_rows(part)
-        |> Verdicts.moved(placed.told_verdicts)
-      else
-        []
-      end
+    {news, pot} =
+      Pot.decide(placed.pot, part, trust_held?: trust_held?, hidden_salt: hidden_salt)
+
+    stale = stale_verdicts(placed, part, trust_held?)
 
     decided = %{placed | pot: pot}
     claim = if overtaken?, do: overtaking_seq, else: placed.applied_seq
@@ -732,6 +776,16 @@ defmodule Hologram.Sync.Session do
     |> Enum.reduce(told, &reread_type(&1, &2, part.synced_types, reread_trust?))
     |> flush_frames()
   end
+
+  # A row handed over whole travels with its verdicts, and none held is patched when held isn't
+  # trusted. The verdicts are the part's, read in the batch's recheck.
+  defp stale_verdicts(state, part, true = _trust_held?) do
+    state.pot
+    |> Pot.verdict_rows(part)
+    |> Verdicts.moved(state.told_verdicts)
+  end
+
+  defp stale_verdicts(_state, _part, false = _trust_held?), do: []
 
   defp overtaken?(_told_seq, nil), do: false
 
