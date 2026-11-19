@@ -54,6 +54,28 @@ defmodule HologramFeatureTests.SyncedTypesTest do
     assert [_alpha, _added] = await_server_todos(2)
   end
 
+  # No window reads bookmarks, so before, a change to one never reached a browser that already held
+  # it: what a client is told live goes by what its user may read.
+  feature "changes live a row of a type only an action reads", %{session: session} do
+    bookmark =
+      %{label: "draft"}
+      |> Bookmark.new()
+      |> DB.create!()
+
+    session =
+      session
+      |> visit(SyncedTypesPage)
+      |> await_local_fill()
+      |> mark_this_page_load()
+      |> await_local_read("Read the labels", "labels", "draft")
+
+    DB.update!(Bookmark, bookmark.id, label: "pinned")
+
+    session
+    |> await_local_read("Read the labels", "labels", "pinned")
+    |> assert_same_page_load()
+  end
+
   # No query on any page reads bookmarks, only an action does - so before, no row of one ever
   # reached the browser, and the action found nothing.
   feature "fills a type only an action reads", %{session: session} do

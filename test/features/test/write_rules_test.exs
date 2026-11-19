@@ -1,4 +1,4 @@
-defmodule HologramFeatureTests.WriteClaimsTest do
+defmodule HologramFeatureTests.WriteRulesTest do
   use HologramFeatureTests.TestCase, async: false
 
   alias Hologram.Auth.RoleGrant
@@ -9,7 +9,7 @@ defmodule HologramFeatureTests.WriteClaimsTest do
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.User
-  alias HologramFeatureTests.WriteClaimsPage
+  alias HologramFeatureTests.WriteRulesPage
 
   # All the tables truncate in one statement: the memo, note, project member and role grant tables'
   # foreign keys to the user table make Postgres reject truncating the referenced table alone.
@@ -26,7 +26,7 @@ defmodule HologramFeatureTests.WriteClaimsTest do
 
   defp log_in(session) do
     session
-    |> visit(WriteClaimsPage)
+    |> visit(WriteRulesPage)
     |> click(button("Log in"))
     |> assert_text(css("#result"), "logged_in")
   end
@@ -57,7 +57,7 @@ defmodule HologramFeatureTests.WriteClaimsTest do
     assert [%Note{body: "by server"}] = DB.read(Note)
   end
 
-  feature "denies a note claimed for a user who is not its author", %{session: session} do
+  feature "denies a note for a user who is not its author", %{session: session} do
     session
     |> log_in()
     |> click(button("Add note as other"))
@@ -73,7 +73,10 @@ defmodule HologramFeatureTests.WriteClaimsTest do
     session
     |> log_in()
     |> click(button("Pin pinned note"))
-    |> assert_text(css("#result"), ~r/^not allowed to pin HologramFeatureTests\.Entities\.Note /)
+    |> assert_text(
+      css("#result"),
+      ~r/^not allowed to update HologramFeatureTests\.Entities\.Note .+ - no allow line that holds covers :pinned$/
+    )
   end
 
   feature "deletes a note on its owner's authority", %{session: session} do
@@ -83,6 +86,18 @@ defmodule HologramFeatureTests.WriteClaimsTest do
     |> assert_text(css("#result"), "deleted_own_note")
 
     assert DB.read(Note) == []
+  end
+
+  feature "denies a change to a field no update line covers", %{session: session} do
+    session
+    |> log_in()
+    |> click(button("Edit note body"))
+    |> assert_text(
+      css("#result"),
+      ~r/^not allowed to update HologramFeatureTests\.Entities\.Note .+ - no allow line that holds covers :body$/
+    )
+
+    assert [%Note{body: "seeded"}] = DB.read(Note)
   end
 
   feature "pins a note on an editor's authority", %{session: session} do

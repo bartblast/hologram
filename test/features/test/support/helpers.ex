@@ -17,6 +17,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Bookmark
+  alias HologramFeatureTests.Entities.Bulletin
   alias HologramFeatureTests.Entities.Cabin
   alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Document
@@ -306,6 +307,36 @@ defmodule HologramFeatureTests.Helpers do
     else
       Process.sleep(50)
       await_local_fill(session, attempts_left - 1)
+    end
+  end
+
+  @doc """
+  Clicks the button with the given text until the element with the given id shows the given text,
+  then returns the `session`.
+
+  For a page that reads the browser's own database when a button is clicked and shows what it
+  found: it shows what the database held at the last click, and a change reaches the browser on its
+  own time, so the read is asked again until it answers as expected.
+  """
+  @spec await_local_read(Wallaby.Session.t(), String.t(), String.t(), String.t(), non_neg_integer) ::
+          Wallaby.Session.t()
+  def await_local_read(session, button_text, element_id, expected, attempts_left \\ 100)
+
+  def await_local_read(session, _button_text, element_id, expected, 0) do
+    raise Wallaby.ExpectationNotMetError,
+          "Timed out waiting for ##{element_id} to read #{inspect(expected)}, it reads " <>
+            inspect(element_text(session, element_id))
+  end
+
+  def await_local_read(session, button_text, element_id, expected, attempts_left) do
+    clicked = Browser.click(session, Query.button(button_text))
+
+    Process.sleep(50)
+
+    if element_text(clicked, element_id) == expected do
+      clicked
+    else
+      await_local_read(clicked, button_text, element_id, expected, attempts_left - 1)
     end
   end
 
@@ -968,6 +999,7 @@ defmodule HologramFeatureTests.Helpers do
         Account,
         Booking,
         Bookmark,
+        Bulletin,
         Cabin,
         Channel,
         Document,
@@ -1413,5 +1445,12 @@ defmodule HologramFeatureTests.Helpers do
       :timer.sleep(100)
       wait_for_js_error(session, start_time)
     end
+  end
+
+  defp element_text(session, element_id) do
+    script_result(
+      session,
+      "return document.getElementById('#{element_id}')?.textContent ?? null;"
+    )
   end
 end

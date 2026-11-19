@@ -2,8 +2,9 @@ defmodule Hologram.Sync.Supervisor do
   @moduledoc false
 
   # Everything a node needs to keep its clients up to date: where results live, where evaluators
-  # are found and started, the connection that hears about writes, and the dispatcher that reads
-  # them. Sessions are not here - each belongs to a connection and is started by it.
+  # are found and started, where the sync sessions on the node are listed, the connection that
+  # hears about writes, and the dispatcher that reads them. The sessions themselves are not here -
+  # each belongs to a connection and is started by it.
   #
   # Started inside the database unit rather than beside it, so that a database restart takes sync
   # with it: what evaluators hold was read through that connection, and the windows they run come
@@ -24,9 +25,10 @@ defmodule Hologram.Sync.Supervisor do
   alias Hologram.Sync.Dispatcher
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
-  alias Hologram.Sync.Fanout
+  alias Hologram.Sync.Live
   alias Hologram.Sync.ReadEdge
   alias Hologram.Sync.ResultStore
+  alias Hologram.Sync.Sessions
 
   @notifications Hologram.Sync.Notifications
 
@@ -51,6 +53,7 @@ defmodule Hologram.Sync.Supervisor do
       ResultStore,
       Evaluators,
       ReadEdge,
+      Sessions,
       {Listener, name: @notifications},
       dispatcher_child()
     ]
@@ -65,18 +68,25 @@ defmodule Hologram.Sync.Supervisor do
     # a window it cannot see, and each client sits on the last thing it was told. A notifications
     # connection replaced on its own leaves the dispatcher listening to a process that is gone,
     # which nothing reports either: it falls back to its poll and is merely slower forever.
+    #
+    # The session list comes after the read edge for the same reason, from the other side: a read
+    # edge replaced starts the dispatcher at the log's edge as it stands, past the batches it had
+    # not read yet, and a session left running would claim a place past them. Replacing the list
+    # stops every session that registered in it (see `Hologram.Sync.Sessions`), so its client comes
+    # back through the doors and is caught up.
     Supervisor.init(children, strategy: :rest_for_one)
   end
 
   # The dispatcher comes after what it hands work to: it starts reading straight away, and what it
-  # reads goes to evaluators found through the registry started before it. It comes after the read
-  # edge for the same reason - a restart resumes from what that kept, which it can only read from a
+  # reads goes to the evaluators found through the registry started before it, and to the sessions
+  # listed before it. It comes after the read edge for the same reason - a restart resumes from what
+  # that kept, which it can only read from a read edge that is already up.
   #
   # Being last but one is what makes keeping the edge worth it: nothing before the dispatcher is
   # restarted when the dispatcher dies, so it comes back beside the same evaluators and the same
   # sessions - which go on advancing from the rounds it sends, and would be carried past the
   # window it was reading if it resumed anywhere but where it left off.
   defp dispatcher_child do
-    {Dispatcher, handler: &Fanout.route/2, notifications: @notifications, read_edge: ReadEdge}
+    {Dispatcher, handler: &Live.route/2, notifications: @notifications, read_edge: ReadEdge}
   end
 end

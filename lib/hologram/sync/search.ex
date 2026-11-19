@@ -23,6 +23,7 @@ defmodule Hologram.Sync.Search do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
+  alias Hologram.Policy.Edges
 
   @whole_row_ops [:del_entity, :put_entity]
 
@@ -43,7 +44,7 @@ defmodule Hologram.Sync.Search do
   type or an op this node does not know is passed over, with or without data.
 
   Edges are the policy dependency index (see `Hologram.Policy.Edges.index/0`), passed in rather
-  than read here. The read rules' edges are followed, and the verdicts' (`{type, :verdicts}`): a
+  than read here. The read rules' edges are followed, and the verdicts' (`{type, {:verdicts}}`): a
   row whose verdicts may have moved is checked again like one whose access may have, and a check
   gives its verdicts beside its readers (see `Hologram.Sync.Recheck.run/2`). The other operations'
   edges aren't followed: a browser answers the rest of their rules from the rows it holds.
@@ -52,7 +53,7 @@ defmodule Hologram.Sync.Search do
   the caller has them. So a change to a column no read rule or verdict reads lists nothing. A
   listed row may be gone, which reading it again answers.
   """
-  @spec candidates(list(map), %{{module, atom} => list(tuple)}) :: %{
+  @spec candidates(list(map), Edges.t()) :: %{
           rows: %{module => MapSet.t(String.t())},
           whole_types: %{module => MapSet.t(String.t())}
         }
@@ -225,12 +226,24 @@ defmodule Hologram.Sync.Search do
     grant["entity_type"] == type and grant["role"] in roles
   end
 
-  defp join_table(mapping, entity_type, relationship_name) do
-    mapping
-    |> Map.fetch!(entity_type)
-    |> Map.fetch!(:join_tables)
-    |> Enum.find(&(&1.relationship == relationship_name))
-    |> Map.fetch!(:name)
+  @doc false
+  # The join table storing the pairs of the given to-many of the given entity type - a to-many the
+  # model declares, so one the mapping has no table for is this build being wrong about itself.
+  @spec join_table(%{module => map}, module, atom) :: String.t()
+  def join_table(mapping, entity_type, relationship_name) do
+    join_tables =
+      mapping
+      |> Map.fetch!(entity_type)
+      |> Map.fetch!(:join_tables)
+
+    case Enum.find(join_tables, &(&1.relationship == relationship_name)) do
+      %{name: name} ->
+        name
+
+      nil ->
+        raise ArgumentError,
+              "no join table for #{inspect(entity_type)}.#{relationship_name} in the mapping"
+    end
   end
 
   # What the walk's last step needs from an effect, resolved once per edge.
@@ -326,7 +339,10 @@ defmodule Hologram.Sync.Search do
     end
   end
 
-  defp qualified_table(table) do
+  @doc false
+  # The given table of the data schema, quoted the way every statement spells it.
+  @spec qualified_table(String.t()) :: String.t()
+  def qualified_table(table) do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"
   end
 
@@ -456,7 +472,7 @@ defmodule Hologram.Sync.Search do
   defp triggers(edges) do
     edges
     |> Enum.flat_map(fn
-      {{entity_type, key}, key_edges} when key in [:read, :verdicts] ->
+      {{entity_type, key}, key_edges} when key in [:read, {:verdicts}] ->
         Enum.map(key_edges, &{entity_type, &1})
 
       {_pair, _edges} ->

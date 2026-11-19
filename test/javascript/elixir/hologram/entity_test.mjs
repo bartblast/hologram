@@ -293,6 +293,18 @@ describe("Elixir_Hologram_Entity", () => {
       assert.deepEqual(field(entity, "rank"), Type.nil());
     });
 
+    // Defaults are baked only for the attributes declaring one, in a plain object, so a name
+    // spelled like one of Object.prototype's properties must find no default rather than the
+    // property.
+    it("defaults an attribute named like a prototype property to nil", () => {
+      globalThis.Hologram.sync.model[ACCOUNT].attributes.constructor = "string";
+      Model.reset();
+
+      const entity = newEntity(Type.alias(ACCOUNT));
+
+      assert.deepEqual(field(entity, "constructor"), Type.nil());
+    });
+
     it("keeps given attribute values over declared defaults", () => {
       const values = Type.map([[Type.atom("public"), Type.boolean(true)]]);
       const entity = newEntityWithValues(Type.alias(ACCOUNT), values);
@@ -745,6 +757,23 @@ describe("Elixir_Hologram_Entity", () => {
     it("returns :ok for valid changes given as a keyword list", () => {
       const changes = Type.keywordList([
         [Type.atom("handle"), Type.bitstring("bart")],
+      ]);
+
+      assert.deepEqual(
+        validateChanges(Type.alias(ACCOUNT), changes),
+        Type.atom("ok"),
+      );
+    });
+
+    // Constraints are baked only for the attributes declaring one, in a plain object, so a name
+    // spelled like one of Object.prototype's properties must find no constraints rather than the
+    // property.
+    it("judges an attribute named like a prototype property by no constraints", () => {
+      globalThis.Hologram.sync.model[ACCOUNT].attributes.constructor = "string";
+      Model.reset();
+
+      const changes = Type.keywordList([
+        [Type.atom("constructor"), Type.bitstring("bart")],
       ]);
 
       assert.deepEqual(

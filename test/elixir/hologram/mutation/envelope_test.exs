@@ -117,7 +117,6 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
       assert write == %Write{
                based_on: %{},
-               claim: nil,
                data: %{a: true, b: 2, c: "x"},
                entity_type: Module2,
                id: @id,
@@ -135,7 +134,6 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
       assert write == %Write{
                based_on: %{c: 3},
-               claim: nil,
                data: %{c: "x"},
                entity_type: Module2,
                id: @id,
@@ -153,7 +151,6 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
       assert write == %Write{
                based_on: %{a: 1, c: 3},
-               claim: nil,
                data: %{},
                entity_type: Module2,
                id: @id,
@@ -210,7 +207,6 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
       assert write == %Write{
                based_on: %{},
-               claim: nil,
                data: %{},
                entity_type: Module16,
                id: @id,
@@ -267,20 +263,13 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert write.data == %{c_id: @target_id}
     end
 
-    test "parses a claim naming an operation" do
-      entry = create(PolicyModule2, %{"public" => true}, claim: ["authorize", "publish"])
+    test "parses a write with no claim" do
+      entry =
+        Module2
+        |> create(%{"c" => "x"})
+        |> Map.delete("claim")
 
-      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
-
-      assert write.claim == {:authorize, :publish}
-    end
-
-    test "parses a claim naming a framework operation on an entity type declaring nothing" do
-      entry = create(Module2, %{"c" => "x"}, claim: ["authorize", "update"])
-
-      assert {:ok, %Envelope{writes: [write]}} = parse(raw([entry]))
-
-      assert write.claim == {:authorize, :update}
+      assert {:ok, %Envelope{writes: [%Write{op: :create}]}} = parse(raw([entry]))
     end
 
     test "accepts a create of a role grant" do
@@ -291,7 +280,6 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
       assert write == %Write{
                based_on: %{},
-               claim: nil,
                data: %{
                  granted_by_id: @granter_id,
                  entity_id: @target_id,
@@ -319,7 +307,6 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
       assert write == %Write{
                based_on: %{role: 3},
-               claim: nil,
                data: %{
                  entity_id: @target_id,
                  entity_type: PolicyModule2,
@@ -455,7 +442,6 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
       assert write == %Write{
                based_on: %{},
-               claim: nil,
                data: %{outcome: :ok},
                entity_type: JobModule3,
                id: @id,
@@ -695,36 +681,36 @@ defmodule Hologram.Mutation.EnvelopeTest do
                {:error, ~s(write 0: "d" is not a valid float)}
     end
 
-    test "refuses the server's authority as a claim" do
-      entry = create(Module2, %{"c" => "x"}, claim: "trust")
+    # The server judges a write by what it does, so a claim could only ask for more: one naming
+    # the operation a reader holds would let them delete the row (#1633). Refused whatever it
+    # names, on every kind of write.
+    test "refuses a write carrying a claim" do
+      claims = [
+        ["authorize", "read"],
+        ["authorize", "update"],
+        ["authorize", "publish"],
+        "trust",
+        ["nope"],
+        false,
+        "",
+        %{}
+      ]
 
-      assert parse(raw([entry])) ==
-               {:error, "write 0: trust is the server's authority - a client cannot claim it"}
-    end
+      entries = [
+        create(PolicyModule2, %{"public" => true}),
+        update(PolicyModule2, %{"public" => true}),
+        delete(PolicyModule2),
+        edge("add_relationship", Module16, "secrets"),
+        edge("delete_relationship", Module16, "secrets"),
+        create(RoleGrant, grant_data()),
+        delete(RoleGrant, data: grant_data())
+      ]
 
-    test "refuses an operation no atom spells" do
-      entry = create(Module2, %{"c" => "x"}, claim: ["authorize", "no_such_operation_declared"])
-
-      assert parse(raw([entry])) ==
-               {:error,
-                "write 0: claim names no operation Hologram.Test.Fixtures.Entity.Module2 declares: " <>
-                  ~s("no_such_operation_declared")}
-    end
-
-    test "refuses an operation the entity type does not declare" do
-      entry = create(Module2, %{"c" => "x"}, claim: ["authorize", "archive"])
-
-      assert parse(raw([entry])) ==
-               {:error,
-                "write 0: claim names no operation Hologram.Test.Fixtures.Entity.Module2 declares: " <>
-                  ~s("archive")}
-    end
-
-    test "refuses a claim that is neither null nor an authorize pair" do
-      entry = create(Module2, %{"c" => "x"}, claim: ["nope"])
-
-      assert parse(raw([entry])) ==
-               {:error, ~s(write 0: claim must be null or ["authorize", operation])}
+      for claim <- claims, entry <- entries do
+        assert parse(raw([Map.put(entry, "claim", claim)])) ==
+                 {:error,
+                  "write 0: a write claims nothing - the server judges it by what it does"}
+      end
     end
 
     test "refuses a stamp that is not a positive integer" do
@@ -751,15 +737,6 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert parse(raw([entry])) ==
                {:error,
                 ~s(write 0: "user" is not a to-many relationship of Hologram.Auth.RoleGrant)}
-    end
-
-    test "refuses a role grant carrying a claim" do
-      entry = create(RoleGrant, grant_data(), claim: ["authorize", "update"])
-
-      assert parse(raw([entry])) ==
-               {:error,
-                "write 0: a role grant claims nothing - the grant_role and revoke_role rules " <>
-                  "are its gate"}
     end
 
     test "refuses a role grant naming a role its resource type does not declare" do

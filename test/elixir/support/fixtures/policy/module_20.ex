@@ -12,7 +12,11 @@ defmodule Hologram.Test.Fixtures.Policy.Module20 do
   relationship :shelf, Module24, optional: true
   relationship :tags, [Module21]
 
-  allow :archive, when: none(card <- shelf.cards, card.flagged == true)
+  allow :update,
+    as: :archive,
+    only: [:subject],
+    when: none(card <- shelf.cards, card.flagged == true)
+
   allow :read
   allow :update, when: none(label <- project.labels, label.name == "locked")
 end

@@ -37,7 +37,7 @@ export default class Model {
   // asks about, always askable on every type. Pinned on both tiers ("framework_operations/0" in
   // test/elixir/hologram/policy_test.exs, "frameworkOperations" in test/javascript/model_test.mjs).
   // Always update both together. A baked entry's operations list carries these too; this copy
-  // exists so a refusal can say which of a type's operations are its own.
+  // exists so a refusal can say which of a type's operations are the names its lines carry.
   static frameworkOperations = [
     "create",
     "delete",
@@ -199,6 +199,13 @@ export default class Model {
     return Model.entry(type).derived;
   }
 
+  // The value the given baked object holds under the given name, or undefined. Its own keys only:
+  // the baked model is made of plain objects, so a name like constructor or toString would otherwise
+  // read a property of Object.prototype.
+  static own(object, name) {
+    return Object.hasOwn(object, name) ? object[name] : undefined;
+  }
+
   // The derived field of the given name, or null for a name the type declares no derived field by -
   // its own key only, so a name like constructor is no derived field.
   static derivedField(type, name) {
@@ -279,8 +286,10 @@ export default class Model {
   static pathTarget(type, relationshipNames) {
     return relationshipNames.reduce(
       (current, name) =>
-        (Model.relationships(current)[name] ?? Model.inverses(current)[name])
-          .type,
+        (
+          Model.own(Model.relationships(current), name) ??
+          Model.own(Model.inverses(current), name)
+        ).type,
       type,
     );
   }
@@ -341,16 +350,14 @@ export default class Model {
     return `${name}$sort`;
   }
 
-  // The way back over the same boundary: a value written in a query becomes the way the wire
-  // spells it, because that is what the rows it will be compared against hold. A date written as
-  // a date compares with a date written as a string only if one of them stops being what it was,
-  // and the rows cannot be the ones to change.
   // The client's Hologram.Policy.validate_operation!/2: refuses an operation the given entity type
   // cannot be asked about, with the server's own sentences (pinned as pairs in
   // test/elixir/hologram/policy_test.exs and test/javascript/model_test.mjs). A framework
   // operation always passes. An atom passes when the type's baked operations list names it. A
   // {:grant_role, role} / {:revoke_role, role} tuple - a two-tuple of atoms, which is the caller's
-  // shape check to make - passes when the type's baked roles name the role.
+  // shape check to make - passes when the type's baked roles name the role, and an {:update, field}
+  // or {:update, fields} tuple - a field atom or a proper list - when every field it names is one
+  // of #updateFields, a list naming at least one.
   //
   // Read off the raw baked entry, as can?/3 and the role check read it: entry() normalizes the
   // keys the write path indexes into and carries neither of these. A hand-built entry without them
@@ -369,23 +376,38 @@ export default class Model {
         return;
       }
 
-      const own = operations.filter(
+      const names = operations.filter(
         (candidate) => !Model.frameworkOperations.includes(candidate),
       );
 
-      const declared =
-        own.length === 0 ? "no operation of their own" : Model.#joinNames(own);
+      let carried;
+
+      if (names.length === 0) {
+        carried = "carry no name";
+      } else if (names.length === 1) {
+        carried = `carry the name :${names[0]}`;
+      } else {
+        carried = `carry the names ${Model.#joinNames(names)}`;
+      }
 
       Interpreter.raiseMisuseError(
-        `unknown operation ${Interpreter.inspect(operation)} for ${type} - its allow lines declare ${declared}, and the framework's own operations are ${Model.#joinNames(Model.frameworkOperations)}`,
+        `unknown operation ${Interpreter.inspect(operation)} for ${type} - the framework's operations are ${Model.#joinNames(Model.frameworkOperations)}, and its allow lines ${carried}`,
       );
     }
 
     const [name, role] = operation.data;
 
+    if (
+      name.value === "update" &&
+      (Type.isAtom(role) || Type.isProperList(role))
+    ) {
+      Model.#validateUpdateFields(type, baked, operation);
+      return;
+    }
+
     if (!["grant_role", "revoke_role"].includes(name.value)) {
       Interpreter.raiseMisuseError(
-        `unknown operation ${Interpreter.inspect(operation)} for ${type} - the operation tuples are {:grant_role, role} and {:revoke_role, role}`,
+        `unknown operation ${Interpreter.inspect(operation)} for ${type} - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}`,
       );
     }
 
@@ -403,6 +425,10 @@ export default class Model {
     }
   }
 
+  // The way back over the same boundary: a value written in a query becomes the way the wire
+  // spells it, because that is what the rows it will be compared against hold. A date written as
+  // a date compares with a date written as a string only if one of them stops being what it was,
+  // and the rows cannot be the ones to change.
   static unbox(value, attributeType) {
     if (Type.isNil(value)) {
       return null;
@@ -1054,5 +1080,48 @@ export default class Model {
       Model.#field(value, "second").value,
       Model.#field(value, "microsecond").data[0].value,
     );
+  }
+
+  // The client's Hologram.Policy.update_fields/1, read off the raw baked entry: the declared
+  // attributes but the system ones and a job's framework-owned ones, and every forward
+  // relationship, a to-one by its relationship name - sorted, as the server sorts atoms.
+  static #updateFields(baked) {
+    const frameworkAttributes = baked?.frameworkAttributes ?? [];
+
+    const attributes = Object.keys(baked?.attributes ?? {}).filter(
+      (name) =>
+        !Model.systemAttributes.includes(name) &&
+        !frameworkAttributes.includes(name),
+    );
+
+    return attributes.concat(Object.keys(baked?.relationships ?? {})).sort();
+  }
+
+  static #validateUpdateFields(type, baked, operation) {
+    const fields = operation.data[1];
+
+    if (Type.isList(fields) && fields.data.length === 0) {
+      Interpreter.raiseMisuseError(
+        `unknown operation ${Interpreter.inspect(operation)} for ${type} - {:update, fields} names at least one field`,
+      );
+    }
+
+    const updateFields = Model.#updateFields(baked);
+    const asked = Type.isList(fields) ? fields.data : [fields];
+
+    const unknown = asked.find(
+      (field) => !Type.isAtom(field) || !updateFields.includes(field.value),
+    );
+
+    if (unknown !== undefined) {
+      const described =
+        updateFields.length === 0
+          ? "it has no field an update sets"
+          : `the fields an update sets are ${updateFields.map((name) => `:${name}`).join(", ")}`;
+
+      Interpreter.raiseMisuseError(
+        `unknown field ${Interpreter.inspect(unknown)} in ${Interpreter.inspect(operation)} for ${type} - ${described}`,
+      );
+    }
   }
 }

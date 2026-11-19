@@ -885,7 +885,10 @@ defmodule Hologram.DB.QueryCompilerTest do
                {:value, ["admin", "member"]},
                {:value, "Hologram.Test.Fixtures.Policy.Module2"},
                {:value,
-                ["Hologram.Test.Fixtures.Role.Module1", "Hologram.Test.Fixtures.Role.Module2"]}
+                ["Hologram.Test.Fixtures.Role.Module1", "Hologram.Test.Fixtures.Role.Module2"]},
+               {:value, "Hologram.Test.Fixtures.Policy.Module40"},
+               {:value, ["owner"]},
+               {:value, "Hologram.Test.Fixtures.Policy.Module40"}
              ]
 
       assert String.contains?(sql, ~s|WHERE (("user_id" = $1)|)
@@ -3918,15 +3921,19 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       global_sql =
         ~s|SELECT "$rg"."user_id" FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
-          ~s|WHERE "$rg"."role" = ANY($14::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+          ~s|WHERE "$rg"."role" = ANY($17::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
           ~s|AND "$rg"."entity_type" IS NULL AND "$rg"."entity_id" IS NULL|
 
       assert candidates_sql(sql) ==
                ~s|(SELECT "user_id") UNION (| <>
-                 grant_candidate_sql(10, 11, ~s|"$rg"."entity_id" = #{grant}."entity_id"|) <>
+                 grant_candidate_sql(13, 14, ~s|"$rg"."entity_id" = #{grant}."entity_id"|) <>
                  ") UNION ((" <>
-                 grant_candidate_sql(12, 13, ~s|"$rg"."entity_id" = #{grant}."entity_id"|) <>
-                 ") UNION (" <> global_sql <> "))"
+                 grant_candidate_sql(15, 16, ~s|"$rg"."entity_id" = #{grant}."entity_id"|) <>
+                 ") UNION (" <>
+                 global_sql <>
+                 ")) UNION (" <>
+                 grant_candidate_sql(18, 19, ~s|"$rg"."entity_id" = #{grant}."entity_id"|) <>
+                 ")"
     end
 
     test "finds the readers of a delegation on the row it leads to" do

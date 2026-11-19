@@ -299,6 +299,26 @@ defmodule Hologram.Sync.SearchTest do
       assert candidates(linked, edges).rows == %{PolicyModule17 => ids([other_project])}
     end
 
+    # A line named :verdicts is keyed by its name, as an operation is, and a browser answers it from
+    # the rows it holds - so its edges are not the verdicts' and lead to no check.
+    test "follows no edges of a line named :verdicts" do
+      project = create!(PolicyModule17)
+      label = create!(PolicyModule19)
+      link!(project, :labels, label)
+
+      derived = Edges.derive([PolicyModule17, PolicyModule18])
+      verdict_edges = Map.fetch!(derived, {PolicyModule17, {:verdicts}})
+
+      edges =
+        derived
+        |> Map.delete({PolicyModule17, {:verdicts}})
+        |> Map.put({PolicyModule17, :verdicts}, verdict_edges)
+
+      renamed = [effect(:patch_entity, PolicyModule19, label.id, %{"name" => "locked"})]
+
+      assert candidates(renamed, edges) == %{rows: %{}, whole_types: %{}}
+    end
+
     # The row is created outside the set, so only what the put recorded names the project.
     test "lists the row whose set a new row joins" do
       project = create!(PolicyModule17)
@@ -942,6 +962,19 @@ defmodule Hologram.Sync.SearchTest do
                },
                whole_types: %{}
              }
+    end
+  end
+
+  describe "join_table/3" do
+    test "returns the join table of a to-many" do
+      assert join_table(DB.mapping(), PolicyModule17, :labels) ==
+               "test_fixtures_policy_module17_labels_$join"
+    end
+
+    test "raises for a relationship the mapping has no join table for" do
+      assert_raise ArgumentError,
+                   "no join table for Hologram.Test.Fixtures.Policy.Module17.nope in the mapping",
+                   fn -> join_table(DB.mapping(), PolicyModule17, :nope) end
     end
   end
 end

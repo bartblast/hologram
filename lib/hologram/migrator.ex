@@ -9,6 +9,7 @@ defmodule Hologram.Migrator do
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Preflight
+  alias Hologram.DB.Protocol
   alias Hologram.DB.Schema
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.SortKey
@@ -895,7 +896,8 @@ defmodule Hologram.Migrator do
   defp with_migration_connection(fun) do
     {:ok, %{rows: [[database]]}} = Connection.query("SELECT current_database()")
     connection_opts = Config.connection_opts(database: database)
-    {:ok, connection_pid} = Postgrex.start_link(connection_opts)
+    # TODO(#1696): Postgrex.start_link/1 again, see Hologram.DB.Protocol.
+    {:ok, connection_pid} = Protocol.start_link(connection_opts)
 
     try do
       Connection.with_connection(connection_pid, fun)
