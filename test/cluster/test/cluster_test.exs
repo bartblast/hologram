@@ -5,6 +5,19 @@ defmodule HologramClusterTests.ClusterTest do
 
   alias HologramClusterTests.HTTPClient
 
+  defp close_listener({:ok, socket}), do: :gen_tcp.close(socket)
+
+  defp close_listener(:busy), do: :ok
+
+  # A port something else already holds serves a test that needs a listener there just as
+  # well as one of its own: free_port/0 refuses it either way.
+  defp listen_unless_busy(port, opts) do
+    case :gen_tcp.listen(port, opts) do
+      {:error, :eaddrinuse} -> :busy
+      result -> result
+    end
+  end
+
   # The picks go up the run's block and start over after its last port.
   defp next_free_port do
     first_port = proxy_port() + 1
@@ -43,12 +56,14 @@ defmodule HologramClusterTests.ClusterTest do
     test "skips a port something listens on" do
       next_port = next_free_port()
 
-      # With reuseaddr, so a connection that just closed on the port can't refuse the listen.
-      {:ok, socket} = :gen_tcp.listen(next_port, ip: {127, 0, 0, 1}, reuseaddr: true)
+      # With reuseaddr, so the test's own listener gets the port even right after a connection
+      # on it closed.
+      listener = listen_unless_busy(next_port, ip: {127, 0, 0, 1}, reuseaddr: true)
+      refute match?({:error, _reason}, listener)
 
       port = free_port()
 
-      :gen_tcp.close(socket)
+      close_listener(listener)
 
       assert port != next_port
     end
@@ -56,17 +71,17 @@ defmodule HologramClusterTests.ClusterTest do
     test "skips a port something listens on over IPv6 alone" do
       next_port = next_free_port()
 
-      case :gen_tcp.listen(next_port, [:inet6, ip: {0, 0, 0, 0, 0, 0, 0, 1}, reuseaddr: true]) do
-        {:ok, socket} ->
-          port = free_port()
-
-          :gen_tcp.close(socket)
-
-          assert port != next_port
-
+      case listen_unless_busy(next_port, [:inet6, ip: {0, 0, 0, 0, 0, 0, 0, 1}, reuseaddr: true]) do
         # A machine without IPv6 has no such listeners.
         {:error, reason} ->
           assert reason in [:eaddrnotavail, :eafnosupport, :eprotonosupport]
+
+        listener ->
+          port = free_port()
+
+          close_listener(listener)
+
+          assert port != next_port
       end
     end
   end
