@@ -483,6 +483,7 @@ defmodule Mix.Tasks.Compile.Hologram do
             data_model_changed?: data_model_changed?,
             derived_stale?: derived_stale?,
             kept_page_reach: kept_page_reach,
+            own_dumps?: own_dumps?(before_dump_stamp, module_info_plt_dump_path),
             pages_to_list: pages_to_list,
             query_shapes: query_shapes,
             stale_components: stale_components,
@@ -1256,10 +1257,11 @@ defmodule Mix.Tasks.Compile.Hologram do
   # The data layer is kept whole when the edit touches nothing it reads: no page's reach to list
   # again, no page gone, no component's queries stale, no kept component gone, the vocabulary the
   # queries are judged against unchanged, the shapes of the queries server code writes the ones it
-  # was derived with, and its dumps on disk from the compile that derived it,
-  # which put the state only once both were written. A page is gone when the kept reach holds a
-  # page the build no longer has, and a component when a kept entry is no longer one of the tracked
-  # components.
+  # was derived with, and its dumps on disk from the compile that derived it, which put the state
+  # only once they were written - so no other VM's compile wrote the module info dump since this
+  # VM's last one (see own_dumps?/2): one that did derived against other module infos, and its data
+  # layer dumps may be the ones there. A page is gone when the kept reach holds a page the build no
+  # longer has, and a component when a kept entry is no longer one of the tracked components.
   defp data_layer_kept?(nil, _parts, _opts), do: false
 
   defp data_layer_kept?(kept_data_layer, parts, opts) do
@@ -1274,7 +1276,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       not parts.data_model_changed? and not parts.derived_stale? and
       kept_data_layer[:query_shapes] == parts.query_shapes and
       map_size(parts.kept_page_reach) == map_size(kept_data_layer.pages) and
-      kept_components_tracked? and data_layer_dumps_exist?(opts)
+      kept_components_tracked? and parts.own_dumps? and data_layer_dumps_exist?(opts)
   end
 
   # What the data layer derives from the build, validated and dumped for the running app: the

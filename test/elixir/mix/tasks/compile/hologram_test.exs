@@ -2002,6 +2002,17 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
     end
 
+    # Whose data layer dumps can describe another build than the one this VM kept.
+    test "a kept data layer is derived again when another VM rewrote the module info dump", %{
+      opts: opts
+    } do
+      run(opts)
+      rewrite_module_info_dump(opts, & &1)
+      fake_edit(@unreached_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+    end
+
     test "an edit that changes a module's query shapes derives the data layer again", %{
       opts: opts
     } do
