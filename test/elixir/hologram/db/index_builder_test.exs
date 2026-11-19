@@ -86,6 +86,25 @@ defmodule Hologram.DB.IndexBuilderTest do
     oid
   end
 
+  # Whether the given session takes the migration lock within the given wall-clock time, trying
+  # until then.
+  defp take_lock_within(session, timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+
+    try_until(session, deadline)
+  end
+
+  defp try_until(session, deadline) do
+    %{rows: [[locked?]]} =
+      Postgrex.query!(session, "SELECT pg_try_advisory_lock($1)", [@migration_lock_key])
+
+    cond do
+      locked? -> true
+      System.monotonic_time(:millisecond) > deadline -> false
+      true -> try_until(session, deadline)
+    end
+  end
+
   defp query!(statement) do
     {:ok, _result} = Connection.query(statement)
   end
@@ -544,9 +563,11 @@ defmodule Hologram.DB.IndexBuilderTest do
 
       route(scratch, fn -> wait_until(fn -> index_validity(@index) == true end, 10_000) end)
 
-      # Between the two steps: free for a booting node, which this one stands for.
-      assert %{rows: [[true]]} =
-               Postgrex.query!(holder, "SELECT pg_try_advisory_lock($1)", [@migration_lock_key])
+      # Between the two steps: free for a booting node, which this one stands for. Tried for 1 s of
+      # the 2 s pause, since the index stands valid a moment before the builder lets the lock go -
+      # and no longer, or a builder holding the lock through the pause would let one try through
+      # as it takes the lock back.
+      assert take_lock_within(holder, 1_000)
 
       assert Task.yield(builder, 2_500) == nil
       route(scratch, fn -> assert index_validity(created_at_index) == :absent end)
@@ -569,7 +590,7 @@ defmodule Hologram.DB.IndexBuilderTest do
         Task.async(fn ->
           {:ok, session} = Postgrex.start_link(scratch_opts)
 
-          route(session, fn -> converge(plan(model), chain, step_pause_ms: 1_000) end)
+          route(session, fn -> converge(plan(model), chain, step_pause_ms: 2_000) end)
         end)
 
       route(scratch, fn -> wait_until(fn -> index_validity(@index) == true end, 10_000) end)
@@ -649,7 +670,7 @@ defmodule Hologram.DB.IndexBuilderTest do
                   plan: plan(model),
                   migrations: chain,
                   retry_interval_ms: 100,
-                  step_pause_ms: 1_000
+                  step_pause_ms: 2_000
                 )
               end)
             end)
