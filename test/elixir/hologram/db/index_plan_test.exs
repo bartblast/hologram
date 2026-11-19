@@ -83,9 +83,19 @@ defmodule Hologram.DB.IndexPlanTest do
     |> needs(@mapping)
   end
 
+  # A path of the test's own in the temp dir. The OS process goes before the counter, which is unique
+  # within one VM only, so two test runs on one machine never share a path (see
+  # Hologram.Test.ScratchDatabaseCase).
+  defp own_tmp_path(name) do
+    Path.join(
+      System.tmp_dir!(),
+      "#{name}_#{System.pid()}_#{System.unique_integer([:positive])}.plt"
+    )
+  end
+
   # Dumps the given needs the way the build does, at a path of the test's own.
   defp write_dump(needs) do
-    path = Path.join(System.tmp_dir!(), "index_needs_#{System.unique_integer([:positive])}.plt")
+    path = own_tmp_path("index_needs")
     on_exit(fn -> File.rm(path) end)
 
     {plt, _dump_path} = Compiler.build_index_needs_plt(needs, build_dir: System.tmp_dir!())
@@ -1043,7 +1053,7 @@ defmodule Hologram.DB.IndexPlanTest do
     end
 
     test "needs nothing when there is no dump" do
-      assert dumped_needs(Path.join(System.tmp_dir!(), "no_index_needs.plt")) == []
+      assert dumped_needs(own_tmp_path("no_index_needs")) == []
     end
   end
 
