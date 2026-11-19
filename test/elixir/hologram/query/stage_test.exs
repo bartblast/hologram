@@ -2735,6 +2735,51 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    # Sibling quantifiers can leave hints under one place, depth and name.
+    test "names the spelling the hints of sibling quantifiers agree on" do
+      expected_msg =
+        "unknown attribute :body in Hologram.Test.Fixtures.Entity.Module29 - known attributes: :created_at, :id, :name, :updated_at - Hologram.Test.Fixtures.Entity.Module28 declares body, read as message.body"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(
+          Module29,
+          [any: {[:messages], [any: {[:labels], [{{:outer, 2, :body}, {:==, "x"}}]}]}],
+          [
+            {:key, 2, {:outer, 2, :body}, nil, ["tag.body", "message.body", "body"]},
+            {:key, 2, {:outer, 2, :body}, nil, ["label.body", "message.body", "body"]}
+          ]
+        )
+      end
+    end
+
+    test "names no spelling for a row the hints of sibling quantifiers spell differently" do
+      expected_msg =
+        "unknown attribute :body in Hologram.Test.Fixtures.Entity.Module29 - known attributes: :created_at, :id, :name, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(
+          Module29,
+          [any: {[:messages], [any: {[:labels], [{{:outer, 2, :body}, {:==, "x"}}]}]}],
+          [
+            {:key, 2, {:outer, 2, :body}, nil, ["tag.body", "task.body", "body"]},
+            {:key, 2, {:outer, 2, :body}, nil, ["label.body", "message.body", "body"]}
+          ]
+        )
+      end
+    end
+
+    test "names no spelling for a row one hint of sibling quantifiers leaves unspelled" do
+      expected_msg =
+        "unknown attribute :name in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :tier, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module32, [any: {[:messages], [name: {:==, "x"}]}], [
+          {:key, 1, :name, nil, ["message.name", "name"]},
+          {:key, 1, :name, nil, ["name.name"]}
+        ])
+      end
+    end
+
     test "names the fix ahead of the spelling a row gives" do
       expected_msg =
         "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :updated_at - #{@fix}"
@@ -2780,6 +2825,21 @@ defmodule Hologram.Query.StageTest do
         Module28
         |> sourced([:labels])
         |> filter(any: {[:messages], [{{:outer, 1, :position}, {:==, 1}}]})
+      end
+    end
+
+    # The nearest row declaring the field is the bound one, which the hints spell differently.
+    test "names no owning row ahead of a nearer row the hints of sibling quantifiers spell differently" do
+      expected_msg =
+        "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module29 - known attributes: :created_at, :id, :name, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        Module28
+        |> sourced([:labels])
+        |> filter([any: {[:messages], [{{:outer, 1, :position}, {:==, 1}}]}], [
+          {:key, 1, {:outer, 1, :position}, nil, ["message.position", "position"]},
+          {:key, 1, {:outer, 1, :position}, nil, ["post.position", "position"]}
+        ])
       end
     end
 

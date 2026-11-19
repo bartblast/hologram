@@ -4228,6 +4228,82 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    describe("sibling quantifiers' hints under one place, depth and name", () => {
+      const outerName = outer(2, "name");
+
+      const filters = Type.list([
+        Type.tuple([
+          Type.atom("any"),
+          Type.tuple([
+            path("projects"),
+            Type.list([
+              Type.tuple([
+                Type.atom("any"),
+                Type.tuple([
+                  path("tasks"),
+                  Type.list([Type.tuple([outerName, Type.bitstring("x")])]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]),
+      ]);
+
+      const hinted = (...spellingLists) =>
+        filterHinted(
+          user,
+          filters,
+          Type.list(
+            spellingLists.flatMap(
+              (spellings) => spelled("key", 2, outerName, spellings).data,
+            ),
+          ),
+        );
+
+      it("names the spelling they agree on", () => {
+        assertBoxedError(
+          () =>
+            hinted(
+              ["tag.name", "project.name", "name"],
+              ["task.name", "project.name", "name"],
+            ),
+          "Hologram.MisuseError",
+          "unknown attribute :name in MyApp.User - known attributes: :active, :email, :ends_on, :id, :level, :logins, :manager_id, :starts_on - MyApp.Project declares name, read as project.name",
+        );
+      });
+
+      it("names no spelling for a row they spell differently", () => {
+        assertBoxedError(
+          () =>
+            hinted(
+              ["tag.name", "board.name", "name"],
+              ["task.name", "project.name", "name"],
+            ),
+          "Hologram.MisuseError",
+          "unknown attribute :name in MyApp.User - known attributes: :active, :email, :ends_on, :id, :level, :logins, :manager_id, :starts_on",
+        );
+      });
+
+      // A quantifier binding the name itself leaves the queried row unspelled.
+      it("names no spelling for a row one of them leaves unspelled", () => {
+        const name = Type.atom("name");
+
+        assertBoxedError(
+          () =>
+            filterHinted(
+              Type.alias(CHANNEL),
+              quantified("messages", "name", Type.bitstring("x")),
+              Type.list([
+                ...spelled("key", 1, name, ["message.name", "name"]).data,
+                ...spelled("key", 1, name, ["name.name"]).data,
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "unknown attribute :name in MyApp.Message - known attributes: :body, :channel_id, :id, :position",
+        );
+      });
+    });
+
     it("names the fix ahead of the spelling a row gives", () => {
       const outerPosition = outer(1, "position");
 

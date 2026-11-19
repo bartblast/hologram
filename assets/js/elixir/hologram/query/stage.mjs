@@ -1032,6 +1032,9 @@ function rangeTriples(name, range, entityType) {
 // Where a name is no field of the row it is read on, but another row in scope declares it: the
 // spelling the query macros left for that row - the nearest such. Only an attribute name is looked
 // for elsewhere. The browser builds no derived field's query, so it has no owning row to name.
+// Sibling quantifiers can leave hints that only their spellings tell apart, so every hint of the
+// name at its place and depth is looked at, and a row they spell differently, or one of them leaves
+// unspelled, has no one spelling to name.
 function rowHint(hints, position, name, rowType, scope) {
   const local = localName(name);
 
@@ -1045,28 +1048,41 @@ function rowHint(hints, position, name, rowType, scope) {
 
   const depth = scope.length - 1;
 
-  const entry = hints.data.find(
-    (hint) =>
-      isHintTuple(hint) &&
-      hint.data[0].value === position &&
-      Number(hint.data[1].value) === depth &&
-      Interpreter.isStrictlyEqual(hint.data[2], name) &&
-      Type.isList(hint.data[4]) &&
-      hint.data[4].data.length > 0,
-  );
+  const spellingLists = hints.data
+    .filter(
+      (hint) =>
+        isHintTuple(hint) &&
+        hint.data[0].value === position &&
+        Number(hint.data[1].value) === depth &&
+        Interpreter.isStrictlyEqual(hint.data[2], name) &&
+        Type.isList(hint.data[4]) &&
+        hint.data[4].data.length > 0,
+    )
+    .map((hint) => hint.data[4].data);
 
-  if (!entry) {
+  if (spellingLists.length === 0) {
     return null;
   }
 
   const ownLevel = isOuterTuple(name) ? Number(name.data[1].value) : 0;
+  const levels = Math.max(...spellingLists.map((list) => list.length));
 
-  for (const [level, spelling] of entry.data[4].data.entries()) {
+  for (let level = 0; level < levels; level++) {
     if (
       level !== ownLevel &&
       filterableNames(scope[level]).includes(local.value)
     ) {
-      return `${scope[level]} declares ${local.value}, read as ${Bitstring.toText(spelling)}`;
+      const spellings = new Set(
+        spellingLists.map((list) =>
+          level < list.length ? Bitstring.toText(list[level]) : null,
+        ),
+      );
+
+      if (spellings.size !== 1 || spellings.has(null)) {
+        return null;
+      }
+
+      return `${scope[level]} declares ${local.value}, read as ${[...spellings][0]}`;
     }
   }
 

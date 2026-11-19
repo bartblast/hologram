@@ -1732,7 +1732,8 @@ defmodule Hologram.Query.Stage do
   # spelling the query macros left for that row - the nearest such - or, for a derived field's
   # owning row, which its query reads only through an argument, the argument that reads it. Only an
   # attribute name is looked for elsewhere, and only when the macros left hints or the term holds a
-  # row outside its own.
+  # row outside its own. Sibling quantifiers can leave hints that only their spellings tell apart,
+  # so every hint of the name at its place and depth is looked at.
   defp row_hint(%{entries: [], outer_rows: 0}, _position, _name, _row_type, _scope), do: nil
 
   defp row_hint(%{entries: entries, outer_rows: outer_rows}, position, name, row_type, scope) do
@@ -1741,14 +1742,15 @@ defmodule Hologram.Query.Stage do
     if is_atom(local) and local not in filterable_names(row_type) do
       depth = length(scope) - 1 - outer_rows
 
-      spellings =
-        Enum.find_value(entries, [], fn
-          {^position, ^depth, ^name, _fix, [_spelling | _spellings] = spellings} -> spellings
-          _entry -> nil
-        end)
+      spelling_lists =
+        for {^position, ^depth, ^name, _fix, [_spelling | _spellings] = spellings} <- entries,
+            do: spellings
 
-      spelled_row_hint(scope, local, name_level(name), spellings) ||
-        owner_row_hint(scope, position, local, outer_rows)
+      case spelled_row_hint(scope, local, name_level(name), spelling_lists) do
+        nil -> owner_row_hint(scope, position, local, outer_rows)
+        :unspelled -> nil
+        hint -> hint
+      end
     end
   end
 
@@ -1859,16 +1861,39 @@ defmodule Hologram.Query.Stage do
     {hd(scope), hops}
   end
 
-  defp spelled_row_hint(scope, name, own_level, spellings) do
-    spellings
-    |> Enum.with_index()
-    |> Enum.find_value(fn {spelling, level} ->
-      row_type = Enum.at(scope, level)
+  # The nearest row the hints spell that declares the name, read the way every hint spells it - a
+  # row the hints spell differently, or one of them leaves unspelled, has no one spelling to name,
+  # and as the nearest row declaring the name it keeps a row farther out from being named instead.
+  defp spelled_row_hint(_scope, _name, _own_level, []), do: nil
 
-      if level != own_level and name in filterable_names(row_type) do
-        "#{inspect(row_type)} declares #{name}, read as #{spelling}"
+  defp spelled_row_hint(scope, name, own_level, spelling_lists) do
+    levels =
+      spelling_lists
+      |> Enum.map(&length/1)
+      |> Enum.max()
+
+    level =
+      Enum.find(0..(levels - 1)//1, fn level ->
+        level != own_level and name in filterable_names(Enum.at(scope, level))
+      end)
+
+    spellings =
+      if level do
+        spelling_lists
+        |> Enum.map(&Enum.at(&1, level))
+        |> Enum.uniq()
       end
-    end)
+
+    case spellings do
+      nil ->
+        nil
+
+      [spelling] when is_binary(spelling) ->
+        "#{inspect(Enum.at(scope, level))} declares #{name}, read as #{spelling}"
+
+      _no_one_spelling ->
+        :unspelled
+    end
   end
 
   # Where a name is declared: an attribute on the queried type, a path's last name on the type its
