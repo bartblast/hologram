@@ -176,12 +176,14 @@ defmodule Hologram.DB.IndexPlan do
 
   A statement with no OR an index serves that bounds its rows - a `take` or `one` - also orders
   from the index: its sort columns follow the need's, up to the first change of direction, a
-  string's sort key or a placeholder, skipping a column an equality fixes. The `id` ending every
-  ordering is kept only when it is the whole of it, as it is for a query naming no sort. A
-  membership or a range on another column than the one the ordering leads with keeps the rows out
-  of order, so then no sort column is kept, and a range on the column it leads with ends the
-  need's ordering columns. Equalities fixing every column of the primary key or a unique index
-  match one row at most, so they order nothing.
+  string's sort key or a placeholder sort column, skipping a column an equality fixes. A direction
+  known only at runtime keeps its column when it is the first, since an index reads in either
+  direction, and ends the sort columns there. The `id` ending every ordering is kept only when it
+  is the whole of it, as it is for a query naming no sort. A membership or a range on another
+  column than the one the ordering leads with keeps the rows out of order, so then no sort column
+  is kept, and a range on the column it leads with ends the need's ordering columns. Equalities
+  fixing every column of the primary key or a unique index match one row at most, so they order
+  nothing.
 
   A need the primary key serves is left out, and so is one whose equalities fix every column of a
   unique index, which serves it, a need with no column and a repeat.
@@ -1081,6 +1083,12 @@ defmodule Hologram.DB.IndexPlan do
 
       MapSet.member?(fixed, equality_column(column, scope)) ->
         {:cont, acc}
+
+      # Whichever it is at runtime, an index on the column reads in it, but no later column's
+      # direction can be known to follow it.
+      direction not in [:asc, :desc] and previous_direction == nil ->
+        {_cont_or_halt, ordered} = ordered_step(column, direction, acc, scope)
+        {:halt, ordered}
 
       direction not in [:asc, :desc] or
           (previous_direction != nil and direction != previous_direction) ->

@@ -483,12 +483,34 @@ defmodule Hologram.DB.IndexPlanTest do
       assert term_needs(by_string) == [need(@module2, [], nil, ["c_$sort"])]
     end
 
-    test "orders nothing for a placeholder ordering or a placeholder direction" do
+    test "orders nothing for a placeholder ordering" do
       by_name = %{Stage.normalize(Module4) | sort: [{{:placeholder, :by}, :asc}], take: 5}
-      by_direction = %{Stage.normalize(Module4) | sort: [{:b, {:placeholder, :dir}}], take: 5}
 
       assert needs(by_name, @mapping) == []
-      assert needs(by_direction, @mapping) == []
+    end
+
+    test "orders by the leading column of a placeholder direction, and by nothing after it" do
+      dir = {:placeholder, :dir}
+      leading = %{Stage.normalize(Module4) | sort: [{:b, dir}, {:d, :asc}], take: 5}
+      following = %{Stage.normalize(Module4) | sort: [{:b, :asc}, {:d, dir}], take: 5}
+
+      assert needs(leading, @mapping) == [need(@module4, [], nil, ["b"])]
+      assert needs(following, @mapping) == [need(@module4, [], nil, ["b"])]
+    end
+
+    test "orders by the leading column of a placeholder direction after a column an equality fixes" do
+      filtered =
+        Module4
+        |> filter(c == :x)
+        |> Stage.normalize()
+
+      query = %{
+        filtered
+        | sort: [{:c, :asc}, {:b, {:placeholder, :dir}}, {:d, :asc}],
+          take: 5
+      }
+
+      assert needs(query, @mapping) == [need(@module4, ["c"], nil, ["b"])]
     end
 
     test "skips a column an equality fixes, wherever the ordering names it" do
