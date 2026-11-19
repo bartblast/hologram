@@ -63,6 +63,25 @@ defmodule Hologram.DB.IndexPlan.PlannerTest do
     |> Enum.sort()
   end
 
+  # Gives Module2's table rows none of the tests' predicates match, inside the sandbox's
+  # transaction, and the statistics that count them - the row count ANALYZE leaves in pg_class
+  # outlives the rollback, the column statistics don't. A table an autovacuum or an ANALYZE has seen
+  # empty is known to hold no rows, and over no rows a scan of the primary key, which gives the
+  # order by id, costs less than any plan that has to sort.
+  defp fill_module2 do
+    {:ok, _result} =
+      Connection.query("""
+      INSERT INTO "hologram_data"."test_fixtures_entity_module2"
+        ("id", "a", "c", "c_$sort", "created_at", "updated_at", "$revisions")
+      SELECT gen_random_uuid(), false, 'a' || i, 'a' || i, now(), now(), '{}'
+      FROM generate_series(1, 1000) AS i
+      """)
+
+    {:ok, _result} = Connection.query(~s{ANALYZE "hologram_data"."test_fixtures_entity_module2"})
+
+    :ok
+  end
+
   defp nodes(node), do: [node | Enum.flat_map(node["Plans"] || [], &nodes/1)]
 
   defp node_types(nodes), do: Enum.map(nodes, & &1["Node Type"])
@@ -80,6 +99,7 @@ defmodule Hologram.DB.IndexPlan.PlannerTest do
   end
 
   test "reads the indexes of two read rules in one BitmapOr" do
+    fill_module2()
     policy = %{anonymous?: false, rules: [rule(Module2, a: true), rule(Module2, c: "x")]}
 
     {index_names, nodes} = explain(Module2, policy)
@@ -90,12 +110,14 @@ defmodule Hologram.DB.IndexPlan.PlannerTest do
   end
 
   test "reads a string equality through the sort key's index" do
+    fill_module2()
     {[index_name], nodes} = explain(filter(Module2, c == "x"))
 
     assert read_index_names(nodes) == [index_name]
   end
 
   test "reads a string range through the sort key's index" do
+    fill_module2()
     {[index_name], nodes} = explain(filter(Module2, c >= "m"))
 
     assert read_index_names(nodes) == [index_name]
