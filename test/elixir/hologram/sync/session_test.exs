@@ -385,15 +385,20 @@ defmodule Hologram.Sync.SessionTest do
       assert Evaluators.live() == []
     end
 
+    # The board window stays outstanding until the test fills it, so what the session took up can
+    # be seen before it is caught up and leaves its windows.
     test "skips a window nothing downloads rather than refusing to start" do
       windows(%{@page => ["w_unknown", @board_window]})
-      hold_windows([@board_window])
+      hold_silently(@board_window)
 
       session = start_session!(gap: [])
 
+      assert Map.keys(:sys.get_state(session).window_refs) == [@board_window]
+
+      finish_filling(session, @board_window)
+
       assert_receive {:sync_synced, :all, _cursor}
       assert Process.alive?(session)
-      assert Evaluators.live() == [{@board_window, Stage.normalize(Module2)}]
     end
 
     # Both sessions are kept catching up by a window that never fills: a session that is caught up
