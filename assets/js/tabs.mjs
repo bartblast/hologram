@@ -55,13 +55,6 @@ const startsOverForSomebodyElse = (message) =>
   message.event === "sync_resync" &&
   message.frame.reason === "identity";
 
-// A frame posted only once what it says was written down - rows, or a place - rather than at once
-// (see SyncStream.tell): heard, it says the store holds every write made before it.
-const isWrittenFrame = (message) =>
-  message.kind === "frame" &&
-  (message.event === "sync_deltas" ||
-    (message.event === "synced" && Boolean(message.frame.cursor)));
-
 export default class Tabs {
   static leader = true;
 
@@ -408,24 +401,20 @@ export default class Tabs {
   //
   // The first tab of a group can hold something too: what the tab before it said, closing while
   // this one joined, with nobody else waiting for the lock. With no place it starts from nowhere,
-  // as above. With one, its frames go all the same: this tab read the store after that tab let go
-  // of the lock, so after every frame it wrote down - and replayed, an older frame would move the
-  // place back behind the store. The state stays, for what is complete at that place. So does a
-  // start-over because somebody else signed in, unless a frame that was written down follows it:
-  // that tab's clear can have been lost as it closed. A frame with rows or a place was posted once
-  // its write committed, which came after the clear's - so the store holds the fill that followed,
-  // and the place this tab read is that fill's, which a start-over replayed would throw away. A
-  // frame with neither went out at once, and says nothing about the clear. (That takes the tab that
-  // posted it to have had a store. One whose database closed under it - another tab needing a new
-  // version, or a failed write whose wipe failed too - posts the same frames having written
-  // nothing, and a tab with no store speaking for its group is the thing to fix there: see #1683.)
+  // as above. With one, it read the store after that tab let go of the lock, so after everything
+  // it wrote down - its identity included. So the group's state goes: the identity it names can be
+  // older than the store's (a refused one replaced just before that tab closed), and its stream
+  // brings what is complete, the rules and a stop, as it does for any first tab. The frames stay:
+  // a batch that tab filed and the answer to it are replayed in order, and the frame that landed
+  // the batch marks it before the answer, which then leaves those writes alone - or, where the
+  // answer came first, writes the server's values over what the answer applied again. A frame
+  // older than the store moves the place back until the stream brings it forward again.
   //
-  // Wherever a tab that leads starts from, the identity the group's state names is taken first, as
-  // the state would have given it: it is the one the queue was numbered under, and the store can
-  // lack it - read before the tab that led had written it down, and then written over by this
-  // tab's restore with its page's pair. A tab that held no state keeps the pair its restore settled
-  // on. A tab taking the lead writes the identity down in #lead, and the first tab of a group here,
-  // when the state named another than its restore settled on - before anything is sent under it.
+  // A tab taking the lead takes the identity the group's state names first, as the state would
+  // have given it: it is the one the queue was numbered under, and the store can lack it - read
+  // before the tab that led had written it down, and then written over by this tab's restore with
+  // its page's pair. A tab that held no state keeps the pair its restore settled on. Either way
+  // #lead writes down the identity before anything is sent under it.
   //
   // A request for the state is never replayed, whoever this tab is. A tab that follows answers
   // none. A tab taking the lead says what it holds once the lead is settled (see #lead) - and a
@@ -438,9 +427,7 @@ export default class Tabs {
     const fromNowhere = Tabs.leader && SyncStream.syncCursor === null;
     const first = Tabs.leader && !lead;
 
-    const lastWritten = Tabs.#held.findLastIndex(isWrittenFrame);
-
-    const held = Tabs.#held.filter((message, index) => {
+    const held = Tabs.#held.filter((message) => {
       if (fromNowhere) {
         return (
           message.kind === "answered" ||
@@ -449,25 +436,15 @@ export default class Tabs {
         );
       }
 
-      if (first && message.kind === "frame") {
-        return startsOverForSomebodyElse(message) && index > lastWritten;
+      if (first && message.kind === "state") {
+        return false;
       }
 
       return message.kind !== "joined";
     });
 
-    if (Tabs.leader) {
-      const replica = Replica.id;
-
+    if (lead) {
       Tabs.#adoptGroupIdentity(Tabs.#held);
-
-      // An identity the group's state named over the one its restore settled on is the one it now
-      // sends under, and a tab that took no lead has no #lead to write it down. Before the replay,
-      // which can wake the sender - though a send waits for it anyway (see
-      // Durability.replicaWritten), so it is not awaited.
-      if (first && Replica.id !== replica) {
-        Durability.persistReplica(Replica.current());
-      }
     }
 
     Tabs.#held = [];
@@ -600,6 +577,11 @@ export default class Tabs {
   // Nothing while this tab is still starting up in a group: the identity and the place it holds
   // then are its page's, not the ones the store gave it. It says what it holds once it is ready
   // (see ready() and #lead).
+  //
+  // And only once the identity it names is written down (see Durability.replicaWritten). A tab
+  // that starts as the first of the group takes the store's identity over any a state it held
+  // names (see ready()), so a state must never name one the store could still lose - a tab closing
+  // before that write commits would leave the next one sending its batches under another pair.
   static postState() {
     if (Tabs.name !== null && !Tabs.#ready) {
       return;
@@ -607,15 +589,18 @@ export default class Tabs {
 
     const completeness = LocalDatabase.syncedState();
 
-    Tabs.post({
-      completeness,
-      cursor: SyncStream.syncCursor,
-      kind: "state",
-      replica: Replica.current(),
-      rules: SyncStream.rulesForGroup(),
-      stopReason: SyncStream.stopReason,
-      synced: completeness.all ? ["all"] : [],
-    });
+    Tabs.post(
+      {
+        completeness,
+        cursor: SyncStream.syncCursor,
+        kind: "state",
+        replica: Replica.current(),
+        rules: SyncStream.rulesForGroup(),
+        stopReason: SyncStream.stopReason,
+        synced: completeness.all ? ["all"] : [],
+      },
+      Durability.replicaWritten(),
+    );
   }
 
   // What a tab does the moment the group becomes its to lead, which is the moment the tab that was
@@ -625,6 +610,8 @@ export default class Tabs {
   // Everything it needs is in its own memory, in the store, or in the grant itself.
   static async #lead() {
     const token = Tabs.#token;
+
+    let recorded = null;
 
     // Nothing goes out until the identity is written down, from the flush below or any other: a
     // batch another tab files, an action, the stream opening (see Tabs.sends). The write comes
@@ -663,6 +650,9 @@ export default class Tabs {
         }
       }
 
+      // Started before the state goes out, which waits for it (see postState).
+      recorded = Durability.persistReplica(Replica.current());
+
       Tabs.postState();
 
       // The stream this tab has greeted the server with no sync - opened as a follower, or while
@@ -681,7 +671,7 @@ export default class Tabs {
       // awaits it: nothing is sent under an identity that is not recorded, or a reload after a lost
       // answer would send the stored batch again under a new pair, and the server would apply it
       // twice.
-      await Durability.persistReplica(Replica.current());
+      await (recorded ?? Durability.persistReplica(Replica.current()));
 
       // A lead of a visit that has ended leaves the next one's to settle.
       if (Tabs.#token === token) {
@@ -713,7 +703,7 @@ export default class Tabs {
   }
 
   // The identity the last of the given messages that is the group's state names, taken up - for a
-  // tab that leads, which writes it down before sending under it (see ready() and #lead).
+  // tab about to lead, which writes it down before sending under it (see ready() and #lead).
   static #adoptGroupIdentity(messages) {
     const state = messages.findLast((message) => message.kind === "state");
 

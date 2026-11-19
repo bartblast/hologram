@@ -434,6 +434,18 @@ describe("Tabs", () => {
       assert.isTrue(flushing.calledOnce);
     });
 
+    // What it says waits for that write (see postState).
+    it("starts writing down the identity before it says what it holds", async () => {
+      const persisting = sinon.stub(Durability, "persistReplica").resolves();
+
+      SyncStream.syncCursor = "place-1";
+
+      await succeed(nextGroup());
+
+      sinon.assert.callOrder(persisting, Tabs.postState);
+      sinon.assert.calledOnce(persisting);
+    });
+
     it("writes down the identity when it starts over", async () => {
       const persisting = sinon.stub(Durability, "persistReplica").resolves();
 
@@ -1198,6 +1210,20 @@ describe("Tabs", () => {
         stopReason: "model_hash",
         synced: [],
       });
+    });
+
+    // A first tab takes the store's identity over the one a held state names, so a state must
+    // never name one the store could still lose.
+    it("says what it holds only once the identity it names is written down", () => {
+      const written = new Promise(() => {});
+      const posting = sinon.stub(Tabs, "post");
+
+      sinon.stub(Durability, "replicaWritten").returns(written);
+
+      Tabs.postState();
+
+      assert.equal(posting.firstCall.args[0].kind, "state");
+      assert.strictEqual(posting.firstCall.args[1], written);
     });
 
     // Before its restore the tab holds its page's identity and no place, not the ones the store
@@ -2558,7 +2584,7 @@ describe("Tabs", () => {
 
     // The tab before it closed while this one joined, with nobody else waiting for the lock: what it
     // said is the tail of a fill this tab's restore refused the head of, as for a lead handed over.
-    it("drops what the tab before it said when it joined as the leader with no place", async () => {
+    it("drops what the tab before it said and takes no identity from it, when it joined as the leader with no place", async () => {
       const answered = {answer: "ok", kind: "answered", seq: 3};
       const persisting = sinon.stub(Durability, "persistReplica").resolves();
       const seen = [];
@@ -2604,31 +2630,34 @@ describe("Tabs", () => {
 
         assert.deepStrictEqual(seen, [barrier, answered]);
 
-        // The queue was numbered under it, and no lead writes it down here.
-        assert.equal(Replica.id, "r-group");
-
-        sinon.assert.calledOnceWithExactly(persisting, {
-          id: "r-group",
-          token: "statement-group",
-        });
+        // It read the store after that tab let go, so after that tab wrote its identity down.
+        assert.isNull(Replica.id);
+        assert.isFalse(persisting.called);
       } finally {
         Replica.reset();
       }
     });
 
-    // It read the store after the tab before it let go of the lock, so after every frame that tab
-    // wrote down: replayed, an older one would move the place back behind the store.
-    it("replays the state but no frame the tab before it said, when it joined as the leader with a place", async () => {
+    // It read the store after the tab before it let go of the lock, so after that tab wrote its
+    // identity down - and the state can name an older one. The frames stay, in order, so the frame
+    // that landed a batch marks it before the answer to it promotes anything.
+    it("replays the frames but no state the tab before it said, when it joined as the leader with a place", async () => {
       const persisting = sinon.stub(Durability, "persistReplica").resolves();
       const seen = [];
 
-      const state = {
-        completeness: {all: true, types: []},
-        cursor: "place-9",
-        kind: "state",
-        replica: {id: "r-group", token: "statement-group"},
-        synced: ["all"],
-      };
+      const messages = [
+        {kind: "sealed", record: {seq: 4}},
+        {event: "sync_resync", frame: {reason: "identity"}, kind: "frame"},
+        frame(1),
+        {
+          completeness: {all: true, types: []},
+          cursor: "place-9",
+          kind: "state",
+          replica: {id: "r-group", token: "statement-group"},
+          synced: ["all"],
+        },
+        {answer: "ok", kind: "answered", seq: 4},
+      ];
 
       sinon.stub(Tabs, "postState");
 
@@ -2651,8 +2680,10 @@ describe("Tabs", () => {
 
       const other = sibling(Tabs.name);
 
-      other.postMessage(frame(1));
-      other.postMessage(state);
+      for (const message of messages) {
+        other.postMessage(message);
+      }
+
       other.postMessage(barrier);
 
       await hasArrived;
@@ -2662,12 +2693,16 @@ describe("Tabs", () => {
 
         Tabs.ready();
 
-        assert.deepStrictEqual(seen, [barrier, state]);
+        assert.deepStrictEqual(seen, [
+          barrier,
+          messages[0],
+          messages[1],
+          messages[2],
+          messages[4],
+        ]);
 
-        sinon.assert.calledOnceWithExactly(persisting, {
-          id: "r-group",
-          token: "statement-group",
-        });
+        assert.isNull(Replica.id);
+        assert.isFalse(persisting.called);
       } finally {
         Replica.reset();
         SyncStream.syncCursor = null;
@@ -2723,133 +2758,6 @@ describe("Tabs", () => {
 
       assert.isTrue(stating.calledOnce);
       assert.equal(failures.length, 1);
-    });
-
-    // Its clear can have been lost as that tab closed - unless a frame held after it that was
-    // written down says the store holds the fill that followed it. A frame posted at once says
-    // nothing about the clear.
-    const resync = {
-      event: "sync_resync",
-      frame: {reason: "identity"},
-      kind: "frame",
-    };
-
-    for (const [after, kept] of [
-      ["nothing", true],
-      ["nothing but a frame with rows before it", true],
-      ["a frame with rows", false],
-      ["a marker with a place", false],
-      ["rules", true],
-      ["a marker with no place", true],
-    ]) {
-      const following = {
-        "a frame with rows": [frame(1)],
-        "a marker with a place": [
-          {event: "synced", frame: {cursor: "place-2"}, kind: "frame"},
-        ],
-        "a marker with no place": [
-          {event: "synced", frame: {cursor: null}, kind: "frame"},
-        ],
-        nothing: [],
-        "nothing but a frame with rows before it": [],
-        rules: [{event: "sync_rules", frame: {}, kind: "frame"}],
-      }[after];
-
-      const preceding =
-        after === "nothing but a frame with rows before it" ? [frame(1)] : [];
-
-      it(`${kept ? "keeps" : "drops"} a start-over for somebody else signing in followed by ${after}, when it joined as the leader with a place`, async () => {
-        const seen = [];
-
-        sinon.stub(Tabs, "postState");
-
-        let arrived;
-
-        const hasArrived = new Promise((resolve) => {
-          arrived = resolve;
-        });
-
-        await Tabs.join(nextGroup(), {
-          onLead: () => {},
-          onMessage: (message) => {
-            seen.push(message);
-
-            if (message.kind === "barrier") {
-              arrived();
-            }
-          },
-        });
-
-        const other = sibling(Tabs.name);
-
-        for (const message of preceding) {
-          other.postMessage(message);
-        }
-
-        other.postMessage(resync);
-
-        for (const message of following) {
-          other.postMessage(message);
-        }
-
-        other.postMessage(barrier);
-
-        await hasArrived;
-
-        try {
-          SyncStream.syncCursor = "place-1";
-
-          Tabs.ready();
-
-          assert.deepStrictEqual(
-            seen.filter((message) => message.event === "sync_resync"),
-            kept ? [resync] : [],
-          );
-        } finally {
-          SyncStream.syncCursor = null;
-        }
-      });
-    }
-
-    it("writes down no identity when the group's state names the one it holds", async () => {
-      const persisting = sinon.stub(Durability, "persistReplica").resolves();
-
-      sinon.stub(Tabs, "postState");
-
-      Replica.offer({id: "r-group", token: "statement-group"});
-
-      let arrived;
-
-      const hasArrived = new Promise((resolve) => {
-        arrived = resolve;
-      });
-
-      await Tabs.join(nextGroup(), {
-        onLead: () => {},
-        onMessage: (message) => message.kind === "barrier" && arrived(),
-      });
-
-      const other = sibling(Tabs.name);
-
-      other.postMessage({
-        completeness: {all: false, types: []},
-        cursor: "place-9",
-        kind: "state",
-        replica: {id: "r-group", token: "statement-group"},
-        synced: [],
-      });
-
-      other.postMessage(barrier);
-
-      await hasArrived;
-
-      try {
-        Tabs.ready();
-
-        assert.isFalse(persisting.called);
-      } finally {
-        Replica.reset();
-      }
     });
 
     // What it held is gone from the queue of held messages by then, and a lead not taken leaves the
