@@ -1897,28 +1897,66 @@ describe("Tabs", () => {
         );
       });
 
-      it("takes the state as before when the store cannot be read", async () => {
+      // Nothing says which rows stand at the group's place, and the next frame naming one would
+      // hand it over anyway - so it leaves, as a tab whose store cannot be read at boot does.
+      it("leaves the group when the store cannot be read", async () => {
         sinon.stub(Durability, "readBase").resolves(null);
+
+        const detaching = sinon.stub(Durability, "detach");
+        const disowning = sinon.stub(Batches, "disown");
+        const reconnecting = sinon.stub(Sse, "reconnect");
+        const refreshing = sinon.stub(Replica, "refresh");
+        const wasStarted = Sse.isStarted;
+
+        Sse.isStarted = true;
 
         await follow();
 
         Tabs.receive(state("place-2"));
         await waitForEventLoop();
+
+        assert.isNull(Tabs.name);
+        assert.isTrue(Tabs.leader);
+        assert.isTrue(detaching.calledOnce);
+        assert.isTrue(disowning.calledOnce);
+        assert.isTrue(refreshing.calledOnce);
+
+        // A stream of its own, greeting the server from the place it holds.
+        assert.isTrue(reconnecting.calledOnce);
 
         assert.equal(SyncStream.syncCursor, "place-1");
-        sinon.assert.calledOnce(LocalDatabase.markAllSynced);
+        sinon.assert.notCalled(LocalDatabase.markAllSynced);
+
+        Sse.isStarted = wasStarted;
       });
 
-      it("takes the place the state names when the store cannot be read and it holds none", async () => {
-        sinon.stub(Durability, "readBase").resolves(null);
-        SyncStream.syncCursor = null;
+      // It never took the lead, so it leaves as the follower it was, and the next tab in line leads.
+      it("leaves the group as a follower when it was handed the lead while it read", async () => {
+        let read;
 
-        await follow();
+        sinon
+          .stub(Durability, "readBase")
+          .returns(new Promise((resolve) => (read = resolve)));
+
+        sinon.stub(Durability, "detach");
+
+        const disowning = sinon.stub(Batches, "disown");
+        const led = sinon.spy();
+        const {group, release} = await follow({onLead: led});
 
         Tabs.receive(state("place-2"));
+
+        release();
         await waitForEventLoop();
 
-        assert.equal(SyncStream.syncCursor, "place-2");
+        assert.isTrue(Tabs.leader);
+
+        read(null);
+        await waitForEventLoop();
+
+        assert.isFalse(led.called);
+        assert.isTrue(disowning.calledOnce);
+        assert.isTrue(await isLockFree(group));
       });
 
       // Not ready, it would hold everything its group says for the rest of its life.

@@ -466,7 +466,7 @@ export default class Tabs {
       // A state that sent this tab back to the store (see #takeStore): what follows it is about
       // what the read brings, so it waits for the read. Only a tab that follows reads it, so there
       // is no lead to carry over - one the group hands it during the read is taken by the ready()
-      // that ends it (see #wait).
+      // that ends it (see #wait), unless the read fails and the tab leaves the group instead.
       if (!Tabs.#ready) {
         Tabs.#held = held.slice(index + 1);
 
@@ -787,7 +787,7 @@ export default class Tabs {
   // names (see #takeState) - and the tab starting up again while it reads: what the group says
   // meanwhile is about the rows and the place the read brings, so it is held, and applied after
   // in the order it arrived (see ready()). A lead the group hands this tab meanwhile is taken then
-  // too, from the place the read left.
+  // too, from the place the read left - unless the read fails, when the tab leaves the group.
   //
   // The read starts as the state arrives, so after every write the state was posted behind: a
   // leader repairs the store before it says what it holds, and posts frames only once they are
@@ -803,14 +803,15 @@ export default class Tabs {
   // - It holds another place: every row the stream vouched for goes, and every row the store holds
   //   comes in as the store holds it, and the place with them. A row only the page carried stays,
   //   carried, for a completeness claim to judge. Then the claims, which are about those rows.
-  // - It cannot be read: the state is taken as it would be by a tab holding its place, which is
-  //   what this tab did before there was a store to read.
+  // - It cannot be read: the tab leaves the group (see below).
   //
   // What that costs, a round trip at most. A tab that heard a frame the new leader passed over goes
   // back to the store's rows until the stream sends that frame again; a batch the dropped frame
   // landed folds without those writes meanwhile, and a row a confirmed batch promoted is gone
   // until the frame that stored it is replayed. And a stream reconnecting while a tab handed the
-  // lead still reads greets with sync, which the lead's own reconnect replaces.
+  // lead still reads greets with sync, which the lead's own reconnect replaces. A read that fails
+  // costs more, and is rarer: the page keeps nothing from then on, and its own pending writes
+  // leave its screen, to land through the group's leader, which sends them from the queue.
   static async #takeStore(message) {
     Tabs.#ready = false;
 
@@ -822,17 +823,25 @@ export default class Tabs {
       return;
     }
 
+    // The store could not be read, so nothing says which rows stand at the group's place - and the
+    // next frame naming a place would hand it over anyway, over rows this tab never checked. So it
+    // leaves the group, as a tab whose store cannot be read at boot does (see DataLayer.boot), and
+    // stops using the store: it was never the one sending, so it takes a fresh identity, lets its
+    // batches go and opens a stream of its own, which greets the server from the place it holds
+    // (see Tabs.dissolve). That holds for a lead handed to it during the read too - it never took
+    // it, and the group's next tab in line takes it instead.
+    if (base === null) {
+      Durability.detach();
+      Tabs.leader = false;
+      Tabs.dissolve();
+
+      return;
+    }
+
     // Ready again whatever happens below: a tab that never is holds everything the group says for
     // the rest of its life.
     try {
-      if (base === null) {
-        if (SyncStream.syncCursor === null) {
-          SyncStream.syncCursor = message.cursor;
-        }
-
-        Tabs.#takeRules(message);
-        Tabs.#takeCompleteness(message);
-      } else if (base.cursor === null) {
+      if (base.cursor === null) {
         Tabs.#takeRules(message);
       } else {
         if (base.records !== null) {
