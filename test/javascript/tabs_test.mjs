@@ -407,6 +407,119 @@ describe("Tabs", () => {
       assert.isTrue(Tabs.postState.calledOnce);
     });
 
+    // A tab that followed wrote no identity down, and a reload after a lost answer would send the
+    // stored batch again under a new pair.
+    it("writes down the identity it sends under before it sends", async () => {
+      let persisted;
+
+      const persisting = sinon
+        .stub(Durability, "persistReplica")
+        .returns(new Promise((resolve) => (persisted = resolve)));
+
+      Replica.offer({id: "r-1", token: "statement-1"});
+      SyncStream.syncCursor = "place-1";
+
+      await succeed(nextGroup());
+
+      sinon.assert.calledOnceWithExactly(persisting, {
+        id: "r-1",
+        token: "statement-1",
+      });
+
+      assert.isFalse(flushing.called);
+
+      persisted();
+      await waitForEventLoop();
+
+      assert.isTrue(flushing.calledOnce);
+    });
+
+    it("writes down the identity when it starts over", async () => {
+      const persisting = sinon.stub(Durability, "persistReplica").resolves();
+
+      sinon.stub(Tabs, "post");
+
+      Replica.offer({id: "r-1", token: "statement-1"});
+
+      await succeed(nextGroup());
+
+      // After the clear, which leaves the identity where it is: the two land in the order made.
+      sinon.assert.callOrder(clearing, persisting);
+
+      sinon.assert.calledOnceWithExactly(persisting, {
+        id: "r-1",
+        token: "statement-1",
+      });
+
+      assert.isTrue(flushing.calledOnce);
+    });
+
+    // A batch another tab files, an action and the stream opening all flush too.
+    it("sends nothing from anywhere until the identity is written down", async () => {
+      let persisted;
+
+      sinon
+        .stub(Durability, "persistReplica")
+        .returns(new Promise((resolve) => (persisted = resolve)));
+
+      SyncStream.syncCursor = "place-1";
+
+      await succeed(nextGroup());
+
+      assert.isFalse(Tabs.sends());
+
+      persisted();
+      await waitForEventLoop();
+
+      assert.isTrue(Tabs.sends());
+    });
+
+    it("leaves the lead of a later visit to settle", async () => {
+      const persisted = [];
+
+      sinon
+        .stub(Durability, "persistReplica")
+        .callsFake(() => new Promise((resolve) => persisted.push(resolve)));
+
+      SyncStream.syncCursor = "place-1";
+
+      await succeed(nextGroup());
+      await Tabs.leave();
+      await succeed(nextGroup());
+
+      persisted[0]();
+      await waitForEventLoop();
+
+      assert.isFalse(Tabs.sends());
+    });
+
+    // Its restore flushes right after ready(), and a batch it held is replayed in it: both before
+    // the lead has written anything down.
+    it("sends nothing until the identity is written down, when handed the lead while starting", async () => {
+      let persisted;
+
+      sinon
+        .stub(Durability, "persistReplica")
+        .returns(new Promise((resolve) => (persisted = resolve)));
+
+      await handOverWhileStarting(nextGroup());
+
+      SyncStream.syncCursor = "place-1";
+
+      Tabs.ready();
+
+      assert.isFalse(Tabs.sends());
+
+      await waitForEventLoop();
+
+      assert.isFalse(Tabs.sends());
+
+      persisted();
+      await waitForEventLoop();
+
+      assert.isTrue(Tabs.sends());
+    });
+
     // Until its restore a starting tab holds no place, and taking the lead without one is asking for
     // everything again over a store that has one.
     it("waits until it is ready to take the lead it was handed while starting", async () => {
@@ -513,6 +626,8 @@ describe("Tabs", () => {
     });
 
     it("settles its lead even when the check fails", async () => {
+      const persisting = sinon.stub(Durability, "persistReplica").resolves();
+
       repairing.rejects(new Error("refused"));
       SyncStream.syncCursor = "place-1";
 
@@ -520,6 +635,11 @@ describe("Tabs", () => {
       await succeed(nextGroup());
 
       assert.isFalse(Tabs.takingLead);
+
+      // Sending again, under an identity written down.
+      assert.isTrue(persisting.calledOnce);
+      assert.isTrue(Tabs.sends());
+      assert.isTrue(flushing.calledOnce);
     });
 
     it("asks for everything when its restore left it no place", async () => {
@@ -885,11 +1005,15 @@ describe("Tabs", () => {
       // Read before the leader wrote it, the store can lack the identity the queue was numbered
       // under - and this tab sends the queue now.
       it("takes and writes down the identity the group's state names when it leads with no place", async () => {
-        const persisting = sinon.stub(Durability, "persistReplica");
+        const persisting = sinon.stub(Durability, "persistReplica").resolves();
 
-        await holdThenHandOver([]);
+        sinon.stub(Tabs, "post");
+
+        // Null takes the real lead, where an absent one takes none.
+        await holdThenHandOver([], {onLead: null});
 
         Tabs.ready();
+        await waitForEventLoop();
 
         assert.equal(Replica.id, "r-group");
 
@@ -897,6 +1021,18 @@ describe("Tabs", () => {
           id: "r-group",
           token: "statement-group",
         });
+      });
+
+      // The restore wrote its page's pair over the one the tab that led had written since, and the
+      // state is what still names it. The handler here takes nothing, so the lead itself does.
+      it("takes the identity the group's state names when it leads from a place", async () => {
+        await holdThenHandOver([], {messages: [state]});
+
+        SyncStream.syncCursor = "place-1";
+
+        Tabs.ready();
+
+        assert.equal(Replica.id, "r-group");
       });
 
       // A start over held behind it is what the lead has to take, from the place the replay leaves.
@@ -955,7 +1091,6 @@ describe("Tabs", () => {
       it("keeps the identity it has when the state names none", async () => {
         Replica.offer({id: "r-page", token: "statement-page"});
 
-        const persisting = sinon.stub(Durability, "persistReplica");
         const anonymous = {...state, replica: {id: null, token: null}};
 
         await holdThenHandOver([], {messages: [anonymous]});
@@ -963,7 +1098,6 @@ describe("Tabs", () => {
         Tabs.ready();
 
         assert.equal(Replica.id, "r-page");
-        assert.isFalse(persisting.called);
       });
 
       // The lead says what this tab holds to the group, and that has to name the identity it now
@@ -997,15 +1131,12 @@ describe("Tabs", () => {
 
       it("replays everything when it leads from a place", async () => {
         const seen = [];
-        const persisting = sinon.stub(Durability, "persistReplica");
 
         await holdThenHandOver(seen);
 
         SyncStream.syncCursor = "place-1";
 
         Tabs.ready();
-
-        assert.isFalse(persisting.called);
 
         assert.deepStrictEqual(seen, [
           {kind: "barrier"},

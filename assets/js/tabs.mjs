@@ -101,6 +101,10 @@ export default class Tabs {
   // that arrives in the same turn as the leaving.
   static #token = null;
 
+  // Whether the group became this tab's to lead and the identity it sends under is not written
+  // down yet (see #lead), so it sends nothing.
+  static #unrecorded = false;
+
   // The group is over, because the thing that made it one is gone: with no store there is nowhere
   // to file a batch and nothing to share, so every tab goes back to being a replica of its own -
   // which is exactly what a tab is in a browser that never had storage at all.
@@ -165,6 +169,7 @@ export default class Tabs {
     Tabs.#onLead = onLead ?? Tabs.#lead;
     Tabs.#ready = false;
     Tabs.#token = token;
+    Tabs.#unrecorded = false;
     Tabs.name = name;
 
     // Leading nothing until the lock says otherwise: a tab in no group leads itself, but one asking
@@ -241,6 +246,7 @@ export default class Tabs {
     Tabs.#ready = false;
     Tabs.#release = null;
     Tabs.#token = null;
+    Tabs.#unrecorded = false;
 
     Tabs.leader = true;
     Tabs.name = null;
@@ -387,13 +393,16 @@ export default class Tabs {
   // and call the pot complete over the tail's rows alone, and the lead would then write exactly
   // that to the store. So the frames and the group's state go: the fill repeats the rows, and the
   // stream repeats a stop and the rules. Three things stay. The batches other tabs filed and the
-  // answers to them are about the queue, which the new fill does not replace. A start-over because
-  // somebody else signed in is said only once, and drops at once every row the previous person may
-  // see - any this tab's own page carried for them included, which the new fill would leave
-  // readable until it ends. And the identity the group's state names is the one the queue was
-  // numbered under - read before the leader had written it, the store can lack it - so it is taken
-  // as the state would have given it, and written down, since this tab now sends under it. (A tab
-  // that held no state keeps the pair its restore settled on: see #1680.)
+  // answers to them are about the queue, which the new fill does not replace. And a start-over
+  // because somebody else signed in is said only once, and drops at once every row the previous
+  // person may see - any this tab's own page carried for them included, which the new fill would
+  // leave readable until it ends.
+  //
+  // Wherever a lead starts from, the identity the group's state names is taken first, as the state
+  // would have given it: it is the one the queue was numbered under, and the store can lack it -
+  // read before the tab that led had written it down, and then written over by this tab's restore
+  // with its page's pair. A tab that held no state keeps the pair its restore settled on. Either
+  // way #lead writes down the identity before anything is sent under it.
   //
   // A request for the state is never replayed, whoever this tab is. A tab that follows answers
   // none. A tab taking the lead says what it holds once the lead is settled (see #lead) - and a
@@ -413,7 +422,7 @@ export default class Tabs {
         : message.kind !== "joined",
     );
 
-    if (fromNowhere) {
+    if (lead) {
       Tabs.#adoptGroupIdentity(Tabs.#held);
     }
 
@@ -432,12 +441,16 @@ export default class Tabs {
     }
   }
 
-  // Whether this tab sends the queue: it leads, and has taken up the identity, the counter and the
-  // batches the store held (see ready()). A tab leading before then would send what it read of the
-  // queue under its page's own identity. A tab in no group has nothing to wait for - it never
-  // joined, or it left and leads itself.
+  // Whether this tab sends the queue: it leads, has taken up the identity, the counter and the
+  // batches the store held (see ready()), and the store holds the identity it sends under (see
+  // #lead). A tab leading before its restore would send what it read of the queue under its page's
+  // own identity, and one sending before the write would leave a reload to send the same batch
+  // again under another. A tab in no group has nothing to wait for - it never joined, or it left
+  // and leads itself.
   static sends() {
-    return Tabs.leader && (Tabs.name === null || Tabs.#ready);
+    return (
+      Tabs.leader && (Tabs.name === null || (Tabs.#ready && !Tabs.#unrecorded))
+    );
   }
 
   // Acted on as it arrives, or held until this tab has taken up what it starts with - the rows its
@@ -449,11 +462,11 @@ export default class Tabs {
   // A FRAME is the server's word about rows the page and the store have not put in yet.
   //
   // The group's STATE carries what is complete, and marking a type or the pot complete is what
-  // SWEEPS the rows a page carried but the stream never vouched for. Swept before the mount it sweeps an
-  // empty set, and the page's own carried rows - filed a moment later - are never looked at again,
-  // so a row the server would no longer send sits there for the life of the tab. (Reachable
-  // whenever a tab is between joining and mounting while another posts state: two tabs opened
-  // together, a succession, an identity switch. Found by CodeRabbit on PR #1169.)
+  // SWEEPS the rows a page carried but the stream never vouched for. Swept before the mount it
+  // sweeps an empty set, and the page's own carried rows - filed a moment later - are never looked
+  // at again, so a row the server would no longer send sits there for the life of the tab.
+  // (Reachable whenever a tab is between joining and mounting while another posts state: two tabs
+  // opened together, a succession, an identity switch. Found by CodeRabbit on PR #1169.)
   //
   // An ANSWER names a batch this tab takes up in the same breath: settling before the batch is
   // there settles nothing, and the batch is then folded for ever - nothing answers it twice.
@@ -548,52 +561,73 @@ export default class Tabs {
   //
   // Everything it needs is in its own memory, in the store, or in the grant itself.
   static async #lead() {
-    if (SyncStream.syncCursor === null) {
-      Tabs.#startOver();
-    } else {
-      // The store can name another place than this tab holds: the tab that was leading can have
-      // written a frame down and closed before telling the group of it. Carrying on would leave the
-      // store naming a place this tab does not hold the rows for (see Durability.repair).
-      //
-      // Or it can name none, which this tab cannot tell from the tab that was leading having
-      // cleared it to start over and closed before saying so. Whatever emptied it, the rows this
-      // tab holds are not what the store vouches for, and it starts over.
-      //
-      // A stream the page opens while this decides is not served sync (see Tabs.takingLead): a
-      // frame stored now would land on a store about to be cleared, with a place.
-      Tabs.takingLead = true;
+    const token = Tabs.#token;
 
-      let placeless;
-
-      try {
-        placeless = await Durability.repair(
-          LocalDatabase.records(LocalDatabase.vouchedRowKeys()),
-          SyncStream.syncCursor,
-        );
-      } finally {
-        Tabs.takingLead = false;
-      }
-
-      if (placeless) {
-        SyncStream.syncCursor = null;
+    // Nothing goes out until the identity is written down, from the flush below or any other: a
+    // batch another tab files, an action, the stream opening (see Tabs.sends). The write comes
+    // last, whatever happens before it, so a lead that fails to settle still writes it down before
+    // the tab sends again - the write itself never fails.
+    try {
+      if (SyncStream.syncCursor === null) {
         Tabs.#startOver();
+      } else {
+        // The store can name another place than this tab holds: the tab that was leading can have
+        // written a frame down and closed before telling the group of it. Carrying on would leave
+        // the store naming a place this tab does not hold the rows for (see Durability.repair).
+        //
+        // Or it can name none, which this tab cannot tell from the tab that was leading having
+        // cleared it to start over and closed before saying so. Whatever emptied it, the rows this
+        // tab holds are not what the store vouches for, and it starts over.
+        //
+        // A stream the page opens while this decides is not served sync (see Tabs.takingLead): a
+        // frame stored now would land on a store about to be cleared, with a place.
+        Tabs.takingLead = true;
+
+        let placeless;
+
+        try {
+          placeless = await Durability.repair(
+            LocalDatabase.records(LocalDatabase.vouchedRowKeys()),
+            SyncStream.syncCursor,
+          );
+        } finally {
+          Tabs.takingLead = false;
+        }
+
+        if (placeless) {
+          SyncStream.syncCursor = null;
+          Tabs.#startOver();
+        }
       }
+
+      Tabs.postState();
+
+      // The stream this tab has greeted the server with no sync - opened as a follower, or while
+      // this was deciding - or has not greeted yet, and would then greet with sync from whatever
+      // place the decision left; either way one the server serves sync on stands in its place,
+      // whichever answers last (see Sse.connect). Holding no place when it took the lead, a tab
+      // handed the lead while starting has none yet: its page starts one right after, which greets
+      // as the leader by itself, and a reconnect would open a second one beside it.
+      if (Sse.isStarted) {
+        Sse.reconnect();
+      }
+    } finally {
+      // The queue is this tab's to drain now, under an identity the store holds. A tab that
+      // followed wrote none down, and one handed the lead while starting can have taken the group's
+      // over the one its restore wrote (see ready()). AWAITED, as the 403 path in Batches.flush
+      // awaits it: nothing is sent under an identity that is not recorded, or a reload after a lost
+      // answer would send the stored batch again under a new pair, and the server would apply it
+      // twice.
+      await Durability.persistReplica(Replica.current());
+
+      // A lead of a visit that has ended leaves the next one's to settle.
+      if (Tabs.#token === token) {
+        Tabs.#unrecorded = false;
+      }
+
+      // Whatever the wait held back goes out now, even after a lead that failed to settle.
+      Batches.flush();
     }
-
-    Tabs.postState();
-
-    // The stream this tab has greeted the server with no sync - opened as a follower, or while this
-    // was deciding - or has not greeted yet, and would then greet with sync from whatever place
-    // the decision left; either way one the server serves sync on stands in its place, whichever
-    // answers last (see Sse.connect). Holding no place when it took the lead, a tab handed the lead
-    // while starting has none yet: its page starts one right after, which greets as the leader by
-    // itself, and a reconnect would open a second one beside it.
-    if (Sse.isStarted) {
-      Sse.reconnect();
-    }
-
-    // And the queue is this tab's to drain now.
-    Batches.flush();
   }
 
   // Nowhere to be brought up to date FROM: the tab that was leading died mid-fill, never got far
@@ -615,14 +649,13 @@ export default class Tabs {
     });
   }
 
-  // The identity the last of the given messages that is the group's state names, taken up and
-  // written down - for a tab about to send under it (see ready()).
+  // The identity the last of the given messages that is the group's state names, taken up - for a
+  // tab about to lead, which writes it down before sending under it (see ready() and #lead).
   static #adoptGroupIdentity(messages) {
     const state = messages.findLast((message) => message.kind === "state");
 
     if (state?.replica?.id) {
       Replica.adopt(state.replica);
-      Durability.persistReplica(Replica.current());
     }
   }
 
@@ -692,7 +725,8 @@ export default class Tabs {
   // that led wrote since. A fill that finished after the read is refused and filled again, which
   // costs a download. A read taken before that tab recorded who the store belongs to is refused
   // as somebody else's, so the ready tabs drop their rows until the refill. And an identity it
-  // wrote since is written over, which ready() puts back when the group's state said it (#1680).
+  // wrote since is written over, which ready() takes back from the group's state when it heard one,
+  // and #lead writes down again.
   //
   // Until it is ready it holds no place: the restore is what hands it the one the store had.
   // Taking the lead without one is asking for everything again, clearing the store and telling
@@ -706,6 +740,7 @@ export default class Tabs {
       }
 
       Tabs.leader = true;
+      Tabs.#unrecorded = true;
 
       if (Tabs.#ready) {
         Tabs.#onLead();
