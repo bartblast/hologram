@@ -610,7 +610,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       assert %{} = rows = recheck(PolicyModule18, @seat_mapping, ids, [nil])
       assert [full.id] == Map.keys(rows)
-      assert {%PolicyModule18{seat: "full"}, :all} = rows[full.id]
+      assert {%PolicyModule18{seat: "full"}, :all, _verdicts} = rows[full.id]
     end
   end
 

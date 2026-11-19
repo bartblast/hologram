@@ -651,7 +651,9 @@ defmodule Hologram.Migration.RendererTest do
       refute Enum.any?(result.transactional, &(&1[:from] == "my_app_task_title_$uidx"))
     end
 
-    test "builds an added attribute's sort key index under the name a later rename gives it" do
+    # A non-unique string's sort key index is the index plan's to build and rename, not a
+    # migration's (see Hologram.DB.IndexBuilder).
+    test "builds no sort key index for an added attribute, under its name or the one a later rename gives it" do
       pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
       ops = [
@@ -668,16 +670,13 @@ defmodule Hologram.Migration.RendererTest do
 
       result = render(ops, pre)
 
-      assert [
-               %{
-                 op: :create_index,
-                 table: "my_app_task",
-                 index: "my_app_task_remark_$sort_$idx",
-                 columns: ["remark_$sort"]
-               }
-             ] = result.tail
+      index_ops =
+        Enum.filter(
+          result.transactional ++ result.tail,
+          &(&1.op in [:create_index, :drop_index, :rename_index])
+        )
 
-      refute Enum.any?(result.transactional, &(&1[:from] == "my_app_task_note_$sort_$idx"))
+      assert index_ops == []
     end
 
     test "drops nothing and builds nothing for a unique index the same file takes back" do
