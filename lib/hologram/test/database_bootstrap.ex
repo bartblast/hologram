@@ -10,6 +10,21 @@ defmodule Hologram.Test.DatabaseBootstrap do
   alias Hologram.DB.Mapper
   alias Hologram.Test.DatabaseBootstrap.Connection
 
+  # What a later run's sweep tells a test database by - never its name, so a database whose name
+  # only looks like one is never dropped. No quotes, so it goes into SQL as a literal unescaped.
+  @mark "Hologram test database, dropped by a later test run once nothing is connected"
+
+  @doc """
+  Returns the comment a test database carries for a later run to drop it once nothing is
+  connected to it.
+
+  For a test support module creating databases of its own, which marks each one once a
+  connection to it is up, with `COMMENT ON DATABASE`. Marked before that, a database could be
+  dropped by a run starting meanwhile.
+  """
+  @spec mark() :: String.t()
+  def mark, do: @mark
+
   @doc """
   Creates the databases of this test run, points the app at them and returns a map from each
   prepared name, the configured test database's and the given ones, to the name of the run's
@@ -25,6 +40,12 @@ defmodule Hologram.Test.DatabaseBootstrap do
 
   Each run database keeps a connection of its own open until the caller ends: linked to it,
   never stopped. Call this from the test helper, whose process lives as long as the run.
+
+  The databases runs left behind are dropped here: every database carrying the mark (see
+  mark/0) that the configured role owns and nothing is connected to, together with the
+  scratch database the shadow verifier named after it. A run's database gets the mark only
+  once its held connection is up, so one with the mark and no session belongs to a run that
+  ended, crashed or was killed, whose sessions the server ended with its sockets.
 
   The configured role must be allowed to create databases, since every run creates its own.
 
@@ -60,16 +81,17 @@ defmodule Hologram.Test.DatabaseBootstrap do
     maintenance_pid = start_maintenance_connection!(database_opts)
 
     try do
+      maintenance_pid
+      |> list_leftover_databases()
+      |> Enum.each(&drop_leftover_database!(maintenance_pid, &1))
+
       Enum.each(run_databases, fn {_database, run_database} ->
         create_database!(maintenance_pid, run_database)
+        hold_database!(maintenance_pid, database_opts, run_database)
       end)
     after
       Connection.stop(maintenance_pid)
     end
-
-    Enum.each(run_databases, fn {_database, run_database} ->
-      hold_database!(database_opts, run_database)
-    end)
 
     # The resolved discrete keys, without :url - a configured url would win over the run's
     # database name.
@@ -103,13 +125,70 @@ defmodule Hologram.Test.DatabaseBootstrap do
     Connection.query!(maintenance_pid, "CREATE DATABASE #{quoted_database} TEMPLATE template0")
   end
 
-  defp hold_database!(database_opts, database) do
-    {:ok, _connection_pid} =
+  # IF EXISTS: another run's sweep, or a test dropping its own databases, may have got there
+  # first.
+  defp drop_database_if_exists!(maintenance_pid, database) do
+    quoted_database = Mapper.quote_identifier(database)
+    Connection.query!(maintenance_pid, "DROP DATABASE IF EXISTS #{quoted_database}")
+  end
+
+  # The shadow verifier's scratch database goes too: a run killed while it verified leaves
+  # one, and with run names never repeating, the verifier's own drop of a stale one never
+  # reaches it. Dropped first, so a sweep stopped between the two drops leaves the mark for a
+  # later one to find both by. Without FORCE, so a session the listing missed is never ended:
+  # a database someone connected to since is left for a later run.
+  defp drop_leftover_database!(maintenance_pid, database) do
+    drop_database_if_exists!(maintenance_pid, Mapper.fit_identifier([database], [], "shadow"))
+    drop_database_if_exists!(maintenance_pid, database)
+  rescue
+    error in Postgrex.Error ->
+      case error do
+        %Postgrex.Error{postgres: %{code: :object_in_use}} -> :ok
+        _other -> reraise error, __STACKTRACE__
+      end
+  end
+
+  # A database whose connection failed is dropped at once: it never got the mark, so no later
+  # run would drop it.
+  defp hold_database!(maintenance_pid, database_opts, database) do
+    connection_result =
       database_opts
       |> connection_opts(database)
       |> Connection.start()
 
-    :ok
+    case connection_result do
+      {:ok, connection_pid} ->
+        quoted_database = Mapper.quote_identifier(database)
+        Connection.query!(connection_pid, "COMMENT ON DATABASE #{quoted_database} IS '#{@mark}'")
+
+        :ok
+
+      # Raised in after, so the connect error is what the caller sees even when the drop fails.
+      {:error, reason} ->
+        try do
+          drop_database_if_exists!(maintenance_pid, database)
+        after
+          raise reason
+        end
+    end
+  end
+
+  # Only the databases the configured role owns, since it can drop no others. A database
+  # someone is connected to is left out: dropping one waits several seconds for its sessions
+  # before it fails.
+  defp list_leftover_databases(maintenance_pid) do
+    statement = """
+    SELECT "datname" FROM pg_catalog.pg_database AS "d"
+    WHERE pg_catalog.shobj_description("d"."oid", 'pg_database') = '#{@mark}'
+      AND "d"."datdba" = (SELECT "oid" FROM pg_catalog.pg_roles WHERE "rolname" = current_user)
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_catalog.pg_stat_activity AS "a" WHERE "a"."datid" = "d"."oid"
+      )
+    """
+
+    %{rows: rows} = Connection.query!(maintenance_pid, statement)
+
+    Enum.map(rows, fn [database] -> database end)
   end
 
   defp print_unusable_server_message(database_opts, reason) do
@@ -138,13 +217,14 @@ defmodule Hologram.Test.DatabaseBootstrap do
   # The prod path this closes is one line in a release console: the :test atom passed to
   # Config.resolve!/2 supplies defaults only, so the app's real config wins, and the run's
   # databases would be created on whatever server it names, with the running app's config
-  # repointed at them. A release with no HOLOGRAM_ENV reports :dev, so it refuses.
+  # repointed at them and the marked databases nobody is connected to dropped. A release with
+  # no HOLOGRAM_ENV reports :dev, so it refuses.
   defp refuse_outside_test! do
     env = Hologram.env()
 
     if env != :test do
-      raise "Hologram.Test.DatabaseBootstrap.run!/1 creates databases and points the " <>
-              "database config at them, so it runs in the test env only - the current env " <>
+      raise "Hologram.Test.DatabaseBootstrap.run!/1 creates and drops databases and points " <>
+              "the database config at them, so it runs in the test env only - the current env " <>
               "is #{inspect(env)}. When neither HOLOGRAM_ENV nor MIX_ENV is set, the test env " <>
               "is recognized by the running ExUnit server, so call run!/1 after ExUnit.start()."
     end

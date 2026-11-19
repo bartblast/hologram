@@ -3,6 +3,7 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
   # :database config, both BEAM-global.
   use Hologram.Test.ScratchDatabaseCase, async: false
 
+  import ExUnit.CaptureLog
   import Hologram.Test.DatabaseBootstrap
 
   alias Hologram.DB.Config
@@ -64,6 +65,23 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
 
   defp claim(scratch, context) do
     route(scratch, fn -> SchemaReconciler.ensure_managed!(context) end)
+  end
+
+  defp close_connections(listen_socket) do
+    case :gen_tcp.accept(listen_socket) do
+      {:ok, client_socket} ->
+        :gen_tcp.close(client_socket)
+        close_connections(listen_socket)
+
+      # The listen socket closes with the test process that owns it.
+      {:error, :closed} ->
+        :ok
+    end
+  end
+
+  defp create_database(scratch, database) do
+    quoted_database = Mapper.quote_identifier(database)
+    Postgrex.query!(scratch, "CREATE DATABASE #{quoted_database} TEMPLATE template0", [])
   end
 
   defp database_exists?(scratch, database) do
@@ -148,6 +166,65 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
     end)
 
     run_databases
+  end
+
+  # Runs the bootstrap in a process that is then shut down, the way a run ends, and returns the
+  # databases it created once the server has ended their sessions. Shut down rather than left
+  # to return: an exit :normal doesn't take the linked held connections down. The config is put
+  # back for the next run.
+  defp run_in_ended_process!(scratch, scratch_opts) do
+    test_pid = self()
+
+    run_pid =
+      spawn(fn ->
+        send(test_pid, {:run_databases, run!()})
+        Process.sleep(:infinity)
+      end)
+
+    assert_receive {:run_databases, run_databases}, 10_000
+
+    Enum.each(run_databases, fn {_database, run_database} ->
+      drop_database_on_exit(scratch_opts, run_database)
+    end)
+
+    Process.exit(run_pid, :shutdown)
+
+    ended_databases = Map.values(run_databases)
+
+    wait_until(fn -> Enum.all?(ended_databases, &(session_count(scratch, &1) == 0)) end, 5_000)
+
+    Application.put_env(:hologram, :database, database: scratch_opts[:database])
+
+    run_databases
+  end
+
+  defp session_count(scratch, database) do
+    statement = "SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE datname = $1"
+
+    %{rows: [[count]]} = Postgrex.query!(scratch, statement, [database])
+
+    count
+  end
+
+  # A TCP proxy in front of the given server that forwards the first connection it accepts and
+  # closes every later one at once, the way a server that stops taking connections would.
+  # Returns the port it listens on.
+  defp start_first_connection_only_proxy(upstream_opts) do
+    {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false])
+    {:ok, port} = :inet.port(listen_socket)
+
+    spawn_link(fn ->
+      {:ok, client_socket} = :gen_tcp.accept(listen_socket)
+
+      forwarder = spawn_link(fn -> forward_connection(client_socket, upstream_opts, 0) end)
+
+      :ok = :gen_tcp.controlling_process(client_socket, forwarder)
+      send(forwarder, :socket_handed_over)
+
+      close_connections(listen_socket)
+    end)
+
+    port
   end
 
   # A TCP proxy in front of the given server that holds the first connection it accepts for
@@ -266,6 +343,130 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
       assert hologram_schemas(scratch) == ["hologram_data", "hologram_system"]
     end
 
+    test "marks the run's databases", %{scratch: scratch, scratch_opts: scratch_opts} do
+      run_databases = run_and_drop!(scratch_opts, [scratch_opts[:database] <> "_given"])
+
+      statement = """
+      SELECT pg_catalog.shobj_description("oid", 'pg_database')
+      FROM pg_catalog.pg_database
+      WHERE "datname" = $1
+      """
+
+      Enum.each(run_databases, fn {_database, run_database} ->
+        assert Postgrex.query!(scratch, statement, [run_database]).rows == [[mark()]]
+      end)
+    end
+
+    test "drops a run database nothing is connected to", %{
+      scratch: scratch,
+      scratch_opts: scratch_opts
+    } do
+      ended_run_databases = run_in_ended_process!(scratch, scratch_opts)
+
+      run_and_drop!(scratch_opts)
+
+      refute database_exists?(scratch, ended_run_databases[scratch_opts[:database]])
+    end
+
+    test "drops the shadow verifier's database named after a run database it drops", %{
+      scratch: scratch,
+      scratch_opts: scratch_opts
+    } do
+      ended_run_databases = run_in_ended_process!(scratch, scratch_opts)
+
+      shadow_database =
+        Mapper.fit_identifier([ended_run_databases[scratch_opts[:database]]], [], "shadow")
+
+      create_database(scratch, shadow_database)
+      drop_database_on_exit(scratch_opts, shadow_database)
+
+      run_and_drop!(scratch_opts)
+
+      refute database_exists?(scratch, shadow_database)
+    end
+
+    test "leaves a run database a run is connected to alone, without waiting on it", %{
+      scratch: scratch,
+      scratch_opts: scratch_opts
+    } do
+      first_run_databases = run_and_drop!(scratch_opts)
+
+      Application.put_env(:hologram, :database, database: scratch_opts[:database])
+
+      {elapsed_us, _run_databases} = :timer.tc(fn -> run_and_drop!(scratch_opts) end)
+
+      assert database_exists?(scratch, first_run_databases[scratch_opts[:database]])
+
+      # Dropping a database someone is connected to fails only after the server has waited 5 s
+      # for its sessions to end, so a run that tried would take longer than that.
+      assert elapsed_us < 5_000_000
+    end
+
+    test "drops a run database whose connection failed", %{
+      scratch: scratch,
+      scratch_opts: scratch_opts
+    } do
+      run_database_prefix = scratch_opts[:database] <> "_run_"
+      maintenance_opts = Keyword.put(scratch_opts, :database, "postgres")
+
+      # The run database's name is random, so should it be left behind, it's found by prefix.
+      on_exit(fn ->
+        {:ok, connection} = Postgrex.start_link(maintenance_opts)
+
+        %{rows: rows} =
+          Postgrex.query!(
+            connection,
+            "SELECT datname FROM pg_catalog.pg_database WHERE starts_with(datname, $1)",
+            [run_database_prefix]
+          )
+
+        Enum.each(rows, fn [database] ->
+          quoted_database = Mapper.quote_identifier(database)
+
+          Postgrex.query!(
+            connection,
+            "DROP DATABASE IF EXISTS #{quoted_database} WITH (FORCE)",
+            []
+          )
+        end)
+
+        GenServer.stop(connection)
+      end)
+
+      # The maintenance connection gets through, the run database's own connection doesn't.
+      proxy_port = start_first_connection_only_proxy(scratch_opts)
+
+      Application.put_env(:hologram, :database,
+        database: scratch_opts[:database],
+        port: proxy_port
+      )
+
+      log =
+        capture_log(fn ->
+          assert_raise DBConnection.ConnectionError, fn -> run!() end
+        end)
+
+      assert log =~ "failed to connect to Postgres"
+
+      statement = "SELECT datname FROM pg_catalog.pg_database WHERE starts_with(datname, $1)"
+
+      assert Postgrex.query!(scratch, statement, [run_database_prefix]).rows == []
+    end
+
+    test "leaves a database without the mark alone", %{
+      scratch: scratch,
+      scratch_opts: scratch_opts
+    } do
+      unmarked_database = scratch_opts[:database] <> "_unmarked"
+
+      create_database(scratch, unmarked_database)
+      drop_database_on_exit(scratch_opts, unmarked_database)
+
+      run_and_drop!(scratch_opts)
+
+      assert database_exists?(scratch, unmarked_database)
+    end
+
     test "waits for a server slow to answer its first connection", %{
       scratch: scratch,
       scratch_opts: scratch_opts
@@ -294,8 +495,8 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
       System.put_env("HOLOGRAM_ENV", "dev")
 
       expected_msg =
-        "Hologram.Test.DatabaseBootstrap.run!/1 creates databases and points the " <>
-          "database config at them, so it runs in the test env only - the current env " <>
+        "Hologram.Test.DatabaseBootstrap.run!/1 creates and drops databases and points " <>
+          "the database config at them, so it runs in the test env only - the current env " <>
           "is :dev. When neither HOLOGRAM_ENV nor MIX_ENV is set, the test env " <>
           "is recognized by the running ExUnit server, so call run!/1 after ExUnit.start()."
 
