@@ -3,13 +3,18 @@ defmodule Hologram.Sync.RecheckTest do
 
   import Hologram.DB.EntityOperations, only: [add_relationship: 4]
   import Hologram.Sync.Recheck
+  import Hologram.Test.Stubs
+  import Mox
 
   alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
+  alias Hologram.Policy
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module13, as: PolicyModule13
+  alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyModule17
+  alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
@@ -21,7 +26,22 @@ defmodule Hologram.Sync.RecheckTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module12
   alias Hologram.Test.Fixtures.Policy.Readers.Module13
   alias Hologram.Test.Fixtures.Policy.Readers.Module14, as: ReadersModule14
+  alias Hologram.Test.Fixtures.Policy.Readers.Module15
+  alias Hologram.Test.Fixtures.Policy.Readers.Module16
+  alias Hologram.Test.Fixtures.Policy.Readers.Module17
+  alias Hologram.Test.Fixtures.Policy.Readers.Module18
+  alias Hologram.Test.Fixtures.Policy.Readers.Module19
   alias Hologram.Test.Fixtures.Policy.Readers.Module2
+  alias Hologram.Test.Fixtures.Policy.Readers.Module20
+  alias Hologram.Test.Fixtures.Policy.Readers.Module21
+  alias Hologram.Test.Fixtures.Policy.Readers.Module22
+  alias Hologram.Test.Fixtures.Policy.Readers.Module23
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24
+  alias Hologram.Test.Fixtures.Policy.Readers.Module25
+  alias Hologram.Test.Fixtures.Policy.Readers.Module26
+  alias Hologram.Test.Fixtures.Policy.Readers.Module27
+  alias Hologram.Test.Fixtures.Policy.Readers.Module28
+  alias Hologram.Test.Fixtures.Policy.Readers.Module29
   alias Hologram.Test.Fixtures.Policy.Readers.Module3
   alias Hologram.Test.Fixtures.Policy.Readers.Module4
   alias Hologram.Test.Fixtures.Policy.Readers.Module5
@@ -30,6 +50,17 @@ defmodule Hologram.Sync.RecheckTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module8
   alias Hologram.Test.Fixtures.Policy.Readers.Module9
   alias Hologram.Test.Fixtures.Role
+
+  use_module_stub :query_cache
+
+  # A build with a page checking permissions on the client - the only kind whose rows carry
+  # verdicts. A test turning it off puts the flag again.
+  setup do
+    stub_with(QueryCacheMock, QueryCacheStub)
+    :persistent_term.put(QueryCacheStub.persistent_term_key(), %{permission_checking?: true})
+
+    on_exit(fn -> :persistent_term.erase(QueryCacheStub.persistent_term_key()) end)
+  end
 
   setup do
     alice = create_user("alice@example.com")
@@ -52,7 +83,7 @@ defmodule Hologram.Sync.RecheckTest do
 
       actual =
         case Map.fetch(readable, row.id) do
-          {:ok, {_row, readers}} -> reads?(readers, user_id)
+          {:ok, {_row, readers, _verdicts}} -> reads?(readers, user_id)
           :error -> false
         end
 
@@ -73,9 +104,43 @@ defmodule Hologram.Sync.RecheckTest do
   defp create_user(email), do: create(Module14, %{email: email})
 
   defp readers_of(readable, row) do
-    {_row, readers} = Map.fetch!(readable, row.id)
+    {_row, readers, _verdicts} = Map.fetch!(readable, row.id)
 
     readers
+  end
+
+  # Every reader's verdicts are what Auth.verdicts/2 answers for the row the recheck read, one row
+  # and one user at a time - for every row given, each readable by somebody, and every user given
+  # who may read it, anonymous ones included.
+  defp assert_verdicts_as_auth(entity_type, rows, user_ids) do
+    assert Policy.deciding_quantifiers(entity_type) != []
+
+    readable =
+      %{entity_type => Enum.map(rows, & &1.id)}
+      |> run(user_ids)
+      |> Map.get(entity_type, %{})
+
+    readable_ids =
+      readable
+      |> Map.keys()
+      |> MapSet.new()
+
+    assert readable_ids == MapSet.new(rows, & &1.id)
+
+    for {_id, {row, readers, row_verdicts}} <- readable,
+        user_id <- user_ids,
+        reads?(readers, user_id) do
+      assert verdicts(row_verdicts, user_id) == Auth.verdicts(user_id, row),
+             "#{inspect(entity_type)} row #{row.id}, user #{inspect(user_id)}"
+    end
+
+    readable
+  end
+
+  defp verdicts_of(readable, row) do
+    {_row, _readers, row_verdicts} = Map.fetch!(readable, row.id)
+
+    row_verdicts
   end
 
   describe "run/2" do
@@ -103,7 +168,7 @@ defmodule Hologram.Sync.RecheckTest do
       create(Module2, %{project_id: project.id, user_id: context.alice})
       create(Module2, %{project_id: project.id, user_id: context.alice})
 
-      %{Module1 => %{^project_id => {_row, readers}}} =
+      %{Module1 => %{^project_id => {_row, readers, _verdicts}}} =
         run(%{Module1 => [project.id]}, context.users)
 
       assert readers == MapSet.new([context.alice])
@@ -116,7 +181,7 @@ defmodule Hologram.Sync.RecheckTest do
       create(Module2, %{project_id: project.id, user_id: context.alice})
       create(Module2, %{project_id: project.id, user_id: context.bob})
 
-      %{Module1 => %{^project_id => {_row, readers}}} =
+      %{Module1 => %{^project_id => {_row, readers, _verdicts}}} =
         run(%{Module1 => [project.id]}, [context.bob, nil])
 
       assert readers == MapSet.new([context.bob])
@@ -392,7 +457,7 @@ defmodule Hologram.Sync.RecheckTest do
 
       project_id = project.id
 
-      %{Module1 => %{^project_id => {row, _readers}}} =
+      %{Module1 => %{^project_id => {row, _readers, _verdicts}}} =
         run(%{Module1 => [project.id]}, [context.alice])
 
       assert row == DB.read(Module1, project.id)
@@ -425,9 +490,13 @@ defmodule Hologram.Sync.RecheckTest do
       shared = create(PolicyModule6, %{shared: true})
       authored = create(PolicyModule6)
 
-      assert run(%{PolicyModule6 => [shared.id, authored.id]}, [nil]) == %{
-               PolicyModule6 => %{shared.id => {DB.read(PolicyModule6, shared.id), :all}}
-             }
+      shared_id = shared.id
+
+      assert %{PolicyModule6 => %{^shared_id => {row, :all, _verdicts}} = readable} =
+               run(%{PolicyModule6 => [shared.id, authored.id]}, [nil])
+
+      assert row == DB.read(PolicyModule6, shared.id)
+      assert map_size(readable) == 1
     end
 
     # A session's user id may be any string, integer or atom, and one naming no user entity is
@@ -444,8 +513,8 @@ defmodule Hologram.Sync.RecheckTest do
       readable =
         run(%{Module5 => [owned.id], PolicyModule6 => [shared.id, authored.id]}, user_ids)
 
-      {_row, owned_readers} = readable[Module5][owned.id]
-      {_row, shared_readers} = readable[PolicyModule6][shared.id]
+      {_row, owned_readers, _verdicts} = readable[Module5][owned.id]
+      {_row, shared_readers, _verdicts} = readable[PolicyModule6][shared.id]
 
       assert owned_readers == MapSet.new([context.bob])
       assert shared_readers == :all
@@ -463,17 +532,289 @@ defmodule Hologram.Sync.RecheckTest do
       project_id = project.id
       create(Module2, %{project_id: project.id, user_id: context.alice})
 
-      %{Module1 => %{^project_id => {_row, readers}}} =
+      %{Module1 => %{^project_id => {_row, readers, _verdicts}}} =
         run(%{Module1 => [project.id]}, [context.alice, context.alice])
 
       assert readers == MapSet.new([context.alice])
     end
   end
 
-  describe "reads?/2" do
-    @alice_id "018f4571-a1b2-7c3d-8e4f-000000000001"
-    @bob_id "018f4571-a1b2-7c3d-8e4f-000000000002"
+  describe "run/2 verdicts" do
+    # A board everyone reads, with a card alice wrote and a done one bob reviews, and an empty one.
+    defp boards(context) do
+      board = create(Module15)
+      empty = create(Module15)
 
+      create(Module16, %{author_id: context.alice, board_id: board.id})
+      create(Module16, %{board_id: board.id, done: true, reviewer_id: context.bob})
+
+      {board, empty}
+    end
+
+    test "answers each reader's verdicts on a row everyone may read as Auth.verdicts/2 does",
+         context do
+      {board, empty} = boards(context)
+
+      assert_verdicts_as_auth(Module15, [board, empty], context.users)
+    end
+
+    test "tests only the readers a listed clause's anchor names, the rest answering its default",
+         context do
+      {board, _empty} = boards(context)
+
+      readable = assert_verdicts_as_auth(Module15, [board], context.users)
+      row_verdicts = verdicts_of(readable, board)
+
+      tested_ids =
+        row_verdicts.users
+        |> Map.keys()
+        |> MapSet.new()
+
+      assert tested_ids == MapSet.new([context.alice, context.bob])
+      assert verdicts(row_verdicts, context.carol) == row_verdicts.others
+    end
+
+    test "answers a clause naming nobody once per row", context do
+      {board, empty} = boards(context)
+
+      readable = run(%{Module15 => [board.id, empty.id]}, context.users)
+      delete_key = Policy.verdict_key(Module15, :delete, {:none, {[:cards], []}})
+
+      for {row, expected} <- [{board, false}, {empty, true}], user_id <- context.users do
+        assert verdicts(verdicts_of(readable[Module15], row), user_id)[delete_key] == expected
+      end
+    end
+
+    test "tests every reader of a type with an unlisted clause", context do
+      holder = create(Module17)
+      create(Module16, %{author_id: context.alice, holder_id: holder.id})
+      create(Module16, %{author_id: context.bob, done: true, holder_id: holder.id})
+
+      readable = assert_verdicts_as_auth(Module17, [holder], context.users)
+      row_verdicts = verdicts_of(readable, holder)
+
+      tested_ids =
+        row_verdicts.users
+        |> Map.keys()
+        |> MapSet.new()
+
+      assert tested_ids == MapSet.new([context.alice, context.bob])
+      assert row_verdicts.others == nil
+
+      # Carol reads no row of the holder, so she was never a reader to answer.
+      assert_raise ArgumentError, fn -> verdicts(row_verdicts, context.carol) end
+    end
+
+    test "answers a row only some users read for each of its readers", context do
+      subject = create(Module6)
+      create(Module7, %{subject_id: subject.id, user_id: context.alice})
+
+      readable = assert_verdicts_as_auth(Module6, [subject], context.users)
+
+      {_row, readers, _verdicts} = readable[subject.id]
+      assert readers == MapSet.new([context.bob, context.carol])
+    end
+
+    test "answers clauses on server-only attributes, the row's own and through a path", context do
+      reviewed = create(Module18, %{reviewed: true, steward_id: context.bob})
+      stewarded = create(Module18, %{steward_id: context.alice})
+      note = create(Module19, %{report_id: reviewed.id})
+      other_note = create(Module19, %{report_id: stewarded.id})
+
+      assert_verdicts_as_auth(Module18, [reviewed, stewarded], context.users)
+      assert_verdicts_as_auth(Module19, [note, other_note], context.users)
+    end
+
+    # No client holds a row of a type nobody may read, so the server answers a read rule reading one.
+    test "answers read rule clauses through a type nobody may read", context do
+      open = create(Module20, %{steward_id: context.bob})
+      archived = create(Module20, %{archived: true, steward_id: context.alice})
+      task = create(Module21, %{project_id: open.id})
+      other_task = create(Module21, %{project_id: archived.id})
+
+      assert_verdicts_as_auth(Module21, [task, other_task], context.users)
+    end
+
+    # Alice holds the role on the team the project names, so the reference through the project
+    # holds for her. Bob reads the task through its own team only, so it fails for him.
+    test "answers a read rule's role reference through a type nobody may read", context do
+      project_team = create(Module22, %{})
+      task_team = create(Module22, %{})
+      project = create(Module23, %{team_id: project_team.id})
+      task = create(Module24, %{project_id: project.id, team_id: task_team.id})
+
+      Auth.grant_role(context.alice, :member, project_team)
+      Auth.grant_role(context.bob, :member, task_team)
+
+      readable = assert_verdicts_as_auth(Module24, [task], context.users)
+      {_row, readers, _verdicts} = readable[task.id]
+
+      assert reads?(readers, context.alice)
+      assert reads?(readers, context.bob)
+    end
+
+    # Alice keeps and holds a role on the open vault, Bob keeps the closed one, and Carol reads the
+    # first parcel through the open vault alone.
+    test "answers a read rule's delegations through a type nobody may read", context do
+      open_vault = create(Module25, %{keeper_id: context.alice, open: true})
+      closed_vault = create(Module25, %{keeper_id: context.bob})
+      crate = create(Module26, %{open: true})
+      shelf = create(Module27, %{crate_id: crate.id})
+      parcel = create(Module28, %{shelf_id: shelf.id, vault_id: open_vault.id})
+      other_parcel = create(Module28, %{vault_id: closed_vault.id})
+
+      Auth.grant_role(context.alice, :member, open_vault)
+
+      assert_verdicts_as_auth(Module28, [parcel, other_parcel], context.users)
+    end
+
+    # Every delegation is to listed rules, so only the users their anchors name are tested: Alice
+    # keeps the vault and Carol holds a role on it, while Bob reads the open parcel by its own rule
+    # and answers the default.
+    test "answers a read rule's delegations to listed rules through a type nobody may read",
+         context do
+      vault = create(Module25, %{keeper_id: context.alice})
+      parcel = create(Module29, %{open: true, vault_id: vault.id})
+
+      Auth.grant_role(context.carol, :member, vault)
+
+      readable = assert_verdicts_as_auth(Module29, [parcel], context.users)
+      {_row, readers, row_verdicts} = readable[parcel.id]
+
+      archive_key = Policy.verdict_key(Module29, :read, {:via, {:archive, [:vault]}})
+      close_key = Policy.verdict_key(Module29, :read, {:via, {:close, [:vault]}})
+
+      tested_ids =
+        row_verdicts.users
+        |> Map.keys()
+        |> MapSet.new()
+
+      assert reads?(readers, context.bob)
+      assert tested_ids == MapSet.new([context.alice, context.carol])
+      assert verdicts(row_verdicts, context.bob) == row_verdicts.others
+      assert verdicts(row_verdicts, context.alice) == %{archive_key => true, close_key => false}
+      assert verdicts(row_verdicts, context.bob) == %{archive_key => false, close_key => false}
+      assert verdicts(row_verdicts, context.carol) == %{archive_key => false, close_key => true}
+    end
+
+    test "answers clauses over paths and through related sets for every user alike", context do
+      project = create(PolicyModule17, %{public: true})
+      locked = create(PolicyModule19, %{name: "locked"})
+      add_relationship(PolicyModule17, project.id, :labels, locked.id)
+
+      assert_verdicts_as_auth(
+        PolicyModule17,
+        [project, create(PolicyModule17, %{public: true})],
+        context.users
+      )
+    end
+
+    test "answers no anonymous user when none was given", context do
+      {board, _empty} = boards(context)
+
+      readable = assert_verdicts_as_auth(Module15, [board], [context.alice, context.bob])
+
+      assert verdicts_of(readable, board).anonymous == nil
+    end
+
+    test "answers no verdicts when no client checks permissions", context do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{permission_checking?: false})
+
+      {board, _empty} = boards(context)
+
+      row_verdicts =
+        %{Module15 => [board.id]}
+        |> run(context.users)
+        |> Map.fetch!(Module15)
+        |> verdicts_of(board)
+
+      for user_id <- context.users do
+        assert verdicts(row_verdicts, user_id) == %{}
+      end
+    end
+
+    test "answers no verdicts for a type with no deciding clause", context do
+      project = create(Module1)
+      create(Module2, %{project_id: project.id, user_id: context.alice})
+
+      readable = run(%{Module1 => [project.id]}, context.users)
+
+      assert verdicts(verdicts_of(readable[Module1], project), context.alice) == %{}
+    end
+
+    # Nothing to answer, so whether a client checks permissions is never asked - the query cache is
+    # never read, as Frame.row_verdicts/2 leaves it.
+    test "never asks whether a client checks permissions when no type has a deciding clause",
+         context do
+      :persistent_term.erase(QueryCacheStub.persistent_term_key())
+
+      project = create(Module1)
+      create(Module2, %{project_id: project.id, user_id: context.alice})
+
+      readable = run(%{Module1 => [project.id]}, context.users)
+
+      assert verdicts(verdicts_of(readable[Module1], project), context.alice) == %{}
+    end
+
+    test "answers a user id in another spelling as an anonymous user", context do
+      {board, _empty} = boards(context)
+
+      shouted = String.upcase(context.alice)
+      readable = run(%{Module15 => [board.id]}, [shouted, context.bob])
+      row_verdicts = verdicts_of(readable[Module15], board)
+
+      assert verdicts(row_verdicts, shouted) == Auth.verdicts(nil, board)
+      assert verdicts(row_verdicts, shouted) == verdicts(row_verdicts, nil)
+    end
+  end
+
+  @alice_id "018f4571-a1b2-7c3d-8e4f-000000000001"
+  @bob_id "018f4571-a1b2-7c3d-8e4f-000000000002"
+
+  describe "verdicts/2" do
+    @row_verdicts %{
+      anonymous: %{"archive:a" => false},
+      others: %{"archive:a" => true},
+      users: %{@alice_id => %{"archive:a" => false}}
+    }
+
+    test "answers a tested reader from their own answers" do
+      assert verdicts(@row_verdicts, @alice_id) == %{"archive:a" => false}
+    end
+
+    test "answers a reader the statement didn't test with the others' answers" do
+      assert verdicts(@row_verdicts, @bob_id) == %{"archive:a" => true}
+    end
+
+    test "answers an anonymous user, and a user id in another spelling, as anonymous" do
+      assert verdicts(@row_verdicts, nil) == %{"archive:a" => false}
+      assert verdicts(@row_verdicts, String.upcase(@bob_id)) == %{"archive:a" => false}
+    end
+
+    test "raises for an anonymous user when none was given" do
+      assert_raise ArgumentError, fn -> verdicts(%{@row_verdicts | anonymous: nil}, nil) end
+    end
+
+    test "raises for a signed-in user the statement had to test but didn't" do
+      assert_raise ArgumentError, fn -> verdicts(%{@row_verdicts | others: nil}, @bob_id) end
+    end
+  end
+
+  describe "verdicts_as_canonical/2" do
+    test "answers a tested reader, one the statement didn't test, and an anonymous user" do
+      assert verdicts_as_canonical(@row_verdicts, @alice_id) == %{"archive:a" => false}
+      assert verdicts_as_canonical(@row_verdicts, @bob_id) == %{"archive:a" => true}
+      assert verdicts_as_canonical(@row_verdicts, nil) == %{"archive:a" => false}
+    end
+
+    test "raises for a user it has no verdicts for" do
+      assert_raise ArgumentError, fn ->
+        verdicts_as_canonical(%{@row_verdicts | others: nil}, @bob_id)
+      end
+    end
+  end
+
+  describe "reads?/2" do
     test "every user reads a row everyone may read" do
       assert reads?(:all, @alice_id)
       assert reads?(:all, nil)
@@ -497,6 +838,21 @@ defmodule Hologram.Sync.RecheckTest do
     test "a user id in a spelling Hologram doesn't generate reads as an anonymous user" do
       assert reads?(MapSet.new([nil]), String.upcase(@alice_id))
       refute reads?(MapSet.new([@alice_id]), String.upcase(@alice_id))
+    end
+  end
+
+  describe "reads_as_canonical?/2" do
+    test "every user reads a row everyone may read" do
+      assert reads_as_canonical?(:all, @alice_id)
+      assert reads_as_canonical?(:all, nil)
+    end
+
+    test "a user reads a row when the readers name them" do
+      readers = MapSet.new([@alice_id, nil])
+
+      assert reads_as_canonical?(readers, @alice_id)
+      assert reads_as_canonical?(readers, nil)
+      refute reads_as_canonical?(readers, @bob_id)
     end
   end
 end

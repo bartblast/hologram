@@ -11,5 +11,10 @@ defmodule HologramFeatureTests.Entities.Leg do
   # update rule, and renamed by an editor of the trip while the trip is not archived.
   allow :create, via: {:update, stop.trip}
   allow :read
-  allow :rename, to: {:editor, stop.trip}, when: stop.trip.archived == false
+
+  allow :update,
+    as: :rename,
+    only: [:name],
+    to: {:editor, stop.trip},
+    when: stop.trip.archived == false
 end

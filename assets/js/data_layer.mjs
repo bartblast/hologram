@@ -1,7 +1,6 @@
 "use strict";
 
 import Batches from "./batches.mjs";
-import Bitstring from "./bitstring.mjs";
 import Deltas from "./deltas.mjs";
 import Durability from "./durability.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -13,6 +12,7 @@ import ManuallyPortedElixirHologramJob from "./elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQueryStage from "./elixir/hologram/query/stage.mjs";
 import Model from "./model.mjs";
 import QueryKernel from "./query_kernel.mjs";
+import QuerySpelling from "./query_spelling.mjs";
 import ReloadNotice from "./reload_notice.mjs";
 import Replica from "./replica.mjs";
 import SyncStream from "./sync_stream.mjs";
@@ -33,11 +33,12 @@ export default class DataLayer {
   // Based on run_query!/4
   //
   // Answers the given normalized term a derived field of the given module is defined by, for the
-  // given name and the arguments its function was called with. The result is boxed here and
+  // given name. The arguments its function was called with are in the term, as the values it
+  // reads. The result is boxed here and
   // nowhere else: rows live plain, and this is the boundary where one becomes something a
   // template can read.
   static answerDerivedQuery(module, name, args, term) {
-    const carried = $.#carriedCount(module, name, args, term);
+    const carried = $.#carriedCount(module, name, term);
 
     if (carried !== null) {
       return Type.integer(carried);
@@ -58,14 +59,22 @@ export default class DataLayer {
     // wins, and this is what the client falls back to when the server refuses it.
     Replica.offer(replica);
 
-    // Awaited HERE, before the mount, which is what lets the restore that follows the mount be
-    // synchronous - everything from the mount onwards runs in one continuation, so the first local
-    // write cannot land ahead of what a previous page load left.
+    // Opened here and read below, once the group is joined.
     await Durability.open();
 
     // The group this browser's tabs share, joined before the mount and before the stream opens -
     // which is what lets the tab that leads greet the server with sync on its FIRST connect, and
     // stops a follower opening a sync session it would have to drop a moment later.
+    //
+    // And joined before the store is READ, which is what lets a tab starting while another syncs
+    // miss nothing. The tab holding the stream stores each frame and then posts it to the group, so
+    // a frame posted before this tab was listening was stored before this tab reads, and one posted
+    // after reaches it as a message, held until it has taken up what it read (see Tabs.ready).
+    // Read first and joined after, a frame stored after the read and posted before the join would
+    // reach it neither way. (Between the leader's store and this tab's read, what orders them is
+    // IndexedDB, which starts a read only after the writes created before it; between the leader's
+    // post and this tab's join, it is the lock round trip the join waits out - not a guarantee
+    // anything states, but a margin no post outruns.)
     //
     // Named for the database and for the user this page mounts under. Per database because tabs on
     // different models or sync protocols cannot share a store, and per user because the leader can
@@ -78,6 +87,24 @@ export default class DataLayer {
       const group = `${Durability.databaseName()}.${readActorUserId() ?? "anonymous"}`;
 
       await Tabs.join(group, {});
+    }
+
+    // Awaited HERE, before the mount, which is what lets the restore that follows the mount be
+    // synchronous - everything from the mount onwards runs in one continuation, so the first local
+    // write cannot land ahead of what a previous page load left.
+    await Durability.load();
+
+    // A store that opened and then could not be read, or that another tab took away while it was
+    // being read, leaves nothing to share - so the tab leads itself, as it would had the open
+    // failed. A store failure another tab reported has already ended the group (see Tabs.dissolve).
+    //
+    // And it lets go of every batch it holds. Before its mount a tab has made none of its own, so
+    // each came from the group - handed over while it was reading, or taken from the store by a
+    // tab that leads - and each was numbered under the group's identity, which this tab no longer
+    // sends under (see Batches.disown). The group's leader sends them, or the next page load does.
+    if (Durability.mode === "memory" && Tabs.name !== null) {
+      Tabs.leave();
+      Batches.disown();
     }
 
     // A read-only window onto the write queue. Nothing in the framework reads it - it is for a
@@ -327,13 +354,6 @@ export default class DataLayer {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
-      "authorize/2",
-      "public",
-      ManuallyPortedElixirHologramQueryStage["authorize/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query.Stage",
       "count/1",
       "public",
       ManuallyPortedElixirHologramQueryStage["count/1"],
@@ -362,9 +382,23 @@ export default class DataLayer {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
+      "filter/3",
+      "public",
+      ManuallyPortedElixirHologramQueryStage["filter/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query.Stage",
       "include/2",
       "public",
       ManuallyPortedElixirHologramQueryStage["include/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query.Stage",
+      "include/3",
+      "public",
+      ManuallyPortedElixirHologramQueryStage["include/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -414,6 +448,13 @@ export default class DataLayer {
       "sort/2",
       "public",
       ManuallyPortedElixirHologramQueryStage["sort/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query.Stage",
+      "sort/3",
+      "public",
+      ManuallyPortedElixirHologramQueryStage["sort/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -501,6 +542,7 @@ export default class DataLayer {
   static ingestMountData(mountData) {
     if (mountData.syncRows) {
       LocalDatabase.actorUserId = mountData.actorUserId;
+      LocalDatabase.actorEntityId = mountData.actorEntityId ?? null;
       Deltas.apply(mountData.syncRows, {insertOnly: true});
 
       // A count has no rows behind it, so the rows cannot carry one - the numbers this render
@@ -614,16 +656,16 @@ export default class DataLayer {
   // WARNING: must match read_session_user/2 (renderer.ex).
   static sessionUser() {
     const userEntity = globalThis.Hologram.sync.userEntity;
-    const actorUserId = LocalDatabase.actorUserId;
+    const actorEntityId = LocalDatabase.actorEntityId;
 
     const row =
-      actorUserId === null
+      actorEntityId === null
         ? null
-        : LocalDatabase.getRow(userEntity, actorUserId);
+        : LocalDatabase.getRow(userEntity, actorEntityId);
 
     // Compared as the query compares, since a table is a plain object: an id spelled like one of
     // its inherited members would find that member rather than a row.
-    return row && row.id === actorUserId
+    return row && row.id === actorEntityId
       ? Model.box(userEntity, row)
       : Type.nil();
   }
@@ -645,12 +687,14 @@ export default class DataLayer {
   // marked, on whichever page and in whichever tab. A field the build listed no types for waits for
   // the whole pot.
   //
-  // The key names the component, the prop or derived field, and the arguments its function was
-  // called with - which is what tells two instances of one component apart - spelled the way the
-  // server spells them (see #spellKeyPart).
+  // The key names the component, the derived field and the query it ran, spelled the way the
+  // server spells it (see QuerySpelling). The query holds every value it reads, so a row argument
+  // whose field the query reads changing is a query the server never counted, and misses, while
+  // one whose other fields change still finds the number. Two instances of one component running
+  // one query share a number, which is the same number.
   //
   // WARNING: must match count_key/3 on the server (carry.ex).
-  static #carriedCount(module, name, args, term) {
+  static #carriedCount(module, name, term) {
     if (term.cardinality !== "count") {
       return null;
     }
@@ -659,9 +703,7 @@ export default class DataLayer {
       return null;
     }
 
-    const key = `${module}/${name.value}/${args
-      .map((arg) => $.#spellKeyPart(arg))
-      .join(",")}`;
+    const key = `${module}/${name.value}/${QuerySpelling.spell(term)}`;
 
     return LocalDatabase.syncCounts[key] ?? null;
   }
@@ -677,107 +719,6 @@ export default class DataLayer {
       types !== undefined &&
       types.every((type) => LocalDatabase.isTypeSynced(type))
     );
-  }
-
-  // Code point order, which is the order Elixir sorts UTF-8 binaries in - where JavaScript's own
-  // comparison orders UTF-16 code units, which a character past U+FFFF puts elsewhere.
-  static #compareCodePoints(left, right) {
-    const leftPoints = Array.from(left, (char) => char.codePointAt(0));
-    const rightPoints = Array.from(right, (char) => char.codePointAt(0));
-    const length = Math.min(leftPoints.length, rightPoints.length);
-
-    for (let index = 0; index < length; ++index) {
-      if (leftPoints[index] !== rightPoints[index]) {
-        return leftPoints[index] < rightPoints[index] ? -1 : 1;
-      }
-    }
-
-    return leftPoints.length - rightPoints.length;
-  }
-
-  static #spellEntityId(id) {
-    return Type.isBinary(id) ? Bitstring.toText(id) : $.#spellKeyPart(id);
-  }
-
-  // Based on spell_key_part/1 (carry.ex)
-  //
-  // An argument spelled the same way on both tiers, which inspect alone doesn't do for a struct or
-  // a float: an entity row by its type and id, the only parts both tiers are sure to hold alike, a
-  // list, a tuple and a map by their items, a map's entries and a struct's fields sorted, a float
-  // by its bits, and anything else by inspect.
-  //
-  // WARNING: must match spell_key_part/1 on the server.
-  static #spellKeyPart(term) {
-    if (Type.isStruct(term)) {
-      const name = Interpreter.moduleExName(
-        term.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
-      );
-
-      // A row is told apart by the metadata every entity struct carries, rather than by its type,
-      // so a row of a type the model doesn't bake is spelled as the server spells it.
-      const meta = term.data[Type.encodeMapKey(Type.atom("__meta__"))];
-
-      if (meta && Type.isStruct(meta[1], "Hologram.Entity.Metadata")) {
-        const id = term.data[Type.encodeMapKey(Type.atom("id"))][1];
-
-        return `${name}#${$.#spellEntityId(id)}`;
-      }
-
-      const fields = Object.values(term.data)
-        .filter(([key]) => key.value !== "__struct__")
-        .map(([key, value]) => [key.value, value])
-        .sort(([left], [right]) => $.#compareCodePoints(left, right))
-        .map(([key, value]) => `${key}: ${$.#spellKeyPart(value)}`)
-        .join(", ");
-
-      return `%${name}{${fields}}`;
-    }
-
-    if (Type.isMap(term)) {
-      const entries = Object.values(term.data)
-        .map(([key, value]) => [$.#spellKeyPart(key), $.#spellKeyPart(value)])
-        // Two keys can spell alike - two structs of one row - so a tie is broken by the value, as
-        // the server's sort of the spelled pairs does.
-        .sort(
-          ([leftKey, leftValue], [rightKey, rightValue]) =>
-            $.#compareCodePoints(leftKey, rightKey) ||
-            $.#compareCodePoints(leftValue, rightValue),
-        )
-        .map(([key, value]) => `${key} => ${value}`)
-        .join(", ");
-
-      return `%{${entries}}`;
-    }
-
-    if (Type.isList(term)) {
-      const items = term.data.map((item) => $.#spellKeyPart(item));
-
-      if (!term.isProper) {
-        const tail = items.pop();
-
-        return `[${items.join(", ")} | ${tail}]`;
-      }
-
-      return `[${items.join(", ")}]`;
-    }
-
-    if (Type.isTuple(term)) {
-      return `{${term.data.map((item) => $.#spellKeyPart(item)).join(", ")}}`;
-    }
-
-    if (Type.isFloat(term)) {
-      const view = new DataView(new ArrayBuffer(8));
-
-      view.setFloat64(0, term.value);
-
-      const bits = Array.from(new Uint8Array(view.buffer), (byte) =>
-        byte.toString(16).padStart(2, "0"),
-      ).join("");
-
-      return `float:${bits}`;
-    }
-
-    return Interpreter.inspect(term);
   }
 }
 

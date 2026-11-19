@@ -136,11 +136,8 @@ function placeholderNames(term) {
 // The edges an update records, each its own entry, in one order however the stages were called -
 // two clients making the same two edges send the same two writes.
 function edgeEntries(entity, entityType, relationshipOps) {
-  const claim = writeClaim(entity);
-
   return Object.values(relationshipOps.data)
     .map(([key, op]) => ({
-      claim,
       id: Bitstring.toText(structField(entity, "id")),
       op: `${op.value}_relationship`,
       relationship: key.data[0].value,
@@ -385,11 +382,12 @@ export function createEntity(entity, entityType) {
 // Nothing is asked of the rules: granted_to: :creator is a declaration being copied, not a
 // permission being judged, and the applier admits such a grant without a gate for the same reason.
 //
-// The two answers that write nothing mirror the server's own. Nobody signed in takes no roles,
-// which is creator_grants/1's nil clause, and a grant the client already holds is not written
-// twice, which is grant_role/3's idempotency read off the same derived id.
+// The two answers that write nothing mirror the server's own. Nobody signed in takes no roles, and
+// neither does a user id no user entity can have: creator_grants/1's nil clause. A grant the client
+// already holds is not written twice, which is grant_role/3's idempotency read off the same derived
+// id.
 function appendCreatorGrants(batch, entityType, entityId) {
-  const actorUserId = LocalDatabase.actorUserId;
+  const actorUserId = LocalDatabase.actorEntityId;
 
   if (actorUserId === null) {
     return;
@@ -522,7 +520,6 @@ function validateEntityType(query) {
 // and the revisions it saw for what it puts.
 function updateEntry(entity, entityType, id, held, data, deltas) {
   const entry = {
-    claim: writeClaim(entity),
     id,
     op: "update",
     stamp: Clock.stamp(),
@@ -548,7 +545,7 @@ function updateEntry(entity, entityType, id, held, data, deltas) {
 
 // A delete says it was based on the row's WHOLE revision map, because it touches every column -
 // the server keeps it only if none of them moved since this client last saw the row.
-function deleteRow(entityType, id, claim) {
+function deleteRow(entityType, id) {
   if (entityType === ROLE_GRANT) {
     Interpreter.raiseMisuseError(
       "role grants are written only through grant_role/revoke_role",
@@ -561,7 +558,6 @@ function deleteRow(entityType, id, claim) {
 
   batch.append({
     based_on: {...(held["$revisions"] ?? {})},
-    claim,
     id: rowId,
     op: "delete",
     stamp: Clock.stamp(),
@@ -576,7 +572,6 @@ function deleteRow(entityType, id, claim) {
 // stores are the same instant derived from one number.
 function writeEntry(entity, entityType, stamp) {
   return {
-    claim: writeClaim(entity),
     data: Model.unboxRow(entityType, entity),
     id: Bitstring.toText(entity.data[Type.encodeMapKey(Type.atom("id"))][1]),
     op: "create",
@@ -619,15 +614,6 @@ function storedEntity(entity, entityType, stamp) {
   }
 
   return stored;
-}
-
-// null for the verb's own operation, ["authorize", op] when a stage named another one. trust never
-// reaches here - the stage refuses it.
-function writeClaim(entity) {
-  const metadata = entity.data[Type.encodeMapKey(Type.atom("__meta__"))][1];
-  const claim = metadata.data[Type.encodeMapKey(Type.atom("claim"))][1];
-
-  return Type.isNil(claim) ? null : ["authorize", claim.data[1].value];
 }
 
 function validateId(id) {
@@ -689,12 +675,10 @@ const Elixir_Hologram_DB = {
   "delete/1": (entity) => {
     const entityType = entityTypeOf(entity, "delete");
 
-    return deleteRow(entityType, structField(entity, "id"), writeClaim(entity));
+    return deleteRow(entityType, structField(entity, "id"));
   },
 
-  // Naming the row by type and id carries no claim - delete/1 is the spelling for one.
-
-  "delete/2": (entityType, id) => deleteRow(aliasName(entityType), id, null),
+  "delete/2": (entityType, id) => deleteRow(aliasName(entityType), id),
 
   // A delete answers :ok or raises here, and never {:error, ...}: the server's refusal names the
   // row that still references this one, which is a question about rows this client does not have.
@@ -873,8 +857,8 @@ const Elixir_Hologram_DB = {
     return Type.atom("ok");
   },
 
-  // The type-indexed twin of update/1: no struct, so no recorded changes and no claim - the
-  // changes are given outright and the operation is the verb's own.
+  // The type-indexed twin of update/1: no struct, so no recorded changes - the changes are given
+  // outright.
 
   "update/3": (entityType, id, changes) => {
     const type = aliasName(entityType);

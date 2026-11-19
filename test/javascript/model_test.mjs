@@ -331,7 +331,7 @@ describe("Model", () => {
 
     // The last two spellings are the ones only the SHAPE check can refuse: their fields name a
     // real day, so the calendar behind it would pass them. The wire carries one spelling per
-    // date, which is what lets these compare as plain strings at all.
+    // date, which is what lets two equal dates be equal strings.
     it("raises for a date the wire spelled some other way", () => {
       for (const spelling of ["garbage", "2026-7-17", "2026-08-16T00:00:00Z"]) {
         assert.throw(
@@ -347,6 +347,61 @@ describe("Model", () => {
     // fortieth of the thirteenth. February is the case the leap rule decides.
     it("raises for a date whose fields the calendar never reaches", () => {
       for (const spelling of ["2026-13-40", "2026-02-29", "2026-04-31"]) {
+        assert.throw(
+          () => Model.box(TASK, row({due_on: spelling})),
+          HologramRuntimeError,
+          `invalid date on the wire: ${spelling}`,
+        );
+      }
+    });
+
+    // The server accepts a date of any year the calendar has and spells it with Date.to_iso8601/1,
+    // so a year below 0 or past 9999 arrives on the wire like any other. One year is still one
+    // spelling: the server never writes fewer than four digits, a leading zero past four, a plus,
+    // or a minus before year 0.
+    it("boxes a date of any year the server spells, and no other spelling of one", () => {
+      const yearOf = (spelling) =>
+        field(
+          field(Model.box(TASK, row({due_on: spelling})), "due_on"),
+          "year",
+        );
+
+      assert.deepEqual(yearOf("-0001-03-01"), Type.integer(-1));
+      assert.deepEqual(yearOf("-10000-03-01"), Type.integer(-10000));
+      assert.deepEqual(yearOf("0000-03-01"), Type.integer(0));
+      assert.deepEqual(yearOf("10000-03-01"), Type.integer(10000));
+      assert.deepEqual(yearOf("20250-03-01"), Type.integer(20250));
+
+      const others = [
+        "206-03-01",
+        "02025-03-01",
+        "+2026-03-01",
+        "-0000-03-01",
+        "-00001-03-01",
+      ];
+
+      for (const spelling of others) {
+        assert.throw(
+          () => Model.box(TASK, row({due_on: spelling})),
+          HologramRuntimeError,
+          `invalid date on the wire: ${spelling}`,
+        );
+      }
+    });
+
+    // The calendar extended backwards keeps the leap rule as it is: years -4 and -400 are leap
+    // years, and -1 and -100 are not.
+    it("reads the leap rule for a year below 0", () => {
+      for (const spelling of ["-0004-02-29", "-0400-02-29"]) {
+        const boxed = Model.box(TASK, row({due_on: spelling}));
+
+        assert.deepEqual(
+          field(field(boxed, "due_on"), "day"),
+          Type.integer(29),
+        );
+      }
+
+      for (const spelling of ["-0001-02-29", "-0100-02-29"]) {
         assert.throw(
           () => Model.box(TASK, row({due_on: spelling})),
           HologramRuntimeError,
@@ -432,6 +487,34 @@ describe("Model", () => {
         field(field(boxed, "updated_at"), "microsecond"),
         Type.tuple([Type.integer(999999), Type.integer(6)]),
       );
+    });
+
+    it("boxes a datetime with a year below 0 as the server spells it, and no other spelling", () => {
+      const boxed = Model.box(
+        TASK,
+        row({updated_at: "-0001-12-31T23:30:00.000005Z"}),
+      );
+
+      assert.deepEqual(
+        field(field(boxed, "updated_at"), "year"),
+        Type.integer(-1),
+      );
+
+      assert.deepEqual(
+        field(field(boxed, "updated_at"), "day"),
+        Type.integer(31),
+      );
+
+      for (const spelling of [
+        "+2026-08-16T00:00:00Z",
+        "-0000-01-01T00:00:00Z",
+      ]) {
+        assert.throw(
+          () => Model.box(TASK, row({updated_at: spelling})),
+          HologramRuntimeError,
+          `invalid datetime on the wire: ${spelling}`,
+        );
+      }
     });
 
     it("boxes a datetime carrying no fractional seconds", () => {
@@ -1003,8 +1086,188 @@ describe("Model", () => {
       assert.equal(Model.unbox(date, "date"), "2026-08-06");
     });
 
-    // One spelling per instant is what lets a datetime compare as a plain string, so a value
-    // written at any precision leaves here with six fractional digits.
+    // Date.to_iso8601/1 pads the year to four digits and puts a minus before a year below 0, so one
+    // day is one spelling on both tiers.
+    it("unboxes a date of any year the way the server spells it", () => {
+      const dateOf = (year) =>
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Date")],
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("month"), Type.integer(3)],
+          [Type.atom("year"), Type.integer(year)],
+        ]);
+
+      assert.equal(Model.unbox(dateOf(-1), "date"), "-0001-03-01");
+      assert.equal(Model.unbox(dateOf(-10000), "date"), "-10000-03-01");
+      assert.equal(Model.unbox(dateOf(0), "date"), "0000-03-01");
+      assert.equal(Model.unbox(dateOf(20250), "date"), "20250-03-01");
+    });
+
+    // The server spells a datetime as the UTC instant it stands for, whatever its zone (the
+    // expected spellings are Hologram.DB.Codec.encode_json/2's for the same structs), so a query
+    // value and a write mean the instant the server means.
+    describe("a datetime outside UTC", () => {
+      const zoned = ({
+        amount = 0,
+        day,
+        hour,
+        minute = 0,
+        month,
+        stdOffset = 0,
+        utcOffset,
+        year,
+      }) =>
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("DateTime")],
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), Type.integer(day)],
+          [Type.atom("hour"), Type.integer(hour)],
+          [
+            Type.atom("microsecond"),
+            Type.tuple([Type.integer(amount), Type.integer(6)]),
+          ],
+          [Type.atom("minute"), Type.integer(minute)],
+          [Type.atom("month"), Type.integer(month)],
+          [Type.atom("second"), Type.integer(0)],
+          [Type.atom("std_offset"), Type.integer(stdOffset)],
+          [Type.atom("time_zone"), Type.bitstring("Europe/Warsaw")],
+          [Type.atom("utc_offset"), Type.integer(utcOffset)],
+          [Type.atom("year"), Type.integer(year)],
+          [Type.atom("zone_abbr"), Type.bitstring("CET")],
+        ]);
+
+      it("unboxes it as the instant it stands for, across a month end", () => {
+        const midnight = zoned({
+          day: 1,
+          hour: 0,
+          month: 3,
+          utcOffset: 3600,
+          year: 2026,
+        });
+
+        assert.equal(
+          Model.unbox(midnight, "datetime"),
+          "2026-02-28T23:00:00.000000Z",
+        );
+      });
+
+      it("unboxes it across a leap day", () => {
+        const value = zoned({
+          day: 1,
+          hour: 0,
+          minute: 30,
+          month: 3,
+          utcOffset: 3600,
+          year: 2024,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "2024-02-29T23:30:00.000000Z",
+        );
+      });
+
+      it("unboxes it across a year end, keeping its microseconds", () => {
+        const value = zoned({
+          amount: 22508,
+          day: 1,
+          hour: 0,
+          month: 1,
+          utcOffset: 3600,
+          year: 2026,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "2025-12-31T23:00:00.022508Z",
+        );
+      });
+
+      it("unboxes it forward into the next day for an offset behind UTC", () => {
+        const value = zoned({
+          day: 31,
+          hour: 23,
+          month: 12,
+          utcOffset: -18000,
+          year: 2026,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "2027-01-01T04:00:00.000000Z",
+        );
+      });
+
+      it("unboxes it moved by its daylight saving offset too", () => {
+        const value = zoned({
+          day: 1,
+          hour: 1,
+          month: 7,
+          stdOffset: 3600,
+          utcOffset: 3600,
+          year: 2026,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "2026-06-30T23:00:00.000000Z",
+        );
+      });
+
+      it("unboxes it moved by an offset that is not a whole number of hours", () => {
+        const value = zoned({
+          day: 1,
+          hour: 0,
+          minute: 15,
+          month: 3,
+          utcOffset: 20700,
+          year: 2026,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "2026-02-28T18:30:00.000000Z",
+        );
+      });
+
+      // Date.UTC would read year 50 as 1950.
+      it("unboxes it in a year below 100", () => {
+        const value = zoned({
+          day: 1,
+          hour: 0,
+          month: 1,
+          utcOffset: 3600,
+          year: 50,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "0049-12-31T23:00:00.000000Z",
+        );
+      });
+
+      it("unboxes it back across year 0, spelling the year below it with a minus", () => {
+        const value = zoned({
+          amount: 5,
+          day: 1,
+          hour: 0,
+          minute: 30,
+          month: 1,
+          utcOffset: 3600,
+          year: 0,
+        });
+
+        assert.equal(
+          Model.unbox(value, "datetime"),
+          "-0001-12-31T23:30:00.000005Z",
+        );
+      });
+    });
+
+    // One spelling per instant is what lets a datetime equal another as a plain string, and order
+    // by its characters within a year, so a value written at any precision leaves here with six
+    // fractional digits.
     it("unboxes a datetime at the precision the wire carries", () => {
       assert.equal(
         Model.unbox(datetime(22508, 6), "datetime"),
@@ -1298,6 +1561,77 @@ describe("Model", () => {
       assert.deepEqual(
         Model.notIncluded("tags"),
         field(Model.box(TASK, row()), "tags"),
+      );
+    });
+  });
+
+  // The order asserted is Date.compare/2's and DateTime.compare/2's over the same values.
+  describe("compareTemporal()", () => {
+    // Within one year the month and day decide, below 0 and past 9999 as anywhere else, and a year
+    // of four digits against a wider one is a comparison of years rather than characters.
+    it("orders dates by their years as numbers, then by month and day", () => {
+      const ordered = [
+        "-10000-01-01",
+        "-0002-12-31",
+        "-0001-02-01",
+        "-0001-11-30",
+        "0000-01-01",
+        "2026-03-01",
+        "9999-12-31",
+        "10000-01-01",
+        "10000-12-31",
+        "20250-01-01",
+      ];
+
+      for (const [index, left] of ordered.entries()) {
+        for (const [otherIndex, right] of ordered.entries()) {
+          assert.equal(
+            Model.compareTemporal(left, right),
+            Math.sign(index - otherIndex),
+            `${left} against ${right}`,
+          );
+        }
+      }
+    });
+
+    // The wall clock's own spelling (toISOString) of a year past 9999 carries a plus and two more
+    // digits - one year, however it is spelled, compares as that year.
+    it("orders a year by its number, however wide or signed its spelling", () => {
+      assert.equal(
+        Model.compareTemporal(
+          "+010000-01-01T00:00:00.000000Z",
+          "9999-12-31T23:59:59.999999Z",
+        ),
+        1,
+      );
+
+      assert.equal(Model.compareTemporal("-000001-01-01", "-0001-01-01"), 0);
+      assert.equal(Model.compareTemporal("-0001-01-01", "-000001-01-01"), 0);
+    });
+
+    it("orders datetimes by their years, then by the instant within one", () => {
+      assert.equal(
+        Model.compareTemporal(
+          "-0002-12-31T23:59:59.999999Z",
+          "-0001-01-01T00:00:00.000000Z",
+        ),
+        -1,
+      );
+
+      assert.equal(
+        Model.compareTemporal(
+          "2026-03-01T10:00:00.000001Z",
+          "2026-03-01T10:00:00.000000Z",
+        ),
+        1,
+      );
+
+      assert.equal(
+        Model.compareTemporal(
+          "0000-01-01T00:00:00.000000Z",
+          "0000-01-01T00:00:00.000000Z",
+        ),
+        0,
       );
     });
   });
@@ -1702,11 +2036,33 @@ describe("Model", () => {
       );
     });
 
+    it("passes an update tuple naming a field an update of the entity type sets", () => {
+      Model.validateOperation(
+        TASK,
+        Type.tuple([Type.atom("update"), Type.atom("title")]),
+      );
+
+      Model.validateOperation(
+        TASK,
+        Type.tuple([Type.atom("update"), Type.atom("project")]),
+      );
+    });
+
+    it("passes an update tuple naming a list of fields an update of the entity type sets", () => {
+      Model.validateOperation(
+        TASK,
+        Type.tuple([
+          Type.atom("update"),
+          Type.list([Type.atom("title"), Type.atom("tags")]),
+        ]),
+      );
+    });
+
     it("raises on an operation no allow line on the type names", () => {
       assertBoxedError(
         () => Model.validateOperation(PROJECT, Type.atom("pin")),
         "Hologram.MisuseError",
-        "unknown operation :pin for MyApp.Project - its allow lines declare :archive and :publish, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
+        "unknown operation :pin for MyApp.Project - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry the names :archive and :publish",
       );
     });
 
@@ -1714,7 +2070,7 @@ describe("Model", () => {
       assertBoxedError(
         () => Model.validateOperation(TASK, Type.atom("archive")),
         "Hologram.MisuseError",
-        "unknown operation :archive for MyApp.Task - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
+        "unknown operation :archive for MyApp.Task - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry no name",
       );
     });
 
@@ -1742,6 +2098,97 @@ describe("Model", () => {
       );
     });
 
+    it("raises on an update tuple naming a field no update of the entity type sets", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            TASK,
+            Type.tuple([Type.atom("update"), Type.atom("project_id")]),
+          ),
+        "Hologram.MisuseError",
+        "unknown field :project_id in {:update, :project_id} for MyApp.Task - the fields an update sets are :done, :due_on, :internal_notes, :position, :project, :starts_at, :status, :tags, :title, :weight",
+      );
+    });
+
+    it("raises on an update list naming a field no update of the entity type sets", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            TASK,
+            Type.tuple([
+              Type.atom("update"),
+              Type.list([Type.atom("title"), Type.atom("updated_at")]),
+            ]),
+          ),
+        "Hologram.MisuseError",
+        "unknown field :updated_at in {:update, [:title, :updated_at]} for MyApp.Task - the fields an update sets are :done, :due_on, :internal_notes, :position, :project, :starts_at, :status, :tags, :title, :weight",
+      );
+    });
+
+    it("raises on an update tuple naming a field that is neither an atom nor a list", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            TASK,
+            Type.tuple([Type.atom("update"), Type.bitstring("title")]),
+          ),
+        "Hologram.MisuseError",
+        'unknown operation {:update, "title"} for MyApp.Task - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}',
+      );
+    });
+
+    it("raises on an update tuple naming an improper list", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            TASK,
+            Type.tuple([
+              Type.atom("update"),
+              Type.improperList([Type.atom("title"), Type.atom("tags")]),
+            ]),
+          ),
+        "Hologram.MisuseError",
+        "unknown operation {:update, [:title | :tags]} for MyApp.Task - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}",
+      );
+    });
+
+    it("raises on an update list naming no field", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            TASK,
+            Type.tuple([Type.atom("update"), Type.list([])]),
+          ),
+        "Hologram.MisuseError",
+        "unknown operation {:update, []} for MyApp.Task - {:update, fields} names at least one field",
+      );
+    });
+
+    it("raises on an update tuple naming a job's framework attribute", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            NOTIFY,
+            Type.tuple([Type.atom("update"), Type.atom("status")]),
+          ),
+        "Hologram.MisuseError",
+        `unknown field :status in {:update, :status} for ${NOTIFY} - the fields an update sets are :reason`,
+      );
+    });
+
+    // A type with no entry stands for one declaring nothing, the server's fieldless fixture.
+    it("raises on an update tuple for an entity type no update sets a field of", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            "MyApp.Fieldless",
+            Type.tuple([Type.atom("update"), Type.atom("title")]),
+          ),
+        "Hologram.MisuseError",
+        "unknown field :title in {:update, :title} for MyApp.Fieldless - it has no field an update sets",
+      );
+    });
+
     it("raises on a tuple whose name is not a grant lifecycle operation", () => {
       assertBoxedError(
         () =>
@@ -1750,8 +2197,22 @@ describe("Model", () => {
             Type.tuple([Type.atom("publish"), Type.atom("editor")]),
           ),
         "Hologram.MisuseError",
-        "unknown operation {:publish, :editor} for MyApp.Project - the operation tuples are {:grant_role, role} and {:revoke_role, role}",
+        "unknown operation {:publish, :editor} for MyApp.Project - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}",
       );
+    });
+  });
+
+  describe("own()", () => {
+    it("returns the value an object holds under its own key", () => {
+      assert.strictEqual(Model.own({title: "string"}, "title"), "string");
+    });
+
+    it("returns undefined for a name the object does not hold", () => {
+      assert.isUndefined(Model.own({title: "string"}, "body"));
+    });
+
+    it("returns undefined for a name every object inherits", () => {
+      assert.isUndefined(Model.own({title: "string"}, "constructor"));
     });
   });
 
@@ -1790,6 +2251,23 @@ describe("Model", () => {
       Model.reset();
 
       assert.equal(Model.pathTarget(TASK, ["project", "tasks"]), TASK);
+    });
+
+    // A name every object inherits is no relationship, so the inverse of that name is the one read.
+    it("follows an inverse named like a prototype property", () => {
+      globalThis.Hologram.sync.model[PROJECT].inverses = {
+        toString: {
+          forward: "project",
+          reference: true,
+          sort: [],
+          toMany: true,
+          type: TASK,
+        },
+      };
+
+      Model.reset();
+
+      assert.equal(Model.pathTarget(TASK, ["project", "toString"]), TASK);
     });
   });
 

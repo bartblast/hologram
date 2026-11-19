@@ -9,6 +9,7 @@ defmodule Hologram.Sync.FillTest do
   alias Hologram.DB.Connection
   alias Hologram.Mutation.Record
   alias Hologram.Query.Stage
+  alias Hologram.Sync.PackedIds
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module26
@@ -147,49 +148,29 @@ defmodule Hologram.Sync.FillTest do
     end
   end
 
-  describe "read_named/4" do
-    test "answers the rows with the given ids the user may read" do
-      named = policy_entity(true)
-      hidden = policy_entity(false)
-      policy_entity(true)
+  describe "read_ids/2" do
+    test "answers the ids of the rows of the type the user may read" do
+      user = policy_user("fill_ids@example.com")
+      public = policy_entity(true)
+      granted = policy_entity(false)
+      policy_entity(false)
 
-      {rows, nil} =
-        read_named(%{PolicyModule1 => [named.id, hidden.id]}, nil, nil, [PolicyModule1])
+      Auth.grant_role(user, :viewer, granted)
 
-      assert sorted_ids(rows) == [named.id]
+      assert read_ids(PolicyModule1, user.id) == PackedIds.pack([public.id, granted.id])
     end
 
-    test "reads the rows of every given type" do
-      entity = policy_entity(true)
-      tag = label("tag")
+    test "reads a visitor through the read rules" do
+      public = policy_entity(true)
+      policy_entity(false)
 
-      {rows, nil} =
-        read_named(
-          %{Module29 => [tag.id], PolicyModule1 => [entity.id]},
-          nil,
-          nil,
-          [Module29, PolicyModule1]
-        )
-
-      assert sorted_ids(rows) == Enum.sort([entity.id, tag.id])
+      assert read_ids(PolicyModule1, nil) == PackedIds.pack([public.id])
     end
 
-    test "reads a row with its sets" do
-      child = policy_entity(true)
-      container = DB.create!(PolicyModule3.new())
+    test "answers nothing packed when the user may read no row of the type" do
+      policy_entity(false)
 
-      add_relationship(PolicyModule3, container.id, :children, child.id)
-
-      {[row], nil} =
-        read_named(%{PolicyModule3 => [container.id]}, nil, nil, [PolicyModule1, PolicyModule3])
-
-      assert sorted_ids(row.children) == [child.id]
-    end
-
-    test "answers the highest sequence number the replica has had confirmed" do
-      confirmed(@replica_id, 3)
-
-      assert read_named(%{}, nil, @replica_id, [Module2]) == {[], 3}
+      assert read_ids(PolicyModule1, nil) == ""
     end
   end
 

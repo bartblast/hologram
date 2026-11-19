@@ -9,6 +9,7 @@ defmodule Hologram.Sync.Diff do
   alias Hologram.Auth
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
+  alias Hologram.Policy.Edges
 
   @pair_ops [:add_relationship, :del_relationship]
 
@@ -19,7 +20,8 @@ defmodule Hologram.Sync.Diff do
   The rows are as the round holds them, embedded lists unscrubbed, for whoever judges several
   rounds' copies of a row together to decide what the client may see once, from all of them.
   """
-  @spec carried(%{ids: MapSet.t(), rows: map}, String.t() | nil) :: {map, MapSet.t()}
+  @spec carried(%{ids: MapSet.t(), rows: map}, Hologram.Server.identity_id() | nil) ::
+          {map, MapSet.t()}
   def carried(result, actor_user_id) do
     members = carried_rows(result)
 
@@ -84,7 +86,7 @@ defmodule Hologram.Sync.Diff do
   @spec deltas(
           %{ids: MapSet.t(), rows: map},
           MapSet.t(),
-          String.t() | nil,
+          Hologram.Server.identity_id() | nil,
           list({term, list(map)})
         ) ::
           %{
@@ -165,9 +167,15 @@ defmodule Hologram.Sync.Diff do
   and what appears is scrubbed against what the client may see NOW, so no id list names a row it
   was not given.
   """
-  @spec reach(%{ids: MapSet.t(), rows: map}, String.t() | nil, list(map), %{
-          {module, atom} => list(tuple)
-        }) :: %{appeared: list(struct), vanished: list(struct)}
+  @spec reach(
+          %{ids: MapSet.t(), rows: map},
+          Hologram.Server.identity_id() | nil,
+          list(map),
+          Edges.t()
+        ) :: %{
+          appeared: list(struct),
+          vanished: list(struct)
+        }
   def reach(result, actor_user_id, named, edges) do
     members = members(result.rows)
 
@@ -224,7 +232,7 @@ defmodule Hologram.Sync.Diff do
   What appears is scrubbed against what the client may see NOW, so no id list names a row it was
   not given.
   """
-  @spec shift(%{ids: MapSet.t(), rows: map}, String.t() | nil, list(struct)) ::
+  @spec shift(%{ids: MapSet.t(), rows: map}, Hologram.Server.identity_id() | nil, list(struct)) ::
           %{appeared: list(struct), vanished: list(struct)}
   def shift(result, actor_user_id, grants_then) do
     members = members(result.rows)

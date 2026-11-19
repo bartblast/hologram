@@ -16,6 +16,7 @@ import Interpreter from "../../assets/js/interpreter.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import ManuallyPortedElixirHologramQueryStage from "../../assets/js/elixir/hologram/query/stage.mjs";
 import Model from "../../assets/js/model.mjs";
+import QuerySpelling from "../../assets/js/query_spelling.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -39,6 +40,10 @@ describe("Renderer derived fields", () => {
   const include = ManuallyPortedElixirHologramQueryStage["include/2"];
   const one = ManuallyPortedElixirHologramQueryStage["one/1"];
   const sort = ManuallyPortedElixirHologramQueryStage["sort/2"];
+
+  // The key the page carries the count of the given query under, the server's spelling of it.
+  const carriedKey = (module, name, query) =>
+    `${module}/${name}/${QuerySpelling.spell(ManuallyPortedElixirHologramQueryStage["normalize/1"](query))}`;
 
   // What the template was rendered with, and what each module's template was rendered with.
   let renderedVars = null;
@@ -675,18 +680,33 @@ describe("Renderer derived fields", () => {
       ]);
     });
 
-    it("answers a count with the count the page carried under the field's name and arguments", () => {
+    it("answers a count with the count the page carried under the field's name and its query", () => {
       defineComponent("MyApp.CarriedCount", {
         queries: ["total"],
         derived: [
-          derivedEntry("total", Type.atom("integer"), ["min_b"], (_minB) =>
-            count(Type.alias(ROW)),
+          derivedEntry("total", Type.atom("integer"), ["min_b"], (minB) =>
+            count(
+              filter(
+                Type.alias(ROW),
+                Type.list([
+                  Type.tuple([
+                    Type.atom("b"),
+                    Type.tuple([Type.atom(">"), minB]),
+                  ]),
+                ]),
+              ),
+            ),
           ),
         ],
         props: [declaration("min_b")],
       });
 
-      LocalDatabase.syncCounts = {"MyApp.CarriedCount/total/5": 42};
+      // The key the server carries the same count under (see "carries a count under the field's
+      // name and the query its function built" in
+      // test/elixir/hologram/template/renderer_derived_test.exs), for this module.
+      LocalDatabase.syncCounts = {
+        'MyApp.CarriedCount/total/{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["b",">",5]],"include":{},"skip":null,"sort":[],"take":null}': 42,
+      };
 
       render(
         componentNode("MyApp.CarriedCount", [
@@ -753,28 +773,6 @@ describe("Renderer derived fields", () => {
         "apple",
         "cherry",
       ]);
-    });
-
-    // The server spells the same key for the same rows (see "carries a count reading another
-    // field's rows under those rows" in test/elixir/hologram/template/renderer_derived_test.exs).
-    it("answers a count reading another field's rows with the count carried under those rows", () => {
-      defineComponent("MyApp.RowsArgument", {
-        queries: ["ripe", "ripe_total"],
-        derived: [
-          derivedEntry("ripe", Type.list([Type.alias(ROW)]), [], ripeRows),
-          derivedEntry("ripe_total", Type.atom("integer"), ["ripe"], (_ripe) =>
-            count(ripeRows()),
-          ),
-        ],
-      });
-
-      LocalDatabase.syncCounts = {
-        [`MyApp.RowsArgument/ripe_total/[${ROW}#r1, ${ROW}#r3]`]: 42,
-      };
-
-      render(componentNode("MyApp.RowsArgument"));
-
-      assert.deepStrictEqual(renderedVar("ripe_total"), Type.integer(42));
     });
 
     it("raises on a query result of a field the build didn't register as a query", () => {
@@ -873,7 +871,10 @@ describe("Renderer derived fields", () => {
               filter(
                 Type.alias(ROW),
                 Type.list([
-                  Type.tuple([Type.atom("id"), Type.bitstring("absent")]),
+                  Type.tuple([
+                    Type.atom("id"),
+                    Type.bitstring("018f0000-0000-7000-8000-0000000000ff"),
+                  ]),
                 ]),
               ),
             ),
@@ -889,6 +890,14 @@ describe("Renderer derived fields", () => {
     // A count has no rows behind it, so carried rows cannot re-derive one - the number the render
     // answered with is held until this client can count for itself.
     describe("a count the page carried", () => {
+      const wantedCount = (wanted) =>
+        count(
+          filter(
+            Type.alias(ROW),
+            Type.list([Type.tuple([Type.atom("a"), Type.boolean(wanted)])]),
+          ),
+        );
+
       const defineCounting = (moduleName) =>
         defineComponent(moduleName, {
           queries: ["total"],
@@ -913,7 +922,10 @@ describe("Renderer derived fields", () => {
       it("counts locally once the whole pot is complete", () => {
         defineCounting("MyApp.DerivedComplete");
 
-        LocalDatabase.syncCounts = {"MyApp.DerivedComplete/total/false": 42};
+        LocalDatabase.syncCounts = {
+          [carriedKey("MyApp.DerivedComplete", "total", wantedCount(false))]:
+            42,
+        };
         LocalDatabase.markAllSynced();
 
         renderCounting("MyApp.DerivedComplete");
@@ -931,7 +943,11 @@ describe("Renderer derived fields", () => {
         };
 
         LocalDatabase.syncCounts = {
-          "MyApp.DerivedTypesComplete/total/false": 42,
+          [carriedKey(
+            "MyApp.DerivedTypesComplete",
+            "total",
+            wantedCount(false),
+          )]: 42,
         };
         LocalDatabase.markTypesSynced([ROW]);
 
@@ -948,7 +964,11 @@ describe("Renderer derived fields", () => {
         };
 
         LocalDatabase.syncCounts = {
-          "MyApp.DerivedTypesFilling/total/false": 42,
+          [carriedKey(
+            "MyApp.DerivedTypesFilling",
+            "total",
+            wantedCount(false),
+          )]: 42,
         };
 
         renderCounting("MyApp.DerivedTypesFilling");
@@ -956,14 +976,19 @@ describe("Renderer derived fields", () => {
         assert.deepStrictEqual(renderedVar("total"), Type.integer(42));
       });
 
-      // Two instances of one component answer two counts, and the arguments their fields were
-      // computed from are what tell them apart.
+      // Two instances of one component answer two counts, and the queries their fields built are
+      // what tell them apart.
       it("reads the count of the instance that asked", () => {
         defineCounting("MyApp.DerivedTwoInstances");
 
         LocalDatabase.syncCounts = {
-          "MyApp.DerivedTwoInstances/total/false": 42,
-          "MyApp.DerivedTwoInstances/total/true": 7,
+          [carriedKey(
+            "MyApp.DerivedTwoInstances",
+            "total",
+            wantedCount(false),
+          )]: 42,
+          [carriedKey("MyApp.DerivedTwoInstances", "total", wantedCount(true))]:
+            7,
         };
 
         renderCounting("MyApp.DerivedTwoInstances");
@@ -981,33 +1006,109 @@ describe("Renderer derived fields", () => {
         assert.deepStrictEqual(renderedVar("total"), Type.integer(1));
       });
 
-      // Two arguments are two values, not their concatenation: 1 and 23 must not read the key
-      // 12 and 3 wrote.
-      it("separates the arguments of a field reading two fields", () => {
-        defineComponent("MyApp.DerivedTwoArgs", {
-          queries: ["total"],
-          derived: [
-            derivedEntry(
-              "total",
-              Type.atom("integer"),
-              ["from", "to"],
-              (_from, _to) => count(Type.alias(ROW)),
-            ),
-          ],
-          props: [declaration("from"), declaration("to")],
-        });
+      // The page counted the rows its prop wanted when that was true. A new value is a query the
+      // server never counted, so the client counts its own rows rather than show that number.
+      it("counts locally once a value the count's query reads changes", () => {
+        defineCounting("MyApp.DerivedChangedValue");
 
         LocalDatabase.syncCounts = {
-          "MyApp.DerivedTwoArgs/total/1,23": 42,
-          "MyApp.DerivedTwoArgs/total/123": 7,
+          [carriedKey("MyApp.DerivedChangedValue", "total", wantedCount(true))]:
+            42,
         };
 
-        render(
-          componentNode("MyApp.DerivedTwoArgs", [
-            propDom("from", Type.integer(1)),
-            propDom("to", Type.integer(23)),
-          ]),
+        renderCounting("MyApp.DerivedChangedValue");
+
+        assert.deepStrictEqual(renderedVar("total"), Type.integer(1));
+      });
+
+      // Holds the number for the first key a count asks for, whatever that key is, and nothing for
+      // any other - so what a test sees doesn't depend on how a key is spelled, only on whether a
+      // second render asks for the same one.
+      const carriedForFirstKey = () => {
+        let firstKey = null;
+
+        return new Proxy(
+          {},
+          {
+            get: (_target, key) => {
+              if (typeof key !== "string") {
+                return undefined;
+              }
+
+              firstKey ??= key;
+
+              return key === firstKey ? 42 : undefined;
+            },
+          },
         );
+      };
+
+      const ROW_ID = "018f0000-0000-7000-8000-000000000001";
+
+      const rowProp = (a) =>
+        Type.struct(ROW, [
+          [Type.atom("__meta__"), Model.emptyMetadata()],
+          [Type.atom("a"), Type.boolean(a)],
+          [Type.atom("id"), Type.bitstring(ROW_ID)],
+        ]);
+
+      const defineRowCounting = (moduleName, buildQuery) =>
+        defineComponent(moduleName, {
+          queries: ["total"],
+          derived: [
+            derivedEntry("total", Type.atom("integer"), ["row"], buildQuery),
+          ],
+          props: [declaration("row")],
+        });
+
+      const renderWithRow = (moduleName, a) =>
+        render(componentNode(moduleName, [propDom("row", rowProp(a))]));
+
+      // The page counted the rows sharing the row prop's a when it was true. Its a changing makes a
+      // query the server never counted, so the client counts its own rows rather than show that
+      // number (#1574).
+      it("counts locally once a field of a row prop the count's query reads changes", () => {
+        defineRowCounting("MyApp.DerivedSameA", (row) =>
+          count(
+            filter(
+              Type.alias(ROW),
+              Type.list([Type.tuple([Type.atom("a"), fieldOf(row, "a")])]),
+            ),
+          ),
+        );
+
+        LocalDatabase.syncCounts = carriedForFirstKey();
+
+        renderWithRow("MyApp.DerivedSameA", true);
+
+        assert.deepStrictEqual(renderedVar("total"), Type.integer(42));
+
+        renderWithRow("MyApp.DerivedSameA", false);
+
+        assert.deepStrictEqual(renderedVar("total"), Type.integer(1));
+      });
+
+      // The query reads only the row prop's id, so its other fields changing leave it the query the
+      // server counted.
+      it("keeps the carried count when a field of a row prop the count's query doesn't read changes", () => {
+        defineRowCounting("MyApp.DerivedOthers", (row) =>
+          count(
+            filter(
+              Type.alias(ROW),
+              Type.list([
+                Type.tuple([
+                  Type.atom("id"),
+                  Type.tuple([Type.atom("!="), fieldOf(row, "id")]),
+                ]),
+              ]),
+            ),
+          ),
+        );
+
+        LocalDatabase.syncCounts = carriedForFirstKey();
+
+        renderWithRow("MyApp.DerivedOthers", true);
+        renderWithRow("MyApp.DerivedOthers", false);
 
         assert.deepStrictEqual(renderedVar("total"), Type.integer(42));
       });
@@ -1015,7 +1116,9 @@ describe("Renderer derived fields", () => {
       it("leaves a field holding rows alone", () => {
         defineRipe("MyApp.DerivedNotCounting");
 
-        LocalDatabase.syncCounts = {"MyApp.DerivedNotCounting/ripe/": 42};
+        LocalDatabase.syncCounts = {
+          [carriedKey("MyApp.DerivedNotCounting", "ripe", ripeRows())]: 42,
+        };
 
         render(componentNode("MyApp.DerivedNotCounting"));
 
@@ -1512,6 +1615,13 @@ describe("Renderer derived fields", () => {
     const renderUserPage = () =>
       Renderer.renderPage(Type.alias("MyApp.UserPage"), Type.map());
 
+    // LocalDatabase.reset() leaves the acting user alone on purpose, so it is put back here, or it
+    // reaches every suite that runs after this file.
+    afterEach(() => {
+      LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
+    });
+
     beforeEach(() => {
       globalThis.Hologram.sync.model[USER] = {
         attributes: {email: "string", id: "uuid"},
@@ -1521,6 +1631,7 @@ describe("Renderer derived fields", () => {
 
       globalThis.Hologram.sync.userEntity = USER;
       LocalDatabase.actorUserId = "u1";
+      LocalDatabase.actorEntityId = "u1";
       putUserRow("ann@example.com");
 
       defineComponent("MyApp.UserPage", {});
@@ -1613,6 +1724,7 @@ describe("Renderer derived fields", () => {
     // The server's value is the row as the page was rendered, and the database says it is gone.
     it("hands nil when the database holds no row of the session user", () => {
       LocalDatabase.actorUserId = "u2";
+      LocalDatabase.actorEntityId = "u2";
 
       renderUserPage();
 
@@ -1624,6 +1736,7 @@ describe("Renderer derived fields", () => {
 
     it("hands nil for an anonymous session", () => {
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
 
       renderUserPage();
 

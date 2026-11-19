@@ -16,7 +16,6 @@ describe("Mutations", () => {
       seq: 7,
       writes: [
         {
-          claim: null,
           data: {title: "alpha"},
           id: "018f0000-0000-7000-8000-000000000001",
           op: "create",

@@ -2,11 +2,12 @@ defmodule Hologram.Policy.Expression do
   @moduledoc false
 
   # Lowers what an allow line was written with to the data form Hologram.Entity.__put_policy__/4
-  # stores. Every key on the line is an option - to: names who holds the operation, via: the
+  # stores. Every key on the line is an option - as: the name the line answers can? and via: by,
+  # only: and except: the fields an update line covers, to: who holds the operation, via: the
   # relationship it is delegated through and, written as a tuple, the operation it asks there,
-  # when: the condition - so no attribute name is taken by the line. Roles and operations are
-  # atoms, relationships are bare names or paths, the condition is an expression, and anything from
-  # the surrounding code is pinned with ^.
+  # when: the condition - so no attribute name is taken by the line. Names, fields, roles and
+  # operations are atoms, relationships are bare names or paths, the condition is an expression,
+  # and anything from the surrounding code is pinned with ^.
   #
   # It runs at expansion and judges the spelling only. Whether a role, a relationship or an
   # attribute is declared stays with the declaration and the whole-model validation, which judge
@@ -16,30 +17,36 @@ defmodule Hologram.Policy.Expression do
 
   @delegation_names %{stage: "via", names: "a relationship", spelled: "a bare name or a path"}
 
-  @option_names [:to, :via, :when]
+  @option_names [:as, :except, :only, :to, :via, :when]
 
   @doc """
   Lowers the options argument of an `allow` line, written for the given operation, to the AST of
   the keyword list `Hologram.Entity.__put_policy__/4` takes.
 
-  `to:` keeps role names and role modules, lowers a `{role, relationship}` tuple's bare name to an
+  `as:` keeps a name atom, and a bare name is refused with the atom it means. `only:` and `except:`
+  keep a list of field name atoms, a bare name in it refused the same way. `to:` keeps role
+  names and role modules, lowers a `{role, relationship}` tuple's bare name to an
   atom (`{:editor, project}` to `{:editor, :project}`) and a path to the list of its names
   (`{:owner, trip.user}` to `{:owner, [:trip, :user]}`), and keeps a `{role, entity type}` tuple,
   in a list or alone. `via:` lowers a bare name to an atom and a path to the list of its names,
   alone or as the relationship of an `{operation, relationship}` tuple (`{:update, project}` to
   `{:update, :project}`, `trip.user` to `[:trip, :user]`). `when:`
-  lowers through `Hologram.Query.Expression.condition/2`. A pinned `to:`, `via:` or `when:` value, a pinned
+  lowers through `Hologram.Query.Expression.condition/2`. A pinned `as:`, `except:`, `only:`, `to:`, `via:` or `when:` value, a pinned
   element of a `to:` list, a pinned role or scope of a grant reference and a pinned operation or
   relationship of a delegation lower to the expression.
   `__MODULE__` names a module wherever a module goes. A nil `to:` or `via:` value and a list
-  element that is not a keyword entry pass through for the declaration to refuse.
+  element that is not a keyword entry pass through for the declaration to refuse. A `when:`
+  condition with names a refusal can hint at (see `Hologram.Query.Expression.condition_hints/2`)
+  adds a `__name_hints__:` entry holding the hints, which the entity type keeps beside the line.
 
   Raises Hologram.CompileError, located at the offending node, on options not written in place, on
   an option written twice (only one would be read, so the line would grant more than it says), on
   an unknown option (naming the condition it can mean when its value is an equality operand), on a
   grant reference with the scope first or a relationship written as an atom, on a role written as
   a bare name, on a delegation written as an atom, on a delegation with the relationship first or
-  with an operation that is not an atom, and on anything else.
+  with an operation that is not an atom, on a pinned bare name no variable of the surrounding code
+  holds where `via:` names a relationship (naming the bare spelling), on what
+  `Hologram.Query.Expression.condition/2` refuses in a `when:`, and on anything else.
   """
   @spec spec(Macro.t(), Macro.t(), Macro.Env.t()) :: Macro.t()
   def spec(operation, spec, env) when is_list(spec) do
@@ -50,7 +57,7 @@ defmodule Hologram.Policy.Expression do
         {option!(element, operation, env), seen_keys}
       end)
 
-    options
+    options ++ name_hints(spec, env)
   end
 
   def spec(operation, spec, env) do
@@ -206,6 +213,33 @@ defmodule Hologram.Policy.Expression do
 
   defp name_atom?(atom), do: is_atom(atom) and atom not in [nil, true, false]
 
+  # What the condition was written with, which a refusal of a name in it can add when the model is
+  # validated - carried in the spec, which is what reaches the entity type, replayed or not, under
+  # a key no option is spelled as.
+  # A spec holding anything but options is refused when the line is declared, printing it whole -
+  # hints added to it would only show there.
+  defp name_hints(spec, env) do
+    keyword? = Enum.all?(spec, &match?({key, _value} when is_atom(key), &1))
+
+    case keyword? && List.keyfind(spec, :when, 0) do
+      {:when, condition} ->
+        case QueryExpression.condition_hints(condition, env) do
+          [] -> []
+          hints -> [{:__name_hints__, Macro.escape(hints)}]
+        end
+
+      _no_condition ->
+        []
+    end
+  end
+
+  defp option!({:as, value}, _operation, env), do: {:as, rule_name!(value, env)}
+
+  defp option!({:except, value}, _operation, env),
+    do: {:except, field_names!(value, :except, env)}
+
+  defp option!({:only, value}, _operation, env), do: {:only, field_names!(value, :only, env)}
+
   defp option!({:to, value}, _operation, env), do: {:to, grant_references!(value, env)}
 
   defp option!({:via, value}, _operation, env), do: {:via, delegation!(value, env)}
@@ -281,6 +315,9 @@ defmodule Hologram.Policy.Expression do
   defp repeated_option!(key, value, operation, env) do
     fix =
       case key do
+        :as -> ""
+        :except -> " - list the fields in one except option"
+        :only -> " - list the fields in one only option"
         :to -> " - list the role references in one to option"
         :via -> ""
         :when -> " - join the conditions with and"
@@ -292,6 +329,45 @@ defmodule Hologram.Policy.Expression do
       env
     )
   end
+
+  # A field is named by its atom, as a name is - a bare name in the list is the atom written without
+  # its colon. A pinned list is the surrounding code's, and anything else passes through for the
+  # declaration to refuse.
+  defp field_names!(fields, key, env) when is_list(fields) do
+    Enum.map(fields, fn
+      {name, _meta, _context} = ast when is_atom(name) ->
+        if bare_name?(ast) do
+          QueryExpression.compile_error!(
+            "#{key} names a field with an atom, got: #{name} - write #{inspect(name)}",
+            ast,
+            env
+          )
+        else
+          unpinned(ast)
+        end
+
+      field ->
+        field
+    end)
+  end
+
+  defp field_names!(fields, _key, _env), do: unpinned(fields)
+
+  # A name is an atom, as an operation is - a bare name is the atom written without its colon. Any
+  # other value passes through for the declaration to refuse.
+  defp rule_name!({name, _meta, _context} = ast, env) when is_atom(name) do
+    if bare_name?(ast) do
+      QueryExpression.compile_error!(
+        "as names a rule with an atom, got: #{name} - write #{inspect(name)}",
+        ast,
+        env
+      )
+    else
+      unpinned(ast)
+    end
+  end
+
+  defp rule_name!(ast, _env), do: unpinned(ast)
 
   # The scope written where the role goes: a relationship, a path or an entity type first and a role
   # atom second is the order the tuple had before it turned around. A path first is never a role, so
@@ -325,7 +401,7 @@ defmodule Hologram.Policy.Expression do
       end
 
     QueryExpression.compile_error!(
-      "unknown option #{inspect(key)} for allow #{Macro.to_string(operation)} - the allow options are to, via and when#{hint}",
+      "unknown option #{inspect(key)} for allow #{Macro.to_string(operation)} - the allow options are as, except, only, to, via and when#{hint}",
       value,
       env
     )

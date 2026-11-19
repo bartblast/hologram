@@ -292,7 +292,7 @@ defmodule Hologram.DB.IndexBuilder do
     statement = DDL.invalid_indexes_statement(false)
     {:ok, %{rows: rows}} = Connection.query(statement)
 
-    Enum.find_value(rows, fn [index] ->
+    Enum.find_value(rows, fn [index, _ready?, _live?] ->
       if MapSet.member?(owned_names, index), do: {:drop_invalid, index}
     end)
   end

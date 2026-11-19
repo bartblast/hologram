@@ -9,6 +9,26 @@ defmodule Hologram.Query.ExpressionTest do
     %{__ENV__ | file: Path.join(File.cwd!(), "lib/my_app/queries.ex"), line: 7}
   end
 
+  # Lowers predicates where the macro is called, returning what they lowered to as data.
+  defmacro lower_in_caller(ast) do
+    ast
+    |> predicates(__CALLER__)
+    |> Macro.escape()
+  end
+
+  # The env of a stage call made where variables of the given names are bound.
+  defp env_binding(names) do
+    assignments =
+      names
+      |> List.wrap()
+      |> Enum.map(&{:=, [], [{&1, [], nil}, nil]})
+
+    {_value, _binding, env} =
+      Code.eval_quoted_with_env({:__block__, [], [nil | assignments]}, [], env())
+
+    env
+  end
+
   # Parses the code, lowers it with the given lowering and evaluates what it lowered to, with the
   # given binding standing for the caller's variables.
   defp lower(lowering, code, binding \\ []) do
@@ -21,17 +41,39 @@ defmodule Hologram.Query.ExpressionTest do
     value
   end
 
-  defp lower_bound(code, binding \\ []), do: lower(&bound(&1, :take, env()), code, binding)
+  # The hints of the given code, where variables of the given names are bound - the names in marked
+  # being a derived field's arguments, marked the way DerivedExpression marks them.
+  defp hints_of(hinting, code, names, marked \\ []) do
+    code
+    |> Code.string_to_quoted!(line: 12)
+    |> Macro.prewalk(fn
+      {name, _meta, context} = ast when is_atom(name) and is_atom(context) ->
+        if name in marked, do: mark_pinnable(ast), else: ast
 
-  defp lower_condition(code, binding \\ []), do: lower(&condition(&1, env()), code, binding)
+      ast ->
+        ast
+    end)
+    |> hinting.(env_binding(names))
+  end
 
-  defp lower_inclusion(code, binding \\ []), do: lower(&inclusion(&1, env()), code, binding)
+  # The stage call is made where the binding's variables are bound, as a pinned name reads one.
+  defp lower_bound(code, binding \\ []),
+    do: lower(&bound(&1, :take, env_binding(Keyword.keys(binding))), code, binding)
 
-  defp lower_ordering(code, binding \\ []), do: lower(&ordering(&1, env()), code, binding)
+  defp lower_condition(code, binding \\ []),
+    do: lower(&condition(&1, env_binding(Keyword.keys(binding))), code, binding)
 
-  defp lower_pagination(code, binding \\ []), do: lower(&pagination(&1, env()), code, binding)
+  defp lower_inclusion(code, binding \\ []),
+    do: lower(&inclusion(&1, env_binding(Keyword.keys(binding))), code, binding)
 
-  defp lower_predicates(code, binding \\ []), do: lower(&predicates(&1, env()), code, binding)
+  defp lower_ordering(code, binding \\ []),
+    do: lower(&ordering(&1, env_binding(Keyword.keys(binding))), code, binding)
+
+  defp lower_pagination(code, binding \\ []),
+    do: lower(&pagination(&1, env_binding(Keyword.keys(binding))), code, binding)
+
+  defp lower_predicates(code, binding \\ []),
+    do: lower(&predicates(&1, env_binding(Keyword.keys(binding))), code, binding)
 
   describe "bound/3" do
     test "lowers a negative integer for the stage to judge" do
@@ -74,6 +116,23 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: take takes an integer or a pinned expression, got: n + 1 - a value from the surrounding code is pinned: ^(n + 1)",
                    fn -> lower_bound("n + 1") end
+    end
+  end
+
+  describe "condition_hints/2" do
+    test "spells a name inside a quantifier on each row" do
+      assert hints_of(&condition_hints/2, "any(member <- members, user_id == user_id())", []) == [
+               {:key, 1, {:outer, 1, :user_id}, nil, ["member.user_id", "user_id"]}
+             ]
+    end
+
+    test "hints nothing at the top of a condition naming no variable" do
+      assert hints_of(&condition_hints/2, "owner_id == assignee_id and status in [:open]", []) ==
+               []
+    end
+
+    test "hints nothing for pinned predicates" do
+      assert hints_of(&condition_hints/2, "^predicates", [:predicates]) == []
     end
   end
 
@@ -287,10 +346,28 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_condition("^base or b == 2") end
     end
 
+    test "raises on a pinned name no variable holds, naming the field of the entity" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^owner_id pins owner_id, which no variable holds here - inside a condition a name without a pin reads a field of the entity: owner_id",
+                   fn -> lower_condition("assignee_id == ^owner_id") end
+    end
+
+    test "raises on a pinned name no variable holds inside a quantifier's condition, naming the bound row too" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^role pins role, which no variable holds here - inside a condition a name without a pin reads a field of the entity: role - or of the row member binds, through its name: member.role",
+                   fn -> lower_condition("any(member <- members, member.role == ^role)") end
+    end
+
     test "raises on a pinned quantifier's condition" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a quantifier's condition is an expression, got: ^predicates - a condition built at runtime goes whole into when: ^predicates",
                    fn -> lower_condition("any(member <- members, ^predicates)") end
+    end
+
+    test "raises on a pinned user_id no variable holds, naming user_id()" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^user_id pins user_id, which no variable holds here - the acting user's id is user_id()",
+                   fn -> lower_condition("owner_id == ^user_id") end
     end
 
     test "raises on a quantifier with too many arguments, naming user_id()" do
@@ -303,6 +380,26 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: all takes a condition - all over no condition says nothing, got: all(members) - write all(row <- members, row.<attribute> == ...)",
                    fn -> lower_condition("all(members)") end
+    end
+
+    test "raises on an attribute compared with itself" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: owner_id == owner_id compares owner_id with itself, which is always true",
+                   fn -> lower_condition("owner_id == owner_id") end
+    end
+
+    test "raises on an attribute compared with itself beside a variable of its name, naming the pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: owner_id == owner_id compares owner_id with itself, which is always true - a value from the surrounding code is pinned: ^owner_id",
+                   fn -> lower(&condition(&1, env_binding(:owner_id)), "owner_id == owner_id") end
+    end
+
+    test "raises on an attribute compared with itself inside a quantifier's condition" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: member.role >= member.role compares member.role with itself, which only says member.role isn't nil - write member.role != nil",
+                   fn ->
+                     lower_condition("any(member <- members, member.role >= member.role)")
+                   end
     end
 
     test "raises on nil" do
@@ -405,8 +502,20 @@ defmodule Hologram.Query.ExpressionTest do
       assert lower_inclusion("[a.b.c, a.b.d]") == [a: [b: [:c, :d]]]
     end
 
+    test "passes a pinned path over a variable through" do
+      assert lower_inclusion("^opts.relationship", opts: %{relationship: :owner}) == :owner
+    end
+
     test "passes a pinned spec through" do
       assert lower_inclusion("^spec", spec: [project: [:owner]]) == [project: [:owner]]
+    end
+
+    # Elixir expands a name a macro marked if_undefined: :apply to a call of that name where no
+    # variable holds it.
+    test "passes a pinned name that falls back to a call through" do
+      name = {:relationship, [if_undefined: :apply, line: 12], nil}
+
+      assert inclusion({:^, [line: 12], [name]}, env()) == name
     end
 
     test "raises on a call" do
@@ -463,6 +572,36 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_inclusion("[tasks: nil]") end
     end
 
+    test "raises on a pinned element no variable holds, naming the bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^owner pins owner, which no variable holds here - include names a relationship with a bare name or a path, without the pin: owner",
+                   fn -> lower_inclusion("[tasks, ^owner]") end
+    end
+
+    test "raises on a pinned keyword entry no variable holds, naming the path" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^owner pins owner, which no variable holds here - include names a relationship with a bare name or a path, without the pin: tasks.owner",
+                   fn -> lower_inclusion("[tasks: ^owner]") end
+    end
+
+    test "raises on a pinned name no variable holds, naming the bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^owner pins owner, which no variable holds here - include names a relationship with a bare name or a path, without the pin: owner",
+                   fn -> lower_inclusion("^owner") end
+    end
+
+    test "raises on a pinned path no variable holds, naming the path" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^tasks.owner pins tasks, which no variable holds here - include names a relationship with a bare name or a path, without the pin: tasks.owner",
+                   fn -> lower_inclusion("^tasks.owner") end
+    end
+
+    test "raises on a pinned path in a keyword entry no variable holds, naming the path" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^owner.project pins owner, which no variable holds here - include names a relationship with a bare name or a path, without the pin: tasks.owner.project",
+                   fn -> lower_inclusion("[tasks: ^owner.project]") end
+    end
+
     test "raises on a path called with parentheses" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: include names a relationship with a bare name or a path, or with a pinned expression when the name comes from the surrounding code, got: tasks.owner() - a value from the surrounding code is pinned: ^tasks.owner()",
@@ -491,6 +630,50 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:7: include names a relationship with a bare name, got: :project - write project",
                    fn -> lower_inclusion("[owner, :project]") end
+    end
+  end
+
+  describe "inclusion_hints/2" do
+    @fix "a value from the surrounding code is pinned: ^relationship"
+
+    test "hints the pin a variable's name forgot" do
+      assert hints_of(&inclusion_hints/2, "relationship", [:relationship]) == [
+               {:include, 0, :relationship, @fix, []}
+             ]
+    end
+
+    test "hints the pin a variable's name forgot in a list" do
+      assert hints_of(&inclusion_hints/2, "[owner, relationship, tasks.owner]", [:relationship]) ==
+               [{:include, 0, :relationship, @fix, []}]
+    end
+
+    test "hints nothing for a path over a variable" do
+      assert hints_of(&inclusion_hints/2, "relationship.owner", [:relationship]) == []
+    end
+
+    # Merged into the path, the name would still be read as a relationship once pinned.
+    test "hints nothing for a variable's name a path in the list starts at" do
+      assert hints_of(&inclusion_hints/2, "[relationship, relationship.owner]", [:relationship]) ==
+               []
+    end
+
+    test "hints nothing for a name no variable holds" do
+      assert hints_of(&inclusion_hints/2, "[owner, tasks]", []) == []
+    end
+
+    test "hints nothing for a keyword entry" do
+      assert hints_of(&inclusion_hints/2, "[relationship: ^nested]", [:relationship, :nested]) ==
+               []
+    end
+
+    test "hints nothing for a pinned spec" do
+      assert hints_of(&inclusion_hints/2, "^relationship", [:relationship]) == []
+    end
+
+    # Pinned in a derived field's query, an argument is a field of the row, which an include can't
+    # name.
+    test "hints nothing for a derived field's argument" do
+      assert hints_of(&inclusion_hints/2, "author", [], [:author]) == []
     end
   end
 
@@ -523,6 +706,14 @@ defmodule Hologram.Query.ExpressionTest do
       assert lower_ordering("^spec", spec: [{:title, :asc}]) == [title: :asc]
     end
 
+    # Elixir expands a name a macro marked if_undefined: :apply to a call of that name where no
+    # variable holds it.
+    test "passes a pinned name that falls back to a call through" do
+      name = {:sort_key, [if_undefined: :apply, line: 12], nil}
+
+      assert ordering({:^, [line: 12], [name]}, env()) == name
+    end
+
     test "raises on a bare direction" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a direction is :asc, :desc or a pinned expression, got: desc",
@@ -533,6 +724,24 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: sort names an attribute with a bare name, or with a pinned expression when the name comes from the surrounding code, got: sort_key() - a value from the surrounding code is pinned: ^sort_key()",
                    fn -> lower_ordering("sort_key()") end
+    end
+
+    test "raises on a pinned name in a pair no variable holds, naming the bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^key pins key, which no variable holds here - sort names an attribute with a bare name, without the pin: key",
+                   fn -> lower_ordering("[{^key, :desc}]") end
+    end
+
+    test "raises on a pinned name in a list no variable holds, naming the bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^key pins key, which no variable holds here - sort names an attribute with a bare name, without the pin: key",
+                   fn -> lower_ordering("[title, ^key]") end
+    end
+
+    test "raises on a pinned name no variable holds, naming the bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^priority pins priority, which no variable holds here - sort names an attribute with a bare name, without the pin: priority",
+                   fn -> lower_ordering("^priority") end
     end
 
     test "raises on a dot path" do
@@ -551,6 +760,43 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:7: sort names an attribute with a bare name, got: :created_at - write created_at",
                    fn -> lower_ordering("[priority, :created_at]") end
+    end
+  end
+
+  describe "ordering_hints/2" do
+    @fix "a value from the surrounding code is pinned: ^sort_field"
+
+    test "hints the pin a variable's name forgot" do
+      assert hints_of(&ordering_hints/2, "sort_field", [:sort_field]) == [
+               {:sort, 0, :sort_field, @fix, []}
+             ]
+    end
+
+    test "hints the pin a variable's name forgot in a list, paired or alone" do
+      assert hints_of(&ordering_hints/2, "[{sort_field, :desc}, title, other]", [
+               :sort_field,
+               :other
+             ]) == [
+               {:sort, 0, :sort_field, @fix, []},
+               {:sort, 0, :other, "a value from the surrounding code is pinned: ^other", []}
+             ]
+    end
+
+    test "hints nothing for a name no variable holds" do
+      assert hints_of(&ordering_hints/2, "[title, priority: :desc]", []) == []
+    end
+
+    test "hints nothing for a keyword key" do
+      assert hints_of(&ordering_hints/2, "[sort_field: :desc]", [:sort_field]) == []
+    end
+
+    test "hints nothing for a pinned spec" do
+      assert hints_of(&ordering_hints/2, "^sort_field", [:sort_field]) == []
+    end
+
+    # Pinned in a derived field's query, an argument is a field of the row, which a sort can't name.
+    test "hints nothing for a derived field's argument" do
+      assert hints_of(&ordering_hints/2, "position", [], [:position]) == []
     end
   end
 
@@ -580,6 +826,188 @@ defmodule Hologram.Query.ExpressionTest do
     end
   end
 
+  describe "predicate_hints/2" do
+    @fix "a value from the surrounding code is pinned: ^search"
+
+    test "hints the pin a variable's name forgot on the right side" do
+      assert hints_of(&predicate_hints/2, "title == search", [:search]) == [
+               {:operand, 0, :search, @fix, []}
+             ]
+    end
+
+    test "hints the pin a path over a variable forgot" do
+      assert hints_of(&predicate_hints/2, "owner_id == user.id", [:user]) == [
+               {:operand, 0, [:user, :id],
+                "a value from the surrounding code is pinned: ^user.id", []}
+             ]
+    end
+
+    test "hints the pin a search term forgot" do
+      assert hints_of(&predicate_hints/2, "contains(title, search, mode: :exact)", [:search]) ==
+               [{:operand, 0, :search, @fix, []}]
+    end
+
+    test "hints a variable's name on the left side of a comparison with a name, flipping the operator" do
+      assert hints_of(&predicate_hints/2, "search < title", [:search]) == [
+               {:key, 0, :search,
+                "a value from the surrounding code is pinned, on the right side: title > ^search",
+                []}
+             ]
+    end
+
+    test "hints a path over a variable on the left side of a comparison with a name" do
+      assert hints_of(&predicate_hints/2, "user.name == title", [:user]) == [
+               {:key, 0, [:user, :name],
+                "a value from the surrounding code is pinned, on the right side: title == ^user.name",
+                []}
+             ]
+    end
+
+    test "hints a variable's name on the left side inside a quantifier, at its depth" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(message <- messages, since <= message.created_at)",
+               [:since]
+             ) == [
+               {:operand, 1, :created_at, nil, ["message.created_at", "created_at"]},
+               {:key, 1, {:outer, 1, :since},
+                "a value from the surrounding code is pinned, on the right side: message.created_at >= ^since",
+                ["message.since", "since"]}
+             ]
+    end
+
+    test "flips an ordering operator taking equality when it swaps the sides" do
+      assert hints_of(&predicate_hints/2, "since >= created_at", [:since]) == [
+               {:key, 0, :since,
+                "a value from the surrounding code is pinned, on the right side: created_at <= ^since",
+                []}
+             ]
+    end
+
+    # The stage names the right side's fix first when that side is no attribute either.
+    test "hints both sides when both are variables' names" do
+      assert hints_of(&predicate_hints/2, "since < until", [:since, :until]) == [
+               {:operand, 0, :until, "a value from the surrounding code is pinned: ^until", []},
+               {:key, 0, :since,
+                "a value from the surrounding code is pinned, on the right side: until > ^since",
+                []}
+             ]
+    end
+
+    test "hints nothing on the left side of a comparison with a pinned value" do
+      assert hints_of(&predicate_hints/2, "project_id == ^project_id", [:project_id]) == []
+    end
+
+    test "hints nothing on the left side of a search" do
+      assert hints_of(&predicate_hints/2, "contains(search, title)", [:search]) == []
+    end
+
+    test "hints the argument a derived field's query forgot to pin" do
+      assert hints_of(&predicate_hints/2, "created_at > last_read_at", [], [:last_read_at]) == [
+               {:operand, 0, :last_read_at,
+                "last_read_at is an argument of the derived field's function, read pinned: ^last_read_at",
+                []}
+             ]
+    end
+
+    test "hints a derived field's argument on the left side of a comparison with a name" do
+      assert hints_of(&predicate_hints/2, "last_read_at < created_at", [], [:last_read_at]) == [
+               {:key, 0, :last_read_at,
+                "last_read_at is an argument of the derived field's function, read pinned, on the right side: created_at > ^last_read_at",
+                []}
+             ]
+    end
+
+    test "hints the pin a variable's name forgot inside a quantifier, at its depth" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(message <- messages, message.created_at > search)",
+               [:search]
+             ) == [
+               {:operand, 1, {:outer, 1, :search}, @fix, ["message.search", "search"]},
+               {:key, 1, :created_at, nil, ["message.created_at", "created_at"]}
+             ]
+    end
+
+    test "spells a name inside nested quantifiers on each row, nearest first" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(channel <- channels, any(message <- channel.messages, body == \"x\"))",
+               []
+             ) == [
+               {:key, 2, {:outer, 2, :body}, nil, ["message.body", "channel.body", "body"]}
+             ]
+    end
+
+    test "spells a membership's and a search's left side inside a quantifier" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(message <- messages, position in [1, 2] and contains(body, \"x\"))",
+               []
+             ) == [
+               {:key, 1, {:outer, 1, :position}, nil, ["message.position", "position"]},
+               {:key, 1, {:outer, 1, :body}, nil, ["message.body", "body"]}
+             ]
+    end
+
+    test "spells no bare name for the queried row where a quantifier binds that name" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(role <- members, role.role == \"admin\")",
+               []
+             ) == [{:key, 1, :role, nil, ["role.role"]}]
+    end
+
+    test "spells nothing for a path inside a quantifier" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(message <- messages, message.author.name == \"x\")",
+               []
+             ) == []
+    end
+
+    test "spells nothing at the top of a filter" do
+      assert hints_of(&predicate_hints/2, "title == name and position in [1]", []) == []
+    end
+
+    test "spells a name a quantifier binds on each row, though a variable holds it too" do
+      assert hints_of(
+               &predicate_hints/2,
+               "any(message <- messages, created_at > message.edited_at)",
+               [:message]
+             ) == [
+               {:operand, 1, :edited_at, nil, ["message.edited_at", "edited_at"]},
+               {:key, 1, {:outer, 1, :created_at}, nil, ["message.created_at", "created_at"]}
+             ]
+    end
+
+    test "hints each side of and and or" do
+      assert hints_of(&predicate_hints/2, "title == search or (body == search and a == 1)", [
+               :search
+             ]) == [{:operand, 0, :search, @fix, []}, {:operand, 0, :search, @fix, []}]
+    end
+
+    test "hints nothing for a name no variable holds" do
+      assert hints_of(&predicate_hints/2, "title == name", []) == []
+    end
+
+    test "hints nothing for a membership" do
+      assert hints_of(&predicate_hints/2, "search in [1, 2]", [:search]) == []
+    end
+
+    test "hints nothing for a negated membership" do
+      assert hints_of(&predicate_hints/2, "search not in [1, 2]", [:search]) == []
+    end
+
+    test "hints nothing for a keyword list" do
+      assert hints_of(&predicate_hints/2, "[title: ^search]", [:search]) == []
+    end
+
+    test "hints nothing for pinned predicates" do
+      assert hints_of(&predicate_hints/2, "^search", [:search]) == []
+    end
+  end
+
   describe "predicates/2" do
     test "flattens a chain of disjunctions" do
       assert lower_predicates("a == 1 or b == 2 or c == 3") ==
@@ -594,6 +1022,12 @@ defmodule Hologram.Query.ExpressionTest do
     test "keeps a pinned keyword value an equality operand" do
       assert lower_predicates("[status: ^statuses]", statuses: [:todo]) ==
                [status: {:==, [:todo]}]
+    end
+
+    test "lowers a bound row's attribute compared with the same attribute of the row above" do
+      assert lower_predicates("any(message <- messages, message.created_at > created_at)") == [
+               any: {[:messages], [created_at: {:>, {:attribute, {:outer, 1, :created_at}}}]}
+             ]
     end
 
     test "lowers a bound row's path inside a quantifier" do
@@ -622,6 +1056,11 @@ defmodule Hologram.Query.ExpressionTest do
     test "lowers a comparison with a path on the left" do
       assert lower_predicates("channel.archived == false") ==
                [{[:channel, :archived], {:==, false}}]
+    end
+
+    test "lowers a comparison with a pinned attribute operand naming its left side" do
+      assert lower_predicates("owner_id == ^{:attribute, :owner_id}") ==
+               [owner_id: {:==, {:attribute, :owner_id}}]
     end
 
     test "lowers a comparison with an attribute" do
@@ -764,6 +1203,44 @@ defmodule Hologram.Query.ExpressionTest do
                [created_at: {:>, ~D[2026-10-13]}]
     end
 
+    # A variable a macro generated is keyed by the counter its hygiene gave it, not by its context.
+    test "lowers a pinned macro-generated variable" do
+      variable = {:since, [counter: 7, line: 12], MyApp.Macros}
+      {_value, _binding, env} = Code.eval_quoted_with_env({:=, [], [variable, nil]}, [], env())
+
+      assert predicates(
+               {:>, [line: 12], [{:created_at, [line: 12], nil}, {:^, [line: 12], [variable]}]},
+               env
+             ) ==
+               [created_at: {:>, variable}]
+    end
+
+    # Elixir expands a name a macro marked if_undefined: :apply to a call of that name where no
+    # variable holds it.
+    test "lowers a pinned name that falls back to a call" do
+      name = {:since, [if_undefined: :apply, line: 12], nil}
+
+      assert predicates(
+               {:>, [line: 12], [{:created_at, [line: 12], nil}, {:^, [line: 12], [name]}]},
+               env()
+             ) ==
+               [created_at: {:>, name}]
+    end
+
+    test "lowers a pinned path over a bound row's name a variable also holds" do
+      assert lower_predicates("any(message <- messages, message.created_at > ^message.edited_at)",
+               message: %{edited_at: 5}
+             ) == [any: {[:messages], [created_at: {:>, 5}]}]
+    end
+
+    # Code.eval_string/2 binds its binding's variables in the env a macro in the code expands in.
+    test "lowers a pinned variable an evaluation binds" do
+      code = "#{inspect(__MODULE__)}.lower_in_caller(created_at > ^since)"
+
+      assert {[created_at: {:>, {:since, _meta, nil}}], _binding} =
+               Code.eval_string("require #{inspect(__MODULE__)}; #{code}", since: nil)
+    end
+
     test "lowers a pinned dot chain" do
       assert lower_predicates("author_id == ^user.id", user: %{id: "u"}) ==
                [author_id: {:==, "u"}]
@@ -866,6 +1343,11 @@ defmodule Hologram.Query.ExpressionTest do
     test "lowers a search on a path" do
       assert lower_predicates(~s|starts_with(author.username, "jo")|) ==
                [{[:author, :username], {:starts_with, "jo"}}]
+    end
+
+    test "lowers a search with a pinned term naming its attribute" do
+      assert lower_predicates("starts_with(title, ^{:attribute, :title})") ==
+               [title: {:starts_with, {:attribute, :title}}]
     end
 
     test "lowers a search with mode: :exact" do
@@ -1031,6 +1513,27 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates(code) end
     end
 
+    test "raises on a bound row's attribute compared with itself" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: message.created_at > message.created_at compares message.created_at with itself, which is always false",
+                   fn ->
+                     lower_predicates(
+                       "any(message <- messages, message.created_at > message.created_at)"
+                     )
+                   end
+    end
+
+    test "raises on a bound row's attribute compared with itself, its name also a variable's, naming no pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: message.read_at > message.read_at compares message.read_at with itself, which is always false",
+                   fn ->
+                     lower(
+                       &predicates(&1, env_binding(:message)),
+                       "any(message <- messages, message.read_at > message.read_at)"
+                     )
+                   end
+    end
+
     test "raises on a call as a comparison operand" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute, a path or a pinned expression, got: Date.utc_today() - a value from the surrounding code is pinned: ^Date.utc_today()",
@@ -1162,6 +1665,34 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates("status in [channel.status]") end
     end
 
+    test "raises on a path compared with itself" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: project.owner_id == project.owner_id compares project.owner_id with itself, which is always true",
+                   fn -> lower_predicates("project.owner_id == project.owner_id") end
+    end
+
+    test "raises on a path compared with itself beside a variable of another name, naming no pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: project.owner_id == project.owner_id compares project.owner_id with itself, which is always true",
+                   fn ->
+                     lower(
+                       &predicates(&1, env_binding(:owner_id)),
+                       "project.owner_id == project.owner_id"
+                     )
+                   end
+    end
+
+    test "raises on a path compared with itself beside a variable of its first name, naming the pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: project.owner_id == project.owner_id compares project.owner_id with itself, which is always true - a value from the surrounding code is pinned: ^project.owner_id",
+                   fn ->
+                     lower(
+                       &predicates(&1, env_binding(:project)),
+                       "project.owner_id == project.owner_id"
+                     )
+                   end
+    end
+
     test "raises on a pinned left side" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: the left side of a comparison names an attribute of the queried entity or a path to one, got: ^x",
@@ -1192,6 +1723,60 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a keyword list or a pinned list of predicates is a whole filter, not one side of or, got: ^base - write the alternative as an expression, or put the whole disjunction in a pinned list: [or: [predicates, predicates]]",
                    fn -> lower_predicates("^base or b == 2") end
+    end
+
+    test "raises on a pinned bound row" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^message pins message, the row a quantifier binds - its fields read without a pin: message.<attribute>",
+                   fn -> lower_predicates("any(message <- messages, message.id == ^message)") end
+    end
+
+    test "raises on a pinned name no variable holds, naming the field" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^created_at pins created_at, which no variable holds here - inside a filter a name without a pin reads a field of the queried entity: created_at",
+                   fn -> lower_predicates("updated_at > ^created_at") end
+    end
+
+    test "raises on a pinned name no variable holds as a search term" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^name pins name, which no variable holds here - inside a filter a name without a pin reads a field of the queried entity: name",
+                   fn -> lower_predicates("contains(title, ^name)") end
+    end
+
+    test "raises on a pinned name no variable holds inside a nested quantifier, naming the nearest bound row" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^archived_at pins archived_at, which no variable holds here - inside a filter a name without a pin reads a field of the queried entity: archived_at - or of the row message binds, through its name: message.archived_at",
+                   fn ->
+                     lower_predicates(
+                       "any(channel <- channels, any(message <- channel.messages, message.created_at > ^archived_at))"
+                     )
+                   end
+    end
+
+    test "raises on a pinned name no variable holds inside a quantifier, naming the bound row too" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^last_read_at pins last_read_at, which no variable holds here - inside a filter a name without a pin reads a field of the queried entity: last_read_at - or of the row message binds, through its name: message.last_read_at",
+                   fn ->
+                     lower_predicates(
+                       "any(message <- messages, message.created_at > ^last_read_at)"
+                     )
+                   end
+    end
+
+    test "raises on a pinned path no variable holds, naming the field" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^project.owner_id pins project, which no variable holds here - inside a filter a name without a pin reads a field of the queried entity: project.owner_id",
+                   fn -> lower_predicates("assignee_id == ^project.owner_id") end
+    end
+
+    test "raises on a pinned path over a bound row" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^message.edited_at pins message, the row a quantifier binds - its fields read without a pin: message.edited_at",
+                   fn ->
+                     lower_predicates(
+                       "any(message <- messages, message.created_at > ^message.edited_at)"
+                     )
+                   end
     end
 
     test "raises on a pinned quantifier's relationship" do
@@ -1258,6 +1843,26 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    ~s|lib/my_app/queries.ex:12: a keyword predicate is attribute: value, got: starts_with(username, "jo") - join comparisons with and|,
                    fn -> lower_predicates(~s|[starts_with(username, "jo"), active == true]|) end
+    end
+
+    test "raises on a search for the attribute it reads" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: starts_with(title, title) compares title with itself, which only says title isn't nil - write title != nil",
+                   fn -> lower_predicates("starts_with(title, title)") end
+    end
+
+    test "raises on a search for the attribute it reads beside a variable of its name, naming the pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: starts_with(title, title) compares title with itself, which only says title isn't nil - a value from the surrounding code is pinned: ^title",
+                   fn ->
+                     lower(&predicates(&1, env_binding(:title)), "starts_with(title, title)")
+                   end
+    end
+
+    test "raises on a search for the attribute it reads with mode: :exact" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: contains(title, title, mode: :exact) compares title with itself, which only says title isn't nil - write title != nil",
+                   fn -> lower_predicates("contains(title, title, mode: :exact)") end
     end
 
     test "raises on a search operator tuple as a keyword value" do
@@ -1332,6 +1937,69 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: all takes a condition - all over no condition says nothing, got: all(tasks) - write all(row <- tasks, row.<attribute> == ...)",
                    fn -> lower_predicates("all(tasks)") end
+    end
+
+    # A variable a macro generated is keyed by the counter its hygiene gave it, not by its context.
+    test "raises on an attribute compared with itself beside a macro-generated variable of its name, naming the pin" do
+      variable = {:inserted_at, [counter: 7, line: 12], MyApp.Macros}
+      {_value, _binding, env} = Code.eval_quoted_with_env({:=, [], [variable, nil]}, [], env())
+
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: inserted_at >= inserted_at compares inserted_at with itself, which only says inserted_at isn't nil - a value from the surrounding code is pinned: ^inserted_at",
+                   fn -> predicates({:>=, [line: 12], [variable, variable]}, env) end
+    end
+
+    test "raises on an attribute compared with itself beside a variable of its name, naming the pin" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: inserted_at >= inserted_at compares inserted_at with itself, which only says inserted_at isn't nil - a value from the surrounding code is pinned: ^inserted_at",
+                   fn ->
+                     lower(
+                       &predicates(&1, env_binding(:inserted_at)),
+                       "inserted_at >= inserted_at"
+                     )
+                   end
+    end
+
+    test "raises on an attribute compared with itself by ==" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: owner_id == owner_id compares owner_id with itself, which is always true",
+                   fn -> lower_predicates("owner_id == owner_id") end
+    end
+
+    test "raises on an attribute compared with itself by an operator that is always false" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: updated_at != updated_at compares updated_at with itself, which is always false",
+                   fn -> lower_predicates("updated_at != updated_at") end
+
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: updated_at < updated_at compares updated_at with itself, which is always false",
+                   fn -> lower_predicates("updated_at < updated_at") end
+
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: updated_at > updated_at compares updated_at with itself, which is always false",
+                   fn -> lower_predicates("updated_at > updated_at") end
+    end
+
+    test "raises on an attribute compared with itself by an ordering operator taking equality" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: updated_at <= updated_at compares updated_at with itself, which only says updated_at isn't nil - write updated_at != nil",
+                   fn -> lower_predicates("updated_at <= updated_at") end
+
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: updated_at >= updated_at compares updated_at with itself, which only says updated_at isn't nil - write updated_at != nil",
+                   fn -> lower_predicates("updated_at >= updated_at") end
+    end
+
+    test "raises on an attribute compared with itself in an alternative" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: owner_id != owner_id compares owner_id with itself, which is always false",
+                   fn -> lower_predicates("archived == true or owner_id != owner_id") end
+    end
+
+    test "raises on an attribute of the queried row compared with itself inside a quantifier" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: created_at < created_at compares created_at with itself, which is always false",
+                   fn -> lower_predicates("any(message <- messages, created_at < created_at)") end
     end
 
     test "raises on an exact search operator tuple as a keyword value" do

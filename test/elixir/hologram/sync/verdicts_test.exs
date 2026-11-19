@@ -7,7 +7,6 @@ defmodule Hologram.Sync.VerdictsTest do
 
   alias Hologram.Entity
   alias Hologram.Policy
-  alias Hologram.Test.Fixtures.Entity.Module2
 
   use_module_stub :query_cache
 
@@ -117,63 +116,25 @@ defmodule Hologram.Sync.VerdictsTest do
     end
   end
 
-  describe "stale/5" do
-    test "returns a row whose verdicts differ from what was told when the round touched what they read" do
-      row = task()
-      user_id = Entity.generate_id()
-      changed_types = MapSet.new([VerdictBoard.Card])
-
-      assert stale([row], %{}, user_id, changed_types) == [{row, %{delete_key() => true}}]
-    end
-
-    test "returns the rows in the order given" do
+  describe "moved/2" do
+    test "returns the verdicts that differ from what was told, in the order given" do
       first = task()
       last = task()
-      changed_types = MapSet.new([VerdictBoard.Card])
+      told = %{first.id => %{delete_key() => true}, last.id => %{delete_key() => true}}
 
-      assert stale([last, first], %{}, Entity.generate_id(), changed_types) == [
-               {last, %{delete_key() => true}},
-               {first, %{delete_key() => true}}
-             ]
+      row_verdicts = [
+        {last, %{delete_key() => false}},
+        {first, %{delete_key() => true}}
+      ]
+
+      assert moved(row_verdicts, told) == [{last, %{delete_key() => false}}]
     end
 
-    test "returns a moved row when the round touched only the rule's own type" do
-      row = task()
-      changed_types = MapSet.new([VerdictTask])
-      moved_ids = MapSet.new([row.id])
-
-      assert stale([row], %{}, Entity.generate_id(), changed_types, moved_ids) == [
-               {row, %{delete_key() => true}}
-             ]
-    end
-
-    test "returns nothing for a row the round left alone when it touched only the rule's own type" do
-      changed_types = MapSet.new([VerdictTask])
-
-      assert stale([task()], %{}, Entity.generate_id(), changed_types, MapSet.new()) == []
-    end
-
-    test "returns nothing for a row whose verdicts are what was told" do
-      row = task()
-      told = %{row.id => %{delete_key() => true}}
-
-      assert stale([row], told, Entity.generate_id(), MapSet.new([VerdictBoard.Card])) == []
-    end
-
-    test "returns nothing when the round touched nothing the verdicts read" do
-      assert stale([task()], %{}, Entity.generate_id(), MapSet.new([Module2])) == []
-    end
-
-    test "returns every row whose verdicts differ when asked for all" do
+    test "takes a row nothing was told of as told no verdicts" do
       row = task()
 
-      assert stale([row], %{row.id => %{delete_key() => true}}, nil, :all) == [
-               {row, %{delete_key() => false}}
-             ]
-    end
-
-    test "returns nothing for a row of a type with no deciding quantifier" do
-      assert stale([Module2.new(a: true)], %{}, nil, :all) == []
+      assert moved([{row, %{}}], %{}) == []
+      assert moved([{row, %{delete_key() => true}}], %{}) == [{row, %{delete_key() => true}}]
     end
   end
 end

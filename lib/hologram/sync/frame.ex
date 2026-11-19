@@ -23,24 +23,65 @@ defmodule Hologram.Sync.Frame do
   Turns what a session worked out for one client into the deltas a frame carries.
 
   A row that appeared travels whole, because a client that did not have it needs all of it, with
-  the server's verdicts for the given user (see `put_entity/2`). A row that changed travels as the
-  attributes that moved, each patch given as `{row, changes, verdicts}` - the verdicts that moved
-  beside them, or nil when none did. A row that left travels as its id, and an
-  edge as the pair it joined or parted.
+  the server's verdicts for the given user (see `put_entity/2`): the ones given for it, per entity
+  type and id - worked out already, as a batch's recheck works them out - and otherwise worked out
+  here (see `row_verdicts/2`). A row that changed travels as the attributes that moved, each patch
+  given as `{row, changes, verdicts}` - the verdicts that moved beside them, or nil when none did.
+  A row that left travels as its id, and an edge as the pair it joined or parted.
 
   Every delta names its own type: an arrived row carries it, an edge carries the type of the row
   the relationship lives on, and a row that left arrives here as its id paired with the type it
   was held under - a row no longer there to be asked is named by the bookkeeping that watched it
   arrive.
+
+  News may also hold `hidden`, the rows a client may hold that no longer reach it, as
+  `{entity_type, salt, ids}` - told by hash rather than by id (see `unsync_hashed/3`).
   """
-  @spec deltas(map, String.t() | nil) :: list(map)
-  def deltas(news, actor_user_id) do
+  @spec deltas(map, Hologram.Server.identity_id() | nil, %{module => %{String.t() => map}}) ::
+          list(map)
+  def deltas(news, actor_user_id, verdicts \\ %{}) do
     Enum.concat([
-      Enum.map(news.appeared, &put_entity(&1, row_verdicts(actor_user_id, &1))),
+      Enum.map(news.appeared, &put_entity(&1, appeared_verdicts(&1, actor_user_id, verdicts))),
       Enum.map(news.patched, fn {row, patch, verdicts} -> patch_entity(row, patch, verdicts) end),
       Enum.map(news.unsynced, fn {id, entity_type} -> unsync_entity(id, entity_type) end),
+      Enum.map(Map.get(news, :hidden, []), fn {entity_type, salt, ids} ->
+        unsync_hashed(entity_type, salt, ids)
+      end),
       Enum.map(news.edges, &relationship/1)
     ])
+  end
+
+  @doc """
+  Returns the hash a client is told to drop a row by (see `unsync_hashed/3`): the first 64 bits of
+  the SHA-256 of the given salt followed by the row's id, as 16 lowercase hex digits. The browser
+  works the same hash out over the ids it holds (`assets/js/drop_hash.mjs`).
+
+  It has to keep the id from being read back, which holds for an id with random bits in it - not
+  for one worked out from what it names, like a grant's, which is never dropped by hash, only kept
+  by it (see `keep_hashed/3`). An id `Hologram.Entity.generate_id/0` makes is a UUIDv7: a creation
+  time to the millisecond and 74 random bits. Finding ids that hash to a given one means trying the random
+  bits one guess at a time - there is no shortcut back through SHA-256 - and even a search that
+  could finish would leave a thousand ids per hash for every millisecond the row may have been
+  created in, 74 bits against 64, with nothing to tell the dropped one apart. Telling one apart
+  takes knowing it already.
+  """
+  @spec drop_hash(String.t(), String.t()) :: String.t()
+  def drop_hash(salt, id) do
+    <<prefix::binary-size(8), _rest::binary>> = :crypto.hash(:sha256, salt <> id)
+
+    Base.encode16(prefix, case: :lower)
+  end
+
+  @doc """
+  Returns a fresh salt for hashing the ids of the rows a client is told to drop: 16 random bytes,
+  url-safe base64 without padding. One per catch-up, so the same row is told under another hash
+  each time, and two clients' drops can't be laid side by side.
+  """
+  @spec drop_salt() :: String.t()
+  def drop_salt do
+    16
+    |> :crypto.strong_rand_bytes()
+    |> Base.url_encode64(padding: false)
   end
 
   @doc """
@@ -210,7 +251,7 @@ defmodule Hologram.Sync.Frame do
   put carries them (see `Hologram.Auth.verdicts/2`) - none when the build has no client checking
   permissions, which never reads one, or the row's type has no deciding quantifier.
   """
-  @spec row_verdicts(String.t() | nil, struct) :: %{String.t() => boolean}
+  @spec row_verdicts(Hologram.Server.identity_id() | nil, struct) :: %{String.t() => boolean}
   def row_verdicts(actor_user_id, %entity_type{} = row) do
     if Policy.deciding_quantifiers(entity_type) != [] and QueryCache.permission_checking?() do
       Auth.verdicts(actor_user_id, row)
@@ -228,6 +269,52 @@ defmodule Hologram.Sync.Frame do
   @spec unsync_entity(String.t(), module) :: map
   def unsync_entity(id, entity_type) do
     %{id: id, op: :unsync_entity, type: Codec.encode_enum_value(entity_type)}
+  end
+
+  @doc """
+  Returns the delta telling a client to keep only the given rows of the given entity type, each
+  named by its hash under the given salt (see `drop_hash/2`), and to drop every other row of the
+  type it holds.
+
+  For a returning client whose user lost a grant reaching every row of a type: the rows the grant
+  hid can't be listed without reading the whole type, while the rows the user may still read are
+  what the session reads anyway. And for the grants a returning client may hold that its user can
+  no longer read: a grant's id is worked out from what it names, so dropping one by hash would let
+  a client confirm a grant it guessed, while a list of the grants it may keep names only grants it
+  may read. Named by hash for the same reason a drop is, and whole - a client keeping only part of
+  the list would drop the rest.
+  """
+  @spec keep_hashed(module, String.t(), list(String.t())) :: map
+  def keep_hashed(entity_type, salt, ids) do
+    %{
+      data: %{hashes: Enum.map(ids, &drop_hash(salt, &1)), salt: salt},
+      op: :keep_hashed,
+      type: Codec.encode_enum_value(entity_type)
+    }
+  end
+
+  @doc """
+  Returns the delta telling a client to drop whichever of the given rows of the given entity type
+  it holds, each named by its hash under the given salt rather than by its id (see `drop_hash/2`).
+
+  For rows a client may hold that the session can't say it does: their user lost them before the
+  session read what a returning client holds. Telling a client the ids of rows it never had would
+  tell it rows exist that it may not read, while a hash names a row only to a client that has it.
+  """
+  @spec unsync_hashed(module, String.t(), list(String.t())) :: map
+  def unsync_hashed(entity_type, salt, ids) do
+    %{
+      data: %{hashes: Enum.map(ids, &drop_hash(salt, &1)), salt: salt},
+      op: :unsync_hashed,
+      type: Codec.encode_enum_value(entity_type)
+    }
+  end
+
+  defp appeared_verdicts(%entity_type{id: id} = row, actor_user_id, verdicts) do
+    case verdicts do
+      %{^entity_type => %{^id => row_verdicts}} -> row_verdicts
+      _not_given -> row_verdicts(actor_user_id, row)
+    end
   end
 
   defp group(deltas) do
@@ -274,7 +361,7 @@ defmodule Hologram.Sync.Frame do
     %{scope: :types, types: Enum.map(types, &Codec.encode_enum_value/1)}
   end
 
-  defp payload(:put_entity, delta), do: delta.data
+  defp payload(op, delta) when op in [:keep_hashed, :put_entity, :unsync_hashed], do: delta.data
 
   defp payload(:unsync_entity, delta), do: delta.id
 

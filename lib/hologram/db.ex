@@ -4,6 +4,7 @@ defmodule Hologram.DB do
   use Supervisor
 
   require Hologram.Query
+  require Logger
 
   alias Hologram.Auth.Context
   alias Hologram.DB.Clock
@@ -12,6 +13,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.IndexPlan
   alias Hologram.DB.Mapper
+  alias Hologram.DB.Protocol
   alias Hologram.DB.QueryRunner
   alias Hologram.DB.SchemaReconciler
   alias Hologram.DB.SQLQuery
@@ -25,6 +27,7 @@ defmodule Hologram.DB do
   alias Hologram.Query.Stage
   alias Hologram.Reflection
   alias Hologram.SQLError
+  alias Hologram.Test.DatabaseBootstrap.Connection, as: ProbeConnection
   alias Hologram.WriteError
 
   @mapping_key {__MODULE__, :mapping}
@@ -32,7 +35,18 @@ defmodule Hologram.DB do
   # The index plan the last reconciliation this node ran converged the database to.
   @plan_key {__MODULE__, :plan}
 
+  # How long the boot waits between two tries while the database cannot be reached. Each try also
+  # waits for the pool to give up on a checkout, about 4 seconds with DBConnection's defaults, then
+  # opens a connection of its own, which a host that drops packets holds for Postgrex's connect
+  # timeout of 15 seconds.
+  @await_retry_interval_ms :timer.seconds(2)
+
   @pool_name Hologram.DB.Pool
+
+  # What a server starting up or shutting down answers with - one that is away for a moment rather
+  # than one the settings are wrong for. Not a connection limit: a role's or a database's limit
+  # answers the same way as the server's, and would hold the boot for good.
+  @unavailable_error_codes [:admin_shutdown, :cannot_connect_now, :crash_shutdown]
 
   @typedoc """
   What an SQL read answers: the column names as strings, in the order the select list named them,
@@ -51,7 +65,6 @@ defmodule Hologram.DB do
       import Hologram.Query,
         only: [
           add_relationship: 3,
-          authorize: 2,
           count: 1,
           decrement: 3,
           delete_relationship: 3,
@@ -92,16 +105,17 @@ defmodule Hologram.DB do
   the moment it was asked, and a value free then can be taken by the next attempt. A write
   refuses at the first violated database constraint and reports no other of its own.
 
-  With an acting user set, the write is evaluated against that user's policies for :create - or
-  for the operation the entity claims through authorize/2 - against the row being inserted, and
-  raises Hologram.AccessDeniedError when no rule grants it. The grant rows the answer rests on
-  are held until the write commits, so a revocation of one of them lands after the write, and a
-  grant made meanwhile is not seen - the write is refused where a moment later it would pass.
-  Every related row a rule reads - a `via:` target, or a row along a path - is held the same way,
-  so a change to it lands after the write. An entity claiming the server's own authority through
-  trust/1 is written without evaluation. Without an acting user an unclaimed write is raw - the
-  trusted tier - and a claimed operation is evaluated with the anonymous semantics. The returned
-  entity carries no claim and no recorded changes.
+  With an acting user set, the write is evaluated against that user's policies for :create,
+  against the row being inserted, and raises Hologram.AccessDeniedError when no rule grants it.
+  The grant rows the answer rests on are held until the write commits, so a revocation of one of
+  them lands after the write, and a grant made meanwhile is not seen - the write is refused where
+  a moment later it would pass. Every related row a rule reads - a `via:` target, or a row along a
+  path - is held the same way, so a change to it lands after the write. An entity claiming the
+  server's own authority through trust/1 is written without evaluation, and without an acting user
+  the write is raw - the trusted tier. A session user id no user entity can have - an app's own
+  serial id - is still an acting user: its writes are evaluated as an anonymous session's, never
+  raw, so server code writing past the rules claims trust/1. The returned entity carries no claim
+  and no recorded changes.
 
   A write PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -154,13 +168,12 @@ defmodule Hologram.DB do
   other constraint violation raises. Deleting a nonexistent id is a no-op. Returns :ok.
 
   With an acting user set, the delete is evaluated against that user's policies for :delete,
-  against the row as it stands, read FOR UPDATE - naming the row by type and id carries no
-  claim, so delete/1 is the spelling for one on another operation's authority. The grant rows
-  the answer rests on are held until the delete commits, so a revocation of one of them lands
-  after the delete, and a grant made meanwhile is not seen - the delete is refused where a moment
-  later it would pass. Every related row a rule reads - a `via:` target, or a row along a path -
-  is held the same way, so a change to it lands after the delete. Without an acting user the
-  delete is raw.
+  against the row as it stands, read FOR UPDATE - naming the row by type and id carries no claim,
+  so delete/1 is the spelling for a trusted one. The grant rows the answer rests on are held until
+  the delete commits, so a revocation of one of them lands after the delete, and a grant made
+  meanwhile is not seen - the delete is refused where a moment later it would pass. Every related
+  row a rule reads - a `via:` target, or a row along a path - is held the same way, so a change to
+  it lands after the delete. Without an acting user the delete is raw.
 
   A delete PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -182,16 +195,15 @@ defmodule Hologram.DB do
   {:error, %{referenced_by: entity_type, relationship: name}}, and a struct whose id names no
   row is a no-op.
 
-  With an acting user set, the delete is evaluated against that user's policies for :delete -
-  or for the operation the entity claims through authorize/2 - against the row as it stands,
-  read FOR UPDATE, and raises Hologram.AccessDeniedError when no rule grants it. The grant rows
-  the answer rests on are held until the delete commits, so a revocation of one of them lands
-  after the delete, and a grant made meanwhile is not seen - the delete is refused where a moment
-  later it would pass. Every related row a rule reads - a `via:` target, or a row along a path -
-  is held the same way, so a change to it lands after the delete. An entity claiming the server's
-  own authority through trust/1 is deleted without evaluation, and without an acting user an
-  unclaimed delete is raw. A struct whose id names no row is not evaluated at all: there is
-  nothing to authorize against.
+  With an acting user set, the delete is evaluated against that user's policies for :delete,
+  against the row as it stands, read FOR UPDATE, and raises Hologram.AccessDeniedError when no
+  rule grants it. The grant rows the answer rests on are held until the delete commits, so a
+  revocation of one of them lands after the delete, and a grant made meanwhile is not seen - the
+  delete is refused where a moment later it would pass. Every related row a rule reads - a `via:`
+  target, or a row along a path - is held the same way, so a change to it lands after the delete.
+  An entity claiming the server's own authority through trust/1 is deleted without evaluation, and
+  without an acting user an unclaimed delete is raw. A struct whose id names no row is not
+  evaluated at all: there is nothing to authorize against.
 
   A delete PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -209,7 +221,7 @@ defmodule Hologram.DB do
   Like delete/1, raising Hologram.WriteError instead of returning {:error, ...}.
 
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a
-  restriction takes delete/1. A denied claim raises Hologram.AccessDeniedError from either.
+  restriction takes delete/1. A denied write raises Hologram.AccessDeniedError from either.
   """
   @spec delete!(Entity.t()) :: :ok
   def delete!(entity) when is_struct(entity) do
@@ -295,8 +307,9 @@ defmodule Hologram.DB do
   With an acting user set, the query is read through that user's :read policies - the rows the
   policies grant, each included relationship filtered by its own type's :read rules, a
   single-result query answering nil and a counting query counting only what the user may read -
-  exactly as a template's registered query is. Without an acting user the query is read raw:
-  the trusted tier, for seeds, tasks and jobs.
+  exactly as a template's registered query is. A session user id no user entity can have - an
+  app's own serial id - reads as an anonymous session would. Without an acting user the query is
+  read raw: the trusted tier, for seeds, tasks and jobs.
 
   A query marked with trust/1 is read raw whether or not a user is acting - the server's own
   authority, the spelling for a read that must see past the acting user's policies.
@@ -476,10 +489,10 @@ defmodule Hologram.DB do
   @doc """
   Updates the entity of the given type with the given id, setting exactly the changed
   columns plus updated_at - there is no full-row variant. Changes (a map or keyword list)
-  are keyed by declared attribute and to-one relationship names - a to-one reference is
-  set, reassigned, or cleared (nil) through its relationship name. Changing any other
-  name, system attributes included, raises Hologram.MisuseError - as do empty changes and an
-  id that names no entity.
+  are keyed by declared attribute names and to-one reference fields (`<relationship name>_id`) -
+  a to-one reference is set, reassigned, or cleared (nil) through its reference field. Changing
+  any other name, system attributes included, raises Hologram.MisuseError - as do empty changes
+  and an id that names no entity.
 
   Returns :ok, or {:error, violations} - the map Entity.validate/2 returns, naming each
   field the changes leave breaking a declaration: the declared constraints a changed value
@@ -501,14 +514,16 @@ defmodule Hologram.DB do
   The misuses named above raise rather than returning, as does a constraint violation the
   mapping does not explain.
 
-  With an acting user set, the update is evaluated against that user's policies for :update,
-  against the row as it stands, read FOR UPDATE - naming the row by type and id carries no
-  claim, so update/1 is the spelling for one on another operation's authority. The grant rows
-  the answer rests on are held until the update commits, so a revocation of one of them lands
-  after the update, and a grant made meanwhile is not seen - the update is refused where a moment
-  later it would pass. Every related row a rule reads - a `via:` target, or a row along a path -
-  is held the same way, so a change to it lands after the update. Without an acting user the
-  update is raw.
+  With an acting user set, the update is evaluated against that user's update rules, against the row
+  as it stands, read FOR UPDATE: every field it changes - a reference field counting as its
+  relationship - has to be covered by a rule that holds, a field-limited line covering it (one whose
+  `only:` lists it, or whose `except:` leaves it out) or a line covering the whole row, and
+  Hologram.AccessDeniedError names the fields none covers. Naming the row by type and id carries no
+  claim, so update/1 is the spelling for a trusted one. The grant rows the answer rests on are held
+  until the update commits, so a revocation of one of them lands after the update, and a grant made
+  meanwhile is not seen - the update is refused where a moment later it would pass. Every related
+  row a rule reads - a `via:` target, or a row along a path - is held the same way, so a change to
+  it lands after the update. Without an acting user the update is raw.
 
   An update PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -533,18 +548,20 @@ defmodule Hologram.DB do
   The attribute changes go first and the edges follow, so a refused value leaves the edges unapplied
   and an edge that raises takes the values with it.
 
-  With an acting user set, the write is evaluated against that user's policies for :update - or
-  for the operation the entity claims through authorize/2 - and raises
-  Hologram.AccessDeniedError when no rule grants it. The row is read FOR UPDATE first and the
-  claim is evaluated against it as it stands, before the recorded changes apply, so a rule
-  describing the state a change leaves ("an editor may pin a note that is not pinned") reads
-  the way it reads in a template. Nothing can change the row between the evaluation and the
-  write, and the grant rows the answer rests on are held until the write commits, so a
-  revocation of one of them lands after the write, and a grant made meanwhile is not seen - the
-  write is refused where a moment later it would pass. Every related row a rule reads - a `via:`
-  target, or a row along a path - is held the same way, so a change to it lands after the write.
-  An entity claiming the server's own authority through trust/1 is written without evaluation, and
-  without an acting user an unclaimed write is raw.
+  With an acting user set, the write is evaluated against that user's update rules, and raises
+  Hologram.AccessDeniedError when no rule grants it. Every field it changes - a value put or moved,
+  a to-one's reference field as its relationship, an edge as its to-many relationship - has to be
+  covered by an update rule that holds: a field-limited line covering it (one whose `only:` lists
+  it, or whose `except:` leaves it out) or a line covering the whole row. The refusal names the
+  fields none covers. The row is read FOR UPDATE first and the rules are evaluated against it as it
+  stands, before the recorded changes apply, so a rule describing the state a change leaves ("an
+  editor may pin a note that is not pinned") reads the way it reads in a template. Nothing can
+  change the row between the evaluation and the write, and the grant rows the answer rests on are
+  held until the write commits, so a revocation of one of them lands after the write, and a grant
+  made meanwhile is not seen - the write is refused where a moment later it would pass. Every
+  related row a rule reads - a `via:` target, or a row along a path - is held the same way, so a
+  change to it lands after the write. An entity claiming the server's own authority through trust/1
+  is written without evaluation, and without an acting user an unclaimed write is raw.
 
   An update PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -566,7 +583,7 @@ defmodule Hologram.DB do
   Like update/1, raising Hologram.WriteError instead of returning {:error, ...}.
 
   The spelling for seeds, scripts and fixtures, as create!/1 is - code that acts on a conflict
-  takes update/1. A denied claim raises Hologram.AccessDeniedError from either.
+  takes update/1. A denied write raises Hologram.AccessDeniedError from either.
   """
   @spec update!(Entity.t()) :: :ok
   def update!(entity) when is_struct(entity) do
@@ -625,11 +642,100 @@ defmodule Hologram.DB do
   def mapping_key, do: @mapping_key
 
   @doc """
+  Applies the session settings every pool connection runs with to the given connection, and
+  returns :ok - the pool's after_connect.
+
+  The server keepalives and user timeout (see Hologram.DB.Config.keepalive_statement/0). A node
+  that vanishes leaves its sessions open on the server until the operating system there notices,
+  and a session caught claiming a job holds that job's row locked meanwhile, so no other node can
+  claim it.
+
+  Best effort: a server refusing them - one compatible with PostgreSQL that lacks a setting - is
+  warned about (see Hologram.DB.Config.warn_keepalives_refused/1) and the connection used as it
+  is. Raising would leave the pool without a connection it could use, for good.
+  """
+  @spec apply_session_settings(DBConnection.conn()) :: :ok
+  def apply_session_settings(connection) do
+    case Postgrex.query(connection, Config.keepalive_statement(), []) do
+      {:ok, _result} ->
+        :ok
+
+      # The connection is gone, which the pool logs, and its replacement runs this again.
+      {:error, %DBConnection.ConnectionError{}} ->
+        :ok
+
+      {:error, error} ->
+        Config.warn_keepalives_refused(error)
+    end
+  end
+
+  @doc """
+  Returns :ok once the database answers through the current connection, trying again while it
+  cannot be reached yet, with a warning for each try that failed.
+
+  What the boot steps that need the database run first. A database that is away while the node
+  boots - started alongside it, or restarting - holds the boot until it is back, the way the pool
+  itself keeps trying, rather than failing it: a boot step that fails fails the application.
+
+  A pool tells only that it has no connection to give, which a server that is down and settings
+  that are wrong look the same through. So a failed try opens one connection of its own to learn
+  which: a server that refuses or cannot be reached - a host name that does not resolve included -
+  or one still starting up or shutting down, is waited for. Any other error - a wrong password, a
+  database that does not exist, a connection limit - raises, failing the boot as it did before the
+  wait. An error the query itself answers with raises the same way, unless it is one of
+  those.
+
+  It runs inside the start of the database's supervisor, so a restart of that supervisor while the
+  database is away - rare, since the pool waits rather than failing - holds the unit above it, and
+  an application stop meanwhile, until the database is back.
+
+  Options:
+
+    * `:connection_opts` - the Postgrex options the connection of its own opens with, defaulting to
+      the configured database's (see Hologram.DB.Config.connection_opts/1), which is what the pool
+      started at boot reaches.
+
+    * `:retry_interval_ms` - how long to wait between two tries, defaulting to 2 seconds.
+  """
+  @spec await_database(keyword) :: :ok
+  def await_database(opts \\ []) do
+    retry_interval_ms = Keyword.get(opts, :retry_interval_ms, @await_retry_interval_ms)
+
+    case Connection.query("SELECT 1") do
+      {:ok, _result} ->
+        :ok
+
+      {:error, %DBConnection.ConnectionError{}} ->
+        opts
+        |> Keyword.get_lazy(:connection_opts, &Config.connection_opts/0)
+        |> probe_database!()
+        |> warn_unreachable(retry_interval_ms)
+
+        Process.sleep(retry_interval_ms)
+
+        await_database(opts)
+
+      {:error, %Postgrex.Error{postgres: %{code: code}} = error}
+      when code in @unavailable_error_codes ->
+        warn_unreachable(error, retry_interval_ms)
+
+        Process.sleep(retry_interval_ms)
+
+        await_database(opts)
+
+      {:error, error} ->
+        raise error
+    end
+  end
+
+  @doc """
   Runs the migration applier as a one-shot supervision child after the pool starts and
-  returns :ignore (no process stays running). A failed apply fails the boot loudly.
+  returns :ignore (no process stays running). Waits for the database first (see
+  await_database/1). A failed apply fails the boot loudly.
   """
   @spec migrate_at_boot() :: :ignore
   def migrate_at_boot do
+    await_database()
     Migrator.run()
 
     :ignore
@@ -663,11 +769,12 @@ defmodule Hologram.DB do
 
   @doc """
   Runs dev schema reconciliation as a one-shot supervision child after the pool starts
-  and returns :ignore (no process stays running). A failed reconciliation fails the
-  boot loudly.
+  and returns :ignore (no process stays running). Waits for the database first (see
+  await_database/1). A failed reconciliation fails the boot loudly.
   """
   @spec reconcile_at_boot() :: :ignore
   def reconcile_at_boot do
+    await_database()
     reconcile_with_plan(reconciliation_context())
 
     :ignore
@@ -763,7 +870,9 @@ defmodule Hologram.DB do
   Starts the database: derives and caches the mapping, then starts the connection pool -
   in dev, schema reconciliation runs as a one-shot boot step right after the pool is up,
   and outside dev and test the migration applier runs there instead.
-  The given opts override the resolved connection options. The database is a VM-wide
+  The given opts override the resolved connection options - the test helper's ownership pool
+  among them, and :after_connect, which replaces the session settings rather than adding to them
+  (see apply_session_settings/1). The database is a VM-wide
   singleton - starting while an instance is already running yields :ignore instead of
   failing the caller's supervision tree.
   """
@@ -790,6 +899,7 @@ defmodule Hologram.DB do
     postgrex_opts =
       Keyword.merge(
         [
+          after_connect: {__MODULE__, :apply_session_settings, []},
           database: resolved_opts[:database],
           hostname: resolved_opts[:host],
           name: @pool_name,
@@ -801,7 +911,8 @@ defmodule Hologram.DB do
         opts
       )
 
-    pool_child = {Postgrex, postgrex_opts}
+    # TODO(#1696): {Postgrex, postgrex_opts} again, see Hologram.DB.Protocol.
+    pool_child = {Protocol, postgrex_opts}
 
     # The environment selects the schema mechanism: dev converges from the model, test
     # manages its schema from the test helpers, and every other env applies the
@@ -910,6 +1021,28 @@ defmodule Hologram.DB do
     "  * key #{inspect(fields)} is already taken#{given_part}"
   end
 
+  # Opens a connection of its own to learn why the pool has none to give. Returns the error of a
+  # database that is away, or nil when this one connected - the pool's own connections are then
+  # still waiting out their backoff. Raises any other error.
+  defp probe_database!(connection_opts) do
+    case ProbeConnection.start(connection_opts) do
+      {:ok, pid} ->
+        ProbeConnection.stop(pid)
+
+        nil
+
+      {:error, %DBConnection.ConnectionError{} = error} ->
+        error
+
+      {:error, %Postgrex.Error{postgres: %{code: code}} = error}
+      when code in @unavailable_error_codes ->
+        error
+
+      {:error, error} ->
+        raise error
+    end
+  end
+
   # A unique field is a declared attribute or the reference field of a unique to-one, and the line
   # names which, the way the :not_found line names a reference.
   defp unique_kind(entity_type, field) do
@@ -938,5 +1071,17 @@ defmodule Hologram.DB do
     end
 
     :ok
+  end
+
+  defp warn_unreachable(nil, retry_interval_ms) do
+    Logger.warning(
+      "the database answers, but the pool has not connected to it yet, trying again in #{retry_interval_ms} ms"
+    )
+  end
+
+  defp warn_unreachable(error, retry_interval_ms) do
+    Logger.warning(
+      "the database cannot be reached yet, trying again in #{retry_interval_ms} ms: #{Exception.message(error)}"
+    )
   end
 end

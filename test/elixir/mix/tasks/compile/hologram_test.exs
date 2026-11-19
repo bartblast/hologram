@@ -126,6 +126,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
     @spec __policies__() :: list({Entity.operation(), term, atom | nil, keyword})
     def __policies__, do: []
 
+    @spec __policy_hints__() :: list(list(Hologram.Query.Stage.name_hint()))
+    def __policy_hints__, do: []
+
     @spec __policy_sources__() :: list(module)
     def __policy_sources__, do: []
 
@@ -1328,7 +1331,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
                 source: {Entity36, [:channel, :messages]}
               }}
 
-    # The fixtures designate a user entity type and hold a page whose template checks permissions.
+    # The fixtures hold a page whose template checks permissions.
     assert queries.permission_checking?
 
     # PageModule18 renders a component querying Entity2, a checking browser holds grant rows, and no

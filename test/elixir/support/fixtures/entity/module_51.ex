@@ -6,7 +6,7 @@ defmodule Hologram.Test.Fixtures.Entity.Module51 do
 
   relationship :parent, Module50, optional: true
 
-  # A read rule may delegate to a type declaring no rule - the browser never decides a read rule -
-  # so no one may read a row through it, and the type stays out of the client's model.
+  # A read rule may delegate to a type declaring no rule - the server's verdict answers the
+  # delegation - so no one may read a row through it, and the type stays out of the client's model.
   allow :read, via: parent
 end

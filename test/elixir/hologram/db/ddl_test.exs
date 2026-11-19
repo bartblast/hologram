@@ -198,7 +198,7 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
-  describe "duplicate_check_statement/3" do
+  describe "duplicate_check_statement/4" do
     test "counts the duplicate key groups, nulls compared as values" do
       statement = duplicate_check_statement("task", ["project_id", "slug"], false)
 
@@ -213,6 +213,15 @@ defmodule Hologram.DB.DDLTest do
       assert statement ==
                ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
                  ~s{WHERE "slug" IS NOT NULL GROUP BY "slug" HAVING COUNT(*) > 1) AS duplicates}
+    end
+
+    test "counts only the groups holding a NULL in the written column" do
+      statement = duplicate_check_statement("task", ["slug"], true, "amount")
+
+      assert statement ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
+                 ~s{WHERE "slug" IS NOT NULL GROUP BY "slug" HAVING COUNT(*) > 1 } <>
+                 ~s{AND COUNT(*) FILTER (WHERE "amount" IS NULL) > 0) AS duplicates}
     end
   end
 
@@ -279,10 +288,18 @@ defmodule Hologram.DB.DDLTest do
   end
 
   describe "invalid_indexes_statement/1" do
+    test "lists the invalid indexes of the data schema, by name, with whether they take writes and are live" do
+      statement = normalize_newlines(invalid_indexes_statement())
+
+      assert statement =~ "SELECT ic.relname, i.indisready, i.indislive"
+      assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid\n"
+      assert statement =~ "ORDER BY ic.relname"
+    end
+
     test "lists the invalid unique indexes of the data schema" do
       statement = normalize_newlines(invalid_indexes_statement(true))
 
-      assert statement =~ "SELECT ic.relname"
+      assert statement =~ "SELECT ic.relname, i.indisready, i.indislive"
 
       assert statement =~
                "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid AND i.indisunique"
@@ -300,13 +317,6 @@ defmodule Hologram.DB.DDLTest do
     test "counts rows with a NULL in the column" do
       assert null_check_statement("task", "subtitle") ==
                ~s{SELECT COUNT(*) FROM "hologram_data"."task" WHERE "subtitle" IS NULL}
-    end
-  end
-
-  describe "reindex_statement/1" do
-    test "rebuilds the index in place, concurrently" do
-      assert reindex_statement("task_project_id_$idx") ==
-               ~s{REINDEX INDEX CONCURRENTLY "hologram_data"."task_project_id_$idx"}
     end
   end
 
@@ -705,6 +715,35 @@ defmodule Hologram.DB.DDLTest do
 
       assert statements(op) == [~s(DROP INDEX "hologram_data"."task_project_id_$idx")]
     end
+
+    test "renders a concurrent drop" do
+      op = %{op: :drop_index, index: "task_project_id_$idx", concurrently: true}
+
+      assert statements(op) == [
+               ~s(DROP INDEX CONCURRENTLY "hologram_data"."task_project_id_$idx")
+             ]
+    end
+
+    test "renders a drop that skips a missing index" do
+      op = %{op: :drop_index, index: "task_project_id_$idx", if_exists: true}
+
+      assert statements(op) == [
+               ~s(DROP INDEX IF EXISTS "hologram_data"."task_project_id_$idx")
+             ]
+    end
+
+    test "renders a concurrent drop that skips a missing index" do
+      op = %{
+        op: :drop_index,
+        index: "task_project_id_$idx",
+        concurrently: true,
+        if_exists: true
+      }
+
+      assert statements(op) == [
+               ~s(DROP INDEX CONCURRENTLY IF EXISTS "hologram_data"."task_project_id_$idx")
+             ]
+    end
   end
 
   describe "statements/1 for drop_table" do
@@ -906,6 +945,20 @@ defmodule Hologram.DB.DDLTest do
 
       assert statements(op) == [
                ~s(ALTER INDEX "hologram_data"."draft_author_id_$idx" ) <>
+                 ~s(RENAME TO "sketch_author_id_$idx")
+             ]
+    end
+
+    test "renders a rename that skips a missing index" do
+      op = %{
+        op: :rename_index,
+        from: "draft_author_id_$idx",
+        to: "sketch_author_id_$idx",
+        if_exists: true
+      }
+
+      assert statements(op) == [
+               ~s(ALTER INDEX IF EXISTS "hologram_data"."draft_author_id_$idx" ) <>
                  ~s(RENAME TO "sketch_author_id_$idx")
              ]
     end

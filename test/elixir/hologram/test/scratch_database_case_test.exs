@@ -21,6 +21,7 @@ defmodule Hologram.Test.ScratchDatabaseCaseTest do
   use Hologram.Test.ScratchDatabaseCase, async: false
 
   alias Hologram.DB.Connection
+  alias Hologram.Test.DatabaseBootstrap
 
   # The two tests below create the same table after asserting it is absent, so whichever
   # of them runs second proves the databases are distinct - in either order ExUnit picks.
@@ -69,5 +70,17 @@ defmodule Hologram.Test.ScratchDatabaseCaseTest do
 
   test "tags every module of the tier as a database test", context do
     assert context.database == true
+  end
+
+  test "marks its database for a later run to drop once nothing is connected", %{
+    scratch: scratch
+  } do
+    statement = """
+    SELECT pg_catalog.shobj_description("oid", 'pg_database')
+    FROM pg_catalog.pg_database
+    WHERE "datname" = current_database()
+    """
+
+    assert Postgrex.query!(scratch, statement, []).rows == [[DatabaseBootstrap.mark()]]
   end
 end

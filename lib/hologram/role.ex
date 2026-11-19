@@ -18,6 +18,9 @@ defmodule Hologram.Role do
   A role held on a particular entity is declared inside the entity type instead, with
   `Hologram.Entity.role/2` - those role names are plain atoms, scoped to their entity type.
 
+  A global role is held by a user, so it needs a user entity type in the model
+  (`use Hologram.Entity, user: true`): the build fails when a role module is defined without one.
+
   ## Options
 
     * `:extends` - a role module, or a list of them, whose capabilities this role carries.

@@ -4,7 +4,7 @@ defmodule Hologram.Mutation.Write do
   # One write of a batch, as the server holds it once the envelope has been parsed: the op, the
   # entity type module, the id of the row it acts on, and what the op carries - values keyed by
   # field and decoded to the terms the model declares, the amounts to move counters by, the
-  # revisions the writer saw, the claim it makes, and the stamp its writer authored - or, for an
+  # revisions the writer saw, and the stamp its writer authored - or, for an
   # edge, the relationship and the row at the other end.
   #
   # Every field is already checked against THIS build's model by the time one of these exists, so
@@ -16,7 +16,6 @@ defmodule Hologram.Mutation.Write do
   alias Hologram.Entity.Metadata
 
   defstruct based_on: %{},
-            claim: nil,
             data: %{},
             deltas: %{},
             entity_type: nil,
@@ -28,7 +27,6 @@ defmodule Hologram.Mutation.Write do
 
   @type t :: %__MODULE__{
           based_on: %{atom => pos_integer},
-          claim: {:authorize, atom} | nil,
           data: %{atom => any},
           deltas: %{atom => integer},
           entity_type: module | nil,
@@ -50,13 +48,14 @@ defmodule Hologram.Mutation.Write do
   nothing: a write against an existing row carries what it changes, not a picture of the row, and
   the executor reads the recorded operations while the policy check reads the stored row.
 
-  A write claiming nothing takes the operation of the verb it is: a client is never the trusted
+  Every write but a grant's carries the client claim, which the writer evaluates like a
+  server-side verb's own operation, except that it always does: a client is never the trusted
   tier, so what a server-side verb leaves to the actor's presence - evaluate, or write raw - a
   batch always evaluates, with the anonymous semantics when nobody is signed in.
 
   A grant of the role store is built without `Entity.new/2`, which refuses that type by name, and
   takes its granter from the acting user rather than from what the client sent - a browser says
-  which role it is handing to whom, never who is handing it. It carries no claim either: the
+  which role it is handing to whom, never who is handing it. It carries no claim: the
   applier routes a grant to `Auth.grant_role/3`'s own rules, so there is no operation here for the
   writer to evaluate. A revocation is built the same way from the grant it carries, so the gate
   can be asked about it whether or not the row is there.
@@ -66,7 +65,7 @@ defmodule Hologram.Mutation.Write do
     values =
       Map.merge(write.data, %{
         __meta__: %Metadata{stamp: write.stamp},
-        granted_by_id: Context.actor_user_id(),
+        granted_by_id: Context.actor_entity_id(),
         id: write.id
       })
 
@@ -83,13 +82,13 @@ defmodule Hologram.Mutation.Write do
     values = Map.put(write.data, :id, write.id)
     entity = Entity.new(write.entity_type, values)
 
-    %{entity | __meta__: %Metadata{claim: claim(write), stamp: write.stamp}}
+    %{entity | __meta__: %Metadata{claim: :client, stamp: write.stamp}}
   end
 
   def to_entity(%__MODULE__{op: :update} = write) do
     metadata = %Metadata{
       attribute_ops: attribute_ops(write),
-      claim: claim(write),
+      claim: :client,
       revisions: write.based_on,
       stamp: write.stamp
     }
@@ -102,7 +101,7 @@ defmodule Hologram.Mutation.Write do
   end
 
   def to_entity(%__MODULE__{op: :delete} = write) do
-    metadata = %Metadata{claim: claim(write), revisions: write.based_on, stamp: write.stamp}
+    metadata = %Metadata{claim: :client, revisions: write.based_on, stamp: write.stamp}
 
     struct!(write.entity_type, id: write.id, __meta__: metadata)
   end
@@ -110,7 +109,7 @@ defmodule Hologram.Mutation.Write do
   def to_entity(%__MODULE__{op: op} = write) do
     edge_op = if op == :add_relationship, do: :add, else: :delete
     relationship_ops = %{{write.relationship, write.target_id} => edge_op}
-    metadata = %Metadata{claim: claim(write), relationship_ops: relationship_ops}
+    metadata = %Metadata{claim: :client, relationship_ops: relationship_ops}
 
     struct!(write.entity_type, id: write.id, __meta__: metadata)
   end
@@ -122,20 +121,4 @@ defmodule Hologram.Mutation.Write do
 
     Map.merge(puts, increments)
   end
-
-  defp claim(%__MODULE__{claim: nil, op: op}), do: {:authorize, default_operation(op)}
-
-  defp claim(%__MODULE__{claim: claim}), do: claim
-
-  # An edge changes the row it hangs off, so it is that row's :update - the same operation the
-  # public edge verbs evaluate.
-  defp default_operation(:add_relationship), do: :update
-
-  defp default_operation(:create), do: :create
-
-  defp default_operation(:delete), do: :delete
-
-  defp default_operation(:delete_relationship), do: :update
-
-  defp default_operation(:update), do: :update
 end

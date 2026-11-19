@@ -9,4 +9,5 @@ defmodule Hologram.Test.Fixtures.Entity.Module16 do
   relationship :secrets, [Module15]
 
   allow :read
+  allow :update
 end

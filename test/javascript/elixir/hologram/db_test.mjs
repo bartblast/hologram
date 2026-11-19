@@ -34,7 +34,6 @@ describe("Elixir_Hologram_DB", () => {
 
   const task = Type.alias(TASK);
 
-  const authorize = Elixir_Hologram_Query_Stage["authorize/2"];
   const count = Elixir_Hologram_Query_Stage["count/1"];
   const addRelationship = Elixir_Hologram_Query_Stage["add_relationship/3"];
   const create = Elixir_Hologram_DB["create/1"];
@@ -208,6 +207,7 @@ describe("Elixir_Hologram_DB", () => {
     Batches.reset();
     Clock.reset();
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
     LocalDatabase.reset();
     Model.reset();
   });
@@ -241,7 +241,6 @@ describe("Elixir_Hologram_DB", () => {
 
       assert.deepStrictEqual(Batches.current().writes, [
         {
-          claim: null,
           data: {done: false, title: "alpha"},
           id: ID_1,
           op: "create",
@@ -251,18 +250,11 @@ describe("Elixir_Hologram_DB", () => {
       ]);
     });
 
-    it("carries the claim a stage recorded", () => {
-      const claimed = authorize(
-        struct(TASK, {done: false, title: "alpha"}),
-        Type.atom("publish"),
-      );
+    // The server judges a write by what it does, and refuses one carrying a claim.
+    it("sends no claim", () => {
+      create(struct(TASK, {done: false, title: "alpha"}));
 
-      create(claimed);
-
-      assert.deepStrictEqual(Batches.current().writes[0].claim, [
-        "authorize",
-        "publish",
-      ]);
+      assert.notProperty(Batches.current().writes[0], "claim");
     });
 
     // The server writes these inside the create's own transaction, and both tiers derive a
@@ -270,12 +262,12 @@ describe("Elixir_Hologram_DB", () => {
     // are one row. They ride the create's batch, so they land together with it or not at all.
     it("appends the grants a creator takes beside the create", () => {
       LocalDatabase.actorUserId = ACTOR;
+      LocalDatabase.actorEntityId = ACTOR;
 
       create(struct(NOTE, {title: "alpha"}));
 
       assert.deepStrictEqual(Batches.current().writes, [
         {
-          claim: null,
           data: {title: "alpha"},
           id: ID_1,
           op: "create",
@@ -283,7 +275,6 @@ describe("Elixir_Hologram_DB", () => {
           type: NOTE,
         },
         {
-          claim: null,
           data: {
             granted_by_id: ACTOR,
             entity_id: ID_1,
@@ -309,8 +300,23 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
+    // The server takes a user id no user entity can have as no data-layer user, and grants it
+    // nothing - creator_grants/1's nil clause again.
+    it("appends no grant for a user id no user entity can have", () => {
+      LocalDatabase.actorUserId = 7;
+      LocalDatabase.actorEntityId = null;
+
+      create(struct(NOTE, {title: "alpha"}));
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => write.type),
+        [NOTE],
+      );
+    });
+
     it("appends no grant for a type whose creator takes none", () => {
       LocalDatabase.actorUserId = ACTOR;
+      LocalDatabase.actorEntityId = ACTOR;
 
       create(struct(TASK, {done: false, title: "alpha"}));
 
@@ -324,6 +330,7 @@ describe("Elixir_Hologram_DB", () => {
     // not written a second time.
     it("appends no grant the client already holds", () => {
       LocalDatabase.actorUserId = ACTOR;
+      LocalDatabase.actorEntityId = ACTOR;
 
       LocalDatabase.putRow(ROLE_GRANT, {
         id: deriveGrantId(ACTOR, NOTE, ID_1, "owner"),
@@ -375,12 +382,8 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("answers a row carrying nothing of what it was asked to do", () => {
-      const claimed = authorize(
-        struct(TASK, {done: false, title: "alpha"}),
-        Type.atom("publish"),
-      );
-
-      const metadata = field(create(claimed).data[1], "__meta__");
+      const created = create(struct(TASK, {done: false, title: "alpha"}));
+      const metadata = field(created.data[1], "__meta__");
 
       assert.deepStrictEqual(field(metadata, "claim"), Type.nil());
       assert.deepStrictEqual(field(metadata, "attribute_ops"), Type.map([]));
@@ -556,7 +559,6 @@ describe("Elixir_Hologram_DB", () => {
       assert.deepStrictEqual(Batches.current().writes, [
         {
           based_on: {title: 11},
-          claim: null,
           data: {title: "Ship it"},
           id: ID_1,
           op: "update",
@@ -614,20 +616,24 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
-    it("carries the claim a stage recorded on every entry it appends", () => {
-      const entity = authorize(
-        addRelationship(
-          putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
-          Type.atom("tags"),
-          Type.bitstring("g1"),
-        ),
-        Type.atom("publish"),
+    it("sends no claim on any entry", () => {
+      const entity = addRelationship(
+        putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
+        Type.atom("tags"),
+        Type.bitstring("g1"),
       );
 
       update(entity);
 
-      for (const write of Batches.current().writes) {
-        assert.deepStrictEqual(write.claim, ["authorize", "publish"]);
+      const writes = Batches.current().writes;
+
+      assert.deepStrictEqual(
+        writes.map((write) => write.op),
+        ["update", "add_relationship"],
+      );
+
+      for (const write of writes) {
+        assert.notProperty(write, "claim");
       }
     });
 
@@ -649,7 +655,6 @@ describe("Elixir_Hologram_DB", () => {
 
       assert.deepStrictEqual(Batches.current().writes, [
         {
-          claim: null,
           deltas: {stock: 2},
           id: ID_2,
           op: "update",
@@ -869,7 +874,7 @@ describe("Elixir_Hologram_DB", () => {
     const changes = (values) =>
       Type.map(values.map(([name, value]) => [Type.atom(name), value]));
 
-    it("writes the changes it was given, carrying no claim", () => {
+    it("writes the changes it was given", () => {
       assert.deepStrictEqual(
         updateById(
           task,
@@ -882,7 +887,6 @@ describe("Elixir_Hologram_DB", () => {
       assert.deepStrictEqual(Batches.current().writes, [
         {
           based_on: {title: 11},
-          claim: null,
           data: {title: "Ship it"},
           id: ID_1,
           op: "update",
@@ -1027,7 +1031,6 @@ describe("Elixir_Hologram_DB", () => {
       assert.deepStrictEqual(Batches.current().writes, [
         {
           based_on: {done: 10, title: 11},
-          claim: null,
           id: ID_1,
           op: "delete",
           stamp: STAMP,
@@ -1051,19 +1054,10 @@ describe("Elixir_Hologram_DB", () => {
       });
     });
 
-    it("carries the claim a stage recorded on the struct", () => {
-      deleteEntity(authorize(held(), Type.atom("archive")));
+    it("sends no claim", () => {
+      deleteEntity(held());
 
-      assert.deepStrictEqual(Batches.current().writes[0].claim, [
-        "authorize",
-        "archive",
-      ]);
-    });
-
-    it("carries no claim when the row is named by type and id", () => {
-      deleteById(task, Type.bitstring(ID_1));
-
-      assert.isNull(Batches.current().writes[0].claim);
+      assert.notProperty(Batches.current().writes[0], "claim");
     });
 
     it("takes the row and its outgoing edges out of the database", () => {

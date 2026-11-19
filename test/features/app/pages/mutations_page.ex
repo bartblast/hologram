@@ -7,6 +7,7 @@ defmodule HologramFeatureTests.MutationsPage do
   alias HologramFeatureTests.Components.Mutations.Items
   alias HologramFeatureTests.Components.Mutations.Jobs
   alias HologramFeatureTests.Components.Mutations.Notes
+  alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Item
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
@@ -28,6 +29,9 @@ defmodule HologramFeatureTests.MutationsPage do
       <button $click={command: :create_restock_job}> Create restock job </button>
       <button $click={command: :log_in}> Log in </button>
       <button $click="put_author"> Put author </button>
+      <button $click="read_bound_row_field"> Read bound row field </button>
+      <button $click="read_forgotten_pin"> Read forgotten pin </button>
+      <button $click="read_mistyped_filter"> Read mistyped filter </button>
       <button $click="read_query_by_id"> Read query by id </button>
       <button $click={command: :restock_item}> Restock item </button>
     </p>
@@ -45,6 +49,40 @@ defmodule HologramFeatureTests.MutationsPage do
     [body: "unsaved"]
     |> Note.new()
     |> put_attribute(:author, nil)
+
+    component
+  end
+
+  # Inside the quantifier a bare name is the channel's, and only the message has a position.
+  def action(:read_bound_row_field, _params, component) do
+    Channel
+    |> filter(any(message <- messages, position > 1))
+    |> DB.read()
+
+    component
+  end
+
+  # The bare search reads an attribute the note doesn't declare - the variable missing its pin. The
+  # pinned read beside it keeps the variable used.
+  def action(:read_forgotten_pin, _params, component) do
+    search = "hi"
+
+    Note
+    |> filter(body == search and body != ^search)
+    |> DB.read()
+
+    component
+  end
+
+  # A string is compared with a boolean attribute, so the filter refuses it in the browser - before
+  # the read answers the rows the string unboxes to. The value goes through wrap_term/1, so neither
+  # the type checker nor Dialyzer flags it.
+  def action(:read_mistyped_filter, _params, component) do
+    value = wrap_term("yes")
+
+    Note
+    |> filter(pinned: ^value)
+    |> DB.read()
 
     component
   end

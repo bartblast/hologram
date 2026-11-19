@@ -1,4 +1,4 @@
-defmodule HologramFeatureTests.WriteClaimsPage do
+defmodule HologramFeatureTests.WriteRulesPage do
   use Hologram.Page
   use Hologram.DB
 
@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.WriteClaimsPage do
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
 
-  route "/write-claims"
+  route "/write-rules"
 
   layout HologramFeatureTests.Components.DefaultLayout
 
@@ -25,6 +25,7 @@ defmodule HologramFeatureTests.WriteClaimsPage do
       <button $click={command: :add_note_as_other}> Add note as other </button>
       <button $click={command: :add_note_by_server}> Add note by server </button>
       <button $click={command: :delete_own_note}> Delete own note </button>
+      <button $click={command: :edit_note_body}> Edit note body </button>
       <button $click={command: :log_in}> Log in </button>
       <button $click={command: :pin_note}> Pin note </button>
       <button $click={command: :pin_pinned_note}> Pin pinned note </button>
@@ -84,6 +85,23 @@ defmodule HologramFeatureTests.WriteClaimsPage do
     put_action(server, :show_result, result: "deleted_own_note")
   end
 
+  def command(:edit_note_body, _params, server) do
+    note = create_note(server.user_id, false)
+
+    result =
+      try do
+        note
+        |> put_attribute(:body, "edited")
+        |> DB.update!()
+
+        "edited_note_body"
+      rescue
+        error in AccessDeniedError -> error.message
+      end
+
+    put_action(server, :show_result, result: result)
+  end
+
   def command(:log_in, _params, server) do
     user = create_user("session@example.com")
 
@@ -95,7 +113,6 @@ defmodule HologramFeatureTests.WriteClaimsPage do
 
     note
     |> put_attribute(:pinned, true)
-    |> authorize(:pin)
     |> DB.update!()
 
     put_action(server, :show_result, result: "pinned_note")
@@ -108,7 +125,6 @@ defmodule HologramFeatureTests.WriteClaimsPage do
       try do
         note
         |> put_attribute(:pinned, true)
-        |> authorize(:pin)
         |> DB.update!()
 
         "pinned_pinned_note"

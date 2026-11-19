@@ -126,26 +126,6 @@ defmodule Hologram.Query do
   defdelegate add_relationship(entity, relationship_name, target_id), to: Stage
 
   @doc """
-  Claims the acting user's authority for the given operation on the given entity struct and
-  returns the struct - the DB verb writing it evaluates that operation, against the row, for
-  the acting user, instead of the operation the verb performs on its own.
-
-  The entity is an entity struct - one a query read, or one Entity.new/2 constructed. The
-  operation is an atom naming an entity operation the entity type declares an allow line for -
-  `:pin`, `:publish`, `:archive` - and is recorded in the struct's metadata as the claim the
-  write carries. There is no user argument: the subject of a claim is always the acting user.
-  A write carries exactly one claim - a struct already claiming an authority, through
-  authorize/2 or trust/1, cannot claim another.
-
-  Raises Hologram.MisuseError when the entity is not an entity struct, when the operation is not an
-  atom, when the operation is neither a framework operation nor one an allow line on the entity
-  type names (see Hologram.Policy.validate_operation!/2), or when the struct already carries a
-  claim.
-  """
-  @spec authorize(Entity.t(), atom) :: Entity.t()
-  defdelegate authorize(entity, operation), to: Stage
-
-  @doc """
   Marks the given query as counting and returns the resulting query term.
 
   The query is an entity type module (starting a fresh query term) or an already built
@@ -316,11 +296,18 @@ defmodule Hologram.Query do
   Ordering comparisons require an orderable attribute - every type but boolean and uuid - and a
   non-nil operand - SQL comparisons with NULL never match, so a nil operand would mean different
   things on the two execution tiers. A comparison on an enum attribute reads the declared
-  `values:` order, so `priority >= :medium` on `[:low, :medium, :high]` means medium or high, and
-  the operand must be one of the declared values. A comparison on a string attribute reads the
-  order `sort` puts it in - case and diacritics fold the way they do in the list - and a
-  bound names a position in that list, spelled the way the list spells it: `name >= "M"` reaches
-  `M`, `m`, `Mango`, while `name >= "m"` starts at `m`.
+  `values:` order, so `priority >= :medium` on `[:low, :medium, :high]` means medium or high. A
+  comparison on a string attribute reads the order `sort` puts it in - case and diacritics fold the
+  way they do in the list - and a bound names a position in that list, spelled the way the list
+  spells it: `name >= "M"` reaches `M`, `m`, `Mango`, while `name >= "m"` starts at `m`.
+
+  A value an attribute is compared with - by equality or an ordering operator - fits the
+  attribute's type, and so does each element of a membership list and each bound of a range: a
+  string for a string attribute, `true` or `false` for a boolean, a `Date`, `DateTime` or `Time`
+  struct for those types, an integer that fits in 64 bits for an integer, one of the declared
+  values for an enum, and for a uuid or a reference field the lowercase hyphenated spelling ids are
+  stored in. A float attribute takes a float or such an integer, the same number compared. Nil fits
+  any type where the operator takes it.
 
   An integer range (`priority in 3..10`) is shorthand for the inclusive bounds - it expands into
   a `>=` triple and a `<=` triple. Ranges require an integer attribute, step 1, and at least one
@@ -343,32 +330,48 @@ defmodule Hologram.Query do
   one side of `and` or `or` or as a quantifier's condition, when a quantifier has a condition but no
   bound row, a bound row but no condition, or - for `all` - no condition at all, when a quantifier
   binds a name an enclosing one already bound, when its relationship is pinned or not a
-  relationship, when a bound row is compared whole rather than through an attribute, when the
-  predicates name `user_id()`, which only a policy condition can (a user's id is pinned from a
+  relationship, when a bound row is compared whole rather than through an attribute, when a
+  comparison or a search reads the same attribute of the same row on both sides - which tells
+  nothing about the row but whether the attribute is set, and the error says what it answers - when
+  the predicates name `user_id()`, which only a policy condition can (a user's id is pinned from a
   variable holding it: `^user_id`), or when the predicates take any other form - a bare name where
   only a value goes (a keyword value, a membership element, a range bound) is most likely a
-  forgotten pin, and the error says so.
+  forgotten pin, and the error says so - or when a pinned name or path on the right side of a
+  comparison or a search starts at a name no variable holds, which is most likely a field written
+  with a pin it doesn't take, and the error names the spelling that reads it.
   Raises Hologram.MisuseError when the query is neither an entity type module nor a query term, when
   pinned predicates are not a list of name and value pairs - a name being an attribute or a path -
   when pinned predicates name the acting user, which only a policy condition can (outside a derived
   field, a user's id is pinned from a variable holding it: `^user_id`), when a predicate names a
-  relationship or an unknown attribute - on the right side of a comparison, which is how a forgotten
-  pin on a variable reads - when a path goes through a to-many relationship, an attribute or an
-  unknown relationship, or ends at a name the related type does not declare, when a quantifier's
-  relationships do not lead through relationships to a to-many relationship, an inverse set or a
-  derived set, when `{:outer, levels, name}` reaches past the queried row, when a disjunction holds
-  fewer than two predicate lists or one of them is empty or not such a list, when a comparison names
-  an attribute with itself or two attributes that do not compare, when a search names an attribute
-  that isn't a string or its term isn't a string, or when a value is invalid for its attribute or
-  its operator - a pinned keyword value holding a list, a tuple or a range is refused as an equality
-  operand, since membership and comparisons are written as expressions.
+  relationship or an unknown attribute - which is how a forgotten pin reads (the error names the pin
+  when the name, on the right side of a comparison or a search or on the left side of one compared
+  with a name, is a variable of the surrounding code or a derived field's argument, and inside a
+  quantifier or a derived field's query the row in scope that declares the name, and how to read it
+  there) - when a path goes through a to-many relationship, an attribute or an unknown relationship,
+  or ends at a name the related type does not declare, when a quantifier's relationships do not lead
+  through relationships to a to-many relationship, an inverse set or a derived set, when
+  `{:outer, levels, name}` reaches past the queried row, when a disjunction holds fewer than two
+  predicate lists or one of them is empty or not such a list, when a comparison names an attribute
+  with itself or two attributes that do not compare, when a search names an attribute that isn't a
+  string or its term isn't a string, when a value doesn't fit the type of the attribute it's
+  compared with, or when a value is invalid for its operator - a pinned keyword value holding a
+  list, a tuple or a range is refused as an equality operand, since membership and comparisons are
+  written as expressions.
   """
   defmacro filter(query, predicates) do
     lowered = Expression.predicates(predicates, __CALLER__)
     Shape.record(:filter, [query, predicates], __CALLER__)
 
-    quote do
-      Stage.filter(unquote(query), unquote(lowered))
+    case Expression.predicate_hints(predicates, __CALLER__) do
+      [] ->
+        quote do
+          Stage.filter(unquote(query), unquote(lowered))
+        end
+
+      hints ->
+        quote do
+          Stage.filter(unquote(query), unquote(lowered), unquote(Macro.escape(hints)))
+        end
     end
   end
 
@@ -408,17 +411,26 @@ defmodule Hologram.Query do
   (`include(:owner)` is refused in favour of `include(owner)`), when a keyword entry nests a
   relationship (`include(tasks: owner)` is refused in favour of `include(tasks.owner)`), when a
   keyword entry pairs a relationship with anything but a pinned nested spec - a narrowed set is a
-  derived field - or when a spec or an entry is anything else. Raises Hologram.MisuseError when the
-  query is neither an entity type module nor a query term, when a spec is invalid or empty, or
-  when a name is not a declared relationship or derived field - which is how a forgotten pin on a
-  variable reads.
+  derived field - when a pinned name or path starts at a name no variable holds, which is most
+  likely a name written with a pin it doesn't take, or when a spec or an entry is anything else.
+  Raises Hologram.MisuseError when the query is neither an entity type module nor a query term,
+  when a spec is invalid or empty, or when a name is not a declared relationship or derived field -
+  which is how a forgotten pin on a variable reads, and the error names the pin.
   """
   defmacro include(query, spec) do
     lowered = Expression.inclusion(spec, __CALLER__)
     Shape.record(:include, [query, spec], __CALLER__)
 
-    quote do
-      Stage.include(unquote(query), unquote(lowered))
+    case Expression.inclusion_hints(spec, __CALLER__) do
+      [] ->
+        quote do
+          Stage.include(unquote(query), unquote(lowered))
+        end
+
+      hints ->
+        quote do
+          Stage.include(unquote(query), unquote(lowered), unquote(Macro.escape(hints)))
+        end
     end
   end
 
@@ -584,19 +596,29 @@ defmodule Hologram.Query do
   which has no stored sort key.
 
   Raises Hologram.CompileError, naming the location, when an attribute is written as an atom
-  (`sort(:priority)` is refused in favour of `sort(priority)`), when a direction is neither an atom
-  nor pinned, or when the spec or an entry is neither a bare name, a pair nor pinned. Raises
+  (`sort(:priority)` is refused in favour of `sort(priority)`), when a pinned name - the spec or an
+  entry - is no variable, which is most likely a name written with a pin it doesn't take, when a
+  direction is neither an atom nor pinned, or when the spec or an entry is neither a bare name, a
+  pair nor pinned. Raises
   Hologram.MisuseError when the query is neither an entity type module nor a query term, when the
   spec is neither an attribute name nor a list, when an entry names a relationship or an unknown
-  attribute - which is how a forgotten pin on a variable reads - or when a direction is neither :asc
-  nor :desc.
+  attribute - which is how a forgotten pin on a variable reads, and the error names the pin - or
+  when a direction is neither :asc nor :desc.
   """
   defmacro sort(query, spec) do
     lowered = Expression.ordering(spec, __CALLER__)
     Shape.record(:sort, [query, spec], __CALLER__)
 
-    quote do
-      Stage.sort(unquote(query), unquote(lowered))
+    case Expression.ordering_hints(spec, __CALLER__) do
+      [] ->
+        quote do
+          Stage.sort(unquote(query), unquote(lowered))
+        end
+
+      hints ->
+        quote do
+          Stage.sort(unquote(query), unquote(lowered), unquote(Macro.escape(hints)))
+        end
     end
   end
 
@@ -634,8 +656,7 @@ defmodule Hologram.Query do
   authority is behind: recording what an external system reported, applying what a poller
   fetched. Trust claims authority, it does not skip validation - a trusted write is validated,
   stamped and recorded like any other, and creator roles are granted when an acting user is
-  set. A write carries exactly one claim - a struct already claiming an authority, through
-  authorize/2 or trust/1, cannot claim another.
+  set. A struct already trusted cannot be trusted again.
 
   On a query - an entity type module or a query term - it marks the query as read on the
   server's own authority: DB.read/1 reads it raw whether or not a user is acting. The spelling

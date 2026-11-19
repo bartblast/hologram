@@ -12,7 +12,7 @@ defmodule Hologram.Job.WorkerTest do
 
   @timeout_ms 2_000
 
-  # Stands in for a Postgrex.Notifications process, which answers listen/2 with a reference and
+  # Stands in for a Hologram.DB.Listener connection, which answers listen/2 with a reference and
   # would otherwise need a connection of its own.
   defmodule NotificationsStub do
     @moduledoc false

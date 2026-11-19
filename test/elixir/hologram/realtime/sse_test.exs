@@ -16,7 +16,6 @@ defmodule Hologram.Realtime.SSETest do
   alias Hologram.Runtime.Serializer
   alias Hologram.Sync.Frame
   alias Hologram.Test.Fixtures.Entity.Module15
-  alias Hologram.Test.Fixtures.Entity.Module2, as: EntityModule2
   alias Hologram.Test.Fixtures.Realtime.SSE.Module1
 
   use_module_stub :asset_path_registry
@@ -171,6 +170,16 @@ defmodule Hologram.Realtime.SSETest do
     end)
 
     System.put_env("HOLOGRAM_ENV", env)
+  end
+
+  # Stands in for a sync session as far as a stream sees one: it is linked, as the session a stream
+  # starts is, and stops when asked.
+  defp sync_session_stub do
+    spawn_link(fn ->
+      receive do
+        :sync_stop -> :ok
+      end
+    end)
   end
 
   defp stream_with_identities(stash_identity, claimed_identity) do
@@ -471,7 +480,7 @@ defmodule Hologram.Realtime.SSETest do
     @types_hash "00112233445566778899aabbccddeeff"
 
     defp sync_start(cursor) do
-      %{edges: nil, cursor: cursor, gap_end: nil, rules: nil, types_hash: @types_hash}
+      %{cursor: cursor, rules: nil, types_hash: @types_hash}
     end
 
     defp connection do
@@ -608,46 +617,70 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
-  describe "process_message/4 on {:sync_deltas, ...}" do
-    test "pushes a sync_deltas SSE event carrying the deltas" do
+  describe "process_message/4 on {:sync_frame, ...}" do
+    test "writes a chunk from the stream's sync session as it came" do
       conn = prepared_test_conn()
-      row = EntityModule2.new(a: true, c: "first")
+      session = spawn(fn -> :ok end)
 
-      # Built through the frame rather than by hand: a delta holds a row already written the way
-      # the wire carries it, and JSON refuses to guess at a struct rather than encoding one badly.
-      deltas = [Frame.put_entity(row, %{})]
+      send(self(), {:sync_frame, session, "event: synced\nid: 1\ndata: {}\n\n"})
 
-      send(self(), {:sync_deltas, "g8uxAAAAZQ", deltas, nil})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ "event: sync_deltas\nid: "
-      assert updated_conn.resp_body =~ ~s["c":"first"]
-
-      # The place the client hands back on reconnect.
-      assert updated_conn.resp_body =~ ~s["cursor":"g8uxAAAAZQ"]
+      assert {:cont, updated_conn} = process_message(conn, nil, nil, sync_session: session)
+      assert updated_conn.resp_body == "event: synced\nid: 1\ndata: {}\n\n"
     end
 
-    test "pushes a frame naming how far the receiving replica's batches are applied" do
+    # This process stands in for the session, so the answer arrives here.
+    test "tells the session it wrote the chunk" do
       conn = prepared_test_conn()
 
-      send(self(), {:sync_deltas, "g8uxAAAAZQ", [], 7})
+      send(self(), {:sync_frame, self(), "event: synced\nid: 1\ndata: {}\n\n"})
 
-      {:cont, updated_conn} = process_message(conn, nil, nil)
+      process_message(conn, nil, nil, sync_session: self())
 
-      assert updated_conn.resp_body =~ ~s["applied_seq":7]
+      assert_received :sync_written
     end
 
-    # A stream serving no replica has no number to give, and the client must read that as nothing
-    # said rather than as nothing applied.
-    test "pushes a frame naming no applied batch of the receiving replica" do
+    test "tells a session it replaced nothing of a chunk it dropped" do
       conn = prepared_test_conn()
+      session = spawn(fn -> :ok end)
 
-      send(self(), {:sync_deltas, "g8uxAAAAZQ", [], nil})
+      send(self(), {:sync_frame, self(), "event: synced\nid: 1\ndata: {}\n\n"})
 
-      {:cont, updated_conn} = process_message(conn, nil, nil)
+      process_message(conn, nil, nil, sync_session: session)
 
-      assert updated_conn.resp_body =~ ~s["applied_seq":null]
+      refute_received :sync_written
+    end
+
+    # A session the stream replaced on a change of identity may still have frames on their way,
+    # some sent after the stream told the client to drop what it holds.
+    test "drops a chunk from a session other than the stream's" do
+      conn = prepared_test_conn()
+      session = spawn(fn -> :ok end)
+      replaced = spawn(fn -> :ok end)
+
+      send(self(), {:sync_frame, replaced, "event: synced\nid: 1\ndata: {}\n\n"})
+
+      assert {:cont, updated_conn} = process_message(conn, nil, nil, sync_session: session)
+      assert updated_conn.resp_body == ""
+    end
+
+    test "drops a chunk while the stream has no sync session" do
+      conn = prepared_test_conn()
+      replaced = spawn(fn -> :ok end)
+
+      send(self(), {:sync_frame, replaced, "event: synced\nid: 1\ndata: {}\n\n"})
+
+      assert {:cont, updated_conn} = process_message(conn, nil, nil, sync_session: nil)
+      assert updated_conn.resp_body == ""
+    end
+
+    test "drops a chunk while the stream waits for a held data model" do
+      conn = prepared_test_conn()
+      replaced = spawn(fn -> :ok end)
+
+      send(self(), {:sync_frame, replaced, "event: synced\nid: 1\ndata: {}\n\n"})
+
+      assert {:cont, updated_conn} = process_message(conn, nil, nil, sync_session: {:held, true})
+      assert updated_conn.resp_body == ""
     end
   end
 
@@ -684,46 +717,6 @@ defmodule Hologram.Realtime.SSETest do
 
       assert updated_conn.resp_body =~ "event: sync_rules\nid: "
       assert updated_conn.resp_body =~ ~s("rules":{"policies":{}})
-    end
-  end
-
-  describe "process_message/4 on {:sync_synced, scope, cursor}" do
-    test "pushes a synced SSE event" do
-      conn = prepared_test_conn()
-      send(self(), {:sync_synced, :all, nil})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ "event: synced\nid: "
-    end
-
-    test "carries the scope the client may now answer from its own store" do
-      conn = prepared_test_conn()
-      send(self(), {:sync_synced, :all, "Nzc4LjA"})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ ~s["scope":"all"]
-    end
-
-    test "carries the entity types a marker names" do
-      conn = prepared_test_conn()
-      send(self(), {:sync_synced, {:types, [EntityModule2]}, nil})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ ~s("types":["Hologram.Test.Fixtures.Entity.Module2"])
-    end
-
-    # The one frame a client filled and then left alone ever receives, so the place has to be on
-    # it or that client has nowhere to come back from.
-    test "carries the place the client may come back from" do
-      conn = prepared_test_conn()
-      send(self(), {:sync_synced, :all, "Nzc4LjA"})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ ~s["cursor":"Nzc4LjA"]
     end
   end
 
@@ -1388,7 +1381,7 @@ defmodule Hologram.Realtime.SSETest do
     # filtering rows as whoever was there before, and the client would go on holding them.
     test "sends the client through the resync door when its identity changes" do
       conn = Plug.Conn.fetch_query_params(prepared_test_conn())
-      old_session = start_supervised!({Agent, fn -> :sync_session end})
+      old_session = sync_session_stub()
 
       send(self(), {:identity_changed, "session-1", 8})
 
@@ -1400,7 +1393,7 @@ defmodule Hologram.Realtime.SSETest do
 
     test "stops the session that was serving the identity it replaced" do
       conn = Plug.Conn.fetch_query_params(prepared_test_conn())
-      old_session = start_supervised!({Agent, fn -> :sync_session end})
+      old_session = sync_session_stub()
       ref = Process.monitor(old_session)
 
       send(self(), {:identity_changed, "session-1", 8})
@@ -1408,6 +1401,31 @@ defmodule Hologram.Realtime.SSETest do
       process_message(conn, "session-1", 7, sync_session: old_session)
 
       assert_receive {:DOWN, ^ref, :process, ^old_session, :normal}
+    end
+
+    # A session waiting for this stream to say it wrote a chunk never answers a stop it is waited
+    # on for, so the stream asks and goes on.
+    @tag timeout: 5_000
+    test "goes on without waiting for the session it replaced to stop" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+
+      old_session =
+        spawn_link(fn ->
+          receive do
+            :never -> :ok
+          end
+        end)
+
+      on_exit(fn -> Process.exit(old_session, :kill) end)
+
+      send(self(), {:identity_changed, "session-1", 8})
+
+      assert {:cont, _conn, _session_id, _user_id, _sync_session} =
+               process_message(conn, "session-1", 7, sync_session: old_session)
+
+      # Unlinked as well: whatever it ends with is no longer this stream's to go down with.
+      {:links, links} = Process.info(self(), :links)
+      refute old_session in links
     end
 
     # The client may hold rows from before the hold, as who it was, and the session that starts

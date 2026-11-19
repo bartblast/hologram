@@ -301,19 +301,12 @@ defmodule Hologram.DB.EntityOperations do
   # place would no longer be the grant its id names. Nor would the log say what it granted before:
   # the entity a grant names is an attribute rather than a reference, so its old value is not
   # recorded. Revoking and granting again says the same thing, and leaves both in the log.
-  def update(RoleGrant, _id, _changes, _opts) do
-    raise MisuseError,
-          "cannot update #{inspect(RoleGrant)} - a role grant is never changed in place, revoke the role and grant the new one instead"
-  end
+  def update(RoleGrant, _id, _changes, _opts), do: raise_grant_update!()
 
   # sobelow_skip ["SQL.Query"]
   def update(entity_type, id, changes, opts) do
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
-
-    columns_by_field =
-      columns
-      |> Enum.reject(&(&1.source in [:revisions, :system] or Mapper.derived?(&1)))
-      |> Map.new(&{field_name(&1), &1})
+    columns_by_field = columns_by_field(entity_type)
 
     changes_map = Map.new(changes)
     sorted_changes = Enum.sort(changes_map)
@@ -436,6 +429,21 @@ defmodule Hologram.DB.EntityOperations do
     end
 
     :ok
+  end
+
+  # The names update/4 refuses, refused for a caller that judges the update before making it - so a
+  # misspelt field reads as the misuse it is, not as a field no rule covers.
+  @doc false
+  @spec validate_update!(module, map | keyword) :: :ok
+  def validate_update!(RoleGrant, _changes), do: raise_grant_update!()
+
+  def validate_update!(entity_type, changes) do
+    sorted_changes =
+      changes
+      |> Map.new()
+      |> Enum.sort()
+
+    validate_changes!(entity_type, sorted_changes, [], columns_by_field(entity_type))
   end
 
   # A unique attribute is worth asking about only when the value could be compared at all: a
@@ -689,11 +697,12 @@ defmodule Hologram.DB.EntityOperations do
 
   # The creating user takes the entity type's creator roles as the row is inserted, in the
   # same transaction - so a row never exists without whoever made it holding its roles.
-  # Creating without an acting user grants nothing, which is what the trusted tier wants.
+  # Creating without an acting user grants nothing, which is what the trusted tier wants, and
+  # neither does an actor no user entity can be, since a grant names a user.
   defp creator_grants(entity) do
     entity_type = entity.__struct__
 
-    case Context.actor_user_id() do
+    case Context.actor_entity_id() do
       nil ->
         []
 
@@ -1257,6 +1266,19 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   defp unique_violations(_entity_type, _error), do: nil
+
+  defp columns_by_field(entity_type) do
+    %{columns: columns} = Map.fetch!(DB.mapping(), entity_type)
+
+    columns
+    |> Enum.reject(&(&1.source in [:revisions, :system] or Mapper.derived?(&1)))
+    |> Map.new(&{field_name(&1), &1})
+  end
+
+  defp raise_grant_update! do
+    raise MisuseError,
+          "cannot update #{inspect(RoleGrant)} - a role grant is never changed in place, revoke the role and grant the new one instead"
+  end
 
   defp validate_changes!(entity_type, sorted_changes, sorted_deltas, columns_by_field) do
     if sorted_changes == [] and sorted_deltas == [] do

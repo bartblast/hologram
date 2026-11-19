@@ -67,7 +67,7 @@ defmodule Hologram.DB.Oplog do
   applies when a row reaches it. Nothing reads a value from here to send it - the readers below
   take the KEYS, to know what moved, and the old references, to know which rows to look at again.
   The acting user is read from the ambient context, so writes made by the framework itself, which
-  have no actor, record none.
+  have no actor, record none, and neither do writes under a user id no user entity can have.
 
   The batch of client writes being applied is read from the ambient context the same way, and an
   effect written outside one records none - a command's write, a seed's, the framework's own. It
@@ -79,7 +79,7 @@ defmodule Hologram.DB.Oplog do
 
   def append(effects) do
     model_hash = Model.hash()
-    actor_id = Codec.encode(Context.actor_user_id(), :uuid)
+    actor_id = Codec.encode(Context.actor_entity_id(), :uuid)
     mutation_ref = Ref.get()
 
     effects
@@ -114,6 +114,41 @@ defmodule Hologram.DB.Oplog do
   end
 
   @doc """
+  Returns one past the highest transaction id that had finished when this is read: a transaction at
+  or above it had not finished, so nothing read before saw what it wrote. Below it a transaction
+  may or may not have been seen - the opposite bound to `current_xmin/0`'s.
+  """
+  @spec current_xmax() :: non_neg_integer
+  def current_xmax do
+    {:ok, %Postgrex.Result{rows: [[xmax]]}} =
+      Connection.query("SELECT pg_snapshot_xmax(pg_current_snapshot())")
+
+    xmax
+  end
+
+  @doc """
+  Returns, for each replica with a batch whose effects are in a transaction above the given one, the
+  highest sequence number among those batches - what a read after a batch of transactions up to the
+  given one can hold of each replica's writes beyond the batch. A replica with none is left out.
+
+  Read through the log's index on the transaction, so it costs what the transactions above the
+  given one wrote, and nothing when none did.
+  """
+  @spec replica_seqs_after(non_neg_integer) :: %{String.t() => non_neg_integer}
+  def replica_seqs_after(tx) do
+    statement = """
+    SELECT "mutation_ref"->>'replica_id', max(("mutation_ref"->>'seq')::bigint)
+    FROM "#{Mapper.system_schema()}"."oplog"
+    WHERE "tx" > $1 AND "mutation_ref" IS NOT NULL
+    GROUP BY 1
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [tx])
+
+    Map.new(rows, fn [replica_id, seq] -> {replica_id, seq} end)
+  end
+
+  @doc """
   Returns the place of the oldest effect the log still holds, or nil when it holds none.
 
   What it answers is whether a returning client's place is one the log can speak for. Every effect
@@ -144,8 +179,9 @@ defmodule Hologram.DB.Oplog do
 
   The order is the windowed read's own - by transaction, then by insert order within it - so a
   place names the same point for a returning client as it did for a connected one. Everything here
-  is committed, which is why this read needs no upper edge: gap-freeness is the windowed read's
-  problem, and history has no gaps left to open.
+  is committed, but a transaction below an effect returned can still be open and commit after - so
+  a caller dating a place by what this returns reads the edge every finished transaction is below
+  first (see `current_xmin/0` and `Hologram.Sync.Catchup.gap/4`).
 
   The limit is not a page - nothing here resumes from where it stopped. It is what keeps a reader
   from pulling an unbounded tail into memory, and a caller that gets `limit` rows back should treat
@@ -182,28 +218,77 @@ defmodule Hologram.DB.Oplog do
   end
 
   @doc """
-  Returns the entity the given stored data describes - the inverse of what `append/1` writes, so a
-  row read back out of the log is the struct it was.
-
-  Every value is decoded against the type its declaration gives, which is what the encoding used
-  on the way in. A key the type does not declare raises: a payload is written by this build for
-  this build, and a gap spanning a change of model is refused before anything reads one.
-
-  The metadata is the type's own default - the stamps a row carried are recorded beside the data
-  rather than in it, and a row rebuilt from a delete has none to carry.
+  Returns how many effects were written after the given place, counting no further than `limit`,
+  and whether any of the ones counted was written under a model other than the given hash's - the
+  two things a returning client's resume is decided by, in one statement, with none of the effects
+  read back.
   """
-  @spec entity_from_data(module, map) :: struct
-  def entity_from_data(entity_type, data) do
-    fields =
-      Enum.map(data, fn {name, value} ->
-        field = String.to_existing_atom(name)
+  @spec count_after(non_neg_integer, non_neg_integer, pos_integer, String.t()) ::
+          {non_neg_integer, boolean}
+  def count_after(tx, seq, limit, model_hash) do
+    statement = """
+    SELECT count(*), coalesce(bool_or("model_hash" <> $4), false)
+    FROM (
+      SELECT "model_hash"
+      FROM "#{Mapper.system_schema()}"."oplog"
+      WHERE "tx" > $1 OR ("tx" = $1 AND "seq" > $2)
+      ORDER BY "tx", "seq"
+      LIMIT $3
+    ) AS "gap"
+    """
 
-        {:ok, decoded} = Codec.decode_json(value, attribute_type(entity_type, field))
+    {:ok, %Postgrex.Result{rows: [[count, other_model?]]}} =
+      Connection.query(statement, [tx, seq, limit, model_hash])
 
-        {field, decoded}
-      end)
+    {count, other_model?}
+  end
 
-    struct!(entity_type, fields)
+  @doc """
+  Returns the payload of each effect of the given seqs, keyed by seq, as stored: string keys, the
+  values as the write encoded them. Every effect is stored with one (see `append/1`), so only a seq
+  the log doesn't hold is left out.
+
+  What `read_after/3` leaves behind, read back for a few effects at a time: a caller holding a gap
+  counted without its payloads fills them in for the part of it it is working on, so it never holds
+  every payload of a long gap at once.
+  """
+  @spec read_data(list(pos_integer)) :: %{pos_integer => map}
+  def read_data([]), do: %{}
+
+  def read_data(seqs) do
+    statement = """
+    SELECT "seq", "data"
+    FROM "#{Mapper.system_schema()}"."oplog"
+    WHERE "seq" = ANY($1::bigint[])
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [seqs])
+
+    Map.new(rows, fn [seq, data] -> {seq, data} end)
+  end
+
+  @doc """
+  Returns whether the stored data of any effect of the given seqs holds every pair of the given
+  match, as `read_type_after/4` matches data - without reading any of it back. A seq the log doesn't
+  hold matches nothing, and no seqs match nothing.
+
+  For a question about a few effects of a gap of any size, answered without the payloads the gap
+  read left behind: the cost follows the seqs asked about, one primary key lookup each.
+  """
+  @spec any_data_match?(list(pos_integer), map) :: boolean
+  def any_data_match?([], _match), do: false
+
+  def any_data_match?(seqs, match) do
+    statement = """
+    SELECT EXISTS (
+      SELECT 1 FROM "#{Mapper.system_schema()}"."oplog"
+      WHERE "seq" = ANY($1::bigint[]) AND "data" @> $2::jsonb
+    )
+    """
+
+    {:ok, %Postgrex.Result{rows: [[matched?]]}} = Connection.query(statement, [seqs, match])
+
+    matched?
   end
 
   @doc """

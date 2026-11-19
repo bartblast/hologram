@@ -59,6 +59,8 @@ Hologram.Test.Helpers.put_derived_definitions([
   Hologram.Test.Fixtures.Policy.Module22,
   Hologram.Test.Fixtures.Policy.Module30,
   Hologram.Test.Fixtures.Policy.Module31,
+  Hologram.Test.Fixtures.Policy.Readers.Module15,
+  Hologram.Test.Fixtures.Policy.Readers.Module17,
   Hologram.Test.Fixtures.Policy.Readers.Module9
 ])
 
@@ -75,10 +77,10 @@ ExUnit.start(exclude: exclude_opts)
 if :database in excluded_tags do
   Hologram.DB.put_boot_facts()
 else
-  # Boot the test database: server connectivity check (fail fast with instructions), database
-  # creation when absent, Hologram schema drop (the suite starts virgin). Positioned after
-  # ExUnit.start and before the pool boots - the drop guard recognizes the test env by the
-  # running ExUnit server.
+  # Boot the test database: server connectivity check (fail fast with instructions), then a
+  # fresh database of this run's own, which the config is pointed at, so runs that overlap
+  # leave each other's tables alone. Positioned after ExUnit.start and before the pool boots -
+  # the env guard recognizes the test env by the running ExUnit server.
   Hologram.Test.DatabaseBootstrap.run!()
 
   # Boot the database gateway for the whole suite with a per-process ownership pool, so that

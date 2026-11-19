@@ -265,6 +265,42 @@ defmodule Hologram.Entity.DerivedExpressionTest do
       end
     end
 
+    test "raises on a field compared with itself" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} compares score with itself, which is always false"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower("fn score -> score > score end")
+      end
+    end
+
+    test "raises on a field compared with itself by an ordering operator taking equality" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} compares score with itself, which only says score isn't nil - write score != nil"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower("fn score -> score >= score end")
+      end
+    end
+
+    test "raises on a field compared with itself in the condition of if" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} compares score with itself, which is always true"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower("fn score -> if score == score, do: 1, else: 2 end")
+      end
+    end
+
+    test "raises on a path compared with itself" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} compares channel.score with itself, which is always true"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower("fn channel -> channel.score == channel.score end")
+      end
+    end
+
     test "raises at the membership's line on a list holding a field" do
       expected_msg =
         "lib/my_app/channel.ex:13: #{@field} looks a field up in [1, other] - the right side of in is a list of values or an @attribute"
@@ -344,6 +380,82 @@ defmodule Hologram.Entity.DerivedExpressionTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         lower("fn messages, names -> filter(messages, position > ^length(names)) end")
       end
+    end
+
+    test "raises on a pinned name no argument binds on the right side of a query's comparison, naming both readings" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} pins last_read_at, which is no argument of its function - add it to the head to read the row's field, or drop the pin to read the queried row's: last_read_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower("fn messages -> filter(messages, created_at > ^last_read_at) end")
+      end
+    end
+
+    test "raises on a pinned path no argument starts on as a query's search term" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} pins channel in ^channel.name, which is no argument of its function - add it to the head to read the row's field, or drop the pin to read the queried row's: channel.name"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower("fn messages -> filter(messages, contains(body, ^channel.name)) end")
+      end
+    end
+
+    test "raises on a pinned field of a row a quantifier binds" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} pins message in ^message.edited_at, the row a quantifier binds - its fields read without a pin: message.edited_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower(
+          "fn threads -> filter(threads, any(message <- messages, message.created_at > ^message.edited_at)) end"
+        )
+      end
+    end
+
+    test "raises on a pinned row a quantifier binds" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} pins message, the row a quantifier binds - its fields read without a pin: message.<attribute>"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower(
+          "fn threads -> filter(threads, any(message <- messages, message.id == ^message)) end"
+        )
+      end
+    end
+
+    test "raises on a pinned name no argument binds inside a quantifier, naming the bound row too" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} pins last_read_at, which is no argument of its function - add it to the head to read the row's field, or drop the pin to read the queried row's: last_read_at - or the row message binds, through its name: message.last_read_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower(
+          "fn threads -> filter(threads, any(message <- messages, message.created_at > ^last_read_at)) end"
+        )
+      end
+    end
+
+    test "raises on a pinned name no argument binds as an exact search term" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} pins term, which is no argument of its function - add it to the head to read the row's field, or drop the pin to read the queried row's: term"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower("fn messages -> filter(messages, contains(body, ^term, mode: :exact)) end")
+      end
+    end
+
+    test "raises at the head on a pinned name no argument binds outside a comparison" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: limit is not an argument of the function of #{@field} - add it to the head to read the field"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower("fn messages -> take(messages, ^limit) end")
+      end
+    end
+
+    test "takes a pinned argument on the right side of a query's comparison" do
+      assert {[:messages, :last_read_at], _body, false} =
+               lower(
+                 "fn messages, last_read_at -> filter(messages, created_at > ^last_read_at) end"
+               )
     end
 
     test "raises on user_id() in a query" do

@@ -4,11 +4,14 @@ defmodule Hologram.Mutation do
   # Applies a batch of client writes: refuses one built against another model, answers one already
   # answered from its record, and runs the rest in ONE transaction under the session's own user.
   #
-  # Every write goes through the same executor a server-side verb goes through, so a claim, a
-  # value, a reference and a merge are judged exactly as they are for a write made on the server -
-  # there is no second set of rules for a write that arrived over the wire. A refusal at any step
-  # rolls the whole batch back and names the write it refused - and a refusal the EVALUATOR made
-  # is then kept, the batch as it arrived beside its answer, for the session that sent it.
+  # Every write goes through the same executor a server-side verb goes through, so a value, a
+  # reference and a merge are judged exactly as they are for a write made on the server - there is
+  # no second set of rules for a write that arrived over the wire. Its authority is the one
+  # difference: a batch carries no claim, and every write in it is judged by the verb's own rules -
+  # an update by the fields it changes - under the anonymous semantics when nobody is signed in,
+  # where a server-side verb with no acting user would write raw. A refusal at any step rolls the
+  # whole batch back and names the write it refused - and a refusal the EVALUATOR made is then
+  # kept, the batch as it arrived beside its answer, for the session that sent it.
 
   alias Hologram.Auth
   alias Hologram.Auth.Context
@@ -88,9 +91,15 @@ defmodule Hologram.Mutation do
 
   # The actor outside, the batch reference inside it, the transaction innermost - the same wrap a
   # command runs under, with the reference added so the oplog knows whose effects these are.
+  #
+  # The record keys a batch by its sender as the data layer stores a user, so a user id no user
+  # entity can have - an app's own serial id - is recorded as nobody, a visitor's batch. The writes
+  # still run under the user id itself, which is acting and so judged rather than trusted.
   defp apply_batch(envelope, raw, server_struct) do
-    case recorded_answer(envelope, server_struct.user_id) do
-      nil -> apply_new_batch(envelope, raw, server_struct)
+    record_actor_id = Auth.canonical_id(server_struct.user_id)
+
+    case recorded_answer(envelope, record_actor_id) do
+      nil -> apply_new_batch(envelope, raw, server_struct, record_actor_id)
       answer -> answer
     end
   end
@@ -121,7 +130,7 @@ defmodule Hologram.Mutation do
   defp apply_revocation(write, row) do
     case Merge.resolve_delete(write.based_on, write.stamp, row.__meta__.revisions) do
       :delete ->
-        Auth.apply_revocation_write(row, Context.actor_user_id())
+        Auth.apply_revocation_write(row, Context.actor_entity_id())
 
         {%{}, nil}
 
@@ -140,7 +149,7 @@ defmodule Hologram.Mutation do
   defp apply_grant(write, index, created_rows, retries_left) do
     grant = Write.to_entity(write)
 
-    case Auth.apply_grant_write(grant, Context.actor_user_id(), created_rows) do
+    case Auth.apply_grant_write(grant, Context.actor_entity_id(), created_rows) do
       :created ->
         {%{}, nil}
 
@@ -167,12 +176,12 @@ defmodule Hologram.Mutation do
   # each other's authority away, or its row writes crossing another batch's - is applied again
   # from its claim. A write whose authority is gone by then is refused, the answer it would have
   # got a moment later, and the client hears a refusal rather than a failed request.
-  defp apply_in_transaction(envelope, server_struct) do
+  defp apply_in_transaction(envelope, record_actor_id) do
     Connection.retry_on_deadlock(fn ->
       Record.claim!(
         envelope.replica_id,
         envelope.seq,
-        server_struct.user_id,
+        record_actor_id,
         envelope.model_hash
       )
 
@@ -184,12 +193,12 @@ defmodule Hologram.Mutation do
     end)
   end
 
-  defp apply_new_batch(envelope, raw, server_struct) do
+  defp apply_new_batch(envelope, raw, server_struct, record_actor_id) do
     ref = %{replica_id: envelope.replica_id, seq: envelope.seq}
 
     result =
       Context.with_actor(server_struct.user_id, fn ->
-        Ref.with_ref(ref, fn -> apply_in_transaction(envelope, server_struct) end)
+        Ref.with_ref(ref, fn -> apply_in_transaction(envelope, record_actor_id) end)
       end)
 
     # A refusal reaches here as the transaction's rollback reason, which is what took the batch's
@@ -199,10 +208,10 @@ defmodule Hologram.Mutation do
         {:ok, answer}
 
       {:error, :duplicate} ->
-        answer_from_race(envelope, server_struct.user_id)
+        answer_from_race(envelope, record_actor_id)
 
       {:error, {:rejected, index, reason}} ->
-        keep_refused(envelope, raw, server_struct.user_id, index, reason)
+        keep_refused(envelope, raw, record_actor_id, index, reason)
     end
   end
 
@@ -234,8 +243,13 @@ defmodule Hologram.Mutation do
   # Only the VALUES go through the merge. A delta is not a claim about what the column should
   # hold, so there is nothing to compare it against and nothing for it to lose: it is applied
   # whatever the row's revision is, which is what makes two writers' +1s land as +2.
+  # The write is judged before the merge, by every field it names: whether it is refused must not
+  # turn on which of its values lose to another writer's, and a write whose every value loses
+  # still answers with the columns it lost to.
   defp apply_write(%Write{op: :update} = write, index, _created_rows) do
     row = lock_row(write, index)
+
+    Writer.check_update!(row, Map.keys(write.data) ++ Map.keys(write.deltas))
 
     {changes, lost} =
       Merge.resolve(write.data, write.based_on, write.stamp, row.__meta__.revisions)
@@ -257,7 +271,7 @@ defmodule Hologram.Mutation do
     # this way, an actor who may not gets the same refusal either way, and a stale revocation's
     # answer - the row it was stale against - stays behind the same gate.
     grant = Write.to_entity(write)
-    Auth.authorize_revocation_write!(grant, Context.actor_user_id())
+    Auth.authorize_revocation_write!(grant, Context.actor_entity_id())
 
     case EntityOperations.get(RoleGrant, write.id, lock: :update) do
       nil -> {%{}, nil}
@@ -265,11 +279,18 @@ defmodule Hologram.Mutation do
     end
   end
 
+  # Judged before the merge, like an update: a delete the merge drops answers with the whole row it
+  # lost to, which is an answer for whoever may delete it, not for whoever knows the id.
   defp apply_write(%Write{op: :delete} = write, index, _created_rows) do
     case EntityOperations.get(write.entity_type, write.id, lock: :update) do
       # Deleting a row that is not there is what the verb itself does: nothing, and no complaint.
-      nil -> {%{}, nil}
-      row -> apply_delete(write, row, index)
+      nil ->
+        {%{}, nil}
+
+      row ->
+        Writer.check_delete!(row)
+
+        apply_delete(write, row, index)
     end
   end
 
@@ -352,17 +373,6 @@ defmodule Hologram.Mutation do
     Map.merge(attributes, references)
   end
 
-  # A refusal took the batch back - its writes, its effects and its claim on the record - so what
-  # is kept of it is written after the rollback, on its own statement: the batch as it arrived and
-  # the answer it got, so that a change a browser made and then lost is somewhere, with the reason.
-  #
-  # Only a refusal the EVALUATOR made reaches here. A batch refused before its transaction was
-  # refused for its build or its clock rather than for what it writes, and the server read nothing
-  # of it worth keeping - a stale one it could not parse at all.
-  #
-  # Nothing is kept for an anonymous session either: an answer is replayed only to the session that
-  # earned it, and one anonymous session cannot be told from another - so a refusal kept under no
-  # actor would be readable by a stranger, or by nobody.
   # What the row KEPT where this write lost, spelled the way a frame spells a patch - the winning
   # values and the revisions they carry.
   #
@@ -389,6 +399,17 @@ defmodule Hologram.Mutation do
     |> stringify()
   end
 
+  # A refusal took the batch back - its writes, its effects and its claim on the record - so what
+  # is kept of it is written after the rollback, on its own statement: the batch as it arrived and
+  # the answer it got, so that a change a browser made and then lost is somewhere, with the reason.
+  #
+  # Only a refusal the EVALUATOR made reaches here. A batch refused before its transaction was
+  # refused for its build or its clock rather than for what it writes, and the server read nothing
+  # of it worth keeping - a stale one it could not parse at all.
+  #
+  # Nothing is kept for an anonymous session either, nor for a user id no user entity can have: an
+  # answer is replayed only to the session that earned it, and the record holds every such session
+  # as nobody - so a refusal kept under no actor would be readable by any of them, or by nobody.
   defp keep_refused(envelope, raw, actor_id, index, reason) do
     answer = rejection(index, reason)
 
@@ -437,7 +458,8 @@ defmodule Hologram.Mutation do
   # and sequence number, and a stored answer is revealing - a denial names a row, a violation map
   # shows what was written - so a record belonging to another session is refused rather than read
   # back. An anonymous session's record has no actor and matches only another anonymous one, which
-  # is the same rule rather than an exception to it.
+  # is the same rule rather than an exception to it - and so does the record of a user id no user
+  # entity can have, which holds no actor either.
   defp parse_and_apply(raw, server_struct) do
     with {:ok, envelope} <- parse(raw),
          :ok <- check_clocks(envelope.writes) do

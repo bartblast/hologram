@@ -326,7 +326,7 @@ defmodule Hologram.Template.RendererDerivedTest do
       refute String.contains?(html, "tok_R4mQ")
     end
 
-    test "carries a count under the field's name and the arguments its function was given" do
+    test "carries a count under the field's name and the query its function built" do
       create_entities()
 
       Carry.start()
@@ -334,7 +334,11 @@ defmodule Hologram.Template.RendererDerivedTest do
       node = {:component, Module150, [{"min_b", [expression: {5}]}], []}
 
       assert {"total = 1", _component_registry, _server_struct} = render_dom(node, @env, @server)
-      assert Carry.take_counts() == %{"#{inspect(Module150)}/total/5" => 1}
+
+      assert Carry.take_counts() == %{
+               ~s|#{inspect(Module150)}/total/{"cardinality":"count","entity":"#{inspect(Entity2)}","filter":[["b",">",5]],"include":{},"skip":null,"sort":[],"take":null}| =>
+                 1
+             }
     end
 
     test "renders only the rows the session user's policy grants" do
@@ -374,7 +378,7 @@ defmodule Hologram.Template.RendererDerivedTest do
                {"entities = 1", %{}, @server}
     end
 
-    test "carries a count reading another field's rows under those rows" do
+    test "carries a count reading another field's rows under the query their ids build" do
       create_entities()
 
       Carry.start()
@@ -383,9 +387,12 @@ defmodule Hologram.Template.RendererDerivedTest do
         render_dom(stateful_node(Module151), @env, @server)
 
       ripe = component_registry["my_component"].struct.derived.ripe
-      spelled_rows = Enum.map_join(ripe, ", ", &"#{inspect(Entity2)}##{&1.id}")
+      spelled_ids = Enum.map_join(ripe, ",", &~s("#{&1.id}"))
 
-      assert Carry.take_counts() == %{"#{inspect(Module151)}/ripe_total/[#{spelled_rows}]" => 2}
+      assert Carry.take_counts() == %{
+               ~s|#{inspect(Module151)}/ripe_total/{"cardinality":"count","entity":"#{inspect(Entity2)}","filter":[["id","in",[#{spelled_ids}]]],"include":{},"skip":null,"sort":[],"take":null}| =>
+                 2
+             }
     end
   end
 
@@ -854,7 +861,7 @@ defmodule Hologram.Template.RendererDerivedTest do
   end
 
   # A count has no rows behind it, so carried rows cannot re-derive one - the number itself
-  # travels, keyed by the field and the arguments that answered it.
+  # travels, keyed by the field and the query that answered it.
   describe "the counts a page hands its client" do
     setup do
       setup_page_rendering([
@@ -881,8 +888,10 @@ defmodule Hologram.Template.RendererDerivedTest do
         |> Map.fetch!("syncCounts")
 
       assert counts == %{
-               "#{inspect(Module174)}/total/false" => 1,
-               "#{inspect(Module174)}/total/true" => 2
+               ~s|#{inspect(Module174)}/total/{"cardinality":"count","entity":"#{inspect(Entity2)}","filter":[["a","==","false"]],"include":{},"skip":null,"sort":[],"take":null}| =>
+                 1,
+               ~s|#{inspect(Module174)}/total/{"cardinality":"count","entity":"#{inspect(Entity2)}","filter":[["a","==","true"]],"include":{},"skip":null,"sort":[],"take":null}| =>
+                 2
              }
     end
 

@@ -9,7 +9,6 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.LiveReload
   alias Hologram.Mutation.Record
   alias Hologram.Policy
-  alias Hologram.Policy.Edges
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
@@ -288,14 +287,24 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
-      {:sync_deltas, cursor, deltas, applied_seq} ->
-        id = System.unique_integer([:positive, :monotonic])
-        chunk_data = Frame.encode_deltas_envelope(id, cursor, deltas, applied_seq)
-
+      # A frame or marker of the sync session, encoded by the session (see `Hologram.Sync.Outbox`)
+      # and written as it came. The session is told once it is written, since it sends no more than
+      # a few ahead of what this stream has written.
+      {:sync_frame, ^sync_session, chunk_data} ->
         case Plug.Conn.chunk(conn, chunk_data) do
-          {:ok, conn} -> {:cont, conn}
-          {:error, _reason} -> {:halt, conn}
+          {:ok, conn} ->
+            send(sync_session, :sync_written)
+            {:cont, conn}
+
+          {:error, _reason} ->
+            {:halt, conn}
         end
+
+      # One from a session this stream replaced on a change of identity, sent before it stopped,
+      # and possibly after the stream told the client to drop what it holds: written, it would hand
+      # the client rows of who it was.
+      {:sync_frame, _other_session, _chunk_data} ->
+        {:cont, conn}
 
       {:sync_reload, reason} ->
         id = System.unique_integer([:positive, :monotonic])
@@ -318,15 +327,6 @@ defmodule Hologram.Realtime.SSE do
       {:sync_rules, policy_hash, rules} ->
         id = System.unique_integer([:positive, :monotonic])
         chunk_data = Frame.encode_rules_envelope(id, policy_hash, rules)
-
-        case Plug.Conn.chunk(conn, chunk_data) do
-          {:ok, conn} -> {:cont, conn}
-          {:error, _reason} -> {:halt, conn}
-        end
-
-      {:sync_synced, scope, cursor} ->
-        id = System.unique_integer([:positive, :monotonic])
-        chunk_data = Frame.encode_synced_envelope(id, scope, cursor)
 
         case Plug.Conn.chunk(conn, chunk_data) do
           {:ok, conn} -> {:cont, conn}
@@ -549,9 +549,9 @@ defmodule Hologram.Realtime.SSE do
   # Public so tests can start syncing under a hold without standing up a stream to start it on.
   #
   # Everything starting a sync session reads of the data model, read before anything is sent: the
-  # rules to hand a client built with others, whether a returning client can be told what it missed
-  # - or why it is to start over - and what each rule reads besides its own row. The session reads
-  # the gap again for itself, after these are sent. A hold can begin after the
+  # rules to hand a client built with others, and whether a returning client can be told what it
+  # missed - or why it is to start over. The session reads the gap for itself, after these are
+  # sent. A hold can begin after the
   # handshake found none, and every one of these refuses to read under it, so meeting one answers
   # `:held` rather than raising - and with nothing sent yet, the client is told nothing it would
   # have to take back when it is started again.
@@ -564,35 +564,21 @@ defmodule Hologram.Realtime.SSE do
   @doc false
   @spec read_sync_start(String.t() | nil, term | nil, String.t(), boolean, boolean) ::
           {:ok, map} | :held | :rules_changed
-  def read_sync_start(cursor, user_id, policy_hash, stale_rules?, resume?) do
+  def read_sync_start(cursor, _user_id, policy_hash, stale_rules?, resume?) do
     rules = if stale_rules?, do: Rules.rendered()
 
-    # Named rather than written inline as `resume? && gap(cursor, user_id, policy_hash)`: that
-    # answers FALSE when it does not resume, and everything below reads "no gap" from nil alone.
     # The types this build syncs, which a place names beside the rules: a client filled with others
-    # holds no rows of a type added since.
-    types_hash = Cursor.types_hash(QueryCache.synced_types())
+    # holds no rows of a type added since. And whether its browser checks permissions: a client
+    # filled without the checks holds rows carrying no verdicts.
+    types_hash = Cursor.types_hash(QueryCache.synced_types(), QueryCache.permission_checking?())
 
-    {gap, resync_reason} =
-      if resume?, do: gap(cursor, user_id, policy_hash, types_hash), else: {nil, nil}
+    resumes = resume? and cursor != nil
+    resync_reason = if resumes, do: resync_reason(cursor, policy_hash, types_hash)
 
-    # What a rule reads besides its own row, so a row the gap never names can be judged again
-    # when the row DECIDING it moved. Only for a returning client - one arriving with nothing
-    # is sent every row it may see, so there is nothing to reach back for.
-    #
-    # Read from the runtime's cache rather than derived per resume: deriving grows with the
-    # model. A compile drops the cache, so a live reload is picked up by the next client that
-    # resumes.
-    edges = if gap, do: Edges.index()
-
-    # The session reads the gap again for itself rather than being handed this one, so only what
-    # this read decided travels on: whether the client resumes at all, from where, and how far
-    # this read reached - a frame names no place past that, since the session's own read can
-    # name effects whose rounds have not reached it yet.
+    # Only whether the client resumes at all, and from where, travels on: the session reads the gap
+    # for itself, once its turn comes.
     start = %{
-      cursor: if(gap, do: cursor),
-      edges: edges,
-      gap_end: gap_end(gap),
+      cursor: if(resumes and resync_reason == nil, do: cursor),
       resync_reason: resync_reason,
       rules: rules,
       types_hash: types_hash
@@ -622,9 +608,7 @@ defmodule Hologram.Realtime.SSE do
       actor_user_id: user_id,
       applied_seq: connection.applied_seq,
       client: self(),
-      edges: start.edges,
       fill_place: connection.fill_place,
-      gap_end: start.gap_end,
       page: page,
       policy_hash: policy_hash,
       read_gap: read_gap,
@@ -757,6 +741,30 @@ defmodule Hologram.Realtime.SSE do
     end)
   end
 
+  # Caps the SSE process's heap so a slow consumer can't bloat the BEAM by
+  # accumulating broadcasts in its mailbox. Depends on the default `:on_heap`
+  # mailbox - do NOT switch the SSE process to `message_queue_data: :off_heap`
+  # without revisiting this guard, since off-heap message data is not counted
+  # against `:max_heap_size`.
+  #
+  # Sync frames reach the process encoded, as binaries too big for a process heap, and depend on
+  # the opposite: shared binaries not counting against the cap, which is the VM's default
+  # (`+hmaxib false`). Counted, a fill's frames would pass the cap again. The key that pins it,
+  # `include_shared_binaries`, needs OTP 27.
+  #
+  # Public so tests can run a stream's work under the cap a stream runs under.
+  @doc false
+  @spec configure_backpressure_safety_net() :: :ok
+  def configure_backpressure_safety_net do
+    Process.flag(:max_heap_size, %{
+      size: @max_heap_size_words,
+      kill: true,
+      error_logger: true
+    })
+
+    :ok
+  end
+
   # Public so tests can exercise the identity-topic diff without entering the
   # blocking message-pump loop.
   @doc false
@@ -865,19 +873,6 @@ defmodule Hologram.Realtime.SSE do
       Session.get_session_id(conn),
       Session.get_user_id(conn)
     }
-  end
-
-  # Caps the SSE process's heap so a slow consumer can't bloat the BEAM by
-  # accumulating broadcasts in its mailbox. Depends on the default `:on_heap`
-  # mailbox - do NOT switch the SSE process to `message_queue_data: :off_heap`
-  # without revisiting this guard, since off-heap message data is not counted
-  # against `:max_heap_size`.
-  defp configure_backpressure_safety_net do
-    Process.flag(:max_heap_size, %{
-      size: @max_heap_size_words,
-      kill: true,
-      error_logger: true
-    })
   end
 
   defp dispatch_broadcast_to_cids(conn, _action_name, _params, []), do: {:cont, conn}
@@ -1056,25 +1051,16 @@ defmodule Hologram.Realtime.SSE do
   # either told what it missed, or told to let go of what it holds - and is then filled the same
   # way a first arrival is. Deciding it here rather than in the session puts the answer beside the
   # reload notice it stands next to, both sent before the session's first frame.
-  defp gap(nil, _user_id, _policy_hash, _types_hash), do: {nil, nil}
-
-  defp gap(cursor, user_id, policy_hash, types_hash) do
-    case Catchup.gap(cursor, user_id, policy_hash, types_hash) do
-      {:ok, effects, _grants_then} -> {effects, nil}
-      {:full_resync, reason} -> {nil, reason}
+  #
+  # Asked without reading what the client missed (see `Hologram.Sync.Catchup.check/3`): a wave of
+  # clients coming back after a deploy asks this once each, all at once, before any of them waits
+  # its turn to be caught up. A few indexed statements, so on the app's own pool rather than
+  # queued behind the fills and catch-ups on sync's.
+  defp resync_reason(cursor, policy_hash, types_hash) do
+    case Catchup.check(cursor, policy_hash, types_hash) do
+      :ok -> nil
+      {:full_resync, reason} -> reason
     end
-  end
-
-  # The place of the last effect the gap holds, or nil for a gap holding none - which dates
-  # nothing, as a gap of nothing never has.
-  defp gap_end(nil), do: nil
-
-  defp gap_end([]), do: nil
-
-  defp gap_end(effects) do
-    %{seq: seq, tx: tx} = List.last(effects)
-
-    {tx, seq}
   end
 
   defp own_identities(instance_id, session_id, user_id) do
@@ -1142,8 +1128,10 @@ defmodule Hologram.Realtime.SSE do
     {conn, session}
   end
 
-  # The session is linked, so it goes when the connection does - what a client holds is only
-  # worth keeping while there is a client to tell about it. Handed back so the connection can
+  # The session is linked, and it watches the stream as well, so it goes when the connection does -
+  # a link alone takes nothing down over HTTP/2, where the stream's process ends normally (see
+  # `Hologram.Sync.Outbox`). What a client holds is only worth keeping while there is a client to
+  # tell about it. Handed back so the connection can
   # reach it later: who the client IS can change while the stream stays open, and the session
   # decides what that client may see.
   #
@@ -1196,6 +1184,13 @@ defmodule Hologram.Realtime.SSE do
   # store is dropped through the door the client already has, and a session is started for who it
   # is now. Told to drop BEFORE the new one begins filling, since a self-send is ahead of anything
   # the new session will queue behind it.
+  #
+  # The old session is asked to stop rather than stopped. It may be waiting for this stream to say
+  # it wrote a chunk (see `Hologram.Sync.Outbox`), which a stream waiting for it to stop never
+  # would, and killing it could land in the middle of a read and take its database connection
+  # down. It ends after the read it is in, and what it sends until then is dropped, since it is no
+  # longer this stream's session. Unlinked first, so whatever it ends with is not this stream's
+  # business.
   defp restart_syncing(conn, nil, _new_user_id), do: {conn, nil}
 
   # Nothing to stop yet, but the client may hold rows from before the hold as who it was.
@@ -1208,7 +1203,8 @@ defmodule Hologram.Realtime.SSE do
   defp restart_syncing(conn, session, new_user_id) do
     send(self(), {:sync_resync, :identity})
 
-    :ok = GenServer.stop(session, :normal)
+    Process.unlink(session)
+    send(session, :sync_stop)
 
     start_syncing(conn, new_user_id, false)
   end

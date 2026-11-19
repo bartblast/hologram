@@ -1477,6 +1477,80 @@ defmodule Hologram.Entity.ModelTest do
       assert entities[MyApp.Comment].attributes == [{:body, :string, []}]
     end
 
+    test "allows a required attribute on an entity type the same ops created and renamed" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Job, line: 3},
+        %{op: :rename_entity, from: MyApp.Job, to: MyApp.Work, line: 4},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Work,
+          name: :code,
+          type: :integer,
+          opts: [],
+          line: 5
+        }
+      ]
+
+      assert %{entities: entities} = fold(task_model(%{}), ops)
+      assert entities[MyApp.Work].attributes == [{:code, :integer, []}]
+    end
+
+    # The add lands on Task's table and its rows - the Task the ops create afterwards is a
+    # new, empty table that only takes the name.
+    test "raises when a required attribute is added before the same ops create another entity type under its name" do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :code,
+          type: :integer,
+          opts: [],
+          line: 3
+        },
+        %{op: :rename_entity, from: MyApp.Task, to: MyApp.Job, line: 4},
+        %{op: :create_entity, entity: MyApp.Task, line: 5}
+      ]
+
+      expected_msg =
+        "required attributes added without a value for existing rows - " <>
+          ":code on MyApp.Task - declare backfill: <value> for a one-time value, " <>
+          "default: <value> to give every row one, or optional: true to leave them empty"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
+    end
+
+    test "raises when a required attribute is added to an entity type taking the name of one the same ops created and deleted" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Job, line: 3},
+        %{op: :delete_entity, entity: MyApp.Job, line: 4},
+        %{op: :rename_entity, from: MyApp.Task, to: MyApp.Job, line: 5},
+        %{op: :add_attribute, entity: MyApp.Job, name: :code, type: :integer, opts: [], line: 6}
+      ]
+
+      expected_msg =
+        "required attributes added without a value for existing rows - " <>
+          ":code on MyApp.Job - declare backfill: <value> for a one-time value, " <>
+          "default: <value> to give every row one, or optional: true to leave them empty"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
+    end
+
+    test "raises when a required attribute is added to an entity type taking the name a created one was renamed away from" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Job, line: 3},
+        %{op: :rename_entity, from: MyApp.Job, to: MyApp.Work, line: 4},
+        %{op: :rename_entity, from: MyApp.Task, to: MyApp.Job, line: 5},
+        %{op: :add_attribute, entity: MyApp.Job, name: :code, type: :integer, opts: [], line: 6}
+      ]
+
+      expected_msg =
+        "required attributes added without a value for existing rows - " <>
+          ":code on MyApp.Job - declare backfill: <value> for a one-time value, " <>
+          "default: <value> to give every row one, or optional: true to leave them empty"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
+    end
+
     test "allows a required attribute carrying a backfill" do
       ops = [
         %{
@@ -1962,6 +2036,53 @@ defmodule Hologram.Entity.ModelTest do
           "empties the role grant store in the same migration"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+  end
+
+  describe "fold/3" do
+    test "skips the filled-adds check when told to" do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :title,
+          type: :string,
+          opts: [],
+          line: 3
+        }
+      ]
+
+      assert %{entities: entities} =
+               fold(task_model(%{}), ops, validate_filled_adds: false)
+
+      assert entities[MyApp.Task].attributes == [{:title, :string, []}]
+    end
+
+    test "keeps the other file checks when told to skip the filled-adds check" do
+      model =
+        fold(empty(), [
+          %{op: :create_entity, entity: MyApp.User, line: 3},
+          %{op: :create_entity, entity: MyApp.Task, line: 4},
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :author,
+            type: MyApp.User,
+            opts: [],
+            line: 5
+          }
+        ])
+
+      ops = [%{op: :delete_entity, entity: MyApp.User, line: 3}]
+
+      expected_msg =
+        "relationship targets deleted at this point in migration history - " <>
+          ":author on MyApp.Task targets MyApp.User - delete the relationship in the " <>
+          "migration that deletes its target, or an earlier one"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        fold(model, ops, validate_filled_adds: false)
+      end
     end
   end
 

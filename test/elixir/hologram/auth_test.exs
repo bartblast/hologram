@@ -3,15 +3,12 @@ defmodule Hologram.AuthTest do
 
   import Hologram.Auth
 
-  require Hologram.Query
-
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
-  alias Hologram.DB.QueryRunner
   alias Hologram.Entity
   alias Hologram.MisuseError
   alias Hologram.Policy
@@ -34,9 +31,22 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module23, as: PolicyCard
   alias Hologram.Test.Fixtures.Policy.Module24, as: PolicyShelf
   alias Hologram.Test.Fixtures.Policy.Module25, as: PolicyProfile
+  alias Hologram.Test.Fixtures.Policy.Module36
+  alias Hologram.Test.Fixtures.Policy.Module37
+  alias Hologram.Test.Fixtures.Policy.Module38
+  alias Hologram.Test.Fixtures.Policy.Module39
   alias Hologram.Test.Fixtures.Policy.Module4
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module8
+  alias Hologram.Test.Fixtures.Policy.Readers.Module20, as: ReadersModule20
+  alias Hologram.Test.Fixtures.Policy.Readers.Module21, as: ReadersModule21
+  alias Hologram.Test.Fixtures.Policy.Readers.Module22, as: ReadersModule22
+  alias Hologram.Test.Fixtures.Policy.Readers.Module23, as: ReadersModule23
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24, as: ReadersModule24
+  alias Hologram.Test.Fixtures.Policy.Readers.Module25, as: ReadersModule25
+  alias Hologram.Test.Fixtures.Policy.Readers.Module26, as: ReadersModule26
+  alias Hologram.Test.Fixtures.Policy.Readers.Module27, as: ReadersModule27
+  alias Hologram.Test.Fixtures.Policy.Readers.Module28, as: ReadersModule28
   alias Hologram.Test.Fixtures.Policy.Readers.Module5, as: ReadersModule5
   alias Hologram.Test.Fixtures.Role
 
@@ -229,6 +239,17 @@ defmodule Hologram.AuthTest do
       assert carried_grants(scopes) == []
     end
 
+    test "returns nothing for a session whose user id no user entity can have" do
+      user = create_user("foreign_actor_4@example.com")
+      resource = create_resource()
+
+      grant_role(user, :editor, resource)
+
+      scopes = MapSet.new([{user.id, {:own, Module1, resource.id}}])
+
+      assert Context.with_actor(7, fn -> carried_grants(scopes) end) == []
+    end
+
     # The scope says which rows to LOOK FOR, the read policy says which the session user may
     # HOLD - so a question about someone else answers with their row only when the asker's own
     # rules admit it.
@@ -275,6 +296,192 @@ defmodule Hologram.AuthTest do
 
     test "denies a framework operation the entity type declares no rule for" do
       refute can?("018f4571-a1b2-7c3d-8e4f-000000000001", :create, %Module1{public: true})
+    end
+
+    test "answers a name by the lines carrying it" do
+      owner = create_user("named-owner@example.com")
+      other = create_user("named-other@example.com")
+
+      channel =
+        [owner_id: owner.id]
+        |> Module36.new()
+        |> DB.create!()
+
+      assert can?(owner, :archive, channel)
+      refute can?(other, :archive, channel)
+    end
+
+    test "answers a named line's operation by it as well" do
+      owner = create_user("named-operation-owner@example.com")
+      other = create_user("named-operation-other@example.com")
+
+      channel =
+        [owner_id: owner.id]
+        |> Module36.new()
+        |> DB.create!()
+
+      assert can?(owner, :update, channel)
+      refute can?(other, :update, channel)
+    end
+
+    test "delegates to a name the related row's lines carry" do
+      owner = create_user("named-delegation-owner@example.com")
+      other = create_user("named-delegation-other@example.com")
+
+      channel =
+        [owner_id: owner.id]
+        |> Module36.new()
+        |> DB.create!()
+
+      message =
+        [channel_id: channel.id]
+        |> Module37.new()
+        |> DB.create!()
+
+      assert can?(owner, :moderate, message)
+      refute can?(other, :moderate, message)
+    end
+
+    # Module36 grants every update of an open channel through a line without the name, which the
+    # name doesn't answer by.
+    test "answers a name by its own lines alone" do
+      owner = create_user("named-alone-owner@example.com")
+      other = create_user("named-alone-other@example.com")
+
+      channel =
+        [name: "open", owner_id: owner.id]
+        |> Module36.new()
+        |> DB.create!()
+
+      assert can?(other, :update, channel)
+      refute can?(other, :archive, channel)
+    end
+
+    # Module37's :moderate line asks the channel's :archive name and its :edit line, a bare via,
+    # asks the channel's :update - so on an open channel anyone may edit but only its owner moderate.
+    test "delegates to a name alone, and through a bare via to the operation" do
+      owner = create_user("named-bare-owner@example.com")
+      other = create_user("named-bare-other@example.com")
+
+      channel =
+        [name: "open", owner_id: owner.id]
+        |> Module36.new()
+        |> DB.create!()
+
+      message =
+        [channel_id: channel.id]
+        |> Module37.new()
+        |> DB.create!()
+
+      assert can?(other, :edit, message)
+      refute can?(other, :moderate, message)
+      assert can?(owner, :moderate, message)
+    end
+
+    # A field-limited line holds for this user, but it covers some fields, not the whole row - so
+    # neither the update nor a delegation asking it counts it.
+    test "counts no field-limited line for a whole-row update" do
+      owner = create_user("limited-owner@example.com")
+      other = create_user("limited-other@example.com")
+
+      channel =
+        [owner_id: owner.id]
+        |> Module38.new()
+        |> DB.create!()
+
+      message =
+        [channel_id: channel.id]
+        |> Module39.new()
+        |> DB.create!()
+
+      assert can?(other, :set_topic, channel)
+      refute can?(other, :update, channel)
+      refute can?(other, :update, message)
+    end
+
+    test "answers a field through the field-limited lines covering it" do
+      user_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
+      channel = %Module38{archived: false, name: "general"}
+
+      assert can?(user_id, {:update, :topic}, channel)
+      assert can?(user_id, {:update, :tags}, channel)
+      refute can?(user_id, {:update, :name}, channel)
+    end
+
+    test "answers a field through the lines covering the whole row" do
+      owner_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
+      other_id = "018f4571-a1b2-7c3d-8e4f-000000000002"
+      channel = %Module38{archived: true, name: "general", owner_id: owner_id}
+
+      assert can?(owner_id, {:update, :archived}, channel)
+      refute can?(other_id, {:update, :archived}, channel)
+    end
+
+    # The except line holds on an open channel and grants what it covers, but leaves :archived out,
+    # so only the line covering the whole row can grant that.
+    test "answers a field an except line leaves out through the other lines" do
+      owner_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
+      other_id = "018f4571-a1b2-7c3d-8e4f-000000000002"
+      channel = %Module38{archived: true, name: "open", owner_id: owner_id}
+
+      assert can?(other_id, {:update, :sent_count}, channel)
+      assert can?(owner_id, {:update, :archived}, channel)
+      refute can?(other_id, {:update, :archived}, channel)
+    end
+
+    # No line that holds here covers both :topic and :name, so the list is granted only by two
+    # lines together.
+    test "answers a list of fields when some holding line covers each" do
+      user_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
+      channel = %Module38{archived: false, name: "general", owner_id: user_id}
+
+      assert can?(user_id, {:update, [:topic, :name]}, channel)
+      refute can?(user_id, {:update, [:topic, :owner]}, channel)
+    end
+
+    test "raises on a field no update of the entity type sets" do
+      expected_msg =
+        "unknown field :owner_id in {:update, :owner_id} for Hologram.Test.Fixtures.Policy.Module38 - the fields an update sets are :archived, :name, :owner, :parent, :sent_count, :tags, :topic"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, :owner_id}, %Module38{})
+      end
+    end
+
+    test "raises on a list of fields naming one that is not an atom" do
+      expected_msg =
+        "unknown field 1 in {:update, [1, :topic]} for Hologram.Test.Fixtures.Policy.Module38 - the fields an update sets are :archived, :name, :owner, :parent, :sent_count, :tags, :topic"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, [1, :topic]}, %Module38{})
+      end
+    end
+
+    test "raises on an update tuple naming a field that is not an atom" do
+      expected_msg =
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, "topic"}, %Module38{})
+      end
+    end
+
+    test "raises on an improper list of fields" do
+      expected_msg =
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, [:topic | :name]}, %Module38{})
+      end
+    end
+
+    test "raises on an update list naming no field" do
+      expected_msg =
+        "unknown operation {:update, []} for Hologram.Test.Fixtures.Policy.Module38 - {:update, fields} names at least one field"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, []}, %Module38{})
+      end
     end
 
     test "matches a rule referencing the acting user" do
@@ -586,7 +793,7 @@ defmodule Hologram.AuthTest do
     # atom nor a role tuple" in test/javascript/elixir/hologram/auth_test.mjs. Always update both.
     test "raises on a role tuple whose members are not atoms" do
       expected_msg =
-        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
         can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:grant_role, "viewer"}, %Module1{
@@ -595,9 +802,20 @@ defmodule Hologram.AuthTest do
       end
     end
 
+    test "raises on a list in a tuple naming no grant lifecycle operation" do
+      expected_msg =
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:delete, [:public]}, %Module1{
+          public: true
+        })
+      end
+    end
+
     test "raises on a tuple that is not a pair" do
       expected_msg =
-        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
         can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:grant_role, :editor, :extra}, %Module1{
@@ -608,7 +826,7 @@ defmodule Hologram.AuthTest do
 
     test "raises on an operation that is neither an atom nor a tuple" do
       expected_msg =
-        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
         can?("018f4571-a1b2-7c3d-8e4f-000000000001", "read", %Module1{public: true})
@@ -617,7 +835,7 @@ defmodule Hologram.AuthTest do
 
     test "raises on an operation the entity type declares no rule for" do
       expected_msg =
-        "unknown operation :transfer for Hologram.Test.Fixtures.Policy.Module1 - its allow lines declare :archive and :publish, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+        "unknown operation :transfer for Hologram.Test.Fixtures.Policy.Module1 - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry the names :archive and :publish"
 
       assert_error MisuseError, expected_msg, fn ->
         can?("018f4571-a1b2-7c3d-8e4f-000000000001", :transfer, %Module1{public: true})
@@ -626,7 +844,7 @@ defmodule Hologram.AuthTest do
 
     test "raises on a tuple whose name is not a grant lifecycle operation" do
       expected_msg =
-        "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+        "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
 
       assert_error MisuseError, expected_msg, fn ->
         can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:publish, :editor}, %Module1{public: true})
@@ -1360,96 +1578,6 @@ defmodule Hologram.AuthTest do
     end
   end
 
-  describe "grants_before/2" do
-    defp grant_effect(op, grant) do
-      data = %{
-        "id" => grant.id,
-        "entity_id" => grant.entity_id,
-        "entity_type" => grant.entity_type && Codec.encode_enum_value(grant.entity_type),
-        "role" => Codec.encode_enum_value(grant.role),
-        "user_id" => grant.user_id
-      }
-
-      %{op: op, type: RoleGrant, entity_id: grant.id, data: data}
-    end
-
-    defp stored_grant(user_id) do
-      RoleGrant
-      |> Query.filter(user_id: ^user_id)
-      |> Stage.normalize()
-      |> QueryRunner.run(DB.mapping())
-      |> hd()
-    end
-
-    test "answers the stored grants when no effect touched them" do
-      user = create_user("user_90@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-
-      assert [grant] = grants_before(user.id, [])
-      assert grant.id == stored_grant(user.id).id
-    end
-
-    test "leaves out a grant created since" do
-      user = create_user("user_91@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-      grant = held_grant(user.id)
-
-      assert grants_before(user.id, [grant_effect(:put_entity, grant)]) == []
-    end
-
-    test "puts back a grant revoked since" do
-      user = create_user("user_92@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-      revoked = stored_grant(user.id)
-      revoke_role(user, :editor, resource)
-
-      assert [grant] = grants_before(user.id, [grant_effect(:del_entity, revoked)])
-      assert grant.id == revoked.id
-      assert grant.entity_id == resource.id
-      assert grant.entity_type == Module1
-      assert grant.role == :editor
-      assert grant.user_id == user.id
-    end
-
-    # Forwards, the creation would be undone before the deletion put it back - leaving a grant
-    # the user never held at the place being asked about.
-    test "answers nothing for a grant given and taken back since" do
-      user = create_user("user_93@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-      grant = held_grant(user.id)
-      revoke_role(user, :editor, resource)
-
-      effects = [grant_effect(:put_entity, grant), grant_effect(:del_entity, grant)]
-
-      assert grants_before(user.id, effects) == []
-    end
-
-    test "answers the grant a revoke and re-grant replaced" do
-      user = create_user("user_94@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-      revoked = stored_grant(user.id)
-      revoke_role(user, :editor, resource)
-      grant_role(user, :owner, resource)
-      current = stored_grant(user.id)
-
-      effects = [grant_effect(:del_entity, revoked), grant_effect(:put_entity, current)]
-
-      assert [grant] = grants_before(user.id, effects)
-      assert grant.id == revoked.id
-      assert grant.role == :editor
-    end
-  end
-
   describe "grant_role/2" do
     test "mints the row's id from the grant" do
       user = create_user("user_117@example.com")
@@ -1545,6 +1673,17 @@ defmodule Hologram.AuthTest do
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(granter.id, fn -> grant_role(user, Role.Module1) end)
+      end
+    end
+
+    test "raises on a global grant issued under a user id no user entity can have" do
+      user = create_user("foreign_actor_1@example.com")
+
+      expected_msg =
+        "global roles are granted only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(7, fn -> grant_role(user, Role.Module1) end)
       end
     end
   end
@@ -1707,6 +1846,20 @@ defmodule Hologram.AuthTest do
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(granter.id, fn -> grant_role(user, :editor, resource) end)
       end
+    end
+
+    test "raises when the acting user id is one no user entity can have" do
+      user = create_user("foreign_actor_2@example.com")
+      resource = create_resource()
+
+      expected_msg =
+        "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)} that may grant :editor"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(7, fn -> grant_role(user, :editor, resource) end)
+      end
+
+      assert grant_rows(user.id) == []
     end
 
     test "raises when the role is above the acting user's own" do
@@ -2447,6 +2600,22 @@ defmodule Hologram.AuthTest do
       end
     end
 
+    test "raises when the acting user id is one no user entity can have" do
+      member = create_user("foreign_actor_3@example.com")
+      resource = create_resource()
+
+      grant_role(member, :editor, resource)
+
+      expected_msg =
+        "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)} that may revoke :editor"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor("abc", fn -> revoke_role(member, :editor, resource) end)
+      end
+
+      assert [%{role: "editor"}] = grant_rows(member.id)
+    end
+
     test "raises when the acting user's role may not revoke it" do
       member = create_user("user_33@example.com")
       other_member = create_user("user_34@example.com")
@@ -2618,7 +2787,7 @@ defmodule Hologram.AuthTest do
 
       allow :read
       allow :delete, when: none(cards)
-      allow :archive, when: none(card <- cards, card.author_id == user_id())
+      allow :update, as: :archive, when: none(card <- cards, card.author_id == user_id())
       allow :update, when: any(card <- cards, card.author_id == user_id())
     end
 
@@ -2641,8 +2810,12 @@ defmodule Hologram.AuthTest do
 
     defp verdict_key(operation, clause), do: Policy.verdict_key(VerdictBoard, operation, clause)
 
-    defp archive_key,
-      do: verdict_key(:archive, {:none, {[:cards], [{:author_id, :==, {:actor}}]}})
+    defp archive_key, do: verdict_key(:archive, archive_clause())
+
+    defp archive_clause, do: {:none, {[:cards], [{:author_id, :==, {:actor}}]}}
+
+    # The archive line is a named update line, so its quantifier is answered under :update too.
+    defp archive_update_key, do: verdict_key(:update, archive_clause())
 
     defp delete_key, do: verdict_key(:delete, {:none, {[:cards], []}})
 
@@ -2651,6 +2824,7 @@ defmodule Hologram.AuthTest do
 
       assert verdicts(user_id, %VerdictBoard{}) == %{
                archive_key() => true,
+               archive_update_key() => true,
                delete_key() => true
              }
     end
@@ -2660,6 +2834,7 @@ defmodule Hologram.AuthTest do
     test "answers a visitor's none naming the actor false" do
       assert verdicts(nil, %VerdictBoard{}) == %{
                archive_key() => false,
+               archive_update_key() => false,
                delete_key() => true
              }
     end
@@ -2686,10 +2861,20 @@ defmodule Hologram.AuthTest do
   end
 
   describe "verdicts/2 for stored rows" do
-    defp policy_verdict_key(operation) do
-      [%{predicates: [clause]}] = Policy.build(PolicyProject)[operation]
+    defp policy_verdict_key(name, key) do
+      [%{predicates: [clause]}] = Policy.build(PolicyProject)[name]
 
-      Policy.verdict_key(PolicyProject, operation, clause)
+      Policy.verdict_key(PolicyProject, key, clause)
+    end
+
+    # The fixture's named lines are limited to :name, so each deciding quantifier is answered under
+    # the field's key as well as under the line's name.
+    defp policy_verdicts(answers) do
+      Map.new(
+        for {name, answer} <- answers,
+            key <- [name, {:update, :name}],
+            do: {policy_verdict_key(name, key), answer}
+      )
     end
 
     test "answers each deciding quantifier over the rows as stored" do
@@ -2700,19 +2885,99 @@ defmodule Hologram.AuthTest do
         |> PolicyLabel.new()
         |> DB.create!()
 
-      assert verdicts(nil, project) == %{
-               policy_verdict_key(:archive) => true,
-               policy_verdict_key(:feature) => true,
-               policy_verdict_key(:publish) => true
-             }
+      assert verdicts(nil, project) ==
+               policy_verdicts(archive: true, feature: true, publish: true)
 
       :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
 
-      assert verdicts(nil, project) == %{
-               policy_verdict_key(:archive) => false,
-               policy_verdict_key(:feature) => true,
-               policy_verdict_key(:publish) => true
-             }
+      assert verdicts(nil, project) ==
+               policy_verdicts(archive: false, feature: true, publish: true)
+    end
+
+    # No client holds a row of a type nobody may read, so the server answers the read rule over the
+    # related row as stored.
+    test "answers a read rule's paths through a type nobody may read over the related row" do
+      user_id = Entity.generate_id()
+      archived_clause = {[:project, :archived], :==, false}
+      steward_clause = {[:project, :steward_id], :==, {:actor}}
+      archived_key = Policy.verdict_key(ReadersModule21, :read, archived_clause)
+      steward_key = Policy.verdict_key(ReadersModule21, :read, steward_clause)
+
+      create = fn entity_type, values ->
+        values
+        |> entity_type.new()
+        |> DB.create!()
+      end
+
+      open = create.(ReadersModule20, %{steward_id: user_id})
+      archived = create.(ReadersModule20, %{archived: true})
+      task = create.(ReadersModule21, %{project_id: open.id})
+      other_task = create.(ReadersModule21, %{project_id: archived.id})
+
+      assert verdicts(user_id, task) == %{archived_key => true, steward_key => true}
+      assert verdicts(user_id, other_task) == %{archived_key => false, steward_key => false}
+      assert verdicts(nil, task) == %{archived_key => true, steward_key => false}
+    end
+
+    # The team's id the role is held on is read off the project, which no client holds.
+    test "answers a read rule's role reference through a type nobody may read over the rows" do
+      holder = create_user("verdict_holder@example.com")
+      other_user = create_user("verdict_other@example.com")
+
+      key =
+        Policy.verdict_key(ReadersModule24, :read, {:to, {:rel, [:project, :team], [:member]}})
+
+      create = fn entity_type, values ->
+        values
+        |> entity_type.new()
+        |> DB.create!()
+      end
+
+      team = create.(ReadersModule22, %{})
+      project = create.(ReadersModule23, %{team_id: team.id})
+      task = create.(ReadersModule24, %{project_id: project.id})
+
+      grant_role(holder, :member, team)
+
+      assert verdicts(holder.id, task) == %{key => true}
+      assert verdicts(other_user.id, task) == %{key => false}
+      assert verdicts(nil, task) == %{key => false}
+    end
+
+    # No client holds a vault or a shelf, so the server answers the parcel's delegations to them
+    # over the rows as stored.
+    test "answers a read rule's delegations through a type nobody may read over the rows" do
+      keeper = create_user("verdict_keeper@example.com")
+      other_user = create_user("verdict_stranger@example.com")
+
+      create = fn entity_type, values ->
+        values
+        |> entity_type.new()
+        |> DB.create!()
+      end
+
+      vault = create.(ReadersModule25, %{keeper_id: keeper.id, open: true})
+      crate = create.(ReadersModule26, %{open: false})
+      shelf = create.(ReadersModule27, %{crate_id: crate.id})
+      parcel = create.(ReadersModule28, %{shelf_id: shelf.id, vault_id: vault.id})
+
+      grant_role(keeper, :member, vault)
+
+      key = &Policy.verdict_key(ReadersModule28, :read, {:via, {&1, &2}})
+
+      expected = fn keeper?, stranger? ->
+        %{
+          key.(:archive, [:vault]) => keeper?,
+          key.(:close, [:vault]) => keeper?,
+          key.(:delete, [:vault]) => stranger?,
+          key.(:read, [:shelf, :crate]) => false,
+          key.(:update, [:vault]) => true
+        }
+      end
+
+      assert verdicts(keeper.id, parcel) == expected.(true, false)
+      assert verdicts(other_user.id, parcel) == expected.(false, true)
+      assert verdicts(nil, parcel) == expected.(false, false)
     end
   end
 end

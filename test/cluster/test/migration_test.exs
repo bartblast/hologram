@@ -11,13 +11,10 @@ defmodule HologramClusterTests.MigrationTest do
   alias Hologram.Migrator
   alias HologramClusterTests.Cluster
 
-  # Every scenario claims the migrations database for a production instance, and the
-  # bootstrap preparing it before the next run refuses a database another env has
-  # claimed - so a scenario leaves the database virgin, whether it passed or failed.
+  # Every scenario claims the migrations database for a production instance, so each one
+  # starts from a virgin database whatever the scenario before it left behind.
   setup do
     reset_migrations_database!()
-
-    on_exit(fn -> reset_migrations_database!() end)
 
     :ok
   end
@@ -66,6 +63,22 @@ defmodule HologramClusterTests.MigrationTest do
       {:ok, %{rows: rows}} = Connection.query(statement, [type_name])
 
       Enum.map(rows, fn [value] -> value end)
+    end)
+  end
+
+  defp index_oid(index) do
+    statement = """
+    SELECT ic.oid
+    FROM pg_catalog.pg_class ic
+    JOIN pg_catalog.pg_namespace n ON n.oid = ic."relnamespace"
+    WHERE n."nspname" = 'hologram_data' AND ic."relname" = $1
+    """
+
+    with_migrations_db(fn ->
+      case Connection.query(statement, [index]) do
+        {:ok, %{rows: [[oid]]}} -> oid
+        {:ok, %{rows: []}} -> :absent
+      end
     end)
   end
 
@@ -163,7 +176,7 @@ defmodule HologramClusterTests.MigrationTest do
   describe "concurrent index build" do
     test "the index builder builds an index on a populated table and it comes out valid" do
       # Through f3: the table stands and carries rows when f4 adds the reference whose index the
-      # index builder then builds concurrently.
+      # index builder then builds concurrently - under the name f6's rename gives it.
       plant_applied_prefix!(3)
 
       insert_item = """
@@ -185,7 +198,7 @@ defmodule HologramClusterTests.MigrationTest do
 
       # Valid, not merely present: a concurrent build that fails partway leaves the
       # index in the catalog serving no query while every write maintains it.
-      assert settled_index_validity("entities_item_parent_id_$idx") == true
+      assert settled_index_validity("entities_item_container_id_$idx") == true
 
       assert Enum.map(applied_version_rows(), fn {version, _applied_at} -> version end) ==
                Enum.map(migrations(), & &1.version)
@@ -193,7 +206,7 @@ defmodule HologramClusterTests.MigrationTest do
 
     test "a build interrupted partway is rebuilt by the next node's index builder" do
       first_peer = start_migration_peer(1)
-      index = "entities_item_parent_id_$idx"
+      index = "entities_item_container_id_$idx"
 
       # Built by the first node's index builder. Then the node stops, so that only the next one's
       # builder can repair the index.
@@ -212,6 +225,33 @@ defmodule HologramClusterTests.MigrationTest do
 
       assert serving?(next_peer)
       assert settled_index_validity(index) == true
+    end
+
+    test "the index builder renames a standing index after a later file renames its reference" do
+      # What a release before f6 leaves: f1 to f4 applied and the reference's index standing,
+      # valid, under the name f4's reference gives it - built here by hand, as that release's
+      # index builder would have. f6 renames the reference, and with it the column the index is
+      # over.
+      plant_applied_prefix!(4)
+
+      old_index = "entities_item_parent_id_$idx"
+      new_index = "entities_item_container_id_$idx"
+
+      create_index =
+        ~s{CREATE INDEX "#{old_index}" ON "hologram_data"."entities_item" ("parent_id")}
+
+      with_migrations_db(fn -> {:ok, _result} = Connection.query(create_index) end)
+
+      oid = index_oid(old_index)
+
+      peer = start_migration_peer(1)
+
+      assert serving?(peer)
+
+      # Renamed, not built again: the same index, by its oid, under the name the plan gives it.
+      assert settled_index_validity(new_index) == true
+      assert index_oid(new_index) == oid
+      assert index_validity(old_index) == :absent
     end
   end
 
@@ -240,7 +280,7 @@ defmodule HologramClusterTests.MigrationTest do
       columns = data_columns("entities_item")
 
       assert "slug" in columns
-      assert "parent_id" in columns
+      assert "container_id" in columns
     end
   end
 
@@ -377,7 +417,7 @@ defmodule HologramClusterTests.MigrationTest do
       # Identical rows, timestamps included: the nodes found the chain applied and
       # recorded nothing of their own.
       assert applied_version_rows() == applied_by_release_step
-      assert length(applied_by_release_step) == 5
+      assert length(applied_by_release_step) == 6
     end
   end
 end

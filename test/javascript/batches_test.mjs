@@ -71,6 +71,7 @@ describe("Batches", () => {
     // resync replaces what the server said and does not change who is signed in. So a test that
     // sets one has to put it back, or it reaches every suite that runs after this file.
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
 
     Replica.reset();
     sinon.restore();
@@ -109,7 +110,6 @@ describe("Batches", () => {
     });
 
     const creating = (id, title) => ({
-      claim: null,
       data: {done: false, title},
       id,
       op: "create",
@@ -452,7 +452,6 @@ describe("Batches", () => {
 
       sealed({
         based_on: {},
-        claim: null,
         id: "t1",
         op: "delete",
         stamp: STAMP,
@@ -468,7 +467,6 @@ describe("Batches", () => {
 
     it("records a confirmed edge in the base", async () => {
       sealed({
-        claim: null,
         id: "t1",
         op: "add_relationship",
         relationship: "tags",
@@ -499,7 +497,6 @@ describe("Batches", () => {
 
       sealed({
         based_on: {title: 99},
-        claim: null,
         data: {title: "mine"},
         id: "t1",
         op: "update",
@@ -535,7 +532,6 @@ describe("Batches", () => {
 
       sealed({
         based_on: {done: 99, title: 99},
-        claim: null,
         id: "t1",
         op: "delete",
         stamp: STAMP,
@@ -576,7 +572,6 @@ describe("Batches", () => {
 
       Batches.current().append({
         based_on: {title: 11},
-        claim: null,
         data: {title: "first"},
         id: "t1",
         op: "update",
@@ -589,7 +584,6 @@ describe("Batches", () => {
 
       Batches.current().append({
         based_on: {done: 10},
-        claim: null,
         data: {done: true},
         id: "t1",
         op: "update",
@@ -1246,7 +1240,6 @@ describe("Batches", () => {
         seq,
         writes: [
           {
-            claim: null,
             data: {done: false, title: "made elsewhere"},
             id,
             op: "create",
@@ -1780,7 +1773,6 @@ describe("Batches", () => {
           seq: 3,
           writes: [
             {
-              claim: null,
               data: {done: false, title: "made elsewhere"},
               id: "t1",
               op: "create",
@@ -1901,7 +1893,6 @@ describe("Batches", () => {
       seq,
       writes: [
         {
-          claim: null,
           data: {done: false, title: "stored"},
           id,
           op: "create",

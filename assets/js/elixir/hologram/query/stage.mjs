@@ -1,8 +1,10 @@
 "use strict";
 
+import Bitstring from "../../../bitstring.mjs";
 import Interpreter from "../../../interpreter.mjs";
 import Model from "../../../model.mjs";
 import Type from "../../../type.mjs";
+import {typeValid} from "../entity.mjs";
 
 // The query stages, hand-written for the client the way the low-level Erlang functions are.
 //
@@ -37,6 +39,18 @@ const SEARCH_OPERATORS = [
   "starts_with_exact",
 ];
 
+// What a value of each type is, as the refusal of a value that doesn't fit it says.
+const TYPE_VALUES = {
+  boolean: "true or false",
+  date: "a Date",
+  datetime: "a DateTime",
+  float: "a float, or an integer that fits in 64 bits",
+  integer: "an integer that fits in 64 bits",
+  string: "a UTF-8 string",
+  time: "a Time",
+  uuid: 'a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001"',
+};
+
 // The type pairs whose attributes compare though their types differ, compared on the wider type -
 // Hologram.Query.Stage's @widenings, and the two must agree.
 const WIDENINGS = [
@@ -51,10 +65,39 @@ function attributeNames(entityType) {
   return Object.keys(Model.entry(entityType).attributes);
 }
 
+// The name an attribute operand reads, as a comparison or a search holds it - null for any other
+// value.
+function attributeOperand(value) {
+  if (isAttributeOperand(value)) {
+    return value.data[1];
+  }
+
+  if (
+    isConstraintTuple(value) &&
+    [
+      ...EQUALITY_OPERATORS,
+      ...ORDERING_OPERATORS,
+      ...SEARCH_OPERATORS,
+    ].includes(value.data[0].value) &&
+    isAttributeOperand(value.data[1])
+  ) {
+    return value.data[1].data[1];
+  }
+
+  return null;
+}
+
 // Another attribute as a predicate's operand, checked the way the server checks it - an ordering
 // comparison needs an orderable attribute, the other one has to be filterable, and the two have to
 // compare. Inside a quantifier the two can live on two rows, so each is looked up where it lives.
-function attributeTriple(name, operator, other, entityType, scope) {
+function attributeTriple(
+  name,
+  operator,
+  other,
+  entityType,
+  scope,
+  hint = null,
+) {
   if (ORDERING_OPERATORS.includes(operator)) {
     validateOrderableAttribute(name, entityType, operator);
   }
@@ -65,7 +108,7 @@ function attributeTriple(name, operator, other, entityType, scope) {
 
   const otherType = nameTypeOf(scope, other);
 
-  validateOperandName(other, otherType);
+  validateOperandName(other, otherType, hint);
   validateComparableAttributes(name, other, operator, entityType, otherType);
 
   // Two compared attributes share a type, so the operand is orderable or searchable when the name
@@ -87,7 +130,9 @@ function attributeType(entityType, name) {
   const derived = Model.derivedField(entityType, name);
   const derivedType = derived?.kind === "scalar" ? derived.type : null;
 
-  return Model.entry(entityType).attributes[name] ?? derivedType ?? "uuid";
+  return (
+    Model.own(Model.entry(entityType).attributes, name) ?? derivedType ?? "uuid"
+  );
 }
 
 function byKey(keyOf) {
@@ -186,7 +231,7 @@ function derivedValueTypes(entityType) {
 
 // One alternative says what its predicates say alone, and an empty one says nothing at all - it
 // would make the disjunction hold for every row - so neither is a disjunction, as on the server.
-function disjunctionClause(alternatives, scope) {
+function disjunctionClause(alternatives, scope, hints) {
   if (alternatives.data.length < 2) {
     Interpreter.raiseMisuseError(
       `a disjunction takes a list of at least two predicate lists, got: ${Interpreter.inspect(alternatives)}`,
@@ -203,7 +248,7 @@ function disjunctionClause(alternatives, scope) {
 
   return {
     or: alternatives.data.map((alternative) =>
-      alternative.data.flatMap((pair) => entryClauses(pair, scope)),
+      alternative.data.flatMap((pair) => entryClauses(pair, scope, hints)),
     ),
   };
 }
@@ -228,7 +273,13 @@ function entityTypeOf(entity, stage) {
 //
 // The scope is the type of the row the predicates are about, then the type of each row above it,
 // nearest first - the queried type last.
-function entryClauses(pair, scope) {
+//
+// A name the query macros left a fix for, or one another row in scope declares, is refused with
+// what reads it. An operand's fix comes ahead of the key - an unknown right side reading a variable
+// stays unknown whichever way the two are swapped - and any other refusal in the order the triple
+// makes it, an operand's row hint handed to the triple. A key's fix is about a comparison with a
+// name, the only one the macros leave it for, so a membership of the same name doesn't take it.
+function entryClauses(pair, scope, hints) {
   const [name, value] = pair.data;
 
   if (
@@ -237,7 +288,7 @@ function entryClauses(pair, scope) {
     Type.isList(value) &&
     value.data.every(Type.isList)
   ) {
-    return [disjunctionClause(value, scope)];
+    return [disjunctionClause(value, scope, hints)];
   }
 
   if (
@@ -245,16 +296,50 @@ function entryClauses(pair, scope) {
     QUANTIFIERS.includes(name.value) &&
     isQuantifierValue(value)
   ) {
-    return [quantifierClause(scope, name.value, value)];
+    return [quantifierClause(scope, name.value, value, hints)];
   }
 
   const entityType = nameTypeOf(scope, name);
   const declaredName = localName(name);
+  const other = attributeOperand(value);
+  const keyFix = other && nameHint(hints, "key", name, scope);
+
+  // A row out of the scope's reach is the triple's to refuse, after the key, as it always was.
+  const otherType = other && reachedNameType(scope, other);
+  const operandFix = otherType && nameHint(hints, "operand", other, scope);
+
+  // The fix is about the name the operand starts at, so of a path only the first hop is checked
+  // here, and the rest where the triple checks it, after the key.
+  if (operandFix) {
+    const otherName = localName(other);
+
+    if (isPath(otherName)) {
+      validatePathHop(otherName.data[0], otherType, operandFix);
+    } else {
+      validateOperandName(other, otherType, operandFix);
+    }
+  }
+
+  const keyHint = keyFix || rowHint(hints, "key", name, entityType, scope);
 
   if (isPath(declaredName)) {
-    validatePath(declaredName, entityType);
+    validatePath(declaredName, entityType, keyHint);
   } else {
-    validateFilteredName(declaredName, entityType);
+    validateFilteredName(declaredName, entityType, keyHint);
+  }
+
+  // An operand another row declares is refused where the triple checks it, with that row's hint.
+  const operandRowHint =
+    otherType &&
+    !operandFix &&
+    rowHint(hints, "operand", other, otherType, scope);
+
+  if (operandRowHint) {
+    const operator = isAttributeOperand(value) ? "==" : value.data[0].value;
+
+    return [
+      attributeTriple(name, operator, other, entityType, scope, operandRowHint),
+    ];
   }
 
   return predicateTriples(name, value, entityType, scope);
@@ -263,7 +348,7 @@ function entryClauses(pair, scope) {
 // The values an enum declares, in their declared order: an enum attribute's, or a derived enum's.
 function enumValues(entityType, name) {
   return (
-    Model.entry(entityType).enumValues[name] ??
+    Model.own(Model.entry(entityType).enumValues, name) ??
     Model.derivedField(entityType, name).values
   );
 }
@@ -298,13 +383,13 @@ function movedValue(entity, name, entityType, delta, stage) {
   );
 }
 
-function orderEntries(spec, entityType) {
+function orderEntries(spec, entityType, hints) {
   if (Type.isAtom(spec)) {
-    return [orderEntry(spec, entityType)];
+    return [orderEntry(spec, entityType, hints)];
   }
 
   if (Type.isList(spec)) {
-    return spec.data.map((entry) => orderEntry(entry, entityType));
+    return spec.data.map((entry) => orderEntry(entry, entityType, hints));
   }
 
   Interpreter.raiseMisuseError(
@@ -314,9 +399,9 @@ function orderEntries(spec, entityType) {
 
 // Every attribute type is an ordering key, enums included: an enum orders by the position of its
 // value in the declared list, which the kernel reads from the model.
-function orderEntry(entry, entityType) {
+function orderEntry(entry, entityType, hints) {
   if (Type.isAtom(entry)) {
-    validateAttributeName(entry, entityType, "ordered");
+    validateAttributeName(entry, entityType, "ordered", sortHint(hints, entry));
 
     return [entry.value, "asc"];
   }
@@ -328,7 +413,7 @@ function orderEntry(entry, entityType) {
   ) {
     const [name, direction] = entry.data;
 
-    validateAttributeName(name, entityType, "ordered");
+    validateAttributeName(name, entityType, "ordered", sortHint(hints, name));
 
     if (!Type.isAtom(direction) || !["asc", "desc"].includes(direction.value)) {
       Interpreter.raiseMisuseError(
@@ -358,6 +443,10 @@ function filterableNames(entityType) {
   ].sort();
 }
 
+function hintSuffix(hint) {
+  return hint === null ? "" : ` - ${hint}`;
+}
+
 // Whether data-form predicates hold the actor leaf anywhere - as a value, an operand, a membership
 // element, inside a disjunction or a quantifier's condition. No attribute value is a one-element
 // tuple, so the leaf can't be anything else.
@@ -372,12 +461,36 @@ function holdsActorLeaf(value) {
   );
 }
 
+function includeHint(hints, name) {
+  const entry = hints.data.find((hint) => {
+    if (!isHintTuple(hint)) {
+      return false;
+    }
+
+    const [position, depth, hintName, fix] = hint.data;
+
+    return (
+      position.value === "include" &&
+      Number(depth.value) === 0 &&
+      Interpreter.isStrictlyEqual(hintName, name) &&
+      Type.isBinary(fix)
+    );
+  });
+
+  return entry ? Bitstring.toText(entry.data[3]) : null;
+}
+
 // A derived field holding a value is included with nothing under it, as null. Any other name is
 // included as its related type's whole term, what the nested spec names included under it - a
 // derived field holding rows takes nested includes only, since its definition states its rows.
-function includeOne(query, name, nestedSpec) {
+function includeOne(query, name, nestedSpec, hints) {
   const term = toTerm(query);
-  const {kind, target} = validateIncludedName(name, term.entity);
+
+  const {kind, target} = validateIncludedName(
+    name,
+    term.entity,
+    includeHint(hints, name),
+  );
 
   if (kind === "derived_value") {
     if (nestedSpec !== null) {
@@ -401,9 +514,9 @@ function includeOne(query, name, nestedSpec) {
 
 // A spec entry is a relationship name or a {name, nested spec} pair. A function would narrow the
 // set, which is what a derived field does - refused naming one.
-function includeSpecEntry(term, entry) {
+function includeSpecEntry(term, entry, hints) {
   if (Type.isAtom(entry)) {
-    return includeOne(term, entry, null);
+    return includeOne(term, entry, null, hints);
   }
 
   if (isConstraintTuple(entry)) {
@@ -415,7 +528,8 @@ function includeSpecEntry(term, entry) {
       );
     }
 
-    return includeOne(term, name, spec);
+    // The macros leave hints for bare names only, so a hint of this name is another element's.
+    return includeOne(term, name, spec, Type.list());
   }
 
   Interpreter.raiseMisuseError(
@@ -485,6 +599,17 @@ function isDerivedString(entityType, name) {
   const derived = Model.derivedField(declared.entityType, declared.name);
 
   return derived?.kind === "scalar" && derived.type === "string";
+}
+
+// A hint the query macros left: a position, a depth, a name, a fix and the spellings - see the
+// name_hint type on the server.
+function isHintTuple(hint) {
+  return (
+    Type.isTuple(hint) &&
+    hint.data.length === 5 &&
+    Type.isAtom(hint.data[0]) &&
+    Type.isInteger(hint.data[1])
+  );
 }
 
 // {:outer, levels, name} with an integer number of levels and an attribute or a path as the name -
@@ -599,6 +724,8 @@ function localName(name) {
 }
 
 function membershipValues(values, name, entityType) {
+  values.forEach((value) => validateOperandValue(name, value, entityType));
+
   return values.map((value) =>
     isStruct(value, "Hologram.Query.Placeholder")
       ? placeholderLeaf(value)
@@ -620,6 +747,30 @@ function mergedSubTerm(included, subTerm) {
   );
 
   return {...included, include};
+}
+
+// The fix the query macros left for the name written in the given position at the depth the scope
+// says, if any - the depth being the quantifiers the clause is nested in. The browser builds no
+// derived field's query, so no row lies outside a filter's clauses.
+function nameHint(hints, position, name, scope) {
+  const depth = scope.length - 1;
+
+  const entry = hints.data.find((hint) => {
+    if (!isHintTuple(hint)) {
+      return false;
+    }
+
+    const [hintPosition, hintDepth, hintName, fix] = hint.data;
+
+    return (
+      hintPosition.value === position &&
+      Number(hintDepth.value) === depth &&
+      Interpreter.isStrictlyEqual(hintName, name) &&
+      Type.isBinary(fix)
+    );
+  });
+
+  return entry ? Bitstring.toText(entry.data[3]) : null;
 }
 
 // The type of what a name reads: an attribute's, or the one a path ends at.
@@ -737,6 +888,7 @@ function operatorTriples(name, tuple, entityType, scope) {
 
   if (EQUALITY_OPERATORS.includes(operator)) {
     validateScalarOperand(name, operator, operand);
+    validateOperandValue(name, operand, entityType);
 
     return [
       [
@@ -762,7 +914,7 @@ function operatorTriples(name, tuple, entityType, scope) {
   if (ORDERING_OPERATORS.includes(operator)) {
     validateOrderableAttribute(name, entityType, operator);
     validateScalarOperand(name, operator, operand, true);
-    validateEnumOperand(name, operand, entityType);
+    validateOperandValue(name, operand, entityType);
 
     return [
       [
@@ -814,6 +966,8 @@ function predicateTriples(name, value, entityType, scope) {
     return listTriples(name, value, entityType, scope);
   }
 
+  validateOperandValue(name, value, entityType);
+
   return [
     [nameValue(name), "==", Model.unbox(value, nameType(entityType, name))],
   ];
@@ -821,7 +975,7 @@ function predicateTriples(name, value, entityType, scope) {
 
 // The source decides the related type the predicates are about, and the rows above them stay in
 // the scope, nearest first.
-function quantifierClause(scope, quantifier, value) {
+function quantifierClause(scope, quantifier, value, hints) {
   const [source, predicates] = value.data;
   const {entityType: sourceType, hops} = sourceStart(scope, source);
   const relatedType = validateSource(hops, sourceType);
@@ -841,7 +995,9 @@ function quantifierClause(scope, quantifier, value) {
   const innerScope = [relatedType, ...scope];
 
   return {
-    filter: predicates.data.flatMap((pair) => entryClauses(pair, innerScope)),
+    filter: predicates.data.flatMap((pair) =>
+      entryClauses(pair, innerScope, hints),
+    ),
     quantifier,
     source: sourceValue(source),
   };
@@ -883,6 +1039,66 @@ function rangeTriples(name, range, entityType) {
   ];
 }
 
+// Where a name is no field of the row it is read on, but another row in scope declares it: the
+// spelling the query macros left for that row - the nearest such. Only an attribute name is looked
+// for elsewhere. The browser builds no derived field's query, so it has no owning row to name.
+// Sibling quantifiers can leave hints that only their spellings tell apart, so every hint of the
+// name at its place and depth is looked at, and a row they spell differently, or one of them leaves
+// unspelled, has no one spelling to name.
+function rowHint(hints, position, name, rowType, scope) {
+  const local = localName(name);
+
+  if (
+    hints.data.length === 0 ||
+    !Type.isAtom(local) ||
+    filterableNames(rowType).includes(local.value)
+  ) {
+    return null;
+  }
+
+  const depth = scope.length - 1;
+
+  const spellingLists = hints.data
+    .filter(
+      (hint) =>
+        isHintTuple(hint) &&
+        hint.data[0].value === position &&
+        Number(hint.data[1].value) === depth &&
+        Interpreter.isStrictlyEqual(hint.data[2], name) &&
+        Type.isList(hint.data[4]) &&
+        hint.data[4].data.length > 0,
+    )
+    .map((hint) => hint.data[4].data);
+
+  if (spellingLists.length === 0) {
+    return null;
+  }
+
+  const ownLevel = isOuterTuple(name) ? Number(name.data[1].value) : 0;
+  const levels = Math.max(...spellingLists.map((list) => list.length));
+
+  for (let level = 0; level < levels; level++) {
+    if (
+      level !== ownLevel &&
+      filterableNames(scope[level]).includes(local.value)
+    ) {
+      const spellings = new Set(
+        spellingLists.map((list) =>
+          level < list.length ? Bitstring.toText(list[level]) : null,
+        ),
+      );
+
+      if (spellings.size !== 1 || spellings.has(null)) {
+        return null;
+      }
+
+      return `${scope[level]} declares ${local.value}, read as ${[...spellings][0]}`;
+    }
+  }
+
+  return null;
+}
+
 function rowsSpelled(count) {
   if (count === 0) {
     return "no row";
@@ -905,6 +1121,20 @@ function settableNames(entityType) {
 
 function structName(value) {
   return field(value, "__struct__").value.replace(/^Elixir\./, "");
+}
+
+// nameTypeOf without the refusal - null for a row out of the scope's reach.
+function reachedNameType(scope, name) {
+  if (!isOuterTuple(name)) {
+    return scope[0];
+  }
+
+  const levelsTerm = name.data[1];
+  const levels = Type.isInteger(levelsTerm) ? Number(levelsTerm.value) : null;
+
+  return levels !== null && levels >= 1 && levels < scope.length
+    ? scope[levels]
+    : null;
 }
 
 function referenceFieldNames(entityType) {
@@ -930,7 +1160,7 @@ function relationshipNames(entityType) {
 function searchTriple(name, operator, operand, entityType) {
   validateSearchableAttribute(name, entityType, operator);
 
-  if (!Type.isBinary(operand)) {
+  if (!Type.isBinary(operand) || !Bitstring.isText(operand)) {
     Interpreter.raiseMisuseError(
       `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${inspectName(name)} - a search term is a string`,
     );
@@ -962,6 +1192,25 @@ function setViewBound(query, field, value) {
   }
 
   return {...term, [field]: Number(value.value)};
+}
+
+function sortHint(hints, name) {
+  const entry = hints.data.find((hint) => {
+    if (!isHintTuple(hint)) {
+      return false;
+    }
+
+    const [position, depth, hintName, fix] = hint.data;
+
+    return (
+      position.value === "sort" &&
+      Number(depth.value) === 0 &&
+      Interpreter.isStrictlyEqual(hintName, name) &&
+      Type.isBinary(fix)
+    );
+  });
+
+  return entry ? Bitstring.toText(entry.data[3]) : null;
 }
 
 function sortedClause(clause) {
@@ -1092,26 +1341,6 @@ function toTerm(query) {
     sort: [],
     take: null,
   };
-}
-
-// A second claim is refused where it is written: a struct carrying two authorities would have to
-// pick one at the write, silently.
-function putClaim(entity, claim, stage) {
-  const entityType = entityTypeOf(entity, stage);
-  const metadata = field(entity, "__meta__");
-  const recorded = field(metadata, "claim");
-
-  if (!Type.isNil(recorded)) {
-    Interpreter.raiseMisuseError(
-      `${entityType} already carries a claim (${Interpreter.inspect(recorded)}) - a write claims exactly one authority`,
-    );
-  }
-
-  return putField(
-    entity,
-    Type.atom("__meta__"),
-    putField(metadata, Type.atom("claim"), claim),
-  );
 }
 
 // The two counter stages share everything but the sign they record. A sum that reaches zero is
@@ -1254,7 +1483,7 @@ function putPairs(values, stage) {
   return entries;
 }
 
-function validateAttributeName(name, entityType, usage) {
+function validateAttributeName(name, entityType, usage, hint) {
   const orderableDerivedNames = Object.entries(derivedValueTypes(entityType))
     .filter(([_name, type]) => type !== "string")
     .map(([derivedName]) => derivedName);
@@ -1276,7 +1505,7 @@ function validateAttributeName(name, entityType, usage) {
 
   if (relationshipNames(entityType).includes(name.value)) {
     Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(name)} is a relationship in ${entityType} - only attributes can be ${usage}`,
+      `${Interpreter.inspect(name)} is a relationship in ${entityType} - only attributes can be ${usage}${hintSuffix(hint)}`,
     );
   }
 
@@ -1291,7 +1520,7 @@ function validateAttributeName(name, entityType, usage) {
   const known = names.map((known) => `:${known}`).join(", ");
 
   Interpreter.raiseMisuseError(
-    `unknown attribute ${Interpreter.inspect(name)} in ${entityType} - known attributes: ${known}`,
+    `unknown attribute ${Interpreter.inspect(name)} in ${entityType} - known attributes: ${known}${hintSuffix(hint)}`,
   );
 }
 
@@ -1352,24 +1581,28 @@ function validateComparableAttributes(
   }
 }
 
-function validateFilteredName(name, entityType) {
+// A hint is added where the name is no attribute at all - unknown, or a relationship's.
+function validateFilteredName(name, entityType, hint = null) {
   const names = filterableNames(entityType);
 
   if (names.includes(name.value)) {
     return;
   }
 
-  const relationship = Model.entry(entityType).relationships[name.value];
+  const relationship = Model.own(
+    Model.entry(entityType).relationships,
+    name.value,
+  );
 
   if (relationship && !relationship.toMany) {
     Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(name)} is a relationship in ${entityType} - only attributes can be filtered - filter its reference via :${name.value}_id`,
+      `${Interpreter.inspect(name)} is a relationship in ${entityType} - only attributes can be filtered - filter its reference via :${name.value}_id${hintSuffix(hint)}`,
     );
   }
 
   if (relationship || Object.hasOwn(Model.inverses(entityType), name.value)) {
     Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(name)} is a relationship in ${entityType} - only attributes can be filtered`,
+      `${Interpreter.inspect(name)} is a relationship in ${entityType} - only attributes can be filtered${hintSuffix(hint)}`,
     );
   }
 
@@ -1384,32 +1617,14 @@ function validateFilteredName(name, entityType) {
   const known = names.map((known) => `:${known}`).join(", ");
 
   Interpreter.raiseMisuseError(
-    `unknown attribute ${Interpreter.inspect(name)} in ${entityType} - known attributes: ${known}`,
+    `unknown attribute ${Interpreter.inspect(name)} in ${entityType} - known attributes: ${known}${hintSuffix(hint)}`,
   );
-}
-
-// A comparison operand on an enum is one of the values it declares, refused where it is written
-// rather than where it is run: the database refuses an undeclared label too, but only once the
-// statement reaches it, and by then nothing can name the values there were to choose from.
-function validateEnumOperand(name, operand, entityType) {
-  if (nameType(entityType, name) !== "enum") {
-    return;
-  }
-
-  const declared = subject(entityType, name);
-  const values = enumValues(declared.entityType, declared.name);
-
-  if (!values.includes(Model.unbox(operand, "enum"))) {
-    Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(operand)} is not a value of attribute ${inspectName(name)} in ${entityType} - the values are ${inspectEnumValues(values)}`,
-    );
-  }
 }
 
 // A stored relationship or an inverse - a set of either is included as a to-many, a single
 // inverse as a to-one - or a derived field: one holding rows is included as its rows' type, one
 // holding a value as its type.
-function validateIncludedName(name, entityType) {
+function validateIncludedName(name, entityType, hint = null) {
   const entry = Model.entry(entityType);
 
   const relationship = Object.hasOwn(entry.relationships, name.value)
@@ -1435,7 +1650,7 @@ function validateIncludedName(name, entityType) {
 
   if (attributeNames(entityType).includes(name.value)) {
     Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(name)} is an attribute in ${entityType} - only relationships and derived fields can be included`,
+      `${Interpreter.inspect(name)} is an attribute in ${entityType} - only relationships and derived fields can be included${hintSuffix(hint)}`,
     );
   }
 
@@ -1446,7 +1661,7 @@ function validateIncludedName(name, entityType) {
     .join(", ");
 
   Interpreter.raiseMisuseError(
-    `unknown relationship ${Interpreter.inspect(name)} in ${entityType} - known relationships and derived fields: ${known}`,
+    `unknown relationship ${Interpreter.inspect(name)} in ${entityType} - known relationships and derived fields: ${known}${hintSuffix(hint)}`,
   );
 }
 
@@ -1492,6 +1707,9 @@ function validateMembershipRange(range, name, entityType) {
       `range ${Interpreter.inspect(range)} for attribute ${inspectName(name)} is empty - it would match nothing`,
     );
   }
+
+  validateOperandValue(name, field(range, "first"), entityType);
+  validateOperandValue(name, field(range, "last"), entityType);
 }
 
 // A derived field holds no reference, so no relationship goes through it - a related row it holds
@@ -1506,11 +1724,11 @@ function validateNotDerivedHop(hop, entityType, reason) {
 
 // What an attribute operand names - another attribute of the row, or a path to one - refused in the
 // words a predicate's own name is, quoted as written, a row above's wrapper included.
-function validateOperandName(operandName, entityType) {
+function validateOperandName(operandName, entityType, hint = null) {
   const name = localName(operandName);
 
   if (Type.isAtom(name)) {
-    validateFilteredName(name, entityType);
+    validateFilteredName(name, entityType, hint);
 
     return;
   }
@@ -1521,7 +1739,51 @@ function validateOperandName(operandName, entityType) {
     );
   }
 
-  validatePath(name, entityType);
+  validatePath(name, entityType, hint);
+}
+
+// A value compared with a name fits the type of what the name reads, refused where it is written
+// rather than where it is run, as on the server: the browser would otherwise unbox it into a value
+// that compares as something else, like "yes" against a boolean matching the false rows. An enum's
+// value is one of the values it declares, which the refusal lists. Nil and a placeholder's value
+// are judged elsewhere, nil by the operator taking it and a placeholder's when the query is built
+// with real values. A float takes an integer too, the same number when compared.
+function validateOperandValue(name, value, entityType) {
+  if (Type.isNil(value) || isStruct(value, "Hologram.Query.Placeholder")) {
+    return;
+  }
+
+  const type = nameType(entityType, name);
+
+  if (type === "enum") {
+    const declared = subject(entityType, name);
+    const values = enumValues(declared.entityType, declared.name);
+
+    // Compared as atoms, as on the server: a label unboxes the module Status.Done and the plain
+    // atom :"Status.Done" alike.
+    const declaredValue =
+      Type.isAtom(value) &&
+      values.some((label) => Model.boxEnumValue(label).value === value.value);
+
+    if (!declaredValue) {
+      Interpreter.raiseMisuseError(
+        `${Interpreter.inspect(value)} is not a value of attribute ${inspectName(name)} in ${entityType} - the values are ${inspectEnumValues(values)}`,
+      );
+    }
+
+    return;
+  }
+
+  const fits =
+    type === "float"
+      ? Type.isFloat(value) || typeValid(value, "integer")
+      : typeValid(value, type);
+
+  if (!fits) {
+    Interpreter.raiseMisuseError(
+      `${Interpreter.inspect(value)} is not a value of attribute ${inspectName(name)} in ${entityType} - the attribute has type :${type}, which takes ${TYPE_VALUES[type]}`,
+    );
+  }
 }
 
 // The types an ordering line can be drawn through: every type but boolean and uuid has an order
@@ -1545,29 +1807,38 @@ function validateOrderableAttribute(name, entityType, operator) {
 
 // A path is followed hop by hop from the queried type, each hop a to-one relationship of the type
 // the hops before it lead to, and its last name is filterable on the type it ends at - so every
-// refusal names the type it was asked of, as on the server.
-function validatePath(path, entityType) {
+// refusal names the type it was asked of, as on the server. A hint is about the name the path
+// starts at, so only its first hop takes it.
+function validatePath(path, entityType, hint = null) {
   const names = path.data;
 
   const endType = names
     .slice(0, -1)
-    .reduce((type, hop) => validatePathHop(hop, type), entityType);
+    .reduce(
+      (type, hop, index) =>
+        validatePathHop(hop, type, index === 0 ? hint : null),
+      entityType,
+    );
 
   validateFilteredName(names[names.length - 1], endType);
 }
 
-function validatePathHop(hop, entityType) {
+// A hint - a forgotten pin the hop's name could also be - follows whichever refusal the hop meets.
+function validatePathHop(hop, entityType, hint = null) {
   if (Object.hasOwn(Model.inverses(entityType), hop.value)) {
     Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(hop)} is an inverse relationship in ${entityType} - a path in a condition goes through to-one relationships that hold their reference`,
+      `${Interpreter.inspect(hop)} is an inverse relationship in ${entityType} - a path in a condition goes through to-one relationships that hold their reference${hintSuffix(hint)}`,
     );
   }
 
-  const relationship = Model.entry(entityType).relationships[hop.value];
+  const relationship = Model.own(
+    Model.entry(entityType).relationships,
+    hop.value,
+  );
 
   if (relationship && relationship.toMany) {
     Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(hop)} is a to-many relationship in ${entityType} - a path in a condition goes through to-one relationships only`,
+      `${Interpreter.inspect(hop)} is a to-many relationship in ${entityType} - a path in a condition goes through to-one relationships only${hintSuffix(hint)}`,
     );
   }
 
@@ -1577,14 +1848,14 @@ function validatePathHop(hop, entityType) {
 
   if (attributeNames(entityType).includes(hop.value)) {
     Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(hop)} is an attribute in ${entityType} - a path goes through relationships, and only its last name is an attribute`,
+      `${Interpreter.inspect(hop)} is an attribute in ${entityType} - a path goes through relationships, and only its last name is an attribute${hintSuffix(hint)}`,
     );
   }
 
   validateNotDerivedHop(
     hop,
     entityType,
-    "a path in a condition goes through to-one relationships that hold their reference",
+    `a path in a condition goes through to-one relationships that hold their reference${hintSuffix(hint)}`,
   );
 
   const known = relationshipNames(entityType)
@@ -1592,7 +1863,7 @@ function validatePathHop(hop, entityType) {
     .join(", ");
 
   Interpreter.raiseMisuseError(
-    `unknown relationship ${Interpreter.inspect(hop)} in ${entityType} - known relationships: ${known}`,
+    `unknown relationship ${Interpreter.inspect(hop)} in ${entityType} - known relationships: ${known}${hintSuffix(hint)}`,
   );
 }
 
@@ -1674,7 +1945,7 @@ function validateSourceSet(name, entityType) {
     );
   }
 
-  const relationship = Model.relationships(entityType)[name.value];
+  const relationship = Model.own(Model.relationships(entityType), name.value);
 
   if (relationship && relationship.toMany) {
     return relationship.type;
@@ -1872,23 +2143,6 @@ const Elixir_Hologram_Query_Stage = {
       "add_relationship",
     ),
 
-  "authorize/2": (entity, operation) => {
-    if (!Type.isAtom(operation)) {
-      Interpreter.raiseMisuseError(
-        `authorize takes an operation atom, got: ${Interpreter.inspect(operation)}`,
-      );
-    }
-
-    // The entity refusal wins, then the operation's, then the double-claim's - the server's order.
-    Model.validateOperation(entityTypeOf(entity, "authorize"), operation);
-
-    return putClaim(
-      entity,
-      Type.tuple([Type.atom("authorize"), operation]),
-      "authorize",
-    );
-  },
-
   "count/1": (query) => setCardinality(query, "count"),
 
   "decrement/3": (entity, name, amount) =>
@@ -1903,7 +2157,12 @@ const Elixir_Hologram_Query_Stage = {
       "delete_relationship",
     ),
 
-  "filter/2": (query, predicates) => {
+  "filter/2": (query, predicates) =>
+    Elixir_Hologram_Query_Stage["filter/3"](query, predicates, Type.list()),
+
+  // The hints say what the query macros saw where the predicates were written, which a refusal of
+  // a name can name instead. They never reach the term.
+  "filter/3": (query, predicates, hints) => {
     const term = toTerm(query);
 
     if (!isPredicateList(predicates)) {
@@ -1922,14 +2181,19 @@ const Elixir_Hologram_Query_Stage = {
     }
 
     const clauses = predicates.data.flatMap((pair) =>
-      entryClauses(pair, [term.entity]),
+      entryClauses(pair, [term.entity], hints),
     );
 
     return {...term, filter: [...term.filter, ...clauses]};
   },
-  "include/2": (query, spec) => {
+  "include/2": (query, spec) =>
+    Elixir_Hologram_Query_Stage["include/3"](query, spec, Type.list()),
+
+  // The hints are filter/3's, about the names the spec was written with - only its own, since a
+  // nested spec is pinned whole or built from paths, neither of which the macros leave hints for.
+  "include/3": (query, spec, hints) => {
     if (Type.isAtom(spec)) {
-      return includeOne(query, spec, null);
+      return includeOne(query, spec, null, hints);
     }
 
     if (Type.isList(spec)) {
@@ -1937,7 +2201,10 @@ const Elixir_Hologram_Query_Stage = {
         Interpreter.raiseMisuseError("include spec must not be empty");
       }
 
-      return spec.data.reduce(includeSpecEntry, toTerm(query));
+      return spec.data.reduce(
+        (term, entry) => includeSpecEntry(term, entry, hints),
+        toTerm(query),
+      );
     }
 
     Interpreter.raiseMisuseError(
@@ -1972,16 +2239,20 @@ const Elixir_Hologram_Query_Stage = {
 
   "skip/2": (query, value) => setViewBound(query, "skip", value),
 
-  "sort/2": (query, spec) => {
+  "sort/2": (query, spec) =>
+    Elixir_Hologram_Query_Stage["sort/3"](query, spec, Type.list()),
+
+  // The hints are filter/3's, about the names the spec was written with.
+  "sort/3": (query, spec, hints) => {
     const term = toTerm(query);
 
-    return {...term, sort: orderEntries(spec, term.entity)};
+    return {...term, sort: orderEntries(spec, term.entity, hints)};
   },
 
   "take/2": (query, value) => setViewBound(query, "take", value),
 
   // Both forms the server accepts - an entity struct and a query - are refused here, in the wire's
-  // own words. Trust is the SERVER's authority: a batch claiming it is refused by name, and a read
+  // own words. Trust is the SERVER's authority: a batch carries no claim at all, and a read
   // claiming it would be asking this client's copy of the data to answer past the policies that
   // decided what it holds. A helper reaching for it learns at its own line that it is server code.
   "trust/1": (_subject) => {

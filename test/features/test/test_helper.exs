@@ -42,8 +42,9 @@ ExUnit.start(exclude: exclude_opts)
 
 # Boot the feature test database before the app starts: the feature app declares
 # entities, which activates the Hologram database - the database itself must exist
-# before the pool connects, and the schema drop makes every run converge from scratch.
-# Positioned after ExUnit.start - the drop guard recognizes the test env by the running
+# before the pool connects. Each run gets a fresh database of its own, so every run
+# converges from scratch and runs that overlap leave each other's tables alone.
+# Positioned after ExUnit.start - the env guard recognizes the test env by the running
 # ExUnit server.
 Hologram.Test.DatabaseBootstrap.run!()
 

@@ -20,12 +20,19 @@ import Overlay from "./overlay.mjs";
 const SEPARATOR = "\u0000";
 
 export default class LocalDatabase {
-  // Who the client is, for the predicates that name the acting user - nil for a visitor. It
-  // arrives with the page rather than with the rows, and a resync does not clear it: what the
-  // client may see can change without anyone becoming someone else.
+  // Who the client is, the session's user id as it is - nil for a visitor. It names whose rows and
+  // queued writes this database holds. It arrives with the page rather than with the rows, and a
+  // resync does not clear it: what the client may see can change without anyone becoming someone
+  // else.
   static actorUserId = null;
 
-  // What the render that handed this page over counted, keyed by the prop instance that asked -
+  // The same user as the data layer reads them - the id of a user entity, or null for a visitor and
+  // for a user id no user entity can have, like an app's own serial id. The rules, the grants and
+  // the session user ask about this one, the way the server's data layer does; who owns the rows
+  // and the queued writes is the id above, which keeps two such users of one browser apart.
+  static actorEntityId = null;
+
+  // What the render that handed this page over counted, keyed by the field and the query it ran -
   // held until this client's own database is complete enough to count for itself.
   static syncCounts = {};
 
