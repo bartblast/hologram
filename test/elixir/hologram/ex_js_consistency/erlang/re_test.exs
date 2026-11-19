@@ -908,6 +908,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert :re.run(<<97, 233>>, <<233>>, [{:capture, :all, :binary}]) == {:match, [<<233>>]}
     end
 
+    test "returns the whole subject with the binary type in byte mode" do
+      assert :re.run(<<233, 0, 255>>, ".+", [{:capture, :all, :binary}]) ==
+               {:match, [<<233, 0, 255>>]}
+    end
+
+    test "returns the UTF-8 bytes of a text subject with the binary type in byte mode" do
+      assert :re.run("aéb", <<0xA9>>, [{:capture, :all, :binary}]) == {:match, [<<0xA9>>]}
+    end
+
+    test "returns raw bytes of an iodata subject with the binary type in byte mode" do
+      assert :re.run([<<97>>, <<233, 98>>], "[^a]+", [{:capture, :all, :binary}]) ==
+               {:match, [<<233, 98>>]}
+    end
+
     test "returns code points with the list type in unicode mode" do
       assert :re.run("a😀", "(😀)", [:unicode, {:capture, :all, :list}]) ==
                {:match, [[128_512], [128_512]]}

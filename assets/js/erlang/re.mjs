@@ -657,13 +657,20 @@ const Erlang_Re = {
           case "binary": {
             if (capture === null) return Type.bitstring("");
 
-            const slice = subjectText.slice(capture.start, capture.end);
+            if (entry.unicode) {
+              return Type.bitstring(
+                subjectText.slice(capture.start, capture.end),
+              );
+            }
 
-            return entry.unicode
-              ? Type.bitstring(slice)
-              : Bitstring.fromBytes(
-                  [...slice].map((char) => char.charCodeAt(0)),
-                );
+            // In byte mode a capture of a binary subject shares its bytes,
+            // like a sub-binary. The binary built from an iolist subject
+            // lives only for this run, so its captures get their own copy.
+            const bytes = Type.isBinary(subject)
+              ? subjectBinary.bytes.subarray(capture.start, capture.end)
+              : subjectBinary.bytes.slice(capture.start, capture.end);
+
+            return Bitstring.fromBytes(bytes);
           }
 
           case "index": {

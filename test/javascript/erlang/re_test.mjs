@@ -1860,6 +1860,40 @@ describe("Erlang_Re", () => {
       assert.deepEqual(result, matchTuple([Bitstring.fromBytes([233])]));
     });
 
+    it("returns the whole subject with the binary type in byte mode", () => {
+      const subject = Bitstring.fromBytes([233, 0, 255]);
+
+      const result = run(subject, Type.bitstring(".+"), [
+        captureOption(Type.atom("all"), "binary"),
+      ]);
+
+      assert.deepEqual(
+        result,
+        matchTuple([Bitstring.fromBytes([233, 0, 255])]),
+      );
+    });
+
+    it("returns the UTF-8 bytes of a text subject with the binary type in byte mode", () => {
+      const result = run(Type.bitstring("aéb"), Bitstring.fromBytes([0xa9]), [
+        captureOption(Type.atom("all"), "binary"),
+      ]);
+
+      assert.deepEqual(result, matchTuple([Bitstring.fromBytes([0xa9])]));
+    });
+
+    it("returns raw bytes of an iodata subject with the binary type in byte mode", () => {
+      const subject = Type.list([
+        Bitstring.fromBytes([97]),
+        Bitstring.fromBytes([233, 98]),
+      ]);
+
+      const result = run(subject, Type.bitstring("[^a]+"), [
+        captureOption(Type.atom("all"), "binary"),
+      ]);
+
+      assert.deepEqual(result, matchTuple([Bitstring.fromBytes([233, 98])]));
+    });
+
     it("returns code points with the list type in unicode mode", () => {
       const result = run(Type.bitstring("a😀"), Type.bitstring("(😀)"), [
         Type.atom("unicode"),
