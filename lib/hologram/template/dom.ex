@@ -411,9 +411,10 @@ defmodule Hologram.Template.DOM do
   defp tag_name_source(tag_name), do: tag_name
 
   defp track_nesting({:end_tag, tag_name} = closer, stack) do
-    # The parser reads the start tag of a void element as self-closing, so its end tag can never
-    # close anything. Checked on the name as written, the same test the parser uses.
-    if is_binary(tag_name) and Helpers.void_element?(tag_name) do
+    # The parser reads the start tag of a void element as self-closing, testing the name as written,
+    # so a void element's end tag closes something only when its start tag is spelled in another
+    # case, like <iNPUT></input>. Any other one is refused as an end tag the element can't have.
+    if void_end_tag?(tag_name) and not Enum.any?(stack, &matches_closer?(&1, closer)) do
       raise TemplateSyntaxError,
         message: "</#{tag_name}> isn't allowed, since <#{tag_name}> has no end tag"
     end
@@ -458,5 +459,19 @@ defmodule Hologram.Template.DOM do
               ~s'the <#{tag_name}> tag accepts only event bindings, but got the "#{name}" attribute'
         end
     end)
+  end
+
+  defp void_end_tag?({:expression, _source}), do: false
+
+  # An element's name has no case, so its end tag is void however it's spelled. A component's name
+  # is a module alias, and a component always has an end tag.
+  defp void_end_tag?(tag_name) do
+    if Helpers.tag_type(tag_name) == :element do
+      tag_name
+      |> String.downcase()
+      |> Helpers.void_element?()
+    else
+      false
+    end
   end
 end

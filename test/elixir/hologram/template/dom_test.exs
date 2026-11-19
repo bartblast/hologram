@@ -2199,6 +2199,15 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
+    test "void element end tag closes a start tag the parser didn't read as void" do
+      # <iNPUT></input>
+      tags = [{:start_tag, {"iNPUT", []}}, {:end_tag, "input"}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "input", [key(tags, 0)], []]}
+             ]
+    end
+
     test "dynamic tag closed with the same expression spaced differently" do
       # <{@tag}></{ @tag }>
       tags = [
@@ -2280,6 +2289,15 @@ defmodule Hologram.Template.DOMTest do
                    fn -> build_ast(tags) end
     end
 
+    test "raises on the end tag of a void element spelled in another case" do
+      # <input></iNPUT>
+      tags = [{:self_closing_tag, {"input", []}}, {:end_tag, "iNPUT"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</iNPUT> isn't allowed, since <iNPUT> has no end tag",
+                   fn -> build_ast(tags) end
+    end
+
     test "raises on the end tag of a slot" do
       # <slot></slot>
       tags = [{:self_closing_tag, {"slot", []}}, {:end_tag, "slot"}]
@@ -2313,6 +2331,15 @@ defmodule Hologram.Template.DOMTest do
 
       assert_error Hologram.TemplateSyntaxError,
                    "</mycomponent> has no matching <mycomponent> inside the <MyComponent> tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a stray component end tag named like a void element" do
+      # <div></Link></div>
+      tags = [{:start_tag, {"div", []}}, {:end_tag, "Link"}, {:end_tag, "div"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</Link> has no matching <Link> inside the <div> tag",
                    fn -> build_ast(tags) end
     end
 
