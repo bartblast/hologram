@@ -1284,7 +1284,13 @@ defmodule Hologram.DB.IndexPlanTest do
         need(@module4, ["a"])
       ]
 
-      assert map_size(select(needs, @mapping)[@module4]) == 2
+      columns =
+        select(needs, @mapping)[@module4]
+        |> Map.values()
+        |> Enum.map(& &1.columns)
+        |> Enum.sort()
+
+      assert columns == [["a", "d", "c", "b"], ["d", "a", "b", "c"]]
     end
 
     test "serves a need from an index whose leading columns it fixes" do
