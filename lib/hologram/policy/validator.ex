@@ -497,7 +497,9 @@ defmodule Hologram.Policy.Validator do
   defp validate_entity_policies!(entity_type) do
     lines = Enum.zip(entity_type.__policies__(), entity_type.__policy_sources__())
 
-    Enum.each(lines, &validate_policy_line!(entity_type, &1))
+    lines
+    |> Enum.zip(entity_type.__policy_hints__())
+    |> Enum.each(&validate_policy_line!(entity_type, &1))
 
     validate_rule_names!(entity_type, lines)
   end
@@ -600,7 +602,7 @@ defmodule Hologram.Policy.Validator do
 
   defp validate_policy_line!(
          entity_type,
-         {{operation, to, via, predicates, name, fields}, source}
+         {{{operation, to, via, predicates, name, fields}, source}, hints}
        ) do
     # Every refusal below names the line as written and where it lives, a named line by its name and
     # a field-limited one with its fields, so two lines of one operation can be told apart:
@@ -616,17 +618,17 @@ defmodule Hologram.Policy.Validator do
 
     validate_to!(entity_type, to, where)
     validate_via!(entity_type, operation, via, where)
-    validate_predicates!(entity_type, operation, name, predicates, where)
+    validate_predicates!(entity_type, operation, name, predicates, hints, where)
     validate_gate_operation!(entity_type, operation, to, via, predicates, where)
   end
 
-  defp validate_predicates!(entity_type, operation, name, predicates, where) do
+  defp validate_predicates!(entity_type, operation, name, predicates, hints, where) do
     predicates
     |> unquantified_predicates()
     |> Stage.written_names()
     |> Enum.each(&validate_set_free_name!(entity_type, &1))
 
-    clauses = Stage.predicate_triples!(entity_type, predicates)
+    clauses = Stage.predicate_triples!(entity_type, predicates, hints)
 
     validate_server_only_predicates!(entity_type, {operation, name}, clauses, where)
 

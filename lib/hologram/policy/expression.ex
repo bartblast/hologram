@@ -35,14 +35,18 @@ defmodule Hologram.Policy.Expression do
   element of a `to:` list, a pinned role or scope of a grant reference and a pinned operation or
   relationship of a delegation lower to the expression.
   `__MODULE__` names a module wherever a module goes. A nil `to:` or `via:` value and a list
-  element that is not a keyword entry pass through for the declaration to refuse.
+  element that is not a keyword entry pass through for the declaration to refuse. A `when:`
+  condition with names a refusal can hint at (see `Hologram.Query.Expression.condition_hints/2`)
+  adds a `__name_hints__:` entry holding the hints, which the entity type keeps beside the line.
 
   Raises Hologram.CompileError, located at the offending node, on options not written in place, on
   an option written twice (only one would be read, so the line would grant more than it says), on
   an unknown option (naming the condition it can mean when its value is an equality operand), on a
   grant reference with the scope first or a relationship written as an atom, on a role written as
   a bare name, on a delegation written as an atom, on a delegation with the relationship first or
-  with an operation that is not an atom, and on anything else.
+  with an operation that is not an atom, on a pinned bare name no variable of the surrounding code
+  holds where `via:` names a relationship (naming the bare spelling), on what
+  `Hologram.Query.Expression.condition/2` refuses in a `when:`, and on anything else.
   """
   @spec spec(Macro.t(), Macro.t(), Macro.Env.t()) :: Macro.t()
   def spec(operation, spec, env) when is_list(spec) do
@@ -53,7 +57,7 @@ defmodule Hologram.Policy.Expression do
         {option!(element, operation, env), seen_keys}
       end)
 
-    options
+    options ++ name_hints(spec, env)
   end
 
   def spec(operation, spec, env) do
@@ -208,6 +212,26 @@ defmodule Hologram.Policy.Expression do
   defp module?(_ast), do: false
 
   defp name_atom?(atom), do: is_atom(atom) and atom not in [nil, true, false]
+
+  # What the condition was written with, which a refusal of a name in it can add when the model is
+  # validated - carried in the spec, which is what reaches the entity type, replayed or not, under
+  # a key no option is spelled as.
+  # A spec holding anything but options is refused when the line is declared, printing it whole -
+  # hints added to it would only show there.
+  defp name_hints(spec, env) do
+    keyword? = Enum.all?(spec, &match?({key, _value} when is_atom(key), &1))
+
+    case keyword? && List.keyfind(spec, :when, 0) do
+      {:when, condition} ->
+        case QueryExpression.condition_hints(condition, env) do
+          [] -> []
+          hints -> [{:__name_hints__, Macro.escape(hints)}]
+        end
+
+      _no_condition ->
+        []
+    end
+  end
 
   defp option!({:as, value}, _operation, env), do: {:as, rule_name!(value, env)}
 

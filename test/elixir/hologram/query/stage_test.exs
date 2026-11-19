@@ -2422,6 +2422,553 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  describe "filter/3" do
+    @fix "a value from the surrounding code is pinned: ^search"
+
+    test "builds the term filter/2 builds" do
+      assert filter(Module2, [b: {:>, 1}], [{:key, 0, :b, @fix, []}]) ==
+               filter(Module2, b: {:>, 1})
+    end
+
+    test "names the fix a hint gives when it refuses an unknown attribute on the right side" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [c: {:==, {:attribute, :search}}], [{:operand, 0, :search, @fix, []}])
+      end
+    end
+
+    test "names the fix a hint gives when it refuses an unknown attribute on the left side" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [search: {:==, {:attribute, :c}}], [{:key, 0, :search, @fix, []}])
+      end
+    end
+
+    test "names the fix a hint gives when it refuses a relationship" do
+      expected_msg =
+        ":b is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered - filter its reference via :b_id - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module3, [c_id: {:==, {:attribute, :b}}], [{:operand, 0, :b, @fix, []}])
+      end
+    end
+
+    test "names the fix a hint gives when it refuses a path's first relationship" do
+      expected_msg =
+        "unknown relationship :user in Hologram.Test.Fixtures.Entity.Module3 - known relationships: :a, :b, :c - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module3, [c_id: {:==, {:attribute, [:user, :id]}}], [
+          {:operand, 0, [:user, :id], @fix, []}
+        ])
+      end
+    end
+
+    test "names the fix a hint gives inside a quantifier, at the hint's depth" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :updated_at - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(
+          Module32,
+          [any: {[:messages], [body: {:==, {:attribute, {:outer, 1, :search}}}]}],
+          [{:operand, 1, {:outer, 1, :search}, @fix, []}]
+        )
+      end
+    end
+
+    test "names the fix a hint gives when it refuses an unknown attribute in a disjunction" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [or: [[c: {:==, {:attribute, :search}}], [b: 1]]], [
+          {:operand, 0, :search, @fix, []}
+        ])
+      end
+    end
+
+    test "names the fix a hint gives when it refuses a to-many relationship" do
+      expected_msg =
+        ":a is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module3, [c_id: {:==, {:attribute, :a}}], [{:operand, 0, :a, @fix, []}])
+      end
+    end
+
+    test "names the fix a hint gives when it refuses the first relationship of a path on the left side" do
+      expected_msg =
+        "unknown relationship :user in Hologram.Test.Fixtures.Entity.Module3 - known relationships: :a, :b, :c - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module3, [{[:user, :id], {:==, {:attribute, :c_id}}}], [
+          {:key, 0, [:user, :id], @fix, []}
+        ])
+      end
+    end
+
+    test "names the fix a hint gives on the left side inside a quantifier" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :updated_at - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(
+          Module32,
+          [any: {[:messages], [{{:outer, 1, :search}, {:==, {:attribute, :body}}}]}],
+          [{:key, 1, {:outer, 1, :search}, @fix, []}]
+        )
+      end
+    end
+
+    # A derived field's query reads the owning row too, which lies outside its clauses - a hint's
+    # depth counts the quantifiers only.
+    test "names the fix a hint gives in a derived field's query" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module29 - known attributes: :created_at, :id, :name, :updated_at - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        Module28
+        |> sourced([:labels])
+        |> filter([name: {:==, {:attribute, :search}}], [{:operand, 0, :search, @fix, []}])
+      end
+    end
+
+    test "names the fix a hint gives inside a quantifier in a derived field's query" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module29 - known attributes: :created_at, :id, :name, :updated_at - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        Module28
+        |> sourced([:labels])
+        |> filter(
+          [any: {[:messages], [body: {:==, {:attribute, {:outer, 1, :search}}}]}],
+          [{:operand, 1, {:outer, 1, :search}, @fix, []}]
+        )
+      end
+    end
+
+    test "skips an entry that is no hint" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [c: {:==, {:attribute, :search}}], [
+          :operand,
+          {:operand, 0, :search, @fix},
+          {:operand, 0, :search, @fix, []}
+        ])
+      end
+    end
+
+    # An unknown right side reading a variable stays unknown whichever way the two are swapped, so
+    # its fix comes ahead of the left side's.
+    test "names the fix a right side's hint gives ahead of refusing the left side" do
+      expected_msg =
+        "unknown attribute :term in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - a value from the surrounding code is pinned: ^term"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [search: {:==, {:attribute, :term}}], [
+          {:operand, 0, :term, "a value from the surrounding code is pinned: ^term", []},
+          {:key, 0, :search,
+           "a value from the surrounding code is pinned, on the right side: term == ^search", []}
+        ])
+      end
+    end
+
+    # The fix is about the name the right side starts at, which a relationship of the row can be too.
+    test "refuses the left side ahead of a right side's later hop" do
+      expected_msg =
+        "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module3 - known attributes: :b_id, :c_id, :created_at, :id, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module3, [nope: {:==, {:attribute, [:b, :missing, :id]}}], [
+          {:operand, 0, [:b, :missing, :id],
+           "a value from the surrounding code is pinned: ^b.missing.id", []}
+        ])
+      end
+    end
+
+    test "names the fix a right side's hint gives where its first hop is an attribute" do
+      fix = "a value from the surrounding code is pinned: ^b.name"
+
+      expected_msg =
+        ":b is an attribute in Hologram.Test.Fixtures.Entity.Module2 - a path goes through relationships, and only its last name is an attribute - #{fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [c: {:==, {:attribute, [:b, :name]}}], [
+          {:operand, 0, [:b, :name], fix, []}
+        ])
+      end
+    end
+
+    test "names the fix a right side's hint gives where its first hop is a to-many relationship" do
+      fix = "a value from the surrounding code is pinned: ^a.count"
+
+      expected_msg =
+        ":a is a to-many relationship in Hologram.Test.Fixtures.Entity.Module3 - a path in a condition goes through to-one relationships only - #{fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module3, [c_id: {:==, {:attribute, [:a, :count]}}], [
+          {:operand, 0, [:a, :count], fix, []}
+        ])
+      end
+    end
+
+    test "names the fix a right side's hint gives where its first hop is an inverse relationship" do
+      fix = "a value from the surrounding code is pinned: ^messages.count"
+
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module29 - a path in a condition goes through to-one relationships that hold their reference - #{fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module29, [name: {:==, {:attribute, [:messages, :count]}}], [
+          {:operand, 0, [:messages, :count], fix, []}
+        ])
+      end
+    end
+
+    test "names the fix a right side's hint gives where its first hop is a derived field" do
+      fix = "a value from the surrounding code is pinned: ^first_message.body"
+
+      expected_msg =
+        ":first_message is a derived field in Hologram.Test.Fixtures.Entity.Module32 - a path in a condition goes through to-one relationships that hold their reference - #{fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module32, [name: {:==, {:attribute, [:first_message, :body]}}], [
+          {:operand, 0, [:first_message, :body], fix, []}
+        ])
+      end
+    end
+
+    test "names the fix a left side's hint gives where its first hop is an attribute" do
+      fix = "a value from the surrounding code is pinned, on the right side: c == ^b.name"
+
+      expected_msg =
+        ":b is an attribute in Hologram.Test.Fixtures.Entity.Module2 - a path goes through relationships, and only its last name is an attribute - #{fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [{[:b, :name], {:==, {:attribute, :c}}}], [
+          {:key, 0, [:b, :name], fix, []}
+        ])
+      end
+    end
+
+    test "refuses a right side's later hop where the triple checks it" do
+      expected_msg =
+        "unknown relationship :missing in Hologram.Test.Fixtures.Entity.Module2 - known relationships: "
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module3, [c_id: {:==, {:attribute, [:b, :missing, :id]}}], [
+          {:operand, 0, [:b, :missing, :id],
+           "a value from the surrounding code is pinned: ^b.missing.id", []}
+        ])
+      end
+    end
+
+    test "names the fix a left side's hint gives beside a right side that is an attribute" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - a value from the surrounding code is pinned, on the right side: c == ^search"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [search: {:==, {:attribute, :c}}], [
+          {:operand, 0, :c, "a value from the surrounding code is pinned: ^c", []},
+          {:key, 0, :search,
+           "a value from the surrounding code is pinned, on the right side: c == ^search", []}
+        ])
+      end
+    end
+
+    test "names the spelling that reads a field only the bound row declares" do
+      expected_msg =
+        "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :updated_at - Hologram.Test.Fixtures.Entity.Module33 declares position, read as message.position"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module32, [any: {[:messages], [{{:outer, 1, :position}, {:>, 1}}]}], [
+          {:key, 1, {:outer, 1, :position}, nil, ["message.position", "position"]}
+        ])
+      end
+    end
+
+    test "names the spelling that reads a field only the queried row declares" do
+      expected_msg =
+        "unknown attribute :name in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :tier, :updated_at - Hologram.Test.Fixtures.Entity.Module32 declares name, read as name"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module32, [any: {[:messages], [name: {:==, "x"}]}], [
+          {:key, 1, :name, nil, ["message.name", "name"]}
+        ])
+      end
+    end
+
+    # Where a quantifier binds the name itself, the macros leave no spelling for the queried row.
+    test "names no spelling for a row the macros left none for" do
+      expected_msg =
+        "unknown attribute :name in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :tier, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module32, [any: {[:messages], [name: {:==, "x"}]}], [
+          {:key, 1, :name, nil, ["name.name"]}
+        ])
+      end
+    end
+
+    test "names the spelling that reads an operand only the bound row declares" do
+      expected_msg =
+        "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :updated_at - Hologram.Test.Fixtures.Entity.Module33 declares position, read as message.position"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(
+          Module32,
+          [any: {[:messages], [position: {:>, {:attribute, {:outer, 1, :position}}}]}],
+          [{:operand, 1, {:outer, 1, :position}, nil, ["message.position", "position"]}]
+        )
+      end
+    end
+
+    test "names the nearest row declaring a field inside nested quantifiers" do
+      expected_msg =
+        "unknown attribute :body in Hologram.Test.Fixtures.Entity.Module29 - known attributes: :created_at, :id, :name, :updated_at - Hologram.Test.Fixtures.Entity.Module28 declares body, read as message.body"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(
+          Module29,
+          [any: {[:messages], [any: {[:labels], [{{:outer, 2, :body}, {:==, "x"}}]}]}],
+          [{:key, 2, {:outer, 2, :body}, nil, ["label.body", "message.body", "body"]}]
+        )
+      end
+    end
+
+    # Sibling quantifiers can leave hints under one place, depth and name.
+    test "names the spelling the hints of sibling quantifiers agree on" do
+      expected_msg =
+        "unknown attribute :body in Hologram.Test.Fixtures.Entity.Module29 - known attributes: :created_at, :id, :name, :updated_at - Hologram.Test.Fixtures.Entity.Module28 declares body, read as message.body"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(
+          Module29,
+          [any: {[:messages], [any: {[:labels], [{{:outer, 2, :body}, {:==, "x"}}]}]}],
+          [
+            {:key, 2, {:outer, 2, :body}, nil, ["tag.body", "message.body", "body"]},
+            {:key, 2, {:outer, 2, :body}, nil, ["label.body", "message.body", "body"]}
+          ]
+        )
+      end
+    end
+
+    test "names no spelling for a row the hints of sibling quantifiers spell differently" do
+      expected_msg =
+        "unknown attribute :body in Hologram.Test.Fixtures.Entity.Module29 - known attributes: :created_at, :id, :name, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(
+          Module29,
+          [any: {[:messages], [any: {[:labels], [{{:outer, 2, :body}, {:==, "x"}}]}]}],
+          [
+            {:key, 2, {:outer, 2, :body}, nil, ["tag.body", "task.body", "body"]},
+            {:key, 2, {:outer, 2, :body}, nil, ["label.body", "message.body", "body"]}
+          ]
+        )
+      end
+    end
+
+    test "names no spelling for a row one hint of sibling quantifiers leaves unspelled" do
+      expected_msg =
+        "unknown attribute :name in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :tier, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module32, [any: {[:messages], [name: {:==, "x"}]}], [
+          {:key, 1, :name, nil, ["message.name", "name"]},
+          {:key, 1, :name, nil, ["name.name"]}
+        ])
+      end
+    end
+
+    test "names the fix ahead of the spelling a row gives" do
+      expected_msg =
+        "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :updated_at - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(
+          Module32,
+          [any: {[:messages], [body: {:==, {:attribute, {:outer, 1, :position}}}]}],
+          [{:operand, 1, {:outer, 1, :position}, @fix, ["message.position", "position"]}]
+        )
+      end
+    end
+
+    test "leaves out a spelling when no row in scope declares the field" do
+      expected_msg =
+        "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module32, [any: {[:messages], [{{:outer, 1, :nope}, {:>, 1}}]}], [
+          {:key, 1, {:outer, 1, :nope}, nil, ["message.nope", "nope"]}
+        ])
+      end
+    end
+
+    # A derived field's query reads the row it is computed for only through the function's
+    # arguments, which needs no hint to name.
+    test "names how a derived field's query reads a field only its owning row declares, on the left side" do
+      expected_msg =
+        "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module29 - known attributes: :created_at, :id, :name, :updated_at - Hologram.Test.Fixtures.Entity.Module28, the row the derived field is computed for, declares position - its fields are read through the function's arguments, pinned on the right side of a comparison"
+
+      assert_error MisuseError, expected_msg, fn ->
+        Module28
+        |> sourced([:labels])
+        |> filter(position: 1)
+      end
+    end
+
+    test "names how a derived field's query reads its owning row's field inside a quantifier" do
+      expected_msg =
+        "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module29 - known attributes: :created_at, :id, :name, :updated_at - Hologram.Test.Fixtures.Entity.Module28, the row the derived field is computed for, declares position - its fields are read through the function's arguments, pinned on the right side of a comparison"
+
+      assert_error MisuseError, expected_msg, fn ->
+        Module28
+        |> sourced([:labels])
+        |> filter(any: {[:messages], [{{:outer, 1, :position}, {:==, 1}}]})
+      end
+    end
+
+    # The nearest row declaring the field is the bound one, which the hints spell differently.
+    test "names no owning row ahead of a nearer row the hints of sibling quantifiers spell differently" do
+      expected_msg =
+        "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module29 - known attributes: :created_at, :id, :name, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        Module28
+        |> sourced([:labels])
+        |> filter([any: {[:messages], [{{:outer, 1, :position}, {:==, 1}}]}], [
+          {:key, 1, {:outer, 1, :position}, nil, ["message.position", "position"]},
+          {:key, 1, {:outer, 1, :position}, nil, ["post.position", "position"]}
+        ])
+      end
+    end
+
+    test "names the argument that reads a field only the derived field's owning row declares, on the right side" do
+      expected_msg =
+        "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module29 - known attributes: :created_at, :id, :name, :updated_at - Hologram.Test.Fixtures.Entity.Module28, the row the derived field is computed for, declares position - add it to the function's head and pin it: ^position"
+
+      assert_error MisuseError, expected_msg, fn ->
+        Module28
+        |> sourced([:labels])
+        |> filter(name: {:==, {:attribute, :position}})
+      end
+    end
+
+    test "names the spelling a row gives when it refuses a relationship" do
+      expected_msg =
+        ":b is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered - filter its reference via :b_id - Hologram.Test.Fixtures.Entity.Module2 declares b, read as row.b"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module3, [any: {[:a], [{{:outer, 1, :b}, {:==, 1}}]}], [
+          {:key, 1, {:outer, 1, :b}, nil, ["row.b", "b"]}
+        ])
+      end
+    end
+
+    test "refuses an unknown left side ahead of an operand another row declares" do
+      expected_msg =
+        "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module29 - known attributes: :created_at, :id, :name, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        Module28
+        |> sourced([:labels])
+        |> filter(nope: {:==, {:attribute, :position}})
+      end
+    end
+
+    test "refuses a left side that can't be ordered ahead of an operand another row declares" do
+      expected_msg =
+        "operator :> requires an orderable attribute - :channel_name in Hologram.Test.Fixtures.Entity.Module33 is a derived string, and a string compares by the sort key stored with it, which a computed string has none of"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(
+          Module32,
+          [any: {[:messages], [channel_name: {:>, {:attribute, {:outer, 1, :position}}}]}],
+          [{:operand, 1, {:outer, 1, :position}, nil, ["message.position", "position"]}]
+        )
+      end
+    end
+
+    # An operand read on a row out of the scope's reach is refused where the triple is built, after
+    # the predicate's own name.
+    test "refuses an unknown left side ahead of an operand on a row out of reach" do
+      expected_msg =
+        "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module32, nope: {:==, {:attribute, {:outer, 1, :name}}})
+      end
+    end
+
+    test "leaves out a hint of another depth" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(
+          Module32,
+          [any: {[:messages], [body: {:==, {:attribute, {:outer, 1, :search}}}]}],
+          [{:operand, 0, {:outer, 1, :search}, @fix, []}]
+        )
+      end
+    end
+
+    test "leaves out a hint of another position" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [c: {:==, {:attribute, :search}}], [{:key, 0, :search, @fix, []}])
+      end
+    end
+
+    test "leaves out a hint with no fix" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [c: {:==, {:attribute, :search}}], [{:operand, 0, :search, nil, []}])
+      end
+    end
+
+    test "leaves out a hint about a path's first relationship when it refuses a later one" do
+      expected_msg =
+        "unknown relationship :nope in Hologram.Test.Fixtures.Entity.Module2 - known relationships: "
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module3, [c_id: {:==, {:attribute, [:b, :nope, :x]}}], [
+          {:operand, 0, [:b, :nope, :x], @fix, []}
+        ])
+      end
+    end
+
+    test "leaves a left side's hint out of a membership of the same name" do
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [search: {:in, [1]}], [{:key, 0, :search, @fix, []}])
+      end
+    end
+
+    test "leaves out a hint when it refuses an attribute for another reason" do
+      expected_msg =
+        "operator :== compares attribute :b with attribute :c in Hologram.Test.Fixtures.Entity.Module2, which have different types (:integer and :string) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, [b: {:==, {:attribute, :c}}], [{:operand, 0, :c, @fix, []}])
+      end
+    end
+  end
+
   describe "include/2" do
     test "includes an inverse set" do
       query = include(Module26, :messages)
@@ -2689,6 +3236,70 @@ defmodule Hologram.Query.StageTest do
 
       assert_error MisuseError, expected_msg, fn ->
         include(Module32, message_count: nil)
+      end
+    end
+  end
+
+  describe "include/3" do
+    @fix "a value from the surrounding code is pinned: ^rel"
+
+    test "builds the term include/2 builds" do
+      assert include(Module3, [:a], [{:include, 0, :a, @fix, []}]) ==
+               include(Module3, [:a])
+    end
+
+    test "names the fix a hint gives when it refuses an unknown relationship" do
+      expected_msg =
+        "unknown relationship :rel in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        include(Module3, :rel, [{:include, 0, :rel, @fix, []}])
+      end
+    end
+
+    test "names the fix a hint gives when it refuses an unknown relationship in a list" do
+      expected_msg =
+        "unknown relationship :rel in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        include(Module3, [:a, :rel], [{:include, 0, :rel, @fix, []}])
+      end
+    end
+
+    test "leaves out a hint for a name paired with a nested spec" do
+      expected_msg =
+        "unknown relationship :rel in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c"
+
+      assert_error MisuseError, expected_msg, fn ->
+        include(Module3, [rel: [:x]], [{:include, 0, :rel, @fix, []}])
+      end
+    end
+
+    test "names the fix a hint gives when it refuses an attribute" do
+      expected_msg =
+        ":c is an attribute in Hologram.Test.Fixtures.Entity.Module2 - only relationships and derived fields can be included - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        include(Module2, :c, [{:include, 0, :c, @fix, []}])
+      end
+    end
+
+    # A nested spec is pinned whole or built from paths, neither of which the macros leave hints for.
+    test "leaves out a hint for a name inside a nested spec" do
+      expected_msg =
+        "unknown relationship :rel in Hologram.Test.Fixtures.Entity.Module2 - known relationships and derived fields: "
+
+      assert_error MisuseError, expected_msg, fn ->
+        include(Module3, [a: [:rel]], [{:include, 0, :rel, @fix, []}])
+      end
+    end
+
+    test "leaves out a hint for another name" do
+      expected_msg =
+        "unknown relationship :rel in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c"
+
+      assert_error MisuseError, expected_msg, fn ->
+        include(Module3, :rel, [{:include, 0, :other, @fix, []}])
       end
     end
   end
@@ -4103,6 +4714,59 @@ defmodule Hologram.Query.StageTest do
 
       assert_error MisuseError, expected_msg, fn ->
         sourced(Module32, [:recent_messages, :channel])
+      end
+    end
+  end
+
+  describe "sort/3" do
+    @fix "a value from the surrounding code is pinned: ^sort_field"
+
+    test "builds the term sort/2 builds" do
+      assert sort(Module2, [b: :desc], [{:sort, 0, :b, @fix, []}]) == sort(Module2, b: :desc)
+    end
+
+    test "names the fix a hint gives when it refuses an unknown attribute" do
+      expected_msg =
+        "unknown attribute :sort_field in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        sort(Module2, :sort_field, [{:sort, 0, :sort_field, @fix, []}])
+      end
+    end
+
+    test "names the fix a hint gives when it refuses an unknown attribute paired with a direction" do
+      expected_msg =
+        "unknown attribute :sort_field in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        sort(Module2, [sort_field: :desc], [{:sort, 0, :sort_field, @fix, []}])
+      end
+    end
+
+    test "names the fix a hint gives when it refuses a relationship" do
+      expected_msg =
+        ":b is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be ordered - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        sort(Module3, :b, [{:sort, 0, :b, @fix, []}])
+      end
+    end
+
+    test "leaves out a hint with no fix" do
+      expected_msg =
+        "unknown attribute :sort_field in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        sort(Module2, :sort_field, [{:sort, 0, :sort_field, nil, []}])
+      end
+    end
+
+    test "leaves out a hint for another name" do
+      expected_msg =
+        "unknown attribute :sort_field in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
+
+      assert_error MisuseError, expected_msg, fn ->
+        sort(Module2, :sort_field, [{:sort, 0, :other, @fix, []}])
       end
     end
   end
