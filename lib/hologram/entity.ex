@@ -219,8 +219,9 @@ defmodule Hologram.Entity do
       `when: owner_id == nil or owner_id == user_id()`. A bare name is an attribute of the row,
       on either side of a comparison, so `when: guests <= capacity` compares two attributes, `^`
       marks a value from the surrounding code (`^@max_priority`), literals need nothing, and
-      `user_id()` is the acting user's entity id. The operators are `==`, `!=`, `<`, `<=`, `>`,
-      `>=`, `in`, `not in`, `and` and `or`, `and` binding tighter and parentheses grouping. A
+      `user_id()` is the acting user's entity id, which needs a user entity type in the model: a
+      condition naming it fails the build without one. The operators are `==`, `!=`, `<`, `<=`,
+      `>`, `>=`, `in`, `not in`, `and` and `or`, `and` binding tighter and parentheses grouping. A
       dotted name is a path through to-one relationships, read off the row they lead to,
       `when: project.archived == false`, through as many relationships as it names. The rows along
       a path are read as stored, whatever the acting user may read of them. A path that leads
