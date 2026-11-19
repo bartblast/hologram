@@ -286,6 +286,40 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Blocks until `count` tabs of this browser hold a tab group's leader lock (`:held`) or wait for
+  it (`:pending`), then returns the `session`. Read from any tab of the browser, the one the
+  session is looking at included, since locks are scoped to the origin.
+
+  What a test can see of a tab it must not look at yet - see `open_tab_behind/2`: the tab has
+  joined its group, leading it or following. Raises if the count is not reached in time.
+  """
+  @spec await_leader_locks(Wallaby.Session.t(), :held | :pending, non_neg_integer, integer | nil) ::
+          Wallaby.Session.t()
+  def await_leader_locks(session, kind, count, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    script = """
+    return navigator.locks.query().then((locks) =>
+      locks.#{kind}.filter((lock) => lock.name.endsWith(".leader")).length
+    );
+    """
+
+    case script_result(session, script) do
+      ^count ->
+        session
+
+      found ->
+        if timed_out?(start_time) do
+          raise Wallaby.ExpectationNotMetError,
+                "Timed out waiting for #{count} #{kind} leader locks, there are #{found}"
+        end
+
+        :timer.sleep(50)
+        await_leader_locks(session, kind, count, start_time)
+    end
+  end
+
+  @doc """
   Blocks until this browser's local database holds a whole fill, then returns the `session`.
 
   The place the client greets a stream with is held once a fill has declared the local database
@@ -851,6 +885,30 @@ defmodule HologramFeatureTests.Helpers do
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [replica_id])
 
     Enum.map(rows, fn [result, seq] -> %{result: result, seq: seq} end)
+  end
+
+  @doc """
+  Opens `page_module` in another tab of the same browser WITHOUT pointing the session at it, and
+  returns the tab's handle.
+
+  For a tab whose page load is held on purpose - see `simulate_slow_page_bundle/2`. The page's
+  bundle is an async script, so the browser counts it as part of loading the page, and the driver
+  waits out the hold on its first look at the tab. So the tab is not looked at until the test needs
+  it mounted, and the driver then waits out what is left of the hold. `await_leader_locks/3` says
+  from another tab when it has joined its group.
+  """
+  @spec open_tab_behind(Wallaby.Session.t(), module) :: String.t()
+  def open_tab_behind(session, page_module) do
+    known =
+      session
+      |> Browser.window_handles()
+      |> MapSet.new()
+
+    Browser.execute_script(session, "window.open(arguments[0]);", [
+      RouterHelpers.page_path(page_module)
+    ])
+
+    await_new_tab(session, known)
   end
 
   @doc """
