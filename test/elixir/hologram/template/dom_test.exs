@@ -2180,6 +2180,173 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
+  describe "build_ast/1, tag pairing" do
+    test "element end tag spelled in another case closes the element" do
+      # <div>a</DIV>
+      tags = [{:start_tag, {"div", []}}, {:text, "a"}, {:end_tag, "DIV"}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "div", [key(tags, 0)], [text: "a"]]}
+             ]
+    end
+
+    test "element end tag spelled in lowercase closes an element whose name has case" do
+      # <foreignObject></foreignobject>
+      tags = [{:start_tag, {"foreignObject", []}}, {:end_tag, "foreignobject"}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "foreignObject", [key(tags, 0)], []]}
+             ]
+    end
+
+    test "dynamic tag closed with the same expression spaced differently" do
+      # <{@tag}></{ @tag }>
+      tags = [
+        {:start_tag, {{:expression, "{@tag}"}, []}},
+        {:end_tag, {:expression, "{ @tag }"}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1],
+                   [
+                     {{:., [line: 1], [{:vars, [line: 1], nil}, :tag]},
+                      [no_parens: true, line: 1], []}
+                   ]},
+                  [key(tags, 0)],
+                  []
+                ]}
+             ]
+    end
+
+    test "raises on an element left unclosed at the end" do
+      # <div>abc
+      tags = [{:start_tag, {"div", []}}, {:text, "abc"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the <div> tag isn't closed, add </div>",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on an element left unclosed before its parent's end tag" do
+      # <div><span>abc</div>
+      tags = [
+        {:start_tag, {"div", []}},
+        {:start_tag, {"span", []}},
+        {:text, "abc"},
+        {:end_tag, "div"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the <span> tag isn't closed before </div>, add </span>",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a stray end tag at the top level" do
+      # <div></div></div>
+      tags = [{:start_tag, {"div", []}}, {:end_tag, "div"}, {:end_tag, "div"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</div> has no matching <div>",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a stray end tag inside an element" do
+      # <div></span></div>
+      tags = [{:start_tag, {"div", []}}, {:end_tag, "span"}, {:end_tag, "div"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</span> has no matching <span> inside the <div> tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on an end tag naming another element" do
+      # <div>abc</span>
+      tags = [{:start_tag, {"div", []}}, {:text, "abc"}, {:end_tag, "span"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</span> has no matching <span> inside the <div> tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on the end tag of a void element" do
+      # <input></input>
+      tags = [{:self_closing_tag, {"input", []}}, {:end_tag, "input"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</input> isn't allowed, since <input> has no end tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on the end tag of a slot" do
+      # <slot></slot>
+      tags = [{:self_closing_tag, {"slot", []}}, {:end_tag, "slot"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</slot> isn't allowed, since <slot> has no end tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on the end tag of a window tag" do
+      # <window></window>
+      tags = [{:self_closing_tag, {"window", []}}, {:end_tag, "window"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</window> isn't allowed, since <window> has no end tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a component left unclosed" do
+      # <MyComponent>abc
+      tags = [{:start_tag, {"MyComponent", []}}, {:text, "abc"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the <MyComponent> tag isn't closed, add </MyComponent>",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a component end tag spelled in another case" do
+      # <MyComponent></mycomponent>
+      tags = [{:start_tag, {"MyComponent", []}}, {:end_tag, "mycomponent"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</mycomponent> has no matching <mycomponent> inside the <MyComponent> tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a dynamic tag left unclosed" do
+      # <{@tag}>abc
+      tags = [{:start_tag, {{:expression, "{@tag}"}, []}}, {:text, "abc"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the <{@tag}> tag isn't closed, add </{@tag}>",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a dynamic tag closed with another expression" do
+      # <{@a}></{@b}>
+      tags = [
+        {:start_tag, {{:expression, "{@a}"}, []}},
+        {:end_tag, {:expression, "{@b}"}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</{@b}> has no matching <{@b}> inside the <{@a}> tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a dynamic tag closed with a static end tag" do
+      # <{@a}></div>
+      tags = [{:start_tag, {{:expression, "{@a}"}, []}}, {:end_tag, "div"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</div> has no matching <div> inside the <{@a}> tag",
+                   fn -> build_ast(tags) end
+    end
+  end
+
   test "build_ast/1, nested AST" do
     tags = [{:expression, "{(fn x -> [x | @acc] end).(@value)}"}]
 
