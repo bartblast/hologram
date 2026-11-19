@@ -24,6 +24,10 @@ config :hologram_cluster_tests, :proxy_port, 4005
 # concurrent queries from one node.
 config :hologram, :database, pool_size: 2
 
+# Sync's own pool opens connections of its own on every peer too, and no cluster test catches up
+# more than one client at once on a node.
+config :hologram, :sync, pool_size: 1
+
 config :logger, level: :warning
 
 config :wallaby,

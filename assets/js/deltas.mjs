@@ -1,6 +1,7 @@
 "use strict";
 
 import Clock from "./clock.mjs";
+import DropHash from "./drop_hash.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Model from "./model.mjs";
@@ -17,6 +18,19 @@ import Model from "./model.mjs";
 // one means putting its attributes in its type's table and its target ids in the relationship
 // facts, with nothing left nested.
 export default class Deltas {
+  // The hashes of the held ids of each type under the salt of the catch-up telling them, each id
+  // hashed once per catch-up rather than once per frame - every frame of one catch-up hashes under
+  // one salt. A row filed since the last hashed drop of its type - one a page carried, or one the
+  // client's own write filed when its answer came - is hashed when the next one arrives. Kept until
+  // the next catch-up's salt replaces them: a hash per held row of the types a catch-up dropped any
+  // of.
+  static #hashes = {byType: new Map(), salt: null};
+
+  // Forgets the hashes worked out for the last catch-up.
+  static reset() {
+    Deltas.#hashes = {byType: new Map(), salt: null};
+  }
+
   // `insertOnly` is how rows a page carried are applied, which changes two things and nothing
   // else: a row already held is left alone, and one that is filed is remembered as unconfirmed
   // until the stream delivers it.
@@ -40,6 +54,19 @@ export default class Deltas {
 
     for (const [op, byType] of Object.entries(deltas)) {
       for (const [type, items] of Object.entries(byType)) {
+        if (op === "unsync_hashed" || op === "keep_hashed") {
+          const keys =
+            op === "unsync_hashed"
+              ? Deltas.#dropHashed(type, items)
+              : Deltas.#keepHashed(type, items);
+
+          for (const key of keys) {
+            written.add(key);
+          }
+
+          continue;
+        }
+
         for (const item of items) {
           const id = Deltas.#applyOne(op, type, item, opts);
 
@@ -91,6 +118,154 @@ export default class Deltas {
       default:
         throw new HologramRuntimeError(`unknown sync delta op: ${op}`);
     }
+  }
+
+  // The server tells a client to drop a row by hash when it can't say whether the client holds it:
+  // telling it the id would tell it that a row it may not read exists. So the client drops the rows
+  // it holds whose ids hash to one it was sent, and knows nothing more of the rest.
+  //
+  // A row it drops this way can be named by the sets of rows it still holds, and the server, not
+  // knowing it was held, tells nothing of those pairs - so they go too, or a set would name a row
+  // the client was never told is back. Answers the key of every row it dropped and of every row the
+  // stream vouched for whose set it took one out of, both of which it wrote and storing keeps. The
+  // server sends these in frames claiming no number of the client's own batches, so naming a row
+  // whose set changed lands no pending write on it.
+  static #dropHashed(type, items) {
+    const dropped = new Set();
+
+    for (const {hashes, salt} of items) {
+      const held = Deltas.#hashedIds(type, salt);
+
+      for (const hash of hashes) {
+        const id = held.get(hash);
+
+        if (id !== undefined && LocalDatabase.baseRow(type, id) !== null) {
+          dropped.add(id);
+        }
+      }
+    }
+
+    return Deltas.#dropRows(type, dropped);
+  }
+
+  // The server tells a client which rows of a type it may keep, by hash, when its user lost a grant
+  // reaching every row of the type: the rows the grant hid can't be named, the rows still readable
+  // can. So every held row of the type whose id hashes to none of them goes, as a hashed drop takes
+  // a row. Hashed here rather than looked up in the catch-up's hashes, which can miss rows filed
+  // since they were worked out - and every one of those has to be judged against the list.
+  static #keepHashed(type, items) {
+    const dropped = new Set();
+
+    for (const {hashes, salt} of items) {
+      const kept = new Set(hashes);
+
+      for (const id of Object.keys(LocalDatabase.baseTable(type))) {
+        if (!kept.has(DropHash.hash(salt, id))) {
+          dropped.add(id);
+        }
+      }
+    }
+
+    return Deltas.#dropRows(type, dropped);
+  }
+
+  static #dropRows(type, ids) {
+    if (ids.size === 0) {
+      return [];
+    }
+
+    for (const id of ids) {
+      LocalDatabase.deleteRow(type, id);
+    }
+
+    const written = Array.from(ids, (id) => `${type} ${id}`);
+
+    return written.concat(Deltas.#deleteFactsNaming(type, ids));
+  }
+
+  // Every pair filed under a held row that names one of the given rows of the given type: in a
+  // to-many of that type, and in an inverse of a to-many whose source is of that type.
+  static #deleteFactsNaming(type, ids) {
+    const written = [];
+
+    // A row a page carried is never stored, so one whose set changed isn't written either.
+    const carried = new Set(
+      LocalDatabase.carriedEntries().map(
+        ([carriedType, id]) => `${carriedType} ${id}`,
+      ),
+    );
+
+    for (const holderType of Object.keys(
+      globalThis.Hologram.sync?.model ?? {},
+    )) {
+      const relationships = Object.entries(
+        Model.relationships(holderType) ?? {},
+      )
+        .filter(
+          ([_name, relationship]) =>
+            relationship.toMany && relationship.type === type,
+        )
+        .map(([name]) => name);
+
+      const inverses = Object.entries(Model.inverses(holderType) ?? {})
+        .filter(
+          ([_name, inverse]) => !inverse.reference && inverse.type === type,
+        )
+        .map(([name]) => name);
+
+      const names = relationships.concat(inverses);
+
+      if (names.length === 0) {
+        continue;
+      }
+
+      for (const holderId of Object.keys(LocalDatabase.baseTable(holderType))) {
+        let changed = false;
+
+        // Read through the set rather than through the dropped ids, which can be many more than
+        // a set holds.
+        for (const name of names) {
+          const named = Array.from(
+            LocalDatabase.baseTargetIds(holderType, name, holderId),
+          ).filter((targetId) => ids.has(targetId));
+
+          for (const targetId of named) {
+            LocalDatabase.deleteFact(holderType, name, holderId, targetId);
+            changed = true;
+          }
+        }
+
+        const key = `${holderType} ${holderId}`;
+
+        if (changed && !carried.has(key)) {
+          written.push(key);
+        }
+      }
+    }
+
+    return written;
+  }
+
+  static #hashedIds(type, salt) {
+    if (Deltas.#hashes.salt !== salt) {
+      Deltas.#hashes = {byType: new Map(), salt};
+    }
+
+    let hashed = Deltas.#hashes.byType.get(type);
+
+    if (hashed === undefined) {
+      hashed = {byHash: new Map(), ids: new Set()};
+      Deltas.#hashes.byType.set(type, hashed);
+    }
+
+    for (const id of Object.keys(LocalDatabase.baseTable(type))) {
+      if (!hashed.ids.has(id)) {
+        hashed.byHash.set(DropHash.hash(salt, id), id);
+        hashed.ids.add(id);
+      }
+    }
+
+    return hashed.byHash;
   }
 
   // A patch names a row the client was told about, so one naming a row it does not hold is one

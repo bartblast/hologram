@@ -3,15 +3,12 @@ defmodule Hologram.AuthTest do
 
   import Hologram.Auth
 
-  require Hologram.Query
-
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
-  alias Hologram.DB.QueryRunner
   alias Hologram.Entity
   alias Hologram.MisuseError
   alias Hologram.Policy
@@ -1578,96 +1575,6 @@ defmodule Hologram.AuthTest do
       assert chain_target_id(%Module5{parent_id: middle.id}, [:parent, :parent]) == target.id
 
       refute "RowShareLock" in relation_lock_modes(Module1)
-    end
-  end
-
-  describe "grants_before/2" do
-    defp grant_effect(op, grant) do
-      data = %{
-        "id" => grant.id,
-        "entity_id" => grant.entity_id,
-        "entity_type" => grant.entity_type && Codec.encode_enum_value(grant.entity_type),
-        "role" => Codec.encode_enum_value(grant.role),
-        "user_id" => grant.user_id
-      }
-
-      %{op: op, type: RoleGrant, entity_id: grant.id, data: data}
-    end
-
-    defp stored_grant(user_id) do
-      RoleGrant
-      |> Query.filter(user_id: ^user_id)
-      |> Stage.normalize()
-      |> QueryRunner.run(DB.mapping())
-      |> hd()
-    end
-
-    test "answers the stored grants when no effect touched them" do
-      user = create_user("user_90@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-
-      assert [grant] = grants_before(user.id, [])
-      assert grant.id == stored_grant(user.id).id
-    end
-
-    test "leaves out a grant created since" do
-      user = create_user("user_91@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-      grant = held_grant(user.id)
-
-      assert grants_before(user.id, [grant_effect(:put_entity, grant)]) == []
-    end
-
-    test "puts back a grant revoked since" do
-      user = create_user("user_92@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-      revoked = stored_grant(user.id)
-      revoke_role(user, :editor, resource)
-
-      assert [grant] = grants_before(user.id, [grant_effect(:del_entity, revoked)])
-      assert grant.id == revoked.id
-      assert grant.entity_id == resource.id
-      assert grant.entity_type == Module1
-      assert grant.role == :editor
-      assert grant.user_id == user.id
-    end
-
-    # Forwards, the creation would be undone before the deletion put it back - leaving a grant
-    # the user never held at the place being asked about.
-    test "answers nothing for a grant given and taken back since" do
-      user = create_user("user_93@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-      grant = held_grant(user.id)
-      revoke_role(user, :editor, resource)
-
-      effects = [grant_effect(:put_entity, grant), grant_effect(:del_entity, grant)]
-
-      assert grants_before(user.id, effects) == []
-    end
-
-    test "answers the grant a revoke and re-grant replaced" do
-      user = create_user("user_94@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-      revoked = stored_grant(user.id)
-      revoke_role(user, :editor, resource)
-      grant_role(user, :owner, resource)
-      current = stored_grant(user.id)
-
-      effects = [grant_effect(:del_entity, revoked), grant_effect(:put_entity, current)]
-
-      assert [grant] = grants_before(user.id, effects)
-      assert grant.id == revoked.id
-      assert grant.role == :editor
     end
   end
 
