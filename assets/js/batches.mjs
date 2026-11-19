@@ -247,7 +247,12 @@ export default class Batches {
     // tab is filed in the one queue they share, so the leader's own reading of that queue is what
     // ships - and a follower that sent as well would put a second copy of every batch on the wire,
     // under the same replica and number, for the server to answer twice from one record.
-    if (!Tabs.leader || Batches.#sending) {
+    //
+    // And only once it is ready (see Tabs.sends): a tab that leads while still starting up has not
+    // taken up the identity, the counter and the batches the store held, so it would send the
+    // stored queue under its page's own identity rather than the one the batches were numbered
+    // under. The restore wakes the sender once it has, and so does the lead it takes.
+    if (!Tabs.sends() || Batches.#sending) {
       return;
     }
 

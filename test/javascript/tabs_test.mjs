@@ -579,13 +579,14 @@ describe("Tabs", () => {
       };
 
       const answered = {answer: "ok", kind: "answered", seq: 3};
-      const sealed = {kind: "sealed"};
+      const barrier = {kind: "barrier"};
 
-      // Says the messages from another tab, with a sealed batch after them as the barrier.
+      // Says the messages from another tab, with a message nothing acts on after them as the
+      // barrier.
       const say = (group, messages) => {
         const other = sibling(group);
 
-        for (const message of [...messages, sealed]) {
+        for (const message of [...messages, barrier]) {
           other.postMessage(message);
         }
       };
@@ -604,7 +605,7 @@ describe("Tabs", () => {
         const onMessage = (message) => {
           seen.push(message);
 
-          if (message.kind === "sealed") {
+          if (message.kind === "barrier") {
             arrived();
           } else {
             receive(message);
@@ -638,7 +639,7 @@ describe("Tabs", () => {
         say(group, [deltas, state, answered]);
         await heard.hasHeard;
 
-        assert.deepStrictEqual(heard.seen, [answered, sealed]);
+        assert.deepStrictEqual(heard.seen, [answered, barrier]);
       });
 
       it("passes them over as the first tab of the group", async () => {
@@ -652,7 +653,7 @@ describe("Tabs", () => {
         say(group, [deltas, state, answered]);
         await heard.hasHeard;
 
-        assert.deepStrictEqual(heard.seen, [answered, sealed]);
+        assert.deepStrictEqual(heard.seen, [answered, barrier]);
       });
 
       it("takes them while it follows", async () => {
@@ -667,7 +668,7 @@ describe("Tabs", () => {
         say(group, [deltas, state, answered]);
         await heard.hasHeard;
 
-        assert.deepStrictEqual(heard.seen, [deltas, state, answered, sealed]);
+        assert.deepStrictEqual(heard.seen, [deltas, state, answered, barrier]);
       });
 
       // The window the repair leaves open: the place it writes down is the one this tab greets from.
@@ -718,7 +719,7 @@ describe("Tabs", () => {
         say(group, [resync]);
         await heard.hasHeard;
 
-        assert.deepStrictEqual(heard.seen, [resync, sealed]);
+        assert.deepStrictEqual(heard.seen, [resync, barrier]);
 
         sinon.assert.calledOnce(clearing);
         sinon.assert.calledOnce(reconnecting);
@@ -739,7 +740,7 @@ describe("Tabs", () => {
         say(group, [{...resync, frame: {reason: "gap"}}]);
         await heard.hasHeard;
 
-        assert.deepStrictEqual(heard.seen, [sealed]);
+        assert.deepStrictEqual(heard.seen, [barrier]);
 
         sinon.assert.notCalled(clearing);
         sinon.assert.notCalled(reconnecting);
@@ -815,7 +816,7 @@ describe("Tabs", () => {
           onMessage: (message) => {
             seen.push(message);
 
-            if (message.kind === "sealed") {
+            if (message.kind === "barrier") {
               arrived();
             }
           },
@@ -827,7 +828,7 @@ describe("Tabs", () => {
           other.postMessage(message);
         }
 
-        other.postMessage({kind: "sealed"});
+        other.postMessage({kind: "barrier"});
 
         await hasArrived;
 
@@ -844,7 +845,21 @@ describe("Tabs", () => {
 
         Tabs.ready();
 
-        assert.deepStrictEqual(seen, [{kind: "sealed"}, answered]);
+        assert.deepStrictEqual(seen, [{kind: "barrier"}, answered]);
+      });
+
+      // A filed batch is about the queue, which the fill it asks for does not replace.
+      it("keeps a batch another tab filed when it leads with no place", async () => {
+        const sealed = {kind: "sealed", record: {seq: 4}};
+        const seen = [];
+
+        await holdThenHandOver(seen, {
+          messages: [frame, sealed, state, answered],
+        });
+
+        Tabs.ready();
+
+        assert.deepStrictEqual(seen, [{kind: "barrier"}, sealed, answered]);
       });
 
       // Said only once, and the one start-over that drops the rows at once: the refill would leave
@@ -864,7 +879,7 @@ describe("Tabs", () => {
 
         Tabs.ready();
 
-        assert.deepStrictEqual(seen, [{kind: "sealed"}, resync, answered]);
+        assert.deepStrictEqual(seen, [{kind: "barrier"}, resync, answered]);
       });
 
       // Read before the leader wrote it, the store can lack the identity the queue was numbered
@@ -889,15 +904,16 @@ describe("Tabs", () => {
         const group = nextGroup();
         const release = await holdLeaderLock(group);
 
-        await Tabs.join(group, {});
-
         let arrived;
 
         const hasArrived = new Promise((resolve) => {
           arrived = resolve;
         });
 
-        sinon.stub(Batches, "adopt").callsFake(() => arrived());
+        await Tabs.join(group, {
+          onMessage: (message) =>
+            message.kind === "barrier" ? arrived() : Tabs.receive(message),
+        });
 
         const other = sibling(group);
 
@@ -907,7 +923,7 @@ describe("Tabs", () => {
           kind: "frame",
         });
 
-        other.postMessage({kind: "sealed", record: {}});
+        other.postMessage({kind: "barrier"});
 
         await hasArrived;
 
@@ -966,6 +982,19 @@ describe("Tabs", () => {
         assert.equal(posted, "r-group");
       });
 
+      // Replayed ahead of the lead, it would be answered with the place from before the repair.
+      it("drops a request for the state when it leads from a place", async () => {
+        const seen = [];
+
+        await holdThenHandOver(seen, {messages: [{kind: "joined"}, answered]});
+
+        SyncStream.syncCursor = "place-1";
+
+        Tabs.ready();
+
+        assert.deepStrictEqual(seen, [{kind: "barrier"}, answered]);
+      });
+
       it("replays everything when it leads from a place", async () => {
         const seen = [];
         const persisting = sinon.stub(Durability, "persistReplica");
@@ -979,7 +1008,7 @@ describe("Tabs", () => {
         assert.isFalse(persisting.called);
 
         assert.deepStrictEqual(seen, [
-          {kind: "sealed"},
+          {kind: "barrier"},
           frame,
           state,
           answered,
@@ -1020,6 +1049,18 @@ describe("Tabs", () => {
         stopReason: "model_hash",
         synced: [],
       });
+    });
+
+    // Before its restore the tab holds its page's identity and no place, not the ones the store
+    // gave it.
+    it("says nothing while the tab is still starting up in a group", async () => {
+      await Tabs.join(nextGroup(), stubs());
+
+      const posting = sinon.stub(Tabs, "post");
+
+      Tabs.postState();
+
+      assert.isFalse(posting.called);
     });
 
     // Builds of one model and one protocol share a group, and a tab of an earlier build iterates
@@ -1197,6 +1238,8 @@ describe("Tabs", () => {
     it("answers a tab that has joined with the group's state, when it leads", async () => {
       await Tabs.join(nextGroup(), {onLead: () => {}});
 
+      Tabs.ready();
+
       const posting = sinon.stub(Tabs, "post");
 
       Tabs.receive({kind: "joined"});
@@ -1208,6 +1251,8 @@ describe("Tabs", () => {
     // The place it holds may be about to go, and it says what it holds once that is settled.
     it("answers a tab that has joined with nothing, while it settles its lead", async () => {
       await Tabs.join(nextGroup(), {onLead: () => {}});
+
+      Tabs.ready();
 
       const posting = sinon.stub(Tabs, "post");
 
@@ -1403,15 +1448,14 @@ describe("Tabs", () => {
       assert.isTrue(Tabs.leader);
     });
 
-    // For the tab that joins while this one is still asking for the lock: it finds the lock taken,
-    // follows, and asks for the state - and nothing answers, because the tab that would was not
-    // leading yet when it asked.
-    it("says what it holds to a group it has just taken the lead of", async () => {
+    // What it holds before it is ready is its page's identity and no place, not what the store
+    // gave it (see ready()).
+    it("says nothing to a group it has just taken the lead of", async () => {
       const posting = sinon.stub(Tabs, "post");
 
       await Tabs.join(nextGroup(), stubs());
 
-      assert.equal(posting.firstCall.args[0].kind, "state");
+      assert.isFalse(posting.called);
     });
 
     it("says nothing to a group it has joined as a follower", async () => {
@@ -1542,9 +1586,9 @@ describe("Tabs", () => {
 
       await Tabs.join(group, {onLead: () => {}, onMessage: received});
 
-      sibling(group).postMessage({kind: "sealed"});
+      sibling(group).postMessage({kind: "barrier"});
 
-      assert.deepStrictEqual(await hasReceived, {kind: "sealed"});
+      assert.deepStrictEqual(await hasReceived, {kind: "barrier"});
     });
   });
 
@@ -1609,7 +1653,7 @@ describe("Tabs", () => {
     // The barrier is not decoration: a message that is NOT held travels the same channel behind the
     // two that are, and a channel keeps one sender's order - so its arrival is what says the frames
     // have been delivered and held rather than merely not delivered yet.
-    const barrier = {kind: "sealed"};
+    const barrier = {kind: "barrier"};
 
     it("holds frames until the tab is ready and drains them in order", async () => {
       const seen = [];
@@ -1625,7 +1669,7 @@ describe("Tabs", () => {
         onMessage: (message) => {
           seen.push(message);
 
-          if (message.kind === "sealed") {
+          if (message.kind === "barrier") {
             arrived();
           }
         },
@@ -1701,7 +1745,7 @@ describe("Tabs", () => {
         onMessage: (message) => {
           seen.push(message);
 
-          if (message.kind === "sealed") {
+          if (message.kind === "barrier") {
             arrived();
           }
         },
@@ -1743,7 +1787,7 @@ describe("Tabs", () => {
         onMessage: (message) => {
           seen.push(message);
 
-          if (message.kind === "sealed") {
+          if (message.kind === "barrier") {
             arrived();
           }
         },
@@ -1763,6 +1807,108 @@ describe("Tabs", () => {
       assert.deepStrictEqual(seen, [barrier, answer]);
     });
 
+    // A filed batch lands on a queue the store has not handed over yet: before the mount it is
+    // passed over for a signed-in user, and in a tab that leads it wakes the sender.
+    it("holds a batch another tab filed until the tab is ready", async () => {
+      const sealed = {kind: "sealed", record: {seq: 3}};
+      const seen = [];
+
+      let arrived;
+
+      const hasArrived = new Promise((resolve) => {
+        arrived = resolve;
+      });
+
+      await Tabs.join(nextGroup(), {
+        onLead: () => {},
+        onMessage: (message) => {
+          seen.push(message);
+
+          if (message.kind === "barrier") {
+            arrived();
+          }
+        },
+      });
+
+      const other = sibling(Tabs.name);
+
+      other.postMessage(sealed);
+      other.postMessage(barrier);
+
+      await hasArrived;
+
+      assert.deepStrictEqual(seen, [barrier]);
+
+      Tabs.ready();
+
+      assert.deepStrictEqual(seen, [barrier, sealed]);
+    });
+
+    // The answer names an identity and a place, which a starting tab holds only once its restore
+    // has handed it the ones the store had. Ready, it says what it holds once for every tab that
+    // asked, rather than once per request.
+    it("answers a request for the state once it is ready, when it leads", async () => {
+      const seen = [];
+
+      let arrived;
+
+      const hasArrived = new Promise((resolve) => {
+        arrived = resolve;
+      });
+
+      await Tabs.join(nextGroup(), {
+        onLead: () => {},
+        onMessage: (message) => {
+          seen.push(message);
+
+          if (message.kind === "barrier") {
+            arrived();
+          }
+        },
+      });
+
+      const posting = sinon.stub(Tabs, "post");
+      const other = sibling(Tabs.name);
+
+      other.postMessage({kind: "joined"});
+      other.postMessage({kind: "joined"});
+      other.postMessage(barrier);
+
+      await hasArrived;
+
+      assert.isFalse(posting.called);
+
+      Tabs.ready();
+
+      assert.deepStrictEqual(seen, [barrier]);
+      assert.isTrue(posting.calledOnce);
+      assert.equal(posting.firstCall.args[0].kind, "state");
+    });
+
+    it("says what it holds once it is ready, when it leads", async () => {
+      await Tabs.join(nextGroup(), stubs());
+
+      const posting = sinon.stub(Tabs, "post");
+
+      Tabs.ready();
+
+      assert.isTrue(posting.calledOnce);
+      assert.equal(posting.firstCall.args[0].kind, "state");
+    });
+
+    it("says nothing once it is ready, when it follows", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      const posting = sinon.stub(Tabs, "post");
+
+      Tabs.ready();
+
+      assert.isFalse(posting.called);
+    });
+
     it("holds nothing a starting tab can act on at once", async () => {
       const seen = [];
 
@@ -1780,11 +1926,11 @@ describe("Tabs", () => {
         },
       });
 
-      sibling(Tabs.name).postMessage(barrier);
+      sibling(Tabs.name).postMessage({kind: "storage_failed"});
 
       await hasArrived;
 
-      assert.deepStrictEqual(seen, [barrier]);
+      assert.deepStrictEqual(seen, [{kind: "storage_failed"}]);
     });
   });
 

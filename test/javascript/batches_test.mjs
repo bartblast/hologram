@@ -139,6 +139,40 @@ describe("Batches", () => {
       assert.equal(Batches.pending.length, 1);
     });
 
+    // Before its restore a tab that leads holds its page's identity, not the one the stored queue
+    // was numbered under - and has not taken that queue up. Ready, it sends.
+    it("sends nothing from a tab that leads its group until it is ready", async () => {
+      const reading = sinon.stub(Durability, "batchesAbove").resolves([]);
+
+      sendStub.resolves(confirmed());
+
+      try {
+        assert.isTrue(
+          await Tabs.join("hologram.1.batches-flush.anonymous", {
+            onLead: () => {},
+            onMessage: () => {},
+          }),
+        );
+
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+
+        assert.isFalse(reading.called);
+        assert.isFalse(sendStub.called);
+        assert.equal(Batches.pending.length, 1);
+
+        Tabs.ready();
+
+        await Batches.flush();
+
+        assert.isTrue(reading.called);
+        assert.isTrue(sendStub.calledOnce);
+      } finally {
+        await Tabs.leave();
+      }
+    });
+
     // The server would refuse them over a mismatch the person did not cause, and roll back what
     // they did.
     it("holds every batch while the server stopped the tab over its model", async () => {

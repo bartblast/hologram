@@ -33,8 +33,15 @@ import SyncStream from "./sync_stream.mjs";
 // before any of this: joining is what makes a tab a follower, and nothing else does.
 
 // What a tab that has not finished starting up holds rather than acts on, because each of these
-// lands ON something the tab has not taken up yet - see `#deliver`.
-const HELD_UNTIL_READY = new Set(["answered", "frame", "state"]);
+// lands ON something the tab has not taken up yet, or asks for what it does not hold yet - see
+// `#deliver`.
+const HELD_UNTIL_READY = new Set([
+  "answered",
+  "frame",
+  "joined",
+  "sealed",
+  "state",
+]);
 
 // What only the tab that leads posts, so what a tab that leads hears of it is the tab before it
 // still speaking - see `#deliver`.
@@ -60,7 +67,8 @@ export default class Tabs {
 
   static #channel = null;
 
-  // Frames that arrived before this tab had finished starting up, in the order they arrived.
+  // What arrived before this tab had finished starting up and has to wait for it, in the order it
+  // arrived (see #deliver).
   static #held = [];
 
   // The lock request that IS this tab's leadership - answered once the lock has really been let
@@ -160,8 +168,8 @@ export default class Tabs {
     Tabs.name = name;
 
     // Leading nothing until the lock says otherwise: a tab in no group leads itself, but one asking
-    // to join speaks for nobody yet. A batch another tab seals during the ask is not this one to
-    // send, and a group that dissolves during it takes back what it handed this tab.
+    // to join speaks for nobody yet. A group that dissolves during the ask takes this tab for one
+    // that was following, which is what it was: it was never the one sending (see dissolve).
     Tabs.leader = false;
 
     Tabs.#onMessage = onMessage ?? Tabs.receive;
@@ -204,12 +212,9 @@ export default class Tabs {
 
     Tabs.leader = leads;
 
-    if (Tabs.leader) {
-      // For the tab that joins while this one is still asking for the lock: it finds the lock
-      // taken, follows, and asks for the state - and nothing answers, because the tab that would
-      // was not yet leading when it asked. Saying so unprompted closes that window.
-      Tabs.postState();
-    } else {
+    // A tab that leads says what it holds only once it is ready, which is when it holds it (see
+    // ready()).
+    if (!Tabs.leader) {
       Tabs.#wait(name, token);
     }
 
@@ -270,7 +275,8 @@ export default class Tabs {
       // complete, which nothing writes down, and the place and the identity as they stand now.
       // Answered by the tab that has them - and not while it is still settling where its lead
       // starts from, since the place it holds then may be about to go (see #lead), which says
-      // what it holds once that is settled.
+      // what it holds once that is settled. Heard only once this tab is ready itself: before
+      // then it holds neither (see #deliver).
       case "joined":
         if (Tabs.leader && !Tabs.takingLead) {
           Tabs.postState();
@@ -281,7 +287,7 @@ export default class Tabs {
       // A batch another tab has just filed. Taken up here so this tab folds it too - two views of
       // one browser's data disagreeing about a write the same person just made is the thing the
       // group exists to prevent - and, in the tab that sends, sent without waiting to read the
-      // store again.
+      // store again. Heard only once this tab is ready (see #deliver).
       case "sealed":
         Batches.adopt([message.record]);
 
@@ -380,25 +386,32 @@ export default class Tabs {
   // place (or for belonging to somebody else). Replayed, the tail's marker would give it a place
   // and call the pot complete over the tail's rows alone, and the lead would then write exactly
   // that to the store. So the frames and the group's state go: the fill repeats the rows, and the
-  // stream repeats a stop and the rules. Three things stay. The answers to batches are about the
-  // queue, which the new fill does not replace. A start-over because somebody else signed in is
-  // said only once, and drops at once every row the previous person may see - any this tab's own
-  // page carried for them included, which the new fill would leave readable until it ends. And the
-  // identity the group's state names is the one the queue was numbered under - read before the
-  // leader had written it, the store can lack it - so it is taken as the state would have given it,
-  // and written down, since this tab now sends under it. (A state its leader posted before its own
-  // restore names that page's pair instead, and a tab that held no state keeps the pair its restore
-  // settled on: see #1680.)
+  // stream repeats a stop and the rules. Three things stay. The batches other tabs filed and the
+  // answers to them are about the queue, which the new fill does not replace. A start-over because
+  // somebody else signed in is said only once, and drops at once every row the previous person may
+  // see - any this tab's own page carried for them included, which the new fill would leave
+  // readable until it ends. And the identity the group's state names is the one the queue was
+  // numbered under - read before the leader had written it, the store can lack it - so it is taken
+  // as the state would have given it, and written down, since this tab now sends under it. (A tab
+  // that held no state keeps the pair its restore settled on: see #1680.)
+  //
+  // A request for the state is never replayed, whoever this tab is. A tab that follows answers
+  // none. A tab taking the lead says what it holds once the lead is settled (see #lead) - and a
+  // request replayed ahead of that would be answered with the place from before the repair, which
+  // is the window `takingLead` keeps it out of. And a tab that already leads, the first tab of its
+  // group, says what it holds here, for the first time and once for every tab that asked: nothing
+  // else prompts it before its stream first serves it.
   static ready() {
     const lead = Tabs.#leadWhenReady;
     const fromNowhere = lead && SyncStream.syncCursor === null;
 
-    const held = fromNowhere
-      ? Tabs.#held.filter(
-          (message) =>
-            message.kind === "answered" || startsOverForSomebodyElse(message),
-        )
-      : Tabs.#held;
+    const held = Tabs.#held.filter((message) =>
+      fromNowhere
+        ? message.kind === "answered" ||
+          message.kind === "sealed" ||
+          startsOverForSomebodyElse(message)
+        : message.kind !== "joined",
+    );
 
     if (fromNowhere) {
       Tabs.#adoptGroupIdentity(Tabs.#held);
@@ -414,14 +427,24 @@ export default class Tabs {
 
     if (lead) {
       Tabs.#onLead();
+    } else if (Tabs.leader) {
+      Tabs.postState();
     }
+  }
+
+  // Whether this tab sends the queue: it leads, and has taken up the identity, the counter and the
+  // batches the store held (see ready()). A tab leading before then would send what it read of the
+  // queue under its page's own identity. A tab in no group has nothing to wait for - it never
+  // joined, or it left and leads itself.
+  static sends() {
+    return Tabs.leader && (Tabs.name === null || Tabs.#ready);
   }
 
   // Acted on as it arrives, or held until this tab has taken up what it starts with - the rows its
   // own page carried, which go in at the mount, and the rows and batches the browser had stored,
   // which go in just after it.
   //
-  // THREE KINDS WAIT, each because it lands on something that is not there yet:
+  // FIVE KINDS WAIT, each because it lands on something that is not there yet, or asks for it:
   //
   // A FRAME is the server's word about rows the page and the store have not put in yet.
   //
@@ -435,10 +458,17 @@ export default class Tabs {
   // An ANSWER names a batch this tab takes up in the same breath: settling before the batch is
   // there settles nothing, and the batch is then folded for ever - nothing answers it twice.
   //
-  // What does not wait: a batch another tab filed (taking one up twice is taking it up once, since
-  // the adopt passes over what it already holds), a tab asking for the group's state (which can be
-  // answered at any time), and a storage failure, which is the one message a tab should act on
-  // before it has finished anything else.
+  // A BATCH another tab filed is taken up into a queue the store has not handed over yet. Taken
+  // before the mount, it is passed over for a signed-in user, since the mount is what says whose
+  // batches this page takes up, and nothing takes it up later: the restore takes up only what its
+  // read of the store found. And in a tab that leads, taking one up wakes the sender, which would
+  // send the stored queue under the page's own identity rather than the one it was numbered under.
+  //
+  // A tab ASKING for the group's state is asking for an identity and a place, which this tab holds
+  // only once its restore has handed it the ones the store had. It is answered then (see ready()).
+  //
+  // What does not wait is a storage failure, the one message a tab should act on before it has
+  // finished anything else.
   //
   // And TWO KINDS A TAB THAT LEADS PASSES OVER: a frame and the group's state. Only the tab that
   // leads posts either, so one that reaches the tab leading now was posted by the tab that led
@@ -490,7 +520,15 @@ export default class Tabs {
   // protocol share a group, so a tab of an earlier build can be listening, and it throws on
   // anything that is not a list - before marking anything, and before replaying what it held. The
   // list says "all" once the whole pot is complete, which is the one scope both builds share.
+  //
+  // Nothing while this tab is still starting up in a group: the identity and the place it holds
+  // then are its page's, not the ones the store gave it. It says what it holds once it is ready
+  // (see ready() and #lead).
   static postState() {
+    if (Tabs.name !== null && !Tabs.#ready) {
+      return;
+    }
+
     const completeness = LocalDatabase.syncedState();
 
     Tabs.post({
