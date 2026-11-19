@@ -43,11 +43,13 @@ defmodule Hologram.Sync.Search do
   its type, since a search without the values a write left misses rows. An effect of an entity
   type or an op this node does not know is passed over, with or without data.
 
-  Edges are the policy dependency index (see `Hologram.Policy.Edges.index/0`), passed in rather
+  Edges are the policy dependency index (see `Hologram.Policy.Edges.index/1`), passed in rather
   than read here. The read rules' edges are followed, and the verdicts' (`{type, {:verdicts}}`): a
   row whose verdicts may have moved is checked again like one whose access may have, and a check
-  gives its verdicts beside its readers (see `Hologram.Sync.Recheck.run/2`). The other operations'
-  edges aren't followed: a browser answers the rest of their rules from the rows it holds.
+  gives its verdicts beside its readers (see `Hologram.Sync.Recheck.run/2`). A build where no
+  client checks permissions sends no verdicts, so its caller leaves their edges out. The other
+  operations' edges aren't followed: a browser answers the rest of their rules from the rows it
+  holds.
 
   The rows the effects wrote are not listed - they are rows to check whatever their rules read, and
   the caller has them. So a change to a column no read rule or verdict reads lists nothing. A

@@ -30,6 +30,8 @@ defmodule Hologram.Policy.EdgesTest do
 
   @index_key {Hologram.Policy.Edges, :index}
 
+  @index_without_verdicts_key {Hologram.Policy.Edges, :index_without_verdicts}
+
   @stale_model_msg "the code changed since the last compile that validated the data model - fix the compile error, if there is one, and save again"
 
   describe "derive/1" do
@@ -612,7 +614,7 @@ defmodule Hologram.Policy.EdgesTest do
 
   # The cache is one term for the whole node, so these leave it empty, for the next read to derive
   # the project's real index.
-  describe "index/0" do
+  describe "index/1" do
     setup do
       on_exit(&reset_caches/0)
 
@@ -637,13 +639,37 @@ defmodule Hologram.Policy.EdgesTest do
       assert :persistent_term.get(@index_key, nil) == derived
     end
 
+    test "leaves out every verdicts' pair and keeps the operations' as they are when asked without the verdicts" do
+      derived = derive(Reflection.list_entities())
+      verdict_keys = for {_entity_type, {:verdicts}} = key <- Map.keys(derived), do: key
+
+      assert length(verdict_keys) > 1
+      assert index(false) == Map.drop(derived, verdict_keys)
+    end
+
+    test "keeps the index without the verdicts for the calls after it" do
+      assert :persistent_term.get(@index_without_verdicts_key, nil) == nil
+
+      derived = index(false)
+
+      assert :persistent_term.get(@index_without_verdicts_key, nil) == derived
+    end
+
+    test "answers the index without the verdicts from the cache" do
+      :persistent_term.put(@index_without_verdicts_key, :cached)
+
+      assert index(false) == :cached
+    end
+
     test "raises when the model is under a hold, even when cached" do
       on_exit(&Model.release/0)
 
       index()
+      index(false)
       Model.hold()
 
       assert_error Hologram.StaleModelError, @stale_model_msg, fn -> index() end
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn -> index(false) end
     end
 
     # A dev VM whose compile refused a via cycle has the cycle's modules loaded and named by the
@@ -698,6 +724,13 @@ defmodule Hologram.Policy.EdgesTest do
 
       assert reset_index_cache() == :ok
       assert :persistent_term.get(@index_key, nil) == nil
+    end
+
+    test "drops the cached index without the verdicts" do
+      index(false)
+
+      assert reset_index_cache() == :ok
+      assert :persistent_term.get(@index_without_verdicts_key, nil) == nil
     end
   end
 

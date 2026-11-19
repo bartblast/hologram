@@ -365,7 +365,8 @@ defmodule Hologram.Compiler do
   A page that checks permissions on the client also downloads the grants window: what a client
   evaluates permissions against is grant rows, so a page that checks them needs them held like any
   other rows it reads. Only when the given module info PLT records a user entity type: a data model
-  without one has no grant store, so no page checks permissions against anything.
+  without one has no grant store, so there are no grant rows to hold. Its pages still check the
+  rules, which name no role.
 
   A page reading the session user from the context downloads the user window (see
   `Hologram.Auth.user_window/2`): the client answers the context from its database on every render,
@@ -375,7 +376,7 @@ defmodule Hologram.Compiler do
   type, for the same reason.
 
   The window ids are derived with whether the build checks permissions on the client (see
-  `permission_checking?/2`), since a checking build's windows download the related rows the rules
+  `permission_checking?/1`), since a checking build's windows download the related rows the rules
   read, and a page has to name the windows the registered queries hold.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_windows_3/README.md
@@ -385,7 +386,7 @@ defmodule Hologram.Compiler do
   def build_page_windows(reach_by_page, component_queries, module_info_plt) do
     user_entity = Reflection.user_entity(module_info_plt)
     grant_store? = user_entity != nil
-    permission_checking? = permission_checking?(reach_by_page, module_info_plt)
+    permission_checking? = permission_checking?(reach_by_page)
 
     # Each component's window ids are derived once, however many pages reach it.
     window_ids_by_component =
@@ -494,7 +495,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the pages that can check permissions on the CLIENT - the ones whose bundled code
-  reaches one of `permission_mfas/0`: a permission check or a role check, each of which reads grant
+  reaches one of `permission_mfas/0`: a permission check, which reads the rules and the server's
+  verdicts, and the grant rows when the model has a grant store, a role check, which reads grant
   rows, or a grant verb, which asks the same gate locally before it writes - from what each page's
   client code reaches, as `list_reach_by_page/2` lists it.
 
@@ -517,20 +519,23 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns true when some page checks permissions on the client and the data model has a grant
-  store to check them against, or false otherwise - from what the data layer keeps of each page's
-  reach (see `build_kept_page_reach/3`) and the given module info PLT.
+  Returns true when some page checks permissions on the client, or false otherwise - from what the
+  data layer keeps of each page's reach (see `build_kept_page_reach/3`).
 
   What it gates is build-wide: the related rows a checking client's windows download beside the
-  rows its queries return, and the server's verdicts its rows carry. The rules and roles ship
-  with every build that has a data model (see `build_sync_constants/3`).
+  rows its queries return, the types sync sends for the rules to read, and the server's verdicts
+  its rows carry. The rules and roles ship with every build that has a data model (see
+  `build_sync_constants/3`).
+
+  Whether the data model has a grant store is not asked: one with no user entity type has none,
+  but its pages still check rules that name no role - an app with no logins calls `can?/3` for
+  the anonymous session, and the browser answers it from the server's verdicts like any other. What
+  needs the grant store, the grants window and the grant type's rows, checks for it on its own (see
+  `build_page_windows/3`, `build_sync_constants/3`).
   """
-  @spec permission_checking?(%{module => kept_page_reach}, PLT.t()) :: boolean
-  def permission_checking?(reach_by_page, module_info_plt) do
-    # A data model with no user entity type has no grant store, so no page checks permissions
-    # against anything then.
-    Reflection.user_entity(module_info_plt) != nil and
-      Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.checks_permissions? end)
+  @spec permission_checking?(%{module => kept_page_reach}) :: boolean
+  def permission_checking?(reach_by_page) do
+    Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.checks_permissions? end)
   end
 
   @doc false
@@ -917,7 +922,7 @@ defmodule Hologram.Compiler do
   The grants window is among the windows when the given entity types hold the role grant store,
   which a data model does exactly when it designates a user entity type. So is the user window (see
   `Hologram.Auth.user_window/2`). Whether the build has a page checking permissions on the client is
-  given (see `permission_checking?/2`): such a client's windows also download the related rows its
+  given (see `permission_checking?/1`): such a client's windows also download the related rows its
   types' rules read, the user window's among them.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_3/README.md
@@ -2395,19 +2400,19 @@ defmodule Hologram.Compiler do
   ones it enforces.
 
   `:synced_types` are the entity types sync sends rows of, sorted by name: the types the queries
-  read and the pages' client code mentions, and the user type when a page reads the session user,
-  as for `:entity_types` - kept syncing whichever of its rows the read rules let the user hold -
-  and, when the build checks
-  permissions on the client (see `permission_checking?/2`), the types every rule of those types
-  reads through relationships, with the grant type. Read rules count too, since the browser decides
-  them in `can?`. They are followed one step: client code checks only rows of types it queries or
-  mentions, and a rule's chains already follow its delegations. A chain's types stop before its
-  first type no session may read (see `Hologram.Policy.readable_prefix/2`), since no client gets
-  a row of it, nor any row reached through it. That is at least what the windows download, which
-  follow the rules of a query's own type and its includes only - bar a type the model leaves out,
-  which declares no rule, so no read rule admits its rows. A type only server code names, like an
-  audit log, is left out, rules or not, and never reaches a browser. The server reads the list
-  (see `Hologram.DB.QueryCache.synced_types/0`), the client does not.
+  read and the pages' client code mentions, and the user type when a page reads the session user, as
+  for `:entity_types` - kept syncing whichever of its rows the read rules let the user hold - and,
+  when the build checks permissions on the client (see `permission_checking?/1`), the types every
+  rule of those types reads through relationships, with the grant type when the model has one. Read
+  rules count too, since the browser decides them in `can?`. They are followed one step: client code
+  checks only rows of types it queries or mentions, and a rule's chains already follow its
+  delegations. A chain's types stop before its first type no session may read (see
+  `Hologram.Policy.readable_prefix/2`), since no client gets a row of it, nor any row reached
+  through it. That is at least what the windows download, which follow the rules of a query's own
+  type and its includes only - bar a type the model leaves out, which declares no rule, so no read
+  rule admits its rows. A type only server code names, like an audit log, is left out, rules or not,
+  and never reaches a browser. The server reads the list (see
+  `Hologram.DB.QueryCache.synced_types/0`), the client does not.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
@@ -2481,8 +2486,7 @@ defmodule Hologram.Compiler do
       model_hash: model_hash(all_entity_types, role_modules),
       policy_hash: policy_hash(all_entity_types),
       role_modules: role_modules,
-      synced_types:
-        synced_types(reached_entity_types, entity_types, reach_by_page, module_info_plt),
+      synced_types: synced_types(reached_entity_types, entity_types, reach_by_page),
       user_entity: if(MapSet.member?(entity_types, user_entity), do: user_entity)
     }
   end
@@ -4417,10 +4421,11 @@ defmodule Hologram.Compiler do
   # read (see `Hologram.Policy.readable_prefix/2`): no client gets such a row, nor any row reached
   # through it. Kept to the types of the client's model: a row of a type the model does not name
   # cannot be read back. What that drops is a type declaring no rule, like one a read rule
-  # delegates to, whose rows no one may read anyway.
-  defp synced_types(reached_entity_types, model_entity_types, reach_by_page, module_info_plt) do
+  # delegates to, whose rows no one may read anyway, and the grant type when the model designates
+  # no user entity type, which has no grant store.
+  defp synced_types(reached_entity_types, model_entity_types, reach_by_page) do
     types =
-      if permission_checking?(reach_by_page, module_info_plt) do
+      if permission_checking?(reach_by_page) do
         reached_entity_types
         |> Enum.flat_map(fn entity_type ->
           entity_type
