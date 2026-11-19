@@ -2495,23 +2495,24 @@ describe("Elixir_Hologram_Auth", () => {
         ...overrides,
       });
 
-    const deciding = (clause) => ({
-      ...clause,
-      reads: [DOCUMENT, FOLDER],
-      verdict: KEY,
-    });
+    // The verdict entries the build bakes for the given type's operations, beside its rules.
+    const putVerdicts = (type, verdicts) => {
+      globalThis.Hologram.sync.model[type].verdicts = verdicts;
+    };
 
-    const noPublic = deciding({
+    const FOLDER_VERDICTS = {read: {reads: [DOCUMENT, FOLDER], verdict: KEY}};
+
+    const noPublic = {
       filter: [["public", "==", true]],
       quantifier: "none",
       source: ["documents"],
-    });
+    };
 
-    const allPublic = deciding({
+    const allPublic = {
       filter: [["public", "==", true]],
       quantifier: "all",
       source: ["documents"],
-    });
+    };
 
     const folderReads = (
       predicates,
@@ -2519,6 +2520,7 @@ describe("Elixir_Hologram_Auth", () => {
       entity = folder(),
     ) => {
       defineModel({}, {read: [rule({predicates})]});
+      putVerdicts(FOLDER, FOLDER_VERDICTS);
 
       return can(userOrId, Type.atom("read"), entity);
     };
@@ -2650,6 +2652,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       const secretFolderReads = (entity) => {
         defineModel({}, {read: [rule({predicates: [noPublic]})]});
+        putVerdicts(FOLDER, FOLDER_VERDICTS);
 
         const folderEntry = globalThis.Hologram.sync.model[FOLDER];
         folderEntry.attributes.secret = "boolean";
@@ -2707,7 +2710,7 @@ describe("Elixir_Hologram_Auth", () => {
 
     it("answers a none over an any from a held row before the verdict", () => {
       const predicates = [
-        deciding({
+        {
           filter: [
             {
               filter: [["name", "==", "urgent"]],
@@ -2717,7 +2720,7 @@ describe("Elixir_Hologram_Auth", () => {
           ],
           quantifier: "none",
           source: ["documents"],
-        }),
+        },
       ];
 
       putFolder({[KEY]: true});
@@ -2734,7 +2737,7 @@ describe("Elixir_Hologram_Auth", () => {
     // A held row cannot show an inner none holds, so the verdict decides whatever is held.
     it("answers an any over a none from the verdict", () => {
       const predicates = [
-        deciding({
+        {
           filter: [
             {
               filter: [["name", "==", "urgent"]],
@@ -2744,7 +2747,7 @@ describe("Elixir_Hologram_Auth", () => {
           ],
           quantifier: "any",
           source: ["documents"],
-        }),
+        },
       ];
 
       putDocument({});
@@ -2786,18 +2789,18 @@ describe("Elixir_Hologram_Auth", () => {
       putDocument({public: true});
 
       assert.deepStrictEqual(
-        folderReads([deciding(anyRecentPublic)]),
+        folderReads([anyRecentPublic]),
         Type.boolean(true),
       );
     });
 
     // A held public document may be one the server's bound leaves out, so it refutes nothing.
     it("grants on a true verdict on a none over a derived set a held row matches", () => {
-      const recent = deciding({
+      const recent = {
         filter: [["public", "==", true]],
         quantifier: "none",
         source: ["recent_documents"],
-      });
+      };
 
       putFolder({[KEY]: true});
       putDocument({public: true});
@@ -2806,13 +2809,14 @@ describe("Elixir_Hologram_Auth", () => {
     });
 
     it("reads the verdict on an any over a derived set past a relationship to its owner", () => {
-      const recent = deciding({
+      const recent = {
         filter: [["public", "==", true]],
         quantifier: "any",
         source: ["folder", "recent_documents"],
-      });
+      };
 
       defineModel({read: [rule({predicates: [recent]})]});
+      putVerdicts(DOCUMENT, {read: {reads: [DOCUMENT, FOLDER], verdict: KEY}});
       putFolder();
       putDocument({$verdicts: {[KEY]: true}});
 
@@ -2823,11 +2827,11 @@ describe("Elixir_Hologram_Auth", () => {
     });
 
     it("grants on a true verdict on an any over a derived set", () => {
-      const recent = deciding({
+      const recent = {
         filter: [["public", "==", true]],
         quantifier: "any",
         source: ["recent_documents"],
-      });
+      };
 
       putFolder({[KEY]: true});
 
@@ -2835,11 +2839,11 @@ describe("Elixir_Hologram_Auth", () => {
     });
 
     it("grants nothing on a false verdict on an any over a derived set a held row matches", () => {
-      const recent = deciding({
+      const recent = {
         filter: [["public", "==", true]],
         quantifier: "any",
         source: ["recent_documents"],
-      });
+      };
 
       putFolder({[KEY]: false});
       putDocument({public: true});
@@ -2852,6 +2856,8 @@ describe("Elixir_Hologram_Auth", () => {
         {read: [rule({via: ["read", ["folder"]]})]},
         {read: [rule({predicates: [noPublic]})]},
       );
+
+      putVerdicts(FOLDER, FOLDER_VERDICTS);
 
       const entity = document({folder_id: FOLDER_ID});
 
@@ -2870,18 +2876,15 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
-    // In a read rule, a predicate reading a row of a type nobody may read comes with its triple
-    // beside its verdict key and the types it reads: an empty reference reads no row, so this client
-    // answers it itself, and the verdict answers it when the reference names a folder it doesn't hold.
-    describe("on a predicate the build sends with its triple and verdict", () => {
-      const noFolderArchived = {
-        predicate: [["folder", "archived"], "==", null],
-        reads: [FOLDER],
-        verdict: KEY,
-      };
+    // In a read rule, a predicate reading a row of a type nobody may read is its triple: an empty
+    // reference reads no row, so this client answers it itself, and the operation's verdict answers
+    // it when the reference names a folder it doesn't hold.
+    describe("on a predicate reading a type nobody may read", () => {
+      const noFolderArchived = [["folder", "archived"], "==", null];
 
       const documentReads = (userId, entity) => {
         defineModel({read: [rule({predicates: [noFolderArchived]})]});
+        putVerdicts(DOCUMENT, {read: {reads: [FOLDER], verdict: KEY}});
 
         return can(Type.bitstring(userId), Type.atom("read"), entity);
       };
@@ -2923,13 +2926,15 @@ describe("Elixir_Hologram_Auth", () => {
       });
     });
 
-    // In a read rule, a delegation whose chain passes a row of a type nobody may read comes with
-    // its verdict key and the types it reads: no client holds the folder it asks.
-    describe("on a delegation the build sends with its verdict", () => {
-      const toFolder = ["read", ["folder"], {reads: [FOLDER], verdict: KEY}];
+    // In a read rule, a delegation whose chain passes a row of a type nobody may read comes with a
+    // third element, true, and is unknown: no client holds the folder it asks, so the operation's
+    // verdict answers.
+    describe("on a delegation through a type nobody may read", () => {
+      const toFolder = ["read", ["folder"], true];
 
       const documentReads = (userId) => {
         defineModel({read: [rule({via: toFolder})]}, {read: [rule()]});
+        putVerdicts(DOCUMENT, {read: {reads: [FOLDER], verdict: KEY}});
 
         return can(
           Type.bitstring(userId),
@@ -2992,14 +2997,10 @@ describe("Elixir_Hologram_Auth", () => {
       it("answers a delegation to the read rule from the related row's verdict", () => {
         defineModel(
           {update: [rule({via: ["read", ["folder"]]})]},
-          {
-            read: [
-              rule({
-                via: ["read", ["parent"], {reads: [FOLDER], verdict: KEY}],
-              }),
-            ],
-          },
+          {read: [rule({via: ["read", ["parent"], true]})]},
         );
+
+        putVerdicts(FOLDER, {read: {reads: [FOLDER], verdict: KEY}});
 
         const documentUpdate = () =>
           can(
@@ -3018,19 +3019,21 @@ describe("Elixir_Hologram_Auth", () => {
       });
     });
 
-    // In a read rule, a role reference reading a row of a type nobody may read comes with its
-    // verdict key and the types it reads: no client holds the folder the parent's id is read off.
-    describe("on a role reference the build sends with its verdict", () => {
+    // In a read rule, a role reference reading a row of a type nobody may read comes with a fifth
+    // element, true, and is unknown: no client holds the folder the parent's id is read off, so the
+    // operation's verdict answers.
+    describe("on a role reference through a type nobody may read", () => {
       const viaFolderParent = [
         "rel",
         ["folder", "parent"],
         FOLDER,
         ["admin"],
-        {reads: [FOLDER, GRANT], verdict: KEY},
+        true,
       ];
 
       const documentReads = (userId) => {
         defineModel({read: [rule({to: [viaFolderParent]})]});
+        putVerdicts(DOCUMENT, {read: {reads: [FOLDER, GRANT], verdict: KEY}});
 
         return can(
           Type.bitstring(userId),
@@ -3089,19 +3092,13 @@ describe("Elixir_Hologram_Auth", () => {
           {
             read: [
               rule({
-                to: [
-                  [
-                    "rel",
-                    ["parent", "parent"],
-                    FOLDER,
-                    ["admin"],
-                    {reads: [FOLDER, GRANT], verdict: KEY},
-                  ],
-                ],
+                to: [["rel", ["parent", "parent"], FOLDER, ["admin"], true]],
               }),
             ],
           },
         );
+
+        putVerdicts(FOLDER, {read: {reads: [FOLDER, GRANT], verdict: KEY}});
 
         const documentUpdate = () =>
           can(
@@ -3127,11 +3124,220 @@ describe("Elixir_Hologram_Auth", () => {
         assert.deepStrictEqual(documentReads(ALICE), Type.boolean(true));
       });
     });
+
+    // The verdict answers the operation whole, so the rows this client holds answer first, and the
+    // verdict only where they leave the answer open.
+    describe("on an operation's rules", () => {
+      const FIELD_KEY = "update:title:00112233aabbccdd";
+      const UPDATE_KEY = "update:44556677aabbccdd";
+
+      const noTags = {filter: [], quantifier: "none", source: ["tags"]};
+
+      it("grants on a rule the held rows decide, whatever the verdict", () => {
+        defineModel(
+          {},
+          {
+            read: [
+              rule({predicates: [noPublic]}),
+              rule({predicates: [["name", "==", "Plans"]]}),
+            ],
+          },
+        );
+
+        putVerdicts(FOLDER, FOLDER_VERDICTS);
+
+        LocalDatabase.putRow(FOLDER, {
+          archived: false,
+          id: FOLDER_ID,
+          kind: null,
+          name: "Plans",
+          parent_id: null,
+          $verdicts: {[KEY]: false},
+        });
+
+        assert.deepStrictEqual(
+          can(Type.nil(), Type.atom("read"), folder({name: "Plans"})),
+          Type.boolean(true),
+        );
+      });
+
+      it("grants nothing when the held rows refute every rule, whatever the verdict", () => {
+        defineModel(
+          {},
+          {read: [rule({predicates: [["name", "==", "Plans"], noPublic]})]},
+        );
+
+        putVerdicts(FOLDER, FOLDER_VERDICTS);
+        putFolder({[KEY]: true});
+
+        assert.deepStrictEqual(
+          can(Type.nil(), Type.atom("read"), folder()),
+          Type.boolean(false),
+        );
+      });
+
+      it("answers a field from its own verdict", () => {
+        defineModel({"update:title": [rule({predicates: [noTags]})]});
+
+        putVerdicts(DOCUMENT, {
+          "update:title": {reads: [DOCUMENT, TAG], verdict: FIELD_KEY},
+        });
+
+        for (const verdict of [true, false]) {
+          putDocument({$verdicts: {[FIELD_KEY]: verdict}});
+
+          assert.deepStrictEqual(
+            can(
+              Type.nil(),
+              updateOf(Type.atom("title")),
+              document({folder_id: FOLDER_ID}),
+            ),
+            Type.boolean(verdict),
+          );
+        }
+      });
+
+      // The field's own lines hold nothing the held rows leave open, so the whole row's verdict
+      // answers it.
+      it("answers a field with no verdict of its own from the whole row's", () => {
+        defineModel({
+          update: [rule({predicates: [noTags]})],
+          "update:title": [rule({predicates: [["public", "==", true]]})],
+        });
+
+        putVerdicts(DOCUMENT, {
+          update: {reads: [DOCUMENT, TAG], verdict: UPDATE_KEY},
+        });
+
+        for (const verdict of [true, false]) {
+          putDocument({$verdicts: {[UPDATE_KEY]: verdict}});
+
+          for (const field of ["title", "summary"]) {
+            assert.deepStrictEqual(
+              can(
+                Type.nil(),
+                updateOf(Type.atom(field)),
+                document({folder_id: FOLDER_ID}),
+              ),
+              Type.boolean(verdict),
+            );
+          }
+        }
+      });
+
+      // The field's own verdict answers it, so a row missing it answers no rather than the whole
+      // row's.
+      it("answers a field whose verdict the row lacks no, whatever the whole row's", () => {
+        defineModel({"update:title": [rule({predicates: [noTags]})]});
+
+        putVerdicts(DOCUMENT, {
+          update: {reads: [DOCUMENT, TAG], verdict: UPDATE_KEY},
+          "update:title": {reads: [DOCUMENT, TAG], verdict: FIELD_KEY},
+        });
+
+        putDocument({$verdicts: {[UPDATE_KEY]: true}});
+
+        assert.deepStrictEqual(
+          can(
+            Type.nil(),
+            updateOf(Type.atom("title")),
+            document({folder_id: FOLDER_ID}),
+          ),
+          Type.boolean(false),
+        );
+      });
+
+      // The title is answered from its verdict and the summary from the held row, and both have to
+      // hold.
+      it("answers several fields, each from its own verdict or the held rows", () => {
+        defineModel({
+          "update:summary": [rule({predicates: [["public", "==", true]]})],
+          "update:title": [rule({predicates: [noTags]})],
+        });
+
+        putVerdicts(DOCUMENT, {
+          "update:title": {reads: [DOCUMENT, TAG], verdict: FIELD_KEY},
+        });
+
+        const fieldsUpdate = (isPublic) => {
+          putDocument({$verdicts: {[FIELD_KEY]: true}, public: isPublic});
+
+          return can(
+            Type.nil(),
+            Type.tuple([
+              Type.atom("update"),
+              Type.list([Type.atom("summary"), Type.atom("title")]),
+            ]),
+            document({folder_id: FOLDER_ID, public: isPublic}),
+          );
+        };
+
+        assert.deepStrictEqual(fieldsUpdate(true), Type.boolean(true));
+        assert.deepStrictEqual(fieldsUpdate(false), Type.boolean(false));
+      });
+
+      // The document's update rule asks the folder's delete rule, which the held rows leave open,
+      // so the folder row's delete verdict answers.
+      it("answers a delegation from the related row's verdict on the operation it asks", () => {
+        defineModel(
+          {update: [rule({via: ["delete", ["folder"]]})]},
+          {delete: [rule({predicates: [noPublic]})]},
+        );
+
+        putVerdicts(FOLDER, {
+          delete: {
+            reads: [DOCUMENT, FOLDER],
+            verdict: "delete:00112233aabbccdd",
+          },
+        });
+
+        for (const verdict of [true, false]) {
+          putFolder({"delete:00112233aabbccdd": verdict});
+
+          assert.deepStrictEqual(
+            can(
+              Type.nil(),
+              Type.atom("update"),
+              document({folder_id: FOLDER_ID}),
+            ),
+            Type.boolean(verdict),
+          );
+        }
+      });
+
+      it("grants nothing on a rule the held rows leave open when the build bakes no verdicts", () => {
+        defineModel({}, {read: [rule({predicates: [noPublic]})]});
+        putFolder({[KEY]: true});
+
+        assert.deepStrictEqual(
+          can(Type.nil(), Type.atom("read"), folder()),
+          Type.boolean(false),
+        );
+      });
+
+      // The baked verdicts are a plain object, so an operation spelled like one of
+      // Object.prototype's properties must find no verdict rather than the property.
+      it("answers no for an operation the build bakes no verdict under", () => {
+        defineModel({constructor: [rule({predicates: [noTags]})]});
+        globalThis.Hologram.sync.model[DOCUMENT].operations.push("constructor");
+        putVerdicts(DOCUMENT, {});
+        putDocument({$verdicts: {[KEY]: true}});
+
+        assert.deepStrictEqual(
+          can(
+            Type.nil(),
+            Type.atom("constructor"),
+            document({folder_id: FOLDER_ID}),
+          ),
+          Type.boolean(false),
+        );
+      });
+    });
   });
 
   // Cases this side alone has: no client holds a server-only attribute's value - a struct holds its
   // sentinel and a held row nothing at all - so a rule reading one never decides on it, wherever the
-  // rule reads it, and only the server's verdict answers a predicate the build sends as one.
+  // rule reads it, and only the server's verdict on the operation answers it.
   describe("server-only attributes", () => {
     const KEY = "read:00112233aabbccdd";
 
@@ -3149,6 +3355,11 @@ describe("Elixir_Hologram_Auth", () => {
 
       model[DOCUMENT].attributes.code = "string";
       model[DOCUMENT].serverOnly = ["code"];
+
+      model[DOCUMENT].verdicts = {read: {reads: [FOLDER], verdict: KEY}};
+      model[FOLDER].verdicts = {
+        read: {reads: [DOCUMENT, FOLDER], verdict: KEY},
+      };
 
       Model.reset();
     };
@@ -3196,7 +3407,7 @@ describe("Elixir_Hologram_Auth", () => {
       );
     };
 
-    const decidedByVerdict = {reads: [FOLDER], verdict: KEY};
+    const serverOnlyMarker = {server: true};
 
     afterEach(() => {
       LocalDatabase.actorUserId = null;
@@ -3300,7 +3511,7 @@ describe("Elixir_Hologram_Auth", () => {
         const verdictReads = (verdict) => {
           putDocument();
 
-          return folderReads([{...anyCode, ...decidedByVerdict}], {
+          return folderReads([anyCode], {
             $verdicts: {[KEY]: verdict},
           });
         };
@@ -3310,24 +3521,24 @@ describe("Elixir_Hologram_Auth", () => {
       });
     });
 
-    describe("in a predicate the build sends as its verdict", () => {
+    describe("in a predicate the build sends as a marker", () => {
       it("grants on a true verdict", () => {
         assert.deepStrictEqual(
-          folderReads([decidedByVerdict], {$verdicts: {[KEY]: true}}),
+          folderReads([serverOnlyMarker], {$verdicts: {[KEY]: true}}),
           Type.boolean(true),
         );
       });
 
       it("grants nothing on a false verdict", () => {
         assert.deepStrictEqual(
-          folderReads([decidedByVerdict], {$verdicts: {[KEY]: false}}),
+          folderReads([serverOnlyMarker], {$verdicts: {[KEY]: false}}),
           Type.boolean(false),
         );
       });
 
       it("grants nothing on a row the server sent with no verdicts", () => {
         assert.deepStrictEqual(
-          folderReads([decidedByVerdict]),
+          folderReads([serverOnlyMarker]),
           Type.boolean(false),
         );
       });
@@ -3338,7 +3549,7 @@ describe("Elixir_Hologram_Auth", () => {
 
         defineServerOnlyModel(
           {},
-          {read: [rule({predicates: [decidedByVerdict]})]},
+          {read: [rule({predicates: [serverOnlyMarker]})]},
         );
         putFolder({$verdicts: {[KEY]: true}});
 
@@ -3355,7 +3566,7 @@ describe("Elixir_Hologram_Auth", () => {
         const changedReads = (name, value) => {
           defineServerOnlyModel(
             {},
-            {read: [rule({predicates: [decidedByVerdict]})]},
+            {read: [rule({predicates: [serverOnlyMarker]})]},
           );
 
           putFolder({$verdicts: {[KEY]: true}});
@@ -3386,7 +3597,7 @@ describe("Elixir_Hologram_Auth", () => {
         const delegates = (verdict) => {
           defineServerOnlyModel(
             {update: [rule({via: ["read", ["folder"]]})]},
-            {read: [rule({predicates: [decidedByVerdict]})]},
+            {read: [rule({predicates: [serverOnlyMarker]})]},
           );
 
           putFolder({$verdicts: {[KEY]: verdict}});
