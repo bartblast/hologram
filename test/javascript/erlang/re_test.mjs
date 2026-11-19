@@ -1524,6 +1524,14 @@ describe("Erlang_Re", () => {
       assertMatchResult(result, [[200, 1]]);
     });
 
+    it("returns byte offsets after a leading byte order mark with the unicode option", () => {
+      const subject = Bitstring.fromBytes([0xef, 0xbb, 0xbf, 0x61]);
+
+      const result = run(subject, Type.bitstring("a"), [Type.atom("unicode")]);
+
+      assertMatchResult(result, [[3, 1]]);
+    });
+
     it("decodes the subject with a unicode compiled pattern", () => {
       const compiled = compilePattern("é", [Type.atom("unicode")]);
 

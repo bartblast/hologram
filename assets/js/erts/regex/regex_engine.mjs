@@ -11,8 +11,8 @@ import {
   NEWLINE_VERBS,
 } from "./regex_newlines.mjs";
 
-import {startOptionSettings} from "./regex_options.mjs";
 import RegexOffsetMap from "./regex_offset_map.mjs";
+import {startOptionSettings} from "./regex_options.mjs";
 import RegexParseError from "./regex_parse_error.mjs";
 import RegexParser, {scanStartOptions} from "./regex_parser.mjs";
 import RegexTranslator from "./regex_translator.mjs";
@@ -43,12 +43,14 @@ const CACHED_SUBJECT_MIN_BYTE_SIZE = 64;
 // engine split. Also bridges boxed Erlang terms to engine inputs: char data
 // conversion and :re compile option parsing.
 export default class RegexEngine {
-  // Converted texts of binary subjects, by binary, one map per mode, since
-  // the texts of one binary differ between the modes, and the offset maps of
-  // their unicode mode texts. Each lives as long as its binary.
+  // Converted byte mode texts of binary subjects, by binary. Each mode has
+  // its own map, since the texts of one binary differ between the modes.
+  // Each text lives as long as its binary.
   static #latin1SubjectTexts = new WeakMap();
+
+  // Offset maps of the unicode mode texts of binary subjects, by binary.
+  // Each map lives as long as its binary.
   static #subjectOffsetMaps = new WeakMap();
-  static #utf8SubjectTexts = new WeakMap();
 
   // Keeps a leading byte order mark, which is data in a binary, where
   // ERTS.utf8Decoder drops it.
@@ -56,6 +58,10 @@ export default class RegexEngine {
     fatal: true,
     ignoreBOM: true,
   });
+
+  // Converted unicode mode texts of binary subjects, by binary. Each text
+  // lives as long as its binary.
+  static #utf8SubjectTexts = new WeakMap();
 
   // Converts char data (a binary or a possibly nested list of code points
   // and binaries, with an improper binary tail allowed) to a JS string,

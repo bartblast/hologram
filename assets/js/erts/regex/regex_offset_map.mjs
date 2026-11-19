@@ -6,9 +6,10 @@ const CHECKPOINT_GAP = 64;
 // Converts between the JS string indices of a text and the UTF-8 byte offsets
 // of the same positions. Walks the text forward from the nearest checkpoint,
 // or from where the previous conversion started or stopped when that is
-// nearer. A conversion walks at most one checkpoint gap, conversions in
-// increasing order walk the text once in total, and a conversion at or after
-// the previous one's start walks only from there.
+// nearer. A conversion inside the part of the text walked so far walks at
+// most one checkpoint gap, conversions in increasing order walk the text
+// once in total, and a conversion at or after the previous one's start walks
+// only from there.
 // Checkpoints are laid down as the walks reach them. ASCII text with a known
 // byte length maps positions as they are.
 export default class RegexOffsetMap {

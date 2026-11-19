@@ -759,6 +759,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert :re.run(subject, "b", [:unicode]) == {:match, [{200, 1}]}
     end
 
+    test "returns byte offsets after a leading byte order mark with the unicode option" do
+      assert :re.run(<<0xEF, 0xBB, 0xBF, ?a>>, "a", [:unicode]) == {:match, [{3, 1}]}
+    end
+
     test "decodes the subject with a unicode compiled pattern" do
       {:ok, compiled} = :re.compile("é", [:unicode])
 
