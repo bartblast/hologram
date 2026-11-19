@@ -65,11 +65,11 @@ defmodule Hologram.Sync.Live do
     has reached
   - `tx_range` - the lowest and the highest of the batch's transaction ids
   - `checked` - every row the batch may have changed for anyone, per entity type: its own ids, both
-    ends of each pair, and the rows the backwards search reaches along the read rules' and the
-    verdicts' edges, packed (see `Hologram.Sync.PackedIds.pack/1`). A checked row missing from
-    `readable` is one the user may not read now, or one that is gone. Packed because it goes to
-    every session: a binary that size is shared between the processes it is sent to, where a set
-    of ids is copied into each of them.
+    ends of each pair, and the rows the backwards search reaches along the given edges - the read
+    rules', and the verdicts' in a build checking permissions on the client - packed (see
+    `Hologram.Sync.PackedIds.pack/1`). A checked row missing from `readable` is one the user may
+    not read now, or one that is gone. Packed because it goes to every session: a binary that size
+    is shared between the processes it is sent to, where a set of ids is copied into each of them.
   - `pair_effects` - the pairs the batch added or removed, once however many times it moved each,
     keyed by `{source type, relationship name, target type}`, the name an atom, each pair packed as
     its source id and its target id (see `Hologram.Sync.PackedIds.pack_pairs/1`)
@@ -94,8 +94,9 @@ defmodule Hologram.Sync.Live do
     deciding quantifier, keyed by id per entity type - what `Hologram.Sync.Frame.row_verdicts/2`
     answers for the user and the row, read in the batch's recheck (see `Hologram.Sync.Recheck`), so
     no session works one out for a batch's rows - with an empty map for such a type the user may
-    read none of. Every readable checked row of such a type has them: the backwards search finds the
-    rows whose verdicts the batch may have moved together with those whose read access it may have
+    read none of. In a build checking permissions on the client, every readable checked row of such
+    a type has them: given the verdicts' edges, the backwards search finds the rows whose verdicts
+    the batch may have moved together with those whose read access it may have
   - `written` - per readable row, the names of the attributes the batch's puts and patches wrote, as
     the log spells them - all a patch needs, and only for a row a patch can go out for
   - `whole_types` - the entity types a grant change in the batch may have moved every row of for
@@ -110,7 +111,7 @@ defmodule Hologram.Sync.Live do
   @spec parts(
           list(map),
           list({pid, String.t() | nil}),
-          %{{module, atom} => list(tuple)},
+          Edges.t(),
           list(module),
           {non_neg_integer, non_neg_integer}
         ) :: %{(String.t() | nil) => part}
@@ -231,7 +232,8 @@ defmodule Hologram.Sync.Live do
   clients up to date: the windows' evaluators (see `Hologram.Sync.Fanout.route/2`), and every sync
   session, each sent `{:live, part}` with its user's part of the batch (see `parts/5`).
 
-  With no session on the node, nothing is read for them.
+  With no session on the node, nothing is read for them. In a build where no client checks
+  permissions, the rows carry no verdicts, so the search follows only the read rules' edges.
   """
   @spec route(list({non_neg_integer, list(map)}), {non_neg_integer, non_neg_integer}) :: :ok
   def route(transactions, place) do
@@ -245,7 +247,11 @@ defmodule Hologram.Sync.Live do
         effects = Enum.flat_map(transactions, fn {_tx, events} -> events end)
 
         # Read from the runtime's caches rather than derived per batch, as the fan-out reads them.
-        parts = parts(effects, sessions, Edges.index(), QueryCache.synced_types(), place)
+        # A build where no client checks permissions sends its rows without verdicts, so the search
+        # follows only the read rules' edges.
+        edges = Edges.index(QueryCache.permission_checking?())
+
+        parts = parts(effects, sessions, edges, QueryCache.synced_types(), place)
 
         Enum.each(sessions, fn {pid, user_id} ->
           send(pid, {:live, Map.fetch!(parts, user_id)})
