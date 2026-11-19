@@ -10,7 +10,6 @@ defmodule HologramFeatureTests.SyncTest do
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.SyncPage
-  alias HologramFeatureTestsWeb.Endpoint
 
   # Every entity table truncates, not only the documents: the client's pot is app-wide, so a row
   # left in ANY synced table by an earlier test file would arrive in this client's initial fill
@@ -63,7 +62,7 @@ defmodule HologramFeatureTests.SyncTest do
       |> Keyword.put_new(:cookie_path, "/policies")
       |> Keyword.put_new(:page, "HologramFeatureTests.PoliciesPage")
 
-    client = SyncClient.connect(Endpoint.url(), opts)
+    client = SyncClient.connect(http_url(), opts)
 
     on_exit(fn -> SyncClient.close(client) end)
 

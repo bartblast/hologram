@@ -12,7 +12,6 @@ defmodule HologramFeatureTests.RoleChecksTest do
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Policies.Page4
   alias HologramFeatureTests.Roles.Admin
-  alias HologramFeatureTestsWeb.Endpoint
 
   # The checks answer in the browser, from the grant rows it holds and the roles its build carries.
   # Each feature changes a grant only once the page is loaded and the browser holds its rows, and
@@ -172,7 +171,7 @@ defmodule HologramFeatureTests.RoleChecksTest do
   feature "shows no role to a session with no user at all", %{session: session} do
     create_document("ephemeris")
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!(Endpoint.url() <> "/policies/4")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/policies/4")
 
     assert html =~ ~r{<strong id="documents"><code>ephemeris</code></strong>}
     assert html =~ ~r{<strong id="admin"><code>false</code></strong>}

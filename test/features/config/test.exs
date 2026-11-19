@@ -1,17 +1,22 @@
 import Config
 
+# Port 0 has the OS pick a free port, so runs that overlap on one machine never share one. The
+# test helper reads the port the listener `Endpoint.url/0` names got, and puts it into the
+# endpoint's URL.
 config :hologram_feature_tests, HologramFeatureTestsWeb.Endpoint,
+  http: [ip: {127, 0, 0, 1}, port: 0],
   secret_key_base: "+c4nzKpOujvWTRjsuvgfREOT8nnWvr/ZL0t+CR5AeWkiJQl36INDkV7uAvyGgnBa",
   server: true
 
-# HOLOGRAM_FEATURE_TESTS_HTTPS serves the same app over TLS, where Chrome negotiates
+# HOLOGRAM_FEATURE_TESTS_HTTPS serves the same app over TLS too, where Chrome negotiates
 # HTTP/2 - Bandit offers it over TLS by default. Tests touching the SSE stream then run
 # against Bandit's other protocol, whose stream lifecycle is unlike HTTP/1.1's.
-# Endpoint.url/0 follows the listener, and Wallaby follows Endpoint.url/0, so nothing
-# else changes.
+# Endpoint.url/0 follows the TLS listener, and Wallaby follows Endpoint.url/0, so nothing
+# else changes for the browser.
 #
-# Port 0 has the OS pick a free port, so runs that overlap on one machine never share one. The
-# test helper reads the port the listener got and puts it into the endpoint's URL.
+# The plain listener stays up next to it, for the tests that fetch from the server without a
+# browser. Their clients speak HTTP/1.1 either way and don't trust the cert below, so they go
+# through `http_url/0` of the test helpers.
 #
 # The cert is a test-only self-signed pair made with OpenSSL, not `mix phx.gen.cert`:
 #
@@ -31,9 +36,6 @@ if System.get_env("HOLOGRAM_FEATURE_TESTS_HTTPS") do
       keyfile: Path.expand("../priv/cert/selfsigned_key.pem", __DIR__),
       port: 0
     ]
-else
-  config :hologram_feature_tests, HologramFeatureTestsWeb.Endpoint,
-    http: [ip: {127, 0, 0, 1}, port: 0]
 end
 
 config :logger, level: :warning
