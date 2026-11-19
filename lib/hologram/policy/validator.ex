@@ -643,13 +643,14 @@ defmodule Hologram.Policy.Validator do
   # row never reaches one - while the server reads the row as stored and may answer yes, the
   # client-locality defect validate_server_only_predicates!/4 refuses for a value, one relationship
   # away. A type's own read rules are left out: a condition, a role reference or a delegation they
-  # read through such a type is a deciding item, which the server's verdict on the row answers (see
-  # Hologram.Policy.deciding_quantifier?/3). A rule delegating to a read rule is not a read rule, so
-  # its own chains stay checked, while the delegated rule's deciding items are answered by the
-  # verdicts on the row it delegates to. The chains a deciding item reads are not checked, since
-  # the server's verdict answers it over the rows as stored (see Hologram.Policy.held_chains/2).
-  # Like any verdict, it answers no in a browser while a write it has not answered names a type
-  # the item reads, until the server's answer brings the verdict anew.
+  # read through such a type is a deciding item, which a browser answers as unknown, leaving the
+  # rule to the server's verdict on the operation (see Hologram.Policy.deciding_quantifier?/3). A
+  # rule delegating to a read rule is not a read rule, so its own chains stay checked, while the
+  # delegated read rules are answered by the read verdict on the row it delegates to. The chains a
+  # deciding item reads are not checked, since the server's verdict answers the operation over the
+  # rows as stored (see Hologram.Policy.held_chains/2). Like any verdict, it answers no in a browser
+  # while a write it has not answered names a type the operation reads, until the server's answer
+  # brings the verdict anew.
   defp validate_readable_chains!(entity_types) do
     unreadable_hops =
       for entity_type <- Enum.sort(entity_types),

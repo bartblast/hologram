@@ -32,7 +32,6 @@ defmodule Hologram.PolicyTest do
       update_fields: 1,
       validate_operation!: 2,
       verdict_key: 2,
-      verdict_key: 3,
       verdict_operations: 1,
       verdict_reads: 2,
       verdict_related_reads: 2
@@ -2486,6 +2485,52 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "verdict_key/2" do
+    defmodule KeyedParcel do
+      use Hologram.Entity
+
+      relationship :vault, Hologram.PolicyTest.KeyedVault, optional: true
+
+      allow :read, via: {:update, vault}
+    end
+
+    defmodule KeyedBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.PolicyTest.KeyedCard]
+
+      derived :top_cards, [Hologram.PolicyTest.KeyedCard], fn cards -> take(cards, 2) end
+
+      allow :delete, when: any(card <- top_cards, card.rank == 1)
+    end
+
+    defmodule KeyedCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+    end
+
+    defmodule ScoredBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.PolicyTest.ScoredCard]
+
+      derived :top_cards, [Hologram.PolicyTest.ScoredCard], fn cards ->
+        cards
+        |> sort(score: :desc)
+        |> take(2)
+      end
+
+      allow :delete, when: any(card <- top_cards, card.rank == 1)
+    end
+
+    defmodule ScoredCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+
+      derived :score, :integer, fn rank -> rank end
+    end
+
     defmodule LabelledMember do
       use Hologram.Entity
 
@@ -2548,6 +2593,28 @@ defmodule Hologram.PolicyTest do
       assert verdict_key(LabelledMember, :update) == verdict_key(RelabelledMember, :update)
     end
 
+    # The key a verdict was told under is never read for what a changed set holds now.
+    test "gives an operation over a derived set a new key when the set's definition changes" do
+      put_derived_definitions([KeyedBoard])
+
+      key = verdict_key(KeyedBoard, :delete)
+      {:query, term} = Derived.definition(KeyedBoard, :top_cards)
+
+      Derived.put_definitions(%{{KeyedBoard, :top_cards} => {:query, %{term | take: 3}}})
+
+      assert verdict_key(KeyedBoard, :delete) != key
+    end
+
+    test "gives an operation over a derived set a new key when a field its definition reads changes" do
+      put_derived_definitions([ScoredBoard, ScoredCard])
+
+      key = verdict_key(ScoredBoard, :delete)
+
+      Derived.put_definitions(%{{ScoredCard, :score} => {:value, 0}})
+
+      assert verdict_key(ScoredBoard, :delete) != key
+    end
+
     # The vault has no read rule, so the parcel's read rule delegating to it is answered by the
     # server's verdict, which a changed vault rule moves.
     test "gives an operation a new key when a rule its delegation asks changes" do
@@ -2558,164 +2625,6 @@ defmodule Hologram.PolicyTest do
       closed_key = verdict_key(Hologram.PolicyTest.KeyedParcel, :read)
 
       assert open_key != closed_key
-    end
-  end
-
-  describe "verdict_key/3" do
-    defmodule KeyedParcel do
-      use Hologram.Entity
-
-      relationship :vault, Hologram.PolicyTest.KeyedVault, optional: true
-
-      allow :read, via: {:update, vault}
-    end
-
-    defmodule KeyedProject do
-      use Hologram.Entity
-
-      attribute :title, :string
-
-      relationship :members, [Hologram.PolicyTest.KeyedMember], inverse: project
-
-      allow :read
-    end
-
-    defmodule KeyedMember do
-      use Hologram.Entity
-
-      attribute :first, :string
-      attribute :seat, :string
-
-      relationship :project, KeyedProject, optional: true
-
-      derived :label, :string, fn first -> first <> "!" end
-
-      allow :read
-    end
-
-    defmodule RekeyedMember do
-      use Hologram.Entity
-
-      attribute :first, :string
-
-      derived :label, :string, fn first -> first <> "?" end
-
-      allow :read
-    end
-
-    defmodule KeyedBoard do
-      use Hologram.Entity
-
-      relationship :cards, [Hologram.PolicyTest.KeyedCard]
-
-      derived :top_cards, [Hologram.PolicyTest.KeyedCard], fn cards -> take(cards, 2) end
-    end
-
-    defmodule KeyedCard do
-      use Hologram.Entity
-
-      attribute :rank, :integer
-    end
-
-    defmodule ScoredBoard do
-      use Hologram.Entity
-
-      relationship :cards, [Hologram.PolicyTest.ScoredCard]
-
-      derived :top_cards, [Hologram.PolicyTest.ScoredCard], fn cards ->
-        cards
-        |> sort(score: :desc)
-        |> take(2)
-      end
-    end
-
-    defmodule ScoredCard do
-      use Hologram.Entity
-
-      attribute :rank, :integer
-
-      derived :score, :integer, fn rank -> rank end
-    end
-
-    # Verdicts are stored with the rows a client holds, so the key a clause gets is pinned - a
-    # change to how keys are made would leave every stored verdict unread.
-    test "keys a clause by its operation and a digest of it" do
-      assert verdict_key(KeyedProject, :delete, {:none, {[:members], []}}) ==
-               "delete:bb12cc9173b5a038"
-    end
-
-    test "gives a changed clause a new key and another operation another one" do
-      key = verdict_key(KeyedProject, :delete, {:none, {[:members], []}})
-
-      assert verdict_key(KeyedProject, :delete, {:all, {[:members], [{:seat, :==, "x"}]}}) != key
-      assert verdict_key(KeyedProject, :archive, {:none, {[:members], []}}) != key
-    end
-
-    # The vault has no read rule, so the parcel's read rule delegating to it is answered by the
-    # server's verdict, which a changed vault rule moves.
-    test "gives a delegation a new key when a rule it asks changes" do
-      open_key = delegation_key_with_vault("allow :update, when: open == true")
-      closed_key = delegation_key_with_vault("allow :update, when: open == false")
-
-      assert open_key != closed_key
-      assert delegation_key_with_vault("allow :update, when: open == true") == open_key
-    end
-
-    # Its roles are expanded in it, so the reference alone says what it means.
-    test "keys a role reference by its operation and a digest of it" do
-      item = {:to, {:rel, [:project, :team], [:member]}}
-
-      assert verdict_key(Policy.Readers.Module24, :read, item) == "read:407dcd1e54324cb9"
-    end
-
-    test "gives a role reference naming other roles a new key" do
-      key =
-        verdict_key(Policy.Readers.Module24, :read, {:to, {:rel, [:project, :team], [:member]}})
-
-      other_item = {:to, {:rel, [:project, :team], [:member, :owner]}}
-
-      assert verdict_key(Policy.Readers.Module24, :read, other_item) != key
-    end
-
-    # The two types declare the same label computed two ways, so the same clause over it means two
-    # things - while over an attribute it means one.
-    test "gives a clause reading a derived field a new key when the field's definition changes" do
-      put_derived_definitions([KeyedMember, RekeyedMember])
-
-      assert verdict_key(KeyedMember, :delete, {:label, :==, "x"}) !=
-               verdict_key(RekeyedMember, :delete, {:label, :==, "x"})
-
-      assert verdict_key(KeyedMember, :delete, {:first, :==, "x"}) ==
-               verdict_key(RekeyedMember, :delete, {:first, :==, "x"})
-    end
-
-    # The key a verdict was told under is never read for what a changed set holds now.
-    test "gives a clause over a derived set a new key when the set's definition changes" do
-      put_derived_definitions([KeyedBoard])
-
-      clause = {:any, {[:top_cards], [{:rank, :==, 1}]}}
-      key = verdict_key(KeyedBoard, :delete, clause)
-      {:query, term} = Derived.definition(KeyedBoard, :top_cards)
-
-      Derived.put_definitions(%{{KeyedBoard, :top_cards} => {:query, %{term | take: 3}}})
-
-      assert verdict_key(KeyedBoard, :delete, clause) != key
-    end
-
-    test "gives a clause over a derived set a new key when a field its definition reads changes" do
-      put_derived_definitions([ScoredBoard, ScoredCard])
-
-      clause = {:any, {[:top_cards], [{:rank, :==, 1}]}}
-      key = verdict_key(ScoredBoard, :delete, clause)
-
-      Derived.put_definitions(%{{ScoredCard, :score} => {:value, 0}})
-
-      assert verdict_key(ScoredBoard, :delete, clause) != key
-    end
-
-    test "keys a per-role operation the way the client spells it" do
-      assert "grant_role:editor:" <> _digest =
-               verdict_key(KeyedProject, {:grant_role, :editor}, {:none, {[:members], []}})
     end
   end
 
@@ -2832,6 +2741,26 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "verdict_reads/2" do
+    defmodule KeyedProject do
+      use Hologram.Entity
+
+      relationship :members, [Hologram.PolicyTest.KeyedMember], inverse: project
+
+      allow :read
+    end
+
+    defmodule KeyedMember do
+      use Hologram.Entity
+
+      attribute :first, :string
+
+      relationship :project, KeyedProject, optional: true
+
+      derived :label, :string, fn first -> first <> "!" end
+
+      allow :read
+    end
+
     test "returns the types along a delegation's chain" do
       assert verdict_reads(Policy.Readers.Module28, {:via, {:read, [:shelf, :crate]}}) == [
                Policy.Readers.Module26,
@@ -3058,13 +2987,6 @@ defmodule Hologram.PolicyTest do
     after
       Code.put_compiler_option(:ignore_module_conflict, ignore_module_conflict?)
     end
-  end
-
-  # The key of KeyedParcel's delegation to its vault, defined with the given rules and no read rule.
-  defp delegation_key_with_vault(rules) do
-    compile_keyed_vault(rules)
-
-    verdict_key(Hologram.PolicyTest.KeyedParcel, :read, {:via, {:update, [:vault]}})
   end
 
   # The key of the given operation of a type defined with the given rules, delete by default.

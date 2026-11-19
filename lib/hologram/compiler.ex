@@ -3054,29 +3054,12 @@ defmodule Hologram.Compiler do
   defp quantified_type(hops, [entity_type | _types_above]),
     do: Derived.path_target(entity_type, hops)
 
-  # The verdict key and the read types of a deciding item - a clause standing in a rule's
-  # predicates, a role reference as {:to, reference} or a delegation as {:via, via} - as members of
-  # its object, none for any other.
-  defp render_verdict_members(item, {entity_type, operation}) do
-    if Policy.deciding_quantifier?(entity_type, operation, item) do
-      reads_js =
-        entity_type
-        |> Policy.verdict_reads(item)
-        |> Enum.map_join(",", &render_entity_type_label/1)
-        |> then(&"[#{&1}]")
-
-      verdict_js =
-        entity_type
-        |> Policy.verdict_key(operation, item)
-        |> Jason.encode!()
-
-      [{"reads", reads_js}, {"verdict", verdict_js}]
-    else
-      []
-    end
+  # Whether the given role reference, as {:to, reference}, or delegation, as {:via, via}, of a rule
+  # is one the client can't decide, which it answers as unknown, leaving the rule to the server's
+  # verdict on the operation.
+  defp deciding_item?(item, {entity_type, operation}) do
+    Policy.deciding_quantifier?(entity_type, operation, item)
   end
-
-  defp render_verdict_members(_item, nil), do: []
 
   defp resolve_derived_definition(entity_type, name, ir_plt) do
     if name in entity_type.__derived_builder_calls__() do
@@ -5029,7 +5012,8 @@ defmodule Hologram.Compiler do
       {"policy", render_policy(entity_type)},
       {"relationships", render_relationships(entity_type)},
       {"roles", render_roles(entity_type)},
-      {"serverOnly", server_only}
+      {"serverOnly", server_only},
+      {"verdicts", render_verdicts(entity_type)}
     ]
   end
 
@@ -5216,6 +5200,27 @@ defmodule Hologram.Compiler do
     |> render_json_object()
   end
 
+  # The server's verdicts a client answers an operation by when the rows it holds leave the answer
+  # open, by operation key as the policy is: each one's verdict key, which the row's $verdicts holds
+  # it under, and the types its rules read, whose unanswered writes by the client make it stale
+  # (see Policy.verdict_operations/1 and Policy.operation_reads/2).
+  defp render_verdicts(entity_type) do
+    entity_type
+    |> Policy.verdict_operations()
+    |> Enum.map(fn {key, operation} ->
+      reads_js =
+        entity_type
+        |> Policy.operation_reads(operation)
+        |> Enum.map_join(",", &render_entity_type_label/1)
+        |> then(&"[#{&1}]")
+
+      entry_js = render_json_object([{"reads", reads_js}, {"verdict", Jason.encode!(key)}])
+
+      {Policy.operation_key(operation), entry_js}
+    end)
+    |> render_json_object()
+  end
+
   defp render_policy_rules(entity_type, operation, rules) do
     rules
     |> Enum.map_join(",", &render_policy_rule(entity_type, operation, &1))
@@ -5255,10 +5260,10 @@ defmodule Hologram.Compiler do
 
   # A quantifier is an object too, in the shape the kernel's filters take it: the set its source
   # leads to, read on the row it is about or on one above it, and the condition each of the set's
-  # rows is matched with, read on that row with the rows above it. A deciding one standing in a
-  # rule's predicates carries the key the server's verdict on it is sent under and the types it
-  # reads, whose unanswered writes by the client make the verdict stale.
-  defp render_policy_clause(types, {quantifier, {source, clauses}} = clause, verdict_context)
+  # rows is matched with, read on that row with the rows above it. A deciding one renders the same:
+  # the rows the client holds of its set decide what one row can and leave the rest unknown, and
+  # over a derived set they decide nothing.
+  defp render_policy_clause(types, {quantifier, {source, clauses}}, _verdict_context)
        when quantifier in [:all, :any, :none] do
     related_type = quantified_type(source, types)
 
@@ -5273,28 +5278,20 @@ defmodule Hologram.Compiler do
       {"source", render_derived_name(source)}
     ]
 
-    render_json_object(members ++ render_verdict_members(clause, verdict_context))
+    render_json_object(members)
   end
 
-  # A deciding predicate standing in a rule's predicates is the key the server's verdict on it is
-  # sent under and the types it reads. One reading a server-only attribute, whose value no client
-  # holds, is those alone, since the client answers it from the verdict and nothing else. One that
-  # in a read rule reads a row of a type no client holds carries its triple too: the client answers
-  # it from the rows it holds when they decide it - an empty reference on the path reads no row -
-  # and from the verdict otherwise.
+  # A predicate standing in a rule's predicates that reads a server-only attribute, whose value no
+  # client holds, is a marker the client answers as unknown - its compared value stays off the
+  # bundle. Every other predicate is its triple: one reading a row of a type no client holds reads
+  # it as unknown unless an empty reference on its path reads no row.
   defp render_policy_clause(types, {_name, _operator, _value} = clause, verdict_context) do
-    case render_verdict_members(clause, verdict_context) do
-      [] ->
-        render_policy_triple(types, clause)
-
-      members ->
-        {entity_type, _operation} = verdict_context
-
-        if Policy.reads_server_only?(entity_type, clause) do
-          render_json_object(members)
-        else
-          render_json_object([{"predicate", render_policy_triple(types, clause)} | members])
-        end
+    # A clause reading a server-only attribute is deciding for that alone, so only whether it stands
+    # in a rule's predicates is left to ask - inside a quantifier it stays a triple.
+    if verdict_context != nil and Policy.reads_server_only?(elem(verdict_context, 0), clause) do
+      render_json_object([{"server", "true"}])
+    else
+      render_policy_triple(types, clause)
     end
   end
 
@@ -5356,9 +5353,8 @@ defmodule Hologram.Compiler do
   end
 
   # The chain a role is held through, spelled the way a delegation spells its chain. A deciding one
-  # - in a read rule, one reading a row of a type no client holds - carries a fifth element, the key
-  # the server's verdict on it is sent under and the types it reads, which the client answers it
-  # from instead.
+  # - in a read rule, one reading a row of a type no client holds - carries a fifth element, true,
+  # and the client answers it as unknown.
   defp render_policy_reference(
          entity_type,
          {:rel, relationship_names, role_names} = reference,
@@ -5366,11 +5362,7 @@ defmodule Hologram.Compiler do
        ) do
     target_type = Entity.path_target(entity_type, relationship_names)
 
-    verdict_entries =
-      case render_verdict_members({:to, reference}, verdict_context) do
-        [] -> []
-        members -> [render_json_object(members)]
-      end
+    verdict_entries = if deciding_item?({:to, reference}, verdict_context), do: ["true"], else: []
 
     render_policy_reference_entry(
       "rel",
@@ -5407,8 +5399,7 @@ defmodule Hologram.Compiler do
 
   # Operation first, as the server's tuple holds it - the array shape grant references bake as. A
   # deciding one - in a read rule, one whose chain passes a row of a type no client holds - carries
-  # a third element, the key the server's verdict on it is sent under and the types it reads, which
-  # the client answers it from instead.
+  # a third element, true, and the client answers it as unknown.
   defp render_policy_delegation(nil, _verdict_context), do: "null"
 
   defp render_policy_delegation({operation, relationship_names} = via, verdict_context) do
@@ -5417,11 +5408,7 @@ defmodule Hologram.Compiler do
       |> Policy.operation_key()
       |> Jason.encode!()
 
-    verdict_js =
-      case render_verdict_members({:via, via}, verdict_context) do
-        [] -> ""
-        members -> ",#{render_json_object(members)}"
-      end
+    verdict_js = if deciding_item?({:via, via}, verdict_context), do: ",true", else: ""
 
     "[#{operation_js},#{render_policy_name(relationship_names)}#{verdict_js}]"
   end
