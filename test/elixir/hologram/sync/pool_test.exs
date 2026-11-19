@@ -29,6 +29,8 @@ defmodule Hologram.Sync.PoolTest do
   end
 
   describe "run/1" do
+    # Opens connections of its own, so it needs a database server.
+    @tag :database
     test "runs the function on the pool when it is started, telling the database who it is" do
       put_app_env(:sync, pool_size: 1)
       start_supervised!(Pool.child_spec())
