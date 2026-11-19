@@ -42,6 +42,18 @@ defmodule Hologram.Mutation.Write do
         }
 
   @doc """
+  Returns what the given edge write does, keyed the way a struct's metadata records an edge change.
+  """
+  @spec edge_op(t) :: {{atom, String.t()}, :add | :delete}
+  def edge_op(%__MODULE__{op: :add_relationship} = write) do
+    {{write.relationship, write.target_id}, :add}
+  end
+
+  def edge_op(%__MODULE__{op: :delete_relationship} = write) do
+    {{write.relationship, write.target_id}, :delete}
+  end
+
+  @doc """
   Returns the entity struct the write's own verb would have handed the executor.
 
   A create builds a struct the way `Entity.new/2` does - the given id and values, with the declared
@@ -110,10 +122,8 @@ defmodule Hologram.Mutation.Write do
     struct!(write.entity_type, id: write.id, __meta__: metadata)
   end
 
-  def to_entity(%__MODULE__{op: op} = write) do
-    edge_op = if op == :add_relationship, do: :add, else: :delete
-    relationship_ops = %{{write.relationship, write.target_id} => edge_op}
-    metadata = %Metadata{claim: :client, relationship_ops: relationship_ops}
+  def to_entity(write) do
+    metadata = %Metadata{claim: :client, relationship_ops: Map.new([edge_op(write)])}
 
     struct!(write.entity_type, id: write.id, __meta__: metadata)
   end

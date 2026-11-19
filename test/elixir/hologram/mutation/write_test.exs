@@ -52,6 +52,20 @@ defmodule Hologram.Mutation.WriteTest do
     }
   end
 
+  describe "edge_op/1" do
+    test "answers an added edge" do
+      write = %Write{op: :add_relationship, relationship: :secrets, target_id: @target_id}
+
+      assert edge_op(write) == {{:secrets, @target_id}, :add}
+    end
+
+    test "answers a deleted edge" do
+      write = %Write{op: :delete_relationship, relationship: :secrets, target_id: @target_id}
+
+      assert edge_op(write) == {{:secrets, @target_id}, :delete}
+    end
+  end
+
   describe "to_entity/1" do
     test "builds a create as a new struct with its declared defaults filled" do
       write = %Write{
