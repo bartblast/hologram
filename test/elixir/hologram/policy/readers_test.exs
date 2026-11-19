@@ -23,6 +23,7 @@ defmodule Hologram.Policy.ReadersTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module2
   alias Hologram.Test.Fixtures.Policy.Readers.Module21
   alias Hologram.Test.Fixtures.Policy.Readers.Module24
+  alias Hologram.Test.Fixtures.Policy.Readers.Module25
   alias Hologram.Test.Fixtures.Policy.Readers.Module28
   alias Hologram.Test.Fixtures.Policy.Readers.Module3
   alias Hologram.Test.Fixtures.Policy.Readers.Module4
@@ -186,6 +187,13 @@ defmodule Hologram.Policy.ReadersTest do
                {:listed, rule([{:owner_id, :==, {:actor}}], own: [:viewer]),
                 {:actor_equal, :owner_id}},
                {:listed, rule([{:open, :==, true}], own: [:viewer]), {:grants, [own: [:viewer]]}}
+             ]
+    end
+
+    test "classifies a field of an update by its limited lines and the whole-row ones" do
+      assert classify(Module25, {:update, :open}) == [
+               {:listed, rule([{:keeper_id, :==, {:actor}}]), {:actor_equal, :keeper_id}},
+               {:independent, rule([{:open, :==, true}])}
              ]
     end
 

@@ -33,7 +33,9 @@ defmodule Hologram.Policy.Readers do
 
   @doc """
   Returns the rules granting the given operation on the given entity type, split and classified by
-  how the users they hold for can be found from a row.
+  how the users they hold for can be found from a row. A field of an update is granted by the
+  limited lines covering it and the ones covering the whole row (see
+  `Hologram.Policy.operation_rules/2`).
 
   Rules are split first, without changing what the policy grants:
 
@@ -63,7 +65,7 @@ defmodule Hologram.Policy.Readers do
   def classify(entity_type, operation \\ :read) do
     entity_type
     |> Policy.build()
-    |> Map.get(operation, [])
+    |> Policy.operation_rules(operation)
     |> Enum.flat_map(&split_disjunctions/1)
     |> Enum.flat_map(&split_delegation(&1, entity_type))
     |> Enum.map(&classify_rule/1)

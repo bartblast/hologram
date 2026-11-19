@@ -19,6 +19,8 @@ defmodule Hologram.PolicyTest do
       line_held_chains: 2,
       locked_set_links: 1,
       operation_key: 1,
+      operation_reads: 2,
+      operation_rules: 2,
       operations: 1,
       read_roles_qualifying_role_modules: 1,
       read_roles_qualifying_roles: 1,
@@ -30,7 +32,9 @@ defmodule Hologram.PolicyTest do
       revoke_role_qualifying_roles: 2,
       update_fields: 1,
       validate_operation!: 2,
+      verdict_key: 2,
       verdict_key: 3,
+      verdict_operations: 1,
       verdict_reads: 2,
       verdict_related_reads: 2,
       verdict_rule: 1
@@ -41,6 +45,10 @@ defmodule Hologram.PolicyTest do
   alias Hologram.MisuseError
   alias Hologram.PolicyTest.HeldBoard
   alias Hologram.PolicyTest.HeldTask
+  alias Hologram.PolicyTest.ServerOnlyReport
+  alias Hologram.PolicyTest.VerdictLabel
+  alias Hologram.PolicyTest.VerdictMember
+  alias Hologram.PolicyTest.VerdictProject
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -2071,6 +2079,62 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "operation_reads/2" do
+    # The close rule of the vault holds a role on it, and the crate delegation reads no type nobody
+    # may read.
+    test "returns the types the delegations read, deciding or not, the grant store among them" do
+      assert operation_reads(Policy.Readers.Module28, :read) == [
+               RoleGrant,
+               Policy.Readers.Module25,
+               Policy.Readers.Module26,
+               Policy.Readers.Module27
+             ]
+    end
+
+    test "returns the grant store and the rows before a role reference's last relationship" do
+      assert operation_reads(Policy.Readers.Module24, :read) == [
+               RoleGrant,
+               Policy.Readers.Module23
+             ]
+    end
+
+    test "returns a quantifier's own type beside its set's" do
+      assert operation_reads(VerdictProject, :delete) == [VerdictLabel, VerdictProject]
+    end
+
+    test "returns what a rule with no deciding item reads" do
+      assert operation_reads(VerdictProject, :read) == [VerdictMember, VerdictProject]
+    end
+
+    # The limited line reads the members, and the whole-row one the labels.
+    test "returns what the limited lines and the whole-row ones read for a field of an update" do
+      assert operation_reads(Hologram.PolicyTest.FieldVerdictProject, {:update, :name}) == [
+               Hologram.PolicyTest.FieldVerdictProject,
+               VerdictLabel,
+               VerdictMember
+             ]
+    end
+  end
+
+  describe "operation_rules/2" do
+    test "returns the limited lines and the whole-row ones for a field of an update" do
+      policy = %{:update => [:whole_row], {:update, :name} => [:limited]}
+
+      assert operation_rules(policy, {:update, :name}) == [:limited, :whole_row]
+    end
+
+    test "returns an operation's own rules" do
+      policy = %{:delete => [:delete], {:grant_role, :editor} => [:grant]}
+
+      assert operation_rules(policy, :delete) == [:delete]
+      assert operation_rules(policy, {:grant_role, :editor}) == [:grant]
+    end
+
+    test "returns no rules for an operation the policy has none for" do
+      assert operation_rules(%{}, :delete) == []
+    end
+  end
+
   describe "operations/1" do
     test "returns the names the allow lines carry beside the framework's operations" do
       defmodule NamedOperationsFixture do
@@ -2549,6 +2613,82 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "verdict_key/2" do
+    defmodule LabelledMember do
+      use Hologram.Entity
+
+      attribute :first, :string
+
+      derived :label, :string, fn first -> first <> "!" end
+
+      allow :update, when: first == "x"
+      allow :delete, when: label == "x"
+    end
+
+    defmodule RelabelledMember do
+      use Hologram.Entity
+
+      attribute :first, :string
+
+      derived :label, :string, fn first -> first <> "?" end
+
+      allow :update, when: first == "x"
+      allow :delete, when: label == "x"
+    end
+
+    # Verdicts are stored with the rows a client holds, so the key an operation gets is pinned - a
+    # change to how keys are made would leave every stored verdict unread.
+    test "keys an operation by its key and a digest of its rules" do
+      assert verdict_key(VerdictProject, :delete) == "delete:890acc79709b7822"
+    end
+
+    test "gives another operation another key" do
+      assert verdict_key(VerdictProject, :archive) != verdict_key(VerdictProject, :delete)
+    end
+
+    test "keys a field of an update the way the client spells it" do
+      assert "update:name:" <> _digest = verdict_key(VerdictProject, {:update, :name})
+    end
+
+    test "gives an operation a new key when its rules change" do
+      open_key = operation_key_with_rules("allow :delete, when: open == true")
+
+      assert operation_key_with_rules("allow :delete, when: open == false") != open_key
+      assert operation_key_with_rules("allow :delete, when: open == true") == open_key
+    end
+
+    test "gives a field of an update a new key when a whole-row update rule changes" do
+      limited_line = "allow :update, only: [:open], when: open == true"
+      open_key = operation_key_with_rules(limited_line, {:update, :open})
+
+      assert operation_key_with_rules(
+               "#{limited_line}\nallow :update, when: open == false",
+               {:update, :open}
+             ) != open_key
+    end
+
+    # The two types declare the same label computed two ways, so the same rule over it means two
+    # things - while over an attribute it means one.
+    test "gives an operation reading a derived field a new key when the field's definition changes" do
+      put_derived_definitions([LabelledMember, RelabelledMember])
+
+      assert verdict_key(LabelledMember, :delete) != verdict_key(RelabelledMember, :delete)
+      assert verdict_key(LabelledMember, :update) == verdict_key(RelabelledMember, :update)
+    end
+
+    # The vault has no read rule, so the parcel's read rule delegating to it is answered by the
+    # server's verdict, which a changed vault rule moves.
+    test "gives an operation a new key when a rule its delegation asks changes" do
+      compile_keyed_vault("allow :update, when: open == true")
+      open_key = verdict_key(Hologram.PolicyTest.KeyedParcel, :read)
+
+      compile_keyed_vault("allow :update, when: open == false")
+      closed_key = verdict_key(Hologram.PolicyTest.KeyedParcel, :read)
+
+      assert open_key != closed_key
+    end
+  end
+
   describe "verdict_key/3" do
     defmodule KeyedParcel do
       use Hologram.Entity
@@ -2704,6 +2844,57 @@ defmodule Hologram.PolicyTest do
     test "keys a per-role operation the way the client spells it" do
       assert "grant_role:editor:" <> _digest =
                verdict_key(KeyedProject, {:grant_role, :editor}, {:none, {[:members], []}})
+    end
+  end
+
+  describe "verdict_operations/1" do
+    defmodule FieldVerdictProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :labels, [Hologram.PolicyTest.VerdictLabel]
+      relationship :members, [Hologram.PolicyTest.VerdictMember]
+
+      allow :update, when: none(labels)
+      allow :update, only: [:name], when: any(member <- members, member.seat == "x")
+    end
+
+    # The read rule's any reads no none or all, so the browser answers it from the rows it holds.
+    test "returns every operation whose rules hold a deciding item, keyed" do
+      operations = [:archive, :close, :delete, :update, {:update, :name}]
+
+      assert verdict_operations(VerdictProject) ==
+               operations
+               |> Enum.map(&{verdict_key(VerdictProject, &1), &1})
+               |> Enum.sort()
+    end
+
+    test "returns a read rule's operation for a predicate on a server-only attribute" do
+      assert verdict_operations(ServerOnlyReport) == [
+               {verdict_key(ServerOnlyReport, :read), :read}
+             ]
+    end
+
+    test "returns a read rule's operation for a role reference or a delegation" do
+      assert verdict_operations(Policy.Readers.Module24) == [
+               {verdict_key(Policy.Readers.Module24, :read), :read}
+             ]
+
+      assert verdict_operations(Policy.Readers.Module28) == [
+               {verdict_key(Policy.Readers.Module28, :read), :read}
+             ]
+    end
+
+    # The field's verdict would answer the whole-row rule too, which update's verdict answers.
+    test "returns a field of an update only when its own lines hold a deciding item" do
+      assert verdict_operations(FieldVerdictProject) == [
+               {verdict_key(FieldVerdictProject, :update), :update}
+             ]
+    end
+
+    test "returns nothing for a type with no deciding item" do
+      assert verdict_operations(Module14) == []
     end
   end
 
@@ -2936,8 +3127,8 @@ defmodule Hologram.PolicyTest do
     hash([Hologram.PolicyTest.HashedProject])
   end
 
-  # The key of KeyedParcel's delegation to its vault, defined with the given rules and no read rule.
-  defp delegation_key_with_vault(rules) do
+  # Defines KeyedParcel's vault with the given rules and no read rule.
+  defp compile_keyed_vault(rules) do
     ignore_module_conflict? = Code.get_compiler_option(:ignore_module_conflict)
     Code.put_compiler_option(:ignore_module_conflict, true)
 
@@ -2954,7 +3145,34 @@ defmodule Hologram.PolicyTest do
     after
       Code.put_compiler_option(:ignore_module_conflict, ignore_module_conflict?)
     end
+  end
+
+  # The key of KeyedParcel's delegation to its vault, defined with the given rules and no read rule.
+  defp delegation_key_with_vault(rules) do
+    compile_keyed_vault(rules)
 
     verdict_key(Hologram.PolicyTest.KeyedParcel, :read, {:via, {:update, [:vault]}})
+  end
+
+  # The key of the given operation of a type defined with the given rules, delete by default.
+  defp operation_key_with_rules(rules, operation \\ :delete) do
+    ignore_module_conflict? = Code.get_compiler_option(:ignore_module_conflict)
+    Code.put_compiler_option(:ignore_module_conflict, true)
+
+    try do
+      Code.compile_string("""
+      defmodule Hologram.PolicyTest.RekeyedTask do
+        use Hologram.Entity
+
+        attribute :open, :boolean, default: false
+
+      #{rules}
+      end
+      """)
+    after
+      Code.put_compiler_option(:ignore_module_conflict, ignore_module_conflict?)
+    end
+
+    verdict_key(Hologram.PolicyTest.RekeyedTask, operation)
   end
 end

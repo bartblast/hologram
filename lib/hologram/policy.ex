@@ -81,6 +81,8 @@ defmodule Hologram.Policy do
 
   @verdict_digest_bytes 8
 
+  @verdict_operations_key {__MODULE__, :verdict_operations}
+
   # The operations the framework itself asks about: the four verbs' own and the three gates.
   # Always askable on every entity type, declared or not - default deny answers false.
   # IMPORTANT: Model.frameworkOperations in assets/js/model.mjs is the hand-ported twin, pinned on
@@ -577,6 +579,37 @@ defmodule Hologram.Policy do
   def operation_key({name, role_name}), do: "#{name}:#{role_name}"
 
   @doc """
+  Returns the entity types the rules of the given operation of the given entity type read, sorted:
+  those `verdict_reads/2` gives each of their items - every clause standing in their predicates,
+  role reference and delegation, deciding or not (see `deciding_quantifier?/3`). The operation's
+  rules are the ones `operation_rules/2` gives. A client takes the server's verdict on the
+  operation as current only while none of its own unanswered writes names one of them, since any
+  part of the rules can move the answer.
+  """
+  @spec operation_reads(module, Entity.operation()) :: list(module)
+  def operation_reads(entity_type, operation) do
+    entity_type
+    |> build()
+    |> operation_rules(operation)
+    |> Enum.flat_map(&rule_items/1)
+    |> Enum.flat_map(&verdict_reads(entity_type, &1))
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
+  Returns the rules of the given compiled policy that `Hologram.Auth.can?/3` reads for the given
+  operation, an update naming one field at most: for a field of an update, those of the limited
+  update lines covering it and those covering the whole row (see `field_rules/2`), and for any
+  other operation its own.
+  """
+  @spec operation_rules(map, atom | {atom, atom}) :: list(map)
+  def operation_rules(policy, {:update, field}) when is_atom(field),
+    do: field_rules(policy, field)
+
+  def operation_rules(policy, operation), do: Map.get(policy, operation, [])
+
+  @doc """
   Returns the operations the given entity type can be asked about, sorted: the framework's own seven, and every name an allow line carries - its own lines and the ones taken from its policy modules alike, since both land in __policies__/0.
   """
   @spec operations(module) :: list(atom)
@@ -749,6 +782,7 @@ defmodule Hologram.Policy do
     :persistent_term.erase(@hash_key)
     :persistent_term.erase(@locked_set_links_key)
     :persistent_term.erase(@model_facts_key)
+    :persistent_term.erase(@verdict_operations_key)
 
     :ok
   end
@@ -876,7 +910,86 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns the entity types the given deciding item of a rule of the given entity type reads, sorted:
+  Returns the key the server's verdict on the given operation of the given entity type is sent
+  under, and the client finds it by: the operation's key, a colon, and a short digest of what the
+  answer rests on - the operation's rules (see `operation_rules/2`), the definitions of the derived
+  fields their clauses read, and the hash of the rules of every type their delegations read (see
+  `hash/1`) but the grant store's, whose rules every type's grant lifecycle lines make. A changed
+  rule, definition or delegated rule gets a new key, so a client holding a verdict on what the
+  rules used to mean never reads it for what they mean now - a deploy changing only policies or
+  derived fields reloads no bundle. The digest's encoding is pinned, so a build and the node
+  running it agree across OTP releases.
+  """
+  @spec verdict_key(module, Entity.operation()) :: String.t()
+  def verdict_key(entity_type, operation) do
+    rules =
+      entity_type
+      |> build()
+      |> operation_rules(operation)
+      |> Enum.sort()
+
+    items = Enum.flat_map(rules, &rule_items/1)
+
+    clauses = Enum.reject(items, &match?({kind, _reference_or_via} when kind in [:to, :via], &1))
+
+    definitions =
+      entity_type
+      |> Derived.read_fields(clauses)
+      |> Enum.map(fn {type, name} -> {name, Derived.definition(type, name)} end)
+
+    rules_hash =
+      items
+      |> Enum.filter(&match?({:via, _via}, &1))
+      |> Enum.flat_map(&verdict_related_reads(entity_type, &1))
+      |> Enum.uniq()
+      |> Enum.sort()
+      |> List.delete(RoleGrant)
+      |> hash()
+
+    "#{operation_key(operation)}:#{verdict_digest({rules, definitions, rules_hash})}"
+  end
+
+  @doc """
+  Returns the operations of the given entity type the server sends its verdict on with each of its
+  rows, as `{key, operation}` pairs sorted by key (see `verdict_key/2`): every key of its compiled
+  policy whose own rules hold a deciding item (see `deciding_quantifier?/3`) - a clause standing in
+  their predicates, a role reference or a delegation. A client answers such an operation from the
+  verdict when the rows it holds leave the answer open. `:read` counts like any other key.
+
+  A field of an update counts by the deciding items of the limited lines covering it, though its
+  verdict answers those lines and the ones covering the whole row: a client answers a field with no
+  verdict of its own from the whole-row operation's, so a type with many limited fields and one
+  deciding whole-row rule sends one verdict rather than one per field.
+
+  Cached, with the model facts, for the types of the project's compiled data model - a row's
+  verdicts are worked out for every row a client is sent.
+  """
+  @spec verdict_operations(module) :: list({String.t(), Entity.operation()})
+  def verdict_operations(entity_type) do
+    Model.ensure_released!()
+
+    cache =
+      case :persistent_term.get(@verdict_operations_key, nil) do
+        nil ->
+          cache = Map.new(Model.entity_types(), &{&1, derived_verdict_operations(&1)})
+
+          :persistent_term.put(@verdict_operations_key, cache)
+
+          cache
+
+        cache ->
+          cache
+      end
+
+    case Map.fetch(cache, entity_type) do
+      {:ok, pairs} -> pairs
+      :error -> derived_verdict_operations(entity_type)
+    end
+  end
+
+  @doc """
+  Returns the entity types the given item of a rule of the given entity type reads, deciding or not
+  (see `deciding_quantifier?/3`), sorted:
   every type along its sets' sources and its paths, and through the derived fields it reads,
   nested quantifiers included - a derived set's own reads among them - and for a quantifier the
   rule's own. A client takes the server's verdict on the item as current only while none of its
@@ -1179,6 +1292,18 @@ defmodule Hologram.Policy do
           do: {verdict_key(entity_type, operation, item), item}
     end)
     |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  defp derived_verdict_operations(entity_type) do
+    entity_type
+    |> build()
+    |> Enum.filter(fn {operation, rules} ->
+      rules
+      |> Enum.flat_map(&rule_items/1)
+      |> Enum.any?(&deciding_quantifier?(entity_type, operation, &1))
+    end)
+    |> Enum.map(fn {operation, _rules} -> {verdict_key(entity_type, operation), operation} end)
     |> Enum.sort()
   end
 
@@ -1656,6 +1781,12 @@ defmodule Hologram.Policy do
       |> Enum.sort()
 
     %{derived: derived, inverses: inverses}
+  end
+
+  # The items of a rule: every clause standing in its predicates, each role reference of its to as
+  # {:to, reference}, and its delegation as {:via, via}.
+  defp rule_items(%{predicates: predicates, to: to, via: via}) do
+    standing_clauses(predicates) ++ reference_items(to) ++ via_items(via)
   end
 
   # The types a rule reads through relationships from a row of the given type, as the server's
