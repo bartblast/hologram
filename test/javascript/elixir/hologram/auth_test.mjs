@@ -2903,6 +2903,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       beforeEach(() => {
         LocalDatabase.actorUserId = ALICE;
+        LocalDatabase.actorEntityId = ALICE;
       });
 
       // The server worked the verdict out for the session's user only.
@@ -2955,6 +2956,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       beforeEach(() => {
         LocalDatabase.actorUserId = ALICE;
+        LocalDatabase.actorEntityId = ALICE;
       });
 
       it("grants on a true verdict", () => {
@@ -3056,6 +3058,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       beforeEach(() => {
         LocalDatabase.actorUserId = ALICE;
+        LocalDatabase.actorEntityId = ALICE;
       });
 
       it("grants on a true verdict", () => {
