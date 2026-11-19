@@ -830,7 +830,17 @@ export default class Tabs {
     // batches go and opens a stream of its own, which greets the server from the place it holds
     // (see Tabs.dissolve). That holds for a lead handed to it during the read too - it never took
     // it, and the group's next tab in line takes it instead.
+    //
+    // A write this tab is still saving is saved and told to the group first: the group's leader
+    // then sends it at once. Told after, the message would go nowhere, and the write would wait
+    // in the store for whatever next wakes the leader. And the tab can have left meanwhile.
     if (base === null) {
+      await Batches.recorded();
+
+      if (Tabs.#token !== token) {
+        return;
+      }
+
       Durability.detach();
       Tabs.leader = false;
       Tabs.dissolve();

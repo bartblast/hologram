@@ -1930,6 +1930,61 @@ describe("Tabs", () => {
         Sse.isStarted = wasStarted;
       });
 
+      // Told after leaving, the message would go nowhere, and the group's leader would send the
+      // write only when something else woke it.
+      it("leaves the group only once the writes it is still saving are told to the group", async () => {
+        let saved;
+
+        sinon.stub(Durability, "readBase").resolves(null);
+        sinon.stub(Durability, "detach");
+        sinon.stub(Batches, "disown");
+
+        const saving = sinon
+          .stub(Batches, "recorded")
+          .returns(new Promise((resolve) => (saved = resolve)));
+
+        await follow();
+
+        Tabs.receive(state("place-2"));
+        await waitForEventLoop();
+
+        assert.isTrue(saving.calledOnce);
+        assert.isNotNull(Tabs.name);
+
+        saved();
+        await waitForEventLoop();
+
+        assert.isNull(Tabs.name);
+      });
+
+      // What it holds is its own by then, batches included, and leaving again would drop them.
+      it("leaves alone a tab that left the group while its writes were being saved", async () => {
+        let saved;
+
+        sinon.stub(Durability, "readBase").resolves(null);
+
+        const detaching = sinon.stub(Durability, "detach");
+        const disowning = sinon.stub(Batches, "disown");
+
+        sinon
+          .stub(Batches, "recorded")
+          .returns(new Promise((resolve) => (saved = resolve)));
+
+        await follow();
+
+        Tabs.receive(state("place-2"));
+        await waitForEventLoop();
+
+        await Tabs.leave();
+
+        saved();
+        await waitForEventLoop();
+
+        assert.isTrue(Tabs.leader);
+        assert.isFalse(detaching.called);
+        assert.isFalse(disowning.called);
+      });
+
       // It never took the lead, so it leaves as the follower it was, and the next tab in line leads.
       it("leaves the group as a follower when it was handed the lead while it read", async () => {
         let read;
