@@ -20,6 +20,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Cabin
   alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Document
+  alias HologramFeatureTests.Entities.Event
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.Inspection
   alias HologramFeatureTests.Entities.Item
@@ -970,6 +971,7 @@ defmodule HologramFeatureTests.Helpers do
         Cabin,
         Channel,
         Document,
+        Event,
         Folder,
         Inspection,
         Item,
