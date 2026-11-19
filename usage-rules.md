@@ -36,6 +36,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Reading a var the template doesn't have raises `Hologram.MisuseError`, naming the var and the vars the template has. A declared prop with no default is a var only when the usage passes it, so give it a default if the template reads it.
 - Interpolate Elixir expressions with curly braces: `{expression}`. **Not** `<%= expression %>`.
 - Component nodes use module names: `<MyComponent prop="value" />`. **Not** `<.my_component>`.
+- Close every element and component with an end tag, even `</li>`, `</p>`, `</td>` and `</option>`, which HTML lets you leave out. Only void elements like `<input>` and self-closing tags like `<MyComponent />` go without one. A component's end tag spells its name exactly as the start tag does. A missing, extra or misplaced end tag or block marker fails the build with `Hologram.TemplateSyntaxError`.
 - Tag names can be dynamic: `<{@module} cid="my_id" title="Hello" />` renders a component when the expression yields a component module, `<{@tag} class="heading">` renders an HTML element when it yields a string, anything else raises `ArgumentError`.
 - Pair a dynamic tag with a spread when the props are data too: `<{widget.module} ...{widget.props} />`.
 - Close a dynamic tag by repeating the opening expression: `<{@module}>content</{@module}>`.

@@ -421,6 +421,10 @@ You can use standard HTML elements and attributes in your templates:
 </div>
 ```
 
+Every element and component needs an end tag, unless it's a void element like `<input>` or `<br>`, or you write it self-closing, like `<div />` or `<MyComponent />`. That includes the end tags HTML lets you leave out, like `</li>`, `</p>`, `</td>` and `</option>`. A component's end tag spells its name exactly as the start tag does.
+
+A missing, extra or misplaced end tag fails the build with a `Hologram.TemplateSyntaxError` that names the tag, like `the <span> tag isn't closed before </div>, add </span>`. The same goes for an `{%if}`, `{%for}` or `{%raw}` block without its `{/if}`, `{/for}` or `{/raw}`, and for an `{%else}` outside an `{%if}` block.
+
 #### Accessing Props and State
 
 Props and state are accessible in templates using the `@var` syntax. This provides a convenient way to reference component data. For example, if you have a prop or state variable named `count`, you can access it as `@count` in your template.
