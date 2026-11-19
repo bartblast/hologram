@@ -241,6 +241,30 @@ defmodule Hologram.DB.Oplog do
   end
 
   @doc """
+  Returns whether the stored data of any effect of the given seqs holds every pair of the given
+  match, as `read_type_after/4` matches data - without reading any of it back. A seq the log doesn't
+  hold matches nothing, and no seqs match nothing.
+
+  For a question about a few effects of a gap of any size, answered without the payloads the gap
+  read left behind: the cost follows the seqs asked about, one primary key lookup each.
+  """
+  @spec any_data_match?(list(pos_integer), map) :: boolean
+  def any_data_match?([], _match), do: false
+
+  def any_data_match?(seqs, match) do
+    statement = """
+    SELECT EXISTS (
+      SELECT 1 FROM "#{Mapper.system_schema()}"."oplog"
+      WHERE "seq" = ANY($1::bigint[]) AND "data" @> $2::jsonb
+    )
+    """
+
+    {:ok, %Postgrex.Result{rows: [[matched?]]}} = Connection.query(statement, [seqs, match])
+
+    matched?
+  end
+
+  @doc """
   Returns the entity the given stored data describes - the inverse of what `append/1` writes, so a
   row read back out of the log is the struct it was.
 

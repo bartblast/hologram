@@ -434,17 +434,17 @@ defmodule Hologram.Sync.Session do
   end
 
   # Whether the gap deletes a grant held by the given user. Grants are only ever created and
-  # deleted, never patched, so a deleted one is all that takes one away. Its payload is read for
-  # the gap's grant deletes alone.
+  # deleted, never patched, so a deleted one is all that takes one away. Asked of the log about the
+  # gap's grant deletes alone, without reading their payloads back, so it costs what those few
+  # effects cost whatever the size of the gap. A delete records the row as decoded from its columns,
+  # so a grant names its user in the one spelling a uuid decodes to, which
+  # `Hologram.Auth.canonical_id/1` gives too.
   defp grant_lost?(_gap, nil), do: false
 
   defp grant_lost?(gap, actor_user_id) do
-    user_id = Auth.canonical_id(actor_user_id)
+    seqs = for %{op: :del_entity, seq: seq, type: RoleGrant} <- gap, do: seq
 
-    gap
-    |> Enum.filter(&(&1.op == :del_entity and &1.type == RoleGrant))
-    |> with_data()
-    |> Enum.any?(&(Auth.canonical_id(&1.data["user_id"]) == user_id))
+    Oplog.any_data_match?(seqs, %{"user_id" => Auth.canonical_id(actor_user_id)})
   end
 
   # The chunk's rows are read after the gap, so they can hold a batch of this client's in a

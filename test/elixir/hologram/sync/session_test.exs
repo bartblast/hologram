@@ -786,6 +786,21 @@ defmodule Hologram.Sync.SessionTest do
       %{hidden: hidden, readable: readable, user: user}
     end
 
+    # A grant's delete written to the log, where the session asks whether the gap took a grant of
+    # its user's away - an entry of the gap naming it, at its place.
+    defp logged_grant_delete(grant) do
+      statement = """
+      INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "data", "tx", "model_hash")
+      VALUES ('del_entity', 'Hologram.Auth.RoleGrant', $1, $2, '300'::xid8, 'h')
+      RETURNING "seq"
+      """
+
+      {:ok, %Postgrex.Result{rows: [[seq]]}} =
+        Connection.query(statement, [Codec.encode(grant["id"], :uuid), grant])
+
+      logged(:del_entity, RoleGrant, grant["id"], grant, {300, seq})
+    end
+
     defp type_grant(user) do
       %{
         "entity_id" => nil,
@@ -834,7 +849,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(
         actor_user_id: user.id,
-        gap: [logged(:del_entity, RoleGrant, grant["id"], grant, {300, 1})]
+        gap: [logged_grant_delete(grant)]
       )
 
       frames = await_frames()
@@ -869,7 +884,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(
         actor_user_id: user.id,
-        gap: [logged(:del_entity, RoleGrant, grant["id"], grant, {300, 1})]
+        gap: [logged_grant_delete(grant)]
       )
 
       refute Enum.any?(await_frames(), fn {deltas, _seq} ->

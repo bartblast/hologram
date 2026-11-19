@@ -357,6 +357,33 @@ defmodule Hologram.DB.OplogTest do
     end
   end
 
+  describe "any_data_match?/2" do
+    test "answers whether the data of any effect of the given seqs holds the match" do
+      seed(200, "del_entity", "Hologram.Auth.RoleGrant", @entity_id, %{"user_id" => "a"})
+      seed(200, "del_entity", "Hologram.Auth.RoleGrant", @target_id, %{"user_id" => "b"})
+
+      [first_seq, second_seq] =
+        0
+        |> read_after(0, 10)
+        |> Enum.map(& &1.seq)
+
+      assert any_data_match?([first_seq, second_seq], %{"user_id" => "b"})
+      refute any_data_match?([first_seq], %{"user_id" => "b"})
+    end
+
+    test "matches nothing of a seq the log doesn't hold" do
+      seed(200, "del_entity", "Hologram.Auth.RoleGrant", @entity_id, %{"user_id" => "a"})
+
+      [%{seq: seq}] = read_after(0, 0, 10)
+
+      refute any_data_match?([seq + 1], %{"user_id" => "a"})
+    end
+
+    test "matches nothing for no seqs" do
+      refute any_data_match?([], %{"user_id" => "a"})
+    end
+  end
+
   describe "read_data/1" do
     test "returns the payload of each effect by its seq" do
       seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{"c" => "x"})
