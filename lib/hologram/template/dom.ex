@@ -132,26 +132,17 @@ defmodule Hologram.Template.DOM do
     code_acc <> code
   end
 
-  # Closes the innermost open tag with the given end tag, or refuses the end tag when it can't.
+  # Closes the innermost open entry with the given closer, or refuses the closer when it can't.
   defp close_entry([], closer) do
     raise TemplateSyntaxError,
       message: "#{describe_closer(closer)} has no matching #{describe_opener(closer)}"
   end
 
   defp close_entry([top | rest], closer) do
-    cond do
-      matches_closer?(top, closer) ->
-        rest
-
-      Enum.any?(rest, &matches_closer?(&1, closer)) ->
-        raise TemplateSyntaxError,
-          message:
-            "#{describe_entry(top)} isn't closed before #{describe_closer(closer)}, add #{describe_entry_closer(top)}"
-
-      true ->
-        raise TemplateSyntaxError,
-          message:
-            "#{describe_closer(closer)} has no matching #{describe_opener(closer)} inside #{describe_entry(top)}"
+    if matches_closer?(top, closer) do
+      reopen_entry(rest, closer)
+    else
+      refuse_closer(top, Enum.find(rest, &matches_closer?(&1, closer)), closer)
     end
   end
 
@@ -166,11 +157,32 @@ defmodule Hologram.Template.DOM do
 
   defp decompose_event_attribute_name(name), do: {name, []}
 
+  defp describe_closer({:block_end, block_name}), do: "{/#{block_name}}"
+
+  defp describe_closer({:block_start, "else"}), do: "{%else}"
+
   defp describe_closer({:end_tag, tag_name}), do: "</#{tag_name_source(tag_name)}>"
+
+  defp describe_closer(:public_comment_end), do: "-->"
+
+  # An {%if} block that has reached its {%else} is still the {%if} block to the person who wrote it.
+  defp describe_entry({:block, "else"}), do: "the {%if} block"
+
+  defp describe_entry({:block, block_name}), do: "the {%#{block_name}} block"
+
+  defp describe_entry(:public_comment), do: "the public comment"
 
   defp describe_entry({:tag, tag_name}), do: "the <#{tag_name_source(tag_name)}> tag"
 
+  defp describe_entry_closer({:block, "else"}), do: "{/if}"
+
+  defp describe_entry_closer({:block, block_name}), do: "{/#{block_name}}"
+
+  defp describe_entry_closer(:public_comment), do: "-->"
+
   defp describe_entry_closer({:tag, tag_name}), do: "</#{tag_name_source(tag_name)}>"
+
+  defp describe_opener({:block_end, block_name}), do: "{%#{block_name}}"
 
   defp describe_opener({:end_tag, tag_name}), do: "<#{tag_name_source(tag_name)}>"
 
@@ -199,9 +211,21 @@ defmodule Hologram.Template.DOM do
     Helpers.tag_type(tag_name) == :element and tag_name not in @unkeyable_tags
   end
 
+  defp matches_closer?({:block, "else"}, {:block_end, "if"}), do: true
+
+  defp matches_closer?({:block, block_name}, {:block_end, block_name}), do: true
+
+  defp matches_closer?({:block, block_name}, {:block_start, "else"})
+       when block_name in ["if", "else"],
+       do: true
+
+  defp matches_closer?(:public_comment, :public_comment_end), do: true
+
   defp matches_closer?({:tag, open_tag_name}, {:end_tag, tag_name}) do
     same_tag_name?(open_tag_name, tag_name)
   end
+
+  defp matches_closer?(_entry, _closer), do: false
 
   # Wraps implicit keyword list.
   # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
@@ -235,6 +259,34 @@ defmodule Hologram.Template.DOM do
   end
 
   defp normalize_newlines(term), do: term
+
+  # Refuses a closer that doesn't close the innermost open entry, given the deeper entry it closes,
+  # if any.
+  #
+  # Tags inside a public comment are text, so an end tag reaches an open comment only when the
+  # parser didn't end the comment, and is told the comment isn't closed, whether or not it closes
+  # something outside the comment.
+  defp refuse_closer(:public_comment, _match, {:end_tag, _tag_name} = closer) do
+    raise TemplateSyntaxError, message: unclosed_before_message(:public_comment, closer)
+  end
+
+  defp refuse_closer(top, nil, closer) do
+    raise TemplateSyntaxError,
+      message:
+        "#{describe_closer(closer)} has no matching #{describe_opener(closer)} inside #{describe_entry(top)}"
+  end
+
+  # The parser reads block markers inside a public comment, so a commented-out {%else} or {/if}
+  # reaches here as one.
+  defp refuse_closer(:public_comment, match, closer) do
+    raise TemplateSyntaxError,
+      message:
+        "#{describe_closer(closer)} belongs to #{describe_entry(match)} outside the public comment"
+  end
+
+  defp refuse_closer(top, _match, closer) do
+    raise TemplateSyntaxError, message: unclosed_before_message(top, closer)
+  end
 
   defp render_attribute_code({:spread, templ_expr}, _tag_type) do
     "{:spread, #{normalize_implicit_keyword_list(templ_expr)}}"
@@ -357,6 +409,12 @@ defmodule Hologram.Template.DOM do
     inspect(EventModifiers.parse(base_name, modifiers))
   end
 
+  # An {%else} closes the branch of its {%if} block before it and opens the one after it, which can
+  # only be closed by {/if}.
+  defp reopen_entry(rest, {:block_start, "else"}), do: [{:block, "else"} | rest]
+
+  defp reopen_entry(rest, _closer), do: rest
+
   # Two sources of a dynamic tag name name the same tag when they are the same code, however they
   # are spaced. A source that isn't valid code can only be the same as itself.
   defp same_expression?(source_1, source_2) do
@@ -410,6 +468,33 @@ defmodule Hologram.Template.DOM do
 
   defp tag_name_source(tag_name), do: tag_name
 
+  defp track_nesting({:block_end, _block_name} = closer, stack) do
+    close_entry(stack, closer)
+  end
+
+  defp track_nesting({:block_start, "else"} = closer, stack) do
+    # Found past the tags and comments open inside it, so that an {%else} in an element in an {%if}
+    # block is told it's inside the element, and one in a {%for} block is told it belongs in an if.
+    innermost_block = Enum.find(stack, &match?({:block, _block_name}, &1))
+
+    cond do
+      innermost_block not in [{:block, "if"}, {:block, "else"}] ->
+        raise TemplateSyntaxError, message: "{%else} can only be used in an {%if} block"
+
+      match?([{:block, "else"} | _rest], stack) ->
+        raise TemplateSyntaxError, message: "the {%if} block has more than one {%else}"
+
+      true ->
+        close_entry(stack, closer)
+    end
+  end
+
+  defp track_nesting({:block_start, "raw"}, stack), do: [{:block, "raw"} | stack]
+
+  defp track_nesting({:block_start, {block_name, _expression}}, stack) do
+    [{:block, block_name} | stack]
+  end
+
   defp track_nesting({:end_tag, tag_name} = closer, stack) do
     # The parser reads the start tag of a void element as self-closing, testing the name as written,
     # so a void element's end tag closes something only when its start tag is spelled in another
@@ -422,11 +507,21 @@ defmodule Hologram.Template.DOM do
     close_entry(stack, closer)
   end
 
+  defp track_nesting(:public_comment_end = closer, stack) do
+    close_entry(stack, closer)
+  end
+
+  defp track_nesting(:public_comment_start, stack), do: [:public_comment | stack]
+
   defp track_nesting({:start_tag, {tag_name, _attributes}}, stack) do
     [{:tag, tag_name} | stack]
   end
 
   defp track_nesting(_tag, stack), do: stack
+
+  defp unclosed_before_message(top, closer) do
+    "#{describe_entry(top)} isn't closed before #{describe_closer(closer)}, add #{describe_entry_closer(top)}"
+  end
 
   defp validate_closed([]), do: :ok
 
@@ -435,8 +530,8 @@ defmodule Hologram.Template.DOM do
       message: "#{describe_entry(top)} isn't closed, add #{describe_entry_closer(top)}"
   end
 
-  # Checks that every start tag is closed by its own end tag, and every end tag closes an open tag,
-  # innermost first.
+  # Checks that every start tag, block and public comment is closed by its own closer, and every
+  # closer closes an open one, innermost first.
   defp validate_nesting(tags) do
     tags
     |> Enum.reduce([], &track_nesting/2)
