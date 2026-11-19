@@ -65,7 +65,18 @@ defmodule Hologram.Sync.Recheck do
   @spec reads?(readers, any) :: boolean
   def reads?(:all, _user_id), do: true
 
-  def reads?(readers, user_id), do: MapSet.member?(readers, Auth.canonical_id(user_id))
+  def reads?(readers, user_id), do: reads_as_canonical?(readers, Auth.canonical_id(user_id))
+
+  @doc """
+  Returns whether the given readers include the given user, given as `Hologram.Auth.canonical_id/1`
+  gives it - for a caller asking about many rows, which reads the id once rather than once a row.
+  """
+  @spec reads_as_canonical?(readers, String.t() | nil) :: boolean
+  def reads_as_canonical?(:all, _canonical_user_id), do: true
+
+  def reads_as_canonical?(readers, canonical_user_id) do
+    MapSet.member?(readers, canonical_user_id)
+  end
 
   @doc """
   Returns the given user's verdicts among the given ones, a row's from `run/2`, keyed by verdict key
@@ -78,15 +89,24 @@ defmodule Hologram.Sync.Recheck do
   user when none was given, and for a signed-in one the statement had to test but didn't.
   """
   @spec verdicts(verdicts, any) :: %{String.t() => boolean}
-  def verdicts(verdicts, user_id) do
+  def verdicts(verdicts, user_id), do: verdicts_as_canonical(verdicts, Auth.canonical_id(user_id))
+
+  @doc """
+  Returns the given user's verdicts among the given ones, as `verdicts/2` does, the user given as
+  `Hologram.Auth.canonical_id/1` gives it - for a caller asking about many rows, which reads the id
+  once rather than once a row.
+  """
+  @spec verdicts_as_canonical(verdicts, String.t() | nil) :: %{String.t() => boolean}
+  def verdicts_as_canonical(verdicts, canonical_user_id) do
     answers =
-      case Auth.canonical_id(user_id) do
+      case canonical_user_id do
         nil -> verdicts.anonymous
         canonical_id -> Map.get(verdicts.users, canonical_id, verdicts.others)
       end
 
     answers ||
       raise ArgumentError,
-            "no verdicts for #{inspect(user_id)}, who wasn't given to the recheck as a reader"
+            "no verdicts for #{inspect(canonical_user_id)}, who wasn't given to the recheck as a " <>
+              "reader"
   end
 end

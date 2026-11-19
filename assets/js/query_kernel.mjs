@@ -42,9 +42,11 @@ import StringOrder from "./string_order.mjs";
 // pinned to the database executor in turn. What is written twice is this small frozen surface,
 // and neither writing is trusted on its own.
 //
-// Temporal values compare as the strings they are: every datetime on the wire is UTC and every
-// datetime and time is at one fractional precision, so the order of the characters IS the order
-// of the instants - which is what lets a comparison here be a comparison rather than a parse.
+// Temporal values are held as the strings they are, one spelling per value - every datetime on the
+// wire is UTC and every datetime and time is at one fractional precision - so equality is the
+// strings' equality. A time of day also orders as its characters do. A date and a datetime do not
+// once a year leaves 0 to 9999, its width and sign being the year's own, so they order by
+// Model.compareTemporal, which is the attribute's declared type deciding, the way an enum's does.
 //
 // What comes back is what the database holds, arranged - never boxed. A result row is a node
 // pairing the stored row with what the query included of it, which is the shape the boxing
@@ -55,11 +57,11 @@ export default class QueryKernel {
   // or null for a single-result query, a number for a counting one.
   static run(term) {
     const context = QueryKernel.#newContext();
-    const ranks = QueryKernel.#ranksFor(term.entity, term.filter);
+    const orders = QueryKernel.#ordersFor(term.entity, term.filter);
 
     const matched = Object.values(LocalDatabase.getTable(term.entity)).filter(
       (row) =>
-        QueryKernel.#matches(row, term.filter, context, ranks, term.entity),
+        QueryKernel.#matches(row, term.filter, context, orders, term.entity),
     );
 
     switch (term.cardinality) {
@@ -91,12 +93,12 @@ export default class QueryKernel {
     return QueryKernel.#chainRows(row, entityType, chain, context);
   }
 
-  // The entity type is what an enum predicate is answered by: its declared value list decides
-  // which of two labels comes first, and a caller that names its type gets the same answer run()
-  // gives. Left out, nothing is ranked and labels compare as they are spelled - and a path cannot
-  // be followed at all, since what its relationships lead to is a fact about the type. Nor is a
-  // derived field computed, since whether a name is one is a fact about the type too: it reads as
-  // the row holds it, which is nothing.
+  // The entity type is what an enum, date or datetime predicate is answered by: an enum's declared
+  // value list decides which of two labels comes first, and a temporal type has its years compared
+  // as numbers, so a caller that names its type gets the same answer run() gives. Left out, values
+  // compare as they are spelled - and a path cannot be followed at all, since what its
+  // relationships lead to is a fact about the type. Nor is a derived field computed, since whether
+  // a name is one is a fact about the type too: it reads as the row holds it, which is nothing.
   //
   // No browser code calls it: it is how the tests reach filter evaluation one row at a time, apart
   // from the table, the order and the bounds a run adds.
@@ -112,9 +114,9 @@ export default class QueryKernel {
       );
     }
 
-    const ranks = QueryKernel.#ranksFor(entityType, filter);
+    const orders = QueryKernel.#ordersFor(entityType, filter);
 
-    return QueryKernel.#matches(row, filter, context, ranks, entityType);
+    return QueryKernel.#matches(row, filter, context, orders, entityType);
   }
 
   // Every predicate triple of the filter, in order, the ones inside a disjunction's alternatives
@@ -181,7 +183,7 @@ export default class QueryKernel {
 
   // Missing values are placed the way the database places them - last when ascending, first when
   // descending - so a page reading its own rows shows them where the server put them.
-  static #compareKeys(left, right, name, direction, ranks) {
+  static #compareKeys(left, right, name, direction, order) {
     const leftValue = left[name] ?? null;
     const rightValue = right[name] ?? null;
 
@@ -195,19 +197,19 @@ export default class QueryKernel {
       return leftValue === null ? nullsLast : -nullsLast;
     }
 
-    const result = QueryKernel.#compareValues(left, right, name, ranks);
+    const result = QueryKernel.#compareValues(left, right, name, order);
 
     return direction === "desc" ? -result : result;
   }
 
-  static #compareRows(left, right, keys, ranks) {
+  static #compareRows(left, right, keys, orders) {
     for (const [name, direction] of keys) {
       const result = QueryKernel.#compareKeys(
         left,
         right,
         name,
         direction,
-        ranks[name],
+        orders[name],
       );
 
       if (result !== 0) {
@@ -223,15 +225,12 @@ export default class QueryKernel {
   // value behind it settles what the key cannot, since the key is a bounded prefix of it. An
   // attribute no query orders by carries no key, and is compared as it is.
   //
-  // An enum is the one type compared by neither: it orders by its value's position in the
-  // declared list, which is the order the database holds the type in, so what compares is the
-  // pair of positions rather than the labels.
-  static #compareValues(left, right, name, ranks) {
-    if (ranks) {
-      return QueryKernel.#compare(
-        ranks.get(left[name]),
-        ranks.get(right[name]),
-      );
+  // An enum, a date and a datetime are compared by neither: each orders by the comparison its
+  // declared type gives - an enum by its value's position in the declared list, which is the order
+  // the database holds the type in, and a date or datetime by the day or instant it names.
+  static #compareValues(left, right, name, order) {
+    if (order) {
+      return order(left[name], right[name]);
     }
 
     const sortName = Model.sortKeyField(name);
@@ -256,7 +255,7 @@ export default class QueryKernel {
         row,
         definition.if,
         context,
-        QueryKernel.#ranksFor(entityType, definition.if),
+        QueryKernel.#ordersFor(entityType, definition.if),
         entityType,
       );
 
@@ -372,16 +371,24 @@ export default class QueryKernel {
       : (end.row[end.name] ?? null);
   }
 
-  // What an enum compares by: each declared value against its position in the list the type
-  // declares, built once per run and only for the names that need it - the ordering keys and the
-  // filtered attributes alike. A name of any other type is absent, and its comparison is the
-  // ordinary one.
-  static #enumRanks(entityType, names) {
+  // The comparison a name's declared type orders its values by, where the ordinary one would put
+  // them in another order than the database does, built once per run and only for the names that
+  // need it - the ordering keys and the filtered attributes alike. An enum compares by its values'
+  // positions in the list the type declares, and a date or datetime by the day or instant it
+  // names. A name of any other type is absent, and its comparison is the ordinary one.
+  static #orders(entityType, names) {
     const entry = Model.entry(entityType);
-    const ranks = {};
+    const orders = {};
 
     for (const name of names) {
       const derived = Model.derivedField(entityType, name);
+
+      const type =
+        derived?.kind === "scalar" ? derived.type : entry.attributes[name];
+
+      if (type === "date" || type === "datetime") {
+        orders[name] = Model.compareTemporal;
+      }
 
       const values =
         entry.attributes[name] === "enum"
@@ -391,11 +398,14 @@ export default class QueryKernel {
             : null;
 
       if (values) {
-        ranks[name] = new Map(values.map((label, index) => [label, index]));
+        const positions = new Map(values.map((label, index) => [label, index]));
+
+        orders[name] = (left, right) =>
+          QueryKernel.#compare(positions.get(left), positions.get(right));
       }
     }
 
-    return ranks;
+    return orders;
   }
 
   // A definition's expression on the row: strings joined, null when one of them is, an if's branch,
@@ -416,7 +426,7 @@ export default class QueryKernel {
         row,
         clauses,
         context,
-        QueryKernel.#ranksFor(entityType, clauses),
+        QueryKernel.#ordersFor(entityType, clauses),
         entityType,
       );
 
@@ -544,14 +554,14 @@ export default class QueryKernel {
   // A set of related rows, put through the clauses the include carries - filtered, ordered and
   // bounded like any other.
   static #includedSet(targets, subTerm, context) {
-    const ranks = QueryKernel.#ranksFor(subTerm.entity, subTerm.filter);
+    const orders = QueryKernel.#ordersFor(subTerm.entity, subTerm.filter);
 
     const matching = targets.filter((target) =>
       QueryKernel.#matches(
         target,
         subTerm.filter,
         context,
-        ranks,
+        orders,
         subTerm.entity,
       ),
     );
@@ -600,14 +610,14 @@ export default class QueryKernel {
   }
 
   // The rows above are those a quantifier's filter can name, nearest first.
-  static #matches(row, filter, context, ranks, entityType, outer = []) {
+  static #matches(row, filter, context, orders, entityType, outer = []) {
     return filter.every((clause) => {
       if (Array.isArray(clause)) {
         return QueryKernel.#matchesTriple(
           row,
           clause,
           context,
-          ranks,
+          orders,
           entityType,
           outer,
         );
@@ -619,7 +629,7 @@ export default class QueryKernel {
             row,
             alternative,
             context,
-            ranks,
+            orders,
             entityType,
             outer,
           ),
@@ -657,14 +667,18 @@ export default class QueryKernel {
     );
 
     const innerOuter = [{entityType, row}, ...outer];
-    const ranks = QueryKernel.#ranksFor(relatedType, clause.filter, innerOuter);
+    const orders = QueryKernel.#ordersFor(
+      relatedType,
+      clause.filter,
+      innerOuter,
+    );
 
     const holds = (relatedRow) =>
       QueryKernel.#matches(
         relatedRow,
         clause.filter,
         context,
-        ranks,
+        orders,
         relatedType,
         innerOuter,
       );
@@ -682,17 +696,18 @@ export default class QueryKernel {
   }
 
   // Another attribute of the same row, or one a path reaches, is read the way the predicate's own
-  // side is, and compared by the predicate's attribute's ranks - two enums compare only when they
-  // declare the same list, so one serves both.
+  // side is, and compared by the predicate's attribute's order - two enums compare only when they
+  // declare the same list, and two temporal values only when they are of one type, so one serves
+  // both.
   static #matchesTriple(
     row,
     [name, operator, operand],
     context,
-    ranks,
+    orders,
     entityType,
     outer,
   ) {
-    const ranksForKey = ranks[QueryKernel.#nameKey(name)];
+    const order = orders[QueryKernel.#nameKey(name)];
 
     const value = QueryKernel.#isAttribute(operand)
       ? QueryKernel.#read(row, operand.attribute, entityType, outer, context)
@@ -712,12 +727,12 @@ export default class QueryKernel {
       operator,
       QueryKernel.#endValue(end, context),
       value,
-      ranksForKey,
+      order,
       pair,
     );
   }
 
-  // The key a name's ranks are kept under - a path's names joined, which no attribute name can
+  // The key a name's order is kept under - a path's names joined, which no attribute name can
   // spell, and a name of a row above marked with how far out it is.
   static #nameKey(name) {
     if (QueryKernel.#isOuter(name)) {
@@ -783,17 +798,17 @@ export default class QueryKernel {
     return {includes: includes, row: row};
   }
 
-  // The ranks a filter's own predicates compare by, keyed by the name each predicate is written
-  // with - an attribute or a path, whose ranks are those of the attribute it ends at, on the row
+  // The orders a filter's own predicates compare by, keyed by the name each predicate is written
+  // with - an attribute or a path, whose order is that of the attribute it ends at, on the row
   // the name is read on - the ones inside a disjunction's alternatives included. A quantifier's
-  // filter is matched with ranks of its own. A caller that names no type ranks nothing, which is
-  // what the raw comparison already was.
-  static #ranksFor(entityType, filter, outer = []) {
+  // filter is matched with orders of its own. A caller that names no type orders nothing by its
+  // type, which is what the raw comparison already was.
+  static #ordersFor(entityType, filter, outer = []) {
     if (entityType === null || entityType === undefined) {
       return {};
     }
 
-    const ranks = {};
+    const orders = {};
 
     for (const name of QueryKernel.#levelNames(filter)) {
       const above = QueryKernel.#isOuter(name) ? outer[name.outer - 1] : null;
@@ -808,14 +823,14 @@ export default class QueryKernel {
         ? localName[localName.length - 1]
         : localName;
 
-      const declared = QueryKernel.#enumRanks(declaringType, [declaredName]);
+      const declared = QueryKernel.#orders(declaringType, [declaredName]);
 
       if (declared[declaredName]) {
-        ranks[QueryKernel.#nameKey(name)] = declared[declaredName];
+        orders[QueryKernel.#nameKey(name)] = declared[declaredName];
       }
     }
 
-    return ranks;
+    return orders;
   }
 
   static #read(row, name, entityType, outer, context) {
@@ -898,7 +913,7 @@ export default class QueryKernel {
   // the row the comparison reads.
   static #sort(rows, keys, entityType, context) {
     const names = keys.map(([name]) => name);
-    const ranks = QueryKernel.#enumRanks(entityType, names);
+    const orders = QueryKernel.#orders(entityType, names);
 
     const derivedNames = names.filter((name) =>
       Model.derivedField(entityType, name),
@@ -920,7 +935,7 @@ export default class QueryKernel {
 
     return views
       .sort((left, right) =>
-        QueryKernel.#compareRows(left.view, right.view, keys, ranks),
+        QueryKernel.#compareRows(left.view, right.view, keys, orders),
       )
       .map(({row}) => row);
   }
@@ -929,7 +944,7 @@ export default class QueryKernel {
   // as the row above them.
   static #sourcedRows(owner, ownerType, term, context) {
     const outer = [{entityType: ownerType, row: owner}];
-    const ranks = QueryKernel.#ranksFor(term.entity, term.filter, outer);
+    const orders = QueryKernel.#ordersFor(term.entity, term.filter, outer);
 
     return QueryKernel.#chainRows(
       owner,
@@ -941,7 +956,7 @@ export default class QueryKernel {
         row,
         term.filter,
         context,
-        ranks,
+        orders,
         term.entity,
         outer,
       ),
@@ -951,7 +966,7 @@ export default class QueryKernel {
   // Null is a value like any other to the equality family - an unset attribute is unequal to a
   // set one, and a list may name it - while an ordering line has no place to put one, so a
   // comparison passes over what is not there.
-  static #satisfies(operator, value, operand, ranksForKey, pair = null) {
+  static #satisfies(operator, value, operand, order, pair = null) {
     switch (operator) {
       case "!=":
         return value !== operand;
@@ -991,7 +1006,7 @@ export default class QueryKernel {
     const result = QueryKernel.#compareOrderingValues(
       value,
       operand,
-      ranksForKey,
+      order,
       pair,
     );
 
@@ -1010,16 +1025,13 @@ export default class QueryKernel {
     }
   }
 
-  // An enum compares by the pair of positions its declared list gives the two labels, and a string
+  // An enum, a date and a datetime compare by the order their declared type gives, and a string
   // by the pair its ordering sorts by - the key carries the order, and the value behind it settles
   // what the key cannot, since the key is a bounded prefix of it. Either way what sorts after a
   // value compares greater than it, which is what makes a bound a position in the list.
-  static #compareOrderingValues(value, operand, ranksForKey, pair) {
-    if (ranksForKey) {
-      return QueryKernel.#compare(
-        ranksForKey.get(value),
-        ranksForKey.get(operand),
-      );
+  static #compareOrderingValues(value, operand, order, pair) {
+    if (order) {
+      return order(value, operand);
     }
 
     if (pair === null) {
