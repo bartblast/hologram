@@ -51,11 +51,12 @@ defmodule Hologram.Query.Stage do
   @widenings [{:float, :integer}, {:integer, :float}]
 
   # What the query macros saw where a name was written, which a refusal of the name can add: where
-  # it stands (a comparison's or a search's left side, its right side, a sort name), how many
-  # quantifiers its clause is nested in, the name as the data form holds it, the fix to name - a
-  # forgotten pin - or nil, and the spelling that reads the name on each row in scope, nearest first.
+  # it stands (a comparison's or a search's left side, its right side, a sort or an include name),
+  # how many quantifiers its clause is nested in, the name as the data form holds it, the fix to
+  # name - a forgotten pin - or nil, and the spelling that reads the name on each row in scope,
+  # nearest first.
   @type name_hint ::
-          {:key | :operand | :sort, non_neg_integer, Query.name(), String.t() | nil,
+          {:include | :key | :operand | :sort, non_neg_integer, Query.name(), String.t() | nil,
            list(String.t())}
 
   @doc false
@@ -225,24 +226,30 @@ defmodule Hologram.Query.Stage do
 
   @doc false
   @spec include(module | Query.t(), atom | list) :: Query.t()
-  def include(query, name) when is_atom(name) do
+  def include(query, spec), do: include(query, spec, [])
+
+  # The hints are filter/3's, about the names the spec was written with - only its own, since a
+  # nested spec is pinned whole or built from paths, neither of which the macros leave hints for.
+  @doc false
+  @spec include(module | Query.t(), atom | list, list(name_hint)) :: Query.t()
+  def include(query, name, hints) when is_atom(name) and is_list(hints) do
     term = to_term(query)
-    sub_term = included_sub_term!(term.entity, name)
+    sub_term = included_sub_term!(term.entity, name, include_hint(hints, name))
 
     %{term | include: put_included(term.include, name, sub_term)}
   end
 
-  def include(query, spec) when is_list(spec) do
+  def include(query, spec, hints) when is_list(spec) and is_list(hints) do
     if spec == [] do
       raise MisuseError, message: "include spec must not be empty"
     end
 
     term = to_term(query)
 
-    Enum.reduce(spec, term, fn entry, acc -> include_spec_entry!(acc, entry) end)
+    Enum.reduce(spec, term, fn entry, acc -> include_spec_entry!(acc, entry, hints) end)
   end
 
-  def include(_query, spec) do
+  def include(_query, spec, _hints) do
     raise MisuseError,
       message: "include spec must be a relationship name or a shape list, got: #{inspect(spec)}"
   end
@@ -923,25 +930,33 @@ defmodule Hologram.Query.Stage do
 
   defp hint_suffix(hint), do: " - #{hint}"
 
-  defp include_spec_entry!(term, name) when is_atom(name) do
-    include(term, name)
+  defp include_hint(hints, name) do
+    Enum.find_value(hints, fn
+      {:include, 0, ^name, fix, _spellings} when is_binary(fix) -> fix
+      _entry -> nil
+    end)
+  end
+
+  defp include_spec_entry!(term, name, hints) when is_atom(name) do
+    include(term, name, hints)
   end
 
   # A function would narrow the set, which is what a derived field does - refused naming one.
-  defp include_spec_entry!(_term, {name, function} = entry)
+  defp include_spec_entry!(_term, {name, function} = entry, _hints)
        when is_atom(name) and is_function(function) do
     raise MisuseError,
       message:
         "invalid include spec entry #{inspect(entry)} - include takes names and paths - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end"
   end
 
-  defp include_spec_entry!(term, {name, nested_spec}) when is_atom(name) do
+  # The macros leave hints for bare names only, so a hint of this name is another element's.
+  defp include_spec_entry!(term, {name, nested_spec}, _hints) when is_atom(name) do
     sub_term = nested_sub_term!(term.entity, name, nested_spec)
 
     %{term | include: put_included(term.include, name, sub_term)}
   end
 
-  defp include_spec_entry!(_term, entry) do
+  defp include_spec_entry!(_term, entry, _hints) do
     raise MisuseError,
       message:
         "invalid include spec entry #{inspect(entry)} - use a relationship name or a {name, spec} pair"
@@ -972,8 +987,8 @@ defmodule Hologram.Query.Stage do
 
   # What an include of the given name holds: nil for a derived value, which has nothing under it,
   # or the related type's whole term.
-  defp included_sub_term!(entity_type, name) do
-    case validate_included_name!(name, entity_type) do
+  defp included_sub_term!(entity_type, name, hint) do
+    case validate_included_name!(name, entity_type, hint) do
       {_type, :derived_value} -> nil
       {target, _kind} -> to_term(target)
     end
@@ -1545,12 +1560,12 @@ defmodule Hologram.Query.Stage do
     raise MisuseError, message: "#{stage} takes an entity struct, got: #{inspect(subject)}"
   end
 
-  @spec raise_unknown_included_name!(atom, module) :: no_return
-  defp raise_unknown_included_name!(name, entity_type) do
+  @spec raise_unknown_included_name!(atom, module, String.t() | nil) :: no_return
+  defp raise_unknown_included_name!(name, entity_type, hint) do
     if name in attribute_names(entity_type) do
       raise MisuseError,
         message:
-          "#{inspect(name)} is an attribute in #{inspect(entity_type)} - only relationships and derived fields can be included"
+          "#{inspect(name)} is an attribute in #{inspect(entity_type)} - only relationships and derived fields can be included#{hint_suffix(hint)}"
     end
 
     known =
@@ -1560,7 +1575,7 @@ defmodule Hologram.Query.Stage do
 
     raise MisuseError,
       message:
-        "unknown relationship #{inspect(name)} in #{inspect(entity_type)} - known relationships and derived fields: #{known}"
+        "unknown relationship #{inspect(name)} in #{inspect(entity_type)} - known relationships and derived fields: #{known}#{hint_suffix(hint)}"
   end
 
   defp raise_unknown_operator!(operator, name) do
@@ -2186,7 +2201,7 @@ defmodule Hologram.Query.Stage do
   # A stored relationship or an inverse - a set of either is included as a to-many, a single
   # inverse as a to-one - or a derived field: one holding rows is included as its rows' type, one
   # holding a value as its type.
-  defp validate_included_name!(name, entity_type) do
+  defp validate_included_name!(name, entity_type, hint \\ nil) do
     definitions = includable_definitions(entity_type)
 
     case List.keyfind(definitions, name, 0) do
@@ -2197,7 +2212,8 @@ defmodule Hologram.Query.Stage do
         {target, :to_one}
 
       nil ->
-        included_derived(name, entity_type) || raise_unknown_included_name!(name, entity_type)
+        included_derived(name, entity_type) ||
+          raise_unknown_included_name!(name, entity_type, hint)
     end
   end
 

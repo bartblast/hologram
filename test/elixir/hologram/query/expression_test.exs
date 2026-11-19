@@ -485,6 +485,10 @@ defmodule Hologram.Query.ExpressionTest do
       assert lower_inclusion("[a.b.c, a.b.d]") == [a: [b: [:c, :d]]]
     end
 
+    test "passes a pinned path over a variable through" do
+      assert lower_inclusion("^opts.relationship", opts: %{relationship: :owner}) == :owner
+    end
+
     test "passes a pinned spec through" do
       assert lower_inclusion("^spec", spec: [project: [:owner]]) == [project: [:owner]]
     end
@@ -543,6 +547,36 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_inclusion("[tasks: nil]") end
     end
 
+    test "raises on a pinned element no variable holds, naming the bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^owner pins owner, which no variable holds here - include names a relationship with a bare name or a path, without the pin: owner",
+                   fn -> lower_inclusion("[tasks, ^owner]") end
+    end
+
+    test "raises on a pinned keyword entry no variable holds, naming the path" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^owner pins owner, which no variable holds here - include names a relationship with a bare name or a path, without the pin: tasks.owner",
+                   fn -> lower_inclusion("[tasks: ^owner]") end
+    end
+
+    test "raises on a pinned name no variable holds, naming the bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^owner pins owner, which no variable holds here - include names a relationship with a bare name or a path, without the pin: owner",
+                   fn -> lower_inclusion("^owner") end
+    end
+
+    test "raises on a pinned path no variable holds, naming the path" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^tasks.owner pins tasks, which no variable holds here - include names a relationship with a bare name or a path, without the pin: tasks.owner",
+                   fn -> lower_inclusion("^tasks.owner") end
+    end
+
+    test "raises on a pinned path in a keyword entry no variable holds, naming the path" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: ^owner.project pins owner, which no variable holds here - include names a relationship with a bare name or a path, without the pin: tasks.owner.project",
+                   fn -> lower_inclusion("[tasks: ^owner.project]") end
+    end
+
     test "raises on a path called with parentheses" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: include names a relationship with a bare name or a path, or with a pinned expression when the name comes from the surrounding code, got: tasks.owner() - a value from the surrounding code is pinned: ^tasks.owner()",
@@ -571,6 +605,50 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:7: include names a relationship with a bare name, got: :project - write project",
                    fn -> lower_inclusion("[owner, :project]") end
+    end
+  end
+
+  describe "inclusion_hints/2" do
+    @fix "a value from the surrounding code is pinned: ^relationship"
+
+    test "hints the pin a variable's name forgot" do
+      assert hints_of(&inclusion_hints/2, "relationship", [:relationship]) == [
+               {:include, 0, :relationship, @fix, []}
+             ]
+    end
+
+    test "hints the pin a variable's name forgot in a list" do
+      assert hints_of(&inclusion_hints/2, "[owner, relationship, tasks.owner]", [:relationship]) ==
+               [{:include, 0, :relationship, @fix, []}]
+    end
+
+    test "hints nothing for a path over a variable" do
+      assert hints_of(&inclusion_hints/2, "relationship.owner", [:relationship]) == []
+    end
+
+    # Merged into the path, the name would still be read as a relationship once pinned.
+    test "hints nothing for a variable's name a path in the list starts at" do
+      assert hints_of(&inclusion_hints/2, "[relationship, relationship.owner]", [:relationship]) ==
+               []
+    end
+
+    test "hints nothing for a name no variable holds" do
+      assert hints_of(&inclusion_hints/2, "[owner, tasks]", []) == []
+    end
+
+    test "hints nothing for a keyword entry" do
+      assert hints_of(&inclusion_hints/2, "[relationship: ^nested]", [:relationship, :nested]) ==
+               []
+    end
+
+    test "hints nothing for a pinned spec" do
+      assert hints_of(&inclusion_hints/2, "^relationship", [:relationship]) == []
+    end
+
+    # Pinned in a derived field's query, an argument is a field of the row, which an include can't
+    # name.
+    test "hints nothing for a derived field's argument" do
+      assert hints_of(&inclusion_hints/2, "author", [], [:author]) == []
     end
   end
 

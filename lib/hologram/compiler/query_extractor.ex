@@ -2074,7 +2074,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     prefix = context.subject
 
     if placeholder_caused?(function, arg_values, error) do
-      "#{prefix} passes an argument to #{function}/#{length(arg_values)} in a position the build cannot enumerate - the rows to download cannot be worked out without its value"
+      "#{prefix} passes an argument to #{function}/#{written_arity(function, arg_values)} in a position the build cannot enumerate - the rows to download cannot be worked out without its value"
     else
       "#{prefix} builds an invalid query - #{Exception.message(error)}"
     end
@@ -2209,4 +2209,12 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp weaker(:match, outcome), do: outcome
 
   defp weaker(:unknown, _outcome), do: :unknown
+
+  # The arity of the stage call the developer wrote - the query macros hand filter, include and sort
+  # the hints of what was written as a last argument of their own.
+  defp written_arity(function, [_query, _spec, _hints])
+       when function in [:filter, :include, :sort],
+       do: 2
+
+  defp written_arity(_function, arg_values), do: length(arg_values)
 end

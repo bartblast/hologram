@@ -54,6 +54,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const filter = Elixir_Hologram_Query_Stage["filter/2"];
   const filterHinted = Elixir_Hologram_Query_Stage["filter/3"];
   const include = Elixir_Hologram_Query_Stage["include/2"];
+  const includeHinted = Elixir_Hologram_Query_Stage["include/3"];
   const normalize = Elixir_Hologram_Query_Stage["normalize/1"];
   const one = Elixir_Hologram_Query_Stage["one/1"];
   const skip = Elixir_Hologram_Query_Stage["skip/2"];
@@ -4726,6 +4727,96 @@ describe("Elixir_Hologram_Query_Stage", () => {
         },
         sort: [["id", "asc"]],
       });
+    });
+  });
+
+  describe("include/3", () => {
+    const fix = "a value from the surrounding code is pinned: ^rel";
+
+    const rel = Type.atom("rel");
+
+    it("builds the term include/2 builds", () => {
+      const spec = Type.list([Type.atom("owner")]);
+
+      assert.deepStrictEqual(
+        includeHinted(
+          project,
+          spec,
+          hints(["include", 0, Type.atom("owner"), fix]),
+        ),
+        include(project, spec),
+      );
+    });
+
+    it("names the fix a hint gives when it refuses an unknown relationship", () => {
+      assertBoxedError(
+        () => includeHinted(project, rel, hints(["include", 0, rel, fix])),
+        "Hologram.MisuseError",
+        `unknown relationship :rel in MyApp.Project - known relationships and derived fields: :owner, :tasks - ${fix}`,
+      );
+    });
+
+    it("names the fix a hint gives when it refuses an unknown relationship in a list", () => {
+      assertBoxedError(
+        () =>
+          includeHinted(
+            project,
+            Type.list([Type.atom("owner"), rel]),
+            hints(["include", 0, rel, fix]),
+          ),
+        "Hologram.MisuseError",
+        `unknown relationship :rel in MyApp.Project - known relationships and derived fields: :owner, :tasks - ${fix}`,
+      );
+    });
+
+    it("leaves out a hint for a name paired with a nested spec", () => {
+      assertBoxedError(
+        () =>
+          includeHinted(
+            project,
+            Type.list([Type.tuple([rel, Type.list([Type.atom("x")])])]),
+            hints(["include", 0, rel, fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown relationship :rel in MyApp.Project - known relationships and derived fields: :owner, :tasks",
+      );
+    });
+
+    it("names the fix a hint gives when it refuses an attribute", () => {
+      const name = Type.atom("name");
+
+      assertBoxedError(
+        () => includeHinted(project, name, hints(["include", 0, name, fix])),
+        "Hologram.MisuseError",
+        `:name is an attribute in MyApp.Project - only relationships and derived fields can be included - ${fix}`,
+      );
+    });
+
+    // A nested spec is pinned whole or built from paths, neither of which the macros leave hints for.
+    it("leaves out a hint for a name inside a nested spec", () => {
+      assertBoxedError(
+        () =>
+          includeHinted(
+            project,
+            Type.list([Type.tuple([Type.atom("tasks"), Type.list([rel])])]),
+            hints(["include", 0, rel, fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown relationship :rel in MyApp.Task - known relationships and derived fields: ",
+      );
+    });
+
+    it("leaves out a hint for another name", () => {
+      assertBoxedError(
+        () =>
+          includeHinted(
+            project,
+            rel,
+            hints(["include", 0, Type.atom("other"), fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown relationship :rel in MyApp.Project - known relationships and derived fields: :owner, :tasks",
+      );
     });
   });
 

@@ -452,12 +452,36 @@ function holdsActorLeaf(value) {
   );
 }
 
+function includeHint(hints, name) {
+  const entry = hints.data.find((hint) => {
+    if (!isHintTuple(hint)) {
+      return false;
+    }
+
+    const [position, depth, hintName, fix] = hint.data;
+
+    return (
+      position.value === "include" &&
+      Number(depth.value) === 0 &&
+      Interpreter.isStrictlyEqual(hintName, name) &&
+      Type.isBinary(fix)
+    );
+  });
+
+  return entry ? Bitstring.toText(entry.data[3]) : null;
+}
+
 // A derived field holding a value is included with nothing under it, as null. Any other name is
 // included as its related type's whole term, what the nested spec names included under it - a
 // derived field holding rows takes nested includes only, since its definition states its rows.
-function includeOne(query, name, nestedSpec) {
+function includeOne(query, name, nestedSpec, hints) {
   const term = toTerm(query);
-  const {kind, target} = validateIncludedName(name, term.entity);
+
+  const {kind, target} = validateIncludedName(
+    name,
+    term.entity,
+    includeHint(hints, name),
+  );
 
   if (kind === "derived_value") {
     if (nestedSpec !== null) {
@@ -481,9 +505,9 @@ function includeOne(query, name, nestedSpec) {
 
 // A spec entry is a relationship name or a {name, nested spec} pair. A function would narrow the
 // set, which is what a derived field does - refused naming one.
-function includeSpecEntry(term, entry) {
+function includeSpecEntry(term, entry, hints) {
   if (Type.isAtom(entry)) {
-    return includeOne(term, entry, null);
+    return includeOne(term, entry, null, hints);
   }
 
   if (isConstraintTuple(entry)) {
@@ -495,7 +519,8 @@ function includeSpecEntry(term, entry) {
       );
     }
 
-    return includeOne(term, name, spec);
+    // The macros leave hints for bare names only, so a hint of this name is another element's.
+    return includeOne(term, name, spec, Type.list());
   }
 
   Interpreter.raiseMisuseError(
@@ -1591,7 +1616,7 @@ function validateFilteredName(name, entityType, hint = null) {
 // A stored relationship or an inverse - a set of either is included as a to-many, a single
 // inverse as a to-one - or a derived field: one holding rows is included as its rows' type, one
 // holding a value as its type.
-function validateIncludedName(name, entityType) {
+function validateIncludedName(name, entityType, hint = null) {
   const entry = Model.entry(entityType);
 
   const relationship = Object.hasOwn(entry.relationships, name.value)
@@ -1617,7 +1642,7 @@ function validateIncludedName(name, entityType) {
 
   if (attributeNames(entityType).includes(name.value)) {
     Interpreter.raiseMisuseError(
-      `${Interpreter.inspect(name)} is an attribute in ${entityType} - only relationships and derived fields can be included`,
+      `${Interpreter.inspect(name)} is an attribute in ${entityType} - only relationships and derived fields can be included${hintSuffix(hint)}`,
     );
   }
 
@@ -1628,7 +1653,7 @@ function validateIncludedName(name, entityType) {
     .join(", ");
 
   Interpreter.raiseMisuseError(
-    `unknown relationship ${Interpreter.inspect(name)} in ${entityType} - known relationships and derived fields: ${known}`,
+    `unknown relationship ${Interpreter.inspect(name)} in ${entityType} - known relationships and derived fields: ${known}${hintSuffix(hint)}`,
   );
 }
 
@@ -2166,9 +2191,14 @@ const Elixir_Hologram_Query_Stage = {
 
     return {...term, filter: [...term.filter, ...clauses]};
   },
-  "include/2": (query, spec) => {
+  "include/2": (query, spec) =>
+    Elixir_Hologram_Query_Stage["include/3"](query, spec, Type.list()),
+
+  // The hints are filter/3's, about the names the spec was written with - only its own, since a
+  // nested spec is pinned whole or built from paths, neither of which the macros leave hints for.
+  "include/3": (query, spec, hints) => {
     if (Type.isAtom(spec)) {
-      return includeOne(query, spec, null);
+      return includeOne(query, spec, null, hints);
     }
 
     if (Type.isList(spec)) {
@@ -2176,7 +2206,10 @@ const Elixir_Hologram_Query_Stage = {
         Interpreter.raiseMisuseError("include spec must not be empty");
       }
 
-      return spec.data.reduce(includeSpecEntry, toTerm(query));
+      return spec.data.reduce(
+        (term, entry) => includeSpecEntry(term, entry, hints),
+        toTerm(query),
+      );
     }
 
     Interpreter.raiseMisuseError(

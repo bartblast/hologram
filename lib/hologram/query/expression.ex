@@ -167,12 +167,13 @@ defmodule Hologram.Query.Expression do
   the path. A pinned spec passes through.
 
   Raises Hologram.CompileError, located at the offending node, on an atom where a bare name goes
-  (naming the bare spelling), on a keyword entry nesting a name or a list (naming the path), on
-  any other unpinned keyword entry (naming the derived field that narrows a set), and on anything
-  else.
+  (naming the bare spelling), on a pinned name or path - the spec, an element or a keyword entry's
+  nested spec - whose first name no variable of the surrounding code holds (naming the spelling
+  without the pin), on a keyword entry nesting a name or a list (naming the path), on any other
+  unpinned keyword entry (naming the derived field that narrows a set), and on anything else.
   """
   @spec inclusion(Macro.t(), Macro.Env.t()) :: Macro.t()
-  def inclusion({:^, _meta, [expr]}, _env), do: expr
+  def inclusion({:^, _meta, [_expr]} = ast, env), do: pinned_include!(ast, env)
 
   def inclusion(list, env) when is_list(list) do
     list
@@ -186,6 +187,37 @@ defmodule Hologram.Query.Expression do
       element -> merge_includes([element])
     end
   end
+
+  @doc """
+  Returns the hints `Hologram.Query.Stage.include/3` can add to its refusal of a name the given
+  `include/2` spec wrote: for a bare name the surrounding code holds a variable of, alone or as an
+  element of a list, the pin it most likely forgot. Takes a spec `inclusion/2` lowered without
+  raising.
+
+  A path gets none - a relationship chosen at runtime is one name - and neither does a bare name a
+  path in the same list starts at, nor a derived field's argument, which pinned is a field of the
+  row, which an include can't name.
+  """
+  @spec inclusion_hints(Macro.t(), Macro.Env.t()) :: list(Hologram.Query.Stage.name_hint())
+  def inclusion_hints({:^, _meta, [_expr]}, _env), do: []
+
+  # A bare name a path in the list starts at merges into that path, which would still name it once
+  # pinned, so the pin would fix nothing.
+  def inclusion_hints(list, env) when is_list(list) do
+    path_roots =
+      list
+      |> Enum.map(&hops/1)
+      |> Enum.flat_map(fn
+        [root, _next | _rest] -> [root]
+        _hops -> []
+      end)
+
+    list
+    |> Enum.reject(&(bare_name?(&1) and elem(&1, 0) in path_roots))
+    |> Enum.flat_map(&include_name_hints(&1, env))
+  end
+
+  def inclusion_hints(ast, env), do: include_name_hints(ast, env)
 
   @doc """
   Marks the given bare name as one the surrounding code reads a value through, though no variable
@@ -651,10 +683,11 @@ defmodule Hologram.Query.Expression do
   # A list element of an include spec: a pinned element keeps its place, a keyword entry with a
   # pinned value pairs a relationship with a nested spec chosen at runtime, and a bare name or a path
   # joins the merge.
-  defp include_element!({:^, _meta, [expr]}, _env), do: {:in_place, expr}
+  defp include_element!({:^, _meta, [_expr]} = ast, env),
+    do: {:in_place, pinned_include!(ast, env)}
 
-  defp include_element!({key, {:^, _meta, [expr]}}, _env) when is_atom(key),
-    do: {:in_place, {key, expr}}
+  defp include_element!({key, {:^, _meta, [_expr]} = pin}, env) when is_atom(key),
+    do: {:in_place, {key, pinned_include!(pin, env, "#{key}.")}}
 
   # A keyword entry naming relationships is a nesting attempt, refused with the paths it means, and
   # any other one an attempt to narrow the set, which a derived field does.
@@ -671,6 +704,17 @@ defmodule Hologram.Query.Expression do
       hops -> {:path, hops}
     end
   end
+
+  # An include names relationships of the queried row only, so the hint's depth is always 0.
+  defp include_name_hints({name, meta, _context} = ast, env) do
+    if bare_name?(ast) and variable?(ast, env) and not Keyword.get(meta, @pinnable_key, false) do
+      [{:include, 0, name, "a value from the surrounding code is pinned: ^#{name}", []}]
+    else
+      []
+    end
+  end
+
+  defp include_name_hints(_ast, _env), do: []
 
   # An integer, or one with a sign - a signed number is a call in the AST, but reads as a literal.
   defp integer_literal?(value) when is_integer(value), do: true
@@ -1038,6 +1082,30 @@ defmodule Hologram.Query.Expression do
       ""
     else
       " - a value from the surrounding code is pinned: #{pin_hint(ast)}"
+    end
+  end
+
+  # pinned_name!/3 for an include, which takes a path too - under a keyword entry the nested spec's
+  # path, written after its key.
+  defp pinned_include!({:^, _meta, [expr]} = ast, env, prefix \\ "") do
+    case hops(expr) do
+      [_root | _rest] ->
+        root_node = root_name(expr)
+
+        if not pinnable?(root_node, env) do
+          {root, _meta, _context} = root_node
+
+          compile_error!(
+            "#{Macro.to_string(ast)} pins #{root}, which no variable holds here - include names a relationship with a bare name or a path, without the pin: #{prefix}#{Macro.to_string(expr)}",
+            ast,
+            env
+          )
+        end
+
+        expr
+
+      nil ->
+        expr
     end
   end
 

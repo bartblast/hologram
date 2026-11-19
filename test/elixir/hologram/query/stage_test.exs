@@ -3145,6 +3145,70 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  describe "include/3" do
+    @fix "a value from the surrounding code is pinned: ^rel"
+
+    test "builds the term include/2 builds" do
+      assert include(Module3, [:a], [{:include, 0, :a, @fix, []}]) ==
+               include(Module3, [:a])
+    end
+
+    test "names the fix a hint gives when it refuses an unknown relationship" do
+      expected_msg =
+        "unknown relationship :rel in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        include(Module3, :rel, [{:include, 0, :rel, @fix, []}])
+      end
+    end
+
+    test "names the fix a hint gives when it refuses an unknown relationship in a list" do
+      expected_msg =
+        "unknown relationship :rel in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        include(Module3, [:a, :rel], [{:include, 0, :rel, @fix, []}])
+      end
+    end
+
+    test "leaves out a hint for a name paired with a nested spec" do
+      expected_msg =
+        "unknown relationship :rel in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c"
+
+      assert_error MisuseError, expected_msg, fn ->
+        include(Module3, [rel: [:x]], [{:include, 0, :rel, @fix, []}])
+      end
+    end
+
+    test "names the fix a hint gives when it refuses an attribute" do
+      expected_msg =
+        ":c is an attribute in Hologram.Test.Fixtures.Entity.Module2 - only relationships and derived fields can be included - #{@fix}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        include(Module2, :c, [{:include, 0, :c, @fix, []}])
+      end
+    end
+
+    # A nested spec is pinned whole or built from paths, neither of which the macros leave hints for.
+    test "leaves out a hint for a name inside a nested spec" do
+      expected_msg =
+        "unknown relationship :rel in Hologram.Test.Fixtures.Entity.Module2 - known relationships and derived fields: "
+
+      assert_error MisuseError, expected_msg, fn ->
+        include(Module3, [a: [:rel]], [{:include, 0, :rel, @fix, []}])
+      end
+    end
+
+    test "leaves out a hint for another name" do
+      expected_msg =
+        "unknown relationship :rel in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c"
+
+      assert_error MisuseError, expected_msg, fn ->
+        include(Module3, :rel, [{:include, 0, :other, @fix, []}])
+      end
+    end
+  end
+
   describe "increment/3" do
     test "records a positive amount as a delta" do
       entity = Module10.new(count: 5)

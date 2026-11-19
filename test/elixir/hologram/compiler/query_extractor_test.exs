@@ -47,6 +47,8 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module136
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module137
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module138
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module139
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module140
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module55
@@ -2002,6 +2004,38 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_derived_queries(Module138, entity_types, ir_plt)
       end
+    end
+
+    # The include macro hands the stage the hints of what was written as an argument of its own.
+    test "raises on an argument the build cannot enumerate, naming the stage as written", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_139.ex:11: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module139 passes an argument to include/2 in a position the build cannot enumerate - the rows to download cannot be worked out without its value
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_139.ex:11: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module139.__derived_rows__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module139, entity_types, ir_plt)
+      end
+    end
+
+    test "replays a recorded include carrying hints", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      assert extract_derived_queries(Module140, entity_types, ir_plt) == [
+               rows: [
+                 %Query{
+                   entity: Entity3,
+                   include: %{a: %Query{entity: Entity2, sort: [id: :asc]}},
+                   sort: [id: :asc]
+                 }
+               ]
+             ]
     end
 
     test "raises on an include name the build cannot enumerate", %{

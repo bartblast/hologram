@@ -421,16 +421,25 @@ defmodule Hologram.Query do
   (`include(:owner)` is refused in favour of `include(owner)`), when a keyword entry nests a
   relationship (`include(tasks: owner)` is refused in favour of `include(tasks.owner)`), when a
   keyword entry pairs a relationship with anything but a pinned nested spec - a narrowed set is a
-  derived field - or when a spec or an entry is anything else. Raises Hologram.MisuseError when the
-  query is neither an entity type module nor a query term, when a spec is invalid or empty, or
-  when a name is not a declared relationship or derived field - which is how a forgotten pin on a
-  variable reads.
+  derived field - when a pinned name or path starts at a name no variable holds, which is most
+  likely a name written with a pin it doesn't take, or when a spec or an entry is anything else.
+  Raises Hologram.MisuseError when the query is neither an entity type module nor a query term,
+  when a spec is invalid or empty, or when a name is not a declared relationship or derived field -
+  which is how a forgotten pin on a variable reads, and the error names the pin.
   """
   defmacro include(query, spec) do
     lowered = Expression.inclusion(spec, __CALLER__)
 
-    quote do
-      Stage.include(unquote(query), unquote(lowered))
+    case Expression.inclusion_hints(spec, __CALLER__) do
+      [] ->
+        quote do
+          Stage.include(unquote(query), unquote(lowered))
+        end
+
+      hints ->
+        quote do
+          Stage.include(unquote(query), unquote(lowered), unquote(Macro.escape(hints)))
+        end
     end
   end
 

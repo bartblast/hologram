@@ -467,6 +467,7 @@ defmodule Hologram.Compiler.CallGraph do
     {Hologram.Query.Stage, :filter, 2},
     {Hologram.Query.Stage, :filter, 3},
     {Hologram.Query.Stage, :include, 2},
+    {Hologram.Query.Stage, :include, 3},
     {Hologram.Query.Stage, :increment, 3},
     {Hologram.Query.Stage, :normalize, 1},
     {Hologram.Query.Stage, :one, 1},

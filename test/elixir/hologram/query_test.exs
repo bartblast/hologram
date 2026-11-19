@@ -215,6 +215,17 @@ defmodule Hologram.QueryTest do
       assert include(Module3, a).include == %{a: %Query{entity: Module2}}
     end
 
+    test "names the pin a variable's name forgot when the query is built" do
+      relationship = :a
+
+      expected_msg =
+        "unknown relationship :relationship in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c - a value from the surrounding code is pinned: ^relationship"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        include(Module3, [relationship, ^relationship])
+      end
+    end
+
     test "lowers a list of paths" do
       query = include(Module5, [a.a, a.b])
 
