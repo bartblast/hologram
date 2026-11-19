@@ -16,20 +16,23 @@ defmodule Hologram.Auth.Context do
   # tier, so a gate that denies in the request process permits there instead. Framework code
   # continuing a session's work in another process re-establishes identity with with_actor/2.
 
+  alias Hologram.Server
+
   @actor_key {__MODULE__, :actor_user_id}
 
   @doc """
   Returns the user id of the actor set for the calling process, or nil when no actor is set (an anonymous session).
   """
-  @spec actor_user_id() :: String.t() | nil
+  @spec actor_user_id() :: Server.identity_id() | nil
   def actor_user_id do
     Process.get(@actor_key)
   end
 
   @doc false
-  @spec put_actor(String.t() | nil) :: :ok
+  # Refuses a value no user is identified by, as with_actor/2 does.
+  @spec put_actor(Server.identity_id() | nil) :: :ok
   def put_actor(user_id) do
-    Process.put(@actor_key, user_id)
+    Process.put(@actor_key, Server.validate_user_id!(user_id))
 
     :ok
   end
@@ -37,9 +40,14 @@ defmodule Hologram.Auth.Context do
   @doc """
   Runs the given function with the given user id set as the calling process' actor and returns its result.
   The actor set before the call is restored afterwards, raised exceptions included, so nested calls compose.
+  Raises Hologram.MisuseError for a value no user is identified by, before the function runs and with the
+  actor left as it was - so no work runs as a user id like false, which the checks testing for an actor
+  would read as none.
   """
-  @spec with_actor(String.t() | nil, (-> any)) :: any
+  @spec with_actor(Server.identity_id() | nil, (-> any)) :: any
   def with_actor(user_id, fun) do
+    Server.validate_user_id!(user_id)
+
     previous_user_id = Process.get(@actor_key)
     Process.put(@actor_key, user_id)
 

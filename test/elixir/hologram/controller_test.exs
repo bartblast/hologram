@@ -72,6 +72,9 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module51
   alias Hologram.Test.Fixtures.Controller.Module52
   alias Hologram.Test.Fixtures.Controller.Module53
+  alias Hologram.Test.Fixtures.Controller.Module54
+  alias Hologram.Test.Fixtures.Controller.Module55
+  alias Hologram.Test.Fixtures.Controller.Module56
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
   alias Hologram.Test.Fixtures.Controller.Module9
@@ -2041,6 +2044,36 @@ defmodule Hologram.ControllerTest do
       refute_receive {:identity_changed, _session_id, _user_id}
     end
 
+    test "raises Hologram.MisuseError without broadcasting {:identity_changed, ...} when the handler sets the user id to false directly" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      session = Map.put(@session, :hologram_session_id, session_id)
+
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_setting_false_user_id,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      assert_error Hologram.MisuseError,
+                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   fn ->
+                     :post
+                     |> conn_with_parsed_json("/hologram/command", parsed_json, session)
+                     |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+                     |> handle_command_request()
+                   end
+
+      refute_receive {:identity_changed, _session_id, _user_id}
+    end
+
     test "broadcasts {:identity_changed, ...} on the pre session's announce topic when middleware changes identity and terminates" do
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
       topic = Realtime.session_announce_topic(session_id)
@@ -2065,6 +2098,36 @@ defmodule Hologram.ControllerTest do
       |> handle_command_request()
 
       assert_receive {:identity_changed, ^session_id, 7}
+    end
+
+    test "raises Hologram.MisuseError without broadcasting {:identity_changed, ...} when middleware sets the user id to false directly and terminates" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      session = Map.put(@session, :hologram_session_id, session_id)
+
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module55,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      assert_error Hologram.MisuseError,
+                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   fn ->
+                     :post
+                     |> conn_with_parsed_json("/hologram/command", parsed_json, session)
+                     |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+                     |> handle_command_request()
+                   end
+
+      refute_receive {:identity_changed, _session_id, _user_id}
     end
 
     test "does not broadcast {:identity_changed, ...} when middleware terminates without changing identity" do
@@ -3188,6 +3251,7 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module22, :dummy_module_22_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module26, :dummy_module_26_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module54, :dummy_module_54_digest)
 
       :ok
     end
@@ -3515,6 +3579,60 @@ defmodule Hologram.ControllerTest do
           replica_token: @replica_token
         )
       end
+
+      refute_receive {:identity_changed, _session_id, _user_id}
+    end
+
+    test "raises Hologram.MisuseError without broadcasting {:identity_changed, ...} when init/3 sets the user id to false directly" do
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      assert_error Hologram.MisuseError,
+                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   fn ->
+                     :get
+                     |> Plug.Test.conn("/")
+                     |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+                     |> Plug.Conn.fetch_cookies()
+                     |> handle_page_request(Module54, %{}, [],
+                       csp_nonce: @csp_nonce,
+                       csp_nonced_elements: @csp_nonced_elements,
+                       initial_page?: true,
+                       instance_id: "test-instance-id",
+                       csrf_token: @masked_csrf_token,
+                       replica_id: @replica_id,
+                       replica_token: @replica_token
+                     )
+                   end
+
+      refute_receive {:identity_changed, _session_id, _user_id}
+    end
+
+    test "raises Hologram.MisuseError without broadcasting {:identity_changed, ...} when page middleware sets the user id to false directly and terminates" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      assert_error Hologram.MisuseError,
+                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   fn ->
+                     :get
+                     |> Plug.Test.conn("/")
+                     |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+                     |> Plug.Conn.fetch_cookies()
+                     |> handle_page_request(Module56, %{}, [],
+                       csp_nonce: @csp_nonce,
+                       csp_nonced_elements: @csp_nonced_elements,
+                       initial_page?: true,
+                       instance_id: "test-instance-id",
+                       csrf_token: @masked_csrf_token,
+                       replica_id: @replica_id,
+                       replica_token: @replica_token
+                     )
+                   end
 
       refute_receive {:identity_changed, _session_id, _user_id}
     end

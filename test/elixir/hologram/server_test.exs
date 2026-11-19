@@ -1219,11 +1219,33 @@ defmodule Hologram.ServerTest do
       assert result.user_id == 456
     end
 
-    test "raises ArgumentError when the identity is not a string, integer, or atom" do
-      assert_error ArgumentError,
-                   "User ID must be a string, integer, or atom, but received %{}",
+    test "clears the identity when given nil" do
+      result = put_user_id(%Server{user_id: 123}, nil)
+
+      assert result.user_id == nil
+    end
+
+    test "raises Hologram.MisuseError when the identity is not a string, integer, or atom" do
+      assert_error Hologram.MisuseError,
+                   "User ID must be a string, integer, or atom other than true and false, but received %{}",
                    fn ->
                      put_user_id(%Server{}, %{})
+                   end
+    end
+
+    test "raises Hologram.MisuseError when the identity is false" do
+      assert_error Hologram.MisuseError,
+                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   fn ->
+                     put_user_id(%Server{}, false)
+                   end
+    end
+
+    test "raises Hologram.MisuseError when the identity is true" do
+      assert_error Hologram.MisuseError,
+                   "User ID must be a string, integer, or atom other than true and false, but received true",
+                   fn ->
+                     put_user_id(%Server{}, true)
                    end
     end
   end

@@ -1,5 +1,6 @@
 defmodule Hologram.Server do
   alias Hologram.Component.Action
+  alias Hologram.MisuseError
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.PlugConnUtils
@@ -754,23 +755,33 @@ defmodule Hologram.Server do
   The change is persisted to the session when the server struct is applied. Use
   `delete_user_id/1` to clear the identity.
 
+  Raises `Hologram.MisuseError` for a user id that is not a string, an integer or an atom, and
+  for `true` and `false`, which no user is identified by.
+
   ## Parameters
 
     * `server` - The server struct
-    * `user_id` - The user identity (a string, integer, or atom)
+    * `user_id` - The user identity (a string, integer, or atom other than `true` and `false`)
   """
   @spec put_user_id(t(), identity_id()) :: t()
-  def put_user_id(server, user_id)
-
-  def put_user_id(server, user_id)
-      when is_binary(user_id) or is_integer(user_id) or is_atom(user_id) do
-    %{server | user_id: user_id}
+  def put_user_id(server, user_id) do
+    %{server | user_id: validate_user_id!(user_id)}
   end
 
-  # TODO: reconsider if this argument validation is needed once Elixir has static typing
-  def put_user_id(_server, user_id) do
-    raise ArgumentError,
-          "User ID must be a string, integer, or atom, but received #{inspect(user_id)}"
+  @doc false
+  # The one check of a user id, wherever one comes in: put_user_id/2, the session it is persisted
+  # to - which a user id set on the struct directly reaches too - and the actor the framework runs
+  # work as. nil is no user. A boolean is refused rather than read as one: false would read as
+  # nobody wherever a check tests for a user id, true as somebody nobody can be.
+  @spec validate_user_id!(any) :: identity_id | nil
+  def validate_user_id!(user_id)
+      when (is_binary(user_id) or is_integer(user_id) or is_atom(user_id)) and
+             not is_boolean(user_id),
+      do: user_id
+
+  def validate_user_id!(user_id) do
+    raise MisuseError,
+          "User ID must be a string, integer, or atom other than true and false, but received #{inspect(user_id)}"
   end
 
   @doc """

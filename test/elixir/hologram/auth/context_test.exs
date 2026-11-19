@@ -7,7 +7,41 @@ defmodule Hologram.Auth.ContextTest do
     assert actor_user_id() == nil
   end
 
+  describe "put_actor/1" do
+    test "sets the actor" do
+      put_actor("user_id_9")
+
+      assert actor_user_id() == "user_id_9"
+    end
+
+    test "raises Hologram.MisuseError for a boolean, leaving the actor as it was" do
+      put_actor("user_id_10")
+
+      assert_error Hologram.MisuseError,
+                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   fn ->
+                     put_actor(false)
+                   end
+
+      assert actor_user_id() == "user_id_10"
+    end
+  end
+
   describe "with_actor/2" do
+    test "raises Hologram.MisuseError for a boolean before the function runs, leaving the actor as it was" do
+      with_actor("user_id_11", fn ->
+        assert_error Hologram.MisuseError,
+                     "User ID must be a string, integer, or atom other than true and false, but received true",
+                     fn ->
+                       with_actor(true, fn -> send(self(), :ran) end)
+                     end
+
+        refute_received :ran
+
+        assert actor_user_id() == "user_id_11"
+      end)
+    end
+
     test "sets the actor for the duration of the function" do
       assert with_actor("user_id_1", fn -> actor_user_id() end) == "user_id_1"
     end

@@ -392,6 +392,7 @@ defmodule Hologram.Controller do
     if middleware_server_struct.status do
       # Middleware produced a terminal response - skip the command and send it,
       # still applying the decorations accumulated by the steps that ran.
+      ensure_valid_user_id!(middleware_server_struct)
       Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
 
       conn
@@ -412,6 +413,7 @@ defmodule Hologram.Controller do
 
       ensure_no_content_security_policy!(processed_server_struct)
       ensure_no_content_type!(processed_server_struct)
+      ensure_valid_user_id!(processed_server_struct)
 
       # Apply subscription deltas before flushing broadcasts so a registry
       # failure (GenServer.call timeout) leaves no half-done state.
@@ -868,6 +870,15 @@ defmodule Hologram.Controller do
 
   defp ensure_no_content_type!(_server), do: :ok
 
+  # A user id set on the struct directly skips put_user_id/2's check, so it is checked here, before
+  # anything acts on it: the subscriptions it authorizes, the identity announced to the session's
+  # other tabs and the session it is persisted to.
+  defp ensure_valid_user_id!(server) do
+    Server.validate_user_id!(server.user_id)
+
+    :ok
+  end
+
   # Reads the Hologram-serialized JSON body produced by `Client.fetchPage` and
   # pulls out the two fields the page-render path needs from the client:
   # the stable JS-context `instance_id` and the subscription keys the client claims to
@@ -1084,6 +1095,7 @@ defmodule Hologram.Controller do
     if middleware_server_struct.status do
       # Middleware answered before anything was rendered - skip the render, still applying the
       # decorations accumulated by the steps that ran.
+      ensure_valid_user_id!(middleware_server_struct)
       Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
 
       {:terminal, decorate_conn(conn, server_struct, middleware_server_struct),
@@ -1099,6 +1111,7 @@ defmodule Hologram.Controller do
 
       ensure_no_content_security_policy!(rendered_server_struct)
       ensure_no_content_type!(rendered_server_struct)
+      ensure_valid_user_id!(rendered_server_struct)
 
       maybe_note_page_rendered(
         renderer_opts[:instance_id],
