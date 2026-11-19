@@ -62,9 +62,6 @@ defmodule Hologram.Auth do
   window is, so the build (which decides which pages subscribe to it) and the query cache (which
   resolves the id back to a term) name one window and not two.
   """
-  # TODO: when #1603 removes windows, the session user's row has to keep syncing - the user type
-  # must stay among the types browser code reads (#1600) whenever a page reads {Hologram, :user},
-  # or every from_context {Hologram, :user} prop goes stale again (#1450).
   @spec user_window(module, boolean) :: Query.t()
   def user_window(user_entity, permission_checking?) do
     user_entity

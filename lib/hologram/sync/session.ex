@@ -1,30 +1,33 @@
 defmodule Hologram.Sync.Session do
   @moduledoc false
 
-  # One per connected client. It holds what that client has been told - which rows, of which
-  # windows - and turns each shared round into the part of it that is this client's news.
-  #
-  # What it keeps is membership, never rows: the rows live once per node in the result store,
-  # and a hundred sessions reading one window read that one copy. The exceptions are a returning
-  # client's catch-up, which keeps the hidden rows that left a window and the rows that entered one
-  # until it is over, bounded by what moved meanwhile, and the rows the gap names that no window
-  # carries, bounded by the gap - and a first arrival's fill, which holds one entity type's rows at
-  # a time while it sends them.
+  # One per connected client. It keeps what that client holds and turns each batch of changes into
+  # the part of it that is this client's news.
   #
   # A client arriving with nothing is filled by entity type: every row of every type sync sends
   # that its user may read, read through the type's read rules (see `Hologram.Sync.Fill`), the
   # types its page reads first, so what the client is looking at is ready first and the rest
   # arrives while it reads. A page it navigates to is then answered from what it already has, with
-  # no server in the way. The windows carry what changes after: a client is subscribed to every
-  # window this build downloads, and a window's rounds tell it nothing until the fill is over.
+  # no server in the way. What changes after reaches it by read access: the session joins the
+  # node's sessions (see `Hologram.Sync.Sessions`), every batch the dispatcher reads is judged for
+  # all of them at once (see `Hologram.Sync.Live`), and the session tells its client what its part
+  # of the batch changes of what it holds (see `Hologram.Sync.Pot`). What it keeps of that is ids,
+  # never rows: the ids its client holds, and the ones it told it to drop.
   #
-  # Until live sync goes by read access too, a row no window carries is sent by the fill and then
-  # left as it was sent: no window's round tells the client it changed, or that it may no longer
-  # see it.
+  # A client coming back with a place is caught up through the windows first: it is subscribed to
+  # every window this build downloads, and keeps each window's last version and what moved in and
+  # out of it while it is caught up. What it keeps of them is ids, never rows - the rows live once
+  # per node in the result store - bar the hidden rows that left a window, bounded by what moved
+  # meanwhile, and the rows the gap names that no window carries, bounded by the gap.
+  # It joins the node's sessions before it takes up a window, and before the gap is read it reads
+  # what its user may read, which it takes the client to hold once caught up; then it leaves the
+  # windows and is synced by read access like a first arrival.
 
   use GenServer, restart: :temporary
 
   alias Hologram.Auth
+  alias Hologram.DB.Codec
+  alias Hologram.DB.Oplog
   alias Hologram.DB.QueryCache
   alias Hologram.Entity
   alias Hologram.Policy
@@ -36,9 +39,14 @@ defmodule Hologram.Sync.Session do
   alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Fill
   alias Hologram.Sync.Frame
+  alias Hologram.Sync.Held
+  alias Hologram.Sync.Live
   alias Hologram.Sync.Outbox
+  alias Hologram.Sync.PackedIds
   alias Hologram.Sync.PageWindows
+  alias Hologram.Sync.Pot
   alias Hologram.Sync.ResultStore
+  alias Hologram.Sync.Sessions
   alias Hologram.Sync.Verdicts
 
   @doc """
@@ -48,10 +56,9 @@ defmodule Hologram.Sync.Session do
   against it before being sent, so what the client named as its page decides only the order the
   types fill in, never what it may see of them.
 
-  `:fill_place` is where the log stood when this session's windows were taken up - what every
-  window's place starts at, so a window that has had no round of its own still holds the frames
-  back to a place its rows are known to cover. Without it a batch already routed but not yet
-  delivered would fall outside every claim a frame makes.
+  `:fill_place` is where the log stood before the session began, and the place its first frames
+  claim: every transaction below it finished before the session read anything, so a first
+  arrival's fill holds it, and a returning client's gap covers it.
 
   `:policy_hash` is the hash of the rules this session judges rows by (see
   `Hologram.Policy.hash/0`), taken once where the session is started and stamped on every place a
@@ -81,13 +88,12 @@ defmodule Hologram.Sync.Session do
   there is nothing coherent to resume from, and a place handed over early is a claim the client
   cannot honour.
 
-  A client arriving with nothing is filled once every window has had its first round, which tells
-  it nothing: the rows the windows hold are kept as held, and the fill then sends every row of
-  every synced type the client may see, read after every first round. Read before one, a change
-  landing between the fill's read and that window's first round would be in no round this session
-  tells - a first round tells no transactions - and the client would hold the row as it was. Each
-  type ends with a marker saying the client holds all of it, and the last with one saying it holds
-  everything.
+  A client arriving with nothing is filled at once, after the session joins the node's sessions:
+  every batch read after that reaches the session, and the fill, read after it, holds every
+  transaction committed before. Each type ends with a marker saying the client holds all of it, and
+  the last with one saying it holds everything, dated by `:fill_place`. A batch the session
+  handles after the fill claims the place it was read from, and one that committed wholly before
+  `:fill_place` is passed over: the fill holds it, and its rows can be older than the fill's.
 
   `:read_gap` reads what a returning client missed - absent for one arriving with nothing, in which
   case every row it may see is sent. It answers what `Hologram.Sync.Catchup.gap/4` answers: the
@@ -108,6 +114,10 @@ defmodule Hologram.Sync.Session do
   `:read_named` reads, for a returning client, the rows the gap names that no window carries,
   answering what `Hologram.Sync.Fill.read_named/4` answers, which it defaults to - a reader for the
   same reason.
+
+  `:read_ids` reads, for a returning client, the ids of the rows of one entity type its user may
+  read, packed, answering what `Hologram.Sync.Fill.read_ids/2` answers, which it defaults to - a
+  reader for the same reason.
 
   `:gap_end` is the place of the last effect the read that decided this client resumes found, or
   nil when it found none. A catch-up frame names no place past it: the session's own read can
@@ -151,32 +161,57 @@ defmodule Hologram.Sync.Session do
       departed: %{},
       edges: Keyword.get(opts, :edges),
       fill_place: Keyword.get(opts, :fill_place),
-      filling: read_gap == nil,
       gap_end: Keyword.get(opts, :gap_end),
-      held: %{},
+      # A client arriving with nothing is synced by read access from the start; a returning one is
+      # caught up through the windows first, and then leaves them.
+      live?: read_gap == nil,
       outbox: Outbox.new(client, Keyword.get(opts, :outbox, [])),
       page: Keyword.fetch!(opts, :page),
       page_types: MapSet.new(),
       page_windows: MapSet.new(),
       pending: MapSet.new(),
-      places: %{},
+      place: Keyword.get(opts, :fill_place),
       policy_hash: Keyword.fetch!(opts, :policy_hash),
+      pot: Pot.new(),
+      queued_parts: [],
       read_fill: Keyword.get(opts, :read_fill, &Fill.read/4),
-      read_named: Keyword.get(opts, :read_named, &Fill.read_named/4),
       read_gap: read_gap,
+      read_ids: Keyword.get(opts, :read_ids, &Fill.read_ids/2),
+      read_named: Keyword.get(opts, :read_named, &Fill.read_named/4),
       replica_id: Keyword.get(opts, :replica_id),
       resuming: read_gap != nil,
+      synced_labels: %{},
       told_verdicts: %{},
+      trust_edge: nil,
       types_hash: Keyword.fetch!(opts, :types_hash),
-      verdicts_checked: nil,
-      versions: %{}
+      unsent: nil,
+      versions: %{},
+      window_refs: %{}
     }
 
+    # Watched as well as linked, through the outbox: a link takes this session down only with a
+    # client that crashes, and one that ends normally would leave it among the node's sessions,
+    # judged for and sent every batch for nobody.
     {:ok, state, {:continue, :subscribe}}
   end
 
+  # A client arriving with nothing joins the sessions every batch is judged for before anything is
+  # read, so every batch read after it reaches this session, and the fill - read after it - holds
+  # everything committed before. It takes up no window.
   @impl GenServer
+  def handle_continue(:subscribe, %{live?: true} = state) do
+    :ok = Sessions.register(state.actor_user_id)
+
+    {:noreply, fill(%{state | page_types: page_types(state.page)})}
+  end
+
+  # A returning client joins them before it takes up any window, for the same reason: a batch read
+  # after that reaches it as a part, kept until it is caught up, and one read before had its rounds
+  # handed to every evaluator before the session asked to join them - so the round a window first
+  # tells the session holds it.
   def handle_continue(:subscribe, state) do
+    :ok = Sessions.register(state.actor_user_id)
+
     page_window_ids = PageWindows.lookup(state.page)
     background_window_ids = PageWindows.all() -- page_window_ids
     window_ids = page_window_ids ++ background_window_ids
@@ -186,27 +221,30 @@ defmodule Hologram.Sync.Session do
     seeded = %{
       state
       | page_windows: MapSet.new(page_window_ids),
-        pending: MapSet.new(window_ids),
-        places: Map.new(window_ids, &{&1, state.fill_place})
+        pending: MapSet.new(window_ids)
     }
 
     # A client with nothing to wait for is told so at once: one left waiting for a marker that
     # never comes would never read its own store.
     subscribed = Enum.reduce(window_ids, announce(seeded), &subscribe_to_window/2)
 
-    {:noreply, subscribed}
+    after_catching_up(state, subscribed)
   end
 
   # What the process reports of itself - to `:sys.get_status/1`, and in the report a crash or a
   # cut writes - leaves out what it holds of rows this client may not read: the rows that left a
   # window hidden from it while it was being caught up (see `departure/2`), each named by its type
-  # alone, and the values the round it was reading carried, which are every client's. A log is no
-  # place for either.
+  # alone, the batches it keeps meanwhile, counted, and the values the round or batch it was
+  # reading carried, which are every client's. A log is no place for any of them.
   @impl GenServer
   def format_status(status) do
     status
     |> Map.update(:state, nil, fn state ->
-      %{state | departed: Map.new(state.departed, &redact_departure/1)}
+      %{
+        state
+        | departed: Map.new(state.departed, &redact_departure/1),
+          queued_parts: length(state.queued_parts)
+      }
     end)
     |> redact_message()
   end
@@ -215,11 +253,43 @@ defmodule Hologram.Sync.Session do
     %{status | message: {:round, window_id, version, :redacted, place}}
   end
 
+  defp redact_message(%{message: {:live, _part}} = status) do
+    %{status | message: {:live, :redacted}}
+  end
+
   defp redact_message(status), do: status
 
   @impl GenServer
   def handle_info({:cut, reason}, state) do
     {:stop, reason, state}
+  end
+
+  # What this session is linked to went away - the connection, or the session list a restart of the
+  # sync unit replaced - and the session goes with it. Only reached by a session trapping exits; one
+  # that doesn't is taken down by the link itself.
+  def handle_info({:EXIT, _from, reason}, state) do
+    {:stop, reason, state}
+  end
+
+  def handle_info({:live, _part}, %{cut: cut} = state) when cut != nil do
+    {:noreply, state}
+  end
+
+  # A part reaching a client still being caught up waits for the catch-up, which tells the kept
+  # parts in the order they came once the client is caught up.
+  def handle_info({:live, part}, %{catching_up: true} = state) do
+    {:noreply, %{state | queued_parts: [part | state.queued_parts]}}
+  end
+
+  # A data model under a hold (see Hologram.Entity.Model.hold/0) can't be judged against until it
+  # is released, and a part can be queued before a hold begins. The session ends rather than
+  # telling half of it, and the client comes back through the doors once the model is released.
+  def handle_info({:live, part}, state) do
+    state
+    |> tell_part_unless_filled(part)
+    |> noreply_sleeping_when_idle()
+  rescue
+    Hologram.StaleModelError -> {:stop, {:shutdown, :model_held}, state}
   end
 
   # The client went (see `Hologram.Sync.Outbox`), and there is no one left to tell anything.
@@ -246,23 +316,25 @@ defmodule Hologram.Sync.Session do
   end
 
   # A session on its way out reads no more rounds, the ones still queued ahead of the cut message
-  # included. The round that cut it has already moved its window's place past itself, so any frame
-  # would claim a place past a change nobody told the client - and a later round of that same
-  # window, still in the store, would tell only its own changes while claiming its own place.
+  # included: the client comes back through the doors, and is caught up there.
   def handle_info({:round, _window_id, _version, _transactions, _place}, %{cut: cut} = state)
       when cut != nil do
     {:noreply, state}
   end
 
-  def handle_info({:round, window_id, version, transactions, place}, state) do
+  # Rounds still queued once the session has left its windows tell nothing: the client is synced
+  # by read access from then on. One an evaluator sent before it read the unsubscribe can carry
+  # big values, so the session sleeps after it as after a part.
+  def handle_info({:round, _window_id, _version, _transactions, _place}, %{live?: true} = state) do
+    noreply_sleeping_when_idle(state)
+  end
+
+  # The rounds of a client being caught up tell nothing: they keep what entered and left each
+  # window, which the catch-up judges against once every window has had its first.
+  def handle_info({:round, window_id, version, transactions, _place}, state) do
     events = Enum.flat_map(transactions, fn {_tx, events} -> events end)
 
-    updated =
-      state
-      |> remember_place(window_id, place)
-      |> remember_applied(events)
-
-    {:noreply, deliver(updated, window_id, version, transactions)}
+    after_catching_up(state, deliver(remember_applied(state, events), window_id, version))
   end
 
   # The stream serving this client replaced it on a change of identity. It asks rather than stops
@@ -277,13 +349,32 @@ defmodule Hologram.Sync.Session do
     {:noreply, %{state | outbox: Outbox.written(state.outbox)}}
   end
 
+  # The callback that catches the client up hibernates the session after it: what the catch-up
+  # read and judged, and the batches it kept, are garbage by then, and a session can sit idle for
+  # as long as its client stays, with nothing allocating to collect them.
+  defp after_catching_up(%{catching_up: true}, %{catching_up: false} = state) do
+    {:noreply, state, :hibernate}
+  end
+
+  defp after_catching_up(_before, state), do: {:noreply, state}
+
+  # A part's packed ids are shared with every session it went to, and a session holds onto them
+  # until it next collects its garbage - which an idle one never does. So one with nothing else to
+  # read sleeps, collecting as it goes.
+  defp noreply_sleeping_when_idle(state) do
+    case Process.info(self(), :message_queue_len) do
+      {:message_queue_len, 0} -> {:noreply, state, :hibernate}
+      _more_to_read -> {:noreply, state}
+    end
+  end
+
   # A cut met while the windows are still being taken up leaves the rest of them to be subscribed
   # to, and nothing of theirs is told either.
-  defp deliver(%{cut: cut} = state, _window_id, _version, _transactions) when cut != nil do
+  defp deliver(%{cut: cut} = state, _window_id, _version) when cut != nil do
     state
   end
 
-  defp deliver(state, window_id, version, transactions) do
+  defp deliver(state, window_id, version) do
     case ResultStore.fetch(window_id, version) do
       # The round fell out of the ring before this session read it, so this client is further
       # behind than the store reaches - the same cliff as coming back to a log that no longer
@@ -295,57 +386,21 @@ defmodule Hologram.Sync.Session do
         cut(state, :behind_the_ring)
 
       result ->
-        held = Map.get(state.held, window_id, %{})
-
-        held_ids =
-          held
-          |> Map.keys()
-          |> MapSet.new()
-
-        deltas = Diff.deltas(result, held_ids, state.actor_user_id, transactions)
-
         state
         |> remember_moved(window_id, result)
         |> remember_version(window_id, version)
-        |> send_deltas(window_id, deltas, transactions)
-        |> remember(window_id, held, deltas)
         |> mark_filled(window_id)
     end
   end
 
-  # A row is dropped only once it has left every window this client holds - one window losing it
-  # while another still carries it is not news, and telling the client to drop it would take the
-  # row out from under the query that still wants it. What a window holds is the whole of its
-  # REACH: a row carried only through an include counts the same as a root.
-  defp left_the_pot(state, window_id, vanished) do
-    others = Map.delete(state.held, window_id)
-
-    Enum.reject(vanished, fn id ->
-      Enum.any?(others, fn {_window_id, held} -> Map.has_key?(held, id) end)
-    end)
-  end
-
   # A client being caught up is told nothing until it is: what it holds is stale until the gap
   # lands, and a marker saying otherwise would have it read a store that lies. Once every window
-  # has reported, what the client may see is known, and the gap can be read and spoken. A client
-  # being filled is told nothing either until every window has reported, and is then filled.
+  # has reported, what the client may see is known, and the gap can be read and spoken.
   #
   # A session on its way out says nothing more: the client comes back through the doors, and
   # anything told in between is told again there.
   defp announce(%{cut: nil} = state) do
-    cond do
-      not Enum.empty?(state.pending) and (replaying?(state) or state.filling) ->
-        state
-
-      replaying?(state) ->
-        catch_up(state)
-
-      state.filling ->
-        fill(state)
-
-      true ->
-        announce_all(state)
-    end
+    if Enum.empty?(state.pending), do: catch_up(state), else: state
   end
 
   defp announce(state), do: state
@@ -369,10 +424,10 @@ defmodule Hologram.Sync.Session do
   # on every page. The rows travel with no place, since mid-fill the client holds no whole pot, and
   # with the number read beside them (see `Hologram.Sync.Fill.read/4`).
   #
-  # Then the windows forget the rows the fill did not send - a row a window's first round carried
-  # that was deleted or hidden by the time the fill read. Left among what a window holds, its next
-  # round would tell it as a patch, which a client that never got the row passes over, rather than
-  # as the row.
+  # Each type's rows are held as they go out. A set a row goes out with names every row of its
+  # type the user may read when the row is read, and a row of a type read later can be gone or
+  # hidden by then and never reach the client - so the rows the sets name that the client never got
+  # are kept among the ones it was told to drop, and a later removal of a pair naming one is told.
   defp fill(state) do
     synced_types = QueryCache.synced_types()
 
@@ -383,38 +438,36 @@ defmodule Hologram.Sync.Session do
 
     fill_order = page_types ++ (synced_types -- page_types)
 
-    # Only what some window holds is ever looked up, so only that is kept of what was sent.
-    held_ids =
-      state.held
-      |> Map.values()
-      |> Enum.reduce(MapSet.new(), &MapSet.union(&2, MapSet.new(Map.keys(&1))))
-
     # A session cut while filling reads no further type: nothing it reads would reach the client.
-    {filled, sent_ids} =
-      Enum.reduce_while(fill_order, {state, MapSet.new()}, fn entity_type, {acc, sent} ->
+    {filled, named} =
+      Enum.reduce_while(fill_order, {state, %{}}, fn entity_type, {acc, named} ->
         if acc.cut do
-          {:halt, {acc, sent}}
+          {:halt, {acc, named}}
         else
-          {:cont, fill_type(acc, sent, held_ids, entity_type, synced_types)}
+          {:cont, fill_type(acc, named, entity_type, synced_types)}
         end
       end)
 
-    held =
-      Map.new(filled.held, fn {window_id, window_held} ->
-        {window_id, Map.filter(window_held, fn {id, _type} -> MapSet.member?(sent_ids, id) end)}
+    pot =
+      Enum.reduce(named, filled.pot, fn {entity_type, packed_ids}, acc ->
+        {_held, not_held} = Held.split(acc.held, entity_type, packed_ids)
+
+        Pot.drop(acc, entity_type, PackedIds.unpack(not_held))
       end)
 
     # The rows read are garbage now, and a session can sit idle for as long as its client stays,
     # with nothing allocating to collect them.
     :erlang.garbage_collect()
 
-    announce_all(%{filled | filling: false, held: held})
+    # Read once every type is: what a transaction below it wrote may be in the rows of some types
+    # and not in those read before it committed (see `trusts_held?/2`).
+    announce_all(%{filled | pot: pot, trust_edge: Oplog.current_xmax()})
   end
 
   # TODO: a client cut off mid-fill comes back with no place and is filled from nothing, though it
   # holds every type whose marker it got. Settle against the local store's design whether a place
   # per type is worth giving it.
-  defp fill_type(state, sent_ids, held_ids, entity_type, synced_types) do
+  defp fill_type(state, named, entity_type, synced_types) do
     {rows, read_seq} =
       state.read_fill.(entity_type, state.actor_user_id, state.replica_id, synced_types)
 
@@ -438,39 +491,118 @@ defmodule Hologram.Sync.Session do
 
     marked = tell_client(told, {:sync_synced, {:types, [entity_type]}, nil})
 
-    held_sent =
-      rows
-      |> Enum.map(& &1.id)
-      |> Enum.filter(&MapSet.member?(held_ids, &1))
+    pot = Pot.hand_over(marked.pot, entity_type, Enum.map(rows, & &1.id))
 
-    {marked, Enum.reduce(held_sent, sent_ids, &MapSet.put(&2, &1))}
+    {%{marked | pot: pot}, name_set_members(rows, named)}
+  end
+
+  # The rows the sets of the given rows name, added to the given ones per entity type - kept packed,
+  # since they last until the fill ends.
+  defp name_set_members(rows, named) do
+    rows
+    |> Enum.flat_map(&set_members/1)
+    |> Enum.group_by(& &1.__struct__, & &1.id)
+    |> Enum.reduce(named, fn {entity_type, ids}, acc ->
+      Map.update(acc, entity_type, PackedIds.pack(ids), &PackedIds.insert(&1, ids))
+    end)
+  end
+
+  defp set_members(row) do
+    row.__struct__
+    |> Entity.includable_names()
+    |> Enum.flat_map(fn name ->
+      case Map.fetch!(row, name) do
+        members when is_list(members) -> members
+        _not_a_set -> []
+      end
+    end)
   end
 
   # The gap is read only now, once every window has filled, rather than when the session began.
   # Rounds reaching a session that is catching up tell nothing, so a change committed while the
   # windows were filling would otherwise be told by nobody: its round is passed over, and a window
   # filling after it reads it as a row that was always so. Read now, the gap names everything
-  # committed before this moment, and everything after it reaches the session as a round once the
-  # client is caught up.
+  # committed before this moment, and the batches after it reach the session as parts, told once
+  # the client is caught up.
   #
   # Two answers end the session instead: a log that can no longer tell this client what it
   # missed, and a window whose last round left the ring before the gap could be judged against it.
+  #
+  # The session joined the node's sessions before it took up a window, so every batch since
+  # reaches it, kept until now, and the gap, read after that, covers the ones before. Before the
+  # gap it reads what its user may read now, which it takes the client to hold once caught up -
+  # read first, so a row its user loses is either in the gap, which names it, or in a batch after
+  # the read, which finds it held and takes it away. Each frame of the catch-up moves what it
+  # holds, and once the client is caught up the session leaves its windows, is synced by read
+  # access, and tells the batches it kept.
   defp catch_up(state) do
-    case state.read_gap.() do
+    held = read_held(state)
+
+    case held.read_gap.() do
       {:ok, gap, grants_then} ->
-        case judge_gap(state, gap, grants_then) do
+        case judge_gap(held, gap, grants_then) do
           {:ok, judged} ->
-            state
+            held
             |> tell_gap(judged)
+            |> leave_windows()
             |> announce_all()
+            |> tell_queued_parts()
 
           :behind_the_ring ->
-            cut(state, :behind_the_ring)
+            cut(held, :behind_the_ring)
         end
 
       {:full_resync, reason} ->
-        cut(state, {:full_resync, reason})
+        cut(held, {:full_resync, reason})
     end
+  end
+
+  # The labels are kept for the catch-up's frames, each of which names its rows' types by label
+  # (see `remember_held/2`).
+  defp read_held(state) do
+    synced_types = QueryCache.synced_types()
+
+    held =
+      Enum.reduce(synced_types, Held.new(), fn entity_type, acc ->
+        Held.put(acc, entity_type, state.read_ids.(entity_type, state.actor_user_id))
+      end)
+
+    %{
+      state
+      | pot: Pot.from_held(held),
+        synced_labels: Map.new(synced_types, &{Codec.encode_enum_value(&1), &1})
+    }
+  end
+
+  # The batches that reached the session while its client was caught up, in the order they came -
+  # each decided against the edge read once the catch-up was over (see `trusts_held?/2`).
+  defp tell_queued_parts(state) do
+    state.queued_parts
+    |> Enum.reverse()
+    |> Enum.reduce(%{state | queued_parts: []}, &tell_part(&2, &1))
+  rescue
+    Hologram.StaleModelError -> cut(state, {:shutdown, :model_held})
+  end
+
+  # Once the client is caught up its windows have nothing more to tell it, so the session leaves
+  # them - an evaluator nobody else holds stops - and is synced by read access. A frame claims the
+  # place the session started from until a batch moves it: the gap covers everything before it.
+  defp leave_windows(state) do
+    Enum.each(state.window_refs, fn {window_id, ref} ->
+      Evaluator.unsubscribe(window_id, self())
+      Process.demonitor(ref, [:flush])
+    end)
+
+    %{
+      state
+      | edges: nil,
+        live?: true,
+        pending: MapSet.new(),
+        place: state.fill_place,
+        synced_labels: %{},
+        trust_edge: Oplog.current_xmax(),
+        window_refs: %{}
+    }
   end
 
   # The session ends once what is already queued ahead of the message has been read, so every
@@ -643,7 +775,7 @@ defmodule Hologram.Sync.Session do
     # can carry a row with a write of this replica's that only a later frame names - and a row going
     # out with the write in it under a number saying it isn't has the client apply the write a
     # second time. A window's round can be older than one of these writes, and the client then
-    # shows the row from before its write until that window's round arrives.
+    # shows the row from before its write until the batch holding it is told.
     told_moved =
       state
       |> remember_applied(judged.gap)
@@ -673,11 +805,10 @@ defmodule Hologram.Sync.Session do
   # What moved in or out of the windows while the client was being caught up, through nothing the gap
   # names: the rows that entered a window are handed over (see `arrived_puts/2`), and the ones that
   # left are taken away. A row that left a window, and that no window's last round lets the client
-  # see, has left every window - what a connected client is told when a row leaves the last
-  # window holding it. Only a row the client may hold is taken away: one it could see in the round
-  # it left, or a hidden one it could see before it went away, under the grants it held then or
-  # before a related row the gap names moved - which, like the reach of the rows a last round
-  # carries, errs towards taking away. So does a row that entered a window during the catch-up
+  # see, has left every window. Only a row the client may hold is taken away: one it could see in
+  # the round it left, or a hidden one it could see before it went away, under the grants it held
+  # then or before a related row the gap names moved - which, like the reach of the rows a last
+  # round carries, errs towards taking away. So does a row that entered a window during the catch-up
   # and left again: it can't be told apart from one another window held from its first round, and
   # taking away a row the client never had changes nothing. Rows the gap names or the shift takes
   # away are spoken for there.
@@ -707,10 +838,13 @@ defmodule Hologram.Sync.Session do
 
     held_hidden = held_hidden(hidden, state, judged)
 
+    # A row that left every window is not one its user may no longer read: the session read what
+    # it may read before the gap, and a row among that stays.
     unsyncs =
       visible
       |> Enum.map(fn {id, {:visible, type}} -> {id, type} end)
       |> Enum.concat(held_hidden)
+      |> Enum.reject(fn {id, type} -> Held.member?(state.pot.held, type, id) end)
       |> Enum.sort()
       |> Enum.map(fn {id, type} -> Frame.unsync_entity(id, type) end)
 
@@ -722,15 +856,14 @@ defmodule Hologram.Sync.Session do
       acc
       |> tell_client({:sync_deltas, nil, deltas, acc.applied_seq})
       |> remember_verdicts(deltas)
-      |> forget_unsynced(deltas)
+      |> remember_held(deltas)
     end)
   end
 
   # A row that entered a window while the client was being caught up, through nothing the gap
   # names - a related row moving into a window's filter brings rows that never changed - and that
-  # the client may see once every window is judged, is handed over as it stands. The window lists it
-  # as held already, so no later round would. Rows the gap names or the shift hands over are spoken
-  # for there.
+  # the client may see once every window is judged, is handed over as it stands. Rows the gap names
+  # or the shift hands over are spoken for there.
   defp arrived_puts(state, judged) do
     named_ids = MapSet.new(judged.gap, & &1.entity_id)
 
@@ -786,25 +919,6 @@ defmodule Hologram.Sync.Session do
     |> Enum.map(&{&1, Map.fetch!(rows, &1).__struct__})
   end
 
-  # A row a catch-up frame takes away is no longer the client's, whichever window lists it as held.
-  # A window can still list a row the catch-up judged hidden - its copy read before the window that
-  # hid it, or a grant or related row moving after its round was delivered - and left there, that
-  # window's next round would tell the row coming back into sight as a patch, or as nothing at all,
-  # to a client that no longer has it.
-  defp forget_unsynced(state, frame_deltas) do
-    unsynced =
-      frame_deltas
-      |> Enum.filter(&(&1.op == :unsync_entity))
-      |> Enum.map(& &1.id)
-
-    held =
-      Map.new(state.held, fn {window_id, window_held} ->
-        {window_id, Map.drop(window_held, unsynced)}
-      end)
-
-    %{state | held: held}
-  end
-
   # What a grant change decided differently, told after the rows the gap named and before the
   # client is told its store is answerable. A row the gap named is left out: the replay has
   # already handed it over as it stands, or already taken it away, and saying so twice would
@@ -831,7 +945,7 @@ defmodule Hologram.Sync.Session do
       acc
       |> tell_client({:sync_deltas, batch_cursor(acc, judged.gap), deltas, acc.applied_seq})
       |> remember_verdicts(deltas)
-      |> forget_unsynced(deltas)
+      |> remember_held(deltas)
     end)
   end
 
@@ -848,7 +962,7 @@ defmodule Hologram.Sync.Session do
     |> Map.drop(Map.keys(state.told_verdicts))
     |> Map.values()
     |> Enum.sort_by(& &1.id)
-    |> Verdicts.stale(state.told_verdicts, state.actor_user_id, :all)
+    |> Verdicts.stale(state.told_verdicts, state.actor_user_id)
     |> Enum.map(fn {row, verdicts} -> {row, %{}, verdicts} end)
     |> Enum.chunk_every(Catchup.rows_per_frame())
     |> Enum.reduce(state, fn patched, acc ->
@@ -919,7 +1033,7 @@ defmodule Hologram.Sync.Session do
 
     told
     |> remember_verdicts(deltas)
-    |> forget_unsynced(deltas)
+    |> remember_held(deltas)
   end
 
   # A gap of nothing dates nothing - the client keeps the place it came back from, as a frame
@@ -944,23 +1058,13 @@ defmodule Hologram.Sync.Session do
     announce(filled)
   end
 
-  # What a frame may claim the client has reached: the SLOWEST window's place. A window's missed
-  # changes can only live in batches after its last applied round, and those start at or above
-  # that round's place - so replaying from the minimum covers every window's possible gap, whatever
-  # order the rounds arrived in. Claiming the newest place instead would lose a slow window's
-  # changes outright, which no amount of idempotent replay puts back.
+  # What a frame may claim the client has reached. Synced by read access, it is the place the
+  # latest batch the session handled was read from - one place, whatever rows the batch touched -
+  # and the fill's place before any. A client cut off mid-batch replays that batch.
   defp cursor(state) do
-    if holds_a_whole_pot?(state) do
-      place =
-        state.places
-        |> Map.values()
-        |> Enum.reject(&is_nil/1)
-        |> Enum.min(fn -> nil end)
-
-      case place do
-        nil -> nil
-        {tx, seq} -> Cursor.encode(tx, seq, state.policy_hash, state.types_hash)
-      end
+    case {holds_a_whole_pot?(state), state.place} do
+      {true, {tx, seq}} -> Cursor.encode(tx, seq, state.policy_hash, state.types_hash)
+      _no_place -> nil
     end
   end
 
@@ -977,11 +1081,6 @@ defmodule Hologram.Sync.Session do
     state.resuming or MapSet.member?(state.announced, :all)
   end
 
-  # The last place each window has applied, taken forward only - a slow round arriving late must
-  # not drag a window's place backwards, and both claims it could make are sound, so the further
-  # one is kept. What a frame may claim is the MINIMUM of these: a window's missed changes can
-  # only live in batches after its last applied round, so replaying from the slowest window's
-  # place covers every window's possible gap. A fill round carries no place and changes nothing.
   # How far this replica's own batches are applied in what the client is about to be told, taken
   # from the effects themselves: every one of them names the batch that wrote it, and the highest
   # number among this replica's is one the frame's values are known to include.
@@ -1018,13 +1117,10 @@ defmodule Hologram.Sync.Session do
 
   defp higher_seq(left, right), do: max(left, right)
 
-  # What each window's last round was, read at its next round while the client is being caught up
-  # and once it is - after that, nothing asks.
+  # What each window's last round was, read at its next round and when the gap is judged.
   defp remember_version(%{catching_up: true} = state, window_id, version) do
     %{state | versions: Map.put(state.versions, window_id, version)}
   end
-
-  defp remember_version(state, _window_id, _version), do: state
 
   defp redact_departure({id, {:hidden, row}}), do: {id, {:hidden, row.__struct__}}
 
@@ -1058,8 +1154,6 @@ defmodule Hologram.Sync.Session do
       :error -> state
     end
   end
-
-  defp remember_moved(state, _window_id, _result), do: state
 
   defp remember_moved(state, window_id, result, previous_version) do
     case ResultStore.fetch(window_id, previous_version) do
@@ -1097,28 +1191,31 @@ defmodule Hologram.Sync.Session do
     end
   end
 
-  defp remember_place(state, _window_id, nil), do: state
+  # What a catch-up frame hands over or takes away moves what the session takes the client to hold.
+  # A delta names its type as the wire spells it, so the label is read back as the synced type it
+  # names. A row of a type sync doesn't send is no row live sync tells of, so it is passed over.
+  #
+  # Moved once per type per frame rather than once per row: each move copies the type's packed ids.
+  # No catch-up frame both hands over and takes away one row, so the order of the two moves can't
+  # matter.
+  defp remember_held(state, frame_deltas) do
+    types = state.synced_labels
 
-  defp remember_place(state, window_id, place) do
-    places = Map.update(state.places, window_id, place, &max(&1, place))
+    moved =
+      frame_deltas
+      |> Enum.filter(&(&1.op in [:put_entity, :unsync_entity] and Map.has_key?(types, &1.type)))
+      |> Enum.group_by(&{&1.op, Map.fetch!(types, &1.type)}, & &1.id)
 
-    %{state | places: places}
+    pot =
+      Enum.reduce(moved, state.pot, fn
+        {{:put_entity, entity_type}, ids}, acc -> Pot.hand_over(acc, entity_type, ids)
+        {{:unsync_entity, entity_type}, ids}, acc -> Pot.drop(acc, entity_type, ids)
+      end)
+
+    %{state | pot: pot}
   end
 
-  # Each id is held under its type, because a row that later leaves is no longer there to name
-  # its own - the arrival is the one moment the type is in hand, so it is kept from there.
-  defp remember(state, window_id, held, deltas) do
-    arrived = Map.new(deltas.appeared, &{&1.id, &1.__struct__})
-
-    window_held =
-      held
-      |> Map.merge(arrived)
-      |> Map.drop(deltas.vanished)
-
-    %{state | held: Map.put(state.held, window_id, window_held)}
-  end
-
-  # What a frame told of the server's verdicts, kept so a later round tells only what moved.
+  # What a frame told of the server's verdicts, kept so a later batch tells only what moved.
   defp remember_verdicts(state, frame_deltas) do
     %{state | told_verdicts: Verdicts.remember(state.told_verdicts, frame_deltas)}
   end
@@ -1141,8 +1238,6 @@ defmodule Hologram.Sync.Session do
   defp merge_later(rows, later_rows) do
     Map.merge(rows, later_rows, fn _id, earlier, later -> Entity.merge_copies(later, earlier) end)
   end
-
-  defp replaying?(state), do: state.catching_up
 
   # The rows the gap names, or that entered a window during the catch-up, that this window lets the
   # client see, as its last round has them. An edge names its target as well as its source, since
@@ -1168,8 +1263,7 @@ defmodule Hologram.Sync.Session do
   #
   # Read after the windows are settled, so the sets a row read here embeds are not scrubbed against
   # what the windows let the client see: they were read through the read rules, which is what the
-  # client holds since its fill - bar the rows the known gap leaves it with, until live sync goes by
-  # read access.
+  # client holds since its fill - bar the rows the gaps #1602 closes leave it with.
   #
   # Bounded by the gap: an id per effect, and a target per edge whose target files the set.
   defp reread_unseen(judged, state) do
@@ -1234,86 +1328,9 @@ defmodule Hologram.Sync.Session do
 
   defp gap_ids(effect), do: [effect.entity_id]
 
-  # A round reaching a client still being caught up tells nothing: the gap, read once every window
-  # has filled, names whatever it changed, and is judged against the window's last round. What the
-  # round still keeps is what the window holds and the rows that left or entered it (see
-  # `remember_moved/3`). Neither does a round reaching a client still being filled: the fill reads
-  # after it, so it sends the row as the round would have, or newer.
-  defp send_deltas(state, window_id, deltas, transactions) do
-    if replaying?(state) or state.filling do
-      state
-    else
-      tell(state, window_id, deltas, transactions)
-    end
-  end
-
-  # The rows a round patches carry the verdicts that moved for them, and a row whose verdicts moved
-  # while none of its values did is patched with those alone - worked out again only for the rows
-  # whose deciding quantifiers read a type the round touched.
-  defp tell(state, window_id, deltas, transactions) do
-    held = Map.get(state.held, window_id, %{})
-    unsynced = left_the_pot(state, window_id, deltas.vanished)
-
-    {patched, checked_state} = patched_with_verdicts(state, deltas, transactions)
-
-    news = %{
-      appeared: deltas.appeared,
-      edges: deltas.edges,
-      patched: patched,
-      unsynced: Enum.map(unsynced, &{&1, Map.fetch!(held, &1)})
-    }
-
-    news
-    |> split_news()
-    |> Enum.reduce(checked_state, fn part, acc ->
-      frame_deltas = Frame.deltas(part, acc.actor_user_id)
-
-      acc
-      |> tell_client({:sync_deltas, cursor(acc), frame_deltas, acc.applied_seq})
-      |> remember_verdicts(frame_deltas)
-    end)
-  end
-
-  # One batch of transactions reaches every window it touched as a round of its own, so a row
-  # several windows hold is worked out once per batch - the first of its windows to report
-  # answers for the rest.
-  defp patched_with_verdicts(state, deltas, transactions) do
-    batch = Enum.map(transactions, fn {tx, _events} -> tx end)
-
-    checked =
-      case state.verdicts_checked do
-        {^batch, ids} -> ids
-        _earlier_batch -> MapSet.new()
-      end
-
-    events = Enum.flat_map(transactions, fn {_tx, events} -> events end)
-    changed_types = MapSet.new(events, & &1.type)
-    # The rows whose own values or pairs moved, a pair naming a row on each side.
-    moved_ids =
-      events
-      |> Enum.flat_map(&gap_ids/1)
-      |> MapSet.new()
-
-    unchecked = Enum.reject(deltas.held, &MapSet.member?(checked, &1.id))
-
-    stale =
-      Verdicts.stale(
-        unchecked,
-        state.told_verdicts,
-        state.actor_user_id,
-        changed_types,
-        moved_ids
-      )
-
-    patches = Verdicts.patches(deltas.patched, stale)
-    now_checked = Enum.reduce(unchecked, checked, &MapSet.put(&2, &1.id))
-
-    {patches, %{state | verdicts_checked: {batch, now_checked}}}
-  end
-
-  # A round can hand over many rows at once - a related row moving into a window's filter brings
-  # every row leaning on it - and all of them in one frame is a frame of unbounded size, the memory
-  # it costs unbounded in exactly the way a replay's was. Rows that APPEARED are the part that
+  # A batch can hand over many rows at once - a grant or a related row moving brings every row
+  # leaning on it - and all of them in one frame is a frame of unbounded size, the memory it costs
+  # unbounded in exactly the way a replay's was. Rows that APPEARED are the part that
   # grows, so they are split across frames and everything else rides with the first.
   defp split_news(news) do
     case Enum.chunk_every(news.appeared, Catchup.rows_per_frame()) do
@@ -1331,24 +1348,16 @@ defmodule Hologram.Sync.Session do
       # Nothing downloads it, so nothing will ever arrive for it - which is as filled as it will
       # ever be, and waiting on it would leave the client waiting forever.
       :no_window ->
-        # Its place is dropped along with it. What a frame claims is the place of the window
-        # furthest behind, and a window that will never have a round never moves - so left among
-        # them it would hold every claim at the place this session started from. The client would
-        # replay from there on each reconnect, from further back every time, until the gap outgrew
-        # what the log still covers and it was sent everything again. A window with no rounds has
-        # no missed changes for a claim to cover.
-        unconstrained = %{state | places: Map.delete(state.places, window_id)}
-
-        mark_filled(unconstrained, window_id)
+        mark_filled(state, window_id)
 
       {:ok, evaluator, version, term} ->
         # Watched from here on: an evaluator that stops is the end of a window's rounds, and a
         # session not told would hold that window pending for as long as the client stayed - never
         # filling or catching it up, never sending a marker, with nothing the client could do about
         # it.
-        Process.monitor(evaluator)
+        ref = Process.monitor(evaluator)
 
-        state
+        %{state | window_refs: Map.put(state.window_refs, window_id, ref)}
         |> remember_page_types(window_id, term)
         |> first_round(window_id, version)
     end
@@ -1371,5 +1380,175 @@ defmodule Hologram.Sync.Session do
     state
   end
 
-  defp first_round(state, window_id, version), do: deliver(state, window_id, version, [])
+  defp first_round(state, window_id, version), do: deliver(state, window_id, version)
+
+  # A batch whose every transaction committed before a first arrival's fill place is one the fill
+  # read, and its rows can be older than the fill's, so it is passed over. A returning client's
+  # catch-up holds only the rows its gap names, so every batch is told it.
+  defp tell_part_unless_filled(
+         %{fill_place: {fill_tx, _seq}, resuming: false} = state,
+         %{tx_range: {_lowest, highest}}
+       )
+       when highest < fill_tx do
+    state
+  end
+
+  defp tell_part_unless_filled(state, part), do: tell_part(state, part)
+
+  # The entity types the page's windows read, which the fill sends first. Read from the terms the
+  # build gave the windows; nothing is subscribed to.
+  defp page_types(page) do
+    page
+    |> PageWindows.lookup()
+    |> Enum.map(&QueryCache.window/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.reduce(MapSet.new(), &MapSet.union(&2, Registry.entity_types(&1)))
+  end
+
+  # A type read again whole for this user, because a grant moved what it may read of every row of
+  # it, and what that tells the client - in frames of its own, after the batch's, since a frame's
+  # deltas are applied grouped by kind rather than in the order they were worked out.
+  defp reread_type(entity_type, state, synced_types, trust_held?) do
+    {rows, read_seq} =
+      state.read_fill.(entity_type, state.actor_user_id, state.replica_id, synced_types)
+
+    read_pairs = &Live.pairs_touching(&1, synced_types)
+
+    {news, pot} =
+      Pot.reread(state.pot, entity_type, rows, read_pairs, trust_held?: trust_held?)
+
+    # Read after the batch, so its rows can hold batches of this client's the session hasn't told:
+    # their frames claim the number the read found, and the session keeps its own (see
+    # `tell_part/2`).
+    send_news(%{state | pot: pot}, news, %{}, higher_seq(state.applied_seq, read_seq))
+  end
+
+  # Frames carrying the given news, the rows handed over split across them by the frame size and
+  # everything else riding the first (see `split_news/1`). A row handed over carries the given
+  # verdicts for it, or has them worked out when none are given - a reread type's rows, read
+  # after the batch.
+  #
+  # The frames claim the given number. One above the session's own is a claim about rows read with
+  # this client's later batches in them, which holds for the rows handed over whole and not for a
+  # pair filed under a row the client already holds: the client takes a pair as a write to that
+  # row, which isn't restated. So the pairs go in a frame of their own, under the session's number -
+  # a pair applied twice changes nothing.
+  defp send_news(state, %{edges: edges} = news, verdicts, claim)
+       when claim != state.applied_seq and edges != [] do
+    state
+    |> send_frames(%{news | edges: []}, verdicts, claim)
+    |> send_frames(
+      %{appeared: [], edges: edges, patched: [], unsynced: []},
+      verdicts,
+      state.applied_seq
+    )
+  end
+
+  defp send_news(state, news, verdicts, claim), do: send_frames(state, news, verdicts, claim)
+
+  # Only the batch's last frame carries its place. The client keeps each frame's cursor as the frame
+  # lands, so an earlier frame carrying it would have a client cut off after that frame come back
+  # past the rest of the batch, which it would then never get. The others carry none, which leaves
+  # the client where it was: one cut off among them replays the batch. So each frame is held back
+  # until the next one is worked out, and the last until the batch is over (see `flush_frames/1`).
+  defp send_frames(state, news, verdicts, claim) do
+    news
+    |> split_news()
+    |> Enum.reduce(state, fn frame_news, acc ->
+      frame_deltas = Frame.deltas(frame_news, acc.actor_user_id, verdicts)
+
+      acc
+      |> send_unsent(nil)
+      |> Map.put(:unsent, {frame_deltas, claim})
+      |> remember_verdicts(frame_deltas)
+    end)
+  end
+
+  # Sends the batch's last frame, with the batch's place.
+  defp flush_frames(state), do: send_unsent(state, cursor(state))
+
+  defp send_unsent(%{unsent: nil} = state, _cursor), do: state
+
+  defp send_unsent(%{unsent: {deltas, claim}} = state, cursor) do
+    tell_client(%{state | unsent: nil}, {:sync_deltas, cursor, deltas, claim})
+  end
+
+  # What one batch tells this client: where it leaves it, how far its own batches are in, what the
+  # batch changed of what it holds and may read (see `Hologram.Sync.Pot.decide/3`), the verdicts it
+  # moved, and then the types a grant moved whole.
+  #
+  # The rows were read after the batch, so they can hold a later batch of this client's own that the
+  # batch doesn't. The client takes a frame's number to cover every write of its own to the rows the
+  # frame names, so a frame naming a row with that batch in it has to claim that batch, or the client
+  # shows the batch's writes twice - and a patch carries only the attributes the batch wrote, so a
+  # patch claiming it would drop what the client shows of the batch's other writes. So a part a
+  # later batch of this client's overtook hands its rows over whole, as read with that batch in them,
+  # under that batch's number. The session keeps the number of what it was told: the next part is
+  # judged against it, so one the same later batch overtook goes out whole too. The fill and the
+  # catch-up raise it from their own reads, which is safe because the edge is read after them: a
+  # part such a batch can overtake starts below the edge, and goes out whole (see `trusts_held?/2`).
+  defp tell_part(state, part) do
+    own_seq = state.replica_id && Map.get(part.own_seqs, state.replica_id)
+    overtaking_seq = state.replica_id && Map.get(part.overtaking_seqs, state.replica_id)
+
+    placed = %{
+      state
+      | applied_seq: higher_seq(state.applied_seq, own_seq),
+        place: max_place(state.place, part.place)
+    }
+
+    overtaken? = overtaken?(placed.applied_seq, overtaking_seq)
+    trust_held? = trusts_held?(placed, part) and not overtaken?
+    {news, pot} = Pot.decide(placed.pot, part, trust_held?: trust_held?)
+
+    # A row handed over whole travels with its verdicts, and none held is patched when held isn't
+    # trusted. The verdicts are the part's, read in the batch's recheck.
+    stale =
+      if trust_held? do
+        placed.pot
+        |> Pot.verdict_rows(part)
+        |> Verdicts.moved(placed.told_verdicts)
+      else
+        []
+      end
+
+    decided = %{placed | pot: pot}
+    claim = if overtaken?, do: overtaking_seq, else: placed.applied_seq
+    news_with_verdicts = %{news | patched: Verdicts.patches(news.patched, stale)}
+
+    told = send_news(decided, news_with_verdicts, part.verdicts, claim)
+
+    # A reread is judged by the edge alone: its frames claim its own read's number, so a later
+    # batch of this client's that overtook the part leaves its rows as true as they are.
+    reread_trust? = trusts_held?(placed, part)
+
+    part.whole_types
+    |> Enum.reduce(told, &reread_type(&1, &2, part.synced_types, reread_trust?))
+    |> flush_frames()
+  end
+
+  defp overtaken?(_told_seq, nil), do: false
+
+  defp overtaken?(nil, _overtaking_seq), do: true
+
+  defp overtaken?(told_seq, overtaking_seq), do: overtaking_seq > told_seq
+
+  # Whether what the session holds can be trusted to say what the client holds of the batch's rows.
+  # Not for a batch with a transaction below the edge read once the fill or the catch-up was over.
+  # The fill read each type at its own moment, so such a transaction can be in the rows of some
+  # types and not in those read before it committed - a row it made readable was sent with the type
+  # read after it, while the rows read before named nothing of it. A catch-up takes its client to
+  # hold what the user may read when it reads that, which a transaction committing around it can
+  # make true of a row the client never got. Such a batch hands every row it may read over whole,
+  # which restates its sets and tells the pairs filed under the rows read before (see
+  # `Hologram.Sync.Pot.decide/3`).
+  defp trusts_held?(%{trust_edge: nil}, _part), do: true
+
+  defp trusts_held?(%{trust_edge: trust_edge}, %{tx_range: {lowest, _highest}}) do
+    lowest >= trust_edge
+  end
+
+  defp max_place(nil, place), do: place
+
+  defp max_place(place, other_place), do: max(place, other_place)
 end

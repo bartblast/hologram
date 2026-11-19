@@ -102,6 +102,67 @@ defmodule Hologram.DB.OplogTest do
     end
   end
 
+  describe "replica_seqs_after/1" do
+    test "returns each replica's highest batch in a transaction above the given one" do
+      entity_id = Hologram.Entity.generate_id()
+
+      seed(200, "patch_entity", "Module2", entity_id, nil, nil, %{"replica_id" => "a", "seq" => 3})
+
+      seed(201, "patch_entity", "Module2", entity_id, nil, nil, %{"replica_id" => "a", "seq" => 5})
+
+      seed(202, "patch_entity", "Module2", entity_id, nil, nil, %{"replica_id" => "a", "seq" => 4})
+
+      seed(201, "patch_entity", "Module2", entity_id, nil, nil, %{"replica_id" => "b", "seq" => 9})
+
+      assert replica_seqs_after(199) == %{"a" => 5, "b" => 9}
+    end
+
+    test "leaves out the batches in the given transaction and below it" do
+      entity_id = Hologram.Entity.generate_id()
+
+      seed(200, "patch_entity", "Module2", entity_id, nil, nil, %{"replica_id" => "a", "seq" => 3})
+
+      seed(201, "patch_entity", "Module2", entity_id, nil, nil, %{"replica_id" => "b", "seq" => 9})
+
+      assert replica_seqs_after(200) == %{"b" => 9}
+      assert replica_seqs_after(201) == %{}
+    end
+
+    test "passes over the effects of no batch" do
+      seed(201, "patch_entity", "Module2", Hologram.Entity.generate_id())
+
+      assert replica_seqs_after(200) == %{}
+    end
+  end
+
+  describe "current_xmax/0" do
+    test "returns an id past a transaction that finished, even one begun after one still open" do
+      {:ok, %Postgrex.Result{rows: [[open_tx]]}} =
+        Connection.query("SELECT pg_current_xact_id()")
+
+      test_pid = self()
+
+      # On a connection of its own, outside the test's transaction, so it commits.
+      spawn_link(fn ->
+        :ok = DBConnection.Ownership.ownership_checkout(DB.pool_name(), [])
+
+        %Postgrex.Result{rows: [[finished_tx]]} =
+          Postgrex.query!(DB.pool_name(), "SELECT pg_current_xact_id()", [])
+
+        :ok = DBConnection.Ownership.ownership_checkin(DB.pool_name(), [])
+        send(test_pid, {:finished_tx, finished_tx})
+      end)
+
+      # The worker's connection comes from the pool the other database tests share, so it may wait
+      # for one to free up, until the pool gives up on the wait after a few seconds.
+      assert_receive {:finished_tx, finished_tx}, 15_000
+
+      assert finished_tx > open_tx
+      assert current_xmax() > finished_tx
+      assert current_xmin() <= open_tx
+    end
+  end
+
   describe "entity_from_data/2" do
     test "rebuilds the entity a put recorded" do
       created =

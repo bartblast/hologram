@@ -114,6 +114,41 @@ defmodule Hologram.DB.Oplog do
   end
 
   @doc """
+  Returns one past the highest transaction id that had finished when this is read: a transaction at
+  or above it had not finished, so nothing read before saw what it wrote. Below it a transaction
+  may or may not have been seen - the opposite bound to `current_xmin/0`'s.
+  """
+  @spec current_xmax() :: non_neg_integer
+  def current_xmax do
+    {:ok, %Postgrex.Result{rows: [[xmax]]}} =
+      Connection.query("SELECT pg_snapshot_xmax(pg_current_snapshot())")
+
+    xmax
+  end
+
+  @doc """
+  Returns, for each replica with a batch whose effects are in a transaction above the given one, the
+  highest sequence number among those batches - what a read after a batch of transactions up to the
+  given one can hold of each replica's writes beyond the batch. A replica with none is left out.
+
+  Read through the log's index on the transaction, so it costs what the transactions above the
+  given one wrote, and nothing when none did.
+  """
+  @spec replica_seqs_after(non_neg_integer) :: %{String.t() => non_neg_integer}
+  def replica_seqs_after(tx) do
+    statement = """
+    SELECT "mutation_ref"->>'replica_id', max(("mutation_ref"->>'seq')::bigint)
+    FROM "#{Mapper.system_schema()}"."oplog"
+    WHERE "tx" > $1 AND "mutation_ref" IS NOT NULL
+    GROUP BY 1
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [tx])
+
+    Map.new(rows, fn [replica_id, seq] -> {replica_id, seq} end)
+  end
+
+  @doc """
   Returns the place of the oldest effect the log still holds, or nil when it holds none.
 
   What it answers is whether a returning client's place is one the log can speak for. Every effect
