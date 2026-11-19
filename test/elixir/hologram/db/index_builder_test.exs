@@ -105,6 +105,14 @@ defmodule Hologram.DB.IndexBuilderTest do
     end
   end
 
+  # Starts the given run/1 call as a task the test awaits, killed when the test ends: run/1 traps
+  # exits, so a linked task would outlive a test that fails before awaiting it, retrying against a
+  # dropped database.
+  defp start_run(fun) do
+    supervisor = start_supervised!(Task.Supervisor)
+    Task.Supervisor.async_nolink(supervisor, fun, shutdown: :brutal_kill)
+  end
+
   defp query!(statement) do
     {:ok, _result} = Connection.query(statement)
   end
@@ -632,7 +640,7 @@ defmodule Hologram.DB.IndexBuilderTest do
       log =
         capture_log(fn ->
           builder =
-            Task.async(fn ->
+            start_run(fn ->
               route(scratch, fn ->
                 run(plan: plan, migrations: chain, retry_interval_ms: 100, step_pause_ms: 0)
               end)
@@ -670,7 +678,7 @@ defmodule Hologram.DB.IndexBuilderTest do
       log =
         capture_log(fn ->
           builder =
-            Task.async(fn ->
+            start_run(fn ->
               route(scratch, fn ->
                 run(
                   plan: plan(model),
