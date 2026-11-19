@@ -47,9 +47,10 @@ defmodule Hologram.Sync.Search do
   than read here. The read rules' edges are followed, and the verdicts' (`{type, {:verdicts}}`): a
   row whose verdicts may have moved is checked again like one whose access may have, and a check
   gives its verdicts beside its readers (see `Hologram.Sync.Recheck.run/2`). A build where no
-  client checks permissions sends no verdicts, so its caller leaves their edges out. The other
-  operations' edges aren't followed: a browser answers the rest of their rules from the rows it
-  holds.
+  client checks permissions sends no verdicts, so its caller leaves their edges out. The verdicts'
+  edges name every rule of each operation the server sends a verdict on but read, whose edges are
+  followed already, so no other operation's edges are followed: a browser answers an operation
+  with no verdict from the rows it holds.
 
   The rows the effects wrote are not listed - they are rows to check whatever their rules read, and
   the caller has them. So a change to a column no read rule or verdict reads lists nothing. A
@@ -469,8 +470,9 @@ defmodule Hologram.Sync.Search do
   defp trigger_type(_edge), do: nil
 
   # The read and verdict edges, keyed by the entity type whose effects can start a walk along them.
-  # A read rule's deciding item names its edges under both, and walks are grouped by chain (see
-  # walk_entries/2), so an edge both name walks once.
+  # An edge can be named under both - a verdict operation's rule reading a chain a read rule reads,
+  # or a named read line's rules, which are its name's operation too - and walks are grouped by
+  # chain (see walk_entries/2), so an edge both name walks once.
   defp triggers(edges) do
     edges
     |> Enum.flat_map(fn

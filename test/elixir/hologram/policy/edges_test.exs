@@ -17,14 +17,8 @@ defmodule Hologram.Policy.EdgesTest do
   alias Hologram.Test.Fixtures.Entity.Module41
   alias Hologram.Test.Fixtures.Entity.Module42
   alias Hologram.Test.Fixtures.Policy
-  alias Hologram.Test.Fixtures.Policy.Readers.Module20, as: ReadersModule20
   alias Hologram.Test.Fixtures.Policy.Readers.Module21, as: ReadersModule21
-  alias Hologram.Test.Fixtures.Policy.Readers.Module22, as: ReadersModule22
-  alias Hologram.Test.Fixtures.Policy.Readers.Module23, as: ReadersModule23
   alias Hologram.Test.Fixtures.Policy.Readers.Module24, as: ReadersModule24
-  alias Hologram.Test.Fixtures.Policy.Readers.Module25, as: ReadersModule25
-  alias Hologram.Test.Fixtures.Policy.Readers.Module26, as: ReadersModule26
-  alias Hologram.Test.Fixtures.Policy.Readers.Module27, as: ReadersModule27
   alias Hologram.Test.Fixtures.Policy.Readers.Module28, as: ReadersModule28
   alias Hologram.Test.Fixtures.Role
 
@@ -447,13 +441,12 @@ defmodule Hologram.Policy.EdgesTest do
              ]
     end
 
-    # Both rules' anys over a derived set are answered by the server's verdict, which reads what the
-    # two sets read.
-    test "derives the verdict edges of anys over derived sets" do
-      assert derive([EdgeBoard])[{EdgeBoard, {:verdicts}}] == [
-               {:set_attributes, [:cards], EdgeCard, [:board_id, :id, :rank]},
-               {:set_edges, [:cards, :tags], EdgeCard, [:tags]}
-             ]
+    # Both rules' anys over a derived set are deciding, but only the update verdict reads what its
+    # rule reads: the read verdict is true for every row a client is sent.
+    test "derives the verdict edges of an any over a derived set" do
+      edges = derive([EdgeBoard])
+
+      assert edges[{EdgeBoard, {:verdicts}}] == edges[{EdgeBoard, :update}]
     end
 
     # The verdict edges are keyed by a tuple, so a line named :verdicts keeps its own edges beside
@@ -556,45 +549,50 @@ defmodule Hologram.Policy.EdgesTest do
 
     # The delete rule's none is answered from the server's verdict, sent with every project, so what
     # it reads is named apart from the operations - beside the operation's own edges.
-    test "names what the deciding quantifiers read under {:verdicts}" do
+    test "names what a deciding operation's rules read under {:verdicts}" do
       assert derive([EdgeProject])[{EdgeProject, {:verdicts}}] == [
                {:set_attributes, [:labels], EdgeLabel, [:name]},
                {:set_edges, [:labels], EdgeProject, [:labels]}
              ]
     end
 
-    # No client holds a server-only value, so the read rule's predicate on one is a verdict too.
-    test "names what a predicate on a server-only attribute reads under {:verdicts}" do
-      assert derive([EdgeReport])[{EdgeReport, {:verdicts}}] == [{:attributes, [:reviewed]}]
-    end
+    # The delete rule's equality is answered from the row a client holds, but the verdict answers
+    # the whole rule, and the field's verdict answers the whole-row update rule beside its own. The
+    # read verdict reads nothing, though its rule is deciding.
+    test "names what the rules of every operation a verdict answers read under {:verdicts}" do
+      defmodule VerdictMixedProject do
+        use Hologram.Entity
 
-    # No client holds a row of a type nobody may read, so the read rules' paths to one are verdicts.
-    test "names what a read rule reads through a type nobody may read under {:verdicts}" do
-      assert derive([ReadersModule21])[{ReadersModule21, {:verdicts}}] == [
-               {:attributes, [:project_id]},
-               {:relationship_attributes, [:project], ReadersModule20, [:archived, :steward_id]}
+        attribute :owner_id, :uuid, optional: true
+        attribute :reviewed, :boolean, server_only: true
+        attribute :title, :string
+
+        relationship :badge, Hologram.Policy.EdgesTest.EdgeLabel, optional: true
+        relationship :labels, [Hologram.Policy.EdgesTest.EdgeLabel]
+
+        allow :read, when: reviewed == true
+        allow :delete, when: owner_id == user_id() and none(labels)
+        allow :update, only: [:title], when: none(label <- labels, label.name == "x")
+        allow :update, when: badge.name == "open"
+      end
+
+      assert derive([VerdictMixedProject])[{VerdictMixedProject, {:verdicts}}] == [
+               {:attributes, [:badge_id, :owner_id]},
+               {:relationship_attributes, [:badge], EdgeLabel, [:name]},
+               {:set_attributes, [:labels], EdgeLabel, [:name]},
+               {:set_edges, [:labels], VerdictMixedProject, [:labels]}
              ]
     end
 
-    # The team's id is read off the project, which no client holds, and the role is held on the team.
-    test "names what a read rule's role reference through a type nobody may read reads under {:verdicts}" do
-      assert derive([ReadersModule24])[{ReadersModule24, {:verdicts}}] == [
-               {:attributes, [:project_id]},
-               {:relationship_attributes, [:project], ReadersModule23, [:team_id]},
-               {:relationship_grants, [:project, :team], ReadersModule22, [:member]}
-             ]
-    end
-
-    # No client holds a vault or a shelf, so what the delegated rules read through them is read for
-    # the verdicts.
-    test "names what a read rule's delegations past an unreadable type read under {:verdicts}" do
-      assert derive([ReadersModule28])[{ReadersModule28, {:verdicts}}] == [
-               {:attributes, [:shelf_id, :vault_id]},
-               {:relationship_attributes, [:shelf], ReadersModule27, [:crate_id]},
-               {:relationship_attributes, [:shelf, :crate], ReadersModule26, [:open]},
-               {:relationship_attributes, [:vault], ReadersModule25, [:keeper_id, :open]},
-               {:relationship_grants, [:vault], ReadersModule25, [:member]}
-             ]
+    # The read verdict is true for every row a client is sent, and the read edges follow a user's
+    # access to the row moving: a server-only value, a path or a role reference through a type
+    # nobody may read, and delegations past one.
+    test "names no {:verdicts} edges for a type whose read rules alone hold deciding items" do
+      for entity_type <- [EdgeReport, ReadersModule21, ReadersModule24, ReadersModule28] do
+        refute [entity_type]
+               |> derive()
+               |> Map.has_key?({entity_type, {:verdicts}})
+      end
     end
 
     test "names no {:verdicts} edges for a type with no deciding quantifier" do
