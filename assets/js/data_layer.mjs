@@ -354,13 +354,6 @@ export default class DataLayer {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
-      "authorize/2",
-      "public",
-      ManuallyPortedElixirHologramQueryStage["authorize/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query.Stage",
       "count/1",
       "public",
       ManuallyPortedElixirHologramQueryStage["count/1"],

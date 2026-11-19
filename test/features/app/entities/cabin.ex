@@ -8,5 +8,5 @@ defmodule HologramFeatureTests.Entities.Cabin do
   relationship :ship, Ship
 
   allow :read
-  allow :rename, via: {:update, ship}
+  allow :update, as: :rename, only: [:name], via: {:update, ship}
 end

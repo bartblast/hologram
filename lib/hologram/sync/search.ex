@@ -23,6 +23,7 @@ defmodule Hologram.Sync.Search do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
+  alias Hologram.Policy.Edges
 
   @whole_row_ops [:del_entity, :put_entity]
 
@@ -43,7 +44,7 @@ defmodule Hologram.Sync.Search do
   type or an op this node does not know is passed over, with or without data.
 
   Edges are the policy dependency index (see `Hologram.Policy.Edges.index/0`), passed in rather
-  than read here. The read rules' edges are followed, and the verdicts' (`{type, :verdicts}`): a
+  than read here. The read rules' edges are followed, and the verdicts' (`{type, {:verdicts}}`): a
   row whose verdicts may have moved is checked again like one whose access may have, and a check
   gives its verdicts beside its readers (see `Hologram.Sync.Recheck.run/2`). The other operations'
   edges aren't followed: a browser answers the rest of their rules from the rows it holds.
@@ -52,7 +53,7 @@ defmodule Hologram.Sync.Search do
   the caller has them. So a change to a column no read rule or verdict reads lists nothing. A
   listed row may be gone, which reading it again answers.
   """
-  @spec candidates(list(map), %{{module, atom} => list(tuple)}) :: %{
+  @spec candidates(list(map), Edges.t()) :: %{
           rows: %{module => MapSet.t(String.t())},
           whole_types: %{module => MapSet.t(String.t())}
         }
@@ -456,7 +457,7 @@ defmodule Hologram.Sync.Search do
   defp triggers(edges) do
     edges
     |> Enum.flat_map(fn
-      {{entity_type, key}, key_edges} when key in [:read, :verdicts] ->
+      {{entity_type, key}, key_edges} when key in [:read, {:verdicts}] ->
         Enum.map(key_edges, &{entity_type, &1})
 
       {_pair, _edges} ->

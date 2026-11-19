@@ -5,6 +5,7 @@ defmodule Hologram.Entity.Validator do
   alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.MisuseError
+  alias Hologram.Policy
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
@@ -19,7 +20,7 @@ defmodule Hologram.Entity.Validator do
 
   # The allow options whose nil value reaches the declaration, to be refused there - a when: nil is
   # refused where it is written, as no condition.
-  @policy_option_names [:to, :via]
+  @policy_option_names [:as, :except, :only, :to, :via]
 
   @reserved_names [:created_at, :id, :updated_at]
 
@@ -280,6 +281,8 @@ defmodule Hologram.Entity.Validator do
     validate_opts_shape!(module, "allow", operation, spec)
 
     Enum.each(@policy_option_names, &validate_policy_option_value!(module, operation, spec, &1))
+    validate_as_opt!(module, operation, spec)
+    validate_fields_opts!(module, operation, spec)
     validate_to_opt_shape!(module, operation, spec)
     validate_when_opt_shape!(module, operation, spec)
 
@@ -372,6 +375,29 @@ defmodule Hologram.Entity.Validator do
 
     :ok
   end
+
+  @doc """
+  Validates a derived field's name written as an atom, a string or an unsigned number, where the
+  declaration is expanded - before its function is read, so a bad name is reported first. Only what
+  the name alone says is checked here: its type and spelling. A name written any other way, like a
+  module attribute, a variable, an alias, a list, a tuple or a signed number (which quotes as a
+  call), is left to `validate_derived!/4`, which checks every name once it is a value, uniqueness
+  included.
+
+  Returns :ok, or raises Hologram.CompileError located at the declaration.
+  """
+  @spec validate_derived_name!(Macro.t(), Macro.Env.t()) :: :ok
+  def validate_derived_name!(name, env)
+      when is_atom(name) or is_binary(name) or is_number(name) do
+    validate_name_spelling!(env.module, "derived field", name)
+  rescue
+    error in Hologram.CompileError ->
+      reraise Hologram.CompileError,
+              [file: env.file, line: env.line, message: error.message],
+              __STACKTRACE__
+  end
+
+  def validate_derived_name!(_name, _env), do: :ok
 
   @doc """
   Validates that the given derived field definition is no capture of a zero-arity function, which
@@ -1335,6 +1361,13 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp validate_declaration_name!(module, kind, name) do
+    validate_name_spelling!(module, kind, name)
+    validate_name_uniqueness!(module, kind, name)
+  end
+
+  # What can be said of a name from the name alone, without the declarations beside it - so the
+  # derived macro can say it before it reads the field's function (see validate_derived_name!/2).
+  defp validate_name_spelling!(module, kind, name) do
     validate_name_type!(module, kind, name)
 
     if name in @reserved_names do
@@ -1370,7 +1403,6 @@ defmodule Hologram.Entity.Validator do
     end
 
     validate_name_underscores!(module, kind, name)
-    validate_name_uniqueness!(module, kind, name)
   end
 
   defp validate_default_constraints!(_module, _name, _type, _opts, nil), do: :ok
@@ -1699,11 +1731,23 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
+  # nil, true and false are atoms, but each already stands for something wherever a name is read -
+  # no value, a flag. A role named nil encodes to no value at all, which the role name checks
+  # crashed on before this refused it.
   defp validate_name_type!(module, kind, name) do
-    if not is_atom(name) do
-      raise Hologram.CompileError,
-        message:
-          "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - declaration names must be atoms"
+    cond do
+      not is_atom(name) ->
+        raise Hologram.CompileError,
+          message:
+            "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - declaration names must be atoms"
+
+      name in [nil, true, false] ->
+        raise Hologram.CompileError,
+          message:
+            "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - nil, true and false already stand for no value and for flags, so they can't name a declaration"
+
+      true ->
+        :ok
     end
   end
 
@@ -1752,7 +1796,27 @@ defmodule Hologram.Entity.Validator do
 
   # The shape is structural, so it is checked where it is written - whether the named roles are
   # declared is checked at the whole-model point, since roles are compiled after the policy lines.
-  defp validate_operation_shape!(_module, operation) when is_atom(operation), do: :ok
+  # An allow line grants one of the framework's operations; a rule an app asks about by its own
+  # word is a named line of the operation it grants. The hint is offered only for a word that
+  # could be a name, so it never suggests a line the next build refuses.
+  defp validate_operation_shape!(module, operation) when is_atom(operation) do
+    framework_operations = Policy.framework_operations()
+
+    if operation not in framework_operations do
+      hint =
+        if operation not in [nil, true, false] and plain_name?(operation) do
+          ". To keep #{inspect(operation)} as a name can? and via: ask by, put it on a line of the operation the rule grants, like allow :update, as: #{inspect(operation)}, only: [...] or allow :delete, as: #{inspect(operation)}"
+        else
+          ""
+        end
+
+      raise Hologram.CompileError,
+        message:
+          "unknown operation #{inspect(operation)} used for allow in #{inspect(module)} - an allow line names one of the framework's operations, #{join_operations(framework_operations)}#{hint}"
+    end
+
+    :ok
+  end
 
   defp validate_operation_shape!(module, {:read_roles, _roles} = operation) do
     raise Hologram.CompileError,
@@ -1764,10 +1828,44 @@ defmodule Hologram.Entity.Validator do
     if not role_operation_valid?(operation) do
       raise Hologram.CompileError,
         message:
-          "invalid operation #{inspect(operation)} used for allow in #{inspect(module)} - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
+          "invalid operation #{inspect(operation)} used for allow in #{inspect(module)} - an allow line names a framework operation, or {:grant_role, role} / {:revoke_role, role} naming a declared role or a list of them"
     end
 
     :ok
+  end
+
+  # A line as written: a named one by its name, a field-limited one with its fields, so two lines of
+  # one operation can be told apart - unless the name or the fields are no name or field list at
+  # all, which their own refusal says.
+  defp describe_allow(operation, spec) do
+    describe_named_allow(operation, spec) <> fields_suffix(spec)
+  end
+
+  # The line without its fields, for the refusals of the fields option itself, which name it.
+  defp describe_named_allow(operation, spec) do
+    case Keyword.get(spec, :as) do
+      name when is_atom(name) and name not in [nil, true, false] ->
+        "allow #{inspect(operation)}, as: #{inspect(name)}"
+
+      _other ->
+        "allow #{inspect(operation)}"
+    end
+  end
+
+  defp fields_suffix(spec) do
+    with [key] <- Enum.filter([:only, :except], &Keyword.has_key?(spec, &1)),
+         fields = Keyword.fetch!(spec, key),
+         true <- field_list?(fields) do
+      ", #{key}: #{inspect(fields)}"
+    else
+      _other -> ""
+    end
+  end
+
+  defp join_operations(operations) do
+    {init, [last]} = Enum.split(operations, -1)
+
+    "#{Enum.map_join(init, ", ", &inspect/1)} and #{inspect(last)}"
   end
 
   defp validate_opts_shape!(module, kind, name, opts) do
@@ -1785,10 +1883,97 @@ defmodule Hologram.Entity.Validator do
     if Keyword.has_key?(spec, key) and is_nil(Keyword.fetch!(spec, key)) do
       raise Hologram.CompileError,
         message:
-          "invalid #{key} option nil for allow #{inspect(operation)} in #{inspect(module)} - omit the option instead"
+          "invalid #{key} option nil for #{describe_allow(operation, spec)} in #{inspect(module)} - omit the option instead"
     end
 
     :ok
+  end
+
+  # A name labels a line for can? and via:, which ask the framework's operations by the same atoms,
+  # so a name spelling one would be asked for that operation instead and never answer as itself.
+  defp validate_as_opt!(module, operation, spec) do
+    case Keyword.fetch(spec, :as) do
+      {:ok, name} when not is_atom(name) or is_boolean(name) ->
+        raise Hologram.CompileError,
+          message:
+            "invalid as option #{inspect(name)} for allow #{inspect(operation)} in #{inspect(module)} - the as option must be an atom naming the rule"
+
+      {:ok, name} ->
+        cond do
+          name in Policy.framework_operations() ->
+            raise Hologram.CompileError,
+              message:
+                "invalid as option #{inspect(name)} for allow #{inspect(operation)} in #{inspect(module)} - a name can't be a framework operation, since can? and via ask those by the same atom"
+
+          # The browser's policy spells a key as text, a per-role key as two names joined by a
+          # colon, so a name spelled otherwise could read as another key there - and a module
+          # is no name at all. A leading double underscore is a name JavaScript objects reserve
+          # (__proto__), which the baked policy is one of.
+          not plain_name?(name) ->
+            raise Hologram.CompileError,
+              message:
+                "invalid as option #{inspect(name)} for allow #{inspect(operation)} in #{inspect(module)} - a name is a plain atom, like :archive"
+
+          true ->
+            :ok
+        end
+
+      :error ->
+        :ok
+    end
+  end
+
+  # Which fields a line covers is a question for update lines alone: every other operation acts on
+  # the row whole. The fields themselves are checked at the whole-model point, against reflection
+  # that does not exist yet here.
+  defp validate_fields_opts!(module, operation, spec) do
+    keys = Enum.filter([:only, :except], &Keyword.has_key?(spec, &1))
+
+    case keys do
+      [] ->
+        :ok
+
+      [_only, _except] ->
+        raise Hologram.CompileError,
+          message:
+            "invalid options for #{describe_named_allow(operation, spec)} in #{inspect(module)} - a line takes only or except, not both"
+
+      [key] when operation != :update ->
+        raise Hologram.CompileError,
+          message:
+            "invalid #{key} option for #{describe_named_allow(operation, spec)} in #{inspect(module)} - only and except name the fields an update line covers, so they go on allow :update lines alone"
+
+      [key] ->
+        validate_fields_opt_value!(
+          module,
+          describe_named_allow(operation, spec),
+          key,
+          Keyword.fetch!(spec, key)
+        )
+    end
+  end
+
+  # A non-empty proper list of atoms. Proper is checked first: enumerating an improper list raises
+  # at its tail.
+  defp field_list?(fields) do
+    is_list(fields) and fields != [] and not List.improper?(fields) and
+      Enum.all?(fields, &is_atom/1)
+  end
+
+  defp validate_fields_opt_value!(module, line, key, fields) do
+    if not field_list?(fields) do
+      raise Hologram.CompileError,
+        message:
+          "invalid #{key} option #{inspect(fields)} for #{line} in #{inspect(module)} - the #{key} option must be a non-empty list of field names"
+    end
+
+    :ok
+  end
+
+  defp plain_name?(name) do
+    name
+    |> Atom.to_string()
+    |> String.match?(~r/\A(?!__)[a-z_][a-zA-Z0-9_]*[?!]?\z/)
   end
 
   # The shape is structural, so it is checked where it is written - the references themselves
@@ -1799,7 +1984,7 @@ defmodule Hologram.Entity.Validator do
         if not to_value_valid?(to) do
           raise Hologram.CompileError,
             message:
-              "invalid to option #{inspect(to)} for allow #{inspect(operation)} in #{inspect(module)} - the to option must be a role name, a role module, a {role, entity type}, {role, relationship} or {role, path} tuple, or a non-empty list of them"
+              "invalid to option #{inspect(to)} for #{describe_allow(operation, spec)} in #{inspect(module)} - the to option must be a role name, a role module, a {role, entity type}, {role, relationship} or {role, path} tuple, or a non-empty list of them"
         end
 
       :error ->
@@ -2117,7 +2302,7 @@ defmodule Hologram.Entity.Validator do
         if not when_value_valid?(condition) do
           raise Hologram.CompileError,
             message:
-              "invalid when option #{inspect(condition)} for allow #{inspect(operation)} in #{inspect(module)} - a pinned condition must be a list of predicates, each pairing a name or a path with a value"
+              "invalid when option #{inspect(condition)} for #{describe_allow(operation, spec)} in #{inspect(module)} - a pinned condition must be a list of predicates, each pairing a name or a path with a value"
         end
 
       :error ->

@@ -1,7 +1,7 @@
 defmodule Hologram.JobCreateTest do
   use Hologram.Test.DatabaseCase, async: true
 
-  import Hologram.Job, only: [create: 1, create: 2, create: 3, create!: 1, create!: 2, create!: 3]
+  import Hologram.Job, only: [create: 1, create: 2, create: 3, create!: 1, create!: 2]
   import Hologram.Test, only: [as_user: 2]
 
   alias Hologram.AccessDeniedError
@@ -56,15 +56,15 @@ defmodule Hologram.JobCreateTest do
     end
 
     test "evaluates the write as create for the acting user" do
-      user = create_user("claimer@example.com")
+      user = create_user("refused@example.com")
 
-      expected_msg = ~r/^not allowed to update Hologram.Test.Fixtures.Job.Module1 "/
+      expected_msg = ~r/^not allowed to create Hologram.Test.Fixtures.Job.Module3 "/
 
       assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(user, fn -> create(Module1, %{}, authorize: :update) end)
+        as_user(user, fn -> create(Module3, outcome: :ok) end)
       end
 
-      assert DB.read(Module1) == []
+      assert DB.read(Module3) == []
     end
 
     test "claims the server's authority with the trust option" do
@@ -95,19 +95,18 @@ defmodule Hologram.JobCreateTest do
     end
 
     test "raises on an unknown option" do
-      expected_msg = "Job.create takes authorize: operation or trust: true, got: [retry: true]"
+      expected_msg = "Job.create takes trust: true as its only option, got: [retry: true]"
 
       assert_error MisuseError, expected_msg, fn ->
         create(Module1, %{}, computed_opts(retry: true))
       end
     end
 
-    test "raises on claiming both authorities" do
-      expected_msg =
-        "Job.create takes authorize: operation or trust: true, got: [authorize: :archive, trust: true]"
+    test "raises on claiming an operation" do
+      expected_msg = "Job.create takes trust: true as its only option, got: [authorize: :update]"
 
       assert_error MisuseError, expected_msg, fn ->
-        create(Module1, %{}, computed_opts(authorize: :archive, trust: true))
+        create(Module1, %{}, computed_opts(authorize: :update))
       end
     end
 
@@ -128,15 +127,6 @@ defmodule Hologram.JobCreateTest do
       end
 
       assert DB.read(Module2) == []
-    end
-
-    test "raises on an operation the job type never declared" do
-      expected_msg =
-        "unknown operation :no_such for Hologram.Test.Fixtures.Job.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
-
-      assert_error MisuseError, expected_msg, fn ->
-        create(Module1, %{}, authorize: :no_such)
-      end
     end
   end
 
@@ -161,10 +151,10 @@ defmodule Hologram.JobCreateTest do
     test "raises on a denial" do
       user = create_user("banged@example.com")
 
-      expected_msg = ~r/^not allowed to update Hologram.Test.Fixtures.Job.Module1 "/
+      expected_msg = ~r/^not allowed to create Hologram.Test.Fixtures.Job.Module3 "/
 
       assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(user, fn -> create!(Module1, %{}, authorize: :update) end)
+        as_user(user, fn -> create!(Module3, outcome: :ok) end)
       end
     end
   end

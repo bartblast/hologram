@@ -79,6 +79,11 @@ describe("Elixir_Hologram_Auth", () => {
       ...overrides,
     });
 
+  const updateOf = (fields) => Type.tuple([Type.atom("update"), fields]);
+
+  const SHAPE_MESSAGE =
+    "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple";
+
   const grantRow = (overrides) => ({
     id: `grant-${Object.values(overrides).join("-")}`,
     entity_id: null,
@@ -875,6 +880,24 @@ describe("Elixir_Hologram_Auth", () => {
       assert.deepStrictEqual(
         reads(rules, document({title: "Łódź"})),
         Type.boolean(false),
+      );
+    });
+
+    // The baked model is a plain object, so a derived field named like one of Object.prototype's
+    // properties must read as the string it holds rather than as the property.
+    it("compares a derived string named like a prototype property by its sort key", () => {
+      defineModel({read: [rule({predicates: [["toString", ">=", "m"]]})]});
+
+      globalThis.Hologram.sync.model[DOCUMENT].derived.toString = {
+        definition: {concat: [{name: "title"}, {value: "!"}]},
+        kind: "scalar",
+        type: "string",
+        values: null,
+      };
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document({title: "Mango"})),
+        Type.boolean(true),
       );
     });
 
@@ -2281,6 +2304,34 @@ describe("Elixir_Hologram_Auth", () => {
       assert.deepStrictEqual(folderReads(predicates), Type.boolean(true));
     });
 
+    // The baked inverses are a plain object, so an inverse named like one of Object.prototype's
+    // properties is followed to its rows rather than read as the property.
+    it("reads a set through an inverse named like a prototype property", () => {
+      const predicates = [
+        {
+          filter: [["name", "==", "urgent"]],
+          quantifier: "any",
+          source: ["toString", "tags"],
+        },
+      ];
+
+      defineModel({}, {read: [rule({predicates})]});
+
+      const inverses = globalThis.Hologram.sync.model[FOLDER].inverses;
+      inverses.toString = inverses.documents;
+      delete inverses.documents;
+      Model.reset();
+
+      putDocument({});
+      LocalDatabase.putRow(TAG, {id: TAG_ID, name: "urgent"});
+      LocalDatabase.replaceFacts(DOCUMENT, "tags", DOC, [TAG_ID]);
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), folder()),
+        Type.boolean(true),
+      );
+    });
+
     // A row not created yet has nothing in any set of its, as the server reads it - not every held
     // row whose reference is empty too.
     it("reads no set off a row with no id", () => {
@@ -3084,17 +3135,89 @@ describe("Elixir_Hologram_Auth", () => {
   // A case this side alone has - the reference always holds every type. An entry absent from a
   // build is a type declaring NO policy (the build ships an entry for every policied type, whether
   // a page reaches it or not), and a policy-less type is denied by the server's own default - so
-  // no is the server's answer, not a fallback.
+  // no is the server's answer, not a fallback. Such a type carries no allow line name and no role
+  // either, so an ask naming one raises as the server's does, and so does an update list naming no
+  // field. An update naming a field answers no, since telling an unknown field from a real one
+  // takes the entry.
   describe("a type the model does not carry", () => {
-    it("denies without asking the model for an entry", () => {
-      const unmodelled = Type.map([
-        [Type.atom("__struct__"), Type.alias("MyApp.Unpolicied")],
-        [Type.atom("id"), Type.bitstring(DOC)],
-      ]);
+    const unmodelled = Type.map([
+      [Type.atom("__struct__"), Type.alias("MyApp.Unpolicied")],
+      [Type.atom("id"), Type.bitstring(DOC)],
+    ]);
 
+    it("denies a framework operation", () => {
       assert.deepStrictEqual(
         can(Type.nil(), Type.atom("read"), unmodelled),
         Type.boolean(false),
+      );
+    });
+
+    it("denies an update ask naming a field", () => {
+      assert.deepStrictEqual(
+        can(Type.nil(), updateOf(Type.atom("title")), unmodelled),
+        Type.boolean(false),
+      );
+    });
+
+    it("denies an update ask naming a list of fields", () => {
+      assert.deepStrictEqual(
+        can(Type.nil(), updateOf(Type.list([Type.atom("title")])), unmodelled),
+        Type.boolean(false),
+      );
+    });
+
+    it("raises on an update list naming no field", () => {
+      assertBoxedError(
+        () => can(Type.nil(), updateOf(Type.list([])), unmodelled),
+        "Hologram.MisuseError",
+        "unknown operation {:update, []} for MyApp.Unpolicied - {:update, fields} names at least one field",
+      );
+    });
+
+    it("raises on a name no allow line carries", () => {
+      assertBoxedError(
+        () => can(Type.nil(), Type.atom("publish"), unmodelled),
+        "Hologram.MisuseError",
+        "unknown operation :publish for MyApp.Unpolicied - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry no name",
+      );
+    });
+
+    it("raises on a grant lifecycle tuple naming a role", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.nil(),
+            Type.tuple([Type.atom("grant_role"), Type.atom("editor")]),
+            unmodelled,
+          ),
+        "Hologram.MisuseError",
+        "unknown role :editor in {:grant_role, :editor} for MyApp.Unpolicied - it declares no role",
+      );
+    });
+
+    it("raises on a revoke lifecycle tuple naming a role", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.nil(),
+            Type.tuple([Type.atom("revoke_role"), Type.atom("editor")]),
+            unmodelled,
+          ),
+        "Hologram.MisuseError",
+        "unknown role :editor in {:revoke_role, :editor} for MyApp.Unpolicied - it declares no role",
+      );
+    });
+
+    it("raises on a tuple naming no operation", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.nil(),
+            Type.tuple([Type.atom("publish"), Type.atom("editor")]),
+            unmodelled,
+          ),
+        "Hologram.MisuseError",
+        "unknown operation {:publish, :editor} for MyApp.Unpolicied - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}",
       );
     });
   });
@@ -3143,7 +3266,7 @@ describe("Elixir_Hologram_Auth", () => {
       assertBoxedError(
         () => can(Type.bitstring(ALICE), operation, document()),
         "Hologram.MisuseError",
-        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple",
       );
     });
 
@@ -3156,7 +3279,7 @@ describe("Elixir_Hologram_Auth", () => {
       assertBoxedError(
         () => can(Type.bitstring(ALICE), operation, document()),
         "Hologram.MisuseError",
-        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple",
       );
     });
   });
@@ -3175,6 +3298,214 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    // The baked policy is a plain object, so a name spelled like one of Object.prototype's
+    // properties must read no rules rather than the property.
+    it("answers no for a carried name the policy bakes no rules under", () => {
+      defineModel({});
+      globalThis.Hologram.sync.model[DOCUMENT].operations.push("constructor");
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), Type.atom("constructor"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers no for a delegation asking a name the related policy bakes no rules under", () => {
+      defineModel({read: [rule({via: ["constructor", ["folder"]]})]});
+
+      LocalDatabase.putRow(FOLDER, {archived: false, id: FOLDER_ID});
+
+      assert.deepStrictEqual(
+        can(
+          Type.bitstring(ALICE),
+          Type.atom("read"),
+          document({folder_id: FOLDER_ID}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    // A named line is baked under its name as well as its operation, the build keeping the name's
+    // own rules apart from the operation's other lines.
+    it("answers a name by its own rules alone", () => {
+      defineModel({
+        archive: [rule({predicates: [["public", "==", true]]})],
+        update: [rule({predicates: [["public", "==", true]]}), rule()],
+      });
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), Type.atom("update"), document()),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), Type.atom("archive"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    // A field-limited line is baked under update:<field> for each field it covers, and a field is
+    // answered by those rules and the ones covering the whole row - never by the bare update key
+    // alone.
+    it("answers a field through the field-limited lines covering it", () => {
+      defineModel({
+        "update:title": [rule({predicates: [["public", "==", false]]})],
+      });
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), updateOf(Type.atom("title")), document()),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), updateOf(Type.atom("summary")), document()),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), Type.atom("update"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers a field through the lines covering the whole row", () => {
+      defineModel({update: [rule({predicates: [["public", "==", true]]})]});
+
+      assert.deepStrictEqual(
+        can(
+          Type.bitstring(ALICE),
+          updateOf(Type.atom("folder")),
+          document({public: true}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), updateOf(Type.atom("folder")), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers a list of fields through field-limited and whole-row lines together", () => {
+      defineModel({
+        "update:title": [rule()],
+        update: [rule({predicates: [["public", "==", true]]})],
+      });
+
+      const fields = updateOf(
+        Type.list([Type.atom("title"), Type.atom("summary")]),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), fields, document({public: true})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), fields, document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers a list of fields when some holding line covers each", () => {
+      defineModel({
+        "update:summary": [rule({predicates: [["public", "==", true]]})],
+        "update:title": [rule()],
+      });
+
+      const fields = (...names) =>
+        updateOf(Type.list(names.map((name) => Type.atom(name))));
+
+      assert.deepStrictEqual(
+        can(
+          Type.bitstring(ALICE),
+          fields("title", "summary"),
+          document({public: true}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), fields("title", "summary"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("raises on a field no update of the entity type sets", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.bitstring(ALICE),
+            updateOf(Type.atom("folder_id")),
+            document(),
+          ),
+        "Hologram.MisuseError",
+        "unknown field :folder_id in {:update, :folder_id} for MyApp.Document - the fields an update sets are :author_id, :count, :due_on, :folder, :held_at, :priority, :public, :rating, :released_on, :stage, :status, :summary, :tags, :title",
+      );
+    });
+
+    it("raises on a list of fields naming one that is not an atom", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.bitstring(ALICE),
+            updateOf(Type.list([Type.integer(1), Type.atom("title")])),
+            document(),
+          ),
+        "Hologram.MisuseError",
+        "unknown field 1 in {:update, [1, :title]} for MyApp.Document - the fields an update sets are :author_id, :count, :due_on, :folder, :held_at, :priority, :public, :rating, :released_on, :stage, :status, :summary, :tags, :title",
+      );
+    });
+
+    it("raises on an update tuple naming a field that is not an atom", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.bitstring(ALICE),
+            updateOf(Type.bitstring("title")),
+            document(),
+          ),
+        "Hologram.MisuseError",
+        SHAPE_MESSAGE,
+      );
+    });
+
+    it("raises on an improper list of fields", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.bitstring(ALICE),
+            updateOf(
+              Type.improperList([Type.atom("title"), Type.atom("summary")]),
+            ),
+            document(),
+          ),
+        "Hologram.MisuseError",
+        SHAPE_MESSAGE,
+      );
+    });
+
+    it("raises on an update list naming no field", () => {
+      assertBoxedError(
+        () => can(Type.bitstring(ALICE), updateOf(Type.list([])), document()),
+        "Hologram.MisuseError",
+        "unknown operation {:update, []} for MyApp.Document - {:update, fields} names at least one field",
+      );
+    });
+
+    it("raises on a list in a tuple naming no grant lifecycle operation", () => {
+      const operation = Type.tuple([
+        Type.atom("delete"),
+        Type.list([Type.atom("public")]),
+      ]);
+
+      assertBoxedError(
+        () => can(Type.bitstring(ALICE), operation, document()),
+        "Hologram.MisuseError",
+        SHAPE_MESSAGE,
+      );
+    });
+
     it("denies a framework operation the type declares no rule for", () => {
       assert.deepStrictEqual(
         can(Type.bitstring(ALICE), Type.atom("update"), document()),
@@ -3186,7 +3517,7 @@ describe("Elixir_Hologram_Auth", () => {
       assertBoxedError(
         () => can(Type.bitstring(ALICE), Type.atom("transfer"), document()),
         "Hologram.MisuseError",
-        "unknown operation :transfer for MyApp.Document - its allow lines declare :archive, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
+        "unknown operation :transfer for MyApp.Document - the framework's operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update, and its allow lines carry the name :archive",
       );
     });
 
@@ -3196,7 +3527,7 @@ describe("Elixir_Hologram_Auth", () => {
       assertBoxedError(
         () => can(Type.bitstring(ALICE), operation, document()),
         "Hologram.MisuseError",
-        "unknown operation {:publish, :editor} for MyApp.Document - the operation tuples are {:grant_role, role} and {:revoke_role, role}",
+        "unknown operation {:publish, :editor} for MyApp.Document - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}",
       );
     });
 
@@ -3210,17 +3541,6 @@ describe("Elixir_Hologram_Auth", () => {
         () => can(Type.bitstring(ALICE), operation, document()),
         "Hologram.MisuseError",
         "unknown role :editr in {:grant_role, :editr} for MyApp.Document - declared roles are: :editor, :owner, :viewer",
-      );
-    });
-
-    it("answers no for a type this build did not bake before asking about the operation", () => {
-      assert.deepStrictEqual(
-        can(
-          Type.bitstring(ALICE),
-          Type.atom("transfer"),
-          Type.struct(USER, [[Type.atom("id"), Type.bitstring(ALICE)]]),
-        ),
-        Type.boolean(false),
       );
     });
   });
@@ -3386,6 +3706,18 @@ describe("Elixir_Hologram_Auth", () => {
         () => hasRole(Type.bitstring(ALICE), Type.alias("MyApp.Roles.Nobody")),
         "Hologram.MisuseError",
         "unknown global role MyApp.Roles.Nobody - defined global roles are: MyApp.Roles.Admin, MyApp.Roles.Support",
+      );
+    });
+
+    // The baked roles are a plain object, so an alias spelled like one of Object.prototype's
+    // properties is no role.
+    it("raises on an alias named like a prototype property", () => {
+      LocalDatabase.putRow(GRANT, grantRow({role: ADMIN}));
+
+      assertBoxedError(
+        () => hasRole(Type.bitstring(ALICE), Type.alias("constructor")),
+        "Hologram.MisuseError",
+        'unknown global role :"Elixir.constructor" - defined global roles are: MyApp.Roles.Admin, MyApp.Roles.Support',
       );
     });
 
@@ -3781,7 +4113,6 @@ describe("a grant written into a batch", () => {
       assert.deepStrictEqual(
         grantEntry(USER_ID, ENTITY_TYPE, RESOURCE_ID, "member", ACTOR_ID),
         {
-          claim: null,
           data: {
             granted_by_id: ACTOR_ID,
             entity_id: RESOURCE_ID,
@@ -4067,7 +4398,6 @@ describe("grant_role/3", () => {
 
     assert.deepStrictEqual(Batches.current().writes, [
       {
-        claim: null,
         data: {
           granted_by_id: GATED_ALICE,
           entity_id: GATED_DOC,
@@ -4310,7 +4640,6 @@ describe("revoke_role/3", () => {
     assert.deepStrictEqual(Batches.current().writes, [
       {
         based_on: REVISIONS,
-        claim: null,
         data: {
           entity_id: GATED_DOC,
           entity_type: GATED_DOCUMENT,

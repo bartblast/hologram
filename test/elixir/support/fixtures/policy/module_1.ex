@@ -20,8 +20,8 @@ defmodule Hologram.Test.Fixtures.Policy.Module1 do
   allow :read, to: [:viewer, {:admin, Module2}]
   allow :update, to: :editor, when: priority >= 3
   allow :delete, to: {:admin, parent}
-  allow :publish, via: parent
+  allow :update, as: :publish, only: [:parent], via: {:publish, parent}
   allow :grant_role, to: :owner
   allow :revoke_role, to: :owner
-  allow :archive, when: author_id == user_id()
+  allow :update, as: :archive, only: [:author], when: author_id == user_id()
 end

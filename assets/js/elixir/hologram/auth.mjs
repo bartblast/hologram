@@ -302,7 +302,9 @@ function chainTargetId(entityType, entity, relationshipNames) {
 function declaredType(entityType, name) {
   const derived = Model.derivedField(entityType, name);
 
-  return Model.entry(entityType).attributes[name] ?? derived?.type ?? null;
+  return (
+    Model.own(Model.entry(entityType).attributes, name) ?? derived?.type ?? null
+  );
 }
 
 // The value a rule compares against, read off the boxed entity in the spelling the rules were
@@ -735,7 +737,10 @@ function throughDerivedSet(entityType, names) {
       return true;
     }
 
-    type = (Model.relationships(type)[name] ?? Model.inverses(type)[name]).type;
+    type = (
+      Model.own(Model.relationships(type), name) ??
+      Model.own(Model.inverses(type), name)
+    ).type;
   }
 
   return false;
@@ -809,6 +814,12 @@ function viaHolds(rule, entityType, entity, actorUserId) {
   );
 }
 
+// The rules the build baked under the given key, or none. Only the policy's own keys count: it is
+// a plain object, so a name like constructor would otherwise read a property of Object.prototype.
+function policyRules(entry, key) {
+  return Object.hasOwn(entry.policy, key) ? entry.policy[key] : [];
+}
+
 function grants(entityType, row, operation, actorUserId) {
   const entry = globalThis.Hologram.sync?.model?.[entityType];
 
@@ -816,7 +827,7 @@ function grants(entityType, row, operation, actorUserId) {
     return false;
   }
 
-  const rules = entry.policy[operation] ?? [];
+  const rules = policyRules(entry, operation);
   const boxed = Model.box(entityType, row);
 
   return rules.some((related) =>
@@ -824,12 +835,60 @@ function grants(entityType, row, operation, actorUserId) {
   );
 }
 
+// The fields an {:update, field} or {:update, fields} ask names, or null for any other operation.
+// The names are not validated here - Model.validateOperation refuses an unknown one, or an empty
+// list, in the server's words. For a type with no baked entry only the empty list is refused, since
+// telling an unknown field from a real one takes the entry.
+function askedFields(operation) {
+  if (!Type.isTuple(operation) || operation.data.length !== 2) {
+    return null;
+  }
+
+  const [name, fields] = operation.data;
+
+  if (!Type.isAtom(name) || name.value !== "update") {
+    return null;
+  }
+
+  if (Type.isAtom(fields)) {
+    return [fields];
+  }
+
+  return Type.isProperList(fields) ? fields.data : null;
+}
+
+// Whether some update rule covering each of the given fields holds: a field's own key's rules,
+// then the rules covering the whole row - Hologram.Policy.field_rules/2 as the server reads it. A
+// field's key is the one Policy.operation_key/1 gives {:update, field} - a hand-ported pair, so a
+// change there is a change here. A rule covering the whole row is matched once however many
+// fields ask it.
+function coversFields(entry, entityType, entity, fields, actorUserId) {
+  const matched = new Map();
+
+  const holds = (rule) => {
+    if (!matched.has(rule)) {
+      matched.set(rule, ruleMatches(rule, entityType, entity, actorUserId));
+    }
+
+    return matched.get(rule);
+  };
+
+  const wholeRowRules = policyRules(entry, "update");
+
+  return fields.every((field) =>
+    policyRules(entry, `update:${field.value}`)
+      .concat(wholeRowRules)
+      .some(holds),
+  );
+}
+
 // The key an entity operation is baked under: an atom as its name, a per-role grant lifecycle
 // operation as the two names joined by a colon. Policy.operation_key/1 is the twin on the server
-// (rendered by Compiler.render_policy/2), and the two must agree.
+// (rendered by Compiler.render_policy/2), and the two must agree - a field of an update is keyed
+// the same way, in coversFields.
 //
-// A tuple naming a LIST of roles is refused: the DSL takes one as sugar for a line per role, so
-// no rule is keyed by it - and can? asks about one role at a time.
+// A grant lifecycle tuple naming a LIST of roles is refused: the DSL takes one as sugar for a line
+// per role, so no rule is keyed by it - and can? asks about one role at a time.
 function operationKey(operation) {
   if (Type.isAtom(operation)) {
     return operation.value;
@@ -842,7 +901,11 @@ function operationKey(operation) {
       return `${name.value}:${role.value}`;
     }
 
-    if (Type.isAtom(name) && Type.isList(role)) {
+    if (
+      Type.isAtom(name) &&
+      ["grant_role", "revoke_role"].includes(name.value) &&
+      Type.isList(role)
+    ) {
       Interpreter.raiseMisuseError(
         `can? asks about one role - ${Interpreter.inspect(operation)} names several`,
       );
@@ -850,7 +913,7 @@ function operationKey(operation) {
   }
 
   Interpreter.raiseMisuseError(
-    "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
+    "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple",
   );
 }
 
@@ -1012,7 +1075,6 @@ const Elixir_Hologram_Auth = {
     // write states, so a row it no longer holds is refused or confirmed the same as one it does.
     batch.append({
       based_on: {...(held["$revisions"] ?? {})},
-      claim: null,
       data: {
         entity_id: entityId,
         entity_type: entityType,
@@ -1034,7 +1096,8 @@ const Elixir_Hologram_Auth = {
     );
 
     const actorUserId = unboxActorUserId(userOrId);
-    const operationName = operationKey(operation);
+    const fields = askedFields(operation);
+    const operationName = fields === null ? operationKey(operation) : null;
 
     // An entry absent from a build is a type that declares NO policy - the build ships an entry
     // for every policied type, whether a page reaches it or not, precisely so this read can mean
@@ -1042,16 +1105,31 @@ const Elixir_Hologram_Auth = {
     // here: it is the server's answer.
     const entry = globalThis.Hologram.sync?.model?.[entityType];
 
+    // The build also ships an entry for every type declaring a role, so a type with no entry
+    // carries no allow line name and no role either. The server's refusals of an unknown name,
+    // role or tuple, or of an update list naming no field, are made here without the entry. A
+    // field is the one thing the entry is needed to tell apart from a typo, so an update naming
+    // one answers no.
     if (!entry) {
+      if (fields === null || fields.length === 0) {
+        Model.validateOperation(entityType, operation);
+      }
+
       return Type.boolean(false);
     }
 
-    // The server's own refusal for an operation nothing on the type declares - a typo or a renamed
-    // operation fails here, at the line that asks, rather than answering no as if the rules had
-    // been consulted.
+    // The server's own refusal for an atom that is neither a framework operation nor a name a line
+    // of the type carries - a typo or a renamed name fails here, at the line that asks, rather
+    // than answering no as if the rules had been consulted.
     Model.validateOperation(entityType, operation);
 
-    const rules = entry.policy[operationName] ?? [];
+    if (fields !== null) {
+      return Type.boolean(
+        coversFields(entry, entityType, entity, fields, actorUserId),
+      );
+    }
+
+    const rules = policyRules(entry, operationName);
 
     // An operation with no rules grants nothing, which is what makes the default deny.
     return Type.boolean(
@@ -1108,7 +1186,6 @@ export function grantEntry(
   actorUserId,
 ) {
   return {
-    claim: null,
     data: {
       entity_id: entityId,
       entity_type: entityType,
@@ -1218,7 +1295,7 @@ function expandedGlobalRoles(role) {
   const expanded = globalThis.Hologram.sync?.expandedRoles ?? {};
   const label = Type.isAlias(role) ? Interpreter.moduleExName(role) : null;
 
-  if (label !== null && expanded[label]) {
+  if (label !== null && Object.hasOwn(expanded, label)) {
     return expanded[label];
   }
 
