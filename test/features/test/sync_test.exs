@@ -258,7 +258,7 @@ defmodule HologramFeatureTests.SyncTest do
 
     update(Folder, folder.id, %{public: false})
 
-    {data, _client} = await_deltas_carrying(client, document.id)
+    {data, _client} = await_deltas_carrying(client, ~s["unsync_entity":])
 
     unsynced_ids =
       data
@@ -284,7 +284,7 @@ defmodule HologramFeatureTests.SyncTest do
 
     update(Folder, folder.id, %{public: false})
 
-    {data, _client} = await_deltas_carrying(client, folder.id)
+    {data, _client} = await_deltas_carrying(client, ~s["unsync_entity":])
 
     unsynced_ids =
       data
