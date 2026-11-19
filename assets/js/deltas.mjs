@@ -18,13 +18,12 @@ import Model from "./model.mjs";
 // one means putting its attributes in its type's table and its target ids in the relationship
 // facts, with nothing left nested.
 export default class Deltas {
-  // The hashes of the held ids of each type under the salt of the catch-up telling them, worked out
-  // at the catch-up's first hashed drop of the type rather than once per frame - every frame of one
-  // catch-up hashes under one salt. A row filed after they were worked out is passed over, which is
-  // right: the server hashes only rows it doesn't take the client to hold, and every row a catch-up
-  // hands over is one it then takes the client to hold, and drops by id - bar a row a page carries,
-  // which joins them (see `#putRow`). Kept until the next
-  // catch-up's salt replaces them: a hash per held row of the types a catch-up dropped any of.
+  // The hashes of the held ids of each type under the salt of the catch-up telling them, each id
+  // hashed once per catch-up rather than once per frame - every frame of one catch-up hashes under
+  // one salt. A row filed since the last hashed drop of its type - one a page carried, or one the
+  // client's own write filed when its answer came - is hashed when the next one arrives. Kept until
+  // the next catch-up's salt replaces them: a hash per held row of the types a catch-up dropped any
+  // of.
   static #hashes = {byType: new Map(), salt: null};
 
   // Forgets the hashes worked out for the last catch-up.
@@ -252,19 +251,21 @@ export default class Deltas {
       Deltas.#hashes = {byType: new Map(), salt};
     }
 
-    let byHash = Deltas.#hashes.byType.get(type);
+    let hashed = Deltas.#hashes.byType.get(type);
 
-    if (byHash === undefined) {
-      byHash = new Map();
-
-      for (const id of Object.keys(LocalDatabase.baseTable(type))) {
-        byHash.set(DropHash.hash(salt, id), id);
-      }
-
-      Deltas.#hashes.byType.set(type, byHash);
+    if (hashed === undefined) {
+      hashed = {byHash: new Map(), ids: new Set()};
+      Deltas.#hashes.byType.set(type, hashed);
     }
 
-    return byHash;
+    for (const id of Object.keys(LocalDatabase.baseTable(type))) {
+      if (!hashed.ids.has(id)) {
+        hashed.byHash.set(DropHash.hash(salt, id), id);
+        hashed.ids.add(id);
+      }
+    }
+
+    return hashed.byHash;
   }
 
   // A patch names a row the client was told about, so one naming a row it does not hold is one
@@ -306,13 +307,6 @@ export default class Deltas {
 
       Deltas.#fileRow(type, row);
       LocalDatabase.markCarried(type, row.id);
-
-      // A page can land in the middle of a catch-up, with a row its user lost since the page was
-      // rendered - one the server doesn't take the client to hold, and hashes. So a row a page
-      // carries joins the hashes already worked out for its type.
-      Deltas.#hashes.byType
-        .get(type)
-        ?.set(DropHash.hash(Deltas.#hashes.salt, row.id), row.id);
 
       return row.id;
     }

@@ -33,9 +33,9 @@ defmodule Hologram.Sync.Catchup do
   # an effect it returns is 33 words whatever the row was, where one carrying the row's `data` runs
   # from 33 for a delete to 337 for a wide entity's put - a tenfold spread a count cannot see. An
   # edge keeps its payload, a relationship name and an id, at about 60 words whatever the entity.
-  # The connection process reads the gap and is killed at a million words, so 5,000 of them is
-  # 1.3 MB against a 7 MB cap, under a fifth of it, and a third were every one an edge - neither
-  # fraction moves with what the app stores.
+  # The session reads the gap without payloads and fills them in a chunk at a time, so 5,000 of
+  # them is 1.3 MB, and 2.4 MB were every one an edge, however wide the app's entities are - and
+  # the stream deciding whether a client resumes only counts them.
   #
   # The economics set the ceiling rather than the memory does, which is why the number is thousands
   # and not tens of thousands: a replay re-reads every row it names, so by a few thousand touched

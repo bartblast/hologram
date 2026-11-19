@@ -55,8 +55,10 @@ defmodule Hologram.Sync.Frame do
   the SHA-256 of the given salt followed by the row's id, as 16 lowercase hex digits. The browser
   works the same hash out over the ids it holds (`assets/js/drop_hash.mjs`).
 
-  It has to keep the id from being read back. An id is a UUIDv7: a creation time to the
-  millisecond and 74 random bits. Finding ids that hash to a given one means trying the random
+  It has to keep the id from being read back, which holds for an id with random bits in it - not
+  for one worked out from what it names, like a grant's, which is never dropped by hash, only kept
+  by it (see `keep_hashed/3`). An id `Hologram.Entity.generate_id/0` makes is a UUIDv7: a creation
+  time to the millisecond and 74 random bits. Finding ids that hash to a given one means trying the random
   bits one guess at a time - there is no shortcut back through SHA-256 - and even a search that
   could finish would leave a thousand ids per hash for every millisecond the row may have been
   created in, 74 bits against 64, with nothing to tell the dropped one apart. Telling one apart
@@ -275,8 +277,11 @@ defmodule Hologram.Sync.Frame do
 
   For a returning client whose user lost a grant reaching every row of a type: the rows the grant
   hid can't be listed without reading the whole type, while the rows the user may still read are
-  what the session reads anyway. Named by hash for the same reason a drop is, and whole - a client
-  keeping only part of the list would drop the rest.
+  what the session reads anyway. And for the grants a returning client may hold that its user can
+  no longer read: a grant's id is worked out from what it names, so dropping one by hash would let
+  a client confirm a grant it guessed, while a list of the grants it may keep names only grants it
+  may read. Named by hash for the same reason a drop is, and whole - a client keeping only part of
+  the list would drop the rest.
   """
   @spec keep_hashed(module, String.t(), list(String.t())) :: map
   def keep_hashed(entity_type, salt, ids) do

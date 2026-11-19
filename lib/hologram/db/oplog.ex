@@ -179,8 +179,9 @@ defmodule Hologram.DB.Oplog do
 
   The order is the windowed read's own - by transaction, then by insert order within it - so a
   place names the same point for a returning client as it did for a connected one. Everything here
-  is committed, which is why this read needs no upper edge: gap-freeness is the windowed read's
-  problem, and history has no gaps left to open.
+  is committed, but a transaction below an effect returned can still be open and commit after - so
+  a caller dating a place by what this returns reads the edge every finished transaction is below
+  first (see `current_xmin/0` and `Hologram.Sync.Catchup.gap/4`).
 
   The limit is not a page - nothing here resumes from where it stopped. It is what keeps a reader
   from pulling an unbounded tail into memory, and a caller that gets `limit` rows back should treat

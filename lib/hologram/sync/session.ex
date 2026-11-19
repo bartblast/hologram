@@ -144,6 +144,7 @@ defmodule Hologram.Sync.Session do
       drop_salt: if(resuming, do: Frame.drop_salt()),
       fill_place: Keyword.get(opts, :fill_place),
       gate_ref: nil,
+      grants_kept: nil,
       outbox: Outbox.new(client, Keyword.get(opts, :outbox, [])),
       page: Keyword.fetch!(opts, :page),
       page_types: MapSet.new(),
@@ -393,7 +394,8 @@ defmodule Hologram.Sync.Session do
   # And a row the client holds that its user lost before the read is missing from it, so every row
   # the gap may have moved out of the user's reach that the session doesn't take the client to hold
   # is told by hash (see `Hologram.Sync.Frame.unsync_hashed/3`): the client drops it if it has it,
-  # and learns nothing of it if not.
+  # and learns nothing of it if not. Grants are the exception, told by the list of the ones the
+  # client may keep (see `tell_part/3`).
   #
   # The batches that reach the session meanwhile queue behind this callback, and are told after it
   # (see `trusts_held?/2`).
@@ -718,7 +720,11 @@ defmodule Hologram.Sync.Session do
   defp send_keep(state, _entity_type, nil, _rows), do: state
 
   defp send_keep(state, entity_type, salt, rows) do
-    keep = Frame.keep_hashed(entity_type, salt, Enum.map(rows, & &1.id))
+    send_keep_ids(state, entity_type, salt, Enum.map(rows, & &1.id))
+  end
+
+  defp send_keep_ids(state, entity_type, salt, ids) do
+    keep = Frame.keep_hashed(entity_type, salt, ids)
 
     state
     |> send_unsent(nil)
@@ -817,9 +823,9 @@ defmodule Hologram.Sync.Session do
   # later batch of this client's overtook hands its rows over whole, as read with that batch in them,
   # under that batch's number. The session keeps the number of what it was told: the next part is
   # judged against it, so one the same later batch overtook goes out whole too. The fill raises it
-  # from its own reads, and the catch-up from its chunks' overtaking numbers, which is safe because
-  # the edge is read after them: a part such a batch can overtake starts below the edge, and goes
-  # out whole (see `trusts_held?/2`).
+  # from its own reads, and the catch-up from the batches its chunks hold, each chunk claiming its
+  # own overtaking number in its frames - which is safe because the edge is read after them: a part
+  # such a batch can overtake starts below the edge, and goes out whole (see `trusts_held?/2`).
   #
   # Given `trust_held?: false`, every row the user may read is handed over whole whatever the
   # session takes the client to hold - a catch-up's chunk, whose held ids were read rather than told.
@@ -850,9 +856,23 @@ defmodule Hologram.Sync.Session do
 
     decided = %{placed | pot: pot}
     claim = if overtaken?, do: overtaking_seq, else: placed.applied_seq
-    news_with_verdicts = %{news | patched: Verdicts.patches(news.patched, stale)}
 
-    told = send_news(decided, news_with_verdicts, part.verdicts, claim)
+    # A grant's id is worked out from who holds which role on what (see
+    # `Hologram.Auth.RoleGrant`), so a client could hash the grants it guesses and learn which of
+    # them exist. Grants are told by a list of the ones the client may keep instead, which names
+    # only grants it may read (see `keep_grants/3`).
+    {grants_hidden, hidden} = Enum.split_with(news.hidden, &(elem(&1, 0) == RoleGrant))
+
+    news_with_verdicts = %{
+      news
+      | hidden: hidden,
+        patched: Verdicts.patches(news.patched, stale)
+    }
+
+    told =
+      decided
+      |> send_news(news_with_verdicts, part.verdicts, claim)
+      |> keep_grants(grants_hidden, hidden_salt)
 
     # A reread is judged by the edge alone: its frames claim its own read's number, so a later
     # batch of this client's that overtook the part leaves its rows as true as they are.
@@ -863,6 +883,66 @@ defmodule Hologram.Sync.Session do
     part.whole_types
     |> Enum.reduce(told, &reread_type(&1, &2, part.synced_types, reread_trust?, keep_salt))
     |> flush_frames()
+  end
+
+  # Read as they stand, rather than taken from what the session holds of them: a grant the client's
+  # own write made meanwhile - a creator's, which the browser files the moment its write is
+  # answered - may be in no part the session has told yet, and a list without it would have the
+  # client drop it. One the write makes between this read and the list landing is still dropped,
+  # until the write's own batch hands it over, after the catch-up.
+  #
+  # Once per session. Every grant a list leaves out that the client may hold is one its user could
+  # not read when the session read what the client holds, since the session holds every other one
+  # and drops it by id when it goes. A grant the list names that the session doesn't hold - one its
+  # user could read when the list was read - is kept (`grants_kept`), and dropped by id should a
+  # later part hide it: naming a grant its user could read tells the client nothing.
+  defp keep_grants(state, [], _salt), do: state
+
+  defp keep_grants(%{grants_kept: nil} = state, _grants_hidden, salt) do
+    ids =
+      RoleGrant
+      |> state.read_ids.(state.actor_user_id)
+      |> PackedIds.unpack()
+
+    held =
+      state.pot.held
+      |> Held.ids(RoleGrant)
+      |> MapSet.new()
+
+    listed = MapSet.new(ids)
+
+    # A grant the session holds that the list leaves out - one a change not told yet hid - is one
+    # the client drops, so the session no longer holds it either, and hands it over whole should it
+    # come back.
+    pot = Pot.drop(state.pot, RoleGrant, Enum.sort(MapSet.difference(held, listed)))
+
+    %{
+      send_keep_ids(state, RoleGrant, salt, ids)
+      | grants_kept: MapSet.difference(listed, held),
+        pot: pot
+    }
+  end
+
+  defp keep_grants(state, grants_hidden, _salt) do
+    named =
+      grants_hidden
+      |> Enum.flat_map(fn {_type, _salt, ids} -> ids end)
+      |> MapSet.new()
+      |> MapSet.intersection(state.grants_kept)
+
+    if MapSet.size(named) == 0 do
+      state
+    else
+      deltas =
+        named
+        |> Enum.sort()
+        |> Enum.map(&Frame.unsync_entity(&1, RoleGrant))
+
+      state
+      |> send_unsent(nil)
+      |> Map.put(:unsent, {deltas, nil})
+      |> Map.put(:grants_kept, MapSet.difference(state.grants_kept, named))
+    end
   end
 
   # A row handed over whole travels with its verdicts, and none held is patched when held isn't

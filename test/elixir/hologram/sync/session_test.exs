@@ -1043,6 +1043,161 @@ defmodule Hologram.Sync.SessionTest do
       end
     end
 
+    # A grant's id is worked out from who holds which role on what, so a client could hash its
+    # guesses - grants go out as the list the client may keep instead.
+    test "tells grants the user may not read by a keep list, never by hash", %{user: user} do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        permission_checking?: false,
+        synced_types: [Module2, PolicyModule1, PolicyModule5, RoleGrant],
+        windows: %{}
+      })
+
+      other =
+        %{email: "other@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      third =
+        %{email: "third@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      Auth.grant_role(user, :viewer, PolicyModule1)
+      Auth.grant_role(other, :viewer, PolicyModule1)
+      Auth.grant_role(third, :viewer, PolicyModule1)
+
+      grants = DB.read(RoleGrant)
+      own_grant = Enum.find(grants, &(&1.user_id == user.id))
+
+      [first_hidden, second_hidden] =
+        Enum.map([other, third], fn holder ->
+          grant = Enum.find(grants, &(&1.user_id == holder.id))
+
+          data = %{
+            "entity_id" => nil,
+            "entity_type" => "Hologram.Test.Fixtures.Policy.Module1",
+            "id" => grant.id,
+            "role" => "viewer",
+            "user_id" => holder.id
+          }
+
+          {grant.id, data}
+        end)
+
+      # Two chunks, each hiding another user's grant: the list goes out once.
+      put_app_env(:sync, rows_per_frame: 1)
+
+      start_session!(
+        actor_user_id: user.id,
+        gap: [
+          logged(:put_entity, RoleGrant, elem(first_hidden, 0), elem(first_hidden, 1), {300, 1}),
+          logged(:put_entity, RoleGrant, elem(second_hidden, 0), elem(second_hidden, 1), {300, 2})
+        ]
+      )
+
+      frames = await_frames()
+      deltas = Enum.flat_map(frames, fn {deltas, _seq} -> deltas end)
+
+      refute Enum.any?(
+               deltas,
+               &(&1.op == :unsync_hashed and &1.type == "Hologram.Auth.RoleGrant")
+             )
+
+      assert [keep] =
+               Enum.filter(
+                 deltas,
+                 &(&1.op == :keep_hashed and &1.type == "Hologram.Auth.RoleGrant")
+               )
+
+      assert keep.data.hashes == [Frame.drop_hash(keep.data.salt, own_grant.id)]
+    end
+
+    # The second read of what the user may read of grants stands for one made after the held ids
+    # were read - a grant the user's own write created meanwhile, say - which no part has told.
+    test "keeps the grants its user may read when the list is read, and drops one by id once hidden",
+         %{user: user} do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        permission_checking?: false,
+        synced_types: [Module2, PolicyModule1, PolicyModule5, RoleGrant],
+        windows: %{}
+      })
+
+      other =
+        %{email: "other@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      Auth.grant_role(other, :viewer, PolicyModule1)
+
+      other_grant =
+        RoleGrant
+        |> DB.read()
+        |> Enum.find(&(&1.user_id == other.id))
+
+      made_meanwhile = Entity.generate_id()
+
+      grant_data = fn id, holder_id ->
+        %{
+          "entity_id" => nil,
+          "entity_type" => "Hologram.Test.Fixtures.Policy.Module1",
+          "id" => id,
+          "role" => "viewer",
+          "user_id" => holder_id
+        }
+      end
+
+      read_ids = read_ids_in_sandbox()
+      reads = :counters.new(1, [])
+
+      read_ids_twice = fn entity_type, actor_user_id ->
+        if entity_type == RoleGrant do
+          :counters.add(reads, 1, 1)
+
+          if :counters.get(reads, 1) > 1,
+            do: PackedIds.pack([made_meanwhile]),
+            else: PackedIds.pack([])
+        else
+          read_ids.(entity_type, actor_user_id)
+        end
+      end
+
+      put_app_env(:sync, rows_per_frame: 1)
+
+      start_session!(
+        actor_user_id: user.id,
+        gap: [
+          logged(
+            :put_entity,
+            RoleGrant,
+            other_grant.id,
+            grant_data.(other_grant.id, other.id),
+            {300, 1}
+          ),
+          logged(
+            :del_entity,
+            RoleGrant,
+            made_meanwhile,
+            grant_data.(made_meanwhile, user.id),
+            {300, 2}
+          )
+        ],
+        read_ids: read_ids_twice
+      )
+
+      deltas = Enum.flat_map(await_frames(), fn {deltas, _seq} -> deltas end)
+
+      assert [keep] =
+               Enum.filter(
+                 deltas,
+                 &(&1.op == :keep_hashed and &1.type == "Hologram.Auth.RoleGrant")
+               )
+
+      assert keep.data.hashes == [Frame.drop_hash(keep.data.salt, made_meanwhile)]
+      assert Frame.unsync_entity(made_meanwhile, RoleGrant) in deltas
+    end
+
     test "tells no keep list once a grant of another user's on all of a type is gone", %{
       user: user
     } do

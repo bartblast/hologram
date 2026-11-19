@@ -675,18 +675,16 @@ describe("Deltas", () => {
       assert.isNull(LocalDatabase.getRow(TASK, "t2"));
     });
 
-    // The hashes are worked out at the catch-up's first hashed drop of the type, and the server
-    // never hashes a row the catch-up hands over.
-    it("passes over a row filed after the catch-up's hashes of its type were worked out", () => {
+    // A row the client's own write filed when its answer came, which nothing the stream sent
+    // filed.
+    it("drops a row filed after the catch-up's hashes of its type were worked out", () => {
       Deltas.apply(hashedDrop(TASK, ["t9"]));
 
-      Deltas.apply({
-        put_entity: {[TASK]: [{done: false, id: "t3", title: "Ship copy"}]},
-      });
+      LocalDatabase.putRow(TASK, {done: false, id: "t3", title: "Ship copy"});
 
       Deltas.apply(hashedDrop(TASK, ["t3"]));
 
-      assert.isNotNull(LocalDatabase.getRow(TASK, "t3"));
+      assert.isNull(LocalDatabase.getRow(TASK, "t3"));
     });
 
     it("drops a row a page carried after the catch-up's hashes of its type were worked out", () => {
