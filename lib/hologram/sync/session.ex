@@ -36,6 +36,7 @@ defmodule Hologram.Sync.Session do
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Gate
   alias Hologram.Sync.Held
+  alias Hologram.Sync.Lens
   alias Hologram.Sync.Live
   alias Hologram.Sync.Outbox
   alias Hologram.Sync.PackedIds
@@ -122,6 +123,12 @@ defmodule Hologram.Sync.Session do
   `Hologram.DB.QueryCache.synced_types/0`) by default - fewer for a client built against an older
   model, whose code reads only some of them. A batch's part names every type this build syncs, and
   the session tells the client only of the ones it is given.
+
+  `:lens` is how a client built against an older model is served, resolved (see
+  `Hologram.Sync.Lens.resolve/2`), or nil for a client of the current one. Every message goes out
+  translated into the client's names, and a row it has no label for - one holding an enum value
+  added since, or a grant of a role or an entity type added since - is kept from it as one its user
+  may not read.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
@@ -151,6 +158,7 @@ defmodule Hologram.Sync.Session do
       fill_place: Keyword.get(opts, :fill_place),
       gate_ref: nil,
       grants_kept: nil,
+      lens: Keyword.get(opts, :lens),
       outbox: Outbox.new(client, Keyword.get(opts, :outbox, [])),
       page: Keyword.fetch!(opts, :page),
       page_types: MapSet.new(),
@@ -342,8 +350,7 @@ defmodule Hologram.Sync.Session do
   # holds every type whose marker it got. Settle against the local store's design whether a place
   # per type is worth giving it.
   defp fill_type(state, named, entity_type, synced_types) do
-    {rows, read_seq} =
-      state.read_fill.(entity_type, state.actor_user_id, state.replica_id, synced_types)
+    {rows, read_seq} = read_rows(state, entity_type, synced_types)
 
     # Never below what the session already knew: every batch that number counts committed before
     # the read, so its writes are in these rows too.
@@ -427,7 +434,7 @@ defmodule Hologram.Sync.Session do
   defp read_held(state) do
     held =
       Enum.reduce(state.synced_types, Held.new(), fn entity_type, acc ->
-        Held.put(acc, entity_type, state.read_ids.(entity_type, state.actor_user_id))
+        Held.put(acc, entity_type, read_ids(state, entity_type))
       end)
 
     %{state | pot: Pot.from_held(held)}
@@ -586,7 +593,18 @@ defmodule Hologram.Sync.Session do
         |> Map.get(entity_type, "")
         |> PackedIds.unpack()
 
-      Held.add(acc, entity_type, readable_ids ++ PackedIds.unpack(held) ++ moved_ids)
+      # A row the lens keeps from the client was told to drop by this chunk or an earlier one (see
+      # `hold_withheld/3`).
+      withheld_ids =
+        part
+        |> Map.get(:withheld, %{})
+        |> Map.get(entity_type, [])
+
+      Held.add(
+        acc,
+        entity_type,
+        readable_ids ++ PackedIds.unpack(held) ++ moved_ids ++ withheld_ids
+      )
     end)
   end
 
@@ -620,7 +638,7 @@ defmodule Hologram.Sync.Session do
   defp tell_client(%{cut: cut} = state, _message) when cut != nil, do: state
 
   defp tell_client(state, message) do
-    case Outbox.put(state.outbox, message) do
+    case Outbox.put(state.outbox, translate(state.lens, message)) do
       {:ok, outbox} -> %{state | outbox: outbox}
       :stalled -> cut(state, :client_stalled)
       :stopped -> cut(state, :normal)
@@ -685,9 +703,18 @@ defmodule Hologram.Sync.Session do
   #
   # Only ever narrower than the part: a live reload can drop a type from what the build syncs while
   # a session given it runs, and a part read without the type has no pairs to state its sets by.
-  defp narrow(%{synced_types: synced_types} = part, %{synced_types: synced_types}), do: part
+  defp narrow(%{synced_types: synced_types} = part, %{lens: nil, synced_types: synced_types}),
+    do: part
 
   defp narrow(part, state) do
+    part
+    |> narrow_types(state)
+    |> withhold(state.lens)
+  end
+
+  defp narrow_types(%{synced_types: synced_types} = part, %{synced_types: synced_types}), do: part
+
+  defp narrow_types(part, state) do
     served = MapSet.new(state.synced_types)
     served? = &MapSet.member?(served, &1)
 
@@ -707,6 +734,92 @@ defmodule Hologram.Sync.Session do
         whole_types: Enum.filter(part.whole_types, served?)
     }
   end
+
+  # A client built against an older model is kept from the rows it has no label for as from rows its
+  # user may not read: one it holds is told to drop, and one that turns servable is handed over
+  # whole. Their ids go beside the part, since a part judged without trusting what the client holds
+  # can't tell whether it holds them (see `tell_part/3`).
+  defp withhold(part, nil), do: part
+
+  defp withhold(part, lens) do
+    {readable, withheld} =
+      Enum.reduce(part.readable, {%{}, %{}}, fn {entity_type, rows}, {readable, withheld} ->
+        {servable, unservable} =
+          Map.split_with(rows, fn {_id, row} -> Lens.servable?(lens, row) end)
+
+        withheld =
+          if unservable == %{},
+            do: withheld,
+            else: Map.put(withheld, entity_type, Map.keys(unservable))
+
+        {Map.put(readable, entity_type, servable), withheld}
+      end)
+
+    verdicts =
+      Map.new(part.verdicts, fn {entity_type, rows} ->
+        {entity_type, Map.drop(rows, Map.get(withheld, entity_type, []))}
+      end)
+
+    Map.merge(part, %{readable: readable, verdicts: verdicts, withheld: withheld})
+  end
+
+  # A part judged without trusting what the client holds hands over every readable row whole, and
+  # tells only the rows the session holds to drop - while the client may hold a row the lens keeps
+  # from it now, one that took a value added since while it was away. Taken as held, each is told to
+  # drop by id: its user may read it, so the id tells the client nothing.
+  #
+  # Only the ones the part still checks: a catch-up's chunk drops the rows an earlier chunk settled
+  # from what it checks after they were found withheld, and a row taken as held that nothing judges
+  # would stay held.
+  defp hold_withheld(pot, %{withheld: withheld} = part, false = _trust_held?) do
+    Enum.reduce(withheld, pot, fn {entity_type, ids}, acc ->
+      checked = Map.get(part.checked, entity_type, "")
+      still_checked = Enum.filter(ids, &PackedIds.member?(checked, &1))
+
+      %{acc | held: Held.add(acc.held, entity_type, still_checked)}
+    end)
+  end
+
+  defp hold_withheld(pot, _part, _trust_held?), do: pot
+
+  # The ids of the rows of the given type a returning client is taken to hold: those its user may
+  # read, bar the ones the lens keeps from it, which only reading the rows tells apart.
+  #
+  # Read with no sets, which only the rows handed over need.
+  defp read_ids(%{lens: lens} = state, entity_type) when lens != nil do
+    if Lens.withholds?(lens, entity_type) do
+      {rows, _read_seq} =
+        state.read_fill.(entity_type, state.actor_user_id, state.replica_id, [])
+
+      ids = for row <- rows, Lens.servable?(lens, row), do: row.id
+
+      PackedIds.pack(ids)
+    else
+      state.read_ids.(entity_type, state.actor_user_id)
+    end
+  end
+
+  defp read_ids(state, entity_type), do: state.read_ids.(entity_type, state.actor_user_id)
+
+  # The rows of the given type the client is sent whole: every one its user may read, bar the ones
+  # the lens keeps from it, with their sets left without them.
+  defp read_rows(%{lens: nil} = state, entity_type, synced_types) do
+    state.read_fill.(entity_type, state.actor_user_id, state.replica_id, synced_types)
+  end
+
+  defp read_rows(state, entity_type, synced_types) do
+    {rows, read_seq} =
+      state.read_fill.(entity_type, state.actor_user_id, state.replica_id, synced_types)
+
+    servable =
+      for row <- rows, Lens.servable?(state.lens, row), do: Lens.servable_members(state.lens, row)
+
+    {servable, read_seq}
+  end
+
+  defp translate(nil, message), do: message
+
+  defp translate(lens, message), do: Lens.message(lens, message)
 
   # A batch whose every transaction committed before a first arrival's fill place is one the fill
   # read, and its rows can be older than the fill's, so it is passed over. A returning client's
@@ -742,8 +855,7 @@ defmodule Hologram.Sync.Session do
   # client's own batch creates after the read, its answer filing it before this frame lands, goes
   # with the rest until that batch is told, once the catch-up is over.
   defp reread_type(entity_type, state, synced_types, trust_held?, keep_salt) do
-    {rows, read_seq} =
-      state.read_fill.(entity_type, state.actor_user_id, state.replica_id, synced_types)
+    {rows, read_seq} = read_rows(state, entity_type, synced_types)
 
     read_pairs = &Live.pairs_touching(&1, synced_types)
 
@@ -891,7 +1003,9 @@ defmodule Hologram.Sync.Session do
     hidden_salt = unless trust_given? and trusts_held?(placed, part), do: state.drop_salt
 
     {news, pot} =
-      Pot.decide(placed.pot, part, trust_held?: trust_held?, hidden_salt: hidden_salt)
+      placed.pot
+      |> hold_withheld(part, trust_held?)
+      |> Pot.decide(part, trust_held?: trust_held?, hidden_salt: hidden_salt)
 
     stale = stale_verdicts(placed, part, trust_held?)
 
@@ -941,8 +1055,8 @@ defmodule Hologram.Sync.Session do
 
   defp keep_grants(%{grants_kept: nil} = state, _grants_hidden, salt) do
     ids =
-      RoleGrant
-      |> state.read_ids.(state.actor_user_id)
+      state
+      |> read_ids(RoleGrant)
       |> PackedIds.unpack()
 
     held =
