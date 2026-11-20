@@ -1218,6 +1218,7 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await Durability.readBase("place-0"), {
         cursor: "place-1",
+        landed: [],
         owner: "u1",
         records: [taskRecord("t1", "Draft copy")],
       });
@@ -1243,6 +1244,7 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await Durability.readBase(null), {
         cursor: "place-1",
+        landed: [],
         owner: "u1",
         records: [taskRecord("t1", "Draft copy")],
       });
@@ -1276,6 +1278,7 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await Durability.readBase("place-1"), {
         cursor: "place-2",
+        landed: [],
         owner: "u1",
         records: [taskRecord("t1", "Draft copy"), taskRecord("t2", "Later")],
       });
@@ -1299,6 +1302,7 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await reading, {
         cursor: "place-1",
+        landed: [],
         owner: "u1",
         records: [taskRecord("t1", "Draft copy")],
       });
@@ -1321,6 +1325,23 @@ describe("Durability", () => {
       await Durability.load();
 
       assert.isNull((await Durability.readBase("place-1")).owner);
+    });
+
+    // A stored frame can have landed a batch a tab holds unlanded.
+    it("answers what the queue records as landed, with the rows", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const batch = sealedBatch(7);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await writeBatches([batch.record()]);
+
+      assert.deepStrictEqual((await Durability.readBase("place-0")).landed, [
+        {landed: [0], seq: 7},
+      ]);
     });
 
     it("answers nothing in memory mode", async () => {

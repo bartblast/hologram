@@ -1972,6 +1972,39 @@ describe("Tabs", () => {
         }
       });
 
+      // A stored frame can have landed a batch this tab holds unlanded: promoted again over the
+      // rows just taken up, a moved counter would count twice.
+      it("takes the landed marks of the batches it holds from the store", async () => {
+        Batches.adopt([
+          {
+            actorUserId: null,
+            landed: [],
+            seq: 7,
+            writes: [
+              {id: "t-stored", op: "delete", stamp: 1, type: "MyApp.Task"},
+            ],
+          },
+        ]);
+
+        sinon.stub(Durability, "readBase").resolves({
+          cursor: "place-2",
+          landed: [{landed: [0], seq: 7}],
+          owner: null,
+          records: [record("t-stored", "stored")],
+        });
+
+        try {
+          await follow();
+
+          Tabs.receive(state("place-2"));
+          await waitForEventLoop();
+
+          assert.isTrue(Batches.pending[0].isLanded(0));
+        } finally {
+          Batches.reset();
+        }
+      });
+
       // A completeness claim judges it: the server may no longer send it.
       it("keeps a row only the page carried, still carried", async () => {
         sinon.stub(Durability, "readBase").resolves({

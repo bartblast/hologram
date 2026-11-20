@@ -453,6 +453,10 @@ export default class Durability {
   // `records: null` when the place is the given one or there is none - and the user the store
   // belongs to, since one store serves every user of the browser, each in a group of their own.
   //
+  // With the rows comes what the queue records as landed, batch by batch: a stored frame can
+  // have landed a batch this tab holds unlanded, and promoted again over rows that already hold
+  // its writes, a moved counter would count twice.
+  //
   // ONE read-only transaction, the rows read in the callback of the place's own request: a write
   // landing between two transactions could leave the rows of one place beside another.
   //
@@ -466,7 +470,7 @@ export default class Durability {
 
     try {
       const transaction = Durability.#db.transaction(
-        [ENTITIES, META],
+        [ENTITIES, META, QUEUE],
         "readonly",
       );
 
@@ -494,11 +498,20 @@ export default class Durability {
           }
 
           try {
-            Durability.#request(
-              transaction.objectStore(ENTITIES).getAll(),
-            ).then(
-              (records) =>
-                resolve({cursor: place, owner, records: records ?? []}),
+            Promise.all([
+              Durability.#request(transaction.objectStore(ENTITIES).getAll()),
+              Durability.#request(transaction.objectStore(QUEUE).getAll()),
+            ]).then(
+              ([records, queued]) =>
+                resolve({
+                  cursor: place,
+                  landed: (queued ?? []).map(({landed, seq}) => ({
+                    landed,
+                    seq,
+                  })),
+                  owner,
+                  records: records ?? [],
+                }),
               reject,
             );
           } catch (error) {

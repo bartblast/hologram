@@ -80,6 +80,36 @@ describe("Batches", () => {
     Batches.current().append(write(id));
   };
 
+  describe("takeLanded()", () => {
+    beforeEach(() => {
+      sinon.stub(SyncStream, "scheduleRender");
+    });
+
+    const held = (seq, landed = []) => ({
+      actorUserId: null,
+      landed,
+      seq,
+      writes: [write("t1"), write("t2")],
+    });
+
+    // A stored frame landed it while this tab held it unlanded.
+    it("adds the marks the store records to a batch this tab holds", () => {
+      Batches.adopt([held(7, [1])]);
+
+      Batches.takeLanded([{landed: [0], seq: 7}]);
+
+      assert.deepStrictEqual(Batches.pending[0].record().landed, [0, 1]);
+    });
+
+    it("passes over a batch this tab does not hold", () => {
+      Batches.adopt([held(7)]);
+
+      Batches.takeLanded([{landed: [0], seq: 8}]);
+
+      assert.deepStrictEqual(Batches.pending[0].record().landed, []);
+    });
+  });
+
   describe("flush()", () => {
     const STAMP = 1_798_246_400_125_952;
 

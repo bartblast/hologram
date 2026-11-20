@@ -831,14 +831,15 @@ export default class Tabs {
   //
   // What that costs, a round trip at most. A tab that heard a frame the new leader passed over goes
   // back to the store's rows until the stream sends that frame again; a batch the dropped frame
-  // landed folds without those writes meanwhile, and a row a confirmed batch promoted is gone
-  // until the frame that stored it is replayed. A stream reconnecting while a tab handed the lead
-  // still reads asks for no sync (see #wait) until the lead's own reconnect greets from the place
-  // the read settles on. A read that fails
-  // costs more, and is rarer: a tab that leaves keeps nothing from then on, and its own pending
-  // writes leave its screen, to land through the group's leader, which sends them from the queue -
-  // or, when it leaves a lead it was handed over another user's store, through the next tab in
-  // line or the next page load; a tab that takes the lead instead asks the server for everything.
+  // landed folds without those writes meanwhile, and a row a confirmed batch promoted is gone until
+  // the frame that stored it is replayed. Landed marks taken from the store can describe writes a
+  // repaired store no longer holds, which then hide until the frame comes again. A stream
+  // reconnecting while a tab handed the lead still reads asks for no sync (see #wait) until the
+  // lead's own reconnect greets from the place the read settles on. A read that fails costs more,
+  // and is rarer: a tab that leaves keeps nothing from then on, and its own pending writes leave
+  // its screen, to land through the group's leader, which sends them from the queue - or, when it
+  // leaves a lead it was handed over another user's store, through the next tab in line or the next
+  // page load; a tab that takes the lead instead asks the server for everything.
   static async #takeStore(message) {
     Tabs.#ready = false;
 
@@ -936,6 +937,10 @@ export default class Tabs {
               LocalDatabase.replaceFacts(type, relationship, id, targetIds);
             }
           }
+
+          // And what the queue records as landed: the rows just taken up can hold writes of a
+          // batch this tab holds unlanded, which promoted again would count a move twice.
+          Batches.takeLanded(base.landed ?? []);
 
           SyncStream.syncCursor = base.cursor;
           SyncStream.scheduleRender();

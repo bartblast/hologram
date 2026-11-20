@@ -225,6 +225,22 @@ export default class Batches {
     Batches.pending = [];
   }
 
+  // The landed marks the store records, taken into the batches this tab holds - for a tab taking
+  // up rows from the store that a stored frame already wrote a batch's writes into (see
+  // Tabs.#takeStore). Only added, never taken away: a mark this tab set itself is as true as one
+  // the store holds. Nothing is written: the store holds these marks already.
+  static takeLanded(records) {
+    for (const {landed, seq} of records) {
+      const batch = Batches.pending.find((held) => held.seq === seq);
+
+      if (batch !== undefined) {
+        for (const index of landed) {
+          batch.landed.add(index);
+        }
+      }
+    }
+  }
+
   // Everything the action wrote goes away, which is what a raise has to mean: an action's writes
   // land together or not at all, and dropping the layer is the whole of putting them back.
   static discard() {
