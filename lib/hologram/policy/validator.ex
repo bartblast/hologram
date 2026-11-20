@@ -678,18 +678,21 @@ defmodule Hologram.Policy.Validator do
       reraise Hologram.CompileError, [message: message], __STACKTRACE__
   end
 
-  # A rule reading a related row through a type nobody may read answers no in every browser - the
-  # row never reaches one - while the server reads the row as stored and may answer yes, the
-  # client-locality defect validate_server_only_predicates!/4 refuses for a value, one relationship
-  # away. A type's own read rules are left out: a condition, a role reference or a delegation they
-  # read through such a type is a deciding item, which a browser answers as unknown, leaving the
-  # rule to the server's verdict on the operation (see Hologram.Policy.deciding_quantifier?/3). A
-  # rule delegating to a read rule is not a read rule, so its own chains stay checked, while the
-  # delegated read rules are answered by the read verdict on the row it delegates to. The chains a
-  # deciding item reads are not checked, since the server's verdict answers the operation over the
-  # rows as stored (see Hologram.Policy.held_chains/2). Like any verdict, it answers no in a browser
-  # while a write it has not answered names a type the operation reads, until the server's answer
-  # brings the verdict anew.
+  # A rule reading a related row through a type nobody may read answers no in every browser on a new
+  # or changed struct - the row never reaches one, and the server's verdict on the operation speaks
+  # only for the row as stored - while the server may answer yes, the client-locality defect
+  # validate_server_only_predicates!/4 refuses for a value, one relationship away. With a read line,
+  # a browser holding the row answers such a check itself, and one whose user may not read it
+  # answers as for a related row of any readable type. A type's own read rules are left out: a
+  # condition, a role reference or a delegation they read through such a type is a deciding item,
+  # which a browser answers as unknown, leaving the rule to the server's verdict on the operation
+  # (see Hologram.Policy.deciding_quantifier?/3). A rule delegating to a read rule is not a read
+  # rule, so its own chains stay checked, while the delegated read rules are answered by the read
+  # verdict on the row it delegates to. The chains a deciding item reads are not checked, since the
+  # server's verdict answers the operation over the rows as stored (see
+  # Hologram.Policy.held_chains/2). Like any verdict, it answers no in a browser while a write it
+  # has not answered names a type the operation reads, until the server's answer brings the verdict
+  # anew.
   defp validate_readable_chains!(entity_types) do
     unreadable_hops =
       for entity_type <- Enum.sort(entity_types),
@@ -715,7 +718,7 @@ defmodule Hologram.Policy.Validator do
 
         raise Hologram.CompileError,
           message:
-            "#{line} in #{inspect(entity_type)} reads #{inspect(hop_type)} through #{Enum.join(chain, ".")}, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on #{inspect(hop_type)}, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+            "#{line} in #{inspect(entity_type)} reads #{inspect(hop_type)} through #{Enum.join(chain, ".")}, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on #{inspect(hop_type)}: a browser holding the row answers such a check itself"
     end
   end
 

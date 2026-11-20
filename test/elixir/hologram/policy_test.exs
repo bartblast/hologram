@@ -2795,6 +2795,74 @@ defmodule Hologram.PolicyTest do
       assert verdict_operations(Module14) == []
     end
 
+    # A workshop, a bench and a permit are read by the workshop's owner and members alone, so a
+    # reader of a tool may not hold the ones its rules read: through a condition, a delegation, a
+    # role held on the bench's workshop and an any over the permits. A create line counts only
+    # under its name, since no verdict answers a check on a struct no row stores yet.
+    test "returns every operation but create whose rules read a related row a reader may not hold" do
+      operations = [:delete, :draft, :read, :update, {:update, :bench}, {:update, :label}]
+
+      assert verdict_operations(Policy.Module49) ==
+               operations
+               |> Enum.map(&{verdict_key(Policy.Module49, &1), &1})
+               |> Enum.sort()
+    end
+
+    # Control: every session reads every channel.
+    test "returns nothing for rules reading only rows every session may read" do
+      assert verdict_operations(Policy.Module39) == []
+    end
+
+    # Control: a crate is read through its workshop, and a box by the workshop's members, whom the
+    # workshop's read rule admits, so every reader holds the workshop. The crate's delete reads the
+    # workshop's site too, which every session reads. The box's delete reads only the workshop's
+    # id, off the box itself.
+    test "returns nothing for rules reading only rows every reader of the row may read" do
+      assert verdict_operations(Policy.Module50) == []
+      assert verdict_operations(Policy.Module51) == []
+    end
+
+    # A row read through its workshop by one rule but not by the other may be read by someone who
+    # can't read the workshop.
+    test "returns an operation reading a related row only some read rules admit readers of" do
+      assert verdict_operations(Policy.Module53) ==
+               [:read, :update]
+               |> Enum.map(&{verdict_key(Policy.Module53, &1), &1})
+               |> Enum.sort()
+    end
+
+    # The workshop admits its members and owners, not its editors.
+    test "returns an operation reading a related row whose read rules don't admit the role read by" do
+      assert verdict_operations(Policy.Module54) == [
+               {verdict_key(Policy.Module54, :update), :update}
+             ]
+    end
+
+    # Every reader holds the box, but not every reader of the box holds its workshop.
+    test "returns an operation reading a related row a held row leads to that a reader may not hold" do
+      assert verdict_operations(Policy.Module57) == [
+               {verdict_key(Policy.Module57, :update), :update}
+             ]
+    end
+
+    # The permit's read rule holds the role on the tool's workshop, read off the tool, which a
+    # reader of the permit may not hold.
+    test "returns a read rule's operation for a role reference through a row a reader may not hold" do
+      assert verdict_operations(Policy.Module48) == [
+               {verdict_key(Policy.Module48, :read), :read}
+             ]
+    end
+
+    # Control: a role held one relationship away is looked up by the id the row itself holds.
+    test "returns nothing for a role reference one relationship away" do
+      assert verdict_operations(Policy.Module55) == []
+    end
+
+    # Control: no client is sent a bin.
+    test "returns nothing for a type no session may read" do
+      assert verdict_operations(Policy.Module52) == []
+    end
+
     # Every field but the name is covered by the one line, so they share its key.
     test "returns one key for the fields of an update the same lines cover" do
       pairs = verdict_operations(Hologram.PolicyTest.SharedFieldProject)

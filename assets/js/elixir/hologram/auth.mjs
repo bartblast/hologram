@@ -18,8 +18,9 @@ import Type from "../../type.mjs";
 // Hologram.Policy.Evaluator is the reference this mirrors, and Hologram.Auth is where its
 // checker lives on that side. The split is kept: rules are evaluated over plain values, and
 // what a rule REFERENCES - a role held somewhere - is answered by reading grant rows. The
-// server reads them with SELECT EXISTS, this reads them from the pot - bar a read rule's reference
-// or delegation through a row of a type nobody may read, which this answers as unknown.
+// server reads them with SELECT EXISTS, this reads them from the pot - bar a reference or
+// delegation through a related row this client does not hold, one its user may not read or of a
+// type nobody may read, which this answers as unknown.
 //
 // What the rows this client holds leave unknown, the server's verdict on the operation answers: its
 // can? answer for the session's user over the row as stored, sent with the row (see verdictHolds/4).
@@ -37,12 +38,13 @@ const GRANT_TYPE = "Hologram.Auth.RoleGrant";
 const CANONICAL_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-// What a condition holds as when this client cannot tell: a related row it would read is one it
-// does not hold - the server reads the row as stored, so taking it for a missing one could grant
-// what the server refuses (`project.status != :archived` over a project nobody synced) - or the
-// value it would read is a server-only attribute's, which no client ever holds. A rule grants only
-// on a definite yes, and `and` and `or` keep what they can still decide: false and unknown are
-// false, true or unknown is true.
+// What a condition, a role reference or a delegation holds as when this client cannot tell: a
+// related row it would read is one it does not hold - one its user may not read, which the server
+// reads as stored, so taking it for a missing one could grant what the server refuses
+// (`project.status != :archived` over a project the user may not read) - or the value it would read
+// is a server-only attribute's, which no client ever holds. A rule grants only on a definite yes,
+// and `and` and `or` keep what they can still decide: false and unknown are false, true or unknown
+// is true.
 const UNKNOWN = Symbol("unknown");
 
 // The sixteen bytes Hologram.Auth.RoleGrant derives every grant id under - drawn once, on
@@ -294,7 +296,8 @@ function chainRowFrom(entityType, row, relationshipNames) {
 }
 
 // The id the last reference of a chain holds, read off the row the relationships before it lead
-// to, or null when they lead nowhere.
+// to, null when they lead nowhere, or UNKNOWN when they lead to a row this client does not hold -
+// one its user may not read, whose reference the server reads as stored.
 function chainTargetId(entityType, entity, relationshipNames) {
   const referenceField = `${relationshipNames.at(-1)}_id`;
 
@@ -304,9 +307,11 @@ function chainTargetId(entityType, entity, relationshipNames) {
 
   const end = chainRow(entityType, entity, relationshipNames.slice(0, -1));
 
-  return end === null || end === UNKNOWN
-    ? null
-    : (end.row[referenceField] ?? null);
+  if (end === null || end === UNKNOWN) {
+    return end;
+  }
+
+  return end.row[referenceField] ?? null;
 }
 
 // The type a name is declared with - an attribute's, or a derived field's holding a value - or
@@ -641,8 +646,10 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
     }
 
     // A role held on the row a chain of relationships leads to, named by the id its last
-    // reference holds. In a read rule, one reading a row of a type nobody may read comes with a
-    // fifth element, true: no client holds the row the id is read off, so it is UNKNOWN.
+    // reference holds - UNKNOWN when this client does not hold a row the id is read through, for
+    // the server's verdict on the operation to answer. In a read rule, one reading a row of a type
+    // nobody may read comes with a fifth element, true: no client holds the row the id is read
+    // off, so it is UNKNOWN.
     case "rel": {
       const [_kind, relationshipNames, targetType, roles, undecided] =
         reference;
@@ -652,6 +659,10 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
       }
 
       const targetId = chainTargetId(entityType, entity, relationshipNames);
+
+      if (targetId === UNKNOWN) {
+        return UNKNOWN;
+      }
 
       return (
         targetId !== null &&
@@ -821,14 +832,16 @@ function canonicalId(value) {
 }
 
 // The server's verdict on an operation whose rules the rows this client holds leave open - a
-// quantifier they can't decide, a predicate reading a server-only attribute, or a read rule's
-// clause, role reference or delegation reading a row of a type nobody may read - as the row's last
-// frame carried it. The entry is the operation's verdict key and the types its rules read. The
-// server works verdicts out for the session's user over the row as stored, so any other question
-// is UNKNOWN: one about another user or a visitor, one about a struct whose stored fields differ
-// from the row's - changed in an action and not written yet - and one asked while a write of this
-// client's that the server has not answered names a type the operation's rules read, since that
-// write may have moved the answer. So is one about a row that came with no verdict.
+// quantifier they can't decide, a predicate reading a server-only attribute, a condition, role
+// reference or delegation reading a related row this client does not hold, which its user may not
+// read, or a read rule's clause, role reference or delegation reading a row of a type nobody may
+// read - as the row's last frame carried it. The entry is the operation's verdict key and the types
+// its rules read. The server works verdicts out for the session's user over the row as stored, so
+// any other question is UNKNOWN: one about another user or a visitor, one about a struct whose
+// stored fields differ from the row's - changed in an action and not written yet - and one asked
+// while a write of this client's that the server has not answered names a type the operation's
+// rules read, since that write may have moved the answer. So is one about a row that came with no
+// verdict.
 //
 // An answer can settle a batch before the frame carrying its round arrives, and between the two
 // the verdict predates the write again: the answer files the write's values into the base row,
@@ -862,11 +875,12 @@ function verdictHolds(entityType, entity, entry, actorUserId) {
 }
 
 // Delegation asks the RELATED entity's policy for the operation the rule names, of the row its
-// chain of relationships leads to, so it needs that row and its rules. A client holds neither for
-// a type its build never syncs, and cannot ask the server mid-render - so the answer is no, the
-// way it is for any rule the rows do not satisfy. In a read rule, a delegation whose chain passes
-// a row of a type nobody may read comes with a third element, true, and is UNKNOWN. A held row
-// answers as its own operation does, its verdict included (see grants/4).
+// chain of relationships leads to, so it needs that row and its rules. An empty reference leads
+// nowhere, which holds nothing on the server either. A row this client does not hold, one its user
+// may not read, is UNKNOWN, for the server's verdict on the operation to answer: a client cannot
+// ask the server mid-render. In a read rule, a delegation whose chain passes a row of a type
+// nobody may read comes with a third element, true, and is UNKNOWN. A held row answers as its own
+// operation does, its verdict included (see grants/4).
 function viaHolds(rule, entityType, entity, actorUserId) {
   const [operation, relationshipNames, undecided] = rule.via;
 
@@ -876,8 +890,12 @@ function viaHolds(rule, entityType, entity, actorUserId) {
 
   const end = chainRow(entityType, entity, relationshipNames);
 
-  if (end === null || end === UNKNOWN) {
+  if (end === null) {
     return false;
+  }
+
+  if (end === UNKNOWN) {
+    return UNKNOWN;
   }
 
   return grants(end.type, end.row, operation, actorUserId);
@@ -966,11 +984,13 @@ function askedFields(operation) {
 // change there is a change here. A rule covering the whole row is matched once however many
 // fields ask it.
 //
-// A field the held rows leave open is answered by the server's verdict under its key, which
-// answers its lines and the whole row's together. A field whose own lines hold no item only the
-// server decides has none, and the whole row's verdict answers it: when the whole-row rules hold
-// the field is covered. When they don't, the answer is no, which can deny where a line of the
-// field's own the held rows leave open would grant on the server - never grant wrongly.
+// A field the held rows leave open is answered by the server's verdict under its key, which answers
+// its lines and the whole row's together. A field whose own lines hold no item only the server
+// decides and read no related row a reader may not hold has none, and the whole row's verdict
+// answers it: when the whole-row rules hold the field is covered. When they don't, the answer is
+// no, which can deny where a line of the field's own would grant on the server - one delegating to
+// a create the held row's rules leave open, or to a held row whose rules leave it open and whose
+// own verdict can't speak, like one the browser created - never grant wrongly.
 function coversFields(entry, entityType, entity, fields, actorUserId) {
   const matched = new Map();
 

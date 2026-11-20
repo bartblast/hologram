@@ -2615,10 +2615,19 @@ defmodule Hologram.Sync.SessionTest do
   end
 
   # The fixture's named lines are limited to :name, and the field's verdict answers every line
-  # covering it, so it holds while the feature line does.
+  # covering it, so it holds while the feature line does. The close, read and whole-row update
+  # lines read the project's tasks and members, which a reader may not hold.
   defp project_verdicts(archivable?) do
     Map.new(
-      [{:archive, archivable?}, {:feature, true}, {:publish, true}, {{:update, :name}, true}],
+      [
+        {:archive, archivable?},
+        {:close, false},
+        {:feature, true},
+        {:publish, true},
+        {:read, true},
+        {:update, false},
+        {{:update, :name}, true}
+      ],
       fn {operation, answer} -> {Policy.verdict_key(PolicyProject, operation), answer} end
     )
   end

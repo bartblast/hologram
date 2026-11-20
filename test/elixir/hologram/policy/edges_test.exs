@@ -71,6 +71,11 @@ defmodule Hologram.Policy.EdgesTest do
                {Policy.Module1, {:update, :parent}} => [
                  {:attributes, [:parent_id]},
                  {:relationship_attributes, [:parent], Policy.Module2, [:public]}
+               ],
+               {Policy.Module1, {:verdicts}} => [
+                 {:attributes, [:parent_id, :priority]},
+                 {:own_grants, [:editor, :owner]},
+                 {:relationship_attributes, [:parent], Policy.Module2, [:public]}
                ]
              }
     end
@@ -252,6 +257,16 @@ defmodule Hologram.Policy.EdgesTest do
                  {:relationship_attributes, [:parent, :parent], Policy.Module1, [:parent_id]},
                  {:relationship_attributes, [:parent, :parent, :parent], Policy.Module2,
                   [:public]}
+               ],
+               {Policy.Module12, {:verdicts}} => [
+                 {:attributes, [:level, :link_id, :parent_id]},
+                 {:relationship_attributes, [:link], Module17, [:priority]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1,
+                  [:created_at, :parent_id, :priority]},
+                 {:relationship_attributes, [:parent, :parent, :parent], Policy.Module2,
+                  [:public]},
+                 {:relationship_grants, [:parent, :parent], Policy.Module1, [:viewer]}
                ]
              }
     end
@@ -548,12 +563,25 @@ defmodule Hologram.Policy.EdgesTest do
     end
 
     # The delete rule's none is answered from the server's verdict, sent with every project, so what
-    # it reads is named apart from the operations - beside the operation's own edges.
+    # it reads is named apart from the operations - beside the operation's own edges. So is the
+    # archive line's any over labels, a set a reader may not hold, and the field's verdict answers
+    # the whole-row update rule's any over the members too.
     test "names what a deciding operation's rules read under {:verdicts}" do
       assert derive([EdgeProject])[{EdgeProject, {:verdicts}}] == [
                {:set_attributes, [:labels], EdgeLabel, [:name]},
+               {:set_attributes, [:members], EdgeMember, [:project_id]},
                {:set_edges, [:labels], EdgeProject, [:labels]}
              ]
+    end
+
+    # Only a workshop's owner and members read it and its benches, so a tool's update and delete
+    # rules reading them are answered from the server's verdicts, and what they read is named
+    # under {:verdicts}: the workshop's archived and the bench's workshop reference among it.
+    test "names what the rules reading related rows a reader may not hold read under {:verdicts}" do
+      edges = derive([Policy.Module49])[{Policy.Module49, {:verdicts}}]
+
+      assert {:relationship_attributes, [:workshop], Policy.Module46, [:archived]} in edges
+      assert {:relationship_attributes, [:bench], Policy.Module47, [:workshop_id]} in edges
     end
 
     # The delete rule's equality is answered from the row a client holds, but the verdict answers
