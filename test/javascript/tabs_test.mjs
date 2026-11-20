@@ -993,6 +993,7 @@ describe("Tabs", () => {
       LocalDatabase.reset();
       Replica.reset();
 
+      SyncStream.servedModelHash = null;
       SyncStream.stopReason = null;
       SyncStream.syncCursor = null;
     });
@@ -1006,6 +1007,7 @@ describe("Tabs", () => {
       LocalDatabase.markTypesSynced(["MyApp.Task"]);
       Replica.offer({id: "r-group", token: "statement-group"});
 
+      SyncStream.servedModelHash = "b7e1d4";
       SyncStream.stopReason = "model_hash";
       SyncStream.syncCursor = "place-1";
 
@@ -1017,6 +1019,7 @@ describe("Tabs", () => {
         kind: "state",
         replica: {id: "r-group", token: "statement-group"},
         rules: null,
+        servedModelHash: "b7e1d4",
         stopReason: "model_hash",
         synced: [],
       });
@@ -1344,6 +1347,22 @@ describe("Tabs", () => {
         "sync_reload",
         {reason: "protocol_version"},
       );
+    });
+
+    it("takes the model the group's server runs", () => {
+      const noting = sinon.stub(SyncStream, "noteServedModel");
+
+      Tabs.receive({
+        cursor: null,
+        kind: "state",
+        replica: {id: null, token: null},
+        servedModelHash: "b7e1d4",
+        stopReason: null,
+        completeness: {all: false, types: []},
+        synced: [],
+      });
+
+      sinon.assert.calledOnceWithExactly(noting, "b7e1d4");
     });
 
     it("takes no stop from a group's state naming none", () => {

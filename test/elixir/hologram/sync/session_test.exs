@@ -47,6 +47,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module39
+  alias Hologram.Test.Fixtures.Entity.Module40
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyProject
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyLabel
@@ -2130,6 +2131,27 @@ defmodule Hologram.Sync.SessionTest do
       assert Enum.any?(deltas, &(&1.op == :put_entity and &1.id == public.id))
     end
 
+    test "stops when a fill reads under a data model on hold" do
+      windows(%{})
+      Process.flag(:trap_exit, true)
+
+      read_fill = fn _entity_type, _actor_user_id, _replica_id, _synced_types ->
+        raise Hologram.StaleModelError
+      end
+
+      {:ok, session} =
+        Session.start_link(
+          client: self(),
+          outbox: [raw: true],
+          page: @page,
+          policy_hash: @policy_hash,
+          read_fill: read_fill,
+          types_hash: @types_hash
+        )
+
+      assert_receive {:EXIT, ^session, {:shutdown, :model_held}}, 1_000
+    end
+
     test "stops when a part arrives under a data model on hold" do
       windows(%{})
 
@@ -2364,7 +2386,7 @@ defmodule Hologram.Sync.SessionTest do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
         permission_checking?: true,
-        synced_types: [Module2, Module39, PolicyModule1, PolicyModule5],
+        synced_types: [Module2, Module39, Module40, PolicyModule1, PolicyModule5],
         windows: %{}
       })
 
@@ -2385,7 +2407,7 @@ defmodule Hologram.Sync.SessionTest do
 
       {:ok, lens} = Lens.build(Model.empty(), ops)
 
-      Lens.resolve(lens, [Module2, Module39, PolicyModule1, RoleGrant])
+      Lens.resolve(lens, [Module2, Module39, Module40, PolicyModule1, RoleGrant])
     end
 
     defp create_member(kind) do
@@ -2615,6 +2637,28 @@ defmodule Hologram.Sync.SessionTest do
 
       assert Frame.drop_hash(salt, viewer) in hashes
       refute Frame.drop_hash(salt, editor) in hashes
+    end
+
+    test "fills a set without the members it is kept from" do
+      guest = create_member(:guest)
+      staff = create_member(:staff)
+
+      team =
+        %{name: "team"}
+        |> Module40.new()
+        |> DB.create!()
+
+      :ok = EntityOperations.add_relationship(Module40, team.id, :players, guest.id)
+      :ok = EntityOperations.add_relationship(Module40, team.id, :players, staff.id)
+
+      start_session!(lens: tab_lens(), synced_types: [Module39, Module40])
+
+      deltas = await_fill()
+
+      assert [%{data: %{players: players}}] =
+               Enum.filter(deltas, &(&1.type == "Hologram.Test.Fixtures.Entity.Module40"))
+
+      assert players == [guest.id]
     end
 
     test "fills no grant of a role the tab's model lacks" do

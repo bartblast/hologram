@@ -995,11 +995,12 @@ defmodule Hologram.Sync.Lens do
   # their values can't keep a row from it. A type new since is never served.
   defp sent_enums(lens, entity_type) do
     entry = type_entry(lens, entity_type)
-    server_only = Entity.server_only_attribute_names(entity_type)
 
-    if entry.old == @new do
+    if entry.old == @new or entry.enums == %{} do
       []
     else
+      server_only = Entity.server_only_attribute_names(entity_type)
+
       Enum.reject(entry.enums, fn {attribute, _values} ->
         Map.get(entry.attributes, attribute) == @new or attribute in server_only
       end)

@@ -41,6 +41,11 @@ export default class SyncStream {
   // same thing, and a tab joining the group is told by the tab that heard it.
   static stopReason = null;
 
+  // The hash of the model the server runs, as its frames last said, or null until one did. A server
+  // of a newer model serves this tab its rows in the shape this bundle reads (see servedAcrossModels),
+  // but the pages it renders are the new build's.
+  static servedModelHash = null;
+
   // Whether a frame or a batch changed rows since the last render, which computed the derived
   // fields from the rows it saw (see DataLayer.rowsChangedSinceRender).
   static rowsChangedSinceRender = false;
@@ -262,6 +267,8 @@ export default class SyncStream {
   static receiveFrame(event, frame) {
     switch (event) {
       case "sync_deltas": {
+        $.noteServedModel(frame.model_hash);
+
         const written = Deltas.apply(frame.deltas);
 
         // What this client's own pending writes are worth against what just arrived: every batch
@@ -366,6 +373,8 @@ export default class SyncStream {
       // carried a place sends no such key at all, and a rolling deploy can put a new bundle in
       // front of an old node.
       case "synced":
+        $.noteServedModel(frame.model_hash);
+
         if (frame.cursor) {
           $.syncCursor = frame.cursor;
         }
@@ -385,6 +394,26 @@ export default class SyncStream {
 
         return null;
     }
+  }
+
+  // Keeps the model the server says it runs. A frame of a build from before frames named it names
+  // none, which says nothing.
+  static noteServedModel(modelHash) {
+    if (typeof modelHash === "string") {
+      $.servedModelHash = modelHash;
+    }
+  }
+
+  // Whether the server serving this tab runs another model than this bundle was built against. It
+  // serves the rows this bundle's pages read, but another page would come from the new build, whose
+  // code reads rows of its own model - over this tab's runtime and its store, which hold this
+  // bundle's. So a navigation loads the next page afresh, with the runtime and the store of the
+  // new build (see DataLayer.stopped), without stopping anything until then.
+  static servedAcrossModels() {
+    return (
+      $.servedModelHash !== null &&
+      $.servedModelHash !== globalThis.Hologram.sync?.modelHash
+    );
   }
 
   // The rules the group's stream syncs under, as a frame carries them, for a tab joining it (see

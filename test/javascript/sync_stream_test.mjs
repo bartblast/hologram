@@ -82,6 +82,7 @@ describe("SyncStream", () => {
     SyncStream.rowsChangedSinceRender = false;
     SyncStream.rules = null;
     SyncStream.served = false;
+    SyncStream.servedModelHash = null;
     SyncStream.stopReason = null;
     SyncStream.syncCursor = null;
   });
@@ -1127,6 +1128,69 @@ describe("SyncStream", () => {
         LocalDatabase.getRow("MyApp.Task", "t1").title,
         "rendered by the server",
       );
+    });
+  });
+
+  describe("servedAcrossModels()", () => {
+    beforeEach(() => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", model: {}};
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+    });
+
+    it("is false before a frame names the model the server runs", () => {
+      assert.isFalse(SyncStream.servedAcrossModels());
+    });
+
+    it("is false once a frame names this bundle's model", () => {
+      SyncStream.noteServedModel("a3f9c2");
+
+      assert.isFalse(SyncStream.servedAcrossModels());
+    });
+
+    it("is true once a frame names another model", () => {
+      SyncStream.noteServedModel("b7e1d4");
+
+      assert.isTrue(SyncStream.servedAcrossModels());
+    });
+
+    // A node of a build from before frames named it says nothing.
+    it("keeps what it knew when a frame names no model", () => {
+      SyncStream.noteServedModel("b7e1d4");
+      SyncStream.noteServedModel(undefined);
+
+      assert.isTrue(SyncStream.servedAcrossModels());
+    });
+
+    // Its writes still go: only a stop over the model holds them.
+    it("holds no writes", () => {
+      SyncStream.noteServedModel("b7e1d4");
+
+      assert.isFalse(SyncStream.holdsWrites());
+    });
+
+    it("notes the model a deltas frame names", () => {
+      SyncStream.receiveFrame("sync_deltas", {
+        applied_seq: null,
+        cursor: null,
+        deltas: {},
+        model_hash: "b7e1d4",
+      });
+
+      assert.equal(SyncStream.servedModelHash, "b7e1d4");
+    });
+
+    // A client caught up with nothing to be told receives only the marker.
+    it("notes the model a completeness marker names", () => {
+      SyncStream.receiveFrame("synced", {
+        cursor: null,
+        model_hash: "b7e1d4",
+        scope: "all",
+      });
+
+      assert.equal(SyncStream.servedModelHash, "b7e1d4");
     });
   });
 

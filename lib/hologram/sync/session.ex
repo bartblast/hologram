@@ -194,6 +194,10 @@ defmodule Hologram.Sync.Session do
     :ok = Sessions.register(state.actor_user_id)
 
     {:noreply, Pool.run(fn -> fill(%{state | page_types: page_types(state.page)}) end)}
+  rescue
+    # The frames and markers name the model the server runs, which a hold refuses to read. The
+    # client comes back through the doors once it is released, as it does from a catch-up.
+    Hologram.StaleModelError -> {:stop, {:shutdown, :model_held}, state}
   end
 
   # A returning client waits its turn at the node's gate. It hasn't joined the node's sessions yet,

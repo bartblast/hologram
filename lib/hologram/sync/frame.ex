@@ -91,10 +91,12 @@ defmodule Hologram.Sync.Frame do
   The cursor is the client's to keep and hand back, never to read: what it is made of is the
   reader's business, so its shape can change without the protocol changing.
 
-  The model hash is stamped once for the frame rather than once per delta. Every value in it was
-  read from the rows as they stand, so a frame's deltas are always of one model - a delta carrying
-  values written under an older one is a thing only stored values could produce, and none are
-  sent.
+  The model hash is stamped once for the frame rather than once per delta, and it is the hash of
+  the model the server runs. Every value in the frame was read from the rows as they stand, so a
+  frame's deltas are always of one model - the server's, or, for a client built against an older
+  one, that client's, translated through its lens (see `Hologram.Sync.Lens`). Such a client tells
+  from the hash that the server runs another model than its own, and loads its next page afresh
+  rather than running the new build's page code over its own runtime and store.
 
   The deltas travel grouped op -> type, with the payload alone as the delta: a whole row for a
   put (its id is one of its attributes), the changed attributes plus the id for a patch or an
@@ -151,6 +153,9 @@ defmodule Hologram.Sync.Frame do
   without this a quiet app would keep everything it was sent and still have nowhere to resume
   from, and would be filled from nothing on its next visit.
 
+  It names the model the server runs, as a deltas frame does (see `encode_deltas_envelope/4`): a
+  client caught up with nothing to be told receives no deltas frame.
+
   Whether the marker names a place is about the CLIENT, not the scope. A first arrival holds a
   whole pot only once `:all` has been announced, so its types markers name none - the scope is
   narrower than the claim. And nil for `:all` on a build whose windows have no places to speak of.
@@ -161,7 +166,11 @@ defmodule Hologram.Sync.Frame do
     payload =
       scope
       |> scope_payload()
-      |> Map.merge(%{cursor: cursor, protocol_version: @protocol_version})
+      |> Map.merge(%{
+        cursor: cursor,
+        model_hash: Model.hash(),
+        protocol_version: @protocol_version
+      })
 
     "event: synced\nid: #{id}\ndata: #{Jason.encode!(payload)}\n\n"
   end
