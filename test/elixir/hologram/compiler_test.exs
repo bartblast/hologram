@@ -5161,13 +5161,15 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      key = Hologram.Policy.verdict_key(BakedSharedProject, {:update, :title})
-
       entry_js =
         verdict_entry_js(BakedSharedProject, {:update, :title}, [BakedLabel, BakedSharedProject])
 
-      assert String.contains?(js, ~s/"update:title":#{entry_js}/)
-      assert length(String.split(js, ~s/"verdict":"#{key}"/)) > 2
+      assert String.contains?(
+               js,
+               ~s/"verdicts":{"update:labels":#{entry_js},"update:title":#{entry_js}}/
+             )
+
+      refute String.contains?(js, ~s/"update:name":/)
     end
 
     # A bounded set computed over the rows a client holds can hold rows the server's doesn't, so an
