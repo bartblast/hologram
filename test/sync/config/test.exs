@@ -11,6 +11,6 @@ config :hologram_sync_tests, HologramSyncTestsWeb.Endpoint,
 # Small frames and gaps, so the randomized run's fills and catch-ups span several frames and chunks,
 # a client can be cut off part way through one, and a client away long enough is sent everything
 # again.
-config :hologram, :sync, gap_limit: 100, rows_per_frame: 5
+config :hologram, :sync, gap_limit: 40, rows_per_frame: 5
 
 config :logger, level: :warning
