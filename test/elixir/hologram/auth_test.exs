@@ -3,15 +3,12 @@ defmodule Hologram.AuthTest do
 
   import Hologram.Auth
 
-  require Hologram.Query
-
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
-  alias Hologram.DB.QueryRunner
   alias Hologram.Entity
   alias Hologram.MisuseError
   alias Hologram.Policy
@@ -235,6 +232,17 @@ defmodule Hologram.AuthTest do
       scopes = MapSet.new([{user.id, {:own, Module1, resource.id}}])
 
       assert carried_grants(scopes) == []
+    end
+
+    test "returns nothing for a session whose user id no user entity can have" do
+      user = create_user("foreign_actor_4@example.com")
+      resource = create_resource()
+
+      grant_role(user, :editor, resource)
+
+      scopes = MapSet.new([{user.id, {:own, Module1, resource.id}}])
+
+      assert Context.with_actor(7, fn -> carried_grants(scopes) end) == []
     end
 
     # The scope says which rows to LOOK FOR, the read policy says which the session user may
@@ -1565,96 +1573,6 @@ defmodule Hologram.AuthTest do
     end
   end
 
-  describe "grants_before/2" do
-    defp grant_effect(op, grant) do
-      data = %{
-        "id" => grant.id,
-        "entity_id" => grant.entity_id,
-        "entity_type" => grant.entity_type && Codec.encode_enum_value(grant.entity_type),
-        "role" => Codec.encode_enum_value(grant.role),
-        "user_id" => grant.user_id
-      }
-
-      %{op: op, type: RoleGrant, entity_id: grant.id, data: data}
-    end
-
-    defp stored_grant(user_id) do
-      RoleGrant
-      |> Query.filter(user_id: ^user_id)
-      |> Stage.normalize()
-      |> QueryRunner.run(DB.mapping())
-      |> hd()
-    end
-
-    test "answers the stored grants when no effect touched them" do
-      user = create_user("user_90@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-
-      assert [grant] = grants_before(user.id, [])
-      assert grant.id == stored_grant(user.id).id
-    end
-
-    test "leaves out a grant created since" do
-      user = create_user("user_91@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-      grant = held_grant(user.id)
-
-      assert grants_before(user.id, [grant_effect(:put_entity, grant)]) == []
-    end
-
-    test "puts back a grant revoked since" do
-      user = create_user("user_92@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-      revoked = stored_grant(user.id)
-      revoke_role(user, :editor, resource)
-
-      assert [grant] = grants_before(user.id, [grant_effect(:del_entity, revoked)])
-      assert grant.id == revoked.id
-      assert grant.entity_id == resource.id
-      assert grant.entity_type == Module1
-      assert grant.role == :editor
-      assert grant.user_id == user.id
-    end
-
-    # Forwards, the creation would be undone before the deletion put it back - leaving a grant
-    # the user never held at the place being asked about.
-    test "answers nothing for a grant given and taken back since" do
-      user = create_user("user_93@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-      grant = held_grant(user.id)
-      revoke_role(user, :editor, resource)
-
-      effects = [grant_effect(:put_entity, grant), grant_effect(:del_entity, grant)]
-
-      assert grants_before(user.id, effects) == []
-    end
-
-    test "answers the grant a revoke and re-grant replaced" do
-      user = create_user("user_94@example.com")
-      resource = create_resource()
-
-      grant_role(user, :editor, resource)
-      revoked = stored_grant(user.id)
-      revoke_role(user, :editor, resource)
-      grant_role(user, :owner, resource)
-      current = stored_grant(user.id)
-
-      effects = [grant_effect(:del_entity, revoked), grant_effect(:put_entity, current)]
-
-      assert [grant] = grants_before(user.id, effects)
-      assert grant.id == revoked.id
-      assert grant.role == :editor
-    end
-  end
-
   describe "grant_role/2" do
     test "mints the row's id from the grant" do
       user = create_user("user_117@example.com")
@@ -1750,6 +1668,17 @@ defmodule Hologram.AuthTest do
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(granter.id, fn -> grant_role(user, Role.Module1) end)
+      end
+    end
+
+    test "raises on a global grant issued under a user id no user entity can have" do
+      user = create_user("foreign_actor_1@example.com")
+
+      expected_msg =
+        "global roles are granted only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(7, fn -> grant_role(user, Role.Module1) end)
       end
     end
   end
@@ -1912,6 +1841,20 @@ defmodule Hologram.AuthTest do
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(granter.id, fn -> grant_role(user, :editor, resource) end)
       end
+    end
+
+    test "raises when the acting user id is one no user entity can have" do
+      user = create_user("foreign_actor_2@example.com")
+      resource = create_resource()
+
+      expected_msg =
+        "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)} that may grant :editor"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(7, fn -> grant_role(user, :editor, resource) end)
+      end
+
+      assert grant_rows(user.id) == []
     end
 
     test "raises when the role is above the acting user's own" do
@@ -2650,6 +2593,22 @@ defmodule Hologram.AuthTest do
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(other_user.id, fn -> revoke_role(member, :editor, resource) end)
       end
+    end
+
+    test "raises when the acting user id is one no user entity can have" do
+      member = create_user("foreign_actor_3@example.com")
+      resource = create_resource()
+
+      grant_role(member, :editor, resource)
+
+      expected_msg =
+        "the acting user holds no role on Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)} that may revoke :editor"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor("abc", fn -> revoke_role(member, :editor, resource) end)
+      end
+
+      assert [%{role: "editor"}] = grant_rows(member.id)
     end
 
     test "raises when the acting user's role may not revoke it" do

@@ -207,6 +207,7 @@ describe("Elixir_Hologram_DB", () => {
     Batches.reset();
     Clock.reset();
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
     LocalDatabase.reset();
     Model.reset();
   });
@@ -261,6 +262,7 @@ describe("Elixir_Hologram_DB", () => {
     // are one row. They ride the create's batch, so they land together with it or not at all.
     it("appends the grants a creator takes beside the create", () => {
       LocalDatabase.actorUserId = ACTOR;
+      LocalDatabase.actorEntityId = ACTOR;
 
       create(struct(NOTE, {title: "alpha"}));
 
@@ -298,8 +300,23 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
+    // The server takes a user id no user entity can have as no data-layer user, and grants it
+    // nothing - creator_grants/1's nil clause again.
+    it("appends no grant for a user id no user entity can have", () => {
+      LocalDatabase.actorUserId = 7;
+      LocalDatabase.actorEntityId = null;
+
+      create(struct(NOTE, {title: "alpha"}));
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => write.type),
+        [NOTE],
+      );
+    });
+
     it("appends no grant for a type whose creator takes none", () => {
       LocalDatabase.actorUserId = ACTOR;
+      LocalDatabase.actorEntityId = ACTOR;
 
       create(struct(TASK, {done: false, title: "alpha"}));
 
@@ -313,6 +330,7 @@ describe("Elixir_Hologram_DB", () => {
     // not written a second time.
     it("appends no grant the client already holds", () => {
       LocalDatabase.actorUserId = ACTOR;
+      LocalDatabase.actorEntityId = ACTOR;
 
       LocalDatabase.putRow(ROLE_GRANT, {
         id: deriveGrantId(ACTOR, NOTE, ID_1, "owner"),
@@ -594,6 +612,71 @@ describe("Elixir_Hologram_DB", () => {
         [
           ["add_relationship", "g1"],
           ["add_relationship", "g2"],
+        ],
+      );
+    });
+
+    it("marks every entry after the call's first as coming with it", () => {
+      const entity = addRelationship(
+        addRelationship(
+          putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
+          Type.atom("tags"),
+          Type.bitstring("g1"),
+        ),
+        Type.atom("tags"),
+        Type.bitstring("g2"),
+      );
+
+      update(entity);
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => [write.op, write.same_call]),
+        [
+          ["update", undefined],
+          ["add_relationship", true],
+          ["add_relationship", true],
+        ],
+      );
+    });
+
+    it("marks the edges after the first of a call that changes only edges", () => {
+      const entity = addRelationship(
+        addRelationship(held(), Type.atom("tags"), Type.bitstring("g1")),
+        Type.atom("tags"),
+        Type.bitstring("g2"),
+      );
+
+      update(entity);
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => write.same_call),
+        [undefined, true],
+      );
+    });
+
+    it("marks nothing on a call that writes one entry", () => {
+      update(addRelationship(held(), Type.atom("tags"), Type.bitstring("g1")));
+
+      assert.notProperty(Batches.current().writes[0], "same_call");
+    });
+
+    it("leaves the first entry of the next call in the batch unmarked", () => {
+      update(
+        addRelationship(
+          putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
+          Type.atom("tags"),
+          Type.bitstring("g1"),
+        ),
+      );
+
+      update(putAttribute(held(), pairs([["title", Type.bitstring("y")]])));
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => [write.op, write.same_call]),
+        [
+          ["update", undefined],
+          ["add_relationship", true],
+          ["update", undefined],
         ],
       );
     });

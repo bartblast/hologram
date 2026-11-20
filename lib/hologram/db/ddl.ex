@@ -340,24 +340,35 @@ defmodule Hologram.DB.DDL do
 
   @doc """
   Returns the statement listing the invalid indexes of the data schema - each one's name,
-  whether writes go through it, and whether it is live.
+  whether writes go through it, and whether it is live - all of them, or the unique ones or the
+  others as the given filter says.
 
   A concurrent build that failed partway leaves its index in the catalog flagged
   invalid: it holds the derived name and serves no query. Writes go through it when the
   build failed in its last phase, checking the rows - a unique one then refuses a write
   repeating its key - and not when it failed in its first, building the index. A concurrent
   drop that stopped partway can leave its index dead: writes skip it, and so does a table
-  rewrite, unless the rewrite changes the type of a column it covers.
+  rewrite, unless the rewrite changes the type of a column it covers. The migrator repairs the
+  unique ones, which the model derives, and `Hologram.DB.IndexBuilder` the others, which the index
+  plan derives - apart, since a build in flight reads as invalid too, and each builds its own under
+  the migration lock.
   """
-  @spec invalid_indexes_statement() :: String.t()
-  def invalid_indexes_statement do
+  @spec invalid_indexes_statement(:any | boolean) :: String.t()
+  def invalid_indexes_statement(unique \\ :any) do
+    unique_sql =
+      case unique do
+        :any -> ""
+        true -> " AND i.indisunique"
+        false -> " AND NOT i.indisunique"
+      end
+
     """
     SELECT ic.relname, i.indisready, i.indislive
     FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
     JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = '#{Mapper.data_schema()}' AND NOT i.indisvalid
+    WHERE n.nspname = '#{Mapper.data_schema()}' AND NOT i.indisvalid#{unique_sql}
     ORDER BY ic.relname\
     """
   end
@@ -385,7 +396,9 @@ defmodule Hologram.DB.DDL do
   column with the delete action - :drop_foreign_key and :rename_constraint render
   their ALTER TABLE forms. :create_index renders a named index over its columns -
   :drop_index renders the schema-qualified drop (indexes are schema-level objects). Both
-  render their CONCURRENTLY form for an op carrying `concurrently: true`.
+  render their CONCURRENTLY form for an op carrying `concurrently: true`. :drop_index and
+  :rename_index render their IF EXISTS form for an op carrying `if_exists: true`, which
+  skips an index that is not there instead of failing on it.
 
   The rename ops - :rename_table, :rename_column, :rename_index, :rename_enum_type -
   render their one-statement forms, and :widen_to_many moves the reference values of a
@@ -522,11 +535,12 @@ defmodule Hologram.DB.DDL do
   end
 
   # Concurrent only from the migrator's index repair and tail, outside any transaction - see
-  # the :create_index clause.
+  # the :create_index clause. IF EXISTS, here and on the rename, only for an op of a migration
+  # file: the boot may have dropped the index the op names before the op applies.
   def statements(%{op: :drop_index} = op) do
     concurrently_sql = if op[:concurrently], do: "CONCURRENTLY ", else: ""
 
-    ["DROP INDEX #{concurrently_sql}#{qualified(op.index)}"]
+    ["DROP INDEX #{concurrently_sql}#{if_exists_sql(op)}#{qualified(op.index)}"]
   end
 
   def statements(%{op: :drop_table} = op) do
@@ -587,7 +601,10 @@ defmodule Hologram.DB.DDL do
   end
 
   def statements(%{op: :rename_index} = op) do
-    ["ALTER INDEX #{qualified(op.from)} RENAME TO #{Mapper.quote_identifier(op.to)}"]
+    [
+      "ALTER INDEX #{if_exists_sql(op)}#{qualified(op.from)} " <>
+        "RENAME TO #{Mapper.quote_identifier(op.to)}"
+    ]
   end
 
   def statements(%{op: :rename_table} = op) do
@@ -639,6 +656,10 @@ defmodule Hologram.DB.DDL do
   defp delete_action(:no_action), do: "NO ACTION"
 
   defp delete_action(:restrict), do: "RESTRICT"
+
+  defp if_exists_sql(op) do
+    if op[:if_exists], do: "IF EXISTS ", else: ""
+  end
 
   defp literal(value) do
     "'#{String.replace(value, "'", "''")}'"

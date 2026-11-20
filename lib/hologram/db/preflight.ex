@@ -111,13 +111,20 @@ defmodule Hologram.DB.Preflight do
 
   @doc """
   Validates that no invalid unique index on the given table that the given change goes
-  through meets rows repeating its key.
+  through meets rows repeating its key, except the ones the given function lets go.
 
-  Returns :ok, or raises naming the table, the index's columns and how many keys repeat. The
-  boot leaves such an index when its build before the pending files fails on those rows,
-  which a running node can write while the index is missing, and so does a node writing
-  them while a file's index builds after its commit. A valid unique index holds no repeated
-  key, so only the invalid ones are counted, and the schema is read only when there are any.
+  Returns the names of the indexes it let go, for the caller to drop before the change, or
+  raises naming the table, the index's columns and how many keys repeat. The boot leaves
+  such an index when its build before the pending files fails on those rows, which a running
+  node can write while the index is missing, and so does a node writing them while a file's
+  index builds after its commit. A valid unique index holds no repeated key, so only the
+  invalid ones are counted, and the schema is read only when there are any.
+
+  The function is asked about each index whose key repeats, with its name and whether the
+  index covers a column the change converts or fills - a column whose values the change
+  itself could make repeat a key. The migrator lets go an index that a later pending op
+  removes, unless the pending files also give the table a unique index and change keys the
+  index would have been asked about.
 
   A `{:rewrite, columns}` - a type change of those columns - rebuilds every index on its
   table, invalid ones included, and rebuilding a unique one fails on rows that repeat its key.
@@ -136,16 +143,11 @@ defmodule Hologram.DB.Preflight do
   """
   @spec check_invalid_unique_indexes!(
           String.t(),
-          {:rewrite, [String.t()]} | :update | {:fill, String.t()}
-        ) :: :ok
-  def check_invalid_unique_indexes!(table, change) do
+          {:rewrite, [String.t()]} | :update | {:fill, String.t()},
+          (String.t(), boolean -> boolean)
+        ) :: [String.t()]
+  def check_invalid_unique_indexes!(table, change, removable?) do
     invalid = invalid_indexes()
-
-    written_column =
-      case change do
-        {:fill, column} -> column
-        _all_rows -> nil
-      end
 
     if map_size(invalid) > 0 do
       Introspection.schema().tables[table].indexes
@@ -154,20 +156,10 @@ defmodule Hologram.DB.Preflight do
         Map.has_key?(invalid, name) and index.unique and not Map.has_key?(index, :non_plain) and
           goes_through?(change, invalid[name], index.columns)
       end)
-      |> Enum.each(fn {_name, index} ->
-        statement =
-          DDL.duplicate_check_statement(
-            table,
-            index.columns,
-            index.nulls_distinct,
-            written_column
-          )
-
-        raise_invalid_duplicate_keys!(table, index.columns, change, count_result(statement))
-      end)
+      |> Enum.flat_map(&let_go_or_raise!(&1, table, change, removable?))
+    else
+      []
     end
-
-    :ok
   end
 
   @doc """
@@ -226,7 +218,7 @@ defmodule Hologram.DB.Preflight do
 
   A type change asks once more right before it applies, about the unique indexes standing
   over its column then (see check_cast!/1), and before that about the invalid unique indexes
-  on its table, which the change rebuilds (see check_invalid_unique_indexes!/2). A fill asks
+  on its table, which the change rebuilds (see check_invalid_unique_indexes!/3). A fill asks
   the same about the invalid unique indexes that still take writes.
 
   An enum rebuild's removed values exclude the ones an unscoped remap carries: those rows
@@ -433,6 +425,13 @@ defmodule Hologram.DB.Preflight do
     count
   end
 
+  # An add fills a column that arrives with it, which no index standing before it covers.
+  defp covers?({:rewrite, columns}, index_columns), do: Enum.any?(index_columns, &(&1 in columns))
+
+  defp covers?({:fill, column}, index_columns), do: column in index_columns
+
+  defp covers?(:update, _index_columns), do: false
+
   defp entity_mapping(mapping, table) do
     mapping
     |> Map.values()
@@ -451,6 +450,26 @@ defmodule Hologram.DB.Preflight do
     {:ok, %{rows: rows}} = Connection.query(DDL.invalid_indexes_statement())
 
     Map.new(rows, fn [index, ready?, live?] -> {index, %{ready?: ready?, live?: live?}} end)
+  end
+
+  # The index's name when its key repeats and the caller lets it go, nothing when no key
+  # repeats.
+  defp let_go_or_raise!({name, index}, table, change, removable?) do
+    statement =
+      DDL.duplicate_check_statement(
+        table,
+        index.columns,
+        index.nulls_distinct,
+        written_column(change)
+      )
+
+    count = count_result(statement)
+
+    cond do
+      count == 0 -> []
+      removable?.(name, covers?(change, index.columns)) -> [name]
+      true -> raise_invalid_duplicate_keys!(table, index.columns, change, count)
+    end
   end
 
   defp not_ready_invalid_indexes do
@@ -477,8 +496,6 @@ defmodule Hologram.DB.Preflight do
             "over (#{columns}) - a unique index cannot be built while rows repeat a " <>
             "key - update the rows or drop the unique declaration"
   end
-
-  defp raise_invalid_duplicate_keys!(_table, _columns, _change, 0), do: :ok
 
   defp raise_invalid_duplicate_keys!(table, columns, change, count) do
     key = Enum.map_join(columns, ", ", &~s("#{&1}"))
@@ -523,8 +540,8 @@ defmodule Hologram.DB.Preflight do
     |> Enum.filter(&(&1.unique and not Map.has_key?(&1, :non_plain) and column in &1.columns))
   end
 
-  # The column indexes a mapping derives are never unique, so the entity's own index entries
-  # hold every unique index of its table.
+  # The mapping derives unique indexes alone - the others are the index plan's - so the entity's
+  # own index entries hold every unique index of its table.
   defp unique_indexes(mapping, table) do
     indexes =
       case entity_mapping(mapping, table) do
@@ -537,4 +554,8 @@ defmodule Hologram.DB.Preflight do
     |> Enum.map(fn {_name, index} -> index end)
     |> Enum.filter(& &1.unique)
   end
+
+  defp written_column({:fill, column}), do: column
+
+  defp written_column(_all_rows), do: nil
 end

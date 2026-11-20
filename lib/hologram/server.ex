@@ -1,5 +1,6 @@
 defmodule Hologram.Server do
   alias Hologram.Component.Action
+  alias Hologram.MisuseError
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.PlugConnUtils
@@ -33,6 +34,8 @@ defmodule Hologram.Server do
             __meta__: %Metadata{}
 
   @type identity_id :: String.t() | integer | atom
+
+  @reserved_session_keys Session.reserved_keys()
 
   @type t :: %__MODULE__{
           broadcasts: [Broadcast.t()],
@@ -223,6 +226,10 @@ defmodule Hologram.Server do
 
   Atom keys are automatically converted to string.
 
+  Raises `Hologram.MisuseError` for a key Hologram keeps its own session state under -
+  `:hologram_csrf_token`, `:hologram_session_id` and `:hologram_user_id`. The user id is cleared
+  with `delete_user_id/1`.
+
   ## Parameters
 
     * `server` - The server struct
@@ -233,6 +240,10 @@ defmodule Hologram.Server do
 
   def delete_session(server, key) when is_atom(key) do
     delete_session(server, Atom.to_string(key))
+  end
+
+  def delete_session(_server, key) when key in @reserved_session_keys do
+    raise_reserved_session_key!(key)
   end
 
   def delete_session(server, key) when is_map_key(server.session, key) do
@@ -658,6 +669,10 @@ defmodule Hologram.Server do
   the session is backed by the Phoenix session store, which uses string keys, and recovering
   atom keys would require an unsafe string-to-atom conversion.
 
+  Raises `Hologram.MisuseError` for a key Hologram keeps its own session state under -
+  `:hologram_csrf_token`, `:hologram_session_id` and `:hologram_user_id`. The user id is set with
+  `put_user_id/2`.
+
   ## Parameters
 
     * `server` - The server struct
@@ -669,6 +684,10 @@ defmodule Hologram.Server do
 
   def put_session(server, key, value) when is_atom(key) do
     put_session(server, Atom.to_string(key), value)
+  end
+
+  def put_session(_server, key, _value) when key in @reserved_session_keys do
+    raise_reserved_session_key!(key)
   end
 
   def put_session(server, key, value) when is_binary(key) do
@@ -754,23 +773,33 @@ defmodule Hologram.Server do
   The change is persisted to the session when the server struct is applied. Use
   `delete_user_id/1` to clear the identity.
 
+  Raises `Hologram.MisuseError` for a user id that is not a string, an integer or an atom, and
+  for `true` and `false`, which no user is identified by.
+
   ## Parameters
 
     * `server` - The server struct
-    * `user_id` - The user identity (a string, integer, or atom)
+    * `user_id` - The user identity (a string, integer, or atom other than `true` and `false`)
   """
   @spec put_user_id(t(), identity_id()) :: t()
-  def put_user_id(server, user_id)
-
-  def put_user_id(server, user_id)
-      when is_binary(user_id) or is_integer(user_id) or is_atom(user_id) do
-    %{server | user_id: user_id}
+  def put_user_id(server, user_id) do
+    %{server | user_id: validate_user_id!(user_id)}
   end
 
-  # TODO: reconsider if this argument validation is needed once Elixir has static typing
-  def put_user_id(_server, user_id) do
-    raise ArgumentError,
-          "User ID must be a string, integer, or atom, but received #{inspect(user_id)}"
+  @doc false
+  # The one check of a user id, wherever one comes in: put_user_id/2, the session it is persisted
+  # to - which a user id set on the struct directly reaches too - and the actor the framework runs
+  # work as. nil is no user. A boolean is refused rather than read as one: false would read as
+  # nobody wherever a check tests for a user id, true as somebody nobody can be.
+  @spec validate_user_id!(any) :: identity_id | nil
+  def validate_user_id!(user_id)
+      when (is_binary(user_id) or is_integer(user_id) or is_atom(user_id)) and
+             not is_boolean(user_id),
+      do: user_id
+
+  def validate_user_id!(user_id) do
+    raise MisuseError,
+          "User ID must be a string, integer, or atom other than true and false, but received #{inspect(user_id)}"
   end
 
   @doc """
@@ -823,6 +852,15 @@ defmodule Hologram.Server do
   end
 
   defp ensure_not_cookie_header!(_name), do: :ok
+
+  defp raise_reserved_session_key!("hologram_user_id") do
+    raise MisuseError,
+          ~s(Session key "hologram_user_id" is reserved by Hologram - set the user id with put_user_id/2 and clear it with delete_user_id/1)
+  end
+
+  defp raise_reserved_session_key!(key) do
+    raise MisuseError, "Session key #{inspect(key)} is reserved by Hologram"
+  end
 
   # is_list/1 accepts invalid iolists like [999], so validate the contents (not just
   # the shape) here. iolist_size/1 raises on any non-iodata value (and is O(1) for a

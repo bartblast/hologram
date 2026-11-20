@@ -104,7 +104,9 @@ defmodule Hologram.DB.Schema do
   end
 
   @doc """
-  Returns the physical schema term derived from the given mapping.
+  Returns the physical schema term derived from the given mapping, holding the indexes of the
+  given index plan (see `Hologram.DB.IndexPlan.select/2`) beside the model's own - none by default,
+  which is what a migration renders and the drift check compares.
 
   The term is plain data keyed by physical names - the shape both sides of the
   reconciliation comparison share. :tables maps each table name (entity tables and
@@ -113,12 +115,12 @@ defmodule Hologram.DB.Schema do
   to %{references:, on_delete:, constraint:}), and :indexes (index name to %{columns:, nulls_distinct:, unique:}).
   :enum_types maps each derived enum type name to its values in declaration order.
   Join table columns are fixed: source_id/target_id uuid NOT NULL with a composite
-  primary key, both columns FK ON DELETE RESTRICT, and the reverse index over
-  (target_id, source_id). Entity table foreign keys are ON DELETE RESTRICT, except the
+  primary key, and both columns FK ON DELETE RESTRICT. Entity table foreign keys are ON DELETE RESTRICT, except the
   role grant store's user references, which are ON DELETE NO ACTION.
   """
-  @spec from_mapping(%{module => %{atom => any}}) :: %{atom => any}
-  def from_mapping(mapping) do
+  @spec from_mapping(%{module => %{atom => any}}, %{String.t() => %{String.t() => map}}) ::
+          %{atom => any}
+  def from_mapping(mapping, plan \\ %{}) do
     tables =
       mapping
       |> Enum.flat_map(fn {entity_type, entity_mapping} ->
@@ -127,7 +129,9 @@ defmodule Hologram.DB.Schema do
           | Enum.map(entity_mapping.join_tables, &join_table/1)
         ]
       end)
-      |> Map.new()
+      |> Map.new(fn {table, definition} ->
+        {table, Map.update!(definition, :indexes, &Map.merge(&1, Map.get(plan, table, %{})))}
+      end)
 
     enum_types =
       mapping
@@ -291,19 +295,12 @@ defmodule Hologram.DB.Schema do
          }}
       end)
 
-    column_indexes =
-      entity_mapping.columns
-      |> Enum.filter(& &1.index)
-      |> Map.new(&{&1.index, %{columns: [&1.name], nulls_distinct: true, unique: false}})
-
-    indexes = Map.merge(column_indexes, entity_mapping.indexes)
-
     {entity_mapping.table,
      %{
        columns: columns,
        primary_key: %{columns: ["id"], constraint: entity_mapping.pk_constraint},
        foreign_keys: foreign_keys,
-       indexes: indexes
+       indexes: entity_mapping.indexes
      }}
   end
 
@@ -473,13 +470,7 @@ defmodule Hologram.DB.Schema do
          constraint: join_table.pk_constraint
        },
        foreign_keys: foreign_keys,
-       indexes: %{
-         join_table.reverse_index => %{
-           columns: ["target_id", "source_id"],
-           nulls_distinct: true,
-           unique: false
-         }
-       }
+       indexes: %{}
      }}
   end
 

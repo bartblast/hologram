@@ -10,8 +10,8 @@ defmodule Hologram.Sync.Verdicts do
   # the row moving at all - a task deletable while its board has no cards stops being so the moment
   # a card is added - so the session keeps what it last told, and tells only what changed: of the
   # verdicts a batch's recheck read for the rows it may have moved them of (see
-  # `Hologram.Sync.Live.parts/5`), and of the ones worked out for a returning client's rows and for
-  # the rows it holds of a type read again whole.
+  # `Hologram.Sync.Live.parts/5`), and of the ones worked out for the rows it holds of a type read
+  # again whole.
   #
   # The bookkeeping is kept here, apart from the session that holds it, so what is told when can be
   # judged without a running session.
@@ -86,9 +86,8 @@ defmodule Hologram.Sync.Verdicts do
   `Hologram.Sync.Frame.row_verdicts/2`), and no rule reads any a client holds of it from an earlier
   build.
 
-  For the rows a returning client may hold verdicts of from before this session, and the rows a
-  client holds of a type read again whole - a batch's rows come with theirs worked out (see
-  `moved/2`).
+  For the rows a client holds of a type read again whole - a batch's rows come with theirs worked
+  out (see `moved/2`).
   """
   @spec stale(list(struct), %{String.t() => map}, String.t() | nil) :: list({struct, map})
   def stale(rows, told, actor_user_id) do

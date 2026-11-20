@@ -5,6 +5,7 @@ import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 import Batch from "../../assets/js/batch.mjs";
 import Clock from "../../assets/js/clock.mjs";
 import Deltas from "../../assets/js/deltas.mjs";
+import DropHash from "../../assets/js/drop_hash.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
@@ -50,6 +51,7 @@ describe("Deltas", () => {
     };
 
     Clock.reset();
+    Deltas.reset();
     LocalDatabase.reset();
     Model.reset();
     Overlay.reset();
@@ -566,6 +568,220 @@ describe("Deltas", () => {
         LocalDatabase.getTargetIds(PROJECT, "tasks", "p1"),
         new Set(),
       );
+    });
+  });
+
+  describe("apply() - unsync_hashed", () => {
+    const SALT = "q3Vx";
+
+    const hashedDrop = (type, ids, salt = SALT) => ({
+      unsync_hashed: {
+        [type]: [{hashes: ids.map((id) => DropHash.hash(salt, id)), salt}],
+      },
+    });
+
+    beforeEach(() => {
+      Deltas.apply({
+        put_entity: {
+          [PROJECT]: [{id: "p1", name: "Website", tasks: ["t1", "t2"]}],
+          [TASK]: [
+            {done: false, id: "t1", owners: ["p1"], title: "Draft copy"},
+            {done: false, id: "t2", owners: ["p1"], title: "Review copy"},
+          ],
+        },
+      });
+    });
+
+    it("drops a held row whose id hashes to one it was sent", () => {
+      Deltas.apply(hashedDrop(TASK, ["t1"]));
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+      assert.isNotNull(LocalDatabase.getRow(TASK, "t2"));
+    });
+
+    it("drops nothing for a hash no held row has", () => {
+      Deltas.apply(hashedDrop(TASK, ["t9"]));
+
+      assert.isNotNull(LocalDatabase.getRow(TASK, "t1"));
+      assert.isNotNull(LocalDatabase.getRow(TASK, "t2"));
+    });
+
+    it("drops nothing for a hash under another salt", () => {
+      const deltas = hashedDrop(TASK, ["t1"], "other");
+      deltas.unsync_hashed[TASK][0].salt = SALT;
+
+      Deltas.apply(deltas);
+
+      assert.isNotNull(LocalDatabase.getRow(TASK, "t1"));
+    });
+
+    it("drops nothing for a type it holds no row of", () => {
+      Deltas.apply(hashedDrop("MyApp.User", ["t1"]));
+
+      assert.isNotNull(LocalDatabase.getRow(TASK, "t1"));
+    });
+
+    it("takes the row out of the sets of the rows it still holds", () => {
+      Deltas.apply(hashedDrop(TASK, ["t1"]));
+
+      assert.deepEqual(
+        LocalDatabase.getTargetIds(PROJECT, "tasks", "p1"),
+        new Set(["t2"]),
+      );
+    });
+
+    it("takes the row out of the inverse sets of the rows it still holds", () => {
+      Deltas.apply(hashedDrop(PROJECT, ["p1"]));
+
+      assert.deepEqual(
+        LocalDatabase.getTargetIds(TASK, "owners", "t1"),
+        new Set(),
+      );
+    });
+
+    it("answers the rows it dropped and the rows whose sets it changed as written", () => {
+      const written = Deltas.apply(hashedDrop(TASK, ["t1"]));
+
+      assert.deepEqual(written, new Set([`${TASK} t1`, `${PROJECT} p1`]));
+    });
+
+    it("answers the row whose inverse set it changed as written", () => {
+      const written = Deltas.apply(hashedDrop(PROJECT, ["p1"]));
+
+      assert.deepEqual(
+        written,
+        new Set([`${PROJECT} p1`, `${TASK} t1`, `${TASK} t2`]),
+      );
+    });
+
+    // A page's rows are never stored, so the change to one's set isn't written.
+    it("answers no row a page carried whose set it changed as written", () => {
+      LocalDatabase.markCarried(PROJECT, "p1");
+
+      const written = Deltas.apply(hashedDrop(TASK, ["t1"]));
+
+      assert.deepEqual(written, new Set([`${TASK} t1`]));
+      assert.deepEqual(
+        LocalDatabase.getTargetIds(PROJECT, "tasks", "p1"),
+        new Set(["t2"]),
+      );
+    });
+
+    // Every frame of one catch-up hashes under its salt, so the hashes are worked out once.
+    it("drops a row a later frame of the same catch-up names", () => {
+      Deltas.apply(hashedDrop(TASK, ["t9"]));
+      Deltas.apply(hashedDrop(TASK, ["t2"]));
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t2"));
+    });
+
+    // A row the client's own write filed when its answer came, which nothing the stream sent
+    // filed.
+    it("drops a row filed after the catch-up's hashes of its type were worked out", () => {
+      Deltas.apply(hashedDrop(TASK, ["t9"]));
+
+      LocalDatabase.putRow(TASK, {done: false, id: "t3", title: "Ship copy"});
+
+      Deltas.apply(hashedDrop(TASK, ["t3"]));
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t3"));
+    });
+
+    it("drops a row a page carried after the catch-up's hashes of its type were worked out", () => {
+      Deltas.apply(hashedDrop(TASK, ["t9"]));
+
+      Deltas.apply(
+        {put_entity: {[TASK]: [{done: false, id: "t3", title: "Ship copy"}]}},
+        {insertOnly: true},
+      );
+
+      Deltas.apply(hashedDrop(TASK, ["t3"]));
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t3"));
+    });
+
+    it("drops nothing for a row a frame of the same catch-up already dropped", () => {
+      Deltas.apply(hashedDrop(TASK, ["t9"]));
+      Deltas.apply({unsync_entity: {[TASK]: ["t1"]}});
+
+      const written = Deltas.apply(hashedDrop(TASK, ["t1"]));
+
+      assert.deepEqual(written, new Set());
+    });
+
+    it("answers nothing written when it drops nothing", () => {
+      const written = Deltas.apply(hashedDrop(TASK, ["t9"]));
+
+      assert.deepEqual(written, new Set());
+    });
+  });
+
+  describe("apply() - keep_hashed", () => {
+    const SALT = "q3Vx";
+
+    const keepList = (type, ids) => ({
+      keep_hashed: {
+        [type]: [
+          {hashes: ids.map((id) => DropHash.hash(SALT, id)), salt: SALT},
+        ],
+      },
+    });
+
+    beforeEach(() => {
+      Deltas.apply({
+        put_entity: {
+          [PROJECT]: [{id: "p1", name: "Website", tasks: ["t1", "t2"]}],
+          [TASK]: [
+            {done: false, id: "t1", owners: ["p1"], title: "Draft copy"},
+            {done: false, id: "t2", owners: ["p1"], title: "Review copy"},
+          ],
+        },
+      });
+    });
+
+    it("keeps the held rows of the type it lists and drops the rest", () => {
+      Deltas.apply(keepList(TASK, ["t2", "t9"]));
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+      assert.isNotNull(LocalDatabase.getRow(TASK, "t2"));
+    });
+
+    it("leaves the rows of other types alone", () => {
+      Deltas.apply(keepList(TASK, []));
+
+      assert.isNotNull(LocalDatabase.getRow(PROJECT, "p1"));
+    });
+
+    it("takes a row it drops out of the sets of the rows it still holds", () => {
+      Deltas.apply(keepList(TASK, ["t2"]));
+
+      assert.deepEqual(
+        LocalDatabase.getTargetIds(PROJECT, "tasks", "p1"),
+        new Set(["t2"]),
+      );
+    });
+
+    // The catch-up's hashes of the type were worked out before the row was filed.
+    it("judges a row filed after the catch-up's hashes of its type were worked out", () => {
+      Deltas.apply({
+        unsync_hashed: {
+          [TASK]: [{hashes: [DropHash.hash(SALT, "t9")], salt: SALT}],
+        },
+      });
+
+      Deltas.apply({
+        put_entity: {[TASK]: [{done: false, id: "t3", title: "Ship copy"}]},
+      });
+
+      Deltas.apply(keepList(TASK, ["t1", "t2"]));
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t3"));
+    });
+
+    it("answers the rows it dropped and the rows whose sets it changed as written", () => {
+      const written = Deltas.apply(keepList(TASK, ["t2"]));
+
+      assert.deepEqual(written, new Set([`${TASK} t1`, `${PROJECT} p1`]));
     });
   });
 

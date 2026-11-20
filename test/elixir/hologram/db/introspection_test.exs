@@ -77,6 +77,9 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_entity_module52",
                "test_fixtures_entity_module53",
                "test_fixtures_entity_module54",
+               "test_fixtures_entity_module55",
+               "test_fixtures_entity_module56",
+               "test_fixtures_entity_module57",
                "test_fixtures_entity_module6",
                "test_fixtures_entity_module6_a_$join",
                "test_fixtures_entity_module7",
@@ -91,6 +94,9 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_mutation_module3",
                "test_fixtures_mutation_module4",
                "test_fixtures_mutation_module4_secrets_$join",
+               "test_fixtures_mutation_module5",
+               "test_fixtures_mutation_module6",
+               "test_fixtures_mutation_module6_tags_$join",
                "test_fixtures_policy_module1",
                "test_fixtures_policy_module10",
                "test_fixtures_policy_module11",
@@ -483,8 +489,13 @@ defmodule Hologram.DB.IntrospectionTest do
              }
     end
 
+    # The unique ones alone: the test bootstrap reconciles the index plan too, whose indexes on the
+    # table depend on what the build's queries read.
     test "introspects a unique attribute's index as unique" do
-      indexes = schema().tables["test_fixtures_entity_module19"].indexes
+      indexes =
+        schema().tables["test_fixtures_entity_module19"].indexes
+        |> Enum.filter(fn {_name, index} -> index.unique end)
+        |> Map.new()
 
       assert indexes == %{
                "test_fixtures_entity_module19_code_$uidx" => %{
@@ -496,16 +507,6 @@ defmodule Hologram.DB.IntrospectionTest do
                  columns: ["slug"],
                  nulls_distinct: true,
                  unique: true
-               },
-               "test_fixtures_entity_module19_code_$sort_$idx" => %{
-                 columns: ["code_$sort"],
-                 nulls_distinct: true,
-                 unique: false
-               },
-               "test_fixtures_entity_module19_slug_$sort_$idx" => %{
-                 columns: ["slug_$sort"],
-                 nulls_distinct: true,
-                 unique: false
                }
              }
     end
@@ -563,6 +564,9 @@ defmodule Hologram.DB.IntrospectionTest do
                  "Hologram.Test.Fixtures.Entity.Module52",
                  "Hologram.Test.Fixtures.Entity.Module53",
                  "Hologram.Test.Fixtures.Entity.Module54",
+                 "Hologram.Test.Fixtures.Entity.Module55",
+                 "Hologram.Test.Fixtures.Entity.Module56",
+                 "Hologram.Test.Fixtures.Entity.Module57",
                  "Hologram.Test.Fixtures.Entity.Module6",
                  "Hologram.Test.Fixtures.Entity.Module7",
                  "Hologram.Test.Fixtures.Entity.Module8",
@@ -574,6 +578,8 @@ defmodule Hologram.DB.IntrospectionTest do
                  "Hologram.Test.Fixtures.Mutation.Module2",
                  "Hologram.Test.Fixtures.Mutation.Module3",
                  "Hologram.Test.Fixtures.Mutation.Module4",
+                 "Hologram.Test.Fixtures.Mutation.Module5",
+                 "Hologram.Test.Fixtures.Mutation.Module6",
                  "Hologram.Test.Fixtures.Policy.Module1",
                  "Hologram.Test.Fixtures.Policy.Module10",
                  "Hologram.Test.Fixtures.Policy.Module11",

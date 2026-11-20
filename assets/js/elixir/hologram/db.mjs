@@ -129,10 +129,6 @@ function placeholderNames(term) {
   return [...fromFilter, ...fromBounds, ...fromOrder, ...fromIncludes];
 }
 
-// A server-only attribute is refused by the WRITE rather than by validation: the value is
-// perfectly valid and server code may set it, so what makes it wrong is only that a browser is
-// the one asking. The wire drops the name, so sending it would be malformed rather than rejected -
-// which is why this is caught here, by name, before anything is built.
 // The edges an update records, each its own entry, in one order however the stages were called -
 // two clients making the same two edges send the same two writes.
 function edgeEntries(entity, entityType, relationshipOps) {
@@ -156,6 +152,10 @@ function structField(struct, name) {
   return struct.data[Type.encodeMapKey(Type.atom(name))][1];
 }
 
+// A server-only attribute is refused by the WRITE rather than by validation: the value is
+// perfectly valid and server code may set it, so what makes it wrong is only that a browser is
+// the one asking. The wire drops the name, so sending it would be malformed rather than rejected -
+// which is why this is caught here, by name, before anything is built.
 function refuseServerOnlyValues(entity, entityType) {
   for (const name of Model.entry(entityType).serverOnly) {
     const value = entity.data[Type.encodeMapKey(Type.atom(name))]?.[1];
@@ -382,11 +382,12 @@ export function createEntity(entity, entityType) {
 // Nothing is asked of the rules: granted_to: :creator is a declaration being copied, not a
 // permission being judged, and the applier admits such a grant without a gate for the same reason.
 //
-// The two answers that write nothing mirror the server's own. Nobody signed in takes no roles,
-// which is creator_grants/1's nil clause, and a grant the client already holds is not written
-// twice, which is grant_role/3's idempotency read off the same derived id.
+// The two answers that write nothing mirror the server's own. Nobody signed in takes no roles, and
+// neither does a user id no user entity can have: creator_grants/1's nil clause. A grant the client
+// already holds is not written twice, which is grant_role/3's idempotency read off the same derived
+// id.
 function appendCreatorGrants(batch, entityType, entityId) {
-  const actorUserId = LocalDatabase.actorUserId;
+  const actorUserId = LocalDatabase.actorEntityId;
 
   if (actorUserId === null) {
     return;
@@ -844,14 +845,17 @@ const Elixir_Hologram_DB = {
     }
 
     const data = Model.unboxChanges(entityType, changes);
+    const entries = edgeEntries(entity, entityType, relationshipOps);
 
     if (Object.keys(changes).length > 0 || Object.keys(deltas).length > 0) {
-      batch.append(updateEntry(entity, entityType, id, held, data, deltas));
+      entries.unshift(updateEntry(entity, entityType, id, held, data, deltas));
     }
 
-    for (const edge of edgeEntries(entity, entityType, relationshipOps)) {
-      batch.append(edge);
-    }
+    // One call, several entries: the ones after the first say they came with it, so the server
+    // judges them all against the row the call started from, as its own update/1 does.
+    entries.forEach((entry, index) =>
+      batch.append(index === 0 ? entry : {...entry, same_call: true}),
+    );
 
     return Type.atom("ok");
   },

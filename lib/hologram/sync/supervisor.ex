@@ -25,7 +25,9 @@ defmodule Hologram.Sync.Supervisor do
   alias Hologram.Sync.Dispatcher
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
+  alias Hologram.Sync.Gate
   alias Hologram.Sync.Live
+  alias Hologram.Sync.Pool
   alias Hologram.Sync.ReadEdge
   alias Hologram.Sync.ResultStore
   alias Hologram.Sync.Sessions
@@ -48,15 +50,22 @@ defmodule Hologram.Sync.Supervisor do
 
   @impl Supervisor
   def init(_opts) do
-    children = [
-      {Registry, keys: :unique, name: Evaluator.registry()},
-      ResultStore,
-      Evaluators,
-      ReadEdge,
-      Sessions,
-      {Listener, name: @notifications},
-      dispatcher_child()
-    ]
+    # Sync's own pool only when it opens any connection (see `Hologram.Sync.Pool`).
+    children =
+      Enum.reject(
+        [
+          {Registry, keys: :unique, name: Evaluator.registry()},
+          ResultStore,
+          Evaluators,
+          ReadEdge,
+          Pool.child_spec(),
+          Gate,
+          Sessions,
+          {Listener, name: @notifications},
+          dispatcher_child()
+        ],
+        &is_nil/1
+      )
 
     # The order above is a dependency order, and rest_for_one is what makes it one: each child is
     # restarted with everything after it, so nothing goes on running against something that has
@@ -74,6 +83,12 @@ defmodule Hologram.Sync.Supervisor do
     # not read yet, and a session left running would claim a place past them. Replacing the list
     # stops every session that registered in it (see `Hologram.Sync.Sessions`), so its client comes
     # back through the doors and is caught up.
+    #
+    # The pool comes before the sessions reading through it, which go with it when it is replaced.
+    #
+    # The gate comes before the session list: a gate replaced forgets whose turn it was, and the
+    # sessions waiting at it stop when it goes (see `Hologram.Sync.Gate`), while the ones caught up
+    # are replaced with the list after it.
     Supervisor.init(children, strategy: :rest_for_one)
   end
 

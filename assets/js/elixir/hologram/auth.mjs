@@ -841,7 +841,7 @@ function canonicalId(value) {
 function verdictHolds(entityType, entity, entry, actorUserId) {
   // The server works a session's verdicts out for its user as rules read it, a visitor for an id
   // naming no user entity.
-  if (actorUserId !== canonicalId(LocalDatabase.actorUserId)) {
+  if (actorUserId !== LocalDatabase.actorEntityId) {
     return UNKNOWN;
   }
 
@@ -1056,7 +1056,7 @@ const Elixir_Hologram_Auth = {
     const userId = validateUserId(userOrId);
     const {entityType, entityId} = entityReference(entity, "granted");
     const roleName = validateDeclaredRole(entityType, role);
-    const actorUserId = LocalDatabase.actorUserId;
+    const actorUserId = LocalDatabase.actorEntityId;
 
     if (actorUserId === null) {
       raiseAccessDenied(signedInWriteMessage("granted"));
@@ -1150,7 +1150,7 @@ const Elixir_Hologram_Auth = {
     const userId = validateUserId(userOrId);
     const {entityType, entityId} = entityReference(entity, "revoked");
     const roleName = validateDeclaredRole(entityType, role);
-    const actorUserId = LocalDatabase.actorUserId;
+    const actorUserId = LocalDatabase.actorEntityId;
 
     if (actorUserId === null) {
       raiseAccessDenied(signedInWriteMessage("revoked"));

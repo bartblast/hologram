@@ -128,7 +128,13 @@ defmodule Hologram.DB.SortKey do
   # TODO: reconciliation bookkeeps this version in hologram_system and
   # regenerates stale companions on a mismatch (clients regenerate their stored
   # keys the same way) - the version must not bump before that wiring exists,
-  # or existing rows would keep keys computed under the old rules.
+  # or existing rows would keep keys computed under the old rules. A stale key is
+  # worse than a misplaced row: the server's string equality compares the key
+  # beside the value, so a row whose key is stale stops matching `==` until it is
+  # regenerated. The rules aren't the only input: downcasing and NFD read the
+  # runtime's Unicode tables, so an Elixir or OTP upgrade that moves to a newer
+  # Unicode version can change the key of a value holding a codepoint it newly
+  # cases or decomposes, with no version bump here.
   @spec version() :: pos_integer
   def version, do: 1
 

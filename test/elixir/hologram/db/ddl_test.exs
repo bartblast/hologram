@@ -287,13 +287,29 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
-  describe "invalid_indexes_statement/0" do
+  describe "invalid_indexes_statement/1" do
     test "lists the invalid indexes of the data schema, by name, with whether they take writes and are live" do
       statement = normalize_newlines(invalid_indexes_statement())
 
       assert statement =~ "SELECT ic.relname, i.indisready, i.indislive"
-      assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid"
+      assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid\n"
       assert statement =~ "ORDER BY ic.relname"
+    end
+
+    test "lists the invalid unique indexes of the data schema" do
+      statement = normalize_newlines(invalid_indexes_statement(true))
+
+      assert statement =~ "SELECT ic.relname, i.indisready, i.indislive"
+
+      assert statement =~
+               "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid AND i.indisunique"
+    end
+
+    test "lists the other invalid indexes of the data schema" do
+      statement = normalize_newlines(invalid_indexes_statement(false))
+
+      assert statement =~
+               "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid AND NOT i.indisunique"
     end
   end
 
@@ -707,6 +723,27 @@ defmodule Hologram.DB.DDLTest do
                ~s(DROP INDEX CONCURRENTLY "hologram_data"."task_project_id_$idx")
              ]
     end
+
+    test "renders a drop that skips a missing index" do
+      op = %{op: :drop_index, index: "task_project_id_$idx", if_exists: true}
+
+      assert statements(op) == [
+               ~s(DROP INDEX IF EXISTS "hologram_data"."task_project_id_$idx")
+             ]
+    end
+
+    test "renders a concurrent drop that skips a missing index" do
+      op = %{
+        op: :drop_index,
+        index: "task_project_id_$idx",
+        concurrently: true,
+        if_exists: true
+      }
+
+      assert statements(op) == [
+               ~s(DROP INDEX CONCURRENTLY IF EXISTS "hologram_data"."task_project_id_$idx")
+             ]
+    end
   end
 
   describe "statements/1 for drop_table" do
@@ -908,6 +945,20 @@ defmodule Hologram.DB.DDLTest do
 
       assert statements(op) == [
                ~s(ALTER INDEX "hologram_data"."draft_author_id_$idx" ) <>
+                 ~s(RENAME TO "sketch_author_id_$idx")
+             ]
+    end
+
+    test "renders a rename that skips a missing index" do
+      op = %{
+        op: :rename_index,
+        from: "draft_author_id_$idx",
+        to: "sketch_author_id_$idx",
+        if_exists: true
+      }
+
+      assert statements(op) == [
+               ~s(ALTER INDEX IF EXISTS "hologram_data"."draft_author_id_$idx" ) <>
                  ~s(RENAME TO "sketch_author_id_$idx")
              ]
     end

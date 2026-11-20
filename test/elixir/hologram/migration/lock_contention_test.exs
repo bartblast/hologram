@@ -41,15 +41,16 @@ defmodule Hologram.Migration.LockContentionTest do
     timestamp: ~U[2026-08-13 09:15:22.000000Z]
   }
 
-  @index "my_app_task_title_$sort_$idx"
+  # A unique index, which migrations build: the plain ones are the index plan's.
+  @index "my_app_task_title_$uidx"
 
   @index_op %{
     op: :create_index,
     table: "my_app_task",
     index: @index,
-    columns: ["title_$sort"],
+    columns: ["title"],
     nulls_distinct: true,
-    unique: false
+    unique: true
   }
 
   # The value of Hologram.Migrator's @advisory_lock_key - the one key the whole procedure
@@ -57,6 +58,9 @@ defmodule Hologram.Migration.LockContentionTest do
   # breaks mutual exclusion across Hologram versions - so a test that followed a change to it
   # would hide exactly what it must catch.
   @migration_lock_key -335_777_576_117_788_795
+
+  # The value of Hologram.Migrator's @boot_lock_key, hardcoded for the same reason.
+  @boot_lock_key -8_943_570_201_190_700_407
 
   # Hologram.Migrator's @migration_lock_poll_interval_ms. Mirrored for the same reason, and
   # used only to size waits in terms of the loop's own cadence.
@@ -157,6 +161,25 @@ defmodule Hologram.Migration.LockContentionTest do
     not_null?
   end
 
+  # Whether a session on this database holds the boot key, the way Hologram.Migrator.boot_key_held?/0
+  # reads it.
+  defp boot_key_held?(session) do
+    statement = """
+    SELECT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_locks
+      WHERE "locktype" = 'advisory' AND "objsubid" = 1
+        AND "database" = (
+          SELECT "oid" FROM pg_catalog.pg_database WHERE "datname" = current_database()
+        )
+        AND (("classid"::bigint << 32) | "objid"::bigint) = $1
+    )
+    """
+
+    %{rows: [[held?]]} = Postgrex.query!(session, statement, [@boot_lock_key])
+
+    held?
+  end
+
   # A session waiting for an advisory lock, which is the shape the deadlock is made of.
   #
   # Scoped to this database the way build_states/1 above is: pg_locks is CLUSTER-wide, and an
@@ -195,7 +218,7 @@ defmodule Hologram.Migration.LockContentionTest do
           entity: MyApp.Task,
           name: :title,
           type: :string,
-          opts: [optional: true],
+          opts: [optional: true, unique: true],
           line: 4
         }
       ])
@@ -280,9 +303,11 @@ defmodule Hologram.Migration.LockContentionTest do
       # The claim, observed directly rather than inferred from the outcome: no session is
       # QUEUED on an advisory lock. A node that waited on the lock would sit here holding a
       # snapshot and a virtual transaction, and the build - which waits for exactly those -
-      # would never finish. It polls instead, so it is between statements, holding nothing.
+      # would never finish. It polls instead, so it is between statements, holding nothing but the
+      # boot key, and a session holding only that has no snapshot either.
       assert queued_advisory_lock_count(observer) == 0
       assert blocked_on_relation_count(observer) == 0
+      assert boot_key_held?(observer)
       assert Task.yield(deploy, 0) == nil
 
       Postgrex.query!(blocker, "COMMIT", [])

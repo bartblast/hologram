@@ -6,6 +6,7 @@ defmodule Hologram.Controller do
   alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
+  alias Hologram.Auth
   alias Hologram.Auth.Context
   alias Hologram.Component.Action
   alias Hologram.LiveReload
@@ -392,6 +393,7 @@ defmodule Hologram.Controller do
     if middleware_server_struct.status do
       # Middleware produced a terminal response - skip the command and send it,
       # still applying the decorations accumulated by the steps that ran.
+      ensure_valid_user_id!(middleware_server_struct)
       Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
 
       conn
@@ -412,6 +414,7 @@ defmodule Hologram.Controller do
 
       ensure_no_content_security_policy!(processed_server_struct)
       ensure_no_content_type!(processed_server_struct)
+      ensure_valid_user_id!(processed_server_struct)
 
       # Apply subscription deltas before flushing broadcasts so a registry
       # failure (GenServer.call timeout) leaves no half-done state.
@@ -868,6 +871,15 @@ defmodule Hologram.Controller do
 
   defp ensure_no_content_type!(_server), do: :ok
 
+  # A user id set on the struct directly skips put_user_id/2's check, so it is checked here, before
+  # anything acts on it: the subscriptions it authorizes, the identity announced to the session's
+  # other tabs and the session it is persisted to.
+  defp ensure_valid_user_id!(server) do
+    Server.validate_user_id!(server.user_id)
+
+    :ok
+  end
+
   # Reads the Hologram-serialized JSON body produced by `Client.fetchPage` and
   # pulls out the two fields the page-render path needs from the client:
   # the stable JS-context `instance_id` and the subscription keys the client claims to
@@ -1008,6 +1020,13 @@ defmodule Hologram.Controller do
   # The fields describing a page that the first page's boot data and a navigation's payload share.
   # The acting user and the rows the render read are plain JSON, which the data layer reads as it
   # is, so they are nested as they are rather than serialized as terms.
+  #
+  # The acting user goes twice. As it is, it names whose rows and queued writes the browser holds,
+  # and two users of the same browser must stay apart there whatever their ids. As the data layer
+  # reads it - a user entity's id, or nil for a user id no user entity can have, like an app's own
+  # serial id - it is what the browser's rules and grants ask about, so they answer such a session
+  # as the server does, a visitor. Worked out here rather than in the browser, which can't tell an
+  # atom spelled as a uuid, which JSON turns into a string, from the id itself.
   defp page_fields(%{
          chunk_digests: chunk_digests,
          mount_data: mount_data,
@@ -1017,6 +1036,7 @@ defmodule Hologram.Controller do
          sub_receipt_drops: sub_receipt_drops
        }) do
     %{
+      actorEntityId: Auth.canonical_id(mount_data.actor_user_id),
       actorUserId: mount_data.actor_user_id,
       chunks: chunk_digests,
       componentRegistry: serialize_to_fragment(mount_data.component_registry),
@@ -1084,6 +1104,7 @@ defmodule Hologram.Controller do
     if middleware_server_struct.status do
       # Middleware answered before anything was rendered - skip the render, still applying the
       # decorations accumulated by the steps that ran.
+      ensure_valid_user_id!(middleware_server_struct)
       Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
 
       {:terminal, decorate_conn(conn, server_struct, middleware_server_struct),
@@ -1099,6 +1120,7 @@ defmodule Hologram.Controller do
 
       ensure_no_content_security_policy!(rendered_server_struct)
       ensure_no_content_type!(rendered_server_struct)
+      ensure_valid_user_id!(rendered_server_struct)
 
       maybe_note_page_rendered(
         renderer_opts[:instance_id],

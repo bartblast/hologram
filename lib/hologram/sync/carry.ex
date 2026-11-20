@@ -127,7 +127,9 @@ defmodule Hologram.Sync.Carry do
   verdicts for the given user, the render's, as a frame's put does (see
   `Hologram.Sync.Frame.row_verdicts/2`).
   """
-  @spec take(String.t() | nil) :: %{optional(:put_entity) => %{String.t() => list(map)}}
+  @spec take(Hologram.Server.identity_id() | nil) :: %{
+          optional(:put_entity) => %{String.t() => list(map)}
+        }
   def take(actor_user_id) do
     entities = Map.values(gathered())
 
