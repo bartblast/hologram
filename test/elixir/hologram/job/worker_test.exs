@@ -627,15 +627,21 @@ defmodule Hologram.Job.WorkerTest do
       assert_receive {:running, Module1, "a", run}, @timeout_ms
 
       run_ref = Process.monitor(run)
+
+      # The first wake's look done before the pool starts refusing, so only the second one's logs.
+      :sys.get_state(worker)
       Agent.update(refusing, fn _refusing -> true end)
 
       log =
         capture_log(fn ->
           wake(worker)
-          refute_receive {:DOWN, ^run_ref, :process, ^run, _reason}, 100
+
+          # The wake's look, which logs the refusal, done before the capture ends.
+          :sys.get_state(worker)
         end)
 
       assert log =~ "the job worker couldn't get a database connection"
+      refute_received {:DOWN, ^run_ref, :process, ^run, _reason}
       assert Process.alive?(worker)
 
       Agent.update(refusing, fn _refusing -> false end)
