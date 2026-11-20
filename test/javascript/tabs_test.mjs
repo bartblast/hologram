@@ -2987,6 +2987,12 @@ describe("Tabs", () => {
 
       Model.reset();
 
+      // Nobody is signed in, as the batch says: a page takes up only its own user's batches, and
+      // the user is not reset between files.
+      const actor = LocalDatabase.actorUserId;
+
+      LocalDatabase.actorUserId = null;
+
       sinon.stub(Batches, "flush");
       sinon.stub(SyncStream, "scheduleRender");
 
@@ -3063,6 +3069,7 @@ describe("Tabs", () => {
         Batches.reset();
         Clock.reset();
         LocalDatabase.reset();
+        LocalDatabase.actorUserId = actor;
         Model.reset();
         SyncStream.syncCursor = null;
       }
