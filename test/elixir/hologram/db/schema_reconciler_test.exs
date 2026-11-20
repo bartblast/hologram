@@ -248,16 +248,12 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     Enum.map(rows, fn [name] -> name end)
   end
 
-  # The test config logs warnings and up - the upgrade lines are info.
-  defp capture_info_log(fun) do
-    level = Logger.level()
-    Logger.configure(level: :info)
-
-    try do
-      ExUnit.CaptureLog.capture_log([level: :info], fun)
-    after
-      Logger.configure(level: level)
-    end
+  # A claim at layout 1, whatever steps the running Hologram has - the upgrade tests start there.
+  defp reconcile_at_layout_1(entity_types) do
+    entity_types
+    |> reconcile_context()
+    |> Map.put(:system_upgrades, [])
+    |> reconcile()
   end
 
   defp set_system_schema_version(version) do
@@ -457,6 +453,26 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     end
   end
 
+  describe "check_system_schema_version!/2" do
+    test "returns :ok for a layout at or below the running one" do
+      context = %{system_upgrades: [{2, []}]}
+
+      assert check_system_schema_version!(%{system_schema_version: 1}, context) == :ok
+      assert check_system_schema_version!(%{system_schema_version: 2}, context) == :ok
+    end
+
+    test "raises for a layout above the running one" do
+      expected_msg =
+        "the configured database's system tables are at layout version 3, from a newer " <>
+          "Hologram - this Hologram knows layout versions up to 2 - upgrade Hologram or " <>
+          "point the config at another database"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        check_system_schema_version!(%{system_schema_version: 3}, %{system_upgrades: [{2, []}]})
+      end
+    end
+  end
+
   describe "create_system_tables/0" do
     test "creates the marker, registry, migration, and oplog tables" do
       drop_hologram_schemas()
@@ -637,7 +653,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     test "claims a virgin database" do
       drop_hologram_schemas()
 
-      assert ensure_managed!(@context) == :claimed
+      assert ensure_managed!(Map.put(@context, :system_upgrades, [])) == :claimed
 
       assert read_marker() == %{
                otp_app: "hologram",
@@ -767,6 +783,43 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     end
   end
 
+  describe "log_system_upgrades/1" do
+    test "logs one info line per version, in order" do
+      log = capture_info_log(fn -> assert log_system_upgrades([2, 3]) == :ok end)
+
+      assert Regex.scan(
+               ~r/\[info\] Hologram: upgraded the system tables to layout version (\d+)/,
+               log,
+               capture: :all_but_first
+             ) == [["2"], ["3"]]
+    end
+  end
+
+  describe "pending_system_upgrades/1" do
+    setup do
+      drop_hologram_schemas()
+      ensure_managed!(Map.put(@context, :system_upgrades, []))
+      :ok
+    end
+
+    test "returns every step above the database's layout, in order" do
+      context = %{system_upgrades: [@create_probe_step, @alter_probe_step]}
+
+      assert pending_system_upgrades(context) == [@create_probe_step, @alter_probe_step]
+
+      set_system_schema_version(2)
+
+      assert pending_system_upgrades(context) == [@alter_probe_step]
+    end
+
+    test "returns none for a database at the running layout" do
+      set_system_schema_version(3)
+
+      assert pending_system_upgrades(%{system_upgrades: [@create_probe_step, @alter_probe_step]}) ==
+               []
+    end
+  end
+
   describe "read_marker/0" do
     test "returns nil when no marker has been written" do
       {:ok, _result} = Connection.query(~s(DELETE FROM "hologram_system"."database"))
@@ -822,7 +875,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     end
 
     test "upgrades the system tables of a database at an older layout, step by step" do
-      reconcile(reconcile_context([Module1]))
+      reconcile_at_layout_1([Module1])
 
       context =
         [Module1]
@@ -840,7 +893,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     end
 
     test "runs only the upgrade steps above the database's layout" do
-      reconcile(reconcile_context([Module1]))
+      reconcile_at_layout_1([Module1])
 
       [Module1]
       |> reconcile_context()
@@ -872,7 +925,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     end
 
     test "rolls the upgrade back with a refused reconciliation, and logs none" do
-      reconcile(reconcile_context([Module1]))
+      reconcile_at_layout_1([Module1])
 
       {:ok, _result} = Connection.query(~s{CREATE TABLE "hologram_data"."alien" ("x" int8)})
 
@@ -2339,6 +2392,32 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       update_registry(ops)
 
       assert registry() == MapSet.new()
+    end
+  end
+
+  describe "upgrade_system_tables!/1" do
+    setup do
+      drop_hologram_schemas()
+      ensure_managed!(Map.put(@context, :system_upgrades, []))
+      :ok
+    end
+
+    test "runs the pending steps in order and returns their versions" do
+      context = %{system_upgrades: [@create_probe_step, @alter_probe_step]}
+
+      assert upgrade_system_tables!(context) == [2, 3]
+      assert probe_columns() == ["id", "note"]
+      assert read_marker().system_schema_version == 3
+    end
+
+    test "returns no versions for a database at the running layout" do
+      set_system_schema_version(3)
+
+      assert upgrade_system_tables!(%{system_upgrades: [@create_probe_step, @alter_probe_step]}) ==
+               []
+
+      assert probe_columns() == []
+      assert read_marker().system_schema_version == 3
     end
   end
 

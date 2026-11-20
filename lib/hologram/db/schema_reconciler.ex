@@ -39,9 +39,9 @@ defmodule Hologram.DB.SchemaReconciler do
 
   @doc """
   Raises when the given marker's hologram_system layout is newer than the running Hologram's - a
-  database a later release upgraded, booted by an earlier one, whose code would read and write
-  tables it doesn't know. Returns :ok otherwise. The running version follows the context (see
-  system_schema_version/1).
+  database a later release claimed or upgraded, booted by an earlier one, whose code would read
+  and write tables it doesn't know. Returns :ok otherwise. The running version follows the
+  context (see system_schema_version/1).
   """
   @spec check_system_schema_version!(%{atom => any}, %{atom => any}) :: :ok
   def check_system_schema_version!(marker, context) do
@@ -128,7 +128,9 @@ defmodule Hologram.DB.SchemaReconciler do
 
   The marker is a map with :otp_app, :env, and :managed_by (the guard facts, as
   strings) plus :hologram_version, :system_schema_version (the layout version of the
-  hologram_system tables) and :last_reconciled_at (diagnostics).
+  hologram_system tables) and :last_reconciled_at (diagnostics). Schema reconciliation refreshes
+  :hologram_version and :last_reconciled_at on every run - the migrator never does, so on a
+  database it manages they are the claim's, whatever layout later upgrades brought.
   """
   @spec read_marker() :: %{atom => any} | nil
   def read_marker do

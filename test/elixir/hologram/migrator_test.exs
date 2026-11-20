@@ -32,7 +32,7 @@ defmodule Hologram.MigratorTest do
       env: @context.env,
       managed_by: managed_by,
       hologram_version: @context.hologram_version,
-      system_schema_version: 1,
+      system_schema_version: SchemaReconciler.system_schema_version(@context),
       last_reconciled_at: @context.timestamp
     })
   end
@@ -949,7 +949,7 @@ defmodule Hologram.MigratorTest do
 
   describe "ensure_managed!/1" do
     test "claims a virgin database for migrations" do
-      assert ensure_managed!(@context) == :claimed
+      assert ensure_managed!(Map.put(@context, :system_upgrades, [])) == :claimed
 
       assert SchemaReconciler.read_marker() == %{
                otp_app: "hologram",

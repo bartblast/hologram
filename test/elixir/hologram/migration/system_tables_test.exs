@@ -26,18 +26,6 @@ defmodule Hologram.Migration.SystemTablesTest do
   # again.
   @probe_step {2, [~s{CREATE TABLE "hologram_system"."upgrade_probe" ("id" integer)}]}
 
-  # The test config logs warnings and up - the upgrade lines are info.
-  defp capture_info_log(fun) do
-    level = Logger.level()
-    Logger.configure(level: :info)
-
-    try do
-      ExUnit.CaptureLog.capture_log([level: :info], fun)
-    after
-      Logger.configure(level: level)
-    end
-  end
-
   defp migration(version, ops) do
     %{version: version, path: "app/migrations/#{version}.ex", ops: ops}
   end
@@ -70,12 +58,13 @@ defmodule Hologram.Migration.SystemTablesTest do
     end)
   end
 
-  # A database an earlier boot claimed and brought up to date, at layout 1.
+  # A database an earlier boot claimed and brought up to date, at layout 1 whatever steps the
+  # running Hologram has.
   setup %{scratch: scratch} do
     create = migration("20260813091522", [%{op: :create_entity, entity: MyApp.Task, line: 3}])
     model = Model.fold(Model.empty(), create.ops)
 
-    route(scratch, fn -> :ok = run([create], model, @context) end)
+    route(scratch, fn -> :ok = run([create], model, Map.put(@context, :system_upgrades, [])) end)
 
     [chain: [create], model: model]
   end
@@ -153,7 +142,7 @@ defmodule Hologram.Migration.SystemTablesTest do
       end)
     end
 
-    test "refuses to boot a database a newer Hologram upgraded", %{
+    test "refuses to boot a database a newer Hologram claimed or upgraded", %{
       chain: chain,
       model: model,
       scratch: scratch
