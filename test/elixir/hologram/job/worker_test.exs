@@ -1,6 +1,7 @@
 defmodule Hologram.Job.WorkerTest do
   use Hologram.Test.BasicCase, async: true
 
+  import ExUnit.CaptureLog
   import Hologram.Job.Worker
 
   alias Hologram.Job.Worker
@@ -40,6 +41,10 @@ defmodule Hologram.Job.WorkerTest do
     agent
   end
 
+  defp add_jobs(queues, job_type, ids) do
+    Agent.update(queues, fn queues -> Map.update(queues, job_type, ids, &(&1 ++ ids)) end)
+  end
+
   # Answers the oldest ids of the type not in the skip set, the way Runner.queued/3 does, and
   # reports each ask to the test.
   defp queued_stub(test_pid, queues) do
@@ -59,7 +64,8 @@ defmodule Hologram.Job.WorkerTest do
   end
 
   # Runs a job by taking it off its queue, the way a claim moves its row out of queued, and reports
-  # it to the test. The answer comes from the given function, :done unless it says otherwise.
+  # it to the test. What it answers comes from the given function, :done unless it says otherwise,
+  # and a job it answers :locked for stays queued.
   defp run_stub(test_pid, queues, answer \\ fn _id -> :done end) do
     fn job_type, id ->
       send(test_pid, {:ran, job_type, id})
@@ -75,11 +81,57 @@ defmodule Hologram.Job.WorkerTest do
     end
   end
 
+  # A run that reports it started, then waits for the test to let it finish.
+  defp blocking_run_stub(test_pid, queues) do
+    fn job_type, id ->
+      take_off(queues, job_type, id)
+      send(test_pid, {:running, job_type, id, self()})
+
+      receive do
+        :finish -> :done
+      end
+    end
+  end
+
+  defp crashing_run_stub(test_pid, end_run) do
+    fn job_type, id ->
+      send(test_pid, {:ran, job_type, id})
+
+      end_run.()
+    end
+  end
+
+  defp release_stub(test_pid) do
+    fn id ->
+      send(test_pid, {:released, id})
+
+      :ok
+    end
+  end
+
   defp sweep_stub(test_pid) do
     fn job_types, skip_ids ->
       send(test_pid, {:swept, job_types, skip_ids})
 
       :ok
+    end
+  end
+
+  # The look a worker makes as it starts asks each type once, the last in module order last. On
+  # queues the test fills only after it, a job the test adds is run by a look the test asks for, and
+  # the asks left in the mailbox are the ones made after it.
+  defp await_first_look do
+    assert_receive {:asked, Module3, _skip_ids}, @timeout_ms
+
+    flush_asks()
+  end
+
+  # Drops the asks the looks so far made, so that a test can tell the asks of the next look.
+  defp flush_asks do
+    receive do
+      {:asked, _job_type, _skip_ids} -> flush_asks()
+    after
+      0 -> :ok
     end
   end
 
@@ -92,13 +144,20 @@ defmodule Hologram.Job.WorkerTest do
     end
   end
 
+  defp start_runs do
+    start_supervised!(Supervisor.child_spec(Task.Supervisor, id: make_ref()))
+  end
+
   defp start_worker!(opts) do
     opts =
       opts
+      |> Keyword.put_new(:max_concurrency, fn _job_type -> 10 end)
       |> Keyword.put_new(:queued, fn _job_type, _skip_ids, _count -> [] end)
+      |> Keyword.put_new(:release, fn _id -> :ok end)
       |> Keyword.put_new(:run, fn _job_type, _id -> :done end)
       |> Keyword.put_new(:sweep, fn _job_types, _skip_ids -> :ok end)
       |> Keyword.put_new(:poll_interval_ms, :timer.minutes(1))
+      |> Keyword.put_new_lazy(:runs, &start_runs/0)
 
     start_supervised!({Worker, opts})
   end
@@ -127,12 +186,35 @@ defmodule Hologram.Job.WorkerTest do
       refute_receive {:listening, _channel}, 100
     end
 
-    # A job that takes down the process running it would take down each worker that restarts, one
-    # after the other, past the supervisor's limit.
-    test "leaves the queued jobs to the first wake or poll as it starts" do
+    # The jobs queued while no worker ran wait for nothing.
+    test "runs the queued jobs as it starts" do
       start_worker_on!(start_queues(%{Module1 => ["a"]}))
 
-      refute_receive {:asked, _job_type, _skip_ids}, 100
+      assert_receive {:ran, Module1, "a"}, @timeout_ms
+    end
+
+    # The runs a predecessor left are failed at once, not at the first poll.
+    test "sweeps every job type as it starts" do
+      start_worker!(sweep: sweep_stub(self()))
+
+      assert_receive {:swept, [Module1, Module2, Module3], skip_ids}, @timeout_ms
+      assert skip_ids == MapSet.new()
+    end
+
+    # A run its predecessor left would go on with its lock given up under it.
+    test "kills the runs its predecessor left as it starts" do
+      runs = start_runs()
+      # Started the way the worker starts its runs.
+      {:ok, left} =
+        Task.Supervisor.start_child(runs, fn -> Process.sleep(:infinity) end,
+          shutdown: :brutal_kill
+        )
+
+      monitor_ref = Process.monitor(left)
+
+      start_worker!(runs: runs)
+
+      assert_receive {:DOWN, ^monitor_ref, :process, ^left, :killed}, @timeout_ms
     end
 
     # Each worker restarting would otherwise crash at once on a sweep that keeps failing, past the
@@ -144,23 +226,42 @@ defmodule Hologram.Job.WorkerTest do
         if Agent.get_and_update(refusing, &{&1, false}), do: raise("refused"), else: :ok
       end
 
-      worker =
-        start_worker_on!(start_queues(%{Module1 => ["a"]}),
-          poll_interval_ms: @poll_interval_ms,
-          sweep: sweep
-        )
+      log =
+        capture_log(fn ->
+          worker = start_worker_on!(start_queues(%{Module1 => ["a"]}), sweep: sweep)
 
-      # The poll that follows sweeps and looks.
-      assert_receive {:ran, Module1, "a"}, @timeout_ms
-      assert Process.alive?(worker)
+          # A sweep failing for a reason of its own doesn't hold up the look.
+          assert_receive {:ran, Module1, "a"}, @timeout_ms
+          assert Process.alive?(worker)
+        end)
+
+      assert log =~ "the job worker failed to look for jobs"
+      assert log =~ "refused"
     end
 
-    # The runs a predecessor left are failed at once, not at the first poll.
-    test "sweeps every job type as it starts" do
-      start_worker!(sweep: sweep_stub(self()))
+    test "stays up when the look as it starts raises" do
+      queues = start_queues(%{Module1 => ["a"]})
+      {:ok, refusing} = Agent.start_link(fn -> true end)
+      stub = queued_stub(self(), queues)
 
-      assert_receive {:swept, [Module1, Module2, Module3], skip_ids}, @timeout_ms
-      assert skip_ids == MapSet.new()
+      queued = fn job_type, skip_ids, count ->
+        if Agent.get_and_update(refusing, &{&1, false}), do: raise("refused")
+
+        stub.(job_type, skip_ids, count)
+      end
+
+      log =
+        capture_log(fn ->
+          worker = start_worker_on!(queues, queued: queued)
+
+          refute_receive {:ran, Module1, "a"}, 100
+
+          wake(worker)
+
+          assert_receive {:ran, Module1, "a"}, @timeout_ms
+        end)
+
+      assert log =~ "the job worker failed to look for jobs"
     end
   end
 
@@ -168,30 +269,97 @@ defmodule Hologram.Job.WorkerTest do
     # The default run takes the lock on it, and a job run without a lock connection would look
     # abandoned.
     test "requires a run lock connection when given no run" do
-      assert_raise KeyError, ~r/:run_lock/, fn -> init([]) end
+      assert_raise KeyError, ~r/:run_lock/, fn ->
+        init(release: fn _id -> :ok end, runs: self())
+      end
+    end
+
+    test "requires a run lock connection when given no release" do
+      assert_raise KeyError, ~r/:run_lock/, fn ->
+        init(run: fn _job_type, _id -> :done end, runs: self())
+      end
+    end
+
+    test "requires the supervisor the runs are started under" do
+      assert_raise KeyError, ~r/:runs/, fn ->
+        init(release: fn _id -> :ok end, run: fn _job_type, _id -> :done end)
+      end
     end
   end
 
   describe "handle :wake" do
     test "runs the queued jobs of a type oldest first" do
       queues = start_queues(%{})
-      worker = start_worker_on!(queues)
+      worker = start_worker_on!(queues, max_concurrency: fn _job_type -> 1 end)
+      await_first_look()
 
-      Agent.update(queues, &Map.put(&1, Module1, ["a", "b"]))
+      add_jobs(queues, Module1, ["a", "b"])
       wake(worker)
 
       assert ran(2) == [{Module1, "a"}, {Module1, "b"}]
     end
 
-    # A type whose jobs keep coming gets one turn a round, so it never holds up the types after it.
-    test "runs one job of each type a round, the types in module order" do
+    test "runs up to a type's limit at once, and the next as one ends" do
       queues = start_queues(%{})
-      worker = start_worker_on!(queues)
+      test_pid = self()
 
-      Agent.update(queues, &Map.merge(&1, %{Module1 => ["a", "b"], Module3 => ["c"]}))
+      worker =
+        start_worker_on!(queues,
+          max_concurrency: fn _job_type -> 2 end,
+          run: blocking_run_stub(test_pid, queues)
+        )
+
+      await_first_look()
+
+      add_jobs(queues, Module1, ["a", "b", "c"])
       wake(worker)
 
-      assert ran(3) == [{Module1, "a"}, {Module3, "c"}, {Module1, "b"}]
+      assert_receive {:running, Module1, "a", first}, @timeout_ms
+      assert_receive {:running, Module1, "b", _second}, @timeout_ms
+      refute_receive {:running, Module1, "c", _third}, 100
+
+      send(first, :finish)
+
+      assert_receive {:running, Module1, "c", _third}, @timeout_ms
+    end
+
+    test "runs the jobs of one type while another type is at its limit" do
+      queues = start_queues(%{})
+      test_pid = self()
+      blocking = blocking_run_stub(test_pid, queues)
+      running = run_stub(test_pid, queues)
+
+      run = fn
+        Module1, id -> blocking.(Module1, id)
+        job_type, id -> running.(job_type, id)
+      end
+
+      worker = start_worker_on!(queues, max_concurrency: fn _job_type -> 1 end, run: run)
+      await_first_look()
+
+      add_jobs(queues, Module1, ["a", "b"])
+      add_jobs(queues, Module3, ["c"])
+      wake(worker)
+
+      assert_receive {:running, Module1, "a", _pid}, @timeout_ms
+      assert_receive {:ran, Module3, "c"}, @timeout_ms
+      refute_receive {:running, Module1, "b", _pid}, 100
+    end
+
+    test "leaves out of a look the jobs it runs" do
+      queues = start_queues(%{})
+      worker = start_worker_on!(queues, run: blocking_run_stub(self(), queues))
+      await_first_look()
+
+      add_jobs(queues, Module1, ["a"])
+      wake(worker)
+      assert_receive {:running, Module1, "a", _pid}, @timeout_ms
+
+      wake(worker)
+
+      skip_ids = MapSet.new(["a"])
+
+      assert_receive {:asked, Module1, ^skip_ids}, @timeout_ms
     end
 
     # Not queued any more, the job is never answered again, and leaving it out of the next look
@@ -199,12 +367,19 @@ defmodule Hologram.Job.WorkerTest do
     test "runs the next job after one another worker took, leaving out nothing" do
       queues = start_queues(%{})
       answer = fn id -> if id == "a", do: :taken, else: :done end
-      worker = start_worker_on!(queues, run: run_stub(self(), queues, answer))
 
-      Agent.update(queues, &Map.put(&1, Module1, ["a", "b"]))
+      worker =
+        start_worker_on!(queues,
+          max_concurrency: fn _job_type -> 1 end,
+          run: run_stub(self(), queues, answer)
+        )
+
+      await_first_look()
+
+      add_jobs(queues, Module1, ["a", "b"])
       wake(worker)
 
-      # The first round's ask, then the second round's, which follows the run.
+      # The wake's ask, then the one after the run that ended.
       assert_receive {:asked, Module1, _skip_ids}, @timeout_ms
       assert_receive {:ran, Module1, "a"}, @timeout_ms
       assert_receive {:asked, Module1, skip_ids}, @timeout_ms
@@ -217,13 +392,20 @@ defmodule Hologram.Job.WorkerTest do
     test "leaves a job whose run lock another session holds until the next wake" do
       queues = start_queues(%{})
       answer = fn id -> if id == "a", do: :locked, else: :done end
-      worker = start_worker_on!(queues, run: run_stub(self(), queues, answer))
 
-      Agent.update(queues, &Map.put(&1, Module1, ["a", "b"]))
+      worker =
+        start_worker_on!(queues,
+          max_concurrency: fn _job_type -> 1 end,
+          run: run_stub(self(), queues, answer)
+        )
+
+      await_first_look()
+
+      add_jobs(queues, Module1, ["a", "b"])
       wake(worker)
 
-      assert_receive {:ran, Module1, "a"}, @timeout_ms
-      assert_receive {:ran, Module1, "b"}, @timeout_ms
+      assert ran(2) == [{Module1, "a"}, {Module1, "b"}]
+
       skip_ids = MapSet.new(["a"])
 
       assert_receive {:asked, Module1, ^skip_ids}, @timeout_ms
@@ -251,8 +433,9 @@ defmodule Hologram.Job.WorkerTest do
       end
 
       worker = start_worker_on!(queues, run: run)
+      await_first_look()
 
-      Agent.update(queues, &Map.put(&1, Module1, ["a"]))
+      add_jobs(queues, Module1, ["a"])
       wake(worker)
 
       assert_receive {:ran, Module1, "a"}, @timeout_ms
@@ -266,7 +449,7 @@ defmodule Hologram.Job.WorkerTest do
 
     test "skips a look that finds the data model under a hold" do
       test_pid = self()
-      {:ok, held} = Agent.start_link(fn -> true end)
+      {:ok, held} = Agent.start_link(fn -> false end)
 
       queued = fn job_type, _skip_ids, _count ->
         send(test_pid, {:asked, job_type})
@@ -276,7 +459,12 @@ defmodule Hologram.Job.WorkerTest do
 
       worker = start_worker!(queued: queued)
 
-      # The first look finds the hold, and gives up before the other types.
+      for job_type <- [Module1, Module2, Module3] do
+        assert_receive {:asked, ^job_type}, @timeout_ms
+      end
+
+      # The look finds the hold, and gives up before the other types.
+      Agent.update(held, fn _held -> true end)
       wake(worker)
 
       assert_receive {:asked, Module1}, @timeout_ms
@@ -288,37 +476,160 @@ defmodule Hologram.Job.WorkerTest do
       assert_receive {:asked, Module2}, @timeout_ms
     end
 
-    # The wakes that arrive while a run works ask what the look after them answers. A run that
-    # blocks holds the first look, and three wakes queue up behind it: Module1 is asked three times
-    # in all - twice by the first look, whose second round finds nothing, and once by the look the
-    # three wakes get.
-    test "answers the wakes that arrived while it worked with one look" do
-      queues = start_queues(%{Module1 => ["a"]})
+    # Crashing would kill every run on the node, through the kill as the next worker starts, for a
+    # wait the next wake or poll gets past.
+    test "keeps its runs going when a look can't get a database connection" do
+      queues = start_queues(%{})
       test_pid = self()
+      {:ok, refusing} = Agent.start_link(fn -> false end)
+      stub = queued_stub(test_pid, queues)
 
-      run = fn job_type, id ->
-        send(test_pid, {:running, self()})
-
-        receive do
-          :finish -> :ok
+      queued = fn job_type, skip_ids, count ->
+        if Agent.get(refusing, & &1) do
+          raise DBConnection.ConnectionError, "connection not available"
         end
 
-        take_off(queues, job_type, id)
-        :done
+        stub.(job_type, skip_ids, count)
       end
 
-      worker = start_worker_on!(queues, run: run)
-      wake(worker)
+      worker =
+        start_worker_on!(queues, queued: queued, run: blocking_run_stub(test_pid, queues))
 
-      assert_receive {:running, ^worker}, @timeout_ms
+      await_first_look()
+
+      add_jobs(queues, Module1, ["a"])
+      wake(worker)
+      assert_receive {:running, Module1, "a", run}, @timeout_ms
+
+      run_ref = Process.monitor(run)
+      Agent.update(refusing, fn _refusing -> true end)
+
+      log =
+        capture_log(fn ->
+          wake(worker)
+          refute_receive {:DOWN, ^run_ref, :process, ^run, _reason}, 100
+        end)
+
+      assert log =~ "the job worker couldn't get a database connection"
+      assert Process.alive?(worker)
+
+      Agent.update(refusing, fn _refusing -> false end)
+      send(run, :finish)
+
+      assert_receive {:DOWN, ^run_ref, :process, ^run, :normal}, @timeout_ms
+    end
+
+    # A run the fill started before a later type's look failed is still the worker's to hear from:
+    # its answer would otherwise match none of the runs the worker knows of.
+    test "keeps the runs a look started when a later type's look fails" do
+      queues = start_queues(%{})
+      test_pid = self()
+      {:ok, refusing} = Agent.start_link(fn -> false end)
+      stub = queued_stub(test_pid, queues)
+
+      queued = fn job_type, skip_ids, count ->
+        if job_type == Module2 and Agent.get(refusing, & &1) do
+          raise DBConnection.ConnectionError, "connection not available"
+        end
+
+        stub.(job_type, skip_ids, count)
+      end
+
+      worker =
+        start_worker_on!(queues, queued: queued, run: blocking_run_stub(test_pid, queues))
+
+      await_first_look()
+
+      add_jobs(queues, Module1, ["a"])
+      Agent.update(refusing, fn _refusing -> true end)
+
+      capture_log(fn ->
+        wake(worker)
+        assert_receive {:running, Module1, "a", run}, @timeout_ms
+        assert_receive {:asked, Module1, _skip_ids}, @timeout_ms
+
+        add_jobs(queues, Module1, ["b"])
+        send(run, :finish)
+
+        assert_receive {:running, Module1, "b", _run}, @timeout_ms
+      end)
+
+      assert Process.alive?(worker)
+    end
+
+    # A failure of one type's own, like an error on its table, would otherwise hold up every type
+    # after it in module order for as long as it lasts.
+    test "looks at the types after one whose look fails for a reason of its own" do
+      queues = start_queues(%{})
+      stub = queued_stub(self(), queues)
+
+      queued = fn
+        Module1, _skip_ids, _count -> raise "no such table"
+        job_type, skip_ids, count -> stub.(job_type, skip_ids, count)
+      end
+
+      log =
+        capture_log(fn ->
+          worker = start_worker_on!(queues, queued: queued)
+          await_first_look()
+
+          add_jobs(queues, Module3, ["a"])
+          wake(worker)
+
+          assert_receive {:ran, Module3, "a"}, @timeout_ms
+        end)
+
+      assert log =~ "no such table"
+    end
+
+    # Only that type's slot freed.
+    test "looks again at the type of a run that ends, and no other" do
+      queues = start_queues(%{})
+      worker = start_worker_on!(queues, run: blocking_run_stub(self(), queues))
+      await_first_look()
+
+      add_jobs(queues, Module1, ["a"])
+      wake(worker)
+      assert_receive {:running, Module1, "a", run}, @timeout_ms
+      assert_receive {:asked, Module3, _skip_ids}, @timeout_ms
+      flush_asks()
+
+      send(run, :finish)
+
+      assert_receive {:asked, Module1, _skip_ids}, @timeout_ms
+      refute_receive {:asked, Module2, _skip_ids}, 100
+    end
+
+    # The wakes that arrive while a look works ask what the look after them answers. A look that
+    # blocks as the worker starts holds three wakes up behind it: Module1 is asked twice in all -
+    # once by the look as it starts, and once by the look the three wakes get.
+    test "answers the wakes that arrived while it worked with one look" do
+      test_pid = self()
+      {:ok, first?} = Agent.start_link(fn -> true end)
+
+      queued = fn job_type, _skip_ids, _count ->
+        send(test_pid, {:asked, job_type, self()})
+
+        if Agent.get_and_update(first?, &{&1, false}) do
+          receive do
+            :finish -> :ok
+          end
+        end
+
+        []
+      end
+
+      worker = start_worker!(queued: queued)
+
+      assert_receive {:asked, Module1, ^worker}, @timeout_ms
 
       wake(worker)
       wake(worker)
       wake(worker)
       send(worker, :finish)
 
-      for _ask <- 1..3, do: assert_receive({:asked, Module1, _skip_ids}, @timeout_ms)
-      refute_receive {:asked, Module1, _skip_ids}, 100
+      assert_receive {:asked, Module1, ^worker}, @timeout_ms
+      refute_receive {:asked, Module1, ^worker}, 100
     end
 
     test "sweeps nothing" do
@@ -332,12 +643,73 @@ defmodule Hologram.Job.WorkerTest do
     end
   end
 
+  describe "handle a run going down" do
+    for {label, end_run} <- [
+          {"raises", quote(do: fn -> raise "boom" end)},
+          {"is killed", quote(do: fn -> Process.exit(self(), :kill) end)}
+        ] do
+      # A run that went down never answered, so its lock may still be held, its row may be left
+      # running, and its claim, tried again at once, would most likely go down the same way.
+      test "gives up the lock of a run that #{label}, sweeps its type, and leaves the job until the next wake" do
+        queues = start_queues(%{})
+        test_pid = self()
+
+        worker =
+          start_worker_on!(queues,
+            release: release_stub(test_pid),
+            run: crashing_run_stub(test_pid, unquote(end_run)),
+            sweep: sweep_stub(test_pid)
+          )
+
+        assert_receive {:swept, _job_types, _skip_ids}, @timeout_ms
+        await_first_look()
+
+        add_jobs(queues, Module1, ["a"])
+
+        capture_log(fn ->
+          wake(worker)
+
+          assert_receive {:ran, Module1, "a"}, @timeout_ms
+          assert_receive {:released, "a"}, @timeout_ms
+        end)
+
+        assert_receive {:swept, [Module1], _skip_ids}, @timeout_ms
+
+        skip_ids = MapSet.new(["a"])
+
+        assert_receive {:asked, Module1, ^skip_ids}, @timeout_ms
+        assert Process.alive?(worker)
+      end
+    end
+
+    test "frees the run's slot" do
+      queues = start_queues(%{})
+      test_pid = self()
+      crashing = crashing_run_stub(test_pid, fn -> Process.exit(self(), :kill) end)
+      running = run_stub(test_pid, queues)
+
+      run = fn
+        job_type, "a" -> crashing.(job_type, "a")
+        job_type, id -> running.(job_type, id)
+      end
+
+      worker = start_worker_on!(queues, max_concurrency: fn _job_type -> 1 end, run: run)
+      await_first_look()
+
+      add_jobs(queues, Module1, ["a", "b"])
+      wake(worker)
+
+      assert ran(2) == [{Module1, "a"}, {Module1, "b"}]
+    end
+  end
+
   describe "handle :notification" do
     test "runs the job a write announces" do
       queues = start_queues(%{})
       worker = start_worker_on!(queues)
+      await_first_look()
 
-      Agent.update(queues, &Map.put(&1, Module2, ["a"]))
+      add_jobs(queues, Module2, ["a"])
       send(worker, {:notification, self(), make_ref(), "hologram_oplog", ""})
 
       assert_receive {:ran, Module2, "a"}, @timeout_ms
@@ -349,7 +721,7 @@ defmodule Hologram.Job.WorkerTest do
       queues = start_queues(%{})
       start_worker_on!(queues, poll_interval_ms: @poll_interval_ms)
 
-      Agent.update(queues, &Map.put(&1, Module1, ["a"]))
+      add_jobs(queues, Module1, ["a"])
 
       assert_receive {:ran, Module1, "a"}, @timeout_ms
     end
@@ -361,6 +733,40 @@ defmodule Hologram.Job.WorkerTest do
       for _sweep <- 1..3 do
         assert_receive {:swept, [Module1, Module2, Module3], _skip_ids}, @timeout_ms
       end
+    end
+
+    # Their locks are held by this node's own session, so a sweep would only find them held.
+    test "leaves out of a sweep the jobs it runs" do
+      queues = start_queues(%{Module1 => ["a"]})
+      test_pid = self()
+
+      start_worker_on!(queues,
+        poll_interval_ms: @poll_interval_ms,
+        run: blocking_run_stub(test_pid, queues),
+        sweep: sweep_stub(test_pid)
+      )
+
+      assert_receive {:running, Module1, "a", _pid}, @timeout_ms
+
+      skip_ids = MapSet.new(["a"])
+
+      assert_receive {:swept, _job_types, ^skip_ids}, @timeout_ms
+    end
+
+    test "looks when its sweep fails for a reason of its own" do
+      queues = start_queues(%{})
+
+      capture_log(fn ->
+        start_worker_on!(queues,
+          poll_interval_ms: @poll_interval_ms,
+          sweep: fn _job_types, _skip_ids -> raise "no such table" end
+        )
+
+        await_first_look()
+        add_jobs(queues, Module1, ["a"])
+
+        assert_receive {:ran, Module1, "a"}, @timeout_ms
+      end)
     end
 
     test "tries a job left queued again" do

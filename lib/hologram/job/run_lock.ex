@@ -1,24 +1,24 @@
 defmodule Hologram.Job.RunLock do
   @moduledoc false
 
-  # The connection a worker holds its run locks on: one session-level advisory lock per job it is
+  # The connection a node's runs hold their run locks on: one session-level advisory lock per job
   # running, named by the job's id, taken as the job is claimed and given up once its outcome is
   # recorded. A running row whose lock any session can take has nobody running it.
   #
   # Session-scoped rather than transactional because a run spans three transactions and reaches
   # outside the database between them, and because PostgreSQL frees a session lock when the
-  # session ends - so a node that stops, a worker that crashes and a connection that drops all free
-  # it, with no process left to do so.
+  # session ends - so a node that stops and a connection that drops free it, with no process left to
+  # do so.
   #
   # A connection of its own, outside the pool: a session lock stays with the connection that took
   # it, which a pooled one cannot promise. Held for as long as its session lasts (see
   # Hologram.DB.Config.held_connection_opts/1): while the database refuses connections it keeps
   # trying, and the worker waits for it in await_connected/1 before anything else. It does not
-  # reconnect a session it had, because a session that ended took its locks with it, and a worker
-  # carrying on would be running a job that looks abandoned to every other node. Losing the session
-  # ends this process, and the worker is restarted beside it. It pings the server while idle, and
-  # it ends itself when the server leaves a statement unanswered - a call's or the session
-  # settings' - which is how a link that went dead is noticed rather than waited on.
+  # reconnect a session it had, because a session that ended took its locks with it, and runs
+  # carrying on would be running jobs that look abandoned to every other node. Losing the session
+  # ends this process, and the runs and the worker are restarted beside it. It pings the server
+  # while idle, and it ends itself when the server leaves a statement unanswered - a call's or the
+  # session settings' - which is how a link that went dead is noticed rather than waited on.
 
   @behaviour Postgrex.SimpleConnection
 

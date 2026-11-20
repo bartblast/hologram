@@ -35,9 +35,10 @@ defmodule Hologram.Job do
   Refuse the transaction and the job never existed, so nothing runs. Let it commit and the job
   runs once, as the user who enqueued it.
 
-  A run cut short before its outcome is recorded - the node stopping, the worker crashing or
-  losing its connection to the database, the outcome write failing - is later failed by a worker
-  looking for jobs, with an error saying so: run/1 may have done all, part or none of its work.
+  A run cut short before its outcome is recorded - the node stopping, the run crashing or being
+  killed, its lock connection to the database being lost, the outcome write failing - is later
+  failed by a worker sweeping for such runs, with an error saying so: run/1 may have done all,
+  part or none of its work.
 
   Attributes and relationships are what a job carries, so they are declared and typed rather
   than passed as a payload: a declaration is what a policy can name and what a migration can

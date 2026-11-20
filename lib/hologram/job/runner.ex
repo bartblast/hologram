@@ -6,7 +6,7 @@ defmodule Hologram.Job.Runner do
   # must not hold a connection while it does, and because the claim has to be visible to every
   # other node before the work starts - which is what stops two nodes running one job.
   #
-  # For the whole run the worker holds the job's run lock (see Hologram.Job.RunLock), taken inside
+  # The job's run lock (see Hologram.Job.RunLock) is held for the whole run, taken inside
   # the claim's transaction and given up once the outcome is recorded - so a running row whose lock
   # nobody holds is one whose run was cut short.
 
@@ -19,8 +19,8 @@ defmodule Hologram.Job.Runner do
   alias Hologram.Job.RunLock
 
   # What the row of a run cut short says. Nothing recorded how far run/1 got, so it claims nothing
-  # either way - and the worker that knew is gone.
-  @cut_short_error "the run was cut short before its outcome was recorded - the node stopped, the worker crashed or lost its connection to the database, or the outcome write failed - so run/1 may have done all, part or none of its work"
+  # either way - and the run that knew is gone.
+  @cut_short_error "the run was cut short before its outcome was recorded - the node stopped, the run crashed or was killed, its lock connection was lost, or the outcome write failed - so run/1 may have done all, part or none of its work"
 
   # Set while the claim's transaction holds a run lock it has not committed yet, so a claim that
   # raises after taking the lock knows to give it back.
@@ -135,8 +135,8 @@ defmodule Hologram.Job.Runner do
 
   @doc """
   Fails each running job of the given job types whose run lock no session holds - a run cut short,
-  by a node that stopped, a worker that crashed or lost its lock connection, or an outcome write
-  that failed - with an error saying so, and returns :ok.
+  by a node that stopped, a run that crashed or was killed, a lost lock connection, or an outcome
+  write that failed - with an error saying so, and returns :ok.
 
   Leaves out the jobs whose ids are in the given set: the ones the caller is running itself, whose
   locks its own session holds.
@@ -152,8 +152,8 @@ defmodule Hologram.Job.Runner do
     end)
   end
 
-  # Whatever run/1 does, the worker goes on: a job that raises is a failed job rather than a failed
-  # worker, and the exception is what the row records.
+  # Whatever run/1 does, the run goes on to record it: a job that raises is a failed job rather than
+  # a crashed run, and the exception is what the row records.
   defp attempt(job) do
     job_type = job.__struct__
 
@@ -234,7 +234,7 @@ defmodule Hologram.Job.Runner do
 
   # Gives up a run lock on the way out of a claim or a run, whether or not it ended in an error. A
   # release that exits - the connection gone, or killed for leaving it unanswered - is let go: the
-  # lock went with the session either way, and the worker goes down with the connection. What it
+  # lock went with the session either way, and the runs go down with the connection. What it
   # must not do is replace the error the claim or the run is leaving with.
   defp release_quietly(run_lock, id) do
     RunLock.release(run_lock, id)
@@ -242,11 +242,12 @@ defmodule Hologram.Job.Runner do
     :exit, _reason -> :ok
   end
 
+  # Raises what the query answers with otherwise, the way the other statements a sweep runs do.
   defp run_lock_free?(id) do
-    {:ok, %Postgrex.Result{rows: [[free?]]}} =
-      Connection.query("SELECT pg_try_advisory_xact_lock($1)", [RunLock.key(id)])
-
-    free?
+    case Connection.query("SELECT pg_try_advisory_xact_lock($1)", [RunLock.key(id)]) do
+      {:ok, %Postgrex.Result{rows: [[free?]]}} -> free?
+      {:error, error} -> raise error
+    end
   end
 
   # Each row is judged in a transaction of its own, whose advisory lock is the job's run lock taken
