@@ -82,12 +82,20 @@ defmodule HologramSyncTests.Consistency.Client do
   def cut(client), do: GenServer.call(client, :cut)
 
   @doc """
-  Returns what the client recorded, oldest first: each connect, cut and stream end, a summary of
-  each frame, and each failure - a frame no browser of this build should get, or a cursor this
-  client can't read.
+  Returns what the client recorded, oldest first, each with its `:kind`: a `:connect`, a `:closed`
+  stream (its `:cause` a cut, a stream end or an error), a `:frame` summary (its `:frame` the SSE
+  event kind), and a `:failure` (its `:failure` naming it) - a frame no browser of this build should
+  get, an op the browser doesn't know, a refused connection, or a cursor this client can't read.
   """
   @spec events(pid) :: list(map)
   def events(client), do: GenServer.call(client, :events)
+
+  @doc """
+  Puts the given place in the client, as one it would come back from - for a test of a client
+  holding a place the server can't read, the way a tab of another build can.
+  """
+  @spec put_cursor(pid, String.t() | nil) :: :ok
+  def put_cursor(client, cursor), do: GenServer.call(client, {:put_cursor, cursor})
 
   @doc """
   Returns the failures among the client's events.
@@ -155,6 +163,9 @@ defmodule HologramSyncTests.Consistency.Client do
   def handle_call(:cut, _from, state),
     do: {:reply, :ok, cancel_reconnect(close(state, :cut))}
 
+  def handle_call({:put_cursor, cursor}, _from, state),
+    do: {:reply, :ok, %{state | cursor: cursor}}
+
   def handle_call(:events, _from, state), do: {:reply, Enum.reverse(state.events), state}
 
   def handle_call(:records, _from, state), do: {:reply, Enum.reverse(state.records), state}
@@ -219,7 +230,7 @@ defmodule HologramSyncTests.Consistency.Client do
   # should a client of this build.
   defp handle_stream({status_line, _headers, body}, state) do
     state
-    |> event(:failure, %{kind: "refused", body: body, status: status_line})
+    |> event(:failure, %{failure: "refused", body: body, status: status_line})
     |> ended({:refused, status_line})
   end
 
@@ -266,7 +277,7 @@ defmodule HologramSyncTests.Consistency.Client do
   defp close(state, reason) do
     SyncClient.close(state.stream)
 
-    event(%{state | buffer: "", complete?: false, stream: nil}, :closed, %{reason: reason})
+    event(%{state | buffer: "", complete?: false, stream: nil}, :closed, %{cause: reason})
   end
 
   defp cookie_path(nil), do: "/plain"
@@ -291,7 +302,7 @@ defmodule HologramSyncTests.Consistency.Client do
 
     applied
     |> keep_cursor(cursor)
-    |> event(:frame, %{cursor: cursor, kind: "sync_deltas", ops: ops_summary(frame)})
+    |> event(:frame, %{cursor: cursor, frame: "sync_deltas", ops: ops_summary(frame)})
   end
 
   defp handle_frame(%{"event" => "synced", "data" => data}, state, _received_at) do
@@ -306,7 +317,7 @@ defmodule HologramSyncTests.Consistency.Client do
 
     marked
     |> keep_cursor(frame["cursor"])
-    |> event(:frame, %{cursor: frame["cursor"], kind: "synced", scope: frame["scope"]})
+    |> event(:frame, %{cursor: frame["cursor"], frame: "synced", scope: frame["scope"]})
   end
 
   defp handle_frame(%{"event" => "sync_resync", "data" => data}, state, _received_at) do
@@ -315,7 +326,7 @@ defmodule HologramSyncTests.Consistency.Client do
     refilled = if reason == "identity", do: reset(state), else: begin_refill(state)
 
     event(%{refilled | complete?: false, cursor: nil}, :frame, %{
-      kind: "sync_resync",
+      frame: "sync_resync",
       reason: reason
     })
   end
@@ -324,7 +335,7 @@ defmodule HologramSyncTests.Consistency.Client do
   # ever come.
   defp handle_frame(%{"event" => kind, "data" => data}, state, _received_at)
        when kind in ["sync_reload", "sync_rules"] do
-    event(state, :failure, %{data: data, kind: kind})
+    event(state, :failure, %{data: data, failure: kind})
   end
 
   defp handle_frame(_frame, state, _received_at), do: state
@@ -333,7 +344,7 @@ defmodule HologramSyncTests.Consistency.Client do
   defp apply_group(state, op, type, _items, _origin)
        when op not in ~w(add_relationship del_entity del_relationship keep_hashed patch_entity
                          put_entity unsync_entity unsync_hashed) do
-    event(state, :failure, %{kind: "unknown op", op: op, type: type})
+    event(state, :failure, %{failure: "unknown op", op: op, type: type})
   end
 
   defp apply_group(state, op, type, items, origin) when op in ["keep_hashed", "unsync_hashed"] do
@@ -517,7 +528,7 @@ defmodule HologramSyncTests.Consistency.Client do
             %{state | records: [record | state.records]}
 
           :error ->
-            event(state, :failure, %{cursor: cursor, kind: "unreadable cursor"})
+            event(state, :failure, %{cursor: cursor, failure: "unreadable cursor"})
         end
     end
   end

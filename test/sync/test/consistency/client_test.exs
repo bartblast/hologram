@@ -4,12 +4,14 @@ defmodule HologramSyncTests.Consistency.ClientTest do
 
   import HologramSyncTests.Helpers
 
+  alias Hologram.Auth
   alias Hologram.DB
   alias Hologram.DB.QueryCache
   alias Hologram.Sync.Sessions
   alias HologramSyncTests.Consistency.Checks
   alias HologramSyncTests.Consistency.Client
   alias HologramSyncTests.Consistency.Model
+  alias HologramSyncTests.Entities.Board
   alias HologramSyncTests.Entities.Card
   alias HologramSyncTests.Entities.Space
   alias HologramSyncTests.Entities.SpaceMember
@@ -49,13 +51,7 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     assert Client.cursor(client) == nil
     assert map_size(Client.store(client)[Space]) == 1
 
-    [membership] =
-      SpaceMember
-      |> DB.read()
-      |> Enum.filter(&(&1.user_id == member.id))
-
-    DB.delete!(membership)
-
+    delete_membership!(member)
     Client.connect(client)
 
     assert Checks.await_converged(client, member.id, 5_000) == :ok
@@ -118,6 +114,105 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     assert await(fn -> Sessions.list() == [] end)
   end
 
+  test "a client cut off once it holds everything comes back from its place", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+
+    Client.cut(client)
+    create!(Tag, name: "added while away")
+    Client.connect(client)
+
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert [nil, cursor] = connect_cursors(client)
+    assert is_binary(cursor)
+    assert resync_reasons(client) == []
+    assert Client.failures(client) == []
+  end
+
+  # The session can't say whether the client holds the rows its user lost, so it names them by
+  # hash.
+  test "a client whose user left a space while it was away drops the space's rows", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert map_size(Client.store(client)[Card]) == 1
+
+    Client.cut(client)
+    delete_membership!(member)
+    Client.connect(client)
+
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert Client.store(client)[Card] == %{}
+    assert {"unsync_hashed", wire_type(Card)} in received_ops(client)
+    assert resync_reasons(client) == []
+    assert Client.failures(client) == []
+  end
+
+  # The rows a type-wide grant hid can't be named, so the session names the ones the client may
+  # keep: here the board the user still views through a grant on the row, and its card.
+  test "a client whose user lost a type-wide grant while it was away keeps only what it may read",
+       %{users: [_member, _viewer, wide_viewer, _outsider]} do
+    [open_board] =
+      Board
+      |> DB.read()
+      |> Enum.filter(&(&1.name == "open"))
+
+    Auth.grant_role(wide_viewer, :viewer, open_board)
+
+    client = start_client(wide_viewer.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, wide_viewer.id, 5_000) == :ok
+    assert map_size(Client.store(client)[Board]) == 3
+
+    Client.cut(client)
+    Auth.revoke_role(wide_viewer, :viewer, Board)
+    Client.connect(client)
+
+    assert Checks.await_converged(client, wide_viewer.id, 5_000) == :ok
+    assert Map.keys(Client.store(client)[Board]) == [open_board.id]
+    assert [%{"board_id" => board_id}] = Map.values(Client.store(client)[Card])
+    assert board_id == open_board.id
+    assert {"keep_hashed", wire_type(Board)} in received_ops(client)
+    assert resync_reasons(client) == []
+    assert Client.failures(client) == []
+  end
+
+  # Coming back from a place the server can't read starts over: the rows stay while the fill comes
+  # again, and each type's marker sweeps the rows of the type it didn't send.
+  test "a client told to start over keeps its rows until the fill says which to drop", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id, cut_when: &match?([%{frame: "sync_resync"} | _events], &1))
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+
+    Client.cut(client)
+    Client.put_cursor(client, "unreadable")
+    delete_membership!(member)
+    Client.connect(client)
+
+    assert await(fn -> "cursor" in resync_reasons(client) and cut_count(client) == 2 end)
+    assert map_size(Client.store(client)[Space]) == 1
+    assert map_size(Client.store(client)[Tag]) == 2
+    assert Client.cursor(client) == nil
+
+    Client.connect(client)
+
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+    assert Client.store(client)[Space] == %{}
+    assert map_size(Client.store(client)[Tag]) == 2
+    assert Client.failures(client) == []
+  end
+
   describe "Checks.diff/2" do
     test "names a missing row, an extra row, wrong fields and a wrong set" do
       expected = %{
@@ -159,14 +254,49 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     end
   end
 
+  defp connect_cursors(client) do
+    for %{kind: :connect, cursor: cursor} <- Client.events(client), do: cursor
+  end
+
+  defp cut_count(client) do
+    client
+    |> Client.events()
+    |> Enum.count(&(&1[:cause] == :cut))
+  end
+
   defp cut?(client) do
     client
     |> Client.events()
-    |> Enum.any?(&(&1[:reason] == :cut))
+    |> Enum.any?(&(&1[:cause] == :cut))
+  end
+
+  defp delete_membership!(user) do
+    [membership] =
+      SpaceMember
+      |> DB.read()
+      |> Enum.filter(&(&1.user_id == user.id))
+
+    DB.delete!(membership)
+  end
+
+  defp received_ops(client) do
+    for %{kind: :frame, ops: ops} <- Client.events(client),
+        {op, type, _count} <- ops,
+        do: {op, type}
+  end
+
+  defp resync_reasons(client) do
+    for %{frame: "sync_resync", reason: reason} <- Client.events(client), do: reason
   end
 
   defp start_client(user_id, opts \\ []) do
     start_supervised!({Client, [base_url: base_url(), user_id: user_id] ++ opts}, id: make_ref())
+  end
+
+  defp wire_type(type) do
+    type
+    |> Module.split()
+    |> Enum.join(".")
   end
 
   defp types_markers(events), do: Enum.count(events, &(&1[:scope] == "types"))
