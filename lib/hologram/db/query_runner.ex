@@ -407,13 +407,14 @@ defmodule Hologram.DB.QueryRunner do
             "nil element in the list for placeholder #{inspect(name)} - use an explicit nil predicate instead"
 
       value ->
-        Codec.encode(value, type)
+        encode_param!(value, name, type)
     end)
   end
 
   # The key slot of a string comparison carries the bound's key, computed here from the same
   # value the raw slot carries - so the pair the statement compares is folded the way the
-  # column's own pair is.
+  # column's own pair is. An equality and a membership bind it the same way, element by element
+  # for a list.
   defp encode_param!(value, _name, :sort_key), do: SortKey.compute(value)
 
   # A search term binds as the pattern its LIKE matches, escaped and folded the way a written-out

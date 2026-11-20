@@ -6,6 +6,7 @@ defmodule Hologram.Migrator do
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Preflight
@@ -19,7 +20,7 @@ defmodule Hologram.Migrator do
   alias Hologram.Reflection
 
   # The ops the boot applies when the database holds an object under a name the current naming
-  # rule no longer derives - see heal_renames/3.
+  # rule no longer derives - see apply_renames/1.
   @rename_ops [:rename_constraint, :rename_enum_type, :rename_index, :rename_table]
 
   # Fixed application-defined key for the migration lock - serializes the whole boot
@@ -29,8 +30,9 @@ defmodule Hologram.Migrator do
   # of md5("hologram_migrations") as a signed int64.
   #
   # EVERY statement that changes the schema runs under this key, on the one session that
-  # holds it: the guard, each file's transaction, each tail's concurrent index build, and
-  # the index repair. A schema change this key does not cover is a deadlock on every deploy
+  # holds it: the guard, each file's transaction, each tail's concurrent index build, the
+  # index repair, and each step of Hologram.DB.IndexBuilder, which takes it per step on a
+  # session of its own. A schema change this key does not cover is a deadlock on every deploy
   # where two nodes reach it together - a concurrent build waits for every transaction that
   # could see its table, and a schema change inside a transaction is exactly that.
   #
@@ -151,10 +153,15 @@ defmodule Hologram.Migrator do
   declares hand-dropped. One rule, no classifying - hologram_data is model-managed
   everywhere, and the wrong-database cases never reach this check (the marker refused
   them).
+
+  The indexes the model leaves to the index plan are the one exception: a plain btree index
+  named `...$idx` that isn't unique is the plan's (see `Hologram.DB.IndexPlan`), which
+  `Hologram.DB.IndexBuilder` converges after the node starts serving, so this check neither asks
+  for one nor refuses one. An index added by hand under any other name is still drift.
   """
   @spec check_drift!(%{module => %{atom => any}}) :: :ok
   def check_drift!(mapping) do
-    drift_ops = Schema.diff(Introspection.schema(), Schema.from_mapping(mapping))
+    drift_ops = drift_ops(mapping)
 
     if drift_ops != [] do
       lines = Enum.map_join(drift_ops, "\n", &"  * #{describe_difference(&1)}")
@@ -308,8 +315,10 @@ defmodule Hologram.Migrator do
   end
 
   @doc """
-  Converges the indexes the given mapping derives - rebuilding the ones PostgreSQL left
-  invalid and creating the ones that are absent - and returns :ok.
+  Converges the indexes the given mapping derives - the primary keys' and the unique ones -
+  rebuilding the ones PostgreSQL left invalid and creating the ones that are absent, and returns
+  :ok. The index plan's indexes are `Hologram.DB.IndexBuilder`'s, which builds them once the node
+  serves.
 
   Index builds are the one part of a migration that cannot ride its transaction, so they
   run after the file commits. A node dying in that window leaves the file recorded as
@@ -402,6 +411,82 @@ defmodule Hologram.Migrator do
     end)
   end
 
+  @doc """
+  Runs the given function on a session of its own, opened against the database currently
+  connected, and returns what it returns - the session the migration lock is taken on.
+
+  Opened against the database currently connected rather than the configured one: they are the
+  same at boot, and following the caller keeps the procedure honest wherever else the applier is
+  pointed. A session of its own, because the migration lock is session-scoped and the pool would
+  put the lock and the work on different connections. Stopping it releases the lock the boot
+  procedure takes, which is why that procedure has no unlock statement - a node that dies
+  mid-procedure frees it exactly the same way.
+
+  The session ends for good when its connection is lost: no reconnect and no restart, so a
+  statement after the loss fails or exits rather than run on a fresh connection - a new session
+  holds no lock, and what the caller ran next would run unlocked. The caller is linked to the
+  session, so one that runs on after such a loss traps exits. That includes a first connect that
+  fails, which ends the caller's work at once rather than after a few tries: a boot fails loudly,
+  for the release to start it again. And its statements run with no timeout of the server's,
+  whatever the role or the database sets - an index build over a big table takes as long as it
+  takes, and one cut short is left invalid, to be built again. Set by the session's first
+  statement rather than as startup parameters, which a pooler may refuse, and only the ones the
+  server knows: `transaction_timeout` is PostgreSQL 17's.
+  """
+  @spec with_migration_connection((-> any)) :: any
+  def with_migration_connection(fun) do
+    {:ok, %{rows: [[database]]}} = Connection.query("SELECT current_database()")
+
+    connection_opts =
+      Config.connection_opts(
+        backoff_type: :stop,
+        database: database,
+        max_restarts: 0
+      )
+
+    # TODO(#1696): Postgrex.start_link/1 again, see Hologram.DB.Protocol.
+    {:ok, connection_pid} = Protocol.start_link(connection_opts)
+
+    try do
+      Connection.with_connection(connection_pid, fn ->
+        {:ok, _result} =
+          Connection.query("""
+          SELECT set_config(name, '0', false)
+          FROM pg_catalog.pg_settings
+          WHERE name IN ('lock_timeout', 'statement_timeout', 'transaction_timeout')
+          """)
+
+        fun.()
+      end)
+    after
+      # A session already gone exits here, which would replace what the function raised.
+      catch_exit_quietly(fn -> GenServer.stop(connection_pid) end)
+    end
+  end
+
+  @doc """
+  Runs the given function under the migration lock, taken on the current session by polling (see
+  @advisory_lock_key in this module) and released once the function returns or raises, and
+  returns what the function returns. For work beside the boot procedure that changes the schema,
+  one step at a time - each step holds the lock no longer than it takes. Polls at the given
+  interval, the boot's when absent: a caller polling more slowly than the boot most likely gives
+  way to a booting node.
+  """
+  @spec with_migration_lock((-> any), pos_integer) :: any
+  def with_migration_lock(fun, poll_interval_ms \\ @migration_lock_poll_interval_ms) do
+    acquire_migration_lock(poll_interval_ms)
+
+    try do
+      fun.()
+    after
+      # Whatever it answers or however it ends: on a session that died, the lock went with it, and
+      # matching or exiting here would replace what the function raised.
+      catch_exit_quietly(fn ->
+        Connection.query("SELECT pg_advisory_unlock($1)", [@advisory_lock_key])
+      end)
+    end
+  end
+
   # The re-read inside the transaction stays, and is not redundant with the lock: the lock
   # keeps two nodes from applying at once, and this is what tells a node that WAITED for it
   # that the file it was about to apply is already there.
@@ -436,10 +521,10 @@ defmodule Hologram.Migrator do
 
   # Acquired by polling, never by queuing - see @advisory_lock_key. The work behind the lock
   # is ours to do, so there is no done-by-someone-else exit: the loop ends by winning it.
-  defp acquire_migration_lock do
+  defp acquire_migration_lock(poll_interval_ms \\ @migration_lock_poll_interval_ms) do
     unless try_migration_lock?() do
-      Process.sleep(@migration_lock_poll_interval_ms)
-      acquire_migration_lock()
+      Process.sleep(poll_interval_ms)
+      acquire_migration_lock(poll_interval_ms)
     end
   end
 
@@ -474,7 +559,8 @@ defmodule Hologram.Migrator do
   # A type change asks about the unique indexes standing over its column right before it
   # applies: two values can convert to one, and the names a file's earlier ops leave behind
   # are the ones the database holds at this point. A tightening carrying a fill keeps its
-  # type, so the clause above has no cast to ask about.
+  # type, so the clause above has no cast to ask about. It drops the plan's indexes over a column
+  # cast to text then too.
   #
   # The change rebuilds every index on the table, so an invalid unique one over rows that
   # already repeat its key is asked about first - the cast's own check would blame the cast
@@ -486,6 +572,7 @@ defmodule Hologram.Migrator do
     end
 
     Preflight.check_cast!(op)
+    drop_plan_indexes_cast_to_text(op)
 
     execute_statements(DDL.statements(op))
   end
@@ -586,6 +673,22 @@ defmodule Hologram.Migrator do
     :applied
   end
 
+  # A database holding an object under a name the current naming rule no longer derives - one
+  # a release that changed the rule left behind - can't be fixed by a migration: replay derives
+  # both sides with the current rule, so there is no difference for a file to express. The
+  # boot renames it instead, in one transaction and ahead of the pending migrations, whose
+  # ops name objects by the current rule and would otherwise fail on the old name. The
+  # diff is against what the applied migrations derive, and only its renames apply: anything
+  # else it finds is the pending files' to change, the index repair's to rebuild, or the drift
+  # check's to refuse.
+  #
+  # Only a node whose chain holds every applied version heals (see known_history?/2). One that
+  # lacks some is most often an older release booting after a newer one migrated the database,
+  # which the drift check refuses, so renaming the newer release's objects back would gain
+  # nothing. The plan's indexes are Hologram.DB.IndexBuilder's to rename, once the node serves. An
+  # older release that differs only by its naming rule does rename back, which is what it needs to
+  # boot once the newer nodes are stopped. Old and new nodes running against one database at once
+  # is a separate matter, not supported yet (#1627).
   defp apply_renames(pre_model) do
     expected =
       pre_model
@@ -633,6 +736,12 @@ defmodule Hologram.Migrator do
       Preflight.check_unique_index!(op)
       raise error
     end
+  end
+
+  defp catch_exit_quietly(fun) do
+    fun.()
+  catch
+    :exit, _reason -> :ok
   end
 
   defp changes_phrase([_one]), do: "change has"
@@ -739,7 +848,7 @@ defmodule Hologram.Migrator do
   #
   # With nothing pending the applied files derive the current model, so the repair after
   # them does the same work. On a history this node does not fully know, what the applied
-  # files derive is not what the database holds - see heal_renames/3.
+  # files derive is not what the database holds - see apply_renames/1.
   defp create_applied_indexes(migrations, applied, pending, pre_model) do
     if pending != [] and known_history?(migrations, applied) do
       pre_model
@@ -802,6 +911,40 @@ defmodule Hologram.Migrator do
     |> Enum.map(&inspect/1)
     |> Enum.sort()
     |> Enum.concat(designation)
+  end
+
+  # A column cast to text keeps its indexes - PostgreSQL rebuilds them over the raw text, which no
+  # plan index holds: a btree entry is capped near 2.7 kB, so a longer value would fail its write
+  # until the builder dropped the index. Dropped here instead, in the file's transaction, whose
+  # cast locks the table anyway, and the builder builds the plan's index over the sort key once the
+  # node serves.
+  defp drop_plan_indexes_cast_to_text(
+         %{before: %{type: before_type}, after: %{type: "text"}} = op
+       )
+       when before_type != "text" do
+    actual = Introspection.schema()
+    owned_names = IndexPlan.owned_index_names(actual)
+
+    for {name, index} <- Enum.sort(actual.tables[op.table].indexes),
+        MapSet.member?(owned_names, name),
+        op.column in index.columns do
+      execute_statements(DDL.statements(%{op: :drop_index, index: name}))
+    end
+
+    :ok
+  end
+
+  defp drop_plan_indexes_cast_to_text(_op), do: :ok
+
+  # What differs between the database and what the given mapping derives, leaving out the index
+  # plan's indexes (see check_drift!/1).
+  defp drift_ops(mapping) do
+    actual = Introspection.schema()
+    plan_names = IndexPlan.owned_index_names(actual)
+
+    actual
+    |> Schema.diff(Schema.from_mapping(mapping))
+    |> Enum.reject(&(&1.op == :drop_index and MapSet.member?(plan_names, &1.index)))
   end
 
   # A concurrent build that failed partway leaves the index in the catalog flagged
@@ -895,6 +1038,16 @@ defmodule Hologram.Migrator do
     {:ok, _result} = Connection.query(fill_statement, [encoded_value])
   end
 
+  # A node whose chain lacks an applied version runs older code than the database, or the version
+  # was removed from the chain. Most such gaps change the schema, and the drift check refuses them
+  # before anything is built - an index on a column the database lacks included. One that left the
+  # schema alone, like a role's change, passes it, and the node repairs the model's indexes as any
+  # boot does.
+  defp converge_for_unknown_chain(mapping) do
+    check_drift!(mapping)
+    repair_indexes(mapping)
+  end
+
   # Every filled row takes the one value, so its companions take one key each, set in the
   # same statement - on the rows the fill reaches only, where the companion fill after the
   # ops would recompute every row of the table.
@@ -963,29 +1116,6 @@ defmodule Hologram.Migrator do
 
   defp follow_index(_op, walked), do: {:cont, walked}
 
-  # A database holding an object under a name the current naming rule no longer derives - one
-  # a release that changed the rule left behind - can't be fixed by a migration: replay derives
-  # both sides with the current rule, so there is no difference for a file to express. The
-  # boot renames it instead, in one transaction and ahead of the pending migrations, whose
-  # ops name objects by the current rule and would otherwise fail on the old name. The
-  # diff is against what the applied migrations derive, and only its renames apply: anything
-  # else it finds is the pending files' to change, the index repair's to rebuild, or the drift
-  # check's to refuse.
-  #
-  # Only a node whose chain holds every applied version heals. One that lacks some is an
-  # older release booting after a newer one migrated the database, which the drift check
-  # refuses anyway, so renaming the newer release's objects back would gain nothing. An
-  # older release that differs only by its naming rule does rename back, which is what it
-  # needs to boot once the newer nodes are stopped. Old and new nodes running against one
-  # database at once is a separate matter, not supported yet (#1627).
-  defp heal_renames(migrations, applied, pre_model) do
-    if known_history?(migrations, applied) do
-      apply_renames(pre_model)
-    else
-      :ok
-    end
-  end
-
   defp hologram_schemas do
     statement = """
     SELECT nspname
@@ -1027,7 +1157,8 @@ defmodule Hologram.Migrator do
   end
 
   defp invalid_indexes do
-    {:ok, %{rows: rows}} = Connection.query(DDL.invalid_indexes_statement())
+    statement = DDL.invalid_indexes_statement(true)
+    {:ok, %{rows: rows}} = Connection.query(statement)
 
     Enum.map(rows, fn [index, _ready?, _live?] -> index end)
   end
@@ -1059,12 +1190,14 @@ defmodule Hologram.Migrator do
             "at another database"
   end
 
-  # Re-read inside the lock: the node that held it before may have finished everything
-  # already, which is the common case for every node of a deploy but the first.
+  # Read again inside the lock: the node that held it before may have finished everything
+  # already, which is the common case for every node of a deploy but the first. Read before it too,
+  # to tell whether the boot needs the lock at all (see up_to_date?/3).
   # Only what the model derives: an index the mapping does not name is drift for the
   # check to report, never something to create. A table the database does not have is
   # drift as well, and is skipped - creating its indexes would raise a relation error here,
-  # before check_drift!/1 gets to name the missing table as the cause. So is a name an index
+  # before check_drift!/1 gets to name the missing table as the cause - and so is a column it
+  # does not have, for the same reason. So is a name an index
   # already holds, whatever its definition, and an index the diff recognises as renamed:
   # building the derived one beside it would leave two, and the drift check names both.
   defp missing_indexes(mapping) do
@@ -1079,6 +1212,7 @@ defmodule Hologram.Migrator do
     |> Schema.diff(Schema.from_mapping(mapping))
     |> Enum.filter(fn op ->
       op.op == :create_index and Map.has_key?(actual.tables, op.table) and
+        Enum.all?(op.columns, &Map.has_key?(actual.tables[op.table].columns, &1)) and
         not MapSet.member?(held_names, op.index)
     end)
   end
@@ -1126,38 +1260,69 @@ defmodule Hologram.Migrator do
 
   # The not-covered check is pure, so it runs BEFORE the lock is taken: a deploy whose model
   # never became migrations refuses without first making the fleet queue for the privilege.
-  # Everything after it touches the schema and runs on the locked session.
+  # Everything after it touches the schema and runs on the locked session - unless a read-only
+  # look finds nothing to do (see up_to_date?/3), which is every boot of a deploy but the first.
   defp run_migrations(migrations, current_model, context) do
     check_covered!(migrations, current_model)
 
-    with_migration_connection(fn ->
-      acquire_migration_lock()
+    mapping = Mapper.derive_from_model!(current_model)
 
-      {:ok, _status} = Connection.transaction(fn -> ensure_managed!(context) end)
+    if !up_to_date?(migrations, mapping, context) do
+      with_migration_connection(fn ->
+        acquire_migration_lock()
 
-      applied = applied_versions()
-
-      pre_model =
-        migrations
-        |> Enum.filter(&(&1.version in applied))
-        |> Enum.reduce(Model.empty(), &Model.fold(&2, &1.ops))
-
-      heal_renames(migrations, applied, pre_model)
-
-      pending = pending(migrations, applied)
-
-      create_applied_indexes(migrations, applied, pending, pre_model)
-
-      apply_pending(pending, pre_model, context)
-
-      mapping = Mapper.derive_from_model!(current_model)
-
-      repair_indexes(mapping)
-
-      check_drift!(mapping)
-    end)
+        run_locked(migrations, mapping, context)
+      end)
+    end
 
     :ok
+  end
+
+  defp run_locked(migrations, mapping, context) do
+    {:ok, _status} = Connection.transaction(fn -> ensure_managed!(context) end)
+
+    applied = applied_versions()
+
+    pre_model =
+      migrations
+      |> Enum.filter(&(&1.version in applied))
+      |> Enum.reduce(Model.empty(), &Model.fold(&2, &1.ops))
+
+    history_known? = known_history?(migrations, applied)
+
+    if history_known?, do: apply_renames(pre_model)
+
+    pending = pending(migrations, applied)
+
+    create_applied_indexes(migrations, applied, pending, pre_model)
+
+    apply_pending(pending, pre_model, context)
+
+    if history_known? do
+      repair_indexes(mapping)
+      check_drift!(mapping)
+    else
+      converge_for_unknown_chain(mapping)
+    end
+  end
+
+  # Whether the database is claimed for this app and env, has every migration of the chain applied,
+  # no model index missing or invalid, and no drift - what the locked procedure would end with, so
+  # the boot skips it, and a node never waits for the lock behind another node's index builds (see
+  # Hologram.DB.IndexBuilder). Read-only, so taking no lock is safe: a node seeing a state another
+  # node is changing at that moment finds something to do, or finds it already done. Anything it
+  # can't read - a virgin database, another app's - is something to do, which the locked procedure
+  # claims or refuses.
+  #
+  # The invalid indexes are read last: a build in flight lists its index as present, invalid, from
+  # its first moment, and an index only goes from invalid to valid, so one the reads before found
+  # standing is either still invalid then, or built.
+  defp up_to_date?(migrations, mapping, context) do
+    hologram_schemas() == Enum.sort([Mapper.data_schema(), Mapper.system_schema()]) and
+      check_marker!(context) == :managed and pending(migrations, applied_versions()) == [] and
+      missing_indexes(mapping) == [] and drift_ops(mapping) == [] and invalid_indexes() == []
+  rescue
+    _error -> false
   end
 
   defp try_migration_lock? do
@@ -1165,24 +1330,5 @@ defmodule Hologram.Migrator do
       Connection.query("SELECT pg_try_advisory_lock($1)", [@advisory_lock_key])
 
     acquired?
-  end
-
-  # Opened against the database currently connected rather than the configured one: they are
-  # the same at boot, and following the caller keeps the procedure honest wherever else the
-  # applier is pointed. A session of its own, because the migration lock is session-scoped and
-  # the pool would put the lock and the work on different connections. Stopping it is what
-  # releases the lock, which is why no unlock statement appears anywhere - a node that dies
-  # mid-procedure frees it exactly the same way.
-  defp with_migration_connection(fun) do
-    {:ok, %{rows: [[database]]}} = Connection.query("SELECT current_database()")
-    connection_opts = Config.connection_opts(database: database)
-    # TODO(#1696): Postgrex.start_link/1 again, see Hologram.DB.Protocol.
-    {:ok, connection_pid} = Protocol.start_link(connection_opts)
-
-    try do
-      Connection.with_connection(connection_pid, fun)
-    after
-      GenServer.stop(connection_pid)
-    end
   end
 end

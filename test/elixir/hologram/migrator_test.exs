@@ -55,6 +55,16 @@ defmodule Hologram.MigratorTest do
     end)
   end
 
+  defp index_oid(name) do
+    {:ok, %{rows: [[oid]]}} =
+      Connection.query(
+        ~s{SELECT c.oid FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c."relnamespace" WHERE n."nspname" = 'hologram_data' AND c."relname" = $1},
+        [name]
+      )
+
+    oid
+  end
+
   defp migration(version, ops) do
     %{version: version, path: "app/migrations/#{version}.ex", ops: ops}
   end
@@ -590,27 +600,54 @@ defmodule Hologram.MigratorTest do
       assert applied_versions() == MapSet.new(["20260813091522"])
     end
 
+    # What another node leaves in the window between a file's commit and its tail: the index the
+    # tail is about to build, already standing and valid. The tail builds nothing over it and drops
+    # nothing - the same index, by its oid, stands after. A unique attribute's, since migrations
+    # build the model's indexes alone, and declared by a later file, so that its table stands and the
+    # build goes to the tail.
     test "leaves a valid index of the same name alone" do
       create =
         migration("20260813091522", [
-          %{op: :create_entity, entity: MyApp.User, line: 3},
-          %{op: :create_entity, entity: MyApp.Task, line: 4},
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
           %{
-            op: :add_relationship,
+            op: :add_attribute,
             entity: MyApp.Task,
-            name: :author,
-            type: MyApp.User,
+            name: :slug,
+            type: :string,
             opts: [optional: true],
-            line: 5
+            line: 4
           }
         ])
 
-      apply_pending([create], Model.empty(), @context)
+      unique =
+        migration("20260813091523", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [unique: true],
+            line: 3
+          }
+        ])
 
-      statement = DDL.invalid_index_check_statement("my_app_task_author_id_$idx")
-      {:ok, %{rows: [[count]]}} = Connection.query(statement)
+      model = apply_pending([create], Model.empty(), @context)
 
-      assert count == 0
+      index = "my_app_task_slug_$uidx"
+
+      {:ok, _result} =
+        Connection.query(
+          ~s{CREATE UNIQUE INDEX "#{index}" ON "hologram_data"."my_app_task" ("slug")}
+        )
+
+      oid = index_oid(index)
+
+      apply_pending([unique], model, @context)
+
+      built_check = DDL.built_index_check_statement(index)
+      {:ok, %{rows: [[built]]}} = Connection.query(built_check)
+
+      assert built == 1
+      assert index_oid(index) == oid
     end
 
     # The file's own add puts the column and its fill in place before the tail is checked,
@@ -872,7 +909,6 @@ defmodule Hologram.MigratorTest do
         normalize_newlines("""
         schema drift detected - the database does not match the model:
           * column "title_$sort" on table "my_app_task" declared by the model is missing
-          * index "my_app_task_title_$sort_$idx" declared by the model is missing
         hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
         """)
 
@@ -1030,6 +1066,7 @@ defmodule Hologram.MigratorTest do
       [mapping: Mapper.derive_from_model!(model)]
     end
 
+    # No index plan: these apply files without a boot, and the plan's indexes are its own to build.
     test "passes a database carrying every index the model derives", %{mapping: mapping} do
       assert repair_indexes(mapping) == :ok
     end

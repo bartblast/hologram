@@ -340,24 +340,35 @@ defmodule Hologram.DB.DDL do
 
   @doc """
   Returns the statement listing the invalid indexes of the data schema - each one's name,
-  whether writes go through it, and whether it is live.
+  whether writes go through it, and whether it is live - all of them, or the unique ones or the
+  others as the given filter says.
 
   A concurrent build that failed partway leaves its index in the catalog flagged
   invalid: it holds the derived name and serves no query. Writes go through it when the
   build failed in its last phase, checking the rows - a unique one then refuses a write
   repeating its key - and not when it failed in its first, building the index. A concurrent
   drop that stopped partway can leave its index dead: writes skip it, and so does a table
-  rewrite, unless the rewrite changes the type of a column it covers.
+  rewrite, unless the rewrite changes the type of a column it covers. The migrator repairs the
+  unique ones, which the model derives, and `Hologram.DB.IndexBuilder` the others, which the index
+  plan derives - apart, since a build in flight reads as invalid too, and each builds its own under
+  the migration lock.
   """
-  @spec invalid_indexes_statement() :: String.t()
-  def invalid_indexes_statement do
+  @spec invalid_indexes_statement(:any | boolean) :: String.t()
+  def invalid_indexes_statement(unique \\ :any) do
+    unique_sql =
+      case unique do
+        :any -> ""
+        true -> " AND i.indisunique"
+        false -> " AND NOT i.indisunique"
+      end
+
     """
     SELECT ic.relname, i.indisready, i.indislive
     FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
     JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = '#{Mapper.data_schema()}' AND NOT i.indisvalid
+    WHERE n.nspname = '#{Mapper.data_schema()}' AND NOT i.indisvalid#{unique_sql}
     ORDER BY ic.relname\
     """
   end

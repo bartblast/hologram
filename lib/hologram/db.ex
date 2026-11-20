@@ -11,6 +11,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Mapper
   alias Hologram.DB.Protocol
   alias Hologram.DB.QueryRunner
@@ -30,6 +31,9 @@ defmodule Hologram.DB do
   alias Hologram.WriteError
 
   @mapping_key {__MODULE__, :mapping}
+
+  # The index plan the last reconciliation this node ran converged the database to.
+  @plan_key {__MODULE__, :plan}
 
   # How long the boot waits between two tries while the database cannot be reached. Each try also
   # waits for the pool to give up on a checkout, about 4 seconds with DBConnection's defaults, then
@@ -771,20 +775,23 @@ defmodule Hologram.DB do
   @spec reconcile_at_boot() :: :ignore
   def reconcile_at_boot do
     await_database()
-    SchemaReconciler.reconcile(reconciliation_context())
+    reconcile_with_plan(reconciliation_context())
 
     :ignore
   end
 
   @doc """
-  Returns the context for a schema reconciliation run: the cached mapping, the guard
-  facts (otp_app and env as strings), and the marker diagnostics (the Hologram version
-  and the current UTC timestamp).
+  Returns the context for a schema reconciliation run: the cached mapping, the index plan
+  over it (see `Hologram.DB.IndexPlan.plan/2`), the guard facts (otp_app and env as strings),
+  and the marker diagnostics (the Hologram version and the current UTC timestamp).
   """
   @spec reconciliation_context() :: %{atom => any}
   def reconciliation_context do
+    mapping = mapping()
+
     %{
-      mapping: mapping(),
+      mapping: mapping,
+      plan: IndexPlan.plan(mapping),
       otp_app: Atom.to_string(Reflection.otp_app()),
       env: Atom.to_string(Hologram.env()),
       hologram_version: to_string(Application.spec(:hologram, :vsn)),
@@ -834,7 +841,26 @@ defmodule Hologram.DB do
       mapping = Mapper.derive!(entity_types, role_modules)
       :persistent_term.put(@mapping_key, mapping)
 
-      SchemaReconciler.reconcile(reconciliation_context())
+      reconcile_with_plan(reconciliation_context())
+    end
+
+    :ok
+  end
+
+  @doc """
+  Reconciles the schema again when the index plan the build's dump gives now differs from the one
+  this node last converged the database to - the live-reload path once a compile has derived or
+  kept the data layer, since a change to a query alone changes the plan without touching the model. A no-op
+  when the database is not running. Returns :ok.
+  """
+  @spec reload_indexes() :: :ok
+  def reload_indexes do
+    if Process.whereis(__MODULE__) do
+      context = reconciliation_context()
+
+      if context.plan != :persistent_term.get(@plan_key, nil) do
+        reconcile_with_plan(context)
+      end
     end
 
     :ok
@@ -966,6 +992,11 @@ defmodule Hologram.DB do
   # received value.
   defp put_values(attribute_ops) do
     for {name, {:put, value}} <- attribute_ops, into: %{}, do: {name, value}
+  end
+
+  defp reconcile_with_plan(context) do
+    SchemaReconciler.reconcile(context)
+    :persistent_term.put(@plan_key, context.plan)
   end
 
   # The value the write gave the field, ahead of which it is spelled - or nothing, for a field
