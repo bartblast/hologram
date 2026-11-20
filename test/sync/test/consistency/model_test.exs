@@ -2,67 +2,21 @@ defmodule HologramSyncTests.Consistency.ModelTest do
   # async: false - each test truncates the shared tables.
   use HologramSyncTests.TestCase, async: false
 
-  import Hologram.Query, only: [add_relationship: 3, include: 2]
+  import Hologram.Query, only: [include: 2]
   import Hologram.Test, only: [as_user: 2]
   import HologramSyncTests.Helpers
 
-  alias Hologram.Auth
   alias Hologram.DB
   alias Hologram.Sync.Fill
   alias Hologram.Sync.WireData
   alias HologramSyncTests.Consistency.Model
-  alias HologramSyncTests.Entities.Board
   alias HologramSyncTests.Entities.Card
-  alias HologramSyncTests.Entities.Notice
-  alias HologramSyncTests.Entities.NoticeBlock
-  alias HologramSyncTests.Entities.Space
-  alias HologramSyncTests.Entities.SpaceMember
   alias HologramSyncTests.Entities.Tag
-  alias HologramSyncTests.Entities.User
 
-  # A state taking every rule's branches: a member of one space and not the other, an archived
-  # board its space's member may not read, a viewer on one board, a type-wide viewer, a notice
-  # blocking one user, tags on cards of boards some users read and others don't, and a user in no
-  # space at all.
   setup do
     truncate_tables()
 
-    [member, viewer, wide_viewer, outsider] =
-      Enum.map(~w(member viewer wide_viewer outsider), &create!(User, name: &1))
-
-    open_space = create!(Space, name: "open")
-    other_space = create!(Space, name: "other")
-
-    create!(SpaceMember, space_id: open_space.id, user_id: member.id)
-    create!(SpaceMember, space_id: other_space.id, user_id: viewer.id)
-
-    open_board = create!(Board, name: "open", space_id: open_space.id)
-    archived_board = create!(Board, archived: true, name: "archived", space_id: open_space.id)
-    other_board = create!(Board, name: "other", space_id: other_space.id)
-
-    Auth.grant_role(viewer, :viewer, archived_board)
-    Auth.grant_role(wide_viewer, :viewer, Board)
-
-    [red, blue] = Enum.map(~w(red blue), &create!(Tag, name: &1))
-
-    create!(Card, board_id: other_board.id, title: "other card")
-
-    for {board, title, tags} <- [
-          {open_board, "open card", [red, blue]},
-          {archived_board, "archived card", [red]}
-        ] do
-      card = create!(Card, board_id: board.id, title: title)
-
-      tags
-      |> Enum.reduce(card, &add_relationship(&2, :tags, &1.id))
-      |> DB.update!()
-    end
-
-    quiet = create!(Notice, title: "quiet")
-    create!(Notice, title: "loud")
-    create!(NoticeBlock, notice_id: quiet.id, user_id: member.id)
-
-    %{users: [member, viewer, wide_viewer, outsider]}
+    %{users: write_fixture()}
   end
 
   test "a signed-in user's rows are the rows Hologram reads for them", %{users: users} do
@@ -144,13 +98,6 @@ defmodule HologramSyncTests.Consistency.ModelTest do
       {name, ids} when is_list(ids) -> {name, Enum.sort(ids)}
       field -> field
     end)
-  end
-
-  defp create!(type, fields) do
-    fields
-    |> Map.new()
-    |> type.new()
-    |> DB.create!()
   end
 
   defp ids(rows) do

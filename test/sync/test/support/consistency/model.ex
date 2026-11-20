@@ -24,6 +24,11 @@ defmodule HologramSyncTests.Consistency.Model do
 
   @types [Board, Card, Notice, NoticeBlock, Space, SpaceMember, Tag, User]
 
+  # The to-many relationships a row travels with as a set of ids, by type: a card's tags, and the
+  # inverse of that on a tag. Every other relationship is a to-one, whose reference field is the
+  # row's, or the inverse of one, which travels as the other rows' reference fields.
+  @sets %{Card => %{"tags" => Tag}, Tag => %{"cards" => Card}}
+
   @typedoc """
   A state of the test's tables: the rows of each type by id, the card and tag pairs, and the
   viewer grants on boards, each `{user_id, board_id}`, or `{user_id, :all}` for a type-wide one.
@@ -111,6 +116,13 @@ defmodule HologramSyncTests.Consistency.Model do
   end
 
   @doc """
+  Returns the sets a row of the given type travels with, by name, each with the type of the rows it
+  names.
+  """
+  @spec sets(module) :: %{String.t() => module}
+  def sets(type), do: Map.get(@sets, type, %{})
+
+  @doc """
   Returns the entity types the test syncs, sorted.
   """
   @spec types() :: list(module)
@@ -152,15 +164,24 @@ defmodule HologramSyncTests.Consistency.Model do
   end
 
   # A card's tags and a tag's cards, kept to the ones the user may read, as the fill keeps a set.
-  defp sets(state, user_id, Card, id) do
-    %{"tags" => set_ids(state, user_id, Tag, for({^id, tag_id} <- state.pairs, do: tag_id))}
+  defp sets(state, user_id, type, id) do
+    type
+    |> sets()
+    |> Map.new(fn {name, target_type} ->
+      named =
+        state.pairs
+        |> Enum.map(&other_side(type, &1, id))
+        |> Enum.reject(&is_nil/1)
+
+      {name, set_ids(state, user_id, target_type, named)}
+    end)
   end
 
-  defp sets(state, user_id, Tag, id) do
-    %{"cards" => set_ids(state, user_id, Card, for({card_id, ^id} <- state.pairs, do: card_id))}
-  end
+  defp other_side(Card, {id, tag_id}, id), do: tag_id
 
-  defp sets(_state, _user_id, _type, _id), do: %{}
+  defp other_side(Tag, {card_id, id}, id), do: card_id
+
+  defp other_side(_type, _pair, _id), do: nil
 
   defp set_ids(state, user_id, type, ids) do
     ids
