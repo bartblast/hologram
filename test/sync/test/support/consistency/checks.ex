@@ -2,7 +2,9 @@ defmodule HologramSyncTests.Consistency.Checks do
   @moduledoc false
 
   # The consistency checks. The first: once writes stop, a client holds exactly what its user may
-  # read - every row, with its current fields and sets, and nothing more.
+  # read - every row, with its current fields and sets, and nothing more. The second: every row a
+  # client received was one its user could read, with the values it carried, in a state the server
+  # could have read it from.
 
   alias HologramSyncTests.Consistency.Client
   alias HologramSyncTests.Consistency.Model
@@ -29,6 +31,28 @@ defmodule HologramSyncTests.Consistency.Checks do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
 
     poll_converged(client, user_id, deadline)
+  end
+
+  @doc """
+  Returns the records of the given client's user, from `Client.records/1`, that no state the frame
+  could have been read from explains: none in which the user could read the row with every field
+  the record carried.
+
+  A frame could have been read from a state when the state could have committed before the frame
+  arrived (its transaction got the commit lock before then), could still have been current when the
+  connection carrying the frame opened (no later state had committed by the open),
+  and, under a cursor, is at or after every state left by a transaction below the cursor's: the
+  server read the place before the frame's rows, and every transaction below it had ended by then.
+  Each violation names the record and the states that bounded it, by position in the history.
+  """
+  @spec leaks(list(map), list(map), String.t() | nil) :: list(map)
+  def leaks(records, entries, user_id) do
+    indexed =
+      entries
+      |> with_superseded_at()
+      |> Enum.with_index()
+
+    Enum.flat_map(records, &leak(&1, indexed, user_id))
   end
 
   @doc """
@@ -68,6 +92,62 @@ defmodule HologramSyncTests.Consistency.Checks do
         poll_converged(client, user_id, deadline)
     end
   end
+
+  defp candidates(record, indexed) do
+    floor = cursor_floor(record.cursor_tx, indexed)
+
+    Enum.filter(indexed, fn {entry, index} ->
+      entry.after_lock_at < record.received_at and index >= floor and
+        (entry.superseded_at == :infinity or entry.superseded_at >= record.opened_at)
+    end)
+  end
+
+  # The position of the last state a transaction below the cursor left - the earliest state the
+  # frame's rows can be from.
+  defp cursor_floor(nil, _indexed), do: 0
+
+  defp cursor_floor(cursor_tx, indexed) do
+    indexed
+    |> Enum.filter(fn {entry, _index} -> entry.xid < cursor_tx end)
+    |> Enum.map(&elem(&1, 1))
+    |> Enum.max(fn -> 0 end)
+  end
+
+  defp explains?(entry, record, user_id) do
+    row = get_in(entry.state, [:rows, record.type, record.id])
+
+    row != nil and Enum.all?(record.carried, fn {name, value} -> Map.get(row, name) == value end) and
+      Model.readable?(entry.state, user_id, record.type, record.id)
+  end
+
+  defp leak(record, indexed, user_id) do
+    candidates = candidates(record, indexed)
+
+    if Enum.any?(candidates, fn {entry, _index} -> explains?(entry, record, user_id) end) do
+      []
+    else
+      [%{candidates: Enum.map(candidates, &elem(&1, 1)), record: record, user_id: user_id}]
+    end
+  end
+
+  # When each state stopped being current at the latest: the earliest commit time of any later
+  # state, since writers read their commit times apart and a later state's can be read first. The
+  # last state is current still.
+  defp with_superseded_at(entries) do
+    {superseded, _earliest} =
+      entries
+      |> Enum.reverse()
+      |> Enum.map_reduce(:infinity, fn entry, earliest_later ->
+        {Map.put(entry, :superseded_at, earliest_later),
+         min_time(entry.committed_at, earliest_later)}
+      end)
+
+    Enum.reverse(superseded)
+  end
+
+  defp min_time(time, :infinity), do: time
+
+  defp min_time(time, other), do: min(time, other)
 
   defp row_diff(_type, _id, nil, nil), do: []
 

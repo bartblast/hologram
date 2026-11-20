@@ -14,6 +14,7 @@ defmodule HologramSyncTests.Consistency.Client do
   # Temporary: a client that crashed is a failure to see, not one to restart empty.
   use GenServer, restart: :temporary
 
+  alias Hologram.Sync.Cursor
   alias Hologram.Sync.Frame
   alias Hologram.Test.SyncClient
   alias HologramSyncTests.Consistency.Model
@@ -533,17 +534,16 @@ defmodule HologramSyncTests.Consistency.Client do
     end
   end
 
-  # The transaction id a frame's cursor names first - opaque to a browser, read here because the
-  # checks bound what a frame may carry by it. A cursor of another shape fails the run rather than
-  # being passed over, so a change to the format can't quietly switch the bound off.
+  # The transaction id a frame's cursor names - opaque to a browser, read here because check 2
+  # bounds what a frame may carry by it, and read the way the server reads one back. A cursor the
+  # server's own decoding can't read fails the run rather than being passed over, so a change to
+  # the format can't quietly switch the bound off.
   defp cursor_tx(nil), do: {:ok, nil}
 
   defp cursor_tx(cursor) do
-    with [tx | _rest] <- String.split(cursor, "."),
-         {tx, ""} <- Integer.parse(tx) do
-      {:ok, tx}
-    else
-      _other_shape -> :error
+    case Cursor.decode(cursor) do
+      {:ok, tx, _seq, _policy_hash, _types_hash} -> {:ok, tx}
+      :error -> :error
     end
   end
 

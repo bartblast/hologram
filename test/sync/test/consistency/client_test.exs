@@ -101,6 +101,32 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     refute Map.has_key?(Client.store(client)[Tag], "stale")
   end
 
+  # Check 2 bounds a frame by its cursor's transaction id, so a cursor of another shape has to stop
+  # the run rather than switch the bound off.
+  test "a client fails on a cursor it can't read a transaction id from", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+
+    [%{request_id: request_id}] =
+      client
+      |> Client.events()
+      |> Enum.filter(&(&1.kind == :connect))
+
+    chunk = """
+    event: sync_deltas
+    data: {"cursor":"123.0","deltas":{"put_entity":{"HologramSyncTests.Entities.Tag":[{"id":"t","name":"t"}]}}}
+
+    """
+
+    send(client, {:http, {request_id, :stream, chunk}})
+
+    assert [%{cursor: "123.0", failure: "unreadable cursor"}] = Client.failures(client)
+  end
+
   # Stopped the way ExUnit stops it at a test's end, by its supervisor.
   test "a stopped client leaves no session on the server", %{users: [member | _users]} do
     client = start_supervised!({Client, base_url: base_url(), user_id: member.id}, id: :stopped)
