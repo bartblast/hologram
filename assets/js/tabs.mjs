@@ -60,7 +60,8 @@ export default class Tabs {
   static leader = true;
 
   // Whether this tab is still settling where the lead it took starts from - while it checks the
-  // store against what it holds (see #lead). A stream opened meanwhile is not served sync.
+  // store against what it holds (see #lead), or holds a lead the group handed it before it was
+  // ready to take it (see #wait). A stream opened meanwhile is not served sync.
   static takingLead = false;
 
   // The group this tab belongs to, and nothing when it belongs to none.
@@ -493,6 +494,7 @@ export default class Tabs {
     }
 
     if (lead) {
+      Tabs.takingLead = false;
       Tabs.#onLead();
     } else if (Tabs.leader) {
       Tabs.postState();
@@ -673,12 +675,13 @@ export default class Tabs {
 
       Tabs.postState();
 
-      // The stream this tab has greeted the server with no sync - opened as a follower, or while
-      // this was deciding - or has not greeted yet, and would then greet with sync from whatever
-      // place the decision left; either way one the server serves sync on stands in its place,
-      // whichever answers last (see Sse.connect). Holding no place when it took the lead, a tab
-      // handed the lead while starting has none yet: its page starts one right after, which greets
-      // as the leader by itself, and a reconnect would open a second one beside it.
+      // The stream this tab has greeted the server with no sync - opened as a follower, while it
+      // held a lead it was not ready to take, or while this was deciding - or has not greeted yet,
+      // and would then greet with sync from whatever place the decision left; either way one the
+      // server serves sync on stands in its place, whichever answers last (see Sse.connect).
+      // Holding no place when it took the lead, a tab handed the lead while starting has none yet:
+      // its page starts one right after, which greets as the leader by itself, and a reconnect
+      // would open a second one beside it.
       if (Sse.isStarted) {
         Sse.reconnect();
       }
@@ -829,8 +832,9 @@ export default class Tabs {
   // What that costs, a round trip at most. A tab that heard a frame the new leader passed over goes
   // back to the store's rows until the stream sends that frame again; a batch the dropped frame
   // landed folds without those writes meanwhile, and a row a confirmed batch promoted is gone
-  // until the frame that stored it is replayed. And a stream reconnecting while a tab handed the
-  // lead still reads greets with sync, which the lead's own reconnect replaces. A read that fails
+  // until the frame that stored it is replayed. A stream reconnecting while a tab handed the lead
+  // still reads asks for no sync (see #wait) until the lead's own reconnect greets from the place
+  // the read settles on. A read that fails
   // costs more, and is rarer: a tab that leaves keeps nothing from then on, and its own pending
   // writes leave its screen, to land through the group's leader, which sends them from the queue -
   // or, when it leaves a lead it was handed over another user's store, through the next tab in
@@ -984,10 +988,16 @@ export default class Tabs {
       Tabs.leader = true;
       Tabs.#unrecorded = true;
 
+      // Not ready, it holds a place it cannot vouch for yet - the one it is reading the store again
+      // to check (see #takeStore) - so a stream that greets the server meanwhile, reconnecting on
+      // its own, asks for no sync from it (see SyncStream.buildGreeting). The lead's own reconnect
+      // greets from the place it settles on. (A tab still starting has no stream to greet with
+      // yet; the flag only keeps the rule the same for it.)
       if (Tabs.#ready) {
         Tabs.#onLead();
       } else {
         Tabs.#leadWhenReady = true;
+        Tabs.takingLead = true;
       }
 
       return Tabs.#hold();

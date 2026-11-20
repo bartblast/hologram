@@ -63,8 +63,8 @@ export default class SyncStream {
     // sync session's to consolidate.
     //
     // Nor does a tab still settling where its lead starts from (see Tabs.takingLead): a frame
-    // served now would be written over a store that is about to be cleared. It is greeted again
-    // once that is settled.
+    // served now would be written over a store and rows that may not stand at the place it
+    // names, or are about to be cleared. It is greeted again once that is settled.
     if (pageModule === null || !Tabs.leader || Tabs.takingLead) {
       return {};
     }

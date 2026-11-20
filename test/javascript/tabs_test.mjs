@@ -612,6 +612,18 @@ describe("Tabs", () => {
       assert.isTrue(Tabs.sends());
     });
 
+    // It would be greeted with no sync until then: its page's place is not one it can vouch for
+    // yet.
+    it("is served no sync until it takes the lead it was handed while starting", async () => {
+      await handOverWhileStarting(nextGroup(), {onLead: () => {}});
+
+      assert.isTrue(Tabs.takingLead);
+
+      Tabs.ready();
+
+      assert.isFalse(Tabs.takingLead);
+    });
+
     // Until its restore a starting tab holds no place, and taking the lead without one is asking for
     // everything again over a store that has one.
     it("waits until it is ready to take the lead it was handed while starting", async () => {
@@ -2200,6 +2212,35 @@ describe("Tabs", () => {
         } finally {
           Sse.isStarted = wasStarted;
         }
+      });
+
+      // A stream reconnecting meanwhile would greet the server with sync from the place the read
+      // is checking. The lead's own reconnect greets from the place it settles on.
+      it("is served no sync while it holds a lead it was handed during the read", async () => {
+        let read;
+
+        sinon
+          .stub(Durability, "readBase")
+          .returns(new Promise((resolve) => (read = resolve)));
+
+        let settling;
+
+        const led = sinon.spy(() => (settling = Tabs.takingLead));
+        const {release} = await follow({onLead: led});
+
+        Tabs.receive(state("place-2"));
+
+        release();
+        await waitForEventLoop();
+
+        assert.isTrue(Tabs.leader);
+        assert.isTrue(Tabs.takingLead);
+
+        read({cursor: "place-2", records: []});
+        await waitForEventLoop();
+
+        assert.isTrue(led.calledOnce);
+        assert.isFalse(settling);
       });
 
       // Leaving would let go of the lock, and with nobody waiting for it nobody would send the queue.
