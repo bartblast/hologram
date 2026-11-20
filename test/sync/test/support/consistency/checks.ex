@@ -4,7 +4,8 @@ defmodule HologramSyncTests.Consistency.Checks do
   # The consistency checks. The first: once writes stop, a client holds exactly what its user may
   # read - every row, with its current fields and sets, and nothing more. The second: every row a
   # client received was one its user could read, with the values it carried, in a state the server
-  # could have read it from.
+  # could have read it from, and every row its sets or a pair named one its user could read since
+  # the connection opened.
 
   alias HologramSyncTests.Consistency.Client
   alias HologramSyncTests.Consistency.Model
@@ -36,7 +37,9 @@ defmodule HologramSyncTests.Consistency.Checks do
   @doc """
   Returns the records of the given client's user, from `Client.records/1`, that no state the frame
   could have been read from explains: none in which the user could read the row with every field
-  the record carried.
+  the record carried, or a row its sets or its pair named that the user could read in none of them.
+  Each named row is judged on its own: a row handed over whole carries sets built from what the
+  session takes the client to hold, which can be read a moment apart from the row's values.
 
   A frame could have been read from a state when the state could have committed before the frame
   arrived (its transaction got the commit lock before then), could still have been current when the
@@ -97,8 +100,17 @@ defmodule HologramSyncTests.Consistency.Checks do
   defp candidates(record, indexed) do
     floor = cursor_floor(record.cursor_tx, indexed)
 
-    Enum.filter(indexed, fn {entry, index} ->
-      entry.after_lock_at < record.received_at and index >= floor and
+    record
+    |> open_candidates(indexed)
+    |> Enum.filter(fn {_entry, index} -> index >= floor end)
+  end
+
+  # The states current at some point between the connection opening and the frame arriving, with no
+  # floor: a row a set or a pair names is one the session holds, readable when it read or told it,
+  # which can be a state below the frame's place - but never one from before the connection.
+  defp open_candidates(record, indexed) do
+    Enum.filter(indexed, fn {entry, _index} ->
+      entry.after_lock_at < record.received_at and
         (entry.superseded_at == :infinity or entry.superseded_at >= record.opened_at)
     end)
   end
@@ -121,10 +133,28 @@ defmodule HologramSyncTests.Consistency.Checks do
       Model.readable?(entry.state, user_id, record.type, record.id)
   end
 
+  # Every row a record's sets or pair named has to be one the user could read in some state since
+  # the connection opened.
+  defp named_readable?(open, user_id, record) do
+    Enum.all?(record.named, fn {type, id} -> readable_in_any?(open, user_id, type, id) end)
+  end
+
+  defp readable_in_any?(states, user_id, type, id) do
+    Enum.any?(states, fn {entry, _index} -> Model.readable?(entry.state, user_id, type, id) end)
+  end
+
+  # A pair carries no values, only the row it's filed under, which the session holds - so that row is
+  # judged as a named row is. A row's values pin the state they came from, bounded by its place.
   defp leak(record, indexed, user_id) do
     candidates = candidates(record, indexed)
+    open = open_candidates(record, indexed)
 
-    if Enum.any?(candidates, fn {entry, _index} -> explains?(entry, record, user_id) end) do
+    row_explained? =
+      if Map.get(record, :pair?, false),
+        do: readable_in_any?(open, user_id, record.type, record.id),
+        else: Enum.any?(candidates, fn {entry, _index} -> explains?(entry, record, user_id) end)
+
+    if row_explained? and named_readable?(open, user_id, record) do
       []
     else
       [%{candidates: Enum.map(candidates, &elem(&1, 1)), record: record, user_id: user_id}]

@@ -11,7 +11,8 @@ defmodule HologramSyncTests.ConsistencyTest do
 
   # Clients take random writes, access changes, cuts and reconnects, and once the writes stop each
   # holds exactly what its user may read (check 1), having received no row its user couldn't read
-  # when it was sent (check 2). The plan comes from the seed: SYNC_SEED, ExUnit's by default.
+  # when it was sent, nor a set or pair naming one (check 2). The plan comes from the seed:
+  # SYNC_SEED, ExUnit's by default.
   #
   # TODO: run it in CI again once #1749 is fixed - a live batch queued behind a returning client's
   # catch-up can send an older row under the catch-up's place, which check 2 flags.
@@ -40,6 +41,7 @@ defmodule HologramSyncTests.ConsistencyTest do
       carried: %{"title" => "stale"},
       cursor_tx: 1_234,
       id: "card-1",
+      named: [],
       opened_at: 0,
       received_at: 10,
       type: Card

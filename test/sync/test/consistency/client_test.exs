@@ -174,6 +174,34 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     assert [%{cursor: "123.0", failure: "unreadable cursor"}] = Client.failures(client)
   end
 
+  test "a client records the rows a row's set and an added pair name", %{users: [member | _users]} do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+
+    [%{request_id: request_id}] =
+      client
+      |> Client.events()
+      |> Enum.filter(&(&1.kind == :connect))
+
+    chunk = """
+    event: sync_deltas
+    data: {"cursor":null,"deltas":{"add_relationship":{"HologramSyncTests.Entities.Card":[{"id":"c","relationship":"tags","target_id":"t2"}]},"put_entity":{"HologramSyncTests.Entities.Tag":[{"cards":["c"],"id":"t","name":"t"}]}}}
+
+    """
+
+    send(client, {:http, {request_id, :stream, chunk}})
+
+    named =
+      client
+      |> Client.records()
+      |> Enum.take(-2)
+      |> Enum.map(&{&1.type, &1.id, &1.named})
+
+    assert named == [{Card, "c", [{Tag, "t2"}]}, {Tag, "t", [{Card, "c"}]}]
+  end
+
   # Only a batch's last frame carries a place, and the batch's rows were read after every
   # transaction below the place the client already held.
   test "a client bounds a frame with no cursor by the place it held", %{users: [member | _users]} do

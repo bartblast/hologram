@@ -25,10 +25,11 @@ defmodule HologramSyncTests.Consistency.Client do
   @reconnect_delay_ms 250
 
   @typedoc """
-  A put or a patch of one of the model's rows, as the client received it: the monotonic time read
-  before the connect that carried it started, the time the chunk completing its frame arrived, the
-  transaction id bounding it, the declared fields it carried, and whether the client applied it - a
-  patch for a row it doesn't hold is passed over, and is a row the server sent all the same.
+  A put or a patch of one of the model's rows, or a pair added under one, as the client received
+  it: the monotonic time read before the connect that carried it started, the time the chunk
+  completing its frame arrived, the transaction id bounding it, the declared fields it carried, the
+  rows its sets or its pair named, each `{type, id}`, and whether the client applied it - a patch
+  for a row it doesn't hold is passed over, and is a row the server sent all the same.
 
   The bound is the frame's cursor, or, for a frame carrying none, the place the client held when it
   arrived: only a batch's last frame carries one, and the server read the batch's rows after every
@@ -40,6 +41,8 @@ defmodule HologramSyncTests.Consistency.Client do
           carried: map,
           cursor_tx: non_neg_integer | nil,
           id: String.t(),
+          named: list({module, String.t()}),
+          pair?: boolean,
           opened_at: integer,
           received_at: integer,
           type: module
@@ -115,7 +118,8 @@ defmodule HologramSyncTests.Consistency.Client do
   end
 
   @doc """
-  Returns every put and patch of the model's rows the client received, oldest first.
+  Returns every put and patch of the model's rows, and every pair added under one, the client
+  received, oldest first.
   """
   @spec records(pid) :: list(received)
   def records(client), do: GenServer.call(client, :records)
@@ -391,13 +395,14 @@ defmodule HologramSyncTests.Consistency.Client do
     Enum.reduce(items, state, &apply_one(&2, op, type, &1, origin))
   end
 
-  defp apply_one(state, "add_relationship", type, item, _origin) do
-    update_fact(
-      state,
-      {type, item["relationship"]},
-      item["id"],
-      &MapSet.put(&1, item["target_id"])
-    )
+  # A pair names a row the user may read too, so it's recorded beside the rows - under the row it's
+  # filed under, carrying no fields.
+  defp apply_one(state, "add_relationship", type, item, origin) do
+    pair = %{"id" => item["id"], item["relationship"] => [item["target_id"]]}
+
+    state
+    |> update_fact({type, item["relationship"]}, item["id"], &MapSet.put(&1, item["target_id"]))
+    |> record(type, pair, origin, true, true)
   end
 
   defp apply_one(state, "del_relationship", type, item, _origin) do
@@ -544,7 +549,8 @@ defmodule HologramSyncTests.Consistency.Client do
     end
   end
 
-  defp record(state, type, data, {cursor, received_at}, applied?) do
+  # A pair's record is marked, so check 2 judges it as a pair rather than as a row's values.
+  defp record(state, type, data, {cursor, received_at}, applied?, pair? \\ false) do
     case model_type(type) do
       nil ->
         state
@@ -555,13 +561,25 @@ defmodule HologramSyncTests.Consistency.Client do
           carried: Map.take(data, Model.fields(module)),
           cursor_tx: bound_tx(cursor),
           id: data["id"],
+          named: named(module, data),
           opened_at: state.opened_at,
+          pair?: pair?,
           received_at: received_at,
           type: module
         }
 
         %{state | records: [record | state.records]}
     end
+  end
+
+  # The rows the sets the data carries name - only the sets it carries, so a patch naming none names
+  # nothing.
+  defp named(module, data) do
+    for {name, target} <- Model.sets(module),
+        ids = Map.get(data, name),
+        is_list(ids),
+        id <- ids,
+        do: {target, id}
   end
 
   # A bound check 2 can't read is a failure where the cursor was kept, so the record goes without

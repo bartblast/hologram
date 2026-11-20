@@ -98,11 +98,18 @@ defmodule HologramSyncTests.Consistency.Report do
   defp describe_problem({:leak, leak}) do
     record = leak.record
 
+    what =
+      if Map.get(record, :pair?, false),
+        do: "a pair under #{inspect(record.type)} #{record.id} naming #{inspect(record.named)}",
+        else:
+          "#{inspect(record.type)} #{record.id} carrying #{inspect(record.carried)}, naming " <>
+            inspect(record.named)
+
     {leak.client,
-     "received #{inspect(record.type)} #{record.id} carrying #{inspect(record.carried)} at " <>
-       "#{record.received_at}, on a connection opened at #{record.opened_at}, bounded by tx " <>
-       "#{inspect(record.cursor_tx)} - its user could read it with those values in none of the " <>
-       "commits #{inspect(leak.candidates)} the frame could come from", record.id}
+     "received #{what}, at #{record.received_at}, on a connection opened at " <>
+       "#{record.opened_at}, bounded by tx #{inspect(record.cursor_tx)} - in the commits " <>
+       "#{inspect(leak.candidates)} the frame could come from, its user could read it with those " <>
+       "values in none, or a row it names in none since the connection opened", record.id}
   end
 
   defp describe_problem({:failure, failure}) do
