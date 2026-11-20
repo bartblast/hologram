@@ -584,6 +584,28 @@ defmodule Hologram.Policy.EdgesTest do
              ]
     end
 
+    # A role a delete rule names moves the delete verdict as surely as a label does, and one
+    # granted on the whole type is followed only through this pair: the read rule names no role.
+    test "names the grants of a role a verdict operation's rule names under {:verdicts}" do
+      defmodule VerdictRoleProject do
+        use Hologram.Entity
+
+        relationship :labels, [Hologram.Policy.EdgesTest.EdgeLabel]
+
+        role :admin
+
+        allow :read
+        allow :delete, to: :admin
+        allow :delete, when: none(label <- labels, label.name == "locked")
+      end
+
+      assert derive([VerdictRoleProject])[{VerdictRoleProject, {:verdicts}}] == [
+               {:own_grants, [:admin]},
+               {:set_attributes, [:labels], EdgeLabel, [:name]},
+               {:set_edges, [:labels], VerdictRoleProject, [:labels]}
+             ]
+    end
+
     # The read verdict is true for every row a client is sent, and the read edges follow a user's
     # access to the row moving: a server-only value, a path or a role reference through a type
     # nobody may read, and delegations past one.
