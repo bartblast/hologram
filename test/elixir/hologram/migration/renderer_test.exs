@@ -957,6 +957,13 @@ defmodule Hologram.Migration.RendererTest do
                  enum_type: "hologram_role_grant_entity_type_$enum",
                  from: "MyApp.Draft",
                  to: "MyApp.Sketch"
+               },
+               %{
+                 op: :rederive_grant_ids,
+                 table: "hologram_role_grant",
+                 column: "entity_type",
+                 from: "MyApp.Draft",
+                 value: "MyApp.Sketch"
                }
              ]
     end
@@ -1355,6 +1362,24 @@ defmodule Hologram.Migration.RendererTest do
              }
 
       refute Enum.any?(result.transactional, &(&1.op == :rename_enum_value))
+
+      # The relabeled grants take the ids their new labels derive, right after the relabel.
+      kinds = op_kinds(result.transactional)
+
+      assert Enum.take(kinds, -2) == [
+               :rebuild_enum_type,
+               :rederive_grant_ids
+             ]
+    end
+
+    test "renders an entity rename with no grant store without re-deriving grant ids" do
+      pre = model(%{MyApp.Draft => %{}, MyApp.Tag => %{}})
+
+      ops = [%{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch, line: 3}]
+
+      result = render(ops, pre)
+
+      refute Enum.any?(result.transactional, &(&1.op == :rederive_grant_ids))
     end
 
     test "renders an entity rename that keeps its entity_type position as a value rename" do
@@ -1392,6 +1417,13 @@ defmodule Hologram.Migration.RendererTest do
                  values: ["admin", "editor"],
                  columns: [{"hologram_role_grant", "role"}],
                  remap: [%{from: "viewer", to: "admin", scope: nil}]
+               },
+               %{
+                 op: :rederive_grant_ids,
+                 table: "hologram_role_grant",
+                 column: "role",
+                 from: "viewer",
+                 value: "admin"
                }
              ]
     end
@@ -1411,6 +1443,13 @@ defmodule Hologram.Migration.RendererTest do
                  enum_type: "hologram_role_grant_role_$enum",
                  from: "moderator",
                  to: "maintainer"
+               },
+               %{
+                 op: :rederive_grant_ids,
+                 table: "hologram_role_grant",
+                 column: "role",
+                 from: "moderator",
+                 value: "maintainer"
                }
              ]
     end
@@ -1443,6 +1482,13 @@ defmodule Hologram.Migration.RendererTest do
                      scope: {"entity_type", "MyApp.Task"}
                    }
                  ]
+               },
+               %{
+                 op: :rederive_grant_ids,
+                 table: "hologram_role_grant",
+                 column: "role",
+                 from: "editor",
+                 value: "reviewer"
                }
              ]
     end
@@ -1469,6 +1515,13 @@ defmodule Hologram.Migration.RendererTest do
                  enum_type: "hologram_role_grant_role_$enum",
                  from: "MyApp.Roles.Moderator",
                  to: "MyApp.Roles.Maintainer"
+               },
+               %{
+                 op: :rederive_grant_ids,
+                 table: "hologram_role_grant",
+                 column: "role",
+                 from: "MyApp.Roles.Moderator",
+                 value: "MyApp.Roles.Maintainer"
                }
              ]
     end
