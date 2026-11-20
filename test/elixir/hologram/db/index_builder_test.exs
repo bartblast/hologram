@@ -11,6 +11,7 @@ defmodule Hologram.DB.IndexBuilderTest do
   import ExUnit.CaptureLog
   import Hologram.DB.IndexBuilder
 
+  alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.IndexPlan
   alias Hologram.DB.Introspection
@@ -33,6 +34,28 @@ defmodule Hologram.DB.IndexBuilderTest do
   # The value of Hologram.Migrator's @advisory_lock_key, hardcoded for the reason the lock
   # contention tests give: the key is frozen forever.
   @migration_lock_key -335_777_576_117_788_795
+
+  # The value of Hologram.Migrator's @boot_lock_key, hardcoded for the same reason.
+  @boot_lock_key -8_943_570_201_190_700_407
+
+  # Whether a session on the given session's database holds the boot key - read here rather than
+  # through Hologram.Migrator.boot_key_held?/0, which is part of what the tests check.
+  defp boot_key_held?(session) do
+    statement = """
+    SELECT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_locks
+      WHERE "locktype" = 'advisory' AND "objsubid" = 1
+        AND "database" = (
+          SELECT "oid" FROM pg_catalog.pg_database WHERE "datname" = current_database()
+        )
+        AND (("classid"::bigint << 32) | "objid"::bigint) = $1
+    )
+    """
+
+    %{rows: [[held?]]} = Postgrex.query!(session, statement, [@boot_lock_key])
+
+    held?
+  end
 
   defp migration(version, ops) do
     %{version: version, path: "app/migrations/#{version}.ex", ops: ops}
@@ -604,6 +627,52 @@ defmodule Hologram.DB.IndexBuilderTest do
       route(scratch, fn -> assert index_validity(created_at_index) == true end)
     end
 
+    test "gives the lock back to a booting node waiting for it, and builds once the node is done",
+         %{
+           chain: chain,
+           model: model,
+           scratch: scratch,
+           scratch_opts: scratch_opts
+         } do
+      boot = start_supervised!({Postgrex, scratch_opts}, id: :boot)
+
+      assert %{rows: [[true]]} =
+               Postgrex.query!(boot, "SELECT pg_try_advisory_lock_shared($1)", [@boot_lock_key])
+
+      log =
+        capture_info(fn ->
+          builder =
+            Task.async(fn ->
+              {:ok, session} = Postgrex.start_link(scratch_opts)
+
+              route(session, fn -> converge(plan(model), chain, step_pause_ms: 0) end)
+            end)
+
+          # Asleep before its next try, which only a builder that gave the lock back is.
+          wait_until(
+            fn ->
+              Process.info(builder.pid, :current_function) ==
+                {:current_function, {Process, :sleep, 1}}
+            end,
+            10_000
+          )
+
+          route(scratch, fn -> assert index_validity(@index) == :absent end)
+
+          assert %{rows: [[true]]} =
+                   Postgrex.query!(boot, "SELECT pg_try_advisory_lock($1)", [@migration_lock_key])
+
+          Postgrex.query!(boot, "SELECT pg_advisory_unlock($1)", [@migration_lock_key])
+          Postgrex.query!(boot, "SELECT pg_advisory_unlock_shared($1)", [@boot_lock_key])
+
+          assert Task.await(builder, 30_000) == :ok
+        end)
+
+      route(scratch, fn -> assert index_validity(@index) == true end)
+
+      assert length(String.split(log, "a booting node needs the migration lock")) == 2
+    end
+
     test "returns a step it took that came up again, which another node undid", %{
       chain: chain,
       model: model,
@@ -728,6 +797,34 @@ defmodule Hologram.DB.IndexBuilderTest do
     end
   end
 
+  describe "Hologram.Migrator.boot_key_held?/0" do
+    test "whether a session on the current database holds the boot key", %{
+      scratch: scratch,
+      scratch_opts: scratch_opts
+    } do
+      boot = start_supervised!({Postgrex, scratch_opts}, id: :boot)
+
+      route(scratch, fn -> refute Migrator.boot_key_held?() end)
+
+      assert %{rows: [[true]]} =
+               Postgrex.query!(boot, "SELECT pg_try_advisory_lock_shared($1)", [@boot_lock_key])
+
+      route(scratch, fn -> assert Migrator.boot_key_held?() end)
+    end
+
+    # pg_locks lists the locks of every database on the server.
+    test "leaves out a session on another database", %{scratch: scratch} do
+      other_database = start_supervised!({Postgrex, Config.connection_opts([])}, id: :other)
+
+      assert %{rows: [[true]]} =
+               Postgrex.query!(other_database, "SELECT pg_try_advisory_lock_shared($1)", [
+                 @boot_lock_key
+               ])
+
+      route(scratch, fn -> refute Migrator.boot_key_held?() end)
+    end
+  end
+
   describe "Hologram.Migrator.with_migration_connection/1" do
     test "runs with no statement or lock timeout, whatever the database sets", %{
       scratch: scratch,
@@ -849,6 +946,48 @@ defmodule Hologram.DB.IndexBuilderTest do
         assert Migrator.run(string_chain, string_model, @context) == :ok
         assert index_names() == [@index]
       end)
+    end
+
+    test "holds the boot key while it waits for the lock, and lets it go with its session", %{
+      chain: chain,
+      model: model,
+      scratch: scratch,
+      scratch_opts: scratch_opts
+    } do
+      title =
+        migration("20260814091522", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            type: :string,
+            opts: [optional: true],
+            line: 3
+          }
+        ])
+
+      {title_chain, title_model} = fold_chain(chain, model, title)
+      holder = start_supervised!({Postgrex, scratch_opts}, id: :holder)
+
+      assert %{rows: [[true]]} =
+               Postgrex.query!(holder, "SELECT pg_try_advisory_lock($1)", [@migration_lock_key])
+
+      boot =
+        Task.async(fn ->
+          {:ok, session} = Postgrex.start_link(scratch_opts)
+
+          route(session, fn -> Migrator.run(title_chain, title_model, @context) end)
+        end)
+
+      wait_until(fn -> boot_key_held?(holder) end, 10_000)
+      assert Task.yield(boot, 0) == nil
+
+      Postgrex.query!(holder, "SELECT pg_advisory_unlock($1)", [@migration_lock_key])
+
+      assert Task.await(boot, 30_000) == :ok
+
+      # The server frees it once the session's backend exits, a moment after the socket closes.
+      wait_until(fn -> not boot_key_held?(scratch) end, 10_000)
     end
 
     test "boots without the lock when nothing is left to do, while a build holds it", %{

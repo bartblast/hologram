@@ -52,7 +52,33 @@ defmodule Hologram.Migrator do
   # Hologram.Migration.ShadowVerifier is the one caller outside this coverage, on purpose:
   # it applies to a throwaway database of its own, one verification at a time under a key of
   # its own, with no second session to exclude.
+  #
+  # A booting node that needs it also holds @boot_lock_key while it waits, which is what makes
+  # Hologram.DB.IndexBuilder give way to it.
   @advisory_lock_key -335_777_576_117_788_795
+
+  # Fixed application-defined key a booting node holds, shared, on the session it takes the
+  # migration lock on - from before it starts polling for that lock until the session ends. Frozen
+  # forever for the reason @advisory_lock_key is: a builder that reads another key never gives way.
+  # Provenance: first 8 bytes of md5("hologram_migrations_boot") as a signed int64.
+  #
+  # Hologram.DB.IndexBuilder, once it holds the migration lock and before it runs a step, asks
+  # whether any session holds this key (see boot_key_held?/0), and gives the lock back without a
+  # step if one does. A builder that asked before a boot took the key held the migration lock when
+  # the boot started waiting, so its step is the one the boot waits for; every builder taking the
+  # lock after it sees the key. So a booting node waits for at most the step holding the lock when
+  # it starts waiting, however many builders wait beside it. Its poll can still miss the lock now
+  # and then, while a builder holds it just to ask, which costs a poll, never a step.
+  #
+  # Taken with pg_try_advisory_lock_shared, never queued, for the reason @advisory_lock_key is:
+  # nobody takes it exclusively, so the try always wins, and booting nodes hold it side by side.
+  # A session holding it between statements has no transaction and no snapshot, so a concurrent
+  # build never waits for it. Freed with the session, like the migration lock the boot holds: a
+  # node whose host vanishes without closing its connection keeps both until the server drops the
+  # session, and builders give way for that long.
+  #
+  # Every release holding the builder holds this key too - the builder never shipped without it.
+  @boot_lock_key -8_943_570_201_190_700_407
 
   # How often a node that missed the migration lock looks again. A politeness knob, not a
   # correctness bound - the loop exits by winning the lock, never by a deadline.
@@ -465,12 +491,39 @@ defmodule Hologram.Migrator do
   end
 
   @doc """
+  Returns whether a session on the current database holds the boot key - a booting node waiting
+  for the migration lock, or running the procedure under it (see @boot_lock_key in this module).
+  Work beside the boot procedure that takes the migration lock asks this once it holds the lock,
+  and gives it back without doing anything when it's true.
+  """
+  @spec boot_key_held?() :: boolean
+  def boot_key_held? do
+    # pg_locks lists every database's locks, and shows a bigint key's high half in classid, its low
+    # half in objid and 1 in objsubid.
+    statement = """
+    SELECT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_locks
+      WHERE "locktype" = 'advisory' AND "objsubid" = 1
+        AND "database" = (
+          SELECT "oid" FROM pg_catalog.pg_database WHERE "datname" = current_database()
+        )
+        AND (("classid"::bigint << 32) | "objid"::bigint) = $1
+    )
+    """
+
+    {:ok, %{rows: [[held?]]}} = Connection.query(statement, [@boot_lock_key])
+
+    held?
+  end
+
+  @doc """
   Runs the given function under the migration lock, taken on the current session by polling (see
   @advisory_lock_key in this module) and released once the function returns or raises, and
   returns what the function returns. For work beside the boot procedure that changes the schema,
-  one step at a time - each step holds the lock no longer than it takes. Polls at the given
-  interval, the boot's when absent: a caller polling more slowly than the boot most likely gives
-  way to a booting node.
+  one step at a time - each step holds the lock no longer than it takes. The given function has to
+  ask boot_key_held?/0 first, and return without doing anything when it's true, so a booting node
+  waits for no step that starts after it started waiting. Polls at the given interval, the boot's
+  when absent.
   """
   @spec with_migration_lock((-> any), pos_integer) :: any
   def with_migration_lock(fun, poll_interval_ms \\ @migration_lock_poll_interval_ms) do
@@ -1269,6 +1322,7 @@ defmodule Hologram.Migrator do
 
     if !up_to_date?(migrations, mapping, context) do
       with_migration_connection(fn ->
+        take_boot_key()
         acquire_migration_lock()
 
         run_locked(migrations, mapping, context)
@@ -1323,6 +1377,14 @@ defmodule Hologram.Migrator do
       missing_indexes(mapping) == [] and drift_ops(mapping) == [] and invalid_indexes() == []
   rescue
     _error -> false
+  end
+
+  # Never let go by hand: it frees with the session, as the migration lock the boot takes does.
+  defp take_boot_key do
+    {:ok, %{rows: [[true]]}} =
+      Connection.query("SELECT pg_try_advisory_lock_shared($1)", [@boot_lock_key])
+
+    :ok
   end
 
   defp try_migration_lock? do
