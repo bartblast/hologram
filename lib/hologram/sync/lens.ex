@@ -49,7 +49,7 @@ defmodule Hologram.Sync.Lens do
   @type history :: %{
           migrations: list(%{atom => any}),
           model_hash: String.t(),
-          positions: %{String.t() => String.t()},
+          positions: %{String.t() => list(String.t())},
           recorded: %{String.t() => String.t()}
         }
 
@@ -84,6 +84,9 @@ defmodule Hologram.Sync.Lens do
 
   # What a frame spells of a type the lens changes nothing of, bar its label.
   @untouched_wire %{edges: %{}, enums: %{}, keys: %{}, label: nil}
+
+  # A type entry mapping no name of the type to another.
+  @untouched_entry %{attributes: %{}, enums: %{}, old: nil, relationships: %{}, roles: %{}}
 
   @type type_entry :: %{
           attributes: %{atom => old(atom)},
@@ -143,12 +146,13 @@ defmodule Hologram.Sync.Lens do
   the hash names no point of the release's migration history, or a change since it can't be given
   back by renaming (see `build/2`).
 
-  The point is the latest version the hash stands for (see `history/2`). Once a history leading to
-  the running model is read, it is kept for that model, and each point's lens is built once and
-  kept under a key of its own, so a lens a session holds is never replaced under it. Each is
-  worked out by one process at a time, so a wave of old tabs reconnecting after a deploy reads the
-  table and builds a point's lens once, and a hash naming no point then costs one map lookup. A
-  history leading elsewhere is not kept, nor is a read the database fails, which raises.
+  A hash standing for several points is served from the latest when they all agree (see
+  `for_hash/3`). Once a history leading to the running model is read, it is kept for that model,
+  and each point's lens is built once and kept under a key of its own, so a lens a session holds is
+  never replaced under it. Each is worked out by one process at a time, so a wave of old tabs
+  reconnecting after a deploy reads the table and builds a point's lens once, and a hash naming no
+  point then costs one map lookup. A history leading elsewhere is not kept, nor is a read the
+  database fails, which raises.
   """
   @spec for_hash(String.t()) :: {:ok, t} | :error
   def for_hash(model_hash) do
@@ -156,8 +160,8 @@ defmodule Hologram.Sync.Lens do
     entity_types = Model.entity_types()
 
     with {:ok, history} <- cached_history(current_hash),
-         {:ok, version} <- position(history, model_hash) do
-      cached_lens(current_hash, version, history, entity_types)
+         {:ok, versions} <- positions(history, model_hash) do
+      agreed(versions, &cached_lens(current_hash, &1, history, entity_types))
     end
   end
 
@@ -169,8 +173,8 @@ defmodule Hologram.Sync.Lens do
   out for the model its file leaves: a deploy of a Hologram whose model term differs from the one
   that applied a file builds bundles under a hash the table never recorded. Only the running
   Hologram's is worked out, so a bundle of a release in between whose Hologram spelled the term
-  another way still can't be placed. A hash standing for several versions - a rename and back -
-  stands for the latest, which holds the same model.
+  another way still can't be placed. A hash can stand for several versions - a rename and back, or
+  two attributes swapping names - each listed, the latest first.
 
   The history also holds the hash of the model all the files fold to, which is the running model's
   when the release is consistent.
@@ -187,8 +191,16 @@ defmodule Hologram.Sync.Lens do
     positions =
       recorded
       |> Enum.concat(computed)
-      |> Enum.reduce(%{}, fn {version, model_hash}, acc ->
-        Map.update(acc, model_hash, version, &max(&1, version))
+      |> Enum.group_by(fn {_version, model_hash} -> model_hash end, fn {version, _hash} ->
+        version
+      end)
+      |> Map.new(fn {model_hash, versions} ->
+        latest_first =
+          versions
+          |> Enum.uniq()
+          |> Enum.sort(:desc)
+
+        {model_hash, latest_first}
       end)
 
     %{
@@ -205,11 +217,18 @@ defmodule Hologram.Sync.Lens do
 
   A recorded point the release has no migration for can't be served from, and neither can one
   before a recorded version the release lacks, since its ops are what the lens is built from.
+
+  A hash standing for several points is served only when every one of them is servable and gives
+  the same translation, from the latest. A tab says only its hash, and the points can mean
+  different things by the same names: two attributes swapped through a temporary name leave a
+  model of the same hash whose values sit under each other's names. A rename and back translates
+  as nothing did. A tab greeting with the running model's own hash is never asked about here, and
+  is served as current even when an earlier point shares that hash.
   """
   @spec for_hash(String.t(), history, list(module)) :: {:ok, t} | :error
   def for_hash(model_hash, history, entity_types) do
-    with {:ok, version} <- position(history, model_hash) do
-      lens_at(version, history, entity_types)
+    with {:ok, versions} <- positions(history, model_hash) do
+      agreed(versions, &lens_at(&1, history, entity_types))
     end
   end
 
@@ -824,9 +843,62 @@ defmodule Hologram.Sync.Lens do
     Hologram.CompileError -> :error
   end
 
-  defp position(history, model_hash) do
+  defp positions(history, model_hash) do
     Map.fetch(history.positions, model_hash)
   end
+
+  # The lens of the latest of the points a hash stands for, when every one of them gives the same
+  # translation (see `for_hash/3`).
+  # Built latest first, stopping at the first point that disagrees, or can't be served from.
+  defp agreed([latest], lens_at), do: lens_at.(latest)
+
+  defp agreed([latest | earlier], lens_at) do
+    with {:ok, lens} <- lens_at.(latest) do
+      translation = translation(lens)
+
+      if Enum.all?(earlier, &agrees?(lens_at.(&1), translation)),
+        do: {:ok, lens},
+        else: :error
+    end
+  end
+
+  defp agrees?({:ok, lens}, translation), do: translation(lens) == translation
+
+  defp agrees?(:error, _translation), do: false
+
+  # What a lens does to the names it maps, without the names it leaves as they are: a walk through
+  # a rename and back records the name as its own old one, which a walk that never touched it
+  # leaves out, and both translate it alike.
+  defp translation(lens) do
+    types =
+      for {entity_type, entry} <- lens.types,
+          entry = changed_entry(entity_type, entry),
+          into: %{},
+          do: {entity_type, entry}
+
+    {types, changed(lens.global_roles)}
+  end
+
+  defp changed_entry(entity_type, entry) do
+    enums =
+      for {attribute, values} <- entry.enums,
+          changed = changed(values),
+          changed != %{},
+          into: %{},
+          do: {attribute, changed}
+
+    changed = %{
+      attributes: changed(entry.attributes),
+      enums: enums,
+      old: entry.old,
+      relationships: changed(entry.relationships),
+      roles: changed(entry.roles)
+    }
+
+    if changed == %{@untouched_entry | old: entity_type}, do: nil, else: changed
+  end
+
+  defp changed(names), do: Map.reject(names, fn {name, old} -> name == old end)
 
   defp read_history do
     statement = ~s(SELECT "version", "model_hash" FROM "#{Mapper.system_schema()}"."migration")

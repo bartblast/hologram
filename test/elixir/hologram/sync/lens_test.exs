@@ -1015,6 +1015,93 @@ defmodule Hologram.Sync.LensTest do
       assert old_type(lens, Module39) == Module39
     end
 
+    # The second file swaps `points` and `score` through a temporary name, so the first two points
+    # record one hash with each value under the other's name.
+    test "serves nothing for a hash whose points translate otherwise" do
+      migrations = [
+        %{
+          ops: [
+            %{op: :create_entity, entity: Module39},
+            %{op: :add_attribute, entity: Module39, name: :points, type: :integer, opts: []},
+            %{op: :add_attribute, entity: Module39, name: :score, type: :integer, opts: []}
+          ],
+          version: "20260101000000"
+        },
+        %{
+          ops: [
+            %{op: :rename_attribute, entity: Module39, from: :points, to: :tmp},
+            %{op: :rename_attribute, entity: Module39, from: :score, to: :points},
+            %{op: :rename_attribute, entity: Module39, from: :tmp, to: :score}
+          ],
+          version: "20260102000000"
+        },
+        %{
+          ops: [
+            %{
+              op: :add_attribute,
+              entity: Module39,
+              name: :bonus,
+              type: :integer,
+              opts: [optional: true]
+            }
+          ],
+          version: "20260103000000"
+        }
+      ]
+
+      recorded = %{
+        "20260101000000" => "h1",
+        "20260102000000" => "h1",
+        "20260103000000" => "h3"
+      }
+
+      assert for_hash("h1", history(recorded, migrations), @entity_types) == :error
+    end
+
+    # The attribute the second file deletes, the third adds again: the first and the third record
+    # one hash, but only the third is servable.
+    test "serves nothing for a hash one of whose points is unservable" do
+      readding = [
+        %{
+          ops: [
+            %{op: :create_entity, entity: Module39},
+            %{
+              op: :add_attribute,
+              entity: Module39,
+              name: :points,
+              type: :integer,
+              opts: [optional: true]
+            }
+          ],
+          version: "20260101000000"
+        },
+        %{
+          ops: [%{op: :delete_attribute, entity: Module39, name: :points}],
+          version: "20260102000000"
+        },
+        %{
+          ops: [
+            %{
+              op: :add_attribute,
+              entity: Module39,
+              name: :points,
+              type: :integer,
+              opts: [optional: true]
+            }
+          ],
+          version: "20260103000000"
+        }
+      ]
+
+      recorded = %{
+        "20260101000000" => "h1",
+        "20260102000000" => "h2",
+        "20260103000000" => "h1"
+      }
+
+      assert for_hash("h1", history(recorded, readding), @entity_types) == :error
+    end
+
     test "serves nothing for a hash no point records" do
       assert for_hash("h9", history(), @entity_types) == :error
     end
