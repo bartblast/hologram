@@ -436,10 +436,9 @@ defmodule HologramFeatureTests.MultiTabTest do
   # mounted under nobody yet - so one taken up before the mount would be passed over, and nothing
   # would bring it back. Held until the tab has mounted, it is taken up under the user signed in.
   #
-  # The write is held at the tab that sends, so nothing but the filed batch can show it. The
-  # starting tab has joined once it waits for the lock, and reads the store straight after - a read
-  # made after the write would find the batch there, and prove nothing, but it is the next thing
-  # the tab does, against several round trips of the driver.
+  # The write is held at the tab that sends, so nothing but the filed batch can show it. And it is
+  # filed after the starting tab's read of the store: the store block holds that read, and the
+  # write queues behind it, so the read cannot find the batch there.
   feature "shows a write another tab made while this one was starting", %{session: session} do
     # The slow bundle is armed on a blank page, so the tab comes back to its page afterwards -
     # mounted under Alice now, and with a bundle the browser has, so at once.
@@ -459,12 +458,13 @@ defmodule HologramFeatureTests.MultiTabTest do
     refute String.ends_with?(group, ".anonymous")
 
     opened_at = System.monotonic_time(:millisecond)
-    second = open_tab_behind(writer, ActionWritesPage)
+    second = open_tab_behind(block_store(writer), ActionWritesPage)
 
     writer
-    |> await_leader_locks(:pending, 1)
+    |> await_store_read_waiting()
     |> click(button("Create alpha"))
     |> assert_text(css("#todos"), "alpha 0")
+    |> unblock_store()
     |> await_durable_writes()
 
     assert_still_starting(opened_at)
