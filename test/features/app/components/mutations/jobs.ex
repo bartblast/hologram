@@ -2,6 +2,7 @@ defmodule HologramFeatureTests.Components.Mutations.Jobs do
   use Hologram.Component
   use Hologram.DB
 
+  alias HologramFeatureTests.Jobs.HoldRun
   alias HologramFeatureTests.Jobs.KillWorker
   alias HologramFeatureTests.Jobs.RestockItem
 
@@ -11,6 +12,8 @@ defmodule HologramFeatureTests.Components.Mutations.Jobs do
 
   derived :killed_jobs, [KillWorker], &killed_jobs_query/0
 
+  derived :held_jobs, [HoldRun], &held_jobs_query/0
+
   def template do
     ~HOLO"""
     <p>
@@ -18,6 +21,9 @@ defmodule HologramFeatureTests.Components.Mutations.Jobs do
     </p>
     <p>
       Killed jobs: <strong id="killed_jobs"><code>{Enum.map_join(@killed_jobs, ",", &"#{&1.label}:#{&1.status}")}</code></strong>
+    </p>
+    <p>
+      Held jobs: <strong id="held_jobs"><code>{Enum.map_join(@held_jobs, ",", &"#{&1.label}:#{&1.status}")}</code></strong>
     </p>
     """
   end
@@ -28,5 +34,9 @@ defmodule HologramFeatureTests.Components.Mutations.Jobs do
 
   defp killed_jobs_query do
     sort(KillWorker, label)
+  end
+
+  defp held_jobs_query do
+    sort(HoldRun, label)
   end
 end

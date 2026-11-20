@@ -16,6 +16,7 @@ defmodule HologramFeatureTests.MutationsTest do
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.User
+  alias HologramFeatureTests.Jobs.HoldRun
   alias HologramFeatureTests.Jobs.KillWorker
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTests.MutationsPage
@@ -28,7 +29,7 @@ defmodule HologramFeatureTests.MutationsTest do
 
     tables =
       Enum.map_join(
-        [Item, KillWorker, Memo, Note, ProjectMember, RestockItem, RoleGrant, User],
+        [HoldRun, Item, KillWorker, Memo, Note, ProjectMember, RestockItem, RoleGrant, User],
         ", ",
         fn entity_type ->
           ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
@@ -69,6 +70,30 @@ defmodule HologramFeatureTests.MutationsTest do
       "type" => inspect(RestockItem),
       "id" => Entity.generate_id(),
       "data" => %{"amount" => amount, "item_id" => item_id},
+      "stamp" => System.os_time(:millisecond) * 1024
+    }
+  end
+
+  # The row reads running once the claim commits, a moment before run/1 registers its process.
+  defp await_hold_run do
+    Enum.reduce_while(1..100, nil, fn _attempt, _acc ->
+      case Process.whereis(HoldRun) do
+        nil ->
+          Process.sleep(50)
+          {:cont, nil}
+
+        pid ->
+          {:halt, pid}
+      end
+    end) || flunk("the held run never registered")
+  end
+
+  defp create_hold_run_write(label) do
+    %{
+      "op" => "create",
+      "type" => inspect(HoldRun),
+      "id" => Entity.generate_id(),
+      "data" => %{"label" => label},
       "stamp" => System.os_time(:millisecond) * 1024
     }
   end
@@ -500,9 +525,9 @@ defmodule HologramFeatureTests.MutationsTest do
     assert [%Item{stock: 0}] = DB.read(Item)
   end
 
-  # The job kills the worker running it, so nothing records its outcome. The worker comes back and
-  # gives up the lock its predecessor held, and its next look for jobs fails the row as cut short.
-  feature "fails a job whose worker died mid-run", %{session: session} do
+  # The job kills the process running it, so nothing records its outcome. The worker hears the run
+  # go down, gives up its lock, and fails the row as cut short.
+  feature "fails a job whose run was killed mid-run", %{session: session} do
     session = log_in(session)
 
     post_batch(session, 1, [create_kill_worker_write("x")])
@@ -514,6 +539,28 @@ defmodule HologramFeatureTests.MutationsTest do
 
     assert [%KillWorker{status: :failed, error: error}] = DB.read(KillWorker)
     assert error =~ "the run was cut short before its outcome was recorded"
+  end
+
+  # The held run stands for a slow job, like a web push waiting on a remote service. The restock
+  # created in the same batch runs and finishes while it's still running.
+  feature "runs a job while another one is still running", %{session: session} do
+    item = create_item(0)
+
+    session = log_in(session)
+
+    post_batch(session, 1, [create_hold_run_write("a"), create_restock_write(item.id, 1)])
+
+    assert await_response(session) ==
+             %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
+
+    session
+    |> assert_text(css("#held_jobs"), "a:running")
+    |> assert_text(css("#jobs"), "1:done")
+    |> assert_text(css("#held_jobs"), "a:running")
+
+    send(await_hold_run(), :go)
+
+    assert_text(session, css("#held_jobs"), "a:done")
   end
 
   feature "runs a job created by a command, as the session's user", %{session: session} do
