@@ -294,7 +294,8 @@ function chainRowFrom(entityType, row, relationshipNames) {
 }
 
 // The id the last reference of a chain holds, read off the row the relationships before it lead
-// to, or null when they lead nowhere.
+// to, null when they lead nowhere, or UNKNOWN when they lead to a row this client does not hold -
+// one its user may not read, whose reference the server reads as stored.
 function chainTargetId(entityType, entity, relationshipNames) {
   const referenceField = `${relationshipNames.at(-1)}_id`;
 
@@ -304,9 +305,11 @@ function chainTargetId(entityType, entity, relationshipNames) {
 
   const end = chainRow(entityType, entity, relationshipNames.slice(0, -1));
 
-  return end === null || end === UNKNOWN
-    ? null
-    : (end.row[referenceField] ?? null);
+  if (end === null || end === UNKNOWN) {
+    return end;
+  }
+
+  return end.row[referenceField] ?? null;
 }
 
 // The type a name is declared with - an attribute's, or a derived field's holding a value - or
@@ -641,8 +644,10 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
     }
 
     // A role held on the row a chain of relationships leads to, named by the id its last
-    // reference holds. In a read rule, one reading a row of a type nobody may read comes with a
-    // fifth element, true: no client holds the row the id is read off, so it is UNKNOWN.
+    // reference holds - UNKNOWN when this client does not hold a row the id is read through, for
+    // the server's verdict on the operation to answer. In a read rule, one reading a row of a type
+    // nobody may read comes with a fifth element, true: no client holds the row the id is read
+    // off, so it is UNKNOWN.
     case "rel": {
       const [_kind, relationshipNames, targetType, roles, undecided] =
         reference;
@@ -652,6 +657,10 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
       }
 
       const targetId = chainTargetId(entityType, entity, relationshipNames);
+
+      if (targetId === UNKNOWN) {
+        return UNKNOWN;
+      }
 
       return (
         targetId !== null &&
@@ -821,14 +830,16 @@ function canonicalId(value) {
 }
 
 // The server's verdict on an operation whose rules the rows this client holds leave open - a
-// quantifier they can't decide, a predicate reading a server-only attribute, or a read rule's
-// clause, role reference or delegation reading a row of a type nobody may read - as the row's last
-// frame carried it. The entry is the operation's verdict key and the types its rules read. The
-// server works verdicts out for the session's user over the row as stored, so any other question
-// is UNKNOWN: one about another user or a visitor, one about a struct whose stored fields differ
-// from the row's - changed in an action and not written yet - and one asked while a write of this
-// client's that the server has not answered names a type the operation's rules read, since that
-// write may have moved the answer. So is one about a row that came with no verdict.
+// quantifier they can't decide, a predicate reading a server-only attribute, a condition, role
+// reference or delegation reading a related row this client does not hold, which its user may not
+// read, or a read rule's clause, role reference or delegation reading a row of a type nobody may
+// read - as the row's last frame carried it. The entry is the operation's verdict key and the types
+// its rules read. The server works verdicts out for the session's user over the row as stored, so
+// any other question is UNKNOWN: one about another user or a visitor, one about a struct whose
+// stored fields differ from the row's - changed in an action and not written yet - and one asked
+// while a write of this client's that the server has not answered names a type the operation's
+// rules read, since that write may have moved the answer. So is one about a row that came with no
+// verdict.
 //
 // An answer can settle a batch before the frame carrying its round arrives, and between the two
 // the verdict predates the write again: the answer files the write's values into the base row,
@@ -862,11 +873,12 @@ function verdictHolds(entityType, entity, entry, actorUserId) {
 }
 
 // Delegation asks the RELATED entity's policy for the operation the rule names, of the row its
-// chain of relationships leads to, so it needs that row and its rules. A client holds neither for
-// a type its build never syncs, and cannot ask the server mid-render - so the answer is no, the
-// way it is for any rule the rows do not satisfy. In a read rule, a delegation whose chain passes
-// a row of a type nobody may read comes with a third element, true, and is UNKNOWN. A held row
-// answers as its own operation does, its verdict included (see grants/4).
+// chain of relationships leads to, so it needs that row and its rules. An empty reference leads
+// nowhere, which holds nothing on the server either. A row this client does not hold, one its user
+// may not read, is UNKNOWN, for the server's verdict on the operation to answer: a client cannot
+// ask the server mid-render. In a read rule, a delegation whose chain passes a row of a type
+// nobody may read comes with a third element, true, and is UNKNOWN. A held row answers as its own
+// operation does, its verdict included (see grants/4).
 function viaHolds(rule, entityType, entity, actorUserId) {
   const [operation, relationshipNames, undecided] = rule.via;
 
@@ -876,8 +888,12 @@ function viaHolds(rule, entityType, entity, actorUserId) {
 
   const end = chainRow(entityType, entity, relationshipNames);
 
-  if (end === null || end === UNKNOWN) {
+  if (end === null) {
     return false;
+  }
+
+  if (end === UNKNOWN) {
+    return UNKNOWN;
   }
 
   return grants(end.type, end.row, operation, actorUserId);

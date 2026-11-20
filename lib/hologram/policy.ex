@@ -892,9 +892,9 @@ defmodule Hologram.Policy do
   their predicates, a role reference or a delegation - and every key but `:create` whose own rules
   hold an item reading a related row a reader of the row may not hold: a row along a clause's paths
   and sets, before a role reference's last relationship, or along a delegation's chain. A client
-  holds only the rows its user may read, so it answers a path or a set reaching a missing row as
-  unknown. A client answers such an operation from the verdict when the rows it holds leave the
-  answer open. `:read` counts like any other key.
+  holds only the rows its user may read, so it answers a path, a set, a role reference or a
+  delegation reaching a missing row as unknown. A client answers such an operation from the verdict
+  when the rows it holds leave the answer open. `:read` counts like any other key.
 
   A related row counts as held when every session may read every row of its type - a read rule
   with no condition, role reference or delegation - or when every read rule of the row before it
