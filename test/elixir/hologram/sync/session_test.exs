@@ -4101,7 +4101,12 @@ defmodule Hologram.Sync.SessionTest do
       project: project
     } do
       put_app_env(:sync, rows_per_frame: 1)
-      other = DB.create!(PolicyProject.new(%{public: true}))
+
+      other =
+        %{public: true}
+        |> PolicyProject.new()
+        |> DB.create!()
+
       windows(%{})
 
       session = start_session!([])

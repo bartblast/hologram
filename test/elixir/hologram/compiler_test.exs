@@ -5124,11 +5124,18 @@ defmodule Hologram.CompilerTest do
       member_types = [BakedMember, BakedProject]
       label_types = [BakedLabel, BakedMember, BakedProject]
 
+      field_types = [
+        BakedLabel,
+        BakedMember,
+        BakedProject,
+        Hologram.Test.Fixtures.Entity.Module14
+      ]
+
       verdicts_js =
         ~s/"verdicts":{"archive":#{verdict_entry_js(BakedProject, :archive, member_types)},/ <>
           ~s/"delete":#{verdict_entry_js(BakedProject, :delete, member_types)},/ <>
           ~s/"share":#{verdict_entry_js(BakedProject, :share, label_types)},/ <>
-          ~s/"update:name":#{verdict_entry_js(BakedProject, {:update, :name}, label_types ++ [Hologram.Test.Fixtures.Entity.Module14])}}/
+          ~s/"update:name":#{verdict_entry_js(BakedProject, {:update, :name}, field_types)}}/
 
       assert String.contains?(js, verdicts_js)
 

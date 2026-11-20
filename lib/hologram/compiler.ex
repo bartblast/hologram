@@ -5285,14 +5285,19 @@ defmodule Hologram.Compiler do
   # client holds, is a marker the client answers as unknown - its compared value stays off the
   # bundle. Every other predicate is its triple: one reading a row of a type no client holds reads
   # it as unknown unless an empty reference on its path reads no row.
-  defp render_policy_clause(types, {_name, _operator, _value} = clause, verdict_context) do
-    # A clause reading a server-only attribute is deciding for that alone, so only whether it stands
-    # in a rule's predicates is left to ask - inside a quantifier it stays a triple.
-    if verdict_context != nil and Policy.reads_server_only?(elem(verdict_context, 0), clause) do
+  #
+  # A clause reading a server-only attribute is deciding for that alone, so only whether it stands
+  # in a rule's predicates is left to ask - inside a quantifier, with no context, it stays a triple.
+  defp render_policy_clause(types, {_name, _operator, _value} = clause, {entity_type, _operation}) do
+    if Policy.reads_server_only?(entity_type, clause) do
       render_json_object([{"server", "true"}])
     else
       render_policy_triple(types, clause)
     end
+  end
+
+  defp render_policy_clause(types, {_name, _operator, _value} = clause, nil) do
+    render_policy_triple(types, clause)
   end
 
   defp render_policy_triple(types, {name, operator, value}) do
