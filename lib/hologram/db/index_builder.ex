@@ -31,10 +31,13 @@ defmodule Hologram.DB.IndexBuilder do
   # its plan would drop the indexes a newer release needs and rename theirs back: it only does 1
   # and 4. Old and new nodes serving one database at once is #1627.
   #
-  # Between two steps it waits a little longer than a booting node polls for the lock, and it polls
-  # for the lock five times slower than one, so a boot that needs the lock - one applying a
-  # migration - most likely waits for one step, not for every build left: a builder waiting beside
-  # it can still win a pause, more often the more of them wait.
+  # A booting node that needs the lock - one applying a migration - holds the boot key while it
+  # waits, and a builder that takes the lock asks whether a session holds that key before anything
+  # else: if one does, the builder gives the lock back without a step and tries again later. So the
+  # boot waits for at most the step running when it started waiting, however many builders wait
+  # beside it (see @boot_lock_key in Hologram.Migrator). Between two steps it pauses, which leaves
+  # the lock to builders on other nodes now and then, and gives a node of another release the
+  # window in which undoing a step shows.
   #
   # A step it took that comes up again means another node undid it - most likely a node of another
   # release, whose plan differs. Two such builders would undo each other back to back for as long
@@ -67,11 +70,12 @@ defmodule Hologram.DB.IndexBuilder do
 
   @retry_interval_ms 30_000
 
-  # Longer than Hologram.Migrator's @migration_lock_poll_interval_ms, so a booting node polling for
-  # the lock gets a try in between.
+  # Leaves the lock free for a while between two steps, so a builder on another node gets it now and
+  # then.
   @step_pause_ms 1_500
 
-  # Five times Hologram.Migrator's @migration_lock_poll_interval_ms.
+  # How often it looks again for the lock another node holds, and how long it waits after giving
+  # the lock back to a booting node.
   @lock_poll_interval_ms 5_000
 
   # The longest a builder backs off for after another node undid its step.
@@ -128,7 +132,7 @@ defmodule Hologram.DB.IndexBuilder do
 
     step_pause_ms = Keyword.get(opts, :step_pause_ms, @step_pause_ms)
 
-    converge_steps(plan, known_versions, step_pause_ms, [])
+    converge_steps(plan, known_versions, step_pause_ms, [], false)
   end
 
   defp attempt(opts, retry_interval_ms, undone_count) do
@@ -178,16 +182,16 @@ defmodule Hologram.DB.IndexBuilder do
     end
   end
 
-  defp converge_steps(plan, known_versions, step_pause_ms, taken_steps) do
+  # Asks for the boot key only once it holds the migration lock: asked before, a boot taking the key
+  # in between would wait for a step the builder took after the boot started waiting.
+  defp converge_steps(plan, known_versions, step_pause_ms, taken_steps, yielding?) do
     outcome =
       Migrator.with_migration_lock(
         fn ->
-          chain_known? =
-            Enum.all?(Migrator.applied_versions(), &MapSet.member?(known_versions, &1))
-
-          case next_step(plan, chain_known?) do
-            :done -> :done
-            step -> take_step(step, taken_steps)
+          if Migrator.boot_key_held?() do
+            :yielded
+          else
+            locked_step(plan, known_versions, taken_steps)
           end
         end,
         @lock_poll_interval_ms
@@ -203,7 +207,19 @@ defmodule Hologram.DB.IndexBuilder do
       {:taken, step} ->
         Process.sleep(step_pause_ms)
 
-        converge_steps(plan, known_versions, step_pause_ms, [step | taken_steps])
+        converge_steps(plan, known_versions, step_pause_ms, [step | taken_steps], false)
+
+      :yielded ->
+        if !yielding? do
+          Logger.info(
+            "Hologram: a booting node needs the migration lock, so building the indexes the " <>
+              "queries need waits for it"
+          )
+        end
+
+        Process.sleep(@lock_poll_interval_ms)
+
+        converge_steps(plan, known_versions, step_pause_ms, taken_steps, true)
     end
   end
 
@@ -220,6 +236,15 @@ defmodule Hologram.DB.IndexBuilder do
       {:EXIT, _pid, _reason} -> flush_exits()
     after
       0 -> :ok
+    end
+  end
+
+  defp locked_step(plan, known_versions, taken_steps) do
+    chain_known? = Enum.all?(Migrator.applied_versions(), &MapSet.member?(known_versions, &1))
+
+    case next_step(plan, chain_known?) do
+      :done -> :done
+      step -> take_step(step, taken_steps)
     end
   end
 

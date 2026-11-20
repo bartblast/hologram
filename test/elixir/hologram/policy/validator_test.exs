@@ -1114,7 +1114,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture68 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture67 through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture67, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture68 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture67 through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture67: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture67, InlinePolicyFixture68], [])
@@ -1141,7 +1141,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :delete in Hologram.Policy.ValidatorTest.InlinePolicyFixture70 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture69 through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture69, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :delete in Hologram.Policy.ValidatorTest.InlinePolicyFixture70 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture69 through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture69: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, InlinePolicyFixture69, InlinePolicyFixture70], [])
@@ -1166,7 +1166,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture105 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture104 through seats, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture104, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture105 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture104 through seats, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture104: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture104, InlinePolicyFixture105], [])
@@ -1459,7 +1459,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture121 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture120 through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture120, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture121 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture120 through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture120: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!(
@@ -1481,7 +1481,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update, as: :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture71 reads Hologram.Test.Fixtures.Entity.Module1 through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Test.Fixtures.Entity.Module1, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update, as: :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture71 reads Hologram.Test.Fixtures.Entity.Module1 through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Test.Fixtures.Entity.Module1: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture71], [])
@@ -1515,7 +1515,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture74 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture72 through project.settings, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture72, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture74 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture72 through project.settings, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture72: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture74], [])
@@ -2336,7 +2336,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update, as: :zap in Hologram.Policy.ValidatorTest.LateNameChainSource reads Hologram.Policy.ValidatorTest.LateNameChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.LateNameChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update, as: :zap in Hologram.Policy.ValidatorTest.LateNameChainSource reads Hologram.Policy.ValidatorTest.LateNameChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.LateNameChainTarget: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([LateNameChainTarget, LateNameChainSource], [])
@@ -2411,7 +2411,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :read, as: :see in Hologram.Policy.ValidatorTest.NamedReadChainSource reads Hologram.Policy.ValidatorTest.NamedReadChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.NamedReadChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :read, as: :see in Hologram.Policy.ValidatorTest.NamedReadChainSource reads Hologram.Policy.ValidatorTest.NamedReadChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.NamedReadChainTarget: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([NamedReadChainTarget, NamedReadChainSource], [])
@@ -2679,7 +2679,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update, except: [:parent] in Hologram.Policy.ValidatorTest.ExceptChainSource reads Hologram.Policy.ValidatorTest.ExceptChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.ExceptChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update, except: [:parent] in Hologram.Policy.ValidatorTest.ExceptChainSource reads Hologram.Policy.ValidatorTest.ExceptChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.ExceptChainTarget: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([ExceptChainTarget, ExceptChainSource], [])
@@ -2707,7 +2707,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update, only: [:topic] in Hologram.Policy.ValidatorTest.LimitedChainSource reads Hologram.Policy.ValidatorTest.LimitedChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.LimitedChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update, only: [:topic] in Hologram.Policy.ValidatorTest.LimitedChainSource reads Hologram.Policy.ValidatorTest.LimitedChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.LimitedChainTarget: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([LimitedChainTarget, LimitedChainSource], [])
@@ -2764,7 +2764,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update, except: [:parent] in Hologram.Policy.ValidatorTest.SharedFieldChainSource reads Hologram.Policy.ValidatorTest.SharedFieldChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.SharedFieldChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update, except: [:parent] in Hologram.Policy.ValidatorTest.SharedFieldChainSource reads Hologram.Policy.ValidatorTest.SharedFieldChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.SharedFieldChainTarget: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([SharedFieldChainTarget, SharedFieldChainSource], [])

@@ -7,6 +7,8 @@ defmodule Hologram.Sync.VerdictsTest do
 
   alias Hologram.Entity
   alias Hologram.Policy
+  alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24, as: ReadersTask
 
   use_module_stub :query_cache
 
@@ -47,11 +49,7 @@ defmodule Hologram.Sync.VerdictsTest do
   end
 
   defp delete_key do
-    Policy.verdict_key(
-      VerdictTask,
-      :delete,
-      {:none, {[:board, :cards], [{:author_id, :==, {:actor}}]}}
-    )
+    Policy.verdict_key(VerdictTask, :delete)
   end
 
   defp task, do: %{VerdictTask.new() | id: Entity.generate_id()}
@@ -135,6 +133,52 @@ defmodule Hologram.Sync.VerdictsTest do
 
       assert moved([{row, %{}}], %{}) == []
       assert moved([{row, %{delete_key() => true}}], %{}) == [{row, %{delete_key() => true}}]
+    end
+  end
+
+  describe "stale/3" do
+    test "returns a row whose verdicts differ from what was told" do
+      row = task()
+
+      assert stale([row], %{}, Entity.generate_id()) == [{row, %{delete_key() => true}}]
+    end
+
+    test "returns the rows in the order given" do
+      first = task()
+      last = task()
+
+      assert stale([last, first], %{}, Entity.generate_id()) == [
+               {last, %{delete_key() => true}},
+               {first, %{delete_key() => true}}
+             ]
+    end
+
+    test "returns nothing for a row whose verdicts are what was told" do
+      row = task()
+      told = %{row.id => %{delete_key() => true}}
+
+      assert stale([row], told, Entity.generate_id()) == []
+    end
+
+    test "returns a row whose verdicts moved from what was told" do
+      row = task()
+
+      assert stale([row], %{row.id => %{delete_key() => true}}, nil) == [
+               {row, %{delete_key() => false}}
+             ]
+    end
+
+    # The task's read rule holds a role on the team its project names, and no client holds a
+    # project, so the server answers its read rules - true for every reader it sends the row to.
+    test "returns a row whose read verdict was never told" do
+      row = %{ReadersTask.new() | id: Entity.generate_id()}
+      key = Policy.verdict_key(ReadersTask, :read)
+
+      assert stale([row], %{}, Entity.generate_id()) == [{row, %{key => true}}]
+    end
+
+    test "returns nothing for a row of a type the server sends no verdict on" do
+      assert stale([Module2.new(a: true)], %{}, nil) == []
     end
   end
 end

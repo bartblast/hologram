@@ -712,12 +712,40 @@ defmodule Hologram.Sync.Session do
     {news, pot} =
       Pot.reread(state.pot, entity_type, rows, read_pairs, trust_held?: trust_held?)
 
+    # The grant can move the verdicts of the rows the client holds too - a rule naming the role, or
+    # one a global role satisfies - while their read access stands. The rows handed over carry
+    # theirs, so those of the rest are worked out here, and only the ones that moved are told.
+    appeared_ids = MapSet.new(news.appeared, & &1.id)
+
+    stale =
+      rows
+      |> Enum.reject(&MapSet.member?(appeared_ids, &1.id))
+      |> Verdicts.stale(state.told_verdicts, state.actor_user_id)
+
     # Read after the batch, so its rows can hold batches of this client's the session hasn't told:
     # their frames claim the number the read found, and the session keeps its own (see
-    # `tell_part/3`).
+    # `tell_part/3`). A verdict patch names a row the client holds, which it takes as a write to the
+    # row, as it takes a pair, so the patches go in frames of their own under the session's number,
+    # as the pairs do (see `send_news/4`) - told twice, a verdict changes nothing.
     %{state | pot: pot}
     |> send_news(news, %{}, higher_seq(state.applied_seq, read_seq))
+    |> send_verdict_patches(stale)
     |> send_keep(entity_type, keep_salt, rows)
+  end
+
+  defp send_verdict_patches(state, []), do: state
+
+  # Split by the frame size, as a fill's rows are: a grant on a whole type can move the verdicts of
+  # every row of it the client holds.
+  defp send_verdict_patches(state, stale) do
+    stale
+    |> Enum.sort_by(fn {row, _verdicts} -> row.id end)
+    |> Enum.chunk_every(Catchup.rows_per_frame())
+    |> Enum.reduce(state, fn chunk, acc ->
+      news = %{appeared: [], edges: [], patched: Verdicts.patches([], chunk), unsynced: []}
+
+      send_frames(acc, news, %{}, acc.applied_seq)
+    end)
   end
 
   defp send_keep(state, _entity_type, nil, _rows), do: state

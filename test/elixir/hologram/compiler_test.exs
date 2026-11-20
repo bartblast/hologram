@@ -3798,6 +3798,36 @@ defmodule Hologram.CompilerTest do
       allow :read, when: report.reviewed == true
     end
 
+    defmodule BakedSharedProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+      attribute :title, :string
+
+      relationship :labels, [Hologram.CompilerTest.BakedLabel]
+
+      allow :read
+      allow :update, except: [:name], when: none(labels)
+    end
+
+    defmodule BakedSecretBoard do
+      use Hologram.Entity
+
+      relationship :notes, [Hologram.CompilerTest.BakedSecretNote], inverse: board
+
+      allow :read, when: any(note <- notes, note.secret == "x")
+    end
+
+    defmodule BakedSecretNote do
+      use Hologram.Entity
+
+      attribute :secret, :string, server_only: true
+
+      relationship :board, BakedSecretBoard, optional: true
+
+      allow :read
+    end
+
     defmodule BakedHiddenProject do
       use Hologram.Entity
 
@@ -3814,10 +3844,12 @@ defmodule Hologram.CompilerTest do
       allow :read, when: project.archived == false
     end
 
-    defp archive_key do
-      [%{predicates: [clause]}] = Hologram.Policy.build(BakedProject).archive
+    # The verdict entry the build bakes for the given operation, reading the given types.
+    defp verdict_entry_js(entity_type, operation, read_types) do
+      reads_js = Enum.map_join(read_types, ",", &~s/"#{inspect(&1)}"/)
+      key = Hologram.Policy.verdict_key(entity_type, operation)
 
-      Hologram.Policy.verdict_key(BakedProject, :archive, clause)
+      ~s/{"reads":[#{reads_js}],"verdict":"#{key}"}/
     end
 
     setup do
@@ -4399,7 +4431,7 @@ defmodule Hologram.CompilerTest do
                  ~s/"enumValues":{"c":["x","y"]},"expandedRoles":{},"frameworkAttributes":[],"inverses":{},/ <>
                  ~s/"operations":["create","delete","grant_role","read","read_roles",/ <>
                  ~s/"revoke_role","update"],"policy":{},/ <>
-                 ~s/"relationships":{},"roles":[],"serverOnly":[]}}/
+                 ~s/"relationships":{},"roles":[],"serverOnly":[],"verdicts":{}}}/
              )
     end
 
@@ -5141,10 +5173,13 @@ defmodule Hologram.CompilerTest do
              )
     end
 
-    # A deciding clause is answered from the server's verdict, so it carries the key the verdict is
-    # sent under and the types whose unanswered writes make the verdict stale - in an alternative
-    # too, and only the outer one when it holds a none inside. The any alone reads no none or all.
-    test "bakes a deciding quantifier's verdict key and the types it reads", %{
+    # A deciding quantifier renders as any other, since the rows a client holds of its set decide
+    # what one row can, and the server's verdict answers its operation whole: the key the verdict is
+    # sent under and the types whose unanswered writes make it stale. The read rule's any reads no
+    # none or all, and the whole-row update rule none either, and every member and label is read by
+    # everyone, so neither operation has a verdict. The publish line reads a member's user, which a
+    # reader may not hold, so it has one too.
+    test "bakes a deciding quantifier as it is and its operation's verdict key and reads", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
@@ -5174,44 +5209,140 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      [%{predicates: [archive_clause]}] = Hologram.Policy.build(BakedProject).archive
-      key = Hologram.Policy.verdict_key(BakedProject, :archive, archive_clause)
-
       assert String.contains?(
                js,
-               ~s/"quantifier":"none","reads":["Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{key}"}/
+               ~s/"delete":[{"predicates":[{"or":[[["name","==","draft"]],[{"filter":[],"quantifier":"none","source":["members"]}]]}],"to":null,"via":null}]/
              )
 
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"filter":[["user_id","==",{"actor":true}]],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+               ~s/"share":[{"predicates":[{"filter":[{"filter":[["name","==","x"]],"quantifier":"none","source":["labels"]}],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
              )
 
-      [%{predicates: [{:or, [_name, [delete_clause]]}]}] =
-        Hologram.Policy.build(BakedProject).delete
+      member_types = [BakedMember, BakedProject]
+      label_types = [BakedLabel, BakedMember, BakedProject]
+      user_types = [BakedMember, BakedProject, Hologram.Test.Fixtures.Entity.Module14]
 
-      delete_key = Hologram.Policy.verdict_key(BakedProject, :delete, delete_clause)
+      field_types = [
+        BakedLabel,
+        BakedMember,
+        BakedProject,
+        Hologram.Test.Fixtures.Entity.Module14
+      ]
+
+      verdicts_js =
+        ~s/"verdicts":{"archive":#{verdict_entry_js(BakedProject, :archive, member_types)},/ <>
+          ~s/"delete":#{verdict_entry_js(BakedProject, :delete, member_types)},/ <>
+          ~s/"publish":#{verdict_entry_js(BakedProject, :publish, user_types)},/ <>
+          ~s/"share":#{verdict_entry_js(BakedProject, :share, label_types)},/ <>
+          ~s/"update:name":#{verdict_entry_js(BakedProject, {:update, :name}, field_types)}}/
+
+      assert String.contains?(js, verdicts_js)
 
       assert String.contains?(
                js,
-               ~s/[{"filter":[],"quantifier":"none","reads":["Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{delete_key}"}]/
-             )
-
-      [%{predicates: [share_clause]}] = Hologram.Policy.build(BakedProject).share
-      share_key = Hologram.Policy.verdict_key(BakedProject, :share, share_clause)
-
-      assert String.contains?(
-               js,
-               ~s/"share":[{"predicates":[{"filter":[{"filter":[["name","==","x"]],"quantifier":"none","source":["labels"]}],"quantifier":"any","reads":["Hologram.CompilerTest.BakedLabel","Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{share_key}"}],"to":null,"via":null}]/
+               ~s/"serverOnly":[],"verdicts":{}},"Hologram.CompilerTest.BakedProject"/
              )
     end
 
-    # A bounded set computed over the rows a client holds can hold rows the server's doesn't, so an
-    # any over one is answered from the verdict too, which reads the rows the set is taken from.
-    test "bakes the verdict key and the types read of an any over a derived set", %{
+    # Every field but the name is covered by the one line, so each field's entry names one verdict,
+    # which a row carries once.
+    test "bakes the fields of an update the same lines cover as entries naming one verdict", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedSharedProject, BakedLabel, RoleGrant])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      entry_js =
+        verdict_entry_js(BakedSharedProject, {:update, :title}, [BakedLabel, BakedSharedProject])
+
+      assert String.contains?(
+               js,
+               ~s/"verdicts":{"update:labels":#{entry_js},"update:title":#{entry_js}}/
+             )
+
+      refute String.contains?(js, ~s/"update:name":/)
+    end
+
+    # Only a workshop's owner and members read it, its benches and its tools' permits, so each of
+    # the tool's operations reading one has a verdict, a create line only under its name.
+    test "bakes the verdicts of operations reading related rows a reader may not hold", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types:
+            MapSet.new([
+              Hologram.Test.Fixtures.Policy.Module46,
+              Hologram.Test.Fixtures.Policy.Module47,
+              Hologram.Test.Fixtures.Policy.Module48,
+              Hologram.Test.Fixtures.Policy.Module49,
+              RoleGrant
+            ])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      tool = Hologram.Test.Fixtures.Policy.Module49
+      workshop_types = [Hologram.Test.Fixtures.Policy.Module46]
+      delegation_types = [RoleGrant, Hologram.Test.Fixtures.Policy.Module46]
+
+      permit_types = [
+        Hologram.Test.Fixtures.Policy.Module46,
+        Hologram.Test.Fixtures.Policy.Module48,
+        tool
+      ]
+
+      bench_types = [
+        RoleGrant,
+        Hologram.Test.Fixtures.Policy.Module46,
+        Hologram.Test.Fixtures.Policy.Module47
+      ]
+
+      verdicts_js =
+        ~s/"verdicts":{"delete":#{verdict_entry_js(tool, :delete, delegation_types)},/ <>
+          ~s/"draft":#{verdict_entry_js(tool, :draft, workshop_types)},/ <>
+          ~s/"read":#{verdict_entry_js(tool, :read, workshop_types)},/ <>
+          ~s/"update":#{verdict_entry_js(tool, :update, workshop_types)},/ <>
+          ~s/"update:bench":#{verdict_entry_js(tool, {:update, :bench}, permit_types)},/ <>
+          ~s/"update:label":#{verdict_entry_js(tool, {:update, :label}, bench_types)}}/
+
+      assert String.contains?(js, verdicts_js)
+    end
+
+    # A bounded set computed over the rows a client holds can hold rows the server's doesn't, so an
+    # any over one leaves its operation to the verdict, which reads the rows the set is taken from.
+    test "bakes the verdict key and the types read of an operation with an any over a derived set",
+         %{
+           ir_plt: ir_plt,
+           runtime_mfas: runtime_mfas
+         } do
       put_derived_definitions([BakedBoard])
 
       sync_constants = %{
@@ -5231,20 +5362,21 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      [%{predicates: [clause]}] = Hologram.Policy.build(BakedBoard).read
-      key = Hologram.Policy.verdict_key(BakedBoard, :read, clause)
-
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"filter":[["rank","==",1]],"quantifier":"any","reads":["Hologram.CompilerTest.BakedBoard","Hologram.CompilerTest.BakedCard"],"source":["top_cards"],"verdict":"#{key}"}],"to":null,"via":null}]/
+               ~s/"read":[{"predicates":[{"filter":[["rank","==",1]],"quantifier":"any","source":["top_cards"]}],"to":null,"via":null}]/
              )
+
+      read_js = verdict_entry_js(BakedBoard, :read, [BakedBoard, BakedCard])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
     end
 
-    # No client holds a server-only value, so a predicate reading one is the key the server's verdict
-    # on it is sent under and the types it reads alone - none for the row's own attribute, which no
-    # write of the client's can move, and the types along a path, without the rule's own. A stored
-    # attribute beside it in an alternative stays a triple.
-    test "bakes a predicate on a server-only attribute as its verdict key and the types it reads",
+    # No client holds a server-only value, so a predicate reading one is a marker the client answers
+    # as unknown, its compared value left off the bundle. A stored attribute beside it in an
+    # alternative stays a triple. The read verdict reads no type for the row's own attribute, which
+    # no write of the client's can move, and the types along a path, without the rule's own.
+    test "bakes a predicate on a server-only attribute as a marker",
          %{
            ir_plt: ir_plt,
            runtime_mfas: runtime_mfas
@@ -5266,26 +5398,60 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      report_key = Hologram.Policy.verdict_key(BakedReport, :read, {:reviewed, :==, true})
-
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"or":[[{"reads":[],"verdict":"#{report_key}"}],[["title","==","x"]]]}],"to":null,"via":null}]/
+               ~s/"read":[{"predicates":[{"or":[[{"server":true}],[["title","==","x"]]]}],"to":null,"via":null}]/
              )
 
-      note_key =
-        Hologram.Policy.verdict_key(BakedReportNote, :read, {[:report, :reviewed], :==, true})
+      assert String.contains?(
+               js,
+               ~s/"verdicts":{"read":#{verdict_entry_js(BakedReport, :read, [])}}/
+             )
 
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"reads":["Hologram.CompilerTest.BakedReport"],"verdict":"#{note_key}"}],"to":null,"via":null}]/
+               ~s/"read":[{"predicates":[{"server":true}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"verdicts":{"read":#{verdict_entry_js(BakedReportNote, :read, [BakedReport])}}/
              )
     end
 
-    # No client holds a row of a type nobody may read, so a read rule's predicate reading one is the
-    # key the server's verdict on it is sent under and the types it reads, with its triple for when
-    # the project reference is empty.
-    test "bakes a read rule's predicate reading a type nobody may read with its verdict key and reads",
+    # A quantifier's condition is read on the rows of its set, so one reading a server-only value
+    # stays a triple, which the client answers as unknown on each row.
+    test "bakes a quantifier's condition on a server-only attribute as its triple", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedSecretBoard, BakedSecretNote, RoleGrant])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"filter":[["secret","==","x"]],"quantifier":"any","source":["notes"]}],"to":null,"via":null}]/
+             )
+    end
+
+    # No client holds a row of a type nobody may read, so a read rule's predicate reading one is its
+    # triple, which the client reads as unknown unless the project reference is empty, and the read
+    # verdict answers the rest.
+    test "bakes a read rule's predicate reading a type nobody may read as its triple",
          %{
            ir_plt: ir_plt,
            runtime_mfas: runtime_mfas
@@ -5307,19 +5473,20 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      key =
-        Hologram.Policy.verdict_key(BakedHiddenTask, :read, {[:project, :archived], :==, false})
-
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"predicate":[["project","archived"],"==",false],"reads":["Hologram.CompilerTest.BakedHiddenProject"],"verdict":"#{key}"}],"to":null,"via":null}]/
+               ~s/"read":[{"predicates":[[["project","archived"],"==",false]],"to":null,"via":null}]/
              )
+
+      read_js = verdict_entry_js(BakedHiddenTask, :read, [BakedHiddenProject])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
     end
 
     # Readers.Module24 reads the team's id off its project, a type nobody may read, so the read
-    # rule's reference carries the key the server's verdict on it is sent under and the types it
-    # reads. A reference one relationship away reads the team's id off the task itself.
-    test "bakes a read rule's role reference reading a type nobody may read with its verdict key and reads",
+    # rule's reference carries a fifth element the client answers as unknown, and the read verdict
+    # answers the rest. A reference one relationship away reads the team's id off the task itself.
+    test "bakes a read rule's role reference reading a type nobody may read with a marker",
          %{
            ir_plt: ir_plt,
            runtime_mfas: runtime_mfas
@@ -5341,19 +5508,16 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      key =
-        Hologram.Policy.verdict_key(
-          ReadersTask,
-          :read,
-          {:to, {:rel, [:project, :team], [:member]}}
-        )
-
       team_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module22"/
 
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[],"to":[["rel",["project","team"],#{team_js},["member"],{"reads":["Hologram.Auth.RoleGrant","Hologram.Test.Fixtures.Policy.Readers.Module23"],"verdict":"#{key}"}]],"via":null},{"predicates":[],"to":[["rel",["team"],#{team_js},["member"]]],"via":null}]/
+               ~s/"read":[{"predicates":[],"to":[["rel",["project","team"],#{team_js},["member"],true]],"via":null},{"predicates":[],"to":[["rel",["team"],#{team_js},["member"]]],"via":null}]/
              )
+
+      read_js = verdict_entry_js(ReadersTask, :read, [RoleGrant, ReadersProject])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
 
       assert String.contains?(
                js,
@@ -5362,9 +5526,9 @@ defmodule Hologram.CompilerTest do
     end
 
     # The parcel's vault and shelf have no read rule, so its read rule's delegations through them
-    # carry the key the server's verdict on each is sent under and the types it reads. The one to
-    # the crate runs through readable types alone.
-    test "bakes a read rule's delegation through a type nobody may read with its verdict key and reads",
+    # carry a third element the client answers as unknown, and the read verdict answers the rest.
+    # The one to the crate runs through readable types alone.
+    test "bakes a read rule's delegation through a type nobody may read with a marker",
          %{
            ir_plt: ir_plt,
            runtime_mfas: runtime_mfas
@@ -5387,26 +5551,19 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      vault_key = Hologram.Policy.verdict_key(ReadersParcel, :read, {:via, {:update, [:vault]}})
-
-      shelf_key =
-        Hologram.Policy.verdict_key(ReadersParcel, :read, {:via, {:read, [:shelf, :crate]}})
-
-      vault_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module25"/
-      crate_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module26"/
-      shelf_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module27"/
-
-      assert String.contains?(
-               js,
-               ~s/"via":["update",["vault"],{"reads":[#{vault_js}],"verdict":"#{vault_key}"}]/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"via":["read",["shelf","crate"],{"reads":[#{crate_js},#{shelf_js}],"verdict":"#{shelf_key}"}]/
-             )
-
+      assert String.contains?(js, ~s/"via":["update",["vault"],true]/)
+      assert String.contains?(js, ~s/"via":["read",["shelf","crate"],true]/)
       assert String.contains?(js, ~s/"via":["read",["crate"]]}/)
+
+      read_js =
+        verdict_entry_js(ReadersParcel, :read, [
+          RoleGrant,
+          ReadersVault,
+          ReadersCrate,
+          ReadersShelf
+        ])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
     end
 
     # Each time is spelled by the type of the attribute it is compared with, on the row that
@@ -5445,7 +5602,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"archive":[{"predicates":[{"filter":[["seat","==","full"],["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"none","reads":["Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{archive_key()}"}],"to":null,"via":null}]/
+               ~s/"archive":[{"predicates":[{"filter":[["seat","==","full"],["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"none","source":["members"]}],"to":null,"via":null}]/
              )
 
       assert String.contains?(

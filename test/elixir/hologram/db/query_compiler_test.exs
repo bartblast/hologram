@@ -8,7 +8,6 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.DB.Mapper
   alias Hologram.MisuseError
   alias Hologram.Policy
-  alias Hologram.Policy.Readers
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
@@ -4339,29 +4338,31 @@ defmodule Hologram.DB.QueryCompilerTest do
         |> Enum.reject(&Mapper.derived?/1)
         |> Enum.map_join(", ", &~s|"#{&1.name}"|)
 
+      users_names =
+        parts.verdict_users
+        |> Enum.with_index(1)
+        |> Enum.map_join(", ", fn {_sql, index} -> ~s|"$v"."$verdict_users_#{index}"| end)
+
+      users_columns =
+        parts.verdict_users
+        |> Enum.with_index(1)
+        |> Enum.map_join(", ", fn {sql, index} -> ~s|#{sql} AS "$verdict_users_#{index}"| end)
+
       ~s|SELECT * FROM (SELECT #{columns}, "$e"."$everyone", | <>
-        ~s|#{parts.anonymous} AS "$anonymous", "$r"."$readers", "$e"."$everyone_verdicts", | <>
-        ~s|#{parts.anonymous_verdicts} AS "$anonymous_verdicts", | <>
-        ~s|"$v"."$verdict_users", "$v"."$user_verdicts" | <>
+        ~s|#{parts.anonymous} AS "$anonymous", "$r"."$readers", "$e"."$verdict_everyone", | <>
+        ~s|ARRAY[#{Enum.join(parts.verdict_anonymous, ", ")}] AS "$verdict_anonymous", | <>
+        ~s|#{users_names} | <>
         ~s|FROM "hologram_data"."#{table_name}" | <>
         ~s|CROSS JOIN LATERAL (SELECT #{parts.everyone} AS "$everyone", | <>
-        ~s|#{parts.everyone_verdicts} AS "$everyone_verdicts" OFFSET 0) AS "$e" | <>
+        ~s|ARRAY[#{Enum.join(parts.verdict_everyone, ", ")}] AS "$verdict_everyone" | <>
+        ~s|OFFSET 0) AS "$e" | <>
         ~s|CROSS JOIN LATERAL (SELECT #{parts.readers} AS "$readers" OFFSET 0) AS "$r" | <>
-        ~s|CROSS JOIN LATERAL (SELECT coalesce(array_agg("$t"."$user"), '{}'::uuid[]) | <>
-        ~s|AS "$verdict_users", coalesce(array_agg(#{parts.user_verdicts}), '{}'::boolean[]) | <>
-        ~s|AS "$user_verdicts" FROM #{parts.tested} AS "$t"("$user") OFFSET 0) AS "$v" | <>
+        ~s|CROSS JOIN LATERAL (SELECT #{users_columns} OFFSET 0) AS "$v" | <>
         ~s|WHERE "#{table_name}"."id" = ANY($1::uuid[]) OFFSET 0) AS "$rows" | <>
         ~s|WHERE "$everyone" OR "$anonymous" OR cardinality("$readers") > 0|
     end
 
-    defp listed_tested_sql(candidates_sql) do
-      ~s|(SELECT DISTINCT "$k"."$user" FROM (#{candidates_sql}) AS "$k"("$user") | <>
-        ~s|WHERE CASE WHEN "$e"."$everyone" | <>
-        ~s|THEN ("$k"."$user" IN (SELECT "$u"."$user" FROM unnest($2::uuid[]) AS "$u"("$user"))) IS TRUE | <>
-        ~s|ELSE "$k"."$user" = ANY("$r"."$readers") END)|
-    end
-
-    test "leaves the statement as it is without verdicts, for a type with deciding clauses" do
+    test "leaves the statement as it is without verdicts, for a type with verdict operations" do
       assert recheck(ReadersModule18, @recheck_mapping, false) == %{
                params: [:ids, :users, {:value, true}],
                sql:
@@ -4374,29 +4375,37 @@ defmodule Hologram.DB.QueryCompilerTest do
              }
     end
 
-    test "answers a clause naming nobody once per row, and a listed one for the users its anchor names" do
-      assert recheck(ReadersModule18, @recheck_mapping, false, true) == %{
-               params: [:ids, :users, {:value, true}, {:value, true}],
+    # The read verdict is true for every reader, so the statement reads nothing more for it.
+    test "leaves the statement as it is for the read verdict, naming its key" do
+      compiled = recheck(ReadersModule18, @recheck_mapping, false, true)
+
+      assert Map.delete(compiled, :verdicts) == recheck(ReadersModule18, @recheck_mapping, false)
+
+      assert compiled.verdicts == %{
+               operations: [],
+               read: [Policy.verdict_key(ReadersModule18, :read)]
+             }
+    end
+
+    test "answers an operation whose rules name nobody once per row, reading no users" do
+      space = "test_fixtures_policy_module26"
+
+      none_sql =
+        ~s|(NOT EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module27" AS "$q1" | <>
+          ~s|WHERE "$q1"."space_id" = "#{space}"."id" AND "flagged" = $2)) IS TRUE|
+
+      assert recheck(PolicyModule26, @recheck_mapping, false, true) == %{
+               params: [:ids, {:value, true}],
                sql:
-                 verdict_recheck_sql(ReadersModule18, %{
+                 verdict_recheck_sql(PolicyModule26, %{
                    anonymous: "FALSE",
-                   anonymous_verdicts: "'{}'::boolean[]",
-                   everyone: ~s|("reviewed" = $3) IS TRUE|,
-                   everyone_verdicts: ~s|ARRAY[("reviewed" = $4) IS TRUE]|,
-                   readers:
-                     listed_readers_sql(
-                       ~s|SELECT "steward_id"|,
-                       ~s|"steward_id" = "$c"."$reader"|
-                     ),
-                   tested: listed_tested_sql(~s|SELECT "steward_id"|),
-                   user_verdicts: ~s|ARRAY[("steward_id" = "$t"."$user") IS TRUE]|
+                   everyone: "TRUE",
+                   readers: "'{}'::uuid[]",
+                   verdict_anonymous: ["FALSE"],
+                   verdict_everyone: [none_sql],
+                   verdict_users: ["'{}'::uuid[]"]
                  }),
-               verdict_clauses: [
-                 {[Policy.verdict_key(ReadersModule18, :read, {:reviewed, :==, true})],
-                  :independent},
-                 {[Policy.verdict_key(ReadersModule18, :read, {:steward_id, :==, {:actor}})],
-                  {:listed, {:actor_equal, :steward_id}, false}}
-               ]
+               verdicts: %{operations: [Policy.verdict_key(PolicyModule26, :delete)], read: []}
              }
     end
 
@@ -4408,122 +4417,120 @@ defmodule Hologram.DB.QueryCompilerTest do
         ~s|WHERE "$s2"."#{owner_column}" = "#{owner_table}"."id" AND "done" = $#{slot})|
     end
 
-    test "tests only the users the anchors of listed clauses name, each anchor once" do
+    # The close rule's any is bounded by the open cards' authors, and only the readers among them
+    # are tested.
+    test "tests the readers an operation's anchors name when its rules are listed" do
       board = "test_fixtures_policy_readers_module15"
-      on_board = ~s|"$q1"."board_id" = "#{board}"."id"|
-
-      candidate_sql = fn reader_sql, membership_sql ->
-        ~s|SELECT "$cq1"."$reader" FROM #{cards_table()} AS "$q1" | <>
-          ~s|CROSS JOIN LATERAL (#{reader_sql}) AS "$cq1"("$reader") WHERE #{membership_sql}|
-      end
 
       candidates_sql =
-        "(" <>
-          candidate_sql.(~s|SELECT "author_id"|, on_board) <>
-          ") UNION (" <>
-          candidate_sql.(~s|SELECT "author_id"|, open_cards_sql(board, "board_id", 6)) <>
-          ") UNION (" <>
-          candidate_sql.(~s|(SELECT "author_id") UNION (SELECT "reviewer_id")|, on_board) <> ")"
+        ~s|SELECT "$cq1"."$reader" FROM #{cards_table()} AS "$q1" | <>
+          ~s|CROSS JOIN LATERAL (SELECT "author_id") AS "$cq1"("$reader") | <>
+          ~s|WHERE #{open_cards_sql(board, "board_id", 8)}|
 
-      user_verdicts_sql =
-        ~s|ARRAY[(NOT EXISTS (SELECT 1 FROM #{cards_table()} AS "$q1" | <>
-          ~s|WHERE #{on_board} AND "author_id" = "$t"."$user")) IS TRUE, | <>
-          ~s|(EXISTS (SELECT 1 FROM #{cards_table()} AS "$q1" | <>
-          ~s|WHERE #{open_cards_sql(board, "board_id", 5)} AND "author_id" = "$t"."$user")) IS TRUE, | <>
-          ~s|(NOT EXISTS (SELECT 1 FROM #{cards_table()} AS "$q1" | <>
-          ~s|WHERE #{on_board} AND (("author_id" != "$t"."$user" OR "author_id" IS NULL)) IS NOT TRUE)) IS TRUE, | <>
-          ~s|(NOT EXISTS (SELECT 1 FROM #{cards_table()} AS "$q1" | <>
-          ~s|WHERE #{on_board} AND (("author_id" = "$t"."$user") OR ("reviewer_id" = "$t"."$user")))) IS TRUE]|
+      close_users_sql =
+        ~s|CASE WHEN "$e"."$verdict_everyone"[2] THEN '{}'::uuid[] | <>
+          ~s|ELSE ARRAY(SELECT DISTINCT "$c"."$reader" FROM (#{candidates_sql}) AS "$c"("$reader") | <>
+          ~s|WHERE CASE WHEN "$e"."$everyone" | <>
+          ~s|THEN ("$c"."$reader" IN (SELECT "$u"."$user" FROM unnest($2::uuid[]) AS "$u"("$user"))) IS TRUE | <>
+          ~s|ELSE "$c"."$reader" = ANY("$r"."$readers") END | <>
+          ~s|AND EXISTS (SELECT 1 FROM #{cards_table()} AS "$q1" | <>
+          ~s|WHERE #{open_cards_sql(board, "board_id", 7)} AND "author_id" = "$c"."$reader")) END | <>
+          ~s|AS "$verdict_users_2"|
 
-      assert %{params: params, sql: sql} =
+      assert %{params: params, sql: sql, verdicts: verdicts} =
                recheck(ReadersModule15, @recheck_mapping, false, true)
 
       # The users are read for the verdicts alone - the board's read rule names nobody.
-      assert params == [:ids, :users | List.duplicate({:value, false}, 4)]
-
-      assert sql =~
-               ~s|CROSS JOIN LATERAL (SELECT TRUE AS "$everyone", | <>
-                 ~s|ARRAY[(NOT EXISTS (SELECT 1 FROM #{cards_table()} AS "$q1" WHERE #{on_board})) IS TRUE, | <>
-                 ~s|(EXISTS (SELECT 1 FROM #{cards_table()} AS "$q1" | <>
-                 ~s|WHERE #{open_cards_sql(board, "board_id", 3)} AND "done" = $4)) IS TRUE] | <>
-                 ~s|AS "$everyone_verdicts" OFFSET 0) AS "$e" |
-
-      assert sql =~
-               ~s|coalesce(array_agg(#{user_verdicts_sql}), '{}'::boolean[]) AS "$user_verdicts" | <>
-                 ~s|FROM #{listed_tested_sql(candidates_sql)} AS "$t"("$user")|
+      assert [:ids, :users | _values] = params
+      assert sql =~ close_users_sql
+      assert Enum.at(verdicts.operations, 1) == Policy.verdict_key(ReadersModule15, :close)
     end
 
-    test "tests every reader when a clause depending on the user is unlisted, folding them for nobody" do
+    # Each unlisted rule may hold for any reader, so every reader is tested, and an anonymous one is
+    # answered by the rules folded for nobody.
+    test "tests every reader when an operation's rule is unlisted, folding its rules for nobody" do
       holder = "test_fixtures_policy_readers_module17"
-      on_holder = ~s|"$q1"."holder_id" = "#{holder}"."id"|
 
       share_sql = fn slot, condition_sql ->
         ~s|(EXISTS (SELECT 1 FROM #{cards_table()} AS "$q1" | <>
           ~s|WHERE #{open_cards_sql(holder, "holder_id", slot)} AND #{condition_sql})) IS TRUE|
       end
 
-      assert recheck(ReadersModule17, @recheck_mapping, true, true) == %{
-               params:
-                 [:ids, :users] ++
-                   [{:value, false}, {:value, true}, {:value, false}] ++
-                   [{:value, true}, {:value, false}, {:value, true}],
-               sql:
-                 verdict_recheck_sql(ReadersModule17, %{
-                   anonymous: "FALSE",
-                   anonymous_verdicts:
-                     ~s|ARRAY[FALSE, FALSE, FALSE, #{share_sql.(3, ~s|"done" = $4|)}]|,
-                   everyone: "FALSE",
-                   everyone_verdicts: "'{}'::boolean[]",
-                   readers:
-                     listed_readers_sql(
-                       ~s|SELECT "$cq1"."$reader" FROM #{cards_table()} AS "$q1" | <>
-                         ~s|CROSS JOIN LATERAL (SELECT "author_id") AS "$cq1"("$reader") | <>
-                         ~s|WHERE #{on_holder}|,
-                       ~s|EXISTS (SELECT 1 FROM #{cards_table()} AS "$q1" | <>
-                         ~s|WHERE #{on_holder} AND "author_id" = "$c"."$reader")|
-                     ),
-                   tested:
-                     ~s|unnest(CASE WHEN "$e"."$everyone" THEN $2::uuid[] ELSE "$r"."$readers" END)|,
-                   user_verdicts:
-                     ~s|ARRAY[#{share_sql.(5, ~s|("author_id" != "$t"."$user" OR "author_id" IS NULL)|)}, | <>
-                       ~s|(NOT EXISTS (SELECT 1 FROM #{cards_table()} AS "$q1" | <>
-                       ~s|WHERE #{on_holder} AND (("done" = $6) OR ("author_id" = "$t"."$user")))) IS TRUE, | <>
-                       ~s|(NOT EXISTS (SELECT 1 FROM #{cards_table()} AS "$q1" | <>
-                       ~s|WHERE #{on_holder} AND ("author_id" = "$t"."$user") IS NOT TRUE)) IS TRUE, | <>
-                       share_sql.(7, ~s|(("author_id" = "$t"."$user") OR ("done" = $8))|) <> "]"
-                 }),
-               verdict_clauses:
-                 ReadersModule17
-                 |> Readers.classify_verdicts()
-                 |> Enum.map(fn {_clause, keys, :unlisted} -> {keys, :unlisted} end)
+      close_users_sql =
+        ~s|CASE WHEN "$e"."$verdict_everyone"[2] THEN '{}'::uuid[] | <>
+          ~s|ELSE ARRAY(SELECT DISTINCT "$c"."$reader" | <>
+          ~s|FROM (SELECT "$u"."$user" FROM unnest(CASE WHEN "$e"."$everyone" THEN $2::uuid[] | <>
+          ~s|ELSE "$r"."$readers" END) AS "$u"("$user")) AS "$c"("$reader") | <>
+          ~s|WHERE EXISTS (SELECT 1 FROM #{cards_table()} AS "$q1" | <>
+          ~s|WHERE #{open_cards_sql(holder, "holder_id", 9)} | <>
+          ~s|AND ("author_id" != "$c"."$reader" OR "author_id" IS NULL))) END AS "$verdict_users_2"|
+
+      assert %{sql: sql, verdicts: verdicts} =
+               recheck(ReadersModule17, @recheck_mapping, true, true)
+
+      assert sql =~
+               ~s|ARRAY[FALSE, FALSE, FALSE, FALSE, #{share_sql.(3, ~s|"done" = $4|)}, FALSE, | <>
+                 ~s|#{share_sql.(5, ~s|"done" = $6|)}] AS "$verdict_anonymous"|
+
+      assert sql =~
+               ~s|ARRAY[#{Enum.join(List.duplicate("FALSE", 7), ", ")}] AS "$verdict_everyone"|
+
+      assert sql =~ close_users_sql
+
+      operations = [:claim, :close, :lock, :move, :share, :update, {:update, :name}]
+
+      assert verdicts == %{
+               operations: Enum.map(operations, &Policy.verdict_key(ReadersModule17, &1)),
+               read: []
              }
     end
 
-    test "tests nobody when every clause answers the same for every user, reading no users" do
-      assert %{params: [:ids, {:value, true}], sql: sql} =
-               recheck(PolicyModule26, @recheck_mapping, false, true)
+    defmodule SharedFieldBoard do
+      use Hologram.Entity
 
-      assert sql =~
-               ~s|CROSS JOIN LATERAL (SELECT '{}'::uuid[] AS "$verdict_users", | <>
-                 ~s|'{}'::boolean[] AS "$user_verdicts" OFFSET 0) AS "$v" |
+      attribute :name, :string
+      attribute :title, :string
+
+      relationship :cards, [Hologram.Test.Fixtures.Policy.Readers.Module16]
+
+      allow :read
+      allow :update, except: [:name], when: none(cards)
     end
 
-    test "lists the clauses answering the same for every user first" do
-      assert %{verdict_clauses: verdict_clauses} =
-               recheck(ReadersModule15, @recheck_mapping, false, true)
+    # The title and the cards are covered by the one line, so their verdicts share a key, which the
+    # statement answers once.
+    test "answers the fields of an update the same lines cover once" do
+      mapping =
+        Mapper.derive!(
+          [
+            Module14,
+            ReadersModule15,
+            ReadersModule16,
+            ReadersModule17,
+            RoleGrant,
+            SharedFieldBoard
+          ],
+          [Role.Module1, Role.Module2]
+        )
 
       operations =
-        Enum.map(verdict_clauses, fn {[key | _rest], _class} ->
-          [operation | _digest] = String.split(key, ":")
-          operation
-        end)
+        for {_key, {:update, _field} = operation} <-
+              Policy.verdict_operations(SharedFieldBoard),
+            do: operation
 
-      assert operations == ["delete", "review", "archive", "close", "hide", "pin"]
+      assert length(operations) > 1
+
+      assert %{verdicts: %{operations: [key], read: []}} =
+               recheck(SharedFieldBoard, mapping, false, true)
+
+      assert key == Policy.verdict_key(SharedFieldBoard, {:update, :title})
     end
 
-    test "answers no verdict for a type with no deciding clause" do
-      assert recheck(ReadersModule2, @recheck_mapping, false, true) ==
-               recheck(ReadersModule2, @recheck_mapping, false)
+    test "answers no verdict for a type the server sends none on" do
+      compiled = recheck(ReadersModule2, @recheck_mapping, false, true)
+
+      assert Map.delete(compiled, :verdicts) == recheck(ReadersModule2, @recheck_mapping, false)
+      assert compiled.verdicts == %{operations: [], read: []}
     end
   end
 

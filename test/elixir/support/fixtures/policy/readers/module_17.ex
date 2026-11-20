@@ -12,6 +12,8 @@ defmodule Hologram.Test.Fixtures.Policy.Readers.Module17 do
 
   allow :read, when: any(card <- cards, card.author_id == user_id())
 
+  allow :update, as: :claim, when: any(card <- open_cards, card.reviewer_id == user_id())
+
   allow :update,
     as: :close,
     only: [:name],

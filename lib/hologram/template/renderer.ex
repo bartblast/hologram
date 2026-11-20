@@ -1954,8 +1954,9 @@ defmodule Hologram.Template.Renderer do
 
     # Gathered as the query resolves, so the client is handed the rows this render read - which is
     # what lets its own first render answer the same query from its own database rather than from
-    # a value passed down beside it. Gathered as stored: the server's verdicts on a carried row read
-    # its server-only values, and the wire leaves those out of what the client is told.
+    # a value passed down beside it. Gathered as stored: the server works a carried row's verdicts
+    # out over the row as it is stored, and the wire leaves its server-only values out of what the
+    # client is told.
     Carry.collect(stored)
 
     result = Entity.strip_server_only_deep(stored)

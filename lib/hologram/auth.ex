@@ -116,6 +116,17 @@ defmodule Hologram.Auth do
   asks the same of every field in the list, each covered by some line that holds - what an update
   changing them all needs. The bare `:update` counts only the lines covering the whole row. A field
   is one of `Hologram.Policy.update_fields/1`, a to-one by its relationship name.
+
+  In the browser, a rule reading a related row the user may not read - through a condition, a set, a
+  role reference or a delegation - is answered from the server's verdict on the row as stored, sent
+  with it (see `Hologram.Policy.verdict_operations/1`), since the browser holds only the rows its
+  user may read. Where no verdict speaks for the question, the browser answers no while the server
+  may answer yes: a check on a new struct, any create among them, or on a struct an action changed
+  and hasn't written yet, a check on, or delegating to, a row the browser created that the server
+  hasn't sent back with its verdicts, a check about another user, or about a visitor in a signed-in
+  session, a check while a write of the browser's the server hasn't answered names a type the
+  operation's rules read, and a rule delegating `:create` to a row whose create rules read a row the
+  browser doesn't hold.
   """
   @spec can?(struct | Server.identity_id() | nil, atom | {atom, atom | list(atom)}, struct) ::
           boolean
@@ -486,28 +497,41 @@ defmodule Hologram.Auth do
   defdelegate user_id, to: Context, as: :actor_user_id
 
   @doc """
-  Returns the server's verdict on each deciding item of the given row's type (see
-  `Hologram.Policy.deciding_quantifiers/1`) for the given user, keyed by its verdict key: whether
-  the item holds for the row, read as stored, as the rule `Hologram.Policy.verdict_rule/1` gives
-  it - what a client answers such an item by, since the rows it holds of a set can't decide one for
-  certain, it never holds a server-only value, and it never holds a row of a type nobody may read.
-  Empty for a type with none. Takes nil for an anonymous session. An item several keys share - one
-  written for several operations, or a grant lifecycle line expanded per role - is answered once.
+  Returns the server's verdict on each operation of the given row's type it sends one on (see
+  `Hologram.Policy.verdict_operations/1`) for the given user, keyed by its verdict key: what
+  `can?/3` answers for the operation on the row, read as stored - what a client answers the
+  operation by when the rows it holds leave the answer open. The read verdict is true without
+  asking, since a client is sent only rows its user may read. Empty for a type with none. Takes
+  nil for an anonymous session. A rule several operations share - a whole-row update rule covering
+  a field's operation too - is answered once.
   """
   @spec verdicts(Server.identity_id() | nil, struct) :: %{String.t() => boolean}
   def verdicts(actor_user_id, %entity_type{} = row) do
-    checker = &check_requirement(&1, &2, &3, :stored)
+    case Policy.verdict_operations(entity_type) do
+      [] ->
+        %{}
 
-    entity_type
-    |> Policy.deciding_quantifiers()
-    |> Enum.group_by(fn {_key, item} -> item end, fn {key, _item} -> key end)
-    |> Enum.flat_map(fn {item, keys} ->
-      rule = Policy.verdict_rule(item)
-      holds? = Evaluator.rule_matches?(rule, row, canonical_id(actor_user_id), checker)
+      pairs ->
+        policy = Policy.build(entity_type)
+        checker = &check_requirement(&1, &2, &3, :stored)
+        canonical_user_id = canonical_id(actor_user_id)
 
-      Enum.map(keys, &{&1, holds?})
-    end)
-    |> Map.new()
+        {answers, _held_by_rule} =
+          Enum.map_reduce(pairs, %{}, fn
+            {key, :read}, held_by_rule ->
+              {{key, true}, held_by_rule}
+
+            {key, operation}, held_by_rule ->
+              rules = Policy.operation_rules(policy, operation)
+
+              {holds?, held_by_rule} =
+                covered?(rules, row, canonical_user_id, checker, held_by_rule)
+
+              {{key, holds?}, held_by_rule}
+          end)
+
+        Map.new(answers)
+    end
   end
 
   # The acting user as rules read it - nil, an anonymous session, for an id no user entity can have.
