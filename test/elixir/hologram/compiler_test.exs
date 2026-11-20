@@ -3703,6 +3703,18 @@ defmodule Hologram.CompilerTest do
       allow :read, when: report.reviewed == true
     end
 
+    defmodule BakedSharedProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+      attribute :title, :string
+
+      relationship :labels, [Hologram.CompilerTest.BakedLabel]
+
+      allow :read
+      allow :update, except: [:name], when: none(labels)
+    end
+
     defmodule BakedSecretBoard do
       use Hologram.Entity
 
@@ -5124,6 +5136,38 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/"serverOnly":[],"verdicts":{}},"Hologram.CompilerTest.BakedProject"/
              )
+    end
+
+    # Every field but the name is covered by the one line, so each field's entry names one verdict,
+    # which a row carries once.
+    test "bakes the fields of an update the same lines cover as entries naming one verdict", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedSharedProject, BakedLabel, RoleGrant])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      key = Hologram.Policy.verdict_key(BakedSharedProject, {:update, :title})
+
+      entry_js =
+        verdict_entry_js(BakedSharedProject, {:update, :title}, [BakedLabel, BakedSharedProject])
+
+      assert String.contains?(js, ~s/"update:title":#{entry_js}/)
+      assert length(String.split(js, ~s/"verdict":"#{key}"/)) > 2
     end
 
     # A bounded set computed over the rows a client holds can hold rows the server's doesn't, so an

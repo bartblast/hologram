@@ -4345,6 +4345,47 @@ defmodule Hologram.DB.QueryCompilerTest do
              }
     end
 
+    defmodule SharedFieldBoard do
+      use Hologram.Entity
+
+      attribute :name, :string
+      attribute :title, :string
+
+      relationship :cards, [Hologram.Test.Fixtures.Policy.Readers.Module16]
+
+      allow :read
+      allow :update, except: [:name], when: none(cards)
+    end
+
+    # The title and the cards are covered by the one line, so their verdicts share a key, which the
+    # statement answers once.
+    test "answers the fields of an update the same lines cover once" do
+      mapping =
+        Mapper.derive!(
+          [
+            Module14,
+            ReadersModule15,
+            ReadersModule16,
+            ReadersModule17,
+            RoleGrant,
+            SharedFieldBoard
+          ],
+          [Role.Module1, Role.Module2]
+        )
+
+      operations =
+        for {_key, {:update, _field} = operation} <-
+              Policy.verdict_operations(SharedFieldBoard),
+            do: operation
+
+      assert length(operations) > 1
+
+      assert %{verdicts: %{operations: [key], read: []}} =
+               recheck(SharedFieldBoard, mapping, false, true)
+
+      assert key == Policy.verdict_key(SharedFieldBoard, {:update, :title})
+    end
+
     test "answers no verdict for a type the server sends none on" do
       compiled = recheck(ReadersModule2, @recheck_mapping, false, true)
 

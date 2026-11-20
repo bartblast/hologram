@@ -1453,9 +1453,15 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   # Each operation the server sends a verdict on but read, whose verdict is true for every reader,
-  # with the rules answering it the same for everyone and the classes of the others, in key order.
+  # with the rules answering it the same for everyone and the classes of the others, in key order -
+  # one per key, since fields covered by the same lines share one (see Policy.verdict_key/2).
   defp recheck_verdict_operations(entity_type) do
-    for {key, operation} <- Policy.verdict_operations(entity_type), operation != :read do
+    pairs =
+      entity_type
+      |> Policy.verdict_operations()
+      |> Enum.uniq_by(fn {key, _operation} -> key end)
+
+    for {key, operation} <- pairs, operation != :read do
       {independent, dependent} =
         entity_type
         |> Readers.classify(operation)

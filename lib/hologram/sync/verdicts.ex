@@ -4,13 +4,14 @@ defmodule Hologram.Sync.Verdicts do
   # What a session has told its client of the server's verdicts, and which of them a batch makes
   # out of date.
   #
-  # A verdict is the server's answer on a policy condition a browser cannot decide over the rows it
-  # holds (see Hologram.Auth.verdicts/2). Every row a client is put carries its verdicts, so a row
-  # that arrives is current. A row the client already holds can have its verdicts move without the
-  # row moving at all - a task deletable while its board has no cards stops being so the moment a
-  # card is added - so the session keeps what it last told, and tells only what changed: of the
+  # A verdict is the server's answer on an operation whose rules a browser cannot decide over the
+  # rows it holds (see Hologram.Auth.verdicts/2). Every row a client is put carries its verdicts, so
+  # a row that arrives is current. A row the client already holds can have its verdicts move without
+  # the row moving at all - a task deletable while its board has no cards stops being so the moment
+  # a card is added - so the session keeps what it last told, and tells only what changed: of the
   # verdicts a batch's recheck read for the rows it may have moved them of (see
-  # `Hologram.Sync.Live.parts/5`), and of the ones worked out for a returning client's rows.
+  # `Hologram.Sync.Live.parts/5`), and of the ones worked out for a returning client's rows and for
+  # the rows it holds of a type read again whole.
   #
   # The bookkeeping is kept here, apart from the session that holds it, so what is told when can be
   # judged without a running session.
@@ -85,8 +86,9 @@ defmodule Hologram.Sync.Verdicts do
   `Hologram.Sync.Frame.row_verdicts/2`), and no rule reads any a client holds of it from an earlier
   build.
 
-  For the rows a returning client may hold verdicts of from before this session - a batch's rows
-  come with theirs worked out (see `moved/2`).
+  For the rows a returning client may hold verdicts of from before this session, and the rows a
+  client holds of a type read again whole - a batch's rows come with theirs worked out (see
+  `moved/2`).
   """
   @spec stale(list(struct), %{String.t() => map}, String.t() | nil) :: list({struct, map})
   def stale(rows, told, actor_user_id) do

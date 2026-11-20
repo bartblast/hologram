@@ -537,8 +537,8 @@ function operandValue(entityType, entity, value, actorUserId, outer) {
 // A clause is a triple array, a disjunction object holding alternatives that are clause lists
 // themselves, a quantifier object, or a server-only marker (see clauseHolds/5) - every clause has
 // to hold, a disjunction holds when one of its alternatives does. False when a clause does not
-// hold, UNKNOWN when none fails but one may, true when all hold. The outer rows are the rows above the entity inside a quantifier, nearest
-// first, each with its type - none at the top of a rule.
+// hold, UNKNOWN when none fails but one may, true when all hold. The outer rows are the rows above
+// the entity inside a quantifier, nearest first, each with its type - none at the top of a rule.
 function predicatesHold(entityType, entity, clauses, actorUserId, outer = []) {
   let result = true;
 
@@ -831,9 +831,13 @@ function canonicalId(value) {
 // write may have moved the answer. So is one about a row that came with no verdict.
 //
 // An answer can settle a batch before the frame carrying its round arrives, and between the two
-// the verdict predates the write again. The window closes itself: a write moving a verdict re-runs
-// the windows over the row, whose frame brings the new one, and a write that moves none sends
-// none, since the verdict held stands. A rule the held rows decide never reads it in between.
+// the verdict predates the write again: the answer files the write's values into the base row,
+// which keeps the verdicts the server worked out before it. A verdict answers its operation whole,
+// so in that window it can grant over values it was never worked out for - those of the row itself
+// or of a row its rules read - and an action can write what the server then refuses and rolls
+// back. The window closes itself: a write moving a verdict brings the new one with its frame, and
+// a write that moves none sends none, since the verdict held stands. A rule the held rows decide
+// never reads it in between.
 function verdictHolds(entityType, entity, entry, actorUserId) {
   // The server works a session's verdicts out for its user as rules read it, a visitor for an id
   // naming no user entity.

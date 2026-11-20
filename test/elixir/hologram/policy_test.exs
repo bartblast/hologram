@@ -2485,6 +2485,18 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "verdict_key/2" do
+    defmodule SharedFieldProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+      attribute :summary, :string
+      attribute :title, :string
+
+      relationship :labels, [Hologram.PolicyTest.VerdictLabel]
+
+      allow :update, except: [:name], when: none(labels)
+    end
+
     defmodule KeyedParcel do
       use Hologram.Entity
 
@@ -2563,8 +2575,21 @@ defmodule Hologram.PolicyTest do
       assert verdict_key(VerdictProject, :archive) != verdict_key(VerdictProject, :delete)
     end
 
-    test "keys a field of an update the way the client spells it" do
-      assert "update:name:" <> _digest = verdict_key(VerdictProject, {:update, :name})
+    # The whole-row rules are never a field's, which adds the lines covering it.
+    test "keys a field of an update under update, apart from the whole row" do
+      assert "update:" <> digest = verdict_key(VerdictProject, {:update, :name})
+
+      refute String.contains?(digest, ":")
+      assert verdict_key(VerdictProject, {:update, :name}) != verdict_key(VerdictProject, :update)
+    end
+
+    test "gives fields of an update covered by the same lines one key" do
+      keys =
+        for field <- [:summary, :title, :name],
+            do: verdict_key(Hologram.PolicyTest.SharedFieldProject, {:update, field})
+
+      assert [shared, shared, other] = keys
+      assert shared != other
     end
 
     test "gives an operation a new key when its rules change" do
@@ -2737,6 +2762,16 @@ defmodule Hologram.PolicyTest do
 
     test "returns nothing for a type with no deciding item" do
       assert verdict_operations(Module14) == []
+    end
+
+    # Every field but the name is covered by the one line, so they share its key.
+    test "returns one key for the fields of an update the same lines cover" do
+      pairs = verdict_operations(Hologram.PolicyTest.SharedFieldProject)
+      keys = Enum.map(pairs, fn {key, _operation} -> key end)
+
+      assert {:update, :summary} in Enum.map(pairs, &elem(&1, 1))
+      assert {:update, :title} in Enum.map(pairs, &elem(&1, 1))
+      assert length(Enum.uniq(keys)) == 1
     end
   end
 

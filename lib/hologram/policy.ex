@@ -842,14 +842,19 @@ defmodule Hologram.Policy do
 
   @doc """
   Returns the key the server's verdict on the given operation of the given entity type is sent
-  under, and the client finds it by: the operation's key, a colon, and a short digest of what the
-  answer rests on - the operation's rules (see `operation_rules/2`), the definitions of the derived
-  fields their clauses read, and the hash of the rules of every type their delegations read (see
-  `hash/1`) but the grant store's, whose rules every type's grant lifecycle lines make. A changed
-  rule, definition or delegated rule gets a new key, so a client holding a verdict on what the
-  rules used to mean never reads it for what they mean now - a deploy changing only policies or
-  derived fields reloads no bundle. The digest's encoding is pinned, so a build and the node
-  running it agree across OTP releases.
+  under, and the client finds it by: the operation's key - `update` for a field of an update - a
+  colon, and a short digest of what the answer rests on - the operation's rules (see
+  `operation_rules/2`), the definitions of the derived fields their clauses read, and the hash of
+  the rules of every type their delegations read (see `hash/1`) but the grant store's, whose rules
+  every type's grant lifecycle lines make. A changed rule, definition or delegated rule gets a new
+  key, so a client holding a verdict on what the rules used to mean never reads it for what they
+  mean now - a deploy changing only policies or derived fields reloads no bundle. The digest's
+  encoding is pinned, so a build and the node running it agree across OTP releases.
+
+  Fields of an update covered by the same lines answer alike, so they share one key, and a row
+  carries one verdict for them: a line naming every field but a few covers the rest with one. A
+  field the server sends a verdict on has lines of its own, so its rules are never the whole-row
+  operation's alone.
   """
   @spec verdict_key(module, Entity.operation()) :: String.t()
   def verdict_key(entity_type, operation) do
@@ -877,7 +882,7 @@ defmodule Hologram.Policy do
       |> List.delete(RoleGrant)
       |> hash()
 
-    "#{operation_key(operation)}:#{verdict_digest({rules, definitions, rules_hash})}"
+    "#{verdict_key_prefix(operation)}:#{verdict_digest({rules, definitions, rules_hash})}"
   end
 
   @doc """
@@ -890,7 +895,8 @@ defmodule Hologram.Policy do
   A field of an update counts by the deciding items of the limited lines covering it, though its
   verdict answers those lines and the ones covering the whole row: a client answers a field with no
   verdict of its own from the whole-row operation's, so a type with many limited fields and one
-  deciding whole-row rule sends one verdict rather than one per field.
+  deciding whole-row rule sends one verdict rather than one per field. Fields covered by the same
+  lines share a key, so several pairs can hold one.
 
   Cached, with the model facts, for the types of the project's compiled data model - a row's
   verdicts are worked out for every row a client is sent.
@@ -1684,6 +1690,10 @@ defmodule Hologram.Policy do
 
     %{derived: derived, inverses: inverses}
   end
+
+  defp verdict_key_prefix({:update, _field}), do: "update"
+
+  defp verdict_key_prefix(operation), do: operation_key(operation)
 
   # The items of a rule: every clause standing in its predicates, each role reference of its to as
   # {:to, reference}, and its delegation as {:via, via}.
