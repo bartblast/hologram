@@ -14,6 +14,7 @@ import Durability from "../../assets/js/durability.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
 import Model from "../../assets/js/model.mjs";
+import Overlay from "../../assets/js/overlay.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
@@ -2831,6 +2832,104 @@ describe("Tabs", () => {
         assert.isFalse(persisting.called);
       } finally {
         Replica.reset();
+        SyncStream.syncCursor = null;
+      }
+    });
+
+    // The tab before it moved a counter, the server applied it, and that tab stored the frame and
+    // closed: this tab's store already holds the move. Replayed, the frame marks the batch landed
+    // before the answer promotes it, so the move is not added a second time.
+    it("moves a counter the tab before it already moved only once, when it joined as the leader with a place", async () => {
+      globalThis.Hologram.sync = {
+        model: {
+          "MyApp.Task": {
+            attributes: {count: "integer", id: "uuid"},
+            enumValues: {},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+
+      sinon.stub(Batches, "flush");
+      sinon.stub(SyncStream, "scheduleRender");
+
+      const promoting = sinon.spy(Overlay, "promote");
+      sinon.stub(Tabs, "postState");
+
+      // What the store holds, and this tab restored: the server's row with the move in it.
+      LocalDatabase.putRow("MyApp.Task", {$revisions: {}, count: 1, id: "t1"});
+
+      let arrived;
+
+      const hasArrived = new Promise((resolve) => {
+        arrived = resolve;
+      });
+
+      await Tabs.join(nextGroup(), {
+        onLead: () => {},
+        onMessage: (message) =>
+          message.kind === "barrier" ? arrived() : Tabs.receive(message),
+      });
+
+      const other = sibling(Tabs.name);
+
+      other.postMessage({
+        kind: "sealed",
+        record: {
+          actorUserId: null,
+          landed: [],
+          seq: 1,
+          writes: [
+            {
+              deltas: {count: 1},
+              id: "t1",
+              op: "update",
+              stamp: 1_798_246_400_125_952,
+              type: "MyApp.Task",
+            },
+          ],
+        },
+      });
+
+      other.postMessage({
+        event: "sync_deltas",
+        frame: {
+          applied_seq: 1,
+          cursor: "place-2",
+          deltas: {patch_entity: {"MyApp.Task": [{count: 1, id: "t1"}]}},
+        },
+        kind: "frame",
+      });
+
+      other.postMessage({
+        answer: {dropped: {}, kept: {}, status: "confirmed"},
+        kind: "answered",
+        seq: 1,
+      });
+
+      other.postMessage(barrier);
+
+      await hasArrived;
+
+      try {
+        SyncStream.syncCursor = "place-1";
+
+        Tabs.ready();
+
+        assert.equal(LocalDatabase.baseRow("MyApp.Task", "t1").count, 1);
+        assert.deepStrictEqual(Batches.pending, []);
+
+        // Promoted, and landed by then.
+        sinon.assert.calledOnce(promoting);
+        assert.isTrue(promoting.firstCall.args[0].isLanded(0));
+      } finally {
+        Batches.reset();
+        Clock.reset();
+        LocalDatabase.reset();
+        Model.reset();
         SyncStream.syncCursor = null;
       }
     });
