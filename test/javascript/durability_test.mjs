@@ -1149,6 +1149,25 @@ describe("Durability", () => {
 
       assert.equal(await readMeta("seq"), 8);
     });
+
+    // The tab that sent it was answered and let go of it: written back, the next page load would
+    // send an answered batch again.
+    it("writes nothing for a batch the queue no longer holds", async () => {
+      await Durability.open();
+      await Durability.load();
+      await storeBatch(8);
+
+      const batch = sealedBatch(7);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await Durability.persistLanded(batch);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [8],
+      );
+    });
   });
 
   describe("persistReplica()", () => {

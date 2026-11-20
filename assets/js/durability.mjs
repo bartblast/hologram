@@ -409,10 +409,24 @@ export default class Durability {
   //
   // Fire and forget: the marks are already in memory, and what storing them buys is only whether
   // they are still true after a reload.
+  //
+  // Only over a record the queue still holds. A tab other than the sender can hear the frame that
+  // lands a batch after the sender was answered and let go of it - a follower whose frame arrives
+  // behind the delete, or a starting tab replaying what it heard while starting - and writing it
+  // back would put an answered batch in the queue for the next page load to send again. Read and
+  // written in ONE transaction, the put chained onto the read's callback, so a delete cannot land
+  // in between.
   static persistLanded(batch) {
-    return Durability.#write([QUEUE], (transaction) =>
-      transaction.objectStore(QUEUE).put(batch.record()),
-    );
+    return Durability.#write([QUEUE], (transaction) => {
+      const queue = transaction.objectStore(QUEUE);
+      const stored = queue.getKey(batch.seq);
+
+      stored.onsuccess = () => {
+        if (stored.result !== undefined) {
+          queue.put(batch.record());
+        }
+      };
+    });
   }
 
   // The identity this browser presents, kept so that the next page load can ignore the fresh pair
