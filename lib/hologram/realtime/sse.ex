@@ -6,6 +6,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Component.Action
   alias Hologram.DB.Oplog
   alias Hologram.DB.QueryCache
+  alias Hologram.Entity.Model
   alias Hologram.LiveReload
   alias Hologram.Mutation.Record
   alias Hologram.Policy
@@ -569,9 +570,15 @@ defmodule Hologram.Realtime.SSE do
     rules = if stale_rules?, do: Rules.rendered()
 
     # The types this build syncs, which a place names beside the rules: a client filled with others
-    # holds no rows of a type added since. And whether its browser checks permissions: a client
-    # filled without the checks holds rows carrying no verdicts.
-    types_hash = Cursor.types_hash(QueryCache.synced_types(), QueryCache.permission_checking?())
+    # holds no rows of a type added since. Whether its browser checks permissions: a client filled
+    # without the checks holds rows carrying no verdicts. And the model the rows were read under,
+    # which a migration can change at rest.
+    types_hash =
+      Cursor.types_hash(
+        QueryCache.synced_types(),
+        QueryCache.permission_checking?(),
+        Model.hash()
+      )
 
     resumes = resume? and cursor != nil
     resync_reason = if resumes, do: resync_reason(cursor, policy_hash, types_hash)

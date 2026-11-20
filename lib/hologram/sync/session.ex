@@ -63,10 +63,11 @@ defmodule Hologram.Sync.Session do
   running session - a live reload does that - and a place stamped with the new rules would vouch
   for rows the old ones decided.
 
-  `:types_hash` is the hash of the entity types sync sends (see
-  `Hologram.Sync.Cursor.types_hash/2`), taken where the session is started and stamped on every
-  place beside the policy hash, for the same reason: a client filled with other types holds none of
-  a type added since.
+  `:types_hash` is the hash of the entity types sync sends, whether the browser checks permissions
+  and the model the rows are read under (see `Hologram.Sync.Cursor.types_hash/3`), taken where the
+  session is started and stamped on every place beside the policy hash, for the same reason: a
+  client filled with other types holds none of a type added since, and one filled under another
+  model holds rows a migration may have changed since.
 
   `:replica_id` is the browser's own copy of the data, when the client presented one this stream
   could vouch for - it is what tells this session's frames which of the effects they carry are
