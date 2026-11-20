@@ -37,7 +37,8 @@ defmodule Hologram.Job.Worker do
 
   `:notifications` names a Hologram.DB.Listener connection to hear writes on. It is optional,
   because the announcements are an optimization over the poll rather than the mechanism: without
-  one a job still runs, no sooner than `:poll_interval_ms` after it was created.
+  one a job still runs, no sooner than `:poll_interval_ms` after it was created. That's 5 seconds
+  unless the option says otherwise, which only tests do.
 
   `:run_lock` names the Hologram.Job.RunLock connection the runs hold their run locks on. The
   worker waits for it to connect, then gives up every lock it holds as it starts: a worker
@@ -83,7 +84,7 @@ defmodule Hologram.Job.Worker do
       notifications: Keyword.get(opts, :notifications),
       gone_down: MapSet.new(),
       passed_over: MapSet.new(),
-      poll_interval_ms: Keyword.get(opts, :poll_interval_ms, default_poll_interval_ms()),
+      poll_interval_ms: Keyword.get(opts, :poll_interval_ms, @default_poll_interval_ms),
       queued: Keyword.get(opts, :queued, &Runner.queued/3),
       release:
         Keyword.get_lazy(opts, :release, fn ->
@@ -203,12 +204,6 @@ defmodule Hologram.Job.Worker do
       {:ok, :ok} -> {:noreply, fill(state, [job_type])}
       _stop_or_skip -> {:noreply, state}
     end
-  end
-
-  defp default_poll_interval_ms do
-    :hologram
-    |> Application.get_env(:job, [])
-    |> Keyword.get(:poll_interval_ms, @default_poll_interval_ms)
   end
 
   defp default_release(run_lock), do: &RunLock.release(run_lock, &1)

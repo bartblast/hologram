@@ -38,7 +38,8 @@ defmodule Hologram.Sync.Dispatcher do
 
   `:notifications` names a `Postgrex.Notifications` process to hear appends on. It is optional
   because the announcements are an optimization over the poll rather than the mechanism: without
-  one the dispatcher still reads, just no sooner than `:poll_interval_ms` after a write.
+  one the dispatcher still reads, just no sooner than `:poll_interval_ms` after a write. That's 5
+  seconds unless the option says otherwise, which only tests do.
 
   `:read_edge` names a `Hologram.Sync.ReadEdge` process keeping how far the log has been read,
   which is what a dispatcher put there before this one started resumes from - a restart that began
@@ -68,7 +69,7 @@ defmodule Hologram.Sync.Dispatcher do
       cursor: Keyword.get(opts, :cursor),
       handler: Keyword.fetch!(opts, :handler),
       notifications: Keyword.get(opts, :notifications),
-      poll_interval_ms: Keyword.get(opts, :poll_interval_ms, default_poll_interval_ms()),
+      poll_interval_ms: Keyword.get(opts, :poll_interval_ms, @default_poll_interval_ms),
       read_edge: Keyword.get(opts, :read_edge)
     }
 
@@ -123,12 +124,6 @@ defmodule Hologram.Sync.Dispatcher do
     # Hologram.Entity.Model.hold/0). The round is skipped rather than crashed, which would restart
     # this process on every round for as long as the hold stands.
     Hologram.StaleModelError -> state
-  end
-
-  defp default_poll_interval_ms do
-    :hologram
-    |> Application.get_env(:sync, [])
-    |> Keyword.get(:poll_interval_ms, @default_poll_interval_ms)
   end
 
   # Every announcement and every nudge asks the same question, so the ones already waiting are
