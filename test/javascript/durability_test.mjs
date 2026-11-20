@@ -448,6 +448,32 @@ describe("Durability", () => {
       sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
     });
 
+    // The log line goes to session storage, whose own quota the log can fill. Thrown, it would
+    // reject the identity write every send waits on, and leave the store open and unwiped.
+    it("stops storing even when the failure cannot be logged", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      sinon
+        .stub(Logger, "debug")
+        .throws(new DOMException("full", "QuotaExceededError"));
+
+      // A pair the store cannot hold, so the write fails.
+      Durability.persistReplica({id: () => {}, token: "statement"});
+
+      await Durability.replicaWritten();
+
+      assert.equal(Durability.mode, "memory");
+      sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
+
+      assert.isUndefined(await readMeta("cursor"));
+      assert.isUndefined(await readMeta("replica"));
+      assert.isUndefined(await readMeta("seq"));
+    });
+
     it("drops the identity and the counter, which have stopped being true", async () => {
       await Durability.open();
       await Durability.load();

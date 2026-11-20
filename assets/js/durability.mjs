@@ -793,10 +793,18 @@ export default class Durability {
   // come back round to this function, and it cannot: nothing in this block reports one. That is
   // also why there is no "already failing" flag to keep in step - the shape rules the case out
   // rather than catching it.
+  //
+  // The log line is best-effort. It goes to session storage, which has a quota of its own that the
+  // log can fill and that survives reloads. A throw here would leave the store open and unwiped,
+  // tell no other tab, and reject the write being failed - which a send waits on when it is the
+  // identity's or the batch's own (see replicaWritten).
   static #fail(reason) {
-    Logger.debug(
-      `Hologram: durable storage stopped (${reason}), the database lives in memory for this page`,
-    );
+    try {
+      Logger.debug(
+        `Hologram: durable storage stopped (${reason}), the database lives in memory for this page`,
+      );
+      // eslint-disable-next-line no-empty
+    } catch {}
 
     try {
       const transaction = Durability.#db.transaction(
