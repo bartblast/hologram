@@ -122,8 +122,7 @@ defmodule Hologram.Job.Worker do
     # the job tables are there - in a test env, whose test helper converges the schema after the
     # app starts - and an error logged then would only be noise.
     with {:ok, job_types} <- guard(&job_types/0, :quiet),
-         swept when swept != :stop <-
-           guard(fn -> state.sweep.(job_types, MapSet.new()) end, :quiet) do
+         :ok <- sweep_types(state, job_types, :quiet) do
       {:noreply, fill(state, job_types, :quiet)}
     else
       _stop_or_skip -> {:noreply, state}
@@ -350,12 +349,8 @@ defmodule Hologram.Job.Worker do
     Enum.count(state.runs, fn {_ref, {running_type, _id}} -> running_type == job_type end)
   end
 
-  # The jobs this node runs, whose locks its own session holds: a sweep would find them held, and a
-  # look must not start one twice. The ids of every type's runs, or of one type's.
-  defp running_ids(runs) do
-    MapSet.new(runs, fn {_ref, {_job_type, id}} -> id end)
-  end
-
+  # The jobs of the given type this node runs, whose locks its own session holds: a sweep would find
+  # them held, and a look must not start one twice.
   defp running_ids(runs, job_type) do
     for {_ref, {^job_type, id}} <- runs, into: MapSet.new(), do: id
   end
@@ -377,11 +372,27 @@ defmodule Hologram.Job.Worker do
     %{state | runs: Map.put(state.runs, task.ref, {job_type, id})}
   end
 
-  defp sweep_if(state, job_types, :sweep) do
-    guard(fn -> state.sweep.(job_types, running_ids(state.runs)) end)
+  defp sweep_if(state, job_types, :sweep), do: sweep_types(state, job_types, :logged)
+
+  defp sweep_if(_state, _job_types, :look), do: :ok
+
+  # One type at a time, each leaving out its own runs, so a type whose sweep fails for a reason of
+  # its own - an error on its table - doesn't keep the types after it from being swept, and their
+  # runs cut short from being failed, for as long as it keeps failing. A failure every type would
+  # meet - a hold on the data model, a pool that can't hand over a connection - stops the sweep
+  # where it is, and answers :stop. Anything else answers :ok.
+  defp sweep_types(state, job_types, logging) do
+    Enum.reduce_while(job_types, :ok, fn job_type, :ok -> sweep_type(state, job_type, logging) end)
   end
 
-  defp sweep_if(_state, _job_types, :look), do: {:ok, :ok}
+  defp sweep_type(state, job_type, logging) do
+    skip_ids = running_ids(state.runs, job_type)
+
+    case guard(fn -> state.sweep.([job_type], skip_ids) end, logging) do
+      :stop -> {:halt, :stop}
+      _swept_or_skipped -> {:cont, :ok}
+    end
+  end
 
   # Every wake and poll starts with nothing passed over, so a job left queued is tried again then,
   # and every poll with no claim that went down left out (see the DOWN handler). The poll also
@@ -401,9 +412,10 @@ defmodule Hologram.Job.Worker do
         :look -> %{state | passed_over: MapSet.new()}
       end
 
-    # A sweep that fails for a reason of one type's own still lets the look run.
+    # A sweep that fails for a reason of one type's own still lets the look run (see
+    # sweep_types/3).
     with {:ok, job_types} <- guard(&job_types/0),
-         swept when swept != :stop <- sweep_if(state, job_types, look_or_sweep) do
+         :ok <- sweep_if(state, job_types, look_or_sweep) do
       fill(state, job_types)
     else
       _stop_or_skip -> state

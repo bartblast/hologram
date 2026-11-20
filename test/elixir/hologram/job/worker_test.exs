@@ -197,8 +197,10 @@ defmodule Hologram.Job.WorkerTest do
     test "sweeps every job type as it starts" do
       start_worker!(sweep: sweep_stub(self()))
 
-      assert_receive {:swept, [Module1, Module2, Module3], skip_ids}, @timeout_ms
-      assert skip_ids == MapSet.new()
+      for job_type <- [Module1, Module2, Module3] do
+        assert_receive {:swept, [^job_type], skip_ids}, @timeout_ms
+        assert skip_ids == MapSet.new()
+      end
     end
 
     # A run its predecessor left would go on with its lock given up under it.
@@ -761,7 +763,9 @@ defmodule Hologram.Job.WorkerTest do
     test "sweeps nothing" do
       worker = start_worker!(sweep: sweep_stub(self()))
 
-      assert_receive {:swept, _job_types, _skip_ids}, @timeout_ms
+      for job_type <- [Module1, Module2, Module3] do
+        assert_receive {:swept, [^job_type], _skip_ids}, @timeout_ms
+      end
 
       wake(worker)
 
@@ -787,7 +791,10 @@ defmodule Hologram.Job.WorkerTest do
             sweep: sweep_stub(test_pid)
           )
 
-        assert_receive {:swept, _job_types, _skip_ids}, @timeout_ms
+        for job_type <- [Module1, Module2, Module3] do
+          assert_receive {:swept, [^job_type], _skip_ids}, @timeout_ms
+        end
+
         await_first_look()
 
         add_jobs(queues, Module1, ["a"])
@@ -880,7 +887,11 @@ defmodule Hologram.Job.WorkerTest do
       end
 
       worker = start_worker_on!(queues, run: run, sweep: sweep_stub(test_pid))
-      assert_receive {:swept, _job_types, _skip_ids}, @timeout_ms
+
+      for job_type <- [Module1, Module2, Module3] do
+        assert_receive {:swept, [^job_type], _skip_ids}, @timeout_ms
+      end
+
       await_first_look()
 
       add_jobs(queues, Module3, ["x"])
@@ -944,9 +955,46 @@ defmodule Hologram.Job.WorkerTest do
     test "keeps sweeping every job type" do
       start_worker!(sweep: sweep_stub(self()), poll_interval_ms: @poll_interval_ms)
 
-      for _sweep <- 1..3 do
-        assert_receive {:swept, [Module1, Module2, Module3], _skip_ids}, @timeout_ms
+      for _sweep <- 1..3, job_type <- [Module1, Module2, Module3] do
+        assert_receive {:swept, [^job_type], _skip_ids}, @timeout_ms
       end
+    end
+
+    # A type whose read raises would otherwise keep every type after it from being swept, and
+    # their runs cut short from being failed, for as long as it keeps raising.
+    test "sweeps the types after one whose sweep fails for a reason of its own" do
+      test_pid = self()
+
+      sweep = fn
+        [Module1], _skip_ids -> raise "no such table"
+        job_types, skip_ids -> sweep_stub(test_pid).(job_types, skip_ids)
+      end
+
+      capture_log(fn ->
+        start_worker!(sweep: sweep, poll_interval_ms: @poll_interval_ms)
+
+        # Once as it starts, and once at the first poll.
+        for _sweep <- 1..2, job_type <- [Module2, Module3] do
+          assert_receive {:swept, [^job_type], _skip_ids}, @timeout_ms
+        end
+      end)
+    end
+
+    test "stops sweeping when it can't get a database connection" do
+      test_pid = self()
+
+      sweep = fn
+        [Module1], _skip_ids -> raise DBConnection.ConnectionError, "connection not available"
+        job_types, skip_ids -> sweep_stub(test_pid).(job_types, skip_ids)
+      end
+
+      capture_log(fn ->
+        worker = start_worker!(sweep: sweep)
+        send(worker, :poll)
+        :sys.get_state(worker)
+      end)
+
+      refute_received {:swept, _job_types, _skip_ids}
     end
 
     # Their locks are held by this node's own session, so a sweep would only find them held.
@@ -964,7 +1012,7 @@ defmodule Hologram.Job.WorkerTest do
 
       skip_ids = MapSet.new(["a"])
 
-      assert_receive {:swept, _job_types, ^skip_ids}, @timeout_ms
+      assert_receive {:swept, [Module1], ^skip_ids}, @timeout_ms
     end
 
     test "looks when its sweep fails for a reason of its own" do
