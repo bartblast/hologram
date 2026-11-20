@@ -1201,6 +1201,35 @@ describe("Durability", () => {
       );
     });
 
+    // A later frame's mark has its own write coming, behind that frame's rows: written here, it
+    // would go down ahead of them.
+    it("writes the marks as they stood when asked, not when the record answers", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const batch = new Batch(null);
+
+      batch.actorUserId = "u1";
+      batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
+      batch.append({id: "t2", op: "delete", type: "MyApp.Task"});
+      batch.seal(7);
+
+      await writeBatches([batch.record()]);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      const writing = Durability.persistLanded(batch);
+
+      batch.land(new Set(["MyApp.Task t2"]));
+
+      await writing;
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.landed),
+        [[0]],
+      );
+    });
+
     // The tab that sent it was answered and let go of it: written back, the next page load would
     // send an answered batch again.
     it("writes nothing for a batch the queue no longer holds", async () => {

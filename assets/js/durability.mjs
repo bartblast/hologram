@@ -420,7 +420,13 @@ export default class Durability {
   // And with the marks the record already holds kept: another tab can have stored more of them,
   // having heard frames this one has not yet, and a mark lost is a move promoted a second time,
   // by the next page load or by a later read of the store (see Tabs.#takeStore).
+  //
+  // The marks are taken as they stand now, not when the record answers: a frame that lands another
+  // write meanwhile has its own write coming, behind its rows, and its mark written here would go
+  // down ahead of those rows.
   static persistLanded(batch) {
+    const record = batch.record();
+
     return Durability.#write([QUEUE], (transaction) => {
       const queue = transaction.objectStore(QUEUE);
       const stored = queue.get(batch.seq);
@@ -430,7 +436,6 @@ export default class Durability {
           return;
         }
 
-        const record = batch.record();
         const landed = new Set([...stored.result.landed, ...record.landed]);
 
         queue.put({
