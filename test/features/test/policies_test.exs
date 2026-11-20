@@ -368,7 +368,7 @@ defmodule HologramFeatureTests.PoliciesTest do
     |> visit(Page3)
     |> assert_text(css("#confirmable_bookings"), ~r/^alpha,charlie,delta$/)
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/policies/3")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/policies/3")
 
     assert html =~ ~r{<strong id="confirmable_bookings"><code>alpha,charlie,delta</code></strong>}
   end
