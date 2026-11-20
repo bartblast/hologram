@@ -416,15 +416,27 @@ export default class Durability {
   // back would put an answered batch in the queue for the next page load to send again. Read and
   // written in ONE transaction, the put chained onto the read's callback, so a delete cannot land
   // in between.
+  //
+  // And with the marks the record already holds kept: another tab can have stored more of them,
+  // having heard frames this one has not yet, and a mark lost is a move promoted a second time,
+  // by the next page load or by a later read of the store (see Tabs.#takeStore).
   static persistLanded(batch) {
     return Durability.#write([QUEUE], (transaction) => {
       const queue = transaction.objectStore(QUEUE);
-      const stored = queue.getKey(batch.seq);
+      const stored = queue.get(batch.seq);
 
       stored.onsuccess = () => {
-        if (stored.result !== undefined) {
-          queue.put(batch.record());
+        if (stored.result === undefined) {
+          return;
         }
+
+        const record = batch.record();
+        const landed = new Set([...stored.result.landed, ...record.landed]);
+
+        queue.put({
+          ...record,
+          landed: Array.from(landed).sort((left, right) => left - right),
+        });
       };
     });
   }

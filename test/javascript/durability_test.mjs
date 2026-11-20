@@ -1150,6 +1150,31 @@ describe("Durability", () => {
       assert.equal(await readMeta("seq"), 8);
     });
 
+    // Another tab heard more frames and stored more marks: a mark lost is a move a later read of
+    // the store promotes a second time.
+    it("keeps the marks the record already holds", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const batch = new Batch(null);
+
+      batch.actorUserId = "u1";
+      batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
+      batch.append({id: "t2", op: "delete", type: "MyApp.Task"});
+      batch.seal(7);
+
+      await writeBatches([{...batch.record(), landed: [1]}]);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await Durability.persistLanded(batch);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.landed),
+        [[0, 1]],
+      );
+    });
+
     // The tab that sent it was answered and let go of it: written back, the next page load would
     // send an answered batch again.
     it("writes nothing for a batch the queue no longer holds", async () => {
