@@ -200,7 +200,6 @@ defmodule Hologram.CompilerTest do
 
   @empty_sync_constants %{
     derived_count_types: %{},
-    derived_queries: %{},
     entity_types: MapSet.new(),
     model_hash: "my_model_hash",
     policy_hash: nil,
@@ -211,7 +210,7 @@ defmodule Hologram.CompilerTest do
 
   # A statement setting the client's data layer constants, as the runtime script takes it rendered
   # (see build_sync_constants_js/1), for the tests of what the script carries besides.
-  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "", policyHash: null, protocolVersion: 1, userEntity: null};/
+  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {countTypes: {}, expandedRoles: {}, model: {}, modelHash: "", policyHash: null, protocolVersion: 1, userEntity: null};/
 
   @tmp_dir Reflection.tmp_dir()
 
@@ -1748,17 +1747,6 @@ defmodule Hologram.CompilerTest do
       assert queries.entries == Registry.build([module_40_term, module_41_term], false)
     end
 
-    test "collects the derived fields the components register as queries", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([QueryExtractorModule84], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      assert queries.derived_queries == MapSet.new([{QueryExtractorModule84, :ripe}])
-    end
-
     # The grants window rides with every build's windows, whether or not a page subscribes to it -
     # the build decides who asks, this is only where an id resolves back to a term.
     test "registers the grants window beside the windows the queries download", %{
@@ -1892,7 +1880,7 @@ defmodule Hologram.CompilerTest do
         |> Stage.normalize()
 
       component_queries = %{
-        DerivedQueries => %{count_types: %{}, derived_queries: [], terms: [term]}
+        DerivedQueries => %{count_types: %{}, terms: [term]}
       }
 
       queries = build_queries(component_queries, entity_types, false)
@@ -1963,7 +1951,7 @@ defmodule Hologram.CompilerTest do
         |> Stage.normalize()
 
       component_queries = %{
-        QuantifiedQueries => %{count_types: %{}, derived_queries: [], terms: [term]}
+        QuantifiedQueries => %{count_types: %{}, terms: [term]}
       }
 
       expected_msg =
@@ -2019,7 +2007,7 @@ defmodule Hologram.CompilerTest do
         |> Stage.normalize()
 
       component_queries = %{
-        QuantifiedQueries => %{count_types: %{}, derived_queries: [], terms: [term]}
+        QuantifiedQueries => %{count_types: %{}, terms: [term]}
       }
 
       expected_msg =
@@ -2106,7 +2094,7 @@ defmodule Hologram.CompilerTest do
         |> Stage.normalize()
 
       component_queries = %{
-        ComponentModule1 => %{count_types: %{}, derived_queries: [], terms: [term]}
+        ComponentModule1 => %{count_types: %{}, terms: [term]}
       }
 
       expected_msg =
@@ -2300,18 +2288,6 @@ defmodule Hologram.CompilerTest do
       refute MapSet.member?(sync_constants.entity_types, Entity10)
     end
 
-    test "collects the derived fields those components register as queries", %{
-      sync_constants: sync_constants
-    } do
-      assert sync_constants.derived_queries[QueryExtractorModule84] == [:ripe]
-    end
-
-    test "collects the derived fields a page registers as queries", %{
-      sync_constants: sync_constants
-    } do
-      assert sync_constants.derived_queries[PageModule19] == [:ripe]
-    end
-
     # The grant type reaches the model by being checked rather than by being queried - its window
     # is registered rather than extracted - so a client would otherwise hold rows of a type the
     # model never described. The page queries no grants and checks no permissions, so the user
@@ -2414,7 +2390,6 @@ defmodule Hologram.CompilerTest do
     test "records no model hash when the module info PLT records no entity type" do
       assert build_sync_constants(%{}, %{}, PLT.start()) == %{
                derived_count_types: %{},
-               derived_queries: %{},
                entity_types: MapSet.new(),
                model_hash: nil,
                policy_hash: nil,
@@ -2656,22 +2631,12 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | policy_hash: "my_policy_hash"}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: "my_policy_hash", protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {countTypes: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: "my_policy_hash", protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
     end
 
     test "renders the model hash the sync constants carry" do
       assert build_sync_constants_js(@empty_sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
-    end
-
-    test "renders the derived fields each component registers as queries" do
-      sync_constants = %{
-        @empty_sync_constants
-        | derived_queries: %{QueryExtractorModule84 => [:ripe, :ripe_rows]}
-      }
-
-      assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84":["ripe","ripe_rows"]}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {countTypes: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
     end
 
     test "renders the entity types each derived field building a count reads" do
@@ -2683,7 +2648,7 @@ defmodule Hologram.CompilerTest do
       }
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module133":{"either_count":["Hologram.Test.Fixtures.Entity.Module1","Hologram.Test.Fixtures.Entity.Module3"],"ripe_count":["Hologram.Test.Fixtures.Entity.Module2"]}}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {countTypes: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module133":{"either_count":["Hologram.Test.Fixtures.Entity.Module1","Hologram.Test.Fixtures.Entity.Module3"],"ripe_count":["Hologram.Test.Fixtures.Entity.Module2"]}}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
     end
 
     # Spelled as the model's keys are, which is how a query term names its entity type.
@@ -2700,7 +2665,7 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | role_modules: [RoleModule1, RoleModule2]}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {countTypes: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
     end
 
     # A client computes a derived field itself, from the definition the build resolved - spelled in
@@ -7766,12 +7731,10 @@ defmodule Hologram.CompilerTest do
                %{
                  ComponentModule40 => %{
                    count_types: %{},
-                   derived_queries: [:entities],
                    terms: [module_40_term]
                  },
                  ComponentModule41 => %{
                    count_types: %{},
-                   derived_queries: [:entities],
                    terms: [module_41_term]
                  }
                }
@@ -7797,7 +7760,7 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt
     } do
       assert extract_component_queries([ComponentModule1], entity_types, ir_plt) == %{
-               ComponentModule1 => %{count_types: %{}, derived_queries: [], terms: []}
+               ComponentModule1 => %{count_types: %{}, terms: []}
              }
     end
 
@@ -7810,7 +7773,6 @@ defmodule Hologram.CompilerTest do
       assert queries == %{
                QueryExtractorModule84 => %{
                  count_types: %{},
-                 derived_queries: [:ripe],
                  terms: [%Query{entity: Entity2, filter: [{:a, :==, true}], sort: [id: :asc]}]
                }
              }

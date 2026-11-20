@@ -1667,7 +1667,7 @@ export default class Renderer {
   // `?.`: a query reads rows of entity types, which only a build that declares them has, and that
   // build ships the data layer.
   static #derivedValue(value, entry, moduleProxy, module, args) {
-    if (Renderer.#isRegisteredDerivedQuery(module, entry.name)) {
+    if (Renderer.#isDerivedQuery(value, entry.type)) {
       const term = Hologram.dataLayer.normalizeQuery(value);
 
       Renderer.#validateDerivedQueryType(term, entry, module);
@@ -1678,12 +1678,6 @@ export default class Renderer {
         entry.name,
         args,
         term,
-      );
-    }
-
-    if (Renderer.#isDerivedQuery(value)) {
-      Interpreter.raiseMisuseError(
-        `derived field ${Interpreter.inspect(entry.name)} in ${module} returned a query the build didn't register - a query is built in the derived field's own function or the builders it calls, not passed in as data`,
       );
     }
 
@@ -2356,16 +2350,24 @@ export default class Renderer {
     return inputType !== "checkbox" && inputType !== "radio";
   }
 
-  // Based on Hologram.Component.Derived's query?/1
+  // Based on Hologram.Component.Derived's query?/2
   //
   // A query term is the plain object the ported query stages build, and an entity type stands for
-  // every row of it.
-  static #isDerivedQuery(value) {
+  // every row of it - for a field declared to hold its rows, since one holding a module as a plain
+  // value, like one declared :atom, never is.
+  static #isDerivedQuery(value, type) {
     if (value !== null && typeof value === "object" && "entity" in value) {
       return true;
     }
 
-    return Renderer.#isEntityTypeAlias(value);
+    const rowType =
+      Type.isList(type) && type.data.length === 1 ? type.data[0] : type;
+
+    return (
+      Renderer.#isEntityTypeAlias(value) &&
+      Type.isAlias(rowType) &&
+      Interpreter.isStrictlyEqual(value, rowType)
+    );
   }
 
   // Based on Hologram.Component.Derived's value_of_type?/2
@@ -2474,16 +2476,6 @@ export default class Renderer {
       Type.isTuple(value) &&
       value.data.length === 2 &&
       Interpreter.isStrictlyEqual(value.data[0], Type.atom("safe"))
-    );
-  }
-
-  // Based on QueryCache.derived_query?/2
-  //
-  // Whether the build registered the given derived field as a query, which the bundle's sync
-  // constants list by module.
-  static #isRegisteredDerivedQuery(module, name) {
-    return Boolean(
-      globalThis.Hologram.sync?.derivedQueries?.[module]?.includes(name.value),
     );
   }
 

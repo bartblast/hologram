@@ -108,13 +108,10 @@ describe("Renderer derived fields", () => {
       },
     ]);
 
-  // queries names the derived fields the build registered as queries.
   const defineComponent = (
     moduleName,
-    {derived = [], init = null, props = [], queries = [], state = []},
+    {derived = [], init = null, props = [], state = []},
   ) => {
-    globalThis.Hologram.sync.derivedQueries[moduleName] = queries;
-
     defineFunction(moduleName, "__derived__", 0, () => Type.list(derived));
     defineFunction(moduleName, "__props__", 0, () => Type.list(props));
     defineFunction(moduleName, "__state__", 0, () => Type.list(state));
@@ -212,7 +209,6 @@ describe("Renderer derived fields", () => {
       derived: [
         derivedEntry("ripe", Type.list([Type.alias(ROW)]), [], ripeRows),
       ],
-      queries: ["ripe"],
     });
 
   const names = (rows) =>
@@ -240,7 +236,6 @@ describe("Renderer derived fields", () => {
           serverOnly: [],
         },
       },
-      derivedQueries: {},
     };
 
     ComponentRegistry.clear();
@@ -682,7 +677,6 @@ describe("Renderer derived fields", () => {
 
     it("answers a count with the count the page carried under the field's name and its query", () => {
       defineComponent("MyApp.CarriedCount", {
-        queries: ["total"],
         derived: [
           derivedEntry("total", Type.atom("integer"), ["min_b"], (minB) =>
             count(
@@ -719,7 +713,6 @@ describe("Renderer derived fields", () => {
 
     it("answers an entity type as a query of every row", () => {
       defineComponent("MyApp.EveryRow", {
-        queries: ["rows"],
         derived: [
           derivedEntry("rows", Type.list([Type.alias(ROW)]), [], () =>
             Type.alias(ROW),
@@ -738,7 +731,6 @@ describe("Renderer derived fields", () => {
 
     it("answers a query of one row for a field declared as one row", () => {
       defineComponent("MyApp.FirstRow", {
-        queries: ["first"],
         derived: [
           derivedEntry("first", Type.alias(ROW), [], () =>
             one(Type.alias(ROW)),
@@ -775,17 +767,100 @@ describe("Renderer derived fields", () => {
       ]);
     });
 
-    it("raises on a query result of a field the build didn't register as a query", () => {
-      defineComponent("MyApp.UnregisteredDerivedQuery", {
+    it("answers a query handed in as a prop value", () => {
+      defineComponent("MyApp.HandedQuery", {
         derived: [
-          derivedEntry("ripe", Type.list([Type.alias(ROW)]), [], ripeRows),
+          derivedEntry(
+            "ripe",
+            Type.list([Type.alias(ROW)]),
+            ["query"],
+            (query) => query,
+          ),
+        ],
+        props: [declaration("query")],
+      });
+
+      render(
+        componentNode("MyApp.HandedQuery", [propDom("query", ripeRows())]),
+      );
+
+      assert.deepStrictEqual(names(renderedVar("ripe")), ["banana", "cherry"]);
+    });
+
+    it("answers an entity type handed in as a prop value for a field declared to hold its rows", () => {
+      defineComponent("MyApp.HandedEntityType", {
+        derived: [
+          derivedEntry(
+            "rows",
+            Type.list([Type.alias(ROW)]),
+            ["source"],
+            (source) => source,
+          ),
+        ],
+        props: [declaration("source")],
+      });
+
+      render(
+        componentNode("MyApp.HandedEntityType", [
+          propDom("source", Type.alias(ROW)),
+        ]),
+      );
+
+      assert.deepStrictEqual(names(renderedVar("rows")).sort(), [
+        "apple",
+        "banana",
+        "cherry",
+      ]);
+    });
+
+    it("raises on an entity type returned by a field declared to hold one of its rows", () => {
+      defineComponent("MyApp.OneRowEntityType", {
+        derived: [
+          derivedEntry("row", Type.alias(ROW), [], () => Type.alias(ROW)),
         ],
       });
 
       assertBoxedError(
-        () => render(componentNode("MyApp.UnregisteredDerivedQuery")),
+        () => render(componentNode("MyApp.OneRowEntityType")),
         "Hologram.MisuseError",
-        "derived field :ripe in MyApp.UnregisteredDerivedQuery returned a query the build didn't register - a query is built in the derived field's own function or the builders it calls, not passed in as data",
+        `derived field :row in MyApp.OneRowEntityType is declared ${ROW}, but its query is a set of ${ROW} rows`,
+      );
+    });
+
+    it("takes an entity type of another type than the declared rows as a plain value", () => {
+      const other = "Hologram.Test.Fixtures.Entity.Module1";
+
+      globalThis.Hologram.sync.model[other] = {
+        attributes: {id: "uuid"},
+        relationships: {},
+        serverOnly: [],
+      };
+
+      Model.reset();
+
+      defineComponent("MyApp.OtherEntityType", {
+        derived: [
+          derivedEntry("rows", Type.list([Type.alias(other)]), [], () =>
+            Type.alias(ROW),
+          ),
+        ],
+      });
+
+      assertBoxedError(
+        () => render(componentNode("MyApp.OtherEntityType")),
+        "Hologram.MisuseError",
+        `derived field :rows in MyApp.OtherEntityType is declared [${other}], but computed ${ROW}`,
+      );
+    });
+
+    it("takes an entity type as a plain value for a field not declared to hold its rows", () => {
+      assert.deepStrictEqual(
+        computedValue(
+          "MyApp.EntityTypeValue",
+          Type.atom("atom"),
+          Type.alias(ROW),
+        ),
+        Type.alias(ROW),
       );
     });
 
@@ -804,7 +879,6 @@ describe("Renderer derived fields", () => {
 
     it("raises on a query of another shape than the type", () => {
       defineComponent("MyApp.WrongShape", {
-        queries: ["total"],
         derived: [derivedEntry("total", Type.atom("integer"), [], ripeRows)],
       });
 
@@ -817,7 +891,6 @@ describe("Renderer derived fields", () => {
 
     it("answers a query built from a prop the field reads", () => {
       defineComponent("MyApp.DerivedWanted", {
-        queries: ["rows"],
         derived: [
           derivedEntry(
             "rows",
@@ -858,7 +931,6 @@ describe("Renderer derived fields", () => {
     // appending the id tiebreaker - the same order the server's executor returns.
     it("answers the rows in the order the normalized term names", () => {
       defineComponent("MyApp.DerivedSorted", {
-        queries: ["rows"],
         derived: [
           derivedEntry("rows", Type.list([Type.alias(ROW)]), [], () =>
             sort(Type.alias(ROW), Type.atom("c")),
@@ -877,7 +949,6 @@ describe("Renderer derived fields", () => {
 
     it("answers nil for a query of one row matching no row", () => {
       defineComponent("MyApp.DerivedNoRow", {
-        queries: ["row"],
         derived: [
           derivedEntry("row", Type.alias(ROW), [], () =>
             one(
@@ -913,7 +984,6 @@ describe("Renderer derived fields", () => {
 
       const defineCounting = (moduleName) =>
         defineComponent(moduleName, {
-          queries: ["total"],
           derived: [
             derivedEntry("total", Type.atom("integer"), ["wanted"], (wanted) =>
               count(
@@ -1067,7 +1137,6 @@ describe("Renderer derived fields", () => {
 
       const defineRowCounting = (moduleName, buildQuery) =>
         defineComponent(moduleName, {
-          queries: ["total"],
           derived: [
             derivedEntry("total", Type.atom("integer"), ["row"], buildQuery),
           ],
@@ -1191,7 +1260,6 @@ describe("Renderer derived fields", () => {
         LocalDatabase.replaceFacts(PROJECT, "tasks", "p1", ["t1", "t3"]);
 
         defineComponent("MyApp.DerivedIncluding", {
-          queries: ["projects"],
           derived: [
             derivedEntry("projects", Type.list([Type.alias(PROJECT)]), [], () =>
               include(Type.alias(PROJECT), Type.atom("tasks")),
@@ -1215,7 +1283,6 @@ describe("Renderer derived fields", () => {
       // sentinel says, and what a read of it reports.
       it("leaves a relationship the query did not include unasked-for", () => {
         defineComponent("MyApp.DerivedNotIncluding", {
-          queries: ["tasks"],
           derived: [
             derivedEntry("tasks", Type.list([Type.alias(TASK)]), [], () =>
               Type.alias(TASK),
@@ -1922,7 +1989,6 @@ describe("Renderer derived fields", () => {
   describe("refreshDerived()", () => {
     it("computes the target's fields again from the rows as they stand", () => {
       defineComponent("MyApp.Refreshed", {
-        queries: ["ripe"],
         derived: [
           derivedEntry("ripe", Type.list([Type.alias(ROW)]), [], ripeRows),
         ],

@@ -39,7 +39,6 @@ defmodule Hologram.DB.QueryCacheTest do
 
     %{
       derived: %{},
-      derived_queries: MapSet.new([{Module40, :entities}, {Module41, :entities}]),
       entries: entries,
       permission_checking?: false,
       synced_types: [],
@@ -79,30 +78,6 @@ defmodule Hologram.DB.QueryCacheTest do
     init(nil)
 
     assert entries() == expected_entries()
-  end
-
-  describe "derived_query?/2" do
-    test "returns true for a derived field the build registered as a query" do
-      dump_query_cache(QueryCacheStub, [Module84])
-
-      init(nil)
-
-      assert derived_query?(Module84, :ripe)
-    end
-
-    test "returns false when no query cache has started" do
-      :persistent_term.erase(QueryCacheStub.persistent_term_key())
-
-      refute derived_query?(Module84, :ripe)
-    end
-
-    test "returns false for a derived field computing a plain value" do
-      dump_query_cache(QueryCacheStub, [Module84])
-
-      init(nil)
-
-      refute derived_query?(Module84, :ripe_total)
-    end
   end
 
   describe "fetch/1" do
@@ -211,7 +186,13 @@ defmodule Hologram.DB.QueryCacheTest do
     reloaded = :persistent_term.get(key)
 
     assert reloaded != expected_data()
-    assert reloaded.derived_queries == MapSet.new([{Module84, :ripe}])
+
+    ripe_term =
+      Entity2
+      |> filter(a == true)
+      |> Stage.normalize()
+
+    assert Map.has_key?(reloaded.entries, Registry.id(ripe_term))
   end
 
   test "dump_path/0 reads from the build directory" do

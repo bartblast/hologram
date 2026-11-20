@@ -985,12 +985,9 @@ defmodule Hologram.Template.Renderer do
     }
   end
 
-  # A derived field the build registered as a query runs it against the database, policies applied.
+  # A derived field returning a query runs it against the database, policies applied.
   defp derived_compute_opts(module) do
-    [
-      registered_query?: &QueryCache.derived_query?(module, &1),
-      run_query: &run_query!(module, &1, &2, &3)
-    ]
+    [run_query: &run_query!(module, &1, &2, &3)]
   end
 
   # WARNING: must match the client renderer's #duplicateRefMessage (renderer.mjs).

@@ -131,13 +131,11 @@ defmodule Hologram.Compiler do
 
   @typedoc """
   The registered queries of one component or page: the normalized terms its derived fields build
-  (see `Hologram.Compiler.QueryExtractor.extract_derived_queries/3`), the names of the derived
-  fields that build one, and the entity types each derived field building a count reads, sorted
-  (see `extract_component_queries/3`).
+  (see `Hologram.Compiler.QueryExtractor.extract_derived_queries/3`), and the entity types each
+  derived field building a count reads, sorted (see `extract_component_queries/3`).
   """
   @type component_queries :: %{
           count_types: %{atom => [module]},
-          derived_queries: [atom],
           terms: [Query.t()]
         }
 
@@ -165,7 +163,6 @@ defmodule Hologram.Compiler do
   """
   @type sync_constants :: %{
           derived_count_types: %{module => %{atom => [module]}},
-          derived_queries: %{module => [atom]},
           entity_types: MapSet.t(module),
           model_hash: String.t() | nil,
           policy_hash: String.t() | nil,
@@ -907,8 +904,8 @@ defmodule Hologram.Compiler do
   @doc """
   Derives what a running Hologram app holds for the given registered queries of components, as
   `extract_component_queries/3` extracts them: the registry entries keyed by query content id, the
-  derived fields that build a query as `{module, field name}` pairs, the term behind each window
-  keyed by window id, and whether the build has a page checking permissions on the client.
+  term behind each window keyed by window id, and whether the build has a page checking permissions
+  on the client.
 
   The components are every component of the build rather than the ones pages reach, because what
   reads the result is the renderer and the sync layer, which answer for any component that renders.
@@ -929,7 +926,6 @@ defmodule Hologram.Compiler do
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_3/README.md
   """
   @spec build_queries(%{module => component_queries}, list(module), boolean) :: %{
-          derived_queries: MapSet.t({module, atom}),
           entries: %{String.t() => %{atom => any}},
           permission_checking?: boolean,
           windows: %{String.t() => Query.t()}
@@ -955,7 +951,6 @@ defmodule Hologram.Compiler do
       |> put_user_window(entity_types, permission_checking?)
 
     %{
-      derived_queries: derived_queries_index(component_queries),
       entries: entries,
       permission_checking?: permission_checking?,
       windows: windows
@@ -1712,7 +1707,6 @@ defmodule Hologram.Compiler do
 
       queries = %{
         count_types: count_types(derived_queries),
-        derived_queries: Enum.map(derived_queries, fn {name, _terms} -> name end),
         terms: terms
       }
 
@@ -2357,10 +2351,6 @@ defmodule Hologram.Compiler do
   has to be told the declarations of. A type neither queried nor mentioned is left out, which is
   what keeps an app's other tables out of a file every page load serves.
 
-  `:derived_queries` are the derived fields of those components whose function builds a query,
-  keyed by component - the fields the client answers from its database rather than computing a
-  value of.
-
   `:derived_count_types` are the entity types each of those fields building a count reads, keyed
   by component and then by field (see `extract_component_queries/3`) - what the client waits to
   hold every row of before it counts for itself rather than showing the server's number. A
@@ -2482,7 +2472,6 @@ defmodule Hologram.Compiler do
 
     %{
       derived_count_types: derived_count_types(component_modules, component_queries),
-      derived_queries: derived_queries(component_modules, component_queries),
       entity_types: entity_types,
       model_hash: model_hash(all_entity_types, role_modules),
       policy_hash: policy_hash(all_entity_types),
@@ -2495,10 +2484,10 @@ defmodule Hologram.Compiler do
   @doc """
   Builds the JavaScript statement that sets the client's data layer constants,
   `globalThis.Hologram.sync`, from the given sync constants (see `build_sync_constants/3`): the
-  entity types each derived field building a count reads, the derived fields whose function builds
-  a query, the global roles with the role modules carrying each, the model of the entity types the
-  client holds, the hash of the project's data model, the hash of the rules it was rendered with,
-  the sync protocol version, and the user entity type.
+  entity types each derived field building a count reads, the global roles with the role modules
+  carrying each, the model of the entity types the client holds, the hash of the project's data
+  model, the hash of the rules it was rendered with, the sync protocol version, and the user entity
+  type.
 
   What the runtime bundle was built against, said by the bundle itself. It has to be baked in
   rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
@@ -2533,13 +2522,12 @@ defmodule Hologram.Compiler do
       model = render_entity_model(sync_constants.entity_types)
 
       count_types = render_derived_count_types(sync_constants.derived_count_types)
-      derived_queries = render_derived_queries(sync_constants.derived_queries)
       expanded_roles = render_global_expanded_roles(sync_constants.role_modules)
 
       policy_hash = Jason.encode!(sync_constants.policy_hash)
       user_entity = render_user_entity(sync_constants.user_entity)
 
-      ~s/globalThis.Hologram.sync = {countTypes: #{count_types}, derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}, userEntity: #{user_entity}};/
+      ~s/globalThis.Hologram.sync = {countTypes: #{count_types}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}, userEntity: #{user_entity}};/
     end
   end
 
@@ -4070,33 +4058,6 @@ defmodule Hologram.Compiler do
     |> Map.new()
   end
 
-  # The derived fields of each component whose function builds a query, which the renderers run
-  # as one. A component with none is left out, which the client reads as none.
-  defp derived_queries(component_modules, component_queries) do
-    component_modules
-    |> Enum.map(fn module ->
-      names =
-        component_queries
-        |> Map.fetch!(module)
-        |> Map.get(:derived_queries, [])
-
-      {module, names}
-    end)
-    |> Enum.reject(fn {_module, names} -> names == [] end)
-    |> Map.new()
-  end
-
-  # The same names `derived_queries/2` collects for the bundle, as the pairs a renderer asks about.
-  defp derived_queries_index(component_queries) do
-    component_queries
-    |> Enum.flat_map(fn {module, queries} ->
-      queries
-      |> Map.get(:derived_queries, [])
-      |> Enum.map(&{module, &1})
-    end)
-    |> MapSet.new()
-  end
-
   # Any literal is resolved, composites included, as long as every part of it is one too - a single
   # expression anywhere inside makes the whole value unknowable until it runs. Pids, ports and
   # references can't be written in a template at all (they only come from calls, which aren't
@@ -5532,19 +5493,6 @@ defmodule Hologram.Compiler do
       Enum.any?(module.__props__(), fn {_name, _type, opts} ->
         opts[:from_context] == {Hologram, :user}
       end)
-  end
-
-  defp render_derived_queries(derived_queries) do
-    derived_queries
-    |> Enum.map(fn {module, names} ->
-      spelled_names =
-        names
-        |> Enum.map(&Atom.to_string/1)
-        |> Jason.encode!()
-
-      {Codec.encode_enum_value(module), spelled_names}
-    end)
-    |> render_json_object()
   end
 
   # Functions are listed by module, then function name, then arity. The module order is the

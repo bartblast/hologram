@@ -4,6 +4,7 @@ defmodule Hologram.Template.RendererDerivedTest do
   use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1]
+  import Hologram.Query, only: [filter: 2, sort: 2]
   import Hologram.Template.Renderer
   import Hologram.Test.Stubs
   import Mox
@@ -76,6 +77,7 @@ defmodule Hologram.Template.RendererDerivedTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module173
   alias Hologram.Test.Fixtures.Template.Renderer.Module174
   alias Hologram.Test.Fixtures.Template.Renderer.Module175
+  alias Hologram.Test.Fixtures.Template.Renderer.Module177
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -277,6 +279,31 @@ defmodule Hologram.Template.RendererDerivedTest do
       Carry.start()
 
       render_dom({:component, Module149, [], []}, @env, @server)
+
+      carried_names =
+        nil
+        |> Carry.take()
+        |> Map.fetch!(:put_entity)
+        |> Map.fetch!(inspect(Entity2))
+        |> Enum.map(& &1.c)
+        |> Enum.sort()
+
+      assert carried_names == ["banana", "cherry"]
+    end
+
+    test "runs a query a field returns as it was handed in, the policies applied" do
+      create_entities()
+
+      Carry.start()
+
+      query =
+        Entity2
+        |> filter(a == true)
+        |> sort(c)
+
+      node = {:component, Module177, [{"query", [expression: {query}]}], []}
+
+      assert render_dom(node, @env, @server) == {"entities = banana,cherry", %{}, @server}
 
       carried_names =
         nil

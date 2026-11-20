@@ -1140,15 +1140,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     assert query_cache_keys == [
              :derived,
-             :derived_queries,
              :entries,
              :permission_checking?,
              :synced_types,
              :windows
            ]
-
-    # The derived fields whose function builds a query, which the renderers run as one.
-    assert MapSet.member?(queries.derived_queries, {QueryExtractorModule84, :ripe})
 
     # Resolved by walking the query builder the derived field calls.
     assert queries.derived[{Entity36, :unread_count}] ==
@@ -1898,7 +1894,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         module_infos: module_infos
       } = cache_state()
 
-      removed_entry = %{count_types: %{}, derived_queries: [], terms: []}
+      removed_entry = %{count_types: %{}, terms: []}
       components = Map.put(data_layer.components, :removed_component, removed_entry)
       Cache.put_data_layer(%{data_layer | components: components})
 
