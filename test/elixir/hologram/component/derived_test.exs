@@ -111,7 +111,7 @@ defmodule Hologram.Component.DerivedTest do
 
       assert_error Hologram.MisuseError,
                    "derived field :rows in Hologram.Test.Fixtures.Component.Module37 claims the " <>
-                     "server's authority with trust() - a component's query is read for the " <>
+                     "server's authority with trust() - a query in browser code is read for the " <>
                      "session user on both tiers, so it cannot claim another. Drop trust(), or " <>
                      "read through the backend API in a command.",
                    fn -> compute(entries, Module37, %{}, %{}, %{}, query_opts(&no_query/3)) end

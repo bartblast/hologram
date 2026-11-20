@@ -16,8 +16,8 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.QueryChains
   alias Hologram.Compiler.QueryExtractor
-  alias Hologram.Component.Derived.QueryCheck
   alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.Entity.Derived
@@ -140,13 +140,15 @@ defmodule Hologram.Compiler do
   reaches a permission check (see `pages_checking_permissions/1`), the atoms its client code spells
   (see `build_kept_page_reach/4`), the components among the modules it reaches, sorted, those
   modules, the struct types it names included, and whether one of those components reads the
-  session user from the context.
+  session user from the context, and the queries its client code writes in one piece (see
+  `Hologram.Compiler.QueryChains`).
   """
   @type kept_page_reach :: %{
           atoms: MapSet.t(atom),
           checks_permissions?: boolean,
           components: [module],
           modules: MapSet.t(module),
+          query_chains: [QueryChains.t()],
           reads_session_user?: boolean
         }
 
@@ -785,7 +787,7 @@ defmodule Hologram.Compiler do
         }
   def build_kept_page_reach(reach_by_page, permission_checking_pages, module_info_plt, ir_plt) do
     checking_pages = MapSet.new(permission_checking_pages)
-    atoms_by_mfa = atoms_by_mfa(reach_by_page, module_info_plt, ir_plt)
+    read_by_mfa = read_by_mfa(reach_by_page, module_info_plt, ir_plt)
 
     Map.new(reach_by_page, fn {page_module, reach} ->
       modules = list_reached_modules(reach)
@@ -797,21 +799,42 @@ defmodule Hologram.Compiler do
         |> Enum.uniq()
         |> Enum.sort()
 
-      atoms =
-        reach.mfas
-        |> Enum.map(&Map.get(atoms_by_mfa, &1, MapSet.new()))
-        |> Enum.reduce(MapSet.new(), &MapSet.union/2)
+      reads = Enum.map(reach.mfas, &Map.get(read_by_mfa, &1, %{atoms: MapSet.new(), chains: []}))
+
+      atoms = Enum.reduce(reads, MapSet.new(), &MapSet.union(&2, &1.atoms))
+
+      query_chains =
+        reads
+        |> Enum.flat_map(& &1.chains)
+        |> Enum.uniq()
 
       kept_reach = %{
         atoms: atoms,
         checks_permissions?: MapSet.member?(checking_pages, page_module),
         components: components,
         modules: MapSet.new(modules),
+        query_chains: query_chains,
         reads_session_user?: Enum.any?(components, &reads_session_user?/1)
       }
 
       {page_module, kept_reach}
     end)
+  end
+
+  @doc """
+  Raises Hologram.CompileError when a query a page's client code writes in one piece is one no
+  browser may run (see `Hologram.Compiler.QueryChains.validate!/2`), from what the data layer keeps
+  of each page's reach (see `build_kept_page_reach/4`). Every page's queries are checked, kept ones
+  included, since what a query may ask for moves with the data model; a query many pages reach is
+  checked once.
+  """
+  @spec validate_query_chains!(%{module => kept_page_reach}, PLT.t() | nil) :: :ok
+  def validate_query_chains!(reach_by_page, module_info_plt) do
+    reach_by_page
+    |> Enum.flat_map(fn {_page_module, reach} -> reach.query_chains end)
+    |> Enum.uniq()
+    |> Enum.sort_by(fn chain -> chain.mfa end)
+    |> Enum.each(&QueryChains.validate!(&1, module_info_plt))
   end
 
   @doc """
@@ -924,13 +947,6 @@ defmodule Hologram.Compiler do
   The components are every component of the build rather than the ones pages reach, because what
   reads the result is the renderer and the sync layer, which answer for any component that renders.
 
-  Raises Hologram.CompileError when a registered query reads an entity type declaring no allow
-  lines - default deny makes it statically dead, returning no rows when it is the query's root and
-  no embedded row when it is an include target - when a registered query filters or sorts on
-  a server-only attribute, which the client never holds and so could never evaluate locally, and
-  when a registered query claims the server's own authority with trust/1, which a component's
-  query has no authority to claim on either tier.
-
   The grants window is among the windows when the given entity types hold the role grant store,
   which a data model does exactly when it designates a user entity type. So is the user window (see
   `Hologram.Auth.user_window/2`). Whether the build has a page checking permissions on the client is
@@ -945,17 +961,12 @@ defmodule Hologram.Compiler do
           windows: %{String.t() => Query.t()}
         }
   def build_queries(component_queries, entity_types, permission_checking?) do
-    # In module order, so that the registry and the first refusal do not depend on the map's order.
-    module_queries =
+    # In module order, so that the registry does not depend on the map's order.
+    terms =
       component_queries
-      |> Enum.map(fn {module, queries} -> {module, queries.terms} end)
       |> Enum.sort()
+      |> Enum.flat_map(fn {_module, queries} -> queries.terms end)
 
-    Enum.each(module_queries, &validate_queries!(&1, :dead_refusal))
-    Enum.each(module_queries, &validate_queries!(&1, :server_only_refusal))
-    Enum.each(module_queries, &validate_queries!(&1, :trust_refusal))
-
-    terms = Enum.flat_map(module_queries, fn {_module, module_terms} -> module_terms end)
     entries = Registry.build(terms, permission_checking?)
 
     windows =
@@ -2999,11 +3010,12 @@ defmodule Hologram.Compiler do
 
   defp collect_operation_asks(_ir, _mfa, acc), do: acc
 
-  # The atom literals each MFA the given pages reach spells, keyed by MFA - for every function but
-  # Elixir's and Hologram's (see build_kept_page_reach/4), each read once however many pages reach
-  # it. The IR of their modules is built into the PLT first, in one go. Module aliases are left out:
+  # What each MFA the given pages reach writes, keyed by MFA: the atom literals it spells and the
+  # query chains it writes (see Hologram.Compiler.QueryChains) - for every function but Elixir's and
+  # Hologram's (see build_kept_page_reach/4), each read once however many pages reach it. The IR of
+  # their modules is built into the PLT first, in one go. Module aliases are left out of the atoms:
   # they name modules, which the pages' reach already lists, and no relationship or derived field.
-  defp atoms_by_mfa(reach_by_page, module_info_plt, ir_plt) do
+  defp read_by_mfa(reach_by_page, module_info_plt, ir_plt) do
     elixir_lib_dir = elixir_lib_dir()
 
     mfas_by_module =
@@ -3033,14 +3045,14 @@ defmodule Hologram.Compiler do
         declares_model? and generated?(function)
       end)
       |> Enum.map(fn {_module, function, arity} = mfa ->
+        {_visibility, clauses} = Map.get(funs, {function, arity}, {:public, []})
+
         atoms =
-          funs
-          |> Map.get({function, arity}, {:public, []})
-          |> elem(1)
+          clauses
           |> collect_atoms(MapSet.new())
           |> MapSet.reject(&Reflection.alias?/1)
 
-        {mfa, atoms}
+        {mfa, %{atoms: atoms, chains: QueryChains.collect(clauses, mfa)}}
       end)
     end)
     |> Map.new()
@@ -6042,18 +6054,6 @@ defmodule Hologram.Compiler do
     {init, [last]} = Enum.split(names, -1)
 
     "#{Enum.map_join(init, ", ", &inspect/1)} and #{inspect(last)}"
-  end
-
-  # A registered query is read for the session user on the server and answered again on the client
-  # from its own database, so it reads only what some rule admits, names nothing the client never
-  # holds, and claims no authority (see Hologram.Component.Derived.QueryCheck).
-  defp validate_queries!({module, module_terms}, check) do
-    Enum.each(module_terms, fn term ->
-      if refusal = apply(QueryCheck, check, [term]) do
-        raise Hologram.CompileError,
-          message: "the registered query in #{inspect(module)} #{refusal}"
-      end
-    end)
   end
 
   defp validate_operation_ask!(%{operation: {:dynamic}}, _declared), do: :ok

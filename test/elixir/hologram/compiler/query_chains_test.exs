@@ -1,0 +1,222 @@
+defmodule Hologram.Compiler.QueryChainsTest do
+  use Hologram.Test.BasicCase, async: true
+
+  import Hologram.Compiler.QueryChains
+
+  alias Hologram.Compiler.IR
+  alias Hologram.Test.Fixtures.Compiler.QueryChains.Module1
+  alias Hologram.Test.Fixtures.Compiler.QueryChains.Module2
+
+  defp chains(module, function, arity) do
+    {_visibility, clauses} =
+      module
+      |> IR.for_module()
+      |> IR.aggregate_module_funs()
+      |> Map.new()
+      |> Map.fetch!({function, arity})
+
+    collect(clauses, {module, function, arity})
+  end
+
+  defp validate_all!(module, function, arity) do
+    module
+    |> chains(function, arity)
+    |> Enum.each(&validate!(&1, nil))
+  end
+
+  defp source_line(module, needle) do
+    module
+    |> Hologram.Reflection.source_path()
+    |> File.read!()
+    |> String.split("\n")
+    |> Enum.find_index(&String.contains?(&1, needle))
+    |> Kernel.+(1)
+  end
+
+  describe "collect/2" do
+    test "collects a chain written from an entity module, its pinned value standing in" do
+      assert [%{root: Hologram.Test.Fixtures.Entity.Module2, steps: steps}] =
+               chains(Module1, :valid, 1)
+
+      assert [
+               {:filter, [[a: {:==, true}, b: {:>=, %Hologram.Query.Placeholder{name: :min_b}}]],
+                _filter_line},
+               {:sort, [:c], _sort_line},
+               {:take, [5], _take_line}
+             ] = steps
+    end
+
+    test "ends a chain at a stage whose whole predicate list only the run knows" do
+      assert [%{steps: []}] = chains(Module1, :pinned_predicates, 1)
+    end
+
+    test "collects no chain for a query built from a variable" do
+      assert chains(Module1, :through_variable, 1) == []
+    end
+
+    test "collects no chain for a query built in a helper" do
+      assert chains(Module1, :through_helper, 0) == []
+    end
+
+    test "collects no chain for a query built in a reduce" do
+      assert chains(Module1, :through_reduce, 1) == []
+    end
+  end
+
+  describe "validate!/2" do
+    test "passes a query the stages and the checks take" do
+      assert validate_all!(Module1, :valid, 1) == :ok
+    end
+
+    test "refuses a mistake in a stage in the stage's own words, at its line" do
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          validate_all!(Module1, :unknown_attribute, 0)
+        end
+
+      assert error.message =~
+               ~r/^the query in Hologram\.Test\.Fixtures\.Compiler\.QueryChains\.Module1\.unknown_attribute\/0 builds an invalid query - .*nonexistent/
+
+      assert error.line == source_line(Module1, "|> sort(nonexistent)")
+    end
+
+    test "refuses an ordering operator beside a pinned value on an attribute with no order" do
+      assert_raise Hologram.CompileError, ~r/builds an invalid query/, fn ->
+        validate_all!(Module1, :pinned_ordering, 1)
+      end
+    end
+
+    test "refuses a mistyped value beside a pinned one in a disjunction" do
+      assert_raise Hologram.CompileError, ~r/builds an invalid query - 5/, fn ->
+        validate_all!(Module1, :pinned_beside_mistyped, 1)
+      end
+    end
+
+    test "refuses a check's mistake at the stage making it" do
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          validate_all!(Module1, :server_only_spread, 0)
+        end
+
+      assert error.line == source_line(Module1, "|> filter(token == \"x\")")
+    end
+
+    test "passes a derived field's sort a later stage replaces" do
+      assert validate_all!(Module2, :__derived_replaced_sort__, 0) == :ok
+    end
+
+    test "passes a derived field's sort a count drops" do
+      assert validate_all!(Module2, :__derived_counted_secrets__, 0) == :ok
+    end
+
+    test "passes a derived field's sort a stage after the cut replaces" do
+      assert validate_all!(Module2, :__derived_sorted_again_after_cut__, 1) == :ok
+    end
+
+    test "refuses a derived field's sort no stage after the cut replaces" do
+      assert_raise Hologram.CompileError, ~r/filters or sorts on server_only attributes/, fn ->
+        validate_all!(Module2, :__derived_sorted_before_cut__, 1)
+      end
+    end
+
+    test "refuses the sort of a derived field's body of several expressions, at the sort" do
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          validate_all!(Module2, :__derived_spread_secrets__, 0)
+        end
+
+      assert error.message =~ ~r/filters or sorts on server_only attributes/
+      # The sort is the body's fifth line after the declaration.
+      assert error.line == source_line(Module2, "derived :spread_secrets") + 5
+    end
+
+    test "passes a sort on a server-only attribute of a query in an anonymous function" do
+      assert validate_all!(Module1, :sorted_secret_in_fun, 0) == :ok
+    end
+
+    test "checks the stages after a pinned sort spec" do
+      assert_raise Hologram.CompileError, ~r/builds an invalid query - .*nonexistent/, fn ->
+        validate_all!(Module1, :pinned_sort, 1)
+      end
+    end
+
+    test "refuses a range written as a literal on an attribute it can't compare with" do
+      assert_raise Hologram.CompileError, ~r/builds an invalid query/, fn ->
+        validate_all!(Module1, :mistyped_range, 0)
+      end
+    end
+
+    test "passes a list of operators beside a pinned one" do
+      assert validate_all!(Module1, :pinned_operator, 1) == :ok
+    end
+
+    test "refuses a pinned struct value its attribute can't hold" do
+      assert_raise Hologram.CompileError, ~r/builds an invalid query/, fn ->
+        validate_all!(Module1, :pinned_date, 0)
+      end
+    end
+
+    test "refuses a literal sort spec the stage doesn't take" do
+      assert_raise Hologram.CompileError, ~r/builds an invalid query/, fn ->
+        validate_all!(Module1, :string_sort, 0)
+      end
+    end
+
+    test "refuses a derived field's own sort on a server-only attribute" do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :secrets in .+ filters or sorts on server_only attributes/,
+                   fn -> validate_all!(Module2, :__derived_secrets__, 0) end
+    end
+
+    test "refuses a sort on a server-only attribute of a query handed straight to the database" do
+      assert_raise Hologram.CompileError, ~r/filters or sorts on server_only attributes/, fn ->
+        validate_all!(Module1, :read_sorted_secret, 0)
+      end
+    end
+
+    test "passes a sort on a server-only attribute of a query handed on, which can be sorted again" do
+      assert validate_all!(Module1, :sorted_secret_handed_on, 0) == :ok
+    end
+
+    test "passes a list of operators holding a pinned value" do
+      assert validate_all!(Module1, :pinned_operator_list, 1) == :ok
+    end
+
+    test "tells a refusal of a chain cut at its first stage at that stage's line" do
+      error =
+        assert_raise Hologram.CompileError, fn -> validate_all!(Module1, :dead_cut, 1) end
+
+      assert error.line == source_line(Module1, "def dead_cut(predicates)")
+    end
+
+    test "passes the steps before one only the run knows" do
+      assert validate_all!(Module1, :pinned_predicates, 1) == :ok
+    end
+
+    test "refuses a filter on a server-only attribute" do
+      assert_raise Hologram.CompileError,
+                   ~r/the query in .+server_only\/0 filters or sorts on server_only attributes/,
+                   fn -> validate_all!(Module1, :server_only, 0) end
+    end
+
+    test "refuses a query over a type no rule lets anyone read" do
+      assert_raise Hologram.CompileError,
+                   ~r/reads Hologram\.Test\.Fixtures\.Entity\.Module1, which declares no allow lines/,
+                   fn ->
+                     validate_all!(Module1, :dead, 0)
+                   end
+    end
+
+    test "refuses a claim of trust" do
+      assert_raise Hologram.CompileError, ~r/claims the server's authority with trust\(\)/, fn ->
+        validate_all!(Module1, :trusted, 0)
+      end
+    end
+
+    test "names a derived field by its name" do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :rows in Hologram\.Test\.Fixtures\.Compiler\.QueryChains\.Module2 builds an invalid query/,
+                   fn -> validate_all!(Module2, :__derived_rows__, 0) end
+    end
+  end
+end

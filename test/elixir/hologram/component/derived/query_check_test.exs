@@ -251,7 +251,7 @@ defmodule Hologram.Component.Derived.QueryCheckTest do
         |> Stage.normalize()
 
       assert refusal(term) ==
-               "claims the server's authority with trust() - a component's query is read for the " <>
+               "claims the server's authority with trust() - a query in browser code is read for the " <>
                  "session user on both tiers, so it cannot claim another. Drop trust(), or read " <>
                  "through the backend API in a command."
     end

@@ -69,7 +69,7 @@ defmodule Hologram.Component.Derived.QueryCheck do
   @spec trust_refusal(Query.t()) :: String.t() | nil
   def trust_refusal(term) do
     if term.trust do
-      "claims the server's authority with trust() - a component's query is read for the session user on both tiers, so it cannot claim another. Drop trust(), or read through the backend API in a command."
+      "claims the server's authority with trust() - a query in browser code is read for the session user on both tiers, so it cannot claim another. Drop trust(), or read through the backend API in a command."
     end
   end
 

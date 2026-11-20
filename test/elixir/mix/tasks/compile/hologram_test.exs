@@ -1866,9 +1866,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
       } = cache_state()
 
       removed_reach = %{
+        atoms: MapSet.new(),
         checks_permissions?: false,
         components: [],
         modules: MapSet.new(),
+        query_chains: [],
         reads_session_user?: false
       }
 
@@ -1955,7 +1957,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert cache_state().data_layer == data_layer
     end
 
-    test "a compile that fails on a registered query writes no dump and keeps nothing new", %{
+    # Every derivation checks the queries every page writes, the kept pages' too, since what a
+    # query may ask for moves with the model - so a kept page's query is what refuses here.
+    test "a compile that fails on a page's query writes no dump and keeps nothing new", %{
       opts: opts
     } do
       run(opts)
@@ -1969,22 +1973,42 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Enum.each(dump_paths, &File.write!(&1, "untouched"))
 
-      # The component joins the build with the edit, as a component saved with a refused query
-      # does: an edited templatable is validated without a kept entry of its own.
+      {page_module, reach} = Enum.min(data_layer.pages)
+
+      refused_chain = %{
+        final_sort?: false,
+        line: 1,
+        mfa: {page_module, :template, 0},
+        root: Entity1,
+        steps: []
+      }
+
+      refused_reach = %{reach | query_chains: [refused_chain | reach.query_chains]}
+
+      refused_data_layer = %{
+        data_layer
+        | pages: %{data_layer.pages | page_module => refused_reach}
+      }
+
+      Cache.put_data_layer(refused_data_layer)
+
+      # An edit that derives the data layer again without listing the page again: a component
+      # joining the build, which only its own entry follows.
       fake_edit(ComponentModule43)
 
-      failing_opts =
-        Keyword.update!(opts, :component_modules, &[ComponentModule43 | &1])
+      failing_opts = Keyword.update!(opts, :component_modules, &[ComponentModule43 | &1])
 
       expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module43 reads " <>
+        "the query in #{inspect(page_module)}.template/0 reads " <>
           "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
           "default deny returns no rows to any session. Add allow lines, or drop the query."
 
-      assert_error Hologram.CompileError, expected_msg, fn -> run(failing_opts) end
+      assert_error Hologram.CompileError, ~r/: #{Regex.escape(expected_msg)}$/, fn ->
+        run(failing_opts)
+      end
 
       assert Enum.map(dump_paths, &File.read!/1) == ["untouched", "untouched"]
-      assert Cache.get().data_layer == data_layer
+      assert Cache.get().data_layer == refused_data_layer
     end
 
     # A run that fails while bundling the runtime forgets the runtime state, which held the

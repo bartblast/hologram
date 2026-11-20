@@ -1315,6 +1315,10 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt, ir_plt)
       |> then(&Map.merge(context.kept_page_reach, &1))
 
+    # Checked on every derivation, the kept pages' queries too: a model change can make one that
+    # was valid refused.
+    Compiler.validate_query_chains!(reach_by_page, module_info_plt)
+
     reached_components =
       reach_by_page
       |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
@@ -1353,8 +1357,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     # Every component of the build, not the ones pages reach: what reads this is the renderer and
     # the sync layer, which answer for any component that renders. Built here and loaded at boot,
-    # like the page windows - so the two registered-query validations fail the BUILD rather than
-    # the first boot, and a release starts without running the extractor at all.
+    # like the page windows, so a release starts without running the extractor at all.
     queries =
       component_queries
       |> Map.take(context.component_modules)

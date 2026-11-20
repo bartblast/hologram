@@ -641,9 +641,9 @@ defmodule Hologram.Query do
   On a query - an entity type module or a query term - it marks the query as read on the
   server's own authority: DB.read/1 reads it raw whether or not a user is acting. The spelling
   for a read that must see past the acting user's policies, such as finding the user an invite
-  names by email when users may read only themselves. A registered query (a component's
-  derived field) cannot carry it - the build refuses one that does - since a component's query is
-  read for the session user on both tiers.
+  names by email when users may read only themselves. A query in browser code, like a
+  component's derived field, cannot carry it - the build refuses one written in one piece, and
+  the run refuses any other - since it is read for the session user on both tiers.
 
   Raises Hologram.MisuseError when the subject is neither an entity struct, an entity type module
   nor a query term, or when a struct already carries a claim.

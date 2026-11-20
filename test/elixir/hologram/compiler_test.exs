@@ -33,16 +33,6 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Component.Module40, as: ComponentModule40
   alias Hologram.Test.Fixtures.Component.Module41, as: ComponentModule41
   alias Hologram.Test.Fixtures.Component.Module42, as: ComponentModule42
-  alias Hologram.Test.Fixtures.Component.Module43, as: ComponentModule43
-  alias Hologram.Test.Fixtures.Component.Module44, as: ComponentModule44
-  alias Hologram.Test.Fixtures.Component.Module45, as: ComponentModule45
-  alias Hologram.Test.Fixtures.Component.Module46, as: ComponentModule46
-  alias Hologram.Test.Fixtures.Component.Module47, as: ComponentModule47
-  alias Hologram.Test.Fixtures.Component.Module48, as: ComponentModule48
-  alias Hologram.Test.Fixtures.Component.Module49, as: ComponentModule49
-  alias Hologram.Test.Fixtures.Component.Module50, as: ComponentModule50
-  alias Hologram.Test.Fixtures.Component.Module51, as: ComponentModule51
-  alias Hologram.Test.Fixtures.Component.Module52, as: ComponentModule52
   alias Hologram.Test.Fixtures.Component.Module53, as: ComponentModule53
   alias Hologram.Test.Fixtures.Component.Module54, as: ComponentModule54
   alias Hologram.Test.Fixtures.Component.Module55, as: ComponentModule55
@@ -88,8 +78,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module19, as: PageModule19
   alias Hologram.Test.Fixtures.Page.Module20, as: PageModule20
   alias Hologram.Test.Fixtures.Page.Module21, as: PageModule21
-  alias Hologram.Test.Fixtures.Page.Module22, as: PageModule22
   alias Hologram.Test.Fixtures.Page.Module24, as: PageModule24
+  alias Hologram.Test.Fixtures.Page.Module25, as: PageModule25
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module12, as: PathPolicyEntity
@@ -324,6 +314,7 @@ defmodule Hologram.CompilerTest do
         checks_permissions?: checks_permissions?,
         components: [],
         modules: MapSet.new(modules),
+        query_chains: [],
         reads_session_user?: reads_session_user?
       }
     }
@@ -1890,261 +1881,6 @@ defmodule Hologram.CompilerTest do
 
       assert map_size(queries.entries) == 1
     end
-
-    test "raises for a registered query whose root type declares no allow lines", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module43 reads " <>
-          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
-          "default deny returns no rows to any session. Add allow lines, or drop the query."
-
-      component_queries =
-        extract_component_queries([ComponentModule43], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query whose include target declares no allow lines", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module44 includes " <>
-          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
-          "default deny leaves the embed empty in every row. Add allow lines, or drop the include."
-
-      component_queries =
-        extract_component_queries([ComponentModule44], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query whose path goes through a type declaring no allow lines",
-         %{entity_types: entity_types} do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module45 filters through " <>
-          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
-          "default deny reads every such row as missing. Add allow lines, or drop the path."
-
-      component_queries =
-        extract_component_queries([ComponentModule45], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query whose quantifier reads a type declaring no allow lines",
-         %{entity_types: entity_types} do
-      defmodule QuantifiedDeadSourceFixture do
-        use Hologram.Entity
-
-        relationship :items, [Hologram.Test.Fixtures.Entity.Module1]
-
-        allow :read
-      end
-
-      term =
-        QuantifiedDeadSourceFixture
-        |> filter(any(items))
-        |> Stage.normalize()
-
-      component_queries = %{
-        QuantifiedQueries => %{terms: [term]}
-      }
-
-      expected_msg =
-        "the registered query in QuantifiedQueries filters through " <>
-          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
-          "default deny reads every such row as missing. Add allow lines, or drop the path."
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query filtering on a server-only attribute", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module46 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      component_queries =
-        extract_component_queries([ComponentModule46], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query filtering on a server-only attribute through a path", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module47 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      component_queries =
-        extract_component_queries([ComponentModule47], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query whose quantifier reads a server-only attribute", %{
-      entity_types: entity_types
-    } do
-      term =
-        Hologram.Test.Fixtures.Entity.Module16
-        |> filter(any(secret <- secrets, secret.token == "x"))
-        |> Stage.normalize()
-
-      component_queries = %{
-        QuantifiedQueries => %{terms: [term]}
-      }
-
-      expected_msg =
-        "the registered query in QuantifiedQueries filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query ordering on a server-only attribute", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module48 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      component_queries =
-        extract_component_queries([ComponentModule48], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query filtering on a server-only attribute inside a disjunction",
-         %{
-           entity_types: entity_types
-         } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module49 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      component_queries =
-        extract_component_queries([ComponentModule49], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query comparing with a server-only attribute", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module50 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      component_queries =
-        extract_component_queries([ComponentModule50], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    # An include reads its set in the order the relationship declares, so a declared order on a
-    # server-only attribute is one the client would have to sort by.
-    test "raises for a registered query including a set ordered by a server-only attribute", %{
-      entity_types: entity_types
-    } do
-      defmodule ServerOnlyOrderFixture do
-        use Hologram.Entity
-
-        alias Hologram.Test.Fixtures.Entity.Module15
-
-        relationship :secrets, [Module15], sort: token
-
-        allow :read
-      end
-
-      term =
-        ServerOnlyOrderFixture
-        |> Stage.include(:secrets)
-        |> Stage.normalize()
-
-      component_queries = %{
-        ComponentModule1 => %{terms: [term]}
-      }
-
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module1 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, [ServerOnlyOrderFixture | entity_types], false)
-      end
-    end
-
-    test "raises for a registered query filtering on a server-only attribute inside a quantifier",
-         %{
-           entity_types: entity_types
-         } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module51 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      component_queries =
-        extract_component_queries([ComponentModule51], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query claiming the server's authority", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module52 claims the server's " <>
-          "authority with trust() - a component's query is read for the session user on both " <>
-          "tiers, so it cannot claim another. Drop trust(), or read through the backend API in " <>
-          "a command."
-
-      component_queries =
-        extract_component_queries([ComponentModule52], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
   end
 
   describe "build_queries_plt/2" do
@@ -2217,21 +1953,20 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      sync_constants = derive_sync_constants([PageModule22], call_graph, module_info_plt, [])
+      sync_constants = derive_sync_constants([PageModule24], call_graph, module_info_plt, [])
 
-      assert MapSet.member?(sync_constants.entity_types, Entity15)
+      assert MapSet.member?(sync_constants.entity_types, Entity16)
     end
 
-    # An included type is one a client holds without any window being rooted in it - reaching it
+    # An included type is one a client holds without any query being rooted in it - reaching it
     # is what puts its rows in the database, so it is named here like any other.
     test "collects the types those queries reach only through an include", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      sync_constants = derive_sync_constants([PageModule22], call_graph, module_info_plt, [])
+      sync_constants = derive_sync_constants([PageModule24], call_graph, module_info_plt, [])
 
-      assert MapSet.member?(sync_constants.entity_types, Entity3)
-      assert MapSet.member?(sync_constants.entity_types, Entity1)
+      assert MapSet.member?(sync_constants.entity_types, Entity15)
     end
 
     # A client constructs and validates entities as well as reading them, and the type it
@@ -2386,17 +2121,6 @@ defmodule Hologram.CompilerTest do
     test "syncs the types the queries the given pages reach read", %{
       sync_constants: sync_constants
     } do
-      assert Entity1 in sync_constants.synced_types
-    end
-
-    # The browser answers a query over the rows it holds, so the rows an include embeds are synced
-    # like the rows the query returns. PageModule22's query reaches Entity1 only through one.
-    test "syncs the types those queries reach only through an include", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      sync_constants = derive_sync_constants([PageModule22], call_graph, module_info_plt, [])
-
       assert Entity1 in sync_constants.synced_types
     end
 
@@ -2657,6 +2381,58 @@ defmodule Hologram.CompilerTest do
                ParentPolicyEntity,
                DelegationPolicyEntity
              ]
+    end
+  end
+
+  describe "validate_query_chains!/2" do
+    test "passes every page of the suite", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      {reach_by_page, _component_queries} =
+        derive_kept_reach(Reflection.list_pages(), call_graph, module_info_plt, [])
+
+      assert validate_query_chains!(reach_by_page, module_info_plt) == :ok
+    end
+
+    test "checks the query a page's derived field writes, kept with the page", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      {reach_by_page, _component_queries} =
+        derive_kept_reach([PageModule24], call_graph, module_info_plt, [])
+
+      assert [%{mfa: {PageModule24, :__derived_holders__, 0}, root: Entity16}] =
+               reach_by_page[PageModule24].query_chains
+    end
+
+    test "leaves out the queries server code writes", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      {reach_by_page, _component_queries} =
+        derive_kept_reach([PageModule25], call_graph, module_info_plt, [])
+
+      assert reach_by_page[PageModule25].query_chains == []
+    end
+
+    test "refuses a kept page's query", %{module_info_plt: module_info_plt} do
+      chain = %{
+        final_sort?: false,
+        line: 1,
+        mfa: {PageModule18, :template, 0},
+        root: Entity1,
+        steps: []
+      }
+
+      reach_by_page =
+        update_in(mentioning_reach([], false)[PageModule18].query_chains, &[chain | &1])
+
+      assert_raise Hologram.CompileError,
+                   ~r/reads Hologram\.Test\.Fixtures\.Entity\.Module1, which declares no allow lines/,
+                   fn ->
+                     validate_query_chains!(reach_by_page, module_info_plt)
+                   end
     end
   end
 
@@ -3221,6 +2997,7 @@ defmodule Hologram.CompilerTest do
                  checks_permissions?: false,
                  components: [Module1, Module2, Module3],
                  modules: MapSet.new([Module1, Module2, Module3, Module4]),
+                 query_chains: [],
                  reads_session_user?: false
                }
              }
@@ -3336,6 +3113,7 @@ defmodule Hologram.CompilerTest do
                    checks_permissions?: false,
                    components: [Module1],
                    modules: MapSet.new(),
+                   query_chains: [],
                    reads_session_user?: false
                  },
                  Module11 => %{
@@ -3343,6 +3121,7 @@ defmodule Hologram.CompilerTest do
                    checks_permissions?: false,
                    components: [Module11],
                    modules: MapSet.new(),
+                   query_chains: [],
                    reads_session_user?: false
                  }
                }
