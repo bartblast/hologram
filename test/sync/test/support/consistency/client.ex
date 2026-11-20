@@ -184,6 +184,11 @@ defmodule HologramSyncTests.Consistency.Client do
 
   def handle_call(:cursor, _from, state), do: {:reply, state.cursor, state}
 
+  # A cut while the client waits to reconnect takes that reconnect back, so it's recorded too: the
+  # run reads a client's return as the first connect after its cut.
+  def handle_call(:cut, _from, %{stream: nil} = state),
+    do: {:reply, :ok, event(cancel_reconnect(state), :closed, %{cause: :cut})}
+
   def handle_call(:cut, _from, state),
     do: {:reply, :ok, cancel_reconnect(close(state, :cut))}
 

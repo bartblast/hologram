@@ -320,31 +320,65 @@ defmodule HologramSyncTests.Consistency.Run do
 
   # A client away until the writers were done has to have been told to start over when its gap
   # outgrew a replay - counted from the place it came back with, in the log as it stands.
-  defp missed_resync?(report) do
-    :await_writers in report.schedule and gap_too_large?(report) and
-      "gap_too_large" not in resync_reasons(report)
-  end
-
-  defp gap_too_large?(report) do
-    with %{cursor: cursor} when is_binary(cursor) <- last_connect(report),
-         {:ok, tx, seq, _policy_hash, _types_hash} <- Cursor.decode(cursor) do
-      limit = Catchup.gap_limit()
-      {count, _other_model?} = Oplog.count_after(tx, seq, limit + 1, EntityModel.hash())
-
-      count > limit
+  @doc false
+  # The client's return is the first connect after its cut: nothing reconnects it while it's away,
+  # and a reconnect of its own, or the run's last connect, comes later, from a later place. What
+  # answers the return comes on a connection from the same place - the return's own, or one after
+  # a stream that ended before the start over was written.
+  @spec missed_resync?(%{events: list(map), schedule: list}) :: boolean
+  def missed_resync?(report) do
+    with true <- :await_writers in report.schedule,
+         {connect, after_return} <- return(report.events) do
+      gap_too_large?(connect) and
+        "gap_too_large" not in resync_reasons(after_return, connect.cursor)
     else
-      _no_place -> false
+      _no_return -> false
     end
   end
 
-  defp last_connect(report) do
-    report.events
-    |> Enum.filter(&(&1.kind == :connect))
-    |> List.last()
+  defp return(events) do
+    cut_at =
+      events
+      |> Enum.with_index()
+      |> Enum.filter(fn {event, _index} -> cut?(event) end)
+      |> List.last()
+
+    with {_cut, index} <- cut_at,
+         {_closed, [connect | rest]} <- split_at_connect(Enum.drop(events, index + 1)) do
+      {connect, rest}
+    else
+      _no_return -> nil
+    end
   end
 
-  defp resync_reasons(report) do
-    for %{frame: "sync_resync", reason: reason} <- report.events, do: reason
+  defp split_at_connect(events), do: Enum.split_while(events, &(&1.kind != :connect))
+
+  defp cut?(event), do: event.kind == :closed and event.cause == :cut
+
+  defp gap_too_large?(%{cursor: cursor}) when is_binary(cursor) do
+    case Cursor.decode(cursor) do
+      {:ok, tx, seq, _policy_hash, _types_hash} ->
+        limit = Catchup.gap_limit()
+        {count, _other_model?} = Oplog.count_after(tx, seq, limit + 1, EntityModel.hash())
+
+        count > limit
+
+      _no_place ->
+        false
+    end
+  end
+
+  defp gap_too_large?(_no_place), do: false
+
+  # The start overs told on connections from the given place, the first of them already open.
+  defp resync_reasons(events, cursor) do
+    events
+    |> Enum.reduce({cursor, []}, fn
+      %{kind: :connect, cursor: from}, {_current, reasons} -> {from, reasons}
+      %{frame: "sync_resync", reason: reason}, {^cursor, reasons} -> {cursor, [reason | reasons]}
+      _event, acc -> acc
+    end)
+    |> elem(1)
   end
 
   # A session's first place is the oldest transaction still running when it starts, which a

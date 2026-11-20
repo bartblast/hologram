@@ -387,6 +387,33 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     end
   end
 
+  # The run reads a client's return as the first connect after its cut, so a cut that takes back a
+  # pending reconnect has to show.
+  test "a cut while a client waits to reconnect is recorded and keeps it away", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+
+    [%{request_id: request_id}] =
+      client
+      |> Client.events()
+      |> Enum.filter(&(&1.kind == :connect))
+
+    send(client, {:http, {request_id, :stream_end, []}})
+    Client.cut(client)
+
+    Process.sleep(500)
+
+    assert [:connect, :stream_end, :cut] =
+             client
+             |> Client.events()
+             |> Enum.filter(&(&1.kind in [:connect, :closed]))
+             |> Enum.map(&(&1[:cause] || &1.kind))
+  end
+
   defp connect_cursors(client) do
     for %{kind: :connect, cursor: cursor} <- Client.events(client), do: cursor
   end
