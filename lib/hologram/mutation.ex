@@ -10,11 +10,12 @@ defmodule Hologram.Mutation do
   # difference: a batch carries no claim, and every write in it is judged by the verb's own rules -
   # an update by the fields it changes - under the anonymous semantics when nobody is signed in,
   # where a server-side verb with no acting user would write raw. One update/1 call reaches here as
-  # a write for its values, if it has any, and one for each of its edges, the later ones marked as the same call,
-  # and they are applied through ONE executor call, as the server verb applies them: every field the
-  # call changes is judged against the row the call started from. A refusal at any step rolls the
-  # whole batch back and names the write it refused - and a refusal the EVALUATOR made is then
-  # kept, the batch as it arrived beside its answer, for the session that sent it.
+  # a write for its values and amounts, if it has any, and one for each of its edges, the later ones
+  # marked as the same call, and they are applied through ONE executor call, as the server verb
+  # applies them: every field the call changes is judged against the row the call started from. A
+  # refusal at any step rolls the whole batch back and names the write it refused, a call's by the
+  # write it starts at - and a refusal the EVALUATOR made is then kept, the batch as it arrived
+  # beside its answer, for the session that sent it.
 
   alias Hologram.Auth
   alias Hologram.Auth.Context
@@ -275,10 +276,10 @@ defmodule Hologram.Mutation do
   end
 
   # A revocation is judged against the grant as the store holds it, locked for the batch: the
-  # verb's own two gates, under the session's actor. It goes through
-  # the delete merge first, like any delete - a grant can be deleted and re-made under one id,
-  # so a revocation based on an earlier grant's revisions loses to a newer one and answers the
-  # way any stale delete does. A row already gone is what the verb itself answers: nothing.
+  # verb's own two gates, under the session's actor. It goes through the delete merge first, like
+  # any delete - a grant can be deleted and re-made under one id, so a revocation based on an
+  # earlier grant's revisions loses to a newer one and answers the way any stale delete does. A row
+  # already gone is what the verb itself answers: nothing.
   defp apply_write(
          %Write{op: :delete, entity_type: RoleGrant} = write,
          _followers,
