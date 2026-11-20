@@ -5,6 +5,7 @@ defmodule Hologram.Sync.Lens.ForHashTest do
   alias Hologram.DB.Connection
   alias Hologram.Entity.Model
   alias Hologram.Migrator
+  alias Hologram.Realtime.SSE
   alias Hologram.Sync.Lens
 
   setup do
@@ -52,6 +53,26 @@ defmodule Hologram.Sync.Lens.ForHashTest do
     assert Lens.for_hash("h1") == :error
     assert {:recent, later, {:value, :error}} = :persistent_term.get(key)
     assert later > until - 2_000
+  end
+
+  # An old tab is answered by its stream's process, whose heap is capped, and reading a history
+  # lists every module of the release.
+  test "answers a stream running under the heap cap" do
+    Migrator.record_applied("20260101000000", DateTime.utc_now(), "h1")
+
+    test_pid = self()
+
+    {stream, ref} =
+      spawn_monitor(fn ->
+        Process.put(:"$callers", [test_pid])
+        :ok = SSE.configure_backpressure_safety_net()
+
+        send(test_pid, {:answer, Lens.for_hash("h1")})
+      end)
+
+    assert_receive {:DOWN, ^ref, :process, ^stream, reason}, 5_000
+    assert reason == :normal
+    assert_received {:answer, :error}
   end
 
   # The stream ends and the browser greets again - told it can't be served, it would never expect

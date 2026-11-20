@@ -729,6 +729,34 @@ defmodule Hologram.Sync.Lens do
 
   defp replay({:raise, kind, reason, stacktrace}), do: :erlang.raise(kind, reason, stacktrace)
 
+  # Listing a release's migrations lists every module it has - in a big app more than a stream's
+  # process may hold (see `Hologram.Realtime.SSE.configure_backpressure_safety_net/0`), and the
+  # stream asking is killed. So that work runs in a process of its own, with no cap, and only its
+  # answer comes back. A raise in that process is raised again in the caller. The caller reads the
+  # database itself, through the connection its own process is routed to.
+  defp uncapped(fun) do
+    caller = self()
+    tag = make_ref()
+
+    {worker, monitor} =
+      Process.spawn(fn -> send(caller, {tag, outcome(fun)}) end, [:monitor, max_heap_size: 0])
+
+    receive do
+      {^tag, outcome} ->
+        Process.demonitor(monitor, [:flush])
+        replay(outcome)
+
+      {:DOWN, ^monitor, :process, ^worker, reason} ->
+        exit(reason)
+    end
+  end
+
+  defp outcome(fun) do
+    {:value, fun.()}
+  catch
+    kind, reason -> {:raise, kind, reason, __STACKTRACE__}
+  end
+
   defp share(key, outcome) do
     until = System.monotonic_time(:millisecond) + @shared_ms
 
@@ -910,7 +938,7 @@ defmodule Hologram.Sync.Lens do
       {:ok, %Postgrex.Result{rows: rows}} ->
         recorded = Map.new(rows, fn [version, model_hash] -> {version, model_hash} end)
 
-        {:ok, history(recorded, Loader.list!())}
+        {:ok, uncapped(fn -> history(recorded, Loader.list!()) end)}
 
       {:error, error} ->
         raise error
