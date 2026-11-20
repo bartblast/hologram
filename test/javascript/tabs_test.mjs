@@ -2098,24 +2098,26 @@ describe("Tabs", () => {
 
         Sse.isStarted = true;
 
-        await follow();
+        try {
+          await follow();
 
-        Tabs.receive(state("place-2"));
-        await waitForEventLoop();
+          Tabs.receive(state("place-2"));
+          await waitForEventLoop();
 
-        assert.isNull(Tabs.name);
-        assert.isTrue(Tabs.leader);
-        assert.isTrue(detaching.calledOnce);
-        assert.isTrue(disowning.calledOnce);
-        assert.isTrue(refreshing.calledOnce);
+          assert.isNull(Tabs.name);
+          assert.isTrue(Tabs.leader);
+          assert.isTrue(detaching.calledOnce);
+          assert.isTrue(disowning.calledOnce);
+          assert.isTrue(refreshing.calledOnce);
 
-        // A stream of its own, greeting the server from nowhere: the place it holds is in doubt.
-        assert.isTrue(reconnecting.calledOnce);
+          // A stream of its own, greeting the server from nowhere: the place it holds is in doubt.
+          assert.isTrue(reconnecting.calledOnce);
 
-        assert.isNull(SyncStream.syncCursor);
-        sinon.assert.notCalled(LocalDatabase.markAllSynced);
-
-        Sse.isStarted = wasStarted;
+          assert.isNull(SyncStream.syncCursor);
+          sinon.assert.notCalled(LocalDatabase.markAllSynced);
+        } finally {
+          Sse.isStarted = wasStarted;
+        }
       });
 
       // Told after leaving, the message would go nowhere, and the group's leader would send the
