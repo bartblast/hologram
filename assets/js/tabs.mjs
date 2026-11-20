@@ -119,19 +119,36 @@ export default class Tabs {
   // greets the server as the replica of its own it now is, and opening one before the mount would
   // greet it with none of the page's subscriptions (see where the page starts it, in hologram.mjs).
   //
+  // The group can hand the lead to a tab that has not taken it yet - one still starting, or
+  // reading the store again (see #takeStore). It holds the lock, so it is the tab that sends the
+  // queue, and keeps it with the identity (a tab still starting holds neither yet: the stored
+  // queue waits for the next page load, see Durability.detach); but its stream is still a
+  // follower's, which the server serves no sync on, so it opens one of its own as a follower
+  // would.
+  //
+  // And a tab that is not ready holds no place it can greet the server from: what it held is
+  // dropped as it leaves, and a tab reading the store again was doing so because its place was in
+  // doubt. So it greets from nowhere, and is filled again.
+  //
   // Answers once the lock is really gone, the way leaving does - which is what lets anything
   // waiting on this tab's place in the group wait for it rather than for a moment.
   static dissolve() {
     const followed = !Tabs.leader;
+    const untaken = Tabs.#leadWhenReady;
+
+    if (Tabs.name !== null && !Tabs.#ready) {
+      SyncStream.syncCursor = null;
+    }
+
     const released = Tabs.leave();
 
     if (followed) {
       Batches.disown();
       Replica.refresh();
+    }
 
-      if (Sse.isStarted) {
-        Sse.reconnect();
-      }
+    if ((followed || untaken) && Sse.isStarted) {
+      Sse.reconnect();
     }
 
     return released;
@@ -830,8 +847,8 @@ export default class Tabs {
     // next frame naming a place would hand it over anyway, over rows this tab never checked. So it
     // leaves the group, as a tab whose store cannot be read at boot does (see DataLayer.boot), and
     // stops using the store: it was never the one sending, so it takes a fresh identity, lets its
-    // batches go and opens a stream of its own, which greets the server from the place it holds
-    // (see Tabs.dissolve).
+    // batches go and opens a stream of its own, which greets the server from nowhere, since the
+    // place it holds is the one in doubt (see Tabs.dissolve).
     //
     // Unless the group handed it the lead meanwhile. Leaving would let go of the lock, and with no
     // tab waiting for it nobody would send the queue - its own writes among it - until a page

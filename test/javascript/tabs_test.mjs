@@ -245,6 +245,66 @@ describe("Tabs", () => {
       assert.isTrue(disowning.calledOnce);
     });
 
+    // It holds the lock, so it sends the queue - but its stream is still a follower's, which the
+    // server serves no sync on.
+    it("keeps the queue and opens a stream of its own in a tab handed a lead it has not taken", async () => {
+      const group = nextGroup();
+      const release = await holdLeaderLock(group);
+
+      await Tabs.join(group, stubs());
+
+      release();
+      await waitForEventLoop();
+
+      assert.isTrue(Tabs.leader);
+
+      Replica.adopt({id: "r-group", token: "statement-group"});
+
+      Tabs.dissolve();
+
+      assert.equal(Replica.id, "r-group");
+      assert.isFalse(disowning.called);
+      assert.isTrue(reconnecting.calledOnce);
+    });
+
+    // What it held is dropped as it leaves, and a tab reading the store again - not ready either -
+    // was doing so because its place was in doubt.
+    it("greets the server from nowhere in a tab that is not ready", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      SyncStream.syncCursor = "place-1";
+
+      try {
+        Tabs.dissolve();
+
+        assert.isNull(SyncStream.syncCursor);
+      } finally {
+        SyncStream.syncCursor = null;
+      }
+    });
+
+    it("keeps the place of a tab that is ready", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      Tabs.ready();
+
+      SyncStream.syncCursor = "place-1";
+
+      try {
+        Tabs.dissolve();
+
+        assert.equal(SyncStream.syncCursor, "place-1");
+      } finally {
+        SyncStream.syncCursor = null;
+      }
+    });
+
     // Asking for the lock speaks for nobody yet, so what the group handed it goes back.
     it("lets the batches go in a tab that was still asking for the lock", async () => {
       sinon.stub(navigator.locks, "request").resolves();
@@ -1955,10 +2015,10 @@ describe("Tabs", () => {
         assert.isTrue(disowning.calledOnce);
         assert.isTrue(refreshing.calledOnce);
 
-        // A stream of its own, greeting the server from the place it holds.
+        // A stream of its own, greeting the server from nowhere: the place it holds is in doubt.
         assert.isTrue(reconnecting.calledOnce);
 
-        assert.equal(SyncStream.syncCursor, "place-1");
+        assert.isNull(SyncStream.syncCursor);
         sinon.assert.notCalled(LocalDatabase.markAllSynced);
 
         Sse.isStarted = wasStarted;
@@ -2017,6 +2077,47 @@ describe("Tabs", () => {
         assert.isTrue(Tabs.leader);
         assert.isFalse(detaching.called);
         assert.isFalse(disowning.called);
+      });
+
+      // It holds the lock, so it keeps the queue; but its stream is a follower's, and the place it
+      // was checking is the one in doubt. It takes no lead in a group that has ended.
+      it("opens a stream of its own from nowhere when the group ends while it reads with the lead", async () => {
+        let read;
+
+        sinon
+          .stub(Durability, "readBase")
+          .returns(new Promise((resolve) => (read = resolve)));
+
+        sinon.stub(Durability, "detach");
+
+        const disowning = sinon.stub(Batches, "disown");
+        const reconnecting = sinon.stub(Sse, "reconnect");
+        const led = sinon.spy();
+        const wasStarted = Sse.isStarted;
+
+        Sse.isStarted = true;
+
+        try {
+          const {release} = await follow({onLead: led});
+
+          Tabs.receive(state("place-2"));
+
+          release();
+          await waitForEventLoop();
+
+          Tabs.receive({kind: "storage_failed"});
+
+          read({cursor: "place-2", records: []});
+          await waitForEventLoop();
+
+          assert.isNull(Tabs.name);
+          assert.isNull(SyncStream.syncCursor);
+          assert.isTrue(reconnecting.calledOnce);
+          assert.isFalse(disowning.called);
+          assert.isFalse(led.called);
+        } finally {
+          Sse.isStarted = wasStarted;
+        }
       });
 
       // Leaving would let go of the lock, and with nobody waiting for it nobody would send the queue.
