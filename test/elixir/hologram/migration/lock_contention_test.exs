@@ -41,15 +41,16 @@ defmodule Hologram.Migration.LockContentionTest do
     timestamp: ~U[2026-08-13 09:15:22.000000Z]
   }
 
-  @index "my_app_task_title_$sort_$idx"
+  # A unique index, which migrations build: the plain ones are the index plan's.
+  @index "my_app_task_title_$uidx"
 
   @index_op %{
     op: :create_index,
     table: "my_app_task",
     index: @index,
-    columns: ["title_$sort"],
+    columns: ["title"],
     nulls_distinct: true,
-    unique: false
+    unique: true
   }
 
   # The value of Hologram.Migrator's @advisory_lock_key - the one key the whole procedure
@@ -195,7 +196,7 @@ defmodule Hologram.Migration.LockContentionTest do
           entity: MyApp.Task,
           name: :title,
           type: :string,
-          opts: [optional: true],
+          opts: [optional: true, unique: true],
           line: 4
         }
       ])

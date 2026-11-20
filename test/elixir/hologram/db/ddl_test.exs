@@ -287,13 +287,29 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
-  describe "invalid_indexes_statement/0" do
+  describe "invalid_indexes_statement/1" do
     test "lists the invalid indexes of the data schema, by name, with whether they take writes and are live" do
       statement = normalize_newlines(invalid_indexes_statement())
 
       assert statement =~ "SELECT ic.relname, i.indisready, i.indislive"
-      assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid"
+      assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid\n"
       assert statement =~ "ORDER BY ic.relname"
+    end
+
+    test "lists the invalid unique indexes of the data schema" do
+      statement = normalize_newlines(invalid_indexes_statement(true))
+
+      assert statement =~ "SELECT ic.relname, i.indisready, i.indislive"
+
+      assert statement =~
+               "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid AND i.indisunique"
+    end
+
+    test "lists the other invalid indexes of the data schema" do
+      statement = normalize_newlines(invalid_indexes_statement(false))
+
+      assert statement =~
+               "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid AND NOT i.indisunique"
     end
   end
 

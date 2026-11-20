@@ -632,6 +632,22 @@ defmodule Hologram.Migration.IndexRecoveryTest do
       [chain: slug_chain, model: slug_model]
     end
 
+    # The repair runs before the drift check, so a boot that finds a model index missing builds it
+    # rather than refusing over it.
+    test "builds an index dropped by hand rather than refusing", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        drop_index()
+
+        assert run(chain, model, @context) == :ok
+
+        assert index_validity() == true
+      end)
+    end
+
     # Nothing pending: the repair after the files meets the index the deploy never built, over
     # rows a running node wrote meanwhile.
     test "refuses while rows repeat a missing index's key, and boots once they no longer do", %{

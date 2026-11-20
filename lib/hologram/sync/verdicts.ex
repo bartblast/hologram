@@ -10,13 +10,10 @@ defmodule Hologram.Sync.Verdicts do
   # row moving at all - a task deletable while its board has no cards stops being so the moment a
   # card is added - so the session keeps what it last told, and tells only what changed: of the
   # verdicts a batch's recheck read for the rows it may have moved them of (see
-  # `Hologram.Sync.Live.parts/5`), and of the ones worked out for a returning client's rows.
+  # `Hologram.Sync.Live.parts/5`).
   #
   # The bookkeeping is kept here, apart from the session that holds it, so what is told when can be
   # judged without a running session.
-
-  alias Hologram.Policy
-  alias Hologram.Sync.Frame
 
   @doc """
   Returns the given rows' verdicts, `{row, verdicts}`, that differ from what was told, in the order
@@ -74,25 +71,5 @@ defmodule Hologram.Sync.Verdicts do
       _delta, acc ->
         acc
     end)
-  end
-
-  @doc """
-  Returns the rows among the given ones whose verdicts for the given user differ from what was
-  told, each with its verdicts now, in the order given. Only rows of a type with a deciding
-  quantifier are worked out: a row of any other type is left out, whatever was told of it, so a
-  caller can't rely on this to clear verdicts told before - and a session has none of it to clear:
-  such a row is put with none (see `Hologram.Sync.Frame.row_verdicts/2`), and no rule reads any a
-  client holds of it from an earlier build.
-
-  For the rows a returning client may hold verdicts of from before this session - a batch's rows
-  come with theirs worked out (see `moved/2`).
-  """
-  @spec stale(list(struct), %{String.t() => map}, Hologram.Server.identity_id() | nil) ::
-          list({struct, map})
-  def stale(rows, told, actor_user_id) do
-    rows
-    |> Enum.filter(&(Policy.deciding_quantifiers(&1.__struct__) != []))
-    |> Enum.map(&{&1, Frame.row_verdicts(actor_user_id, &1)})
-    |> moved(told)
   end
 end

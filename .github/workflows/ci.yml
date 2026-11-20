@@ -949,7 +949,7 @@ jobs:
       # Step: Archive the ChromeDriver logs of a run that failed or recovered from a browser hang.
       - name: Archive ChromeDriver logs
         # Execute the step if the job has failed or a browser hang was reported, but don't execute it if the job has been canceled.
-        if: ${{ !cancelled() && (failure() || hashFiles('test/features/tmp/chromedriver/hangs.txt') != '') }}
+        if: ${{ !cancelled() && (failure() || hashFiles('test/features/tmp/chromedriver/**/hangs.txt') != '') }}
         uses: actions/upload-artifact@v7
         with:
           name: chromedriver-logs-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}-partition-${{ matrix.partition }}
@@ -1080,7 +1080,7 @@ jobs:
       # Step: Archive the ChromeDriver logs of a run that failed or recovered from a browser hang.
       - name: Archive ChromeDriver logs
         # Execute the step if the job has failed or a browser hang was reported, but don't execute it if the job has been canceled.
-        if: ${{ !cancelled() && (failure() || hashFiles('test/features/tmp/chromedriver/hangs.txt') != '') }}
+        if: ${{ !cancelled() && (failure() || hashFiles('test/features/tmp/chromedriver/**/hangs.txt') != '') }}
         uses: actions/upload-artifact@v7
         with:
           name: https-chromedriver-logs-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
@@ -1254,7 +1254,7 @@ jobs:
       # Step: Archive the ChromeDriver logs of a run that failed or recovered from a browser hang.
       - name: Archive ChromeDriver logs
         # Execute the step if the job has failed or a browser hang was reported, but don't execute it if the job has been canceled.
-        if: ${{ !cancelled() && (failure() || hashFiles('test/cluster/tmp/chromedriver/hangs.txt') != '') }}
+        if: ${{ !cancelled() && (failure() || hashFiles('test/cluster/tmp/chromedriver/**/hangs.txt') != '') }}
         uses: actions/upload-artifact@v7
         with:
           name: cluster-chromedriver-logs-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
@@ -1419,7 +1419,7 @@ jobs:
       # Step: Archive the ChromeDriver logs of a run that failed or recovered from a browser hang.
       - name: Archive ChromeDriver logs
         # Execute the step if the job has failed or a browser hang was reported, but don't execute it if the job has been canceled.
-        if: ${{ !cancelled() && (failure() || hashFiles('test/cowboy/tmp/chromedriver/hangs.txt') != '') }}
+        if: ${{ !cancelled() && (failure() || hashFiles('test/cowboy/tmp/chromedriver/**/hangs.txt') != '') }}
         uses: actions/upload-artifact@v7
         with:
           name: cowboy-chromedriver-logs-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
@@ -1584,7 +1584,7 @@ jobs:
       # Step: Archive the ChromeDriver logs of a run that failed or recovered from a browser hang.
       - name: Archive ChromeDriver logs
         # Execute the step if the job has failed or a browser hang was reported, but don't execute it if the job has been canceled.
-        if: ${{ !cancelled() && (failure() || hashFiles('test/ecosystem/tmp/chromedriver/hangs.txt') != '') }}
+        if: ${{ !cancelled() && (failure() || hashFiles('test/ecosystem/tmp/chromedriver/**/hangs.txt') != '') }}
         uses: actions/upload-artifact@v7
         with:
           name: ecosystem-chromedriver-logs-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
@@ -1905,7 +1905,7 @@ jobs:
       # Step: Archive the ChromeDriver logs of a run that failed or recovered from a browser hang.
       - name: Archive ChromeDriver logs
         # Execute the step if the job has failed or a browser hang was reported, but don't execute it if the job has been canceled.
-        if: ${{ !cancelled() && (failure() || hashFiles('test/umbrella/apps/app_1/tmp/chromedriver/hangs.txt') != '') }}
+        if: ${{ !cancelled() && (failure() || hashFiles('test/umbrella/apps/app_1/tmp/chromedriver/**/hangs.txt') != '') }}
         uses: actions/upload-artifact@v7
         with:
           name: umbrella-chromedriver-logs-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}

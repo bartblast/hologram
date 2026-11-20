@@ -9,14 +9,13 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
   alias Hologram.DB.Connection
   alias Hologram.Entity.Model
   alias Hologram.Policy
-  alias Hologram.Policy.Edges
   alias Hologram.Sync.Cursor
   alias Hologram.Test.Fixtures.Entity.Module2
 
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @policy_hash "0123456789abcdef0123456789abcdef"
   @synced_types [Module2]
-  @types_hash Cursor.types_hash(@synced_types)
+  @types_hash Cursor.types_hash(@synced_types, false)
 
   use_module_stub :query_cache
 
@@ -28,7 +27,11 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     :persistent_term.put({Policy, :hash}, @policy_hash)
 
     setup_query_cache(QueryCacheStub, false)
-    :persistent_term.put(QueryCacheStub.persistent_term_key(), %{synced_types: @synced_types})
+
+    :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+      permission_checking?: false,
+      synced_types: @synced_types
+    })
 
     :ok
   end
@@ -54,7 +57,7 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
   # start read did, under the same rules and types.
   describe "sync_session_opts/5" do
     defp gap_reader(cursor) do
-      start = %{edges: nil, cursor: cursor, gap_end: nil, rules: nil, types_hash: @types_hash}
+      start = %{cursor: cursor, rules: nil, types_hash: @types_hash}
       connection = %{applied_seq: nil, fill_place: {200, 0}, replica_id: nil}
 
       sync_session_opts(nil, MyApp.Page, @policy_hash, start, connection)[:read_gap]
@@ -63,13 +66,13 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     test "hands the session a gap reader that reads past a place filled under the same rules and types" do
       {tx, seq} = seed(200)
 
-      assert gap_reader(Cursor.encode(tx, seq, @policy_hash, @types_hash)).() == {:ok, [], nil}
+      assert {:ok, [], _edge} = gap_reader(Cursor.encode(tx, seq, @policy_hash, @types_hash)).()
     end
 
     test "hands the session a gap reader that refuses a place filled with other types" do
       {tx, seq} = seed(200)
 
-      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([]))
+      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([], false))
 
       assert gap_reader(cursor).() == {:full_resync, :synced_types}
     end
@@ -129,19 +132,16 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
                {:ok,
                 %{
                   cursor: nil,
-                  edges: nil,
-                  gap_end: nil,
                   resync_reason: nil,
                   rules: nil,
                   types_hash: @types_hash
                 }}
     end
 
-    # The session reads the gap again for itself, so what travels on is where it reads from and how
-    # far this read reached - the furthest a catch-up frame may vouch for.
-    test "hands on where a returning client resumes from and how far its gap reaches" do
+    # The session reads the gap for itself, so what travels on is where it reads from.
+    test "hands on where a returning client resumes from" do
       {tx, seq} = seed(200)
-      gap_end = seed(201)
+      seed(201)
 
       cursor = Cursor.encode(tx, seq, @policy_hash, @types_hash)
 
@@ -149,25 +149,6 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
                {:ok,
                 %{
                   cursor: cursor,
-                  edges: Edges.index(),
-                  gap_end: gap_end,
-                  resync_reason: nil,
-                  rules: nil,
-                  types_hash: @types_hash
-                }}
-    end
-
-    test "hands on no gap end for a returning client that missed nothing" do
-      {tx, seq} = seed(200)
-
-      cursor = Cursor.encode(tx, seq, @policy_hash, @types_hash)
-
-      assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
-               {:ok,
-                %{
-                  cursor: cursor,
-                  edges: Edges.index(),
-                  gap_end: nil,
                   resync_reason: nil,
                   rules: nil,
                   types_hash: @types_hash
@@ -185,8 +166,6 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
                {:ok,
                 %{
                   cursor: nil,
-                  edges: nil,
-                  gap_end: nil,
                   resync_reason: :policy_hash,
                   rules: nil,
                   types_hash: @types_hash
@@ -198,14 +177,12 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     test "sends everything again to a client filled with other types" do
       {tx, seq} = seed(200)
 
-      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([]))
+      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([], false))
 
       assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
                {:ok,
                 %{
                   cursor: nil,
-                  edges: nil,
-                  gap_end: nil,
                   resync_reason: :synced_types,
                   rules: nil,
                   types_hash: @types_hash

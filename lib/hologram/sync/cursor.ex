@@ -66,16 +66,27 @@ defmodule Hologram.Sync.Cursor do
 
   @doc """
   Returns the hash a cursor names the given entity types by - the types sync sends (see
-  `Hologram.DB.QueryCache.synced_types/0`) - as the same short digest the policy hash is. Their order
-  moves nothing.
+  `Hologram.DB.QueryCache.synced_types/0`) - and whether the browser checks permissions (see
+  `Hologram.DB.QueryCache.permission_checking?/0`), as the same short digest the policy hash is.
+  Their order moves nothing.
+
+  Whether the browser checks permissions is in it because the rows a client holds carry the server's
+  verdicts only when it does (see `Hologram.Sync.Frame.row_verdicts/2`): a client filled without
+  them holds rows with none, and nothing in the log says so - a deploy turning the checks on moves
+  no row. A place naming the other answer sends the client everything again, like a place filled
+  with other types.
   """
-  @spec types_hash(list(module)) :: String.t()
-  def types_hash(entity_types) do
-    entity_types
-    |> Enum.map(&Codec.encode_enum_value/1)
-    |> Enum.sort()
-    |> Enum.join(",")
-    |> CryptographicUtils.short_digest(16)
+  @spec types_hash(list(module), boolean) :: String.t()
+  def types_hash(entity_types, permission_checking?) do
+    labels =
+      entity_types
+      |> Enum.map(&Codec.encode_enum_value/1)
+      |> Enum.sort()
+      |> Enum.join(",")
+
+    checks = if permission_checking?, do: ";checks", else: ""
+
+    CryptographicUtils.short_digest(labels <> checks, 16)
   end
 
   defp in_range?(value, ceiling), do: value >= 0 and value <= ceiling

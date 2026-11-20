@@ -735,6 +735,18 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Returns the URL of the app's plain HTTP listener, for a test that fetches from the server
+  without a browser. The listener is up in HTTPS mode too, where `Endpoint.url/0` names the TLS
+  listener: the clients such a test uses don't trust the test cert.
+  """
+  def http_url do
+    {:ok, {_ip, port}} = Endpoint.server_info(:http)
+    url = %{Endpoint.struct_url() | port: port, scheme: "http"}
+
+    URI.to_string(url)
+  end
+
+  @doc """
   Keeps the browser from putting the document the `session` shows into its back/forward cache,
   so that coming back to it with Back or Forward loads a new document. Adds an `unload` listener,
   which makes a page ineligible for Chrome's back/forward cache.
