@@ -291,8 +291,12 @@ defmodule Hologram.Migrator do
   tables, and the marker are created, and :claimed is returned. A database whose marker
   matches the given context returns :managed. Every other state raises with a specific
   message: Hologram schemas without a marker, a marker belonging to another app or env,
-  or a database managed by schema reconciliation - dev's mechanism, which never shares a
-  database with production.
+  a database managed by schema reconciliation - dev's mechanism, which never shares a
+  database with production - or system tables at a newer layout than the running one (see
+  Hologram.DB.SchemaReconciler.system_schema_version/1, which reads the context's optional
+  :system_upgrades). It never upgrades the system tables of a database it finds managed - that is
+  Hologram.DB.SchemaReconciler.upgrade_system_tables!/1, which run/3 runs next in the same
+  transaction.
 
   The migration lock is the caller's to hold - run/3 takes it before this runs and keeps it
   for the whole procedure. That exclusion is what makes a virgin database safe, since it is
@@ -419,10 +423,12 @@ defmodule Hologram.Migrator do
   model's history.
 
   The not-covered check runs first, before any database access - then the guard claims
-  or verifies the database, objects standing under names the current naming rule no
-  longer derives are renamed (one info line each), and the pending files apply from the
-  model the applied ones produce - with the indexes the applied files derive and the
-  database lacks built before them, when the node knows every applied file. A unique one
+  or verifies the database and brings its system tables to the running layout (one info
+  line per step, see Hologram.DB.SchemaReconciler.upgrade_system_tables!/1), objects
+  standing under names the current naming rule no longer derives are renamed (one info
+  line each), and the pending files apply from the model the applied ones produce - with
+  the indexes the applied files derive and the database lacks built before them, when the
+  node knows every applied file. A unique one
   whose build fails on rows repeating its key is left invalid for the pending files, and
   the repair after them refuses it if they keep it - or the file that changes a type on its
   table, which rebuilds it, or fills a row repeating its key through it while it takes writes,
@@ -431,6 +437,10 @@ defmodule Hologram.Migrator do
   unique index, and a type change, fill or enum rebuild among them could change keys the
   dropped index would have been asked about (see removed_later?/4). The index repair and
   the drift check come last.
+
+  The context carries the guard facts (:otp_app, :env) and the marker diagnostics
+  (:hologram_version, :timestamp), and may carry :system_upgrades, steps in place of
+  Hologram.DB.SchemaReconciler.system_schema_upgrades/0's (see system_schema_version/1).
   """
   @spec run(list(%{atom => any}), %{atom => any}, %{atom => any}) :: :ok
   def run(migrations, current_model, context) do
@@ -838,6 +848,7 @@ defmodule Hologram.Migrator do
                 "the migration applier never touches it"
 
       true ->
+        SchemaReconciler.check_system_schema_version!(marker, context)
         :managed
     end
   end
@@ -846,15 +857,9 @@ defmodule Hologram.Migrator do
 
   defp check_unique_keys!(_op), do: :ok
 
-  # The one path that builds the system tables, and so the one that decides which columns a
-  # database has forever: a database already claimed goes through check_marker!/1 above, which
-  # reads the marker and changes nothing. So a column added here later - `model_hash` on the
-  # migration table is one - reaches virgin databases only, and the first write that needs it
-  # fails on one claimed before it existed.
-  #
-  # Deliberate while the data layer is unreleased, and owed at its first release together with the
-  # bump it belongs to - see `@system_schema_version` in Hologram.DB.SchemaReconciler, which
-  # carries the whole reasoning. Until then a stale database is dropped and recreated.
+  # The one path that builds the system tables, at the running layout. A database already claimed
+  # goes through check_marker!/1 above, which refuses a newer layout, and the upgrade steps carry
+  # an older one forward (see Hologram.DB.SchemaReconciler.system_schema_upgrades/0).
   defp claim(context) do
     {:ok, _result} = Connection.query(~s(CREATE SCHEMA "#{Mapper.system_schema()}"))
     {:ok, _result} = Connection.query(~s(CREATE SCHEMA "#{Mapper.data_schema()}"))
@@ -866,6 +871,7 @@ defmodule Hologram.Migrator do
       env: context.env,
       managed_by: @managed_by,
       hologram_version: context.hologram_version,
+      system_schema_version: SchemaReconciler.system_schema_version(context),
       last_reconciled_at: context.timestamp
     })
 
@@ -1343,7 +1349,13 @@ defmodule Hologram.Migrator do
   end
 
   defp run_locked(migrations, mapping, context) do
-    {:ok, _status} = Connection.transaction(fn -> ensure_managed!(context) end)
+    {:ok, upgraded} =
+      Connection.transaction(fn ->
+        ensure_managed!(context)
+        SchemaReconciler.upgrade_system_tables!(context)
+      end)
+
+    SchemaReconciler.log_system_upgrades(upgraded)
 
     applied = applied_versions()
 
@@ -1370,20 +1382,22 @@ defmodule Hologram.Migrator do
     end
   end
 
-  # Whether the database is claimed for this app and env, has every migration of the chain applied,
-  # no model index missing or invalid, and no drift - what the locked procedure would end with, so
-  # the boot skips it, and a node never waits for the lock behind another node's index builds (see
-  # Hologram.DB.IndexBuilder). Read-only, so taking no lock is safe: a node seeing a state another
-  # node is changing at that moment finds something to do, or finds it already done. Anything it
-  # can't read - a virgin database, another app's - is something to do, which the locked procedure
-  # claims or refuses.
+  # Whether the database is claimed for this app and env, has its system tables at the running
+  # layout, has every migration of the chain applied, no model index missing or invalid, and no
+  # drift - what the locked procedure would end with, so the boot skips it, and a node never waits
+  # for the lock behind another node's index builds (see Hologram.DB.IndexBuilder). Read-only, so
+  # taking no lock is safe: a node seeing a state another node is changing at that moment finds
+  # something to do, or finds it already done. Anything it can't read - a virgin database, another
+  # app's, a newer layout - is something to do, which the locked procedure claims or refuses.
   #
   # The invalid indexes are read last: a build in flight lists its index as present, invalid, from
   # its first moment, and an index only goes from invalid to valid, so one the reads before found
   # standing is either still invalid then, or built.
   defp up_to_date?(migrations, mapping, context) do
     hologram_schemas() == Enum.sort([Mapper.data_schema(), Mapper.system_schema()]) and
-      check_marker!(context) == :managed and pending(migrations, applied_versions()) == [] and
+      check_marker!(context) == :managed and
+      SchemaReconciler.pending_system_upgrades(context) == [] and
+      pending(migrations, applied_versions()) == [] and
       missing_indexes(mapping) == [] and drift_ops(mapping) == [] and invalid_indexes() == []
   rescue
     _error -> false
