@@ -21,6 +21,8 @@ defmodule Hologram.Mutation.Envelope do
   alias Hologram.Mutation.Write
   alias Hologram.Reflection
 
+  @edge_ops [:add_relationship, :delete_relationship]
+
   @ops "create, update, delete, add_relationship, delete_relationship"
 
   defstruct instance_id: nil, model_hash: nil, replica_id: nil, seq: nil, writes: []
@@ -64,6 +66,27 @@ defmodule Hologram.Mutation.Envelope do
       revisions when is_map(revisions) -> decode_based_on(revisions, entity_type)
       _other -> {:error, "based_on must be an object"}
     end
+  end
+
+  # A call sends its values first and its edges after them, so what joins the write before it is
+  # always an edge, and the write it joins is an update or an edge of the same row. The marker is
+  # read on every op, so one anywhere else is refused rather than ignored.
+  defp call_position(%Write{same_call: false}, _previous), do: :ok
+
+  defp call_position(%Write{op: op}, _previous) when op not in @edge_ops do
+    {:error, "same_call joins only an edge to the write before it"}
+  end
+
+  defp call_position(%Write{entity_type: entity_type, id: id}, %Write{
+         op: op,
+         entity_type: entity_type,
+         id: id
+       })
+       when op in [:update | @edge_ops],
+       do: :ok
+
+  defp call_position(_write, _previous) do
+    {:error, "same_call joins a write to an update or edge of the same row before it"}
   end
 
   # A write names no authority. The server judges it by what it does - the verb's own operation -
@@ -462,16 +485,21 @@ defmodule Hologram.Mutation.Envelope do
         _other -> {:error, "op must be one of #{@ops}"}
       end
 
-    with {:ok, write} <- parsed do
-      validate_grant_write(write)
+    with {:ok, write} <- parsed,
+         {:ok, same_call} <- same_call(entry) do
+      validate_grant_write(%{write | same_call: same_call})
     end
   end
 
   defp parse_write(_entry), do: {:error, "a write must be an object"}
 
+  # The writes before this one are in the accumulator, newest first, so the one a same_call write
+  # joins is at its head.
   defp parse_write_into({entry, index}, {:ok, writes}) do
-    case parse_write(entry) do
-      {:ok, write} -> {:cont, {:ok, [write | writes]}}
+    with {:ok, write} <- parse_write(entry),
+         :ok <- call_position(write, List.first(writes)) do
+      {:cont, {:ok, [write | writes]}}
+    else
       {:error, message} -> {:halt, {:error, "write #{index}: #{message}"}}
     end
   end
@@ -508,6 +536,16 @@ defmodule Hologram.Mutation.Envelope do
     # that is not an entity type: a client is told what this build does not have, not how it
     # failed to look it up.
     ArgumentError -> {:error, unknown_type_message(label)}
+  end
+
+  # Whether the write came from the same call as the write before it - one update/1 changing a
+  # value and an edge, or several edges.
+  defp same_call(entry) do
+    case Map.get(entry, "same_call") do
+      nil -> {:ok, false}
+      true -> {:ok, true}
+      _other -> {:error, "same_call must be true when given"}
+    end
   end
 
   defp some_change(data, deltas) when data == %{} and deltas == %{} do

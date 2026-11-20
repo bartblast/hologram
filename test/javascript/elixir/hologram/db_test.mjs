@@ -368,6 +368,15 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
+    // The server stamps its pair when the row reaches it, so a browser's create has none yet.
+    it("answers a row with no server times", () => {
+      const result = create(struct(TASK, {done: false, title: "alpha"}));
+      const stored = result.data[1];
+
+      assert.deepStrictEqual(field(stored, "server_created_at"), Type.nil());
+      assert.deepStrictEqual(field(stored, "server_updated_at"), Type.nil());
+    });
+
     it("answers a row whose every settable field takes the write's stamp", () => {
       const result = create(struct(TASK, {done: false, title: "alpha"}));
       const metadata = field(result.data[1], "__meta__");
@@ -470,6 +479,8 @@ describe("Elixir_Hologram_DB", () => {
         created_at: TIMESTAMP,
         done: false,
         id: ID_1,
+        server_created_at: null,
+        server_updated_at: null,
         title: "Łódź",
         title$sort: "lodz",
         updated_at: TIMESTAMP,
@@ -612,6 +623,71 @@ describe("Elixir_Hologram_DB", () => {
         [
           ["add_relationship", "g1"],
           ["add_relationship", "g2"],
+        ],
+      );
+    });
+
+    it("marks every entry after the call's first as coming with it", () => {
+      const entity = addRelationship(
+        addRelationship(
+          putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
+          Type.atom("tags"),
+          Type.bitstring("g1"),
+        ),
+        Type.atom("tags"),
+        Type.bitstring("g2"),
+      );
+
+      update(entity);
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => [write.op, write.same_call]),
+        [
+          ["update", undefined],
+          ["add_relationship", true],
+          ["add_relationship", true],
+        ],
+      );
+    });
+
+    it("marks the edges after the first of a call that changes only edges", () => {
+      const entity = addRelationship(
+        addRelationship(held(), Type.atom("tags"), Type.bitstring("g1")),
+        Type.atom("tags"),
+        Type.bitstring("g2"),
+      );
+
+      update(entity);
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => write.same_call),
+        [undefined, true],
+      );
+    });
+
+    it("marks nothing on a call that writes one entry", () => {
+      update(addRelationship(held(), Type.atom("tags"), Type.bitstring("g1")));
+
+      assert.notProperty(Batches.current().writes[0], "same_call");
+    });
+
+    it("leaves the first entry of the next call in the batch unmarked", () => {
+      update(
+        addRelationship(
+          putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
+          Type.atom("tags"),
+          Type.bitstring("g1"),
+        ),
+      );
+
+      update(putAttribute(held(), pairs([["title", Type.bitstring("y")]])));
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => [write.op, write.same_call]),
+        [
+          ["update", undefined],
+          ["add_relationship", true],
+          ["update", undefined],
         ],
       );
     });

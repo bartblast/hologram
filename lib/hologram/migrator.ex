@@ -52,7 +52,35 @@ defmodule Hologram.Migrator do
   # Hologram.Migration.ShadowVerifier is the one caller outside this coverage, on purpose:
   # it applies to a throwaway database of its own, one verification at a time under a key of
   # its own, with no second session to exclude.
+  #
+  # A booting node that needs it also holds @boot_lock_key while it waits, which is what makes
+  # Hologram.DB.IndexBuilder give way to it.
   @advisory_lock_key -335_777_576_117_788_795
+
+  # Fixed application-defined key a booting node holds, shared, on the session it takes the
+  # migration lock on - from before it starts polling for that lock until the session ends. Frozen
+  # forever for the reason @advisory_lock_key is: a builder that reads another key never gives way.
+  # Provenance: first 8 bytes of md5("hologram_migrations_boot") as a signed int64.
+  #
+  # Hologram.DB.IndexBuilder, once it holds the migration lock and before it runs a step, asks
+  # whether any session holds this key (see boot_key_held?/0), and gives the lock back without a
+  # step if one does. A builder that asked before a boot took the key held the migration lock when
+  # the boot started waiting, so its step is the one the boot waits for; every builder taking the
+  # lock after it sees the key. So a booting node waits for at most the step holding the lock when
+  # it starts waiting, however many builders wait beside it. Its poll can still miss the lock now
+  # and then, while a builder holds it just to ask, which costs a poll, never a step.
+  #
+  # Taken with pg_try_advisory_lock_shared, never queued, for the reason @advisory_lock_key is:
+  # nobody takes it exclusively, so the try always wins, and booting nodes hold it side by side.
+  # A session holding it between statements has no transaction and no snapshot, so a concurrent
+  # build never waits for it. Freed with the session, like the migration lock the boot holds: a
+  # node whose host vanishes without closing its connection keeps what it holds until the server
+  # drops the session, and builders give way for that long - about a minute on a direct connection
+  # once the session is between statements, given its keepalives (see
+  # with_migration_connection/1), while a statement it was running runs to its end first.
+  #
+  # Every release holding the builder holds this key too - the builder never shipped without it.
+  @boot_lock_key -8_943_570_201_190_700_407
 
   # How often a node that missed the migration lock looks again. A politeness knob, not a
   # correctness bound - the loop exits by winning the lock, never by a deadline.
@@ -263,8 +291,12 @@ defmodule Hologram.Migrator do
   tables, and the marker are created, and :claimed is returned. A database whose marker
   matches the given context returns :managed. Every other state raises with a specific
   message: Hologram schemas without a marker, a marker belonging to another app or env,
-  or a database managed by schema reconciliation - dev's mechanism, which never shares a
-  database with production.
+  a database managed by schema reconciliation - dev's mechanism, which never shares a
+  database with production - or system tables at a newer layout than the running one (see
+  Hologram.DB.SchemaReconciler.system_schema_version/1, which reads the context's optional
+  :system_upgrades). It never upgrades the system tables of a database it finds managed - that is
+  Hologram.DB.SchemaReconciler.upgrade_system_tables!/1, which run/3 runs next in the same
+  transaction.
 
   The migration lock is the caller's to hold - run/3 takes it before this runs and keeps it
   for the whole procedure. That exclusion is what makes a virgin database safe, since it is
@@ -391,10 +423,12 @@ defmodule Hologram.Migrator do
   model's history.
 
   The not-covered check runs first, before any database access - then the guard claims
-  or verifies the database, objects standing under names the current naming rule no
-  longer derives are renamed (one info line each), and the pending files apply from the
-  model the applied ones produce - with the indexes the applied files derive and the
-  database lacks built before them, when the node knows every applied file. A unique one
+  or verifies the database and brings its system tables to the running layout (one info
+  line per step, see Hologram.DB.SchemaReconciler.upgrade_system_tables!/1), objects
+  standing under names the current naming rule no longer derives are renamed (one info
+  line each), and the pending files apply from the model the applied ones produce - with
+  the indexes the applied files derive and the database lacks built before them, when the
+  node knows every applied file. A unique one
   whose build fails on rows repeating its key is left invalid for the pending files, and
   the repair after them refuses it if they keep it - or the file that changes a type on its
   table, which rebuilds it, or fills a row repeating its key through it while it takes writes,
@@ -403,6 +437,10 @@ defmodule Hologram.Migrator do
   unique index, and a type change, fill or enum rebuild among them could change keys the
   dropped index would have been asked about (see removed_later?/4). The index repair and
   the drift check come last.
+
+  The context carries the guard facts (:otp_app, :env) and the marker diagnostics
+  (:hologram_version, :timestamp), and may carry :system_upgrades, steps in place of
+  Hologram.DB.SchemaReconciler.system_schema_upgrades/0's (see system_schema_version/1).
   """
   @spec run(list(%{atom => any}), %{atom => any}, %{atom => any}) :: :ok
   def run(migrations, current_model, context) do
@@ -432,6 +470,12 @@ defmodule Hologram.Migrator do
   takes, and one cut short is left invalid, to be built again. Set by the session's first
   statement rather than as startup parameters, which a pooler may refuse, and only the ones the
   server knows: `transaction_timeout` is PostgreSQL 17's.
+
+  It also runs with the pool's keepalives and user timeout (see
+  Hologram.DB.Config.keepalive_statement/0): a node that vanishes holding the migration lock or the
+  boot key holds up every other node's boot or index builds until the server drops its session.
+  Best effort, as for the pool: a server refusing them is warned about and the session used as it
+  is.
   """
   @spec with_migration_connection((-> any)) :: any
   def with_migration_connection(fun) do
@@ -456,6 +500,8 @@ defmodule Hologram.Migrator do
           WHERE name IN ('lock_timeout', 'statement_timeout', 'transaction_timeout')
           """)
 
+        apply_keepalives()
+
         fun.()
       end)
     after
@@ -465,12 +511,39 @@ defmodule Hologram.Migrator do
   end
 
   @doc """
+  Returns whether a session on the current database holds the boot key - a booting node waiting
+  for the migration lock, or running the procedure under it (see @boot_lock_key in this module).
+  Work beside the boot procedure that takes the migration lock asks this once it holds the lock,
+  and gives it back without doing anything when it's true.
+  """
+  @spec boot_key_held?() :: boolean
+  def boot_key_held? do
+    # pg_locks lists every database's locks, and shows a bigint key's high half in classid, its low
+    # half in objid and 1 in objsubid.
+    statement = """
+    SELECT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_locks
+      WHERE "locktype" = 'advisory' AND "objsubid" = 1
+        AND "database" = (
+          SELECT "oid" FROM pg_catalog.pg_database WHERE "datname" = current_database()
+        )
+        AND (("classid"::bigint << 32) | "objid"::bigint) = $1
+    )
+    """
+
+    {:ok, %{rows: [[held?]]}} = Connection.query(statement, [@boot_lock_key])
+
+    held?
+  end
+
+  @doc """
   Runs the given function under the migration lock, taken on the current session by polling (see
   @advisory_lock_key in this module) and released once the function returns or raises, and
   returns what the function returns. For work beside the boot procedure that changes the schema,
-  one step at a time - each step holds the lock no longer than it takes. Polls at the given
-  interval, the boot's when absent: a caller polling more slowly than the boot most likely gives
-  way to a booting node.
+  one step at a time - each step holds the lock no longer than it takes. The given function has to
+  ask boot_key_held?/0 first, and return without doing anything when it's true, so a booting node
+  waits for no step that starts after it started waiting. Polls at the given interval, the boot's
+  when absent.
   """
   @spec with_migration_lock((-> any), pos_integer) :: any
   def with_migration_lock(fun, poll_interval_ms \\ @migration_lock_poll_interval_ms) do
@@ -775,6 +848,7 @@ defmodule Hologram.Migrator do
                 "the migration applier never touches it"
 
       true ->
+        SchemaReconciler.check_system_schema_version!(marker, context)
         :managed
     end
   end
@@ -783,15 +857,9 @@ defmodule Hologram.Migrator do
 
   defp check_unique_keys!(_op), do: :ok
 
-  # The one path that builds the system tables, and so the one that decides which columns a
-  # database has forever: a database already claimed goes through check_marker!/1 above, which
-  # reads the marker and changes nothing. So a column added here later - `model_hash` on the
-  # migration table is one - reaches virgin databases only, and the first write that needs it
-  # fails on one claimed before it existed.
-  #
-  # Deliberate while the data layer is unreleased, and owed at its first release together with the
-  # bump it belongs to - see `@system_schema_version` in Hologram.DB.SchemaReconciler, which
-  # carries the whole reasoning. Until then a stale database is dropped and recreated.
+  # The one path that builds the system tables, at the running layout. A database already claimed
+  # goes through check_marker!/1 above, which refuses a newer layout, and the upgrade steps carry
+  # an older one forward (see Hologram.DB.SchemaReconciler.system_schema_upgrades/0).
   defp claim(context) do
     {:ok, _result} = Connection.query(~s(CREATE SCHEMA "#{Mapper.system_schema()}"))
     {:ok, _result} = Connection.query(~s(CREATE SCHEMA "#{Mapper.data_schema()}"))
@@ -803,6 +871,7 @@ defmodule Hologram.Migrator do
       env: context.env,
       managed_by: @managed_by,
       hologram_version: context.hologram_version,
+      system_schema_version: SchemaReconciler.system_schema_version(context),
       last_reconciled_at: context.timestamp
     })
 
@@ -1269,6 +1338,7 @@ defmodule Hologram.Migrator do
 
     if !up_to_date?(migrations, mapping, context) do
       with_migration_connection(fn ->
+        take_boot_key()
         acquire_migration_lock()
 
         run_locked(migrations, mapping, context)
@@ -1279,7 +1349,13 @@ defmodule Hologram.Migrator do
   end
 
   defp run_locked(migrations, mapping, context) do
-    {:ok, _status} = Connection.transaction(fn -> ensure_managed!(context) end)
+    {:ok, upgraded} =
+      Connection.transaction(fn ->
+        ensure_managed!(context)
+        SchemaReconciler.upgrade_system_tables!(context)
+      end)
+
+    SchemaReconciler.log_system_upgrades(upgraded)
 
     applied = applied_versions()
 
@@ -1306,23 +1382,43 @@ defmodule Hologram.Migrator do
     end
   end
 
-  # Whether the database is claimed for this app and env, has every migration of the chain applied,
-  # no model index missing or invalid, and no drift - what the locked procedure would end with, so
-  # the boot skips it, and a node never waits for the lock behind another node's index builds (see
-  # Hologram.DB.IndexBuilder). Read-only, so taking no lock is safe: a node seeing a state another
-  # node is changing at that moment finds something to do, or finds it already done. Anything it
-  # can't read - a virgin database, another app's - is something to do, which the locked procedure
-  # claims or refuses.
+  # Whether the database is claimed for this app and env, has its system tables at the running
+  # layout, has every migration of the chain applied, no model index missing or invalid, and no
+  # drift - what the locked procedure would end with, so the boot skips it, and a node never waits
+  # for the lock behind another node's index builds (see Hologram.DB.IndexBuilder). Read-only, so
+  # taking no lock is safe: a node seeing a state another node is changing at that moment finds
+  # something to do, or finds it already done. Anything it can't read - a virgin database, another
+  # app's, a newer layout - is something to do, which the locked procedure claims or refuses.
   #
   # The invalid indexes are read last: a build in flight lists its index as present, invalid, from
   # its first moment, and an index only goes from invalid to valid, so one the reads before found
   # standing is either still invalid then, or built.
   defp up_to_date?(migrations, mapping, context) do
     hologram_schemas() == Enum.sort([Mapper.data_schema(), Mapper.system_schema()]) and
-      check_marker!(context) == :managed and pending(migrations, applied_versions()) == [] and
+      check_marker!(context) == :managed and
+      SchemaReconciler.pending_system_upgrades(context) == [] and
+      pending(migrations, applied_versions()) == [] and
       missing_indexes(mapping) == [] and drift_ops(mapping) == [] and invalid_indexes() == []
   rescue
     _error -> false
+  end
+
+  # A connection lost here ends the session, which the next statement, or the exit the session
+  # sends, reports.
+  defp apply_keepalives do
+    case Connection.query(Config.keepalive_statement()) do
+      {:ok, _result} -> :ok
+      {:error, %DBConnection.ConnectionError{}} -> :ok
+      {:error, error} -> Config.warn_keepalives_refused(error)
+    end
+  end
+
+  # Never let go by hand: it frees with the session, as the migration lock the boot takes does.
+  defp take_boot_key do
+    {:ok, %{rows: [[true]]}} =
+      Connection.query("SELECT pg_try_advisory_lock_shared($1)", [@boot_lock_key])
+
+    :ok
   end
 
   defp try_migration_lock? do

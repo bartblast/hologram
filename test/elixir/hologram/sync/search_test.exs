@@ -21,6 +21,8 @@ defmodule Hologram.Sync.SearchTest do
   alias Hologram.Test.Fixtures.Policy.Module20, as: PolicyModule20
   alias Hologram.Test.Fixtures.Policy.Module21, as: PolicyModule21
   alias Hologram.Test.Fixtures.Policy.Module25, as: PolicyModule25
+  alias Hologram.Test.Fixtures.Policy.Module38, as: PolicyModule38
+  alias Hologram.Test.Fixtures.Policy.Module39, as: PolicyModule39
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
@@ -266,12 +268,15 @@ defmodule Hologram.Sync.SearchTest do
              }
     end
 
-    # Module12's delete rule reads parent.parent.priority, which no read rule or verdict reads.
+    # Module39's update rule delegates to its channel's, which reads the channel's archived, and no
+    # read rule or verdict reads it: everyone reads every channel, so a client answers the rule
+    # from the channel it holds.
     test "follows no other operation's edges" do
-      %{top: top} = seed_chain()
+      channel = create!(PolicyModule38)
+      create!(PolicyModule39, channel_id: channel.id)
 
-      edges = Edges.derive([PolicyModule1, PolicyModule5, PolicyModule12])
-      effects = [effect(:patch_entity, PolicyModule1, top.id, %{"priority" => 3})]
+      edges = Edges.derive([PolicyModule38, PolicyModule39])
+      effects = [effect(:patch_entity, PolicyModule38, channel.id, %{"archived" => true})]
 
       assert candidates(effects, edges) == %{rows: %{}, whole_types: %{}}
     end
@@ -740,6 +745,20 @@ defmodule Hologram.Sync.SearchTest do
     test "names the holder of an own role granted on the whole type" do
       user = create!(Module14, email: "a@b.c")
       edges = %{{PolicyModule1, :read} => [{:own_grants, [:viewer]}]}
+
+      effects = grant_effects(fn -> Auth.grant_role(user, :viewer, PolicyModule1) end)
+
+      assert candidates(effects, edges) == %{
+               rows: %{},
+               whole_types: %{PolicyModule1 => MapSet.new([user.id])}
+             }
+    end
+
+    # A rule of an operation the server sends a verdict on can name the role, which moves the
+    # verdicts of every row of the type its holder may read.
+    test "names the holder of an own role granted on the whole type a verdict edge names" do
+      user = create!(Module14, email: "a@b.c")
+      edges = %{{PolicyModule1, {:verdicts}} => [{:own_grants, [:viewer]}]}
 
       effects = grant_effects(fn -> Auth.grant_role(user, :viewer, PolicyModule1) end)
 

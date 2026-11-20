@@ -103,6 +103,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
               id: nil,
               owner: %NotIncluded{relationship: :owner},
               owner_id: nil,
+              server_created_at: nil,
+              server_updated_at: nil,
               updated_at: nil
 
     @spec __attributes__() :: list({atom, atom, keyword})
@@ -146,7 +148,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     @spec __system_attributes__() :: list({atom, atom, keyword})
     def __system_attributes__ do
-      [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
+      [
+        {:created_at, :datetime, []},
+        {:id, :uuid, []},
+        {:server_created_at, :datetime, []},
+        {:server_updated_at, :datetime, []},
+        {:updated_at, :datetime, []}
+      ]
     end
 
     @spec __uniques__() :: list(list(atom))
@@ -164,6 +172,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
               id: nil,
               b_c: %NotIncluded{relationship: :b_c},
               b_c_id: nil,
+              server_created_at: nil,
+              server_updated_at: nil,
               updated_at: nil
 
     @spec __attributes__() :: list({atom, atom, keyword})
@@ -207,7 +217,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     @spec __system_attributes__() :: list({atom, atom, keyword})
     def __system_attributes__ do
-      [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
+      [
+        {:created_at, :datetime, []},
+        {:id, :uuid, []},
+        {:server_created_at, :datetime, []},
+        {:server_updated_at, :datetime, []},
+        {:updated_at, :datetime, []}
+      ]
     end
 
     @spec __uniques__() :: list(list(atom))
@@ -223,6 +239,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
               id: nil,
               c: %NotIncluded{relationship: :c},
               c_id: nil,
+              server_created_at: nil,
+              server_updated_at: nil,
               updated_at: nil
 
     @spec __attributes__() :: list({atom, atom, keyword})
@@ -266,7 +284,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     @spec __system_attributes__() :: list({atom, atom, keyword})
     def __system_attributes__ do
-      [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
+      [
+        {:created_at, :datetime, []},
+        {:id, :uuid, []},
+        {:server_created_at, :datetime, []},
+        {:server_updated_at, :datetime, []},
+        {:updated_at, :datetime, []}
+      ]
     end
 
     @spec __uniques__() :: list(list(atom))

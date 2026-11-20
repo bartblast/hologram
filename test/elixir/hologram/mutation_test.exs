@@ -10,6 +10,7 @@ defmodule Hologram.MutationTest do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
+  alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Mutation.Record
@@ -32,6 +33,7 @@ defmodule Hologram.MutationTest do
   alias Hologram.Test.Fixtures.Mutation.Module3, as: MutationModule3
   alias Hologram.Test.Fixtures.Mutation.Module4, as: MutationModule4
   alias Hologram.Test.Fixtures.Mutation.Module5, as: MutationModule5
+  alias Hologram.Test.Fixtures.Mutation.Module6, as: MutationModule6
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
 
@@ -50,9 +52,9 @@ defmodule Hologram.MutationTest do
     Map.new(row.__meta__.revisions, fn {name, revision} -> {Atom.to_string(name), revision} end)
   end
 
-  defp count_edges(source_id, target_id) do
+  defp count_edges(entity_type, relationship, source_id, target_id) do
     statement =
-      ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_entity_module16_secrets_$join" | <>
+      ~s|SELECT count(*) FROM "hologram_data"."#{DB.join_table_name(entity_type, relationship)}" | <>
         ~s|WHERE "source_id" = $1 AND "target_id" = $2|
 
     {:ok, %Postgrex.Result{rows: [[count]]}} =
@@ -70,6 +72,19 @@ defmodule Hologram.MutationTest do
 
   defp create_source do
     DB.create!(Module16.new())
+  end
+
+  # A row Mutation.Module6's rule lets anyone update while it's open and holds no locked tag.
+  defp create_ticket(status) do
+    [status: status]
+    |> MutationModule6.new()
+    |> DB.create!()
+  end
+
+  defp create_tag(label) do
+    %{label: label, token: "t"}
+    |> Module15.new()
+    |> DB.create!()
   end
 
   defp create_target do
@@ -215,6 +230,9 @@ defmodule Hologram.MutationTest do
      }}
   end
 
+  # Marks the entry as part of the call the entry before it came from.
+  defp same_call(entry), do: Map.put(entry, "same_call", true)
+
   defp server(user_id \\ nil), do: %Server{user_id: user_id}
 
   defp update_write(entity_type, id, data, opts \\ []) do
@@ -292,6 +310,21 @@ defmodule Hologram.MutationTest do
       assert EntityOperations.get(MutationModule2, id).__meta__.revisions == %{
                public: writer_stamp
              }
+    end
+
+    # Written offline an hour ago and arriving now: the writer's pair says when it was made, the
+    # server's pair when it got here - which is what tells everyone else it is new.
+    test "files a create written earlier under its writer's time and its arrival" do
+      id = Entity.generate_id()
+      written_ms = System.os_time(:millisecond) - 3_600_000
+
+      run(envelope([public_write(id, stamp: written_ms * 1024)]), server())
+
+      row = EntityOperations.get(MutationModule2, id)
+
+      assert DateTime.to_unix(row.created_at, :millisecond) == written_ms
+      assert DateTime.compare(row.server_created_at, row.created_at) == :gt
+      assert row.server_updated_at == row.server_created_at
     end
 
     test "records the batch on the effect it wrote" do
@@ -412,6 +445,36 @@ defmodule Hologram.MutationTest do
       assert answer["kept"]["0"]["$revisions"]["priority"] == newer
 
       assert EntityOperations.get(MutationModule1, row.id).priority == 5
+    end
+
+    # Nothing changed on the server, so its update time says the row last changed when it did. A
+    # value planted months back, so a statement run in the same millisecond as the create could
+    # not leave the column looking untouched.
+    test "leaves server_updated_at alone when every value of an update loses" do
+      user = create_user("outrun_whole@example.com")
+      row = create_authored(user, priority: 5)
+      newer = row.__meta__.revisions.priority + 1_000_000
+      planted_at = ~U[2026-01-15 10:30:00.000000Z]
+
+      set_revisions(MutationModule1, row.id, %{"priority" => newer})
+
+      {:ok, _result} =
+        Connection.query(
+          ~s|UPDATE "hologram_data"."#{Mapper.table_name(MutationModule1)}" | <>
+            ~s|SET "server_updated_at" = $1 WHERE "id" = $2|,
+          [Codec.encode(planted_at, :datetime), Codec.encode(row.id, :uuid)]
+        )
+
+      write =
+        update_write(MutationModule1, row.id, %{"priority" => 9},
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: newer - 1
+        )
+
+      assert {:ok, %{"dropped" => %{"0" => %{"priority" => 9}}}} =
+               run(envelope([write]), server(user.id))
+
+      assert EntityOperations.get(MutationModule1, row.id).server_updated_at == planted_at
     end
 
     test "applies the rest of an update whose column was dropped" do
@@ -577,7 +640,7 @@ defmodule Hologram.MutationTest do
 
       assert {:ok, %{"status" => "confirmed"}} = run(envelope([write]), server())
 
-      assert count_edges(source.id, target.id) == 1
+      assert count_edges(Module16, :secrets, source.id, target.id) == 1
     end
 
     test "applies a deleted edge" do
@@ -590,7 +653,147 @@ defmodule Hologram.MutationTest do
 
       assert {:ok, %{"status" => "confirmed"}} = run(envelope([write]), server())
 
-      assert count_edges(source.id, target.id) == 0
+      assert count_edges(Module16, :secrets, source.id, target.id) == 0
+    end
+
+    # The server verb judges the whole call against the row it started from, so a status it closes
+    # doesn't refuse the tag it adds.
+    test "lands a call that puts a value its rule reads and adds an edge" do
+      ticket = create_ticket("open")
+      tag = create_tag("plain")
+
+      writes = [
+        update_write(MutationModule6, ticket.id, %{"status" => "closed"},
+          stamp: stamp_above(ticket)
+        ),
+        same_call(edge_write("add_relationship", MutationModule6, ticket.id, "tags", tag.id))
+      ]
+
+      assert run(envelope(writes), server()) ==
+               {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+
+      assert EntityOperations.get(MutationModule6, ticket.id).status == "closed"
+      assert count_edges(MutationModule6, :tags, ticket.id, tag.id) == 1
+    end
+
+    test "lands a call that puts a value its rule reads and deletes an edge" do
+      ticket = create_ticket("open")
+      tag = create_tag("plain")
+
+      :ok = EntityOperations.add_relationship(MutationModule6, ticket.id, :tags, tag.id)
+
+      writes = [
+        update_write(MutationModule6, ticket.id, %{"status" => "closed"},
+          stamp: stamp_above(ticket)
+        ),
+        same_call(edge_write("delete_relationship", MutationModule6, ticket.id, "tags", tag.id))
+      ]
+
+      assert {:ok, %{"status" => "confirmed"}} = run(envelope(writes), server())
+
+      assert EntityOperations.get(MutationModule6, ticket.id).status == "closed"
+      assert count_edges(MutationModule6, :tags, ticket.id, tag.id) == 0
+    end
+
+    test "lands an edge-only call whose first edge would refuse the second on its own" do
+      ticket = create_ticket("open")
+      locked = create_tag("locked")
+      plain = create_tag("plain")
+
+      writes = [
+        edge_write("add_relationship", MutationModule6, ticket.id, "tags", locked.id),
+        same_call(edge_write("add_relationship", MutationModule6, ticket.id, "tags", plain.id))
+      ]
+
+      assert {:ok, %{"status" => "confirmed"}} = run(envelope(writes), server())
+
+      assert count_edges(MutationModule6, :tags, ticket.id, locked.id) == 1
+      assert count_edges(MutationModule6, :tags, ticket.id, plain.id) == 1
+    end
+
+    test "judges a separate call against the row the call before it left" do
+      ticket = create_ticket("open")
+      tag = create_tag("plain")
+
+      writes = [
+        update_write(MutationModule6, ticket.id, %{"status" => "closed"},
+          stamp: stamp_above(ticket)
+        ),
+        edge_write("add_relationship", MutationModule6, ticket.id, "tags", tag.id)
+      ]
+
+      assert {:ok, %{"status" => "rejected", "write" => 1, "reason" => reason}} =
+               run(envelope(writes), server())
+
+      assert reason =~ "no allow line that holds covers :tags"
+      assert EntityOperations.get(MutationModule6, ticket.id).status == "open"
+    end
+
+    test "refuses a call by its first write, naming every field it changes" do
+      ticket = create_ticket("closed")
+      tag = create_tag("plain")
+
+      writes = [
+        update_write(MutationModule6, ticket.id, %{"status" => "archived"},
+          stamp: stamp_above(ticket)
+        ),
+        same_call(edge_write("add_relationship", MutationModule6, ticket.id, "tags", tag.id))
+      ]
+
+      assert {:ok, %{"status" => "rejected", "write" => 0, "reason" => reason}} =
+               run(envelope(writes), server())
+
+      assert reason =~ "no allow line that holds covers :status, :tags"
+      assert EntityOperations.get(MutationModule6, ticket.id).status == "closed"
+      assert count_edges(MutationModule6, :tags, ticket.id, tag.id) == 0
+    end
+
+    test "applies a call's edges when every value it puts loses to a newer edit" do
+      ticket = create_ticket("open")
+      tag = create_tag("plain")
+      newer = ticket.__meta__.revisions.status + 1_000_000
+
+      set_revisions(MutationModule6, ticket.id, %{"status" => newer})
+
+      writes = [
+        update_write(MutationModule6, ticket.id, %{"status" => "closed"},
+          based_on: %{"status" => ticket.__meta__.revisions.status},
+          stamp: newer - 1
+        ),
+        same_call(edge_write("add_relationship", MutationModule6, ticket.id, "tags", tag.id))
+      ]
+
+      assert {:ok, %{"dropped" => %{"0" => %{"status" => "closed"}}}} =
+               run(envelope(writes), server())
+
+      assert EntityOperations.get(MutationModule6, ticket.id).status == "open"
+      assert count_edges(MutationModule6, :tags, ticket.id, tag.id) == 1
+    end
+
+    test "answers a write after a call under its own position" do
+      first = create_ticket("open")
+      second = create_ticket("open")
+      tag = create_tag("plain")
+      newer = second.__meta__.revisions.status + 1_000_000
+
+      set_revisions(MutationModule6, second.id, %{"status" => newer})
+
+      writes = [
+        update_write(MutationModule6, first.id, %{"status" => "closed"},
+          stamp: stamp_above(first)
+        ),
+        same_call(edge_write("add_relationship", MutationModule6, first.id, "tags", tag.id)),
+        update_write(MutationModule6, second.id, %{"status" => "closed"},
+          based_on: %{"status" => second.__meta__.revisions.status},
+          stamp: newer - 1
+        )
+      ]
+
+      assert {:ok, %{"status" => "confirmed", "dropped" => dropped, "kept" => kept}} =
+               run(envelope(writes), server())
+
+      assert dropped == %{"2" => %{"status" => "closed"}}
+      assert Map.keys(kept) == ["2"]
     end
 
     test "refuses an update naming a row that is not there" do

@@ -603,7 +603,7 @@ defmodule HologramFeatureTests.MutationsTest do
 
   feature "names the pin a variable's name forgot in a filter in the browser", %{session: session} do
     expected_msg =
-      "unknown attribute :search in HologramFeatureTests.Entities.Note - known attributes: :author_id, :body, :created_at, :id, :pinned, :updated_at - a value from the surrounding code is pinned: ^search"
+      "unknown attribute :search in HologramFeatureTests.Entities.Note - known attributes: :author_id, :body, :created_at, :id, :pinned, :server_created_at, :server_updated_at, :updated_at - a value from the surrounding code is pinned: ^search"
 
     assert_client_error session, Hologram.MisuseError, expected_msg, fn ->
       session
@@ -614,7 +614,7 @@ defmodule HologramFeatureTests.MutationsTest do
 
   feature "names how to read a field of a quantifier's row in the browser", %{session: session} do
     expected_msg =
-      "unknown attribute :position in HologramFeatureTests.Entities.Channel - known attributes: :created_at, :id, :message_count, :name, :updated_at - HologramFeatureTests.Entities.Message declares position, read as message.position"
+      "unknown attribute :position in HologramFeatureTests.Entities.Channel - known attributes: :created_at, :id, :message_count, :name, :server_created_at, :server_updated_at, :updated_at - HologramFeatureTests.Entities.Message declares position, read as message.position"
 
     assert_client_error session, Hologram.MisuseError, expected_msg, fn ->
       session

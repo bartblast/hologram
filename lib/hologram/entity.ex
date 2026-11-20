@@ -18,6 +18,8 @@ defmodule Hologram.Entity do
   @system_attributes [
     {:created_at, :datetime, []},
     {:id, :uuid, []},
+    {:server_created_at, :datetime, []},
+    {:server_updated_at, :datetime, []},
     {:updated_at, :datetime, []}
   ]
 
@@ -317,9 +319,9 @@ defmodule Hologram.Entity do
 
       derived :message_count, :integer, fn messages -> count(messages) end
 
-      derived :unread_count, :integer, fn channel, last_read_at ->
+      derived :unread_count, :integer, fn channel, last_seen_at ->
         channel.messages
-        |> filter(created_at > ^last_read_at)
+        |> filter(server_created_at > ^last_seen_at)
         |> count()
       end
 

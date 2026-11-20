@@ -150,6 +150,8 @@ defmodule Hologram.Migration.ConcurrentApplyTest do
                  "created_at",
                  "id",
                  "priority",
+                 "server_created_at",
+                 "server_updated_at",
                  "title",
                  "title_$search",
                  "title_$sort",

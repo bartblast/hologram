@@ -15,11 +15,13 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Sync.Session
   alias HologramFeatureTests.Entities.Account
+  alias HologramFeatureTests.Entities.Bench
   alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Bookmark
   alias HologramFeatureTests.Entities.Bulletin
   alias HologramFeatureTests.Entities.Cabin
   alias HologramFeatureTests.Entities.Channel
+  alias HologramFeatureTests.Entities.Docket
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Event
   alias HologramFeatureTests.Entities.Folder
@@ -33,7 +35,9 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Message
   alias HologramFeatureTests.Entities.Milestone
   alias HologramFeatureTests.Entities.Note
+  alias HologramFeatureTests.Entities.Notice
   alias HologramFeatureTests.Entities.Parcel
+  alias HologramFeatureTests.Entities.Permit
   alias HologramFeatureTests.Entities.Post
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Project
@@ -45,13 +49,16 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Shelf
   alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Shop
+  alias HologramFeatureTests.Entities.Sticker
   alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Ticket
   alias HologramFeatureTests.Entities.Todo
+  alias HologramFeatureTests.Entities.Tool
   alias HologramFeatureTests.Entities.Topic
   alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Entities.Vault
+  alias HologramFeatureTests.Entities.Workshop
   alias HologramFeatureTests.Jobs.HoldRun
   alias HologramFeatureTests.Jobs.KillRun
   alias HologramFeatureTests.Jobs.RestockItem
@@ -1155,11 +1162,13 @@ defmodule HologramFeatureTests.Helpers do
     tables =
       [
         Account,
+        Bench,
         Booking,
         Bookmark,
         Bulletin,
         Cabin,
         Channel,
+        Docket,
         Document,
         Event,
         Folder,
@@ -1175,7 +1184,9 @@ defmodule HologramFeatureTests.Helpers do
         Message,
         Milestone,
         Note,
+        Notice,
         Parcel,
+        Permit,
         Post,
         Product,
         Project,
@@ -1189,16 +1200,22 @@ defmodule HologramFeatureTests.Helpers do
         Shelf,
         Ship,
         Shop,
+        Sticker,
         Stop,
         Ticket,
         Todo,
+        Tool,
         Topic,
         Trip,
         User,
-        Vault
+        Vault,
+        Workshop
       ]
       |> Enum.map(&Mapper.table_name/1)
-      |> Enum.concat([DB.join_table_name(Message, :labels)])
+      |> Enum.concat([
+        DB.join_table_name(Docket, :stickers),
+        DB.join_table_name(Message, :labels)
+      ])
       |> Enum.map_join(", ", &~s("hologram_data"."#{&1}"))
 
     {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
