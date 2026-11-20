@@ -730,6 +730,94 @@ describe("SyncStream", () => {
       assert.isTrue(postingState.calledOnce);
     });
 
+    // The frame itself reaches the other tabs only once it is stored, so the state the first frame
+    // tells them already names the model the server runs.
+    for (const [event, frame] of [
+      ["sync_deltas", {applied_seq: null, cursor: null, deltas: {}}],
+      ["synced", {cursor: null, scope: "all"}],
+    ]) {
+      it(`tells the group the server's model with the state a first ${event} frame tells it`, () => {
+        let toldModelHash;
+        postingState.callsFake(() => {
+          toldModelHash = SyncStream.servedModelHash;
+        });
+
+        sinon.stub(Durability, "persistFrame").resolves();
+        Tabs.name = "hologram.1.a3f9c2.anonymous";
+
+        try {
+          eventSource.listeners[event]({
+            data: JSON.stringify({
+              ...frame,
+              model_hash: "b7e1d4",
+              protocol_version: 1,
+            }),
+          });
+        } finally {
+          Tabs.name = null;
+        }
+
+        assert.equal(toldModelHash, "b7e1d4");
+      });
+    }
+
+    // A returning tab is first sent a resync, which names no model, and its refill's frames reach the
+    // other tabs only once they are stored.
+    it("tells the group a model the server names after the first frame", () => {
+      const toldModelHashes = [];
+      postingState.callsFake(() => {
+        toldModelHashes.push(SyncStream.servedModelHash);
+      });
+
+      sinon.stub(Durability, "persistFrame").returns(new Promise(() => {}));
+      sinon.stub(Durability, "clear");
+      Tabs.name = "hologram.1.a3f9c2.anonymous";
+
+      try {
+        eventSource.listeners.sync_resync({
+          data: JSON.stringify({protocol_version: 1, reason: "synced_types"}),
+        });
+
+        eventSource.listeners.sync_deltas({
+          data: JSON.stringify({
+            applied_seq: null,
+            cursor: null,
+            deltas: {},
+            model_hash: "b7e1d4",
+            protocol_version: 1,
+          }),
+        });
+      } finally {
+        Tabs.name = null;
+      }
+
+      assert.deepStrictEqual(toldModelHashes, [null, "b7e1d4"]);
+    });
+
+    it("tells the group nothing again for a model it told already", () => {
+      sinon.stub(Durability, "persistFrame").resolves();
+      Tabs.name = "hologram.1.a3f9c2.anonymous";
+
+      const frame = {
+        data: JSON.stringify({
+          applied_seq: null,
+          cursor: null,
+          deltas: {},
+          model_hash: "b7e1d4",
+          protocol_version: 1,
+        }),
+      };
+
+      try {
+        eventSource.listeners.sync_deltas(frame);
+        eventSource.listeners.sync_deltas(frame);
+      } finally {
+        Tabs.name = null;
+      }
+
+      assert.isTrue(postingState.calledOnce);
+    });
+
     it("tells nobody when this tab is in no group", () => {
       eventSource.listeners.synced({
         data: JSON.stringify({

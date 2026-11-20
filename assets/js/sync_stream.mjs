@@ -165,7 +165,7 @@ export default class SyncStream {
     eventSource.addEventListener("sync_deltas", (event) => {
       const frame = JSON.parse(event.data);
 
-      $.markServed();
+      $.markServedBy(frame.model_hash);
       const written = $.receiveFrame("sync_deltas", frame);
 
       // Behind memory, and only what the STREAM delivered: the rows this frame wrote, and the
@@ -224,7 +224,7 @@ export default class SyncStream {
     eventSource.addEventListener("synced", (event) => {
       const frame = JSON.parse(event.data);
 
-      $.markServed();
+      $.markServedBy(frame.model_hash);
 
       $.receiveFrame("synced", frame);
 
@@ -396,11 +396,32 @@ export default class SyncStream {
     }
   }
 
-  // Keeps the model the server says it runs. A frame of a build from before frames named it names
-  // none, which says nothing.
+  // Keeps the model the server says it runs, answering whether that changed what this tab knew. A
+  // frame of a build from before frames named it names none, which says nothing.
   static noteServedModel(modelHash) {
-    if (typeof modelHash === "string") {
-      $.servedModelHash = modelHash;
+    if (typeof modelHash !== "string" || modelHash === $.servedModelHash) {
+      return false;
+    }
+
+    $.servedModelHash = modelHash;
+
+    return true;
+  }
+
+  // What a frame naming the server's model tells the group, ahead of the frame itself, which
+  // reaches the other tabs only once it is stored: one navigating meanwhile has to know already
+  // what model the server runs (see servedAcrossModels). The first frame served tells it with the
+  // rest of the state (see markServed). A model the server names later - the first frame of a
+  // returning tab is a resync, which names none, and a reconnect can reach a node of another
+  // build - is told with the state again.
+  static markServedBy(modelHash) {
+    const wasServed = $.served;
+    const changed = $.noteServedModel(modelHash);
+
+    $.markServed();
+
+    if (wasServed && changed && Tabs.name !== null) {
+      Tabs.postState();
     }
   }
 
