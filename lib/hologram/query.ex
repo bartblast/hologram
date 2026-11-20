@@ -219,7 +219,7 @@ defmodule Hologram.Query do
       `any:`, `none:` or `all:` entry pairing a list of relationships with a predicate list about
       one related row is a quantifier (`[any: {[:messages], [author_id: id]}]`), inside which
       `{:outer, levels, name}` names an attribute or a path of the row that many quantifiers out
-      (`[any: {[:messages], [created_at: {:>, {:attribute, {:outer, 1, :last_read_at}}}]}]`)
+      (`[any: {[:messages], [server_created_at: {:>, {:attribute, {:outer, 1, :last_seen_at}}}]}]`)
 
   Each predicate becomes one or more `{attribute, operator, value}` triples, a disjunction one
   `{:or, alternatives}` clause and a quantifier one `{quantifier, {source, clauses}}` clause,
@@ -251,16 +251,17 @@ defmodule Hologram.Query do
   through other relationships when it is written as a path (`channel.messages`). Through a set, the
   related rows are the ones every path reaches, each once - `any(message <- channels.messages, ...)`
   asks about every message of every channel. Inside the condition the bound name is one related row
-  and a bare name is still the queried row's - `message.created_at > last_read_at` compares the
-  message with the row being filtered - and a value from the surrounding code is pinned. A bound
-  name hides a relationship or attribute of the queried row of the same name inside the condition.
+  and a bare name is still the queried row's - `message.server_created_at > last_seen_at` compares
+  the message with the row being filtered - and a value from the surrounding code is pinned. A
+  bound name hides a relationship or attribute of the queried row of the same name inside the
+  condition.
 
       Channel |> filter(any(messages))
       Channel |> filter(none(message <- messages, message.author_id == ^user_id))
       Project |> filter(all(task <- tasks, task.status == :done))
 
       ChannelUserState
-      |> filter(any(message <- channel.messages, message.created_at > last_read_at))
+      |> filter(any(message <- channel.messages, message.server_created_at > last_seen_at))
 
   A quantifier is a condition like any other: joined with `and`, one side of `or`, or inside
   another quantifier's condition, where the names bound around it read their rows -

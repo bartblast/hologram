@@ -4393,6 +4393,7 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
+                 ~s/"server_created_at":"datetime","server_updated_at":"datetime",/ <>
                  ~s/"updated_at":"datetime"},"constraints":{},"creatorRoles":[],/ <>
                  ~s/"defaults":{"c":Type.atom("x")},"derived":{},/ <>
                  ~s/"enumValues":{"c":["x","y"]},"expandedRoles":{},"frameworkAttributes":[],"inverses":{},/ <>

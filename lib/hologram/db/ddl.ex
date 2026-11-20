@@ -386,8 +386,9 @@ defmodule Hologram.DB.DDL do
   Returns the DDL statements that execute the given change op, in execution order.
 
   :create_table renders one statement with all columns and the named primary key
-  constraint - columns are laid out in canonical order (id first, created_at and
-  updated_at last, everything else alphabetical). :add_column, :drop_column, and
+  constraint - columns are laid out in canonical order (id first, the timestamps -
+  created_at, server_created_at, server_updated_at and updated_at - last, everything
+  else alphabetical). :add_column, :drop_column, and
   :drop_table render one statement each. :alter_column renders one ALTER TABLE
   statement combining a type action (with COLLATE and a USING cast) and a nullability
   action, as needed.
@@ -630,6 +631,10 @@ defmodule Hologram.DB.DDL do
   defp column_order_key("id"), do: {0, "id"}
 
   defp column_order_key("created_at"), do: {2, "created_at"}
+
+  defp column_order_key("server_created_at"), do: {2, "server_created_at"}
+
+  defp column_order_key("server_updated_at"), do: {2, "server_updated_at"}
 
   defp column_order_key("updated_at"), do: {2, "updated_at"}
 

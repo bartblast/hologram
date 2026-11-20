@@ -209,8 +209,8 @@ defmodule Hologram.Test.Helpers do
   def insert_global_grant(user_id, role) do
     insert_sql =
       ~s|INSERT INTO "hologram_data"."hologram_role_grant" | <>
-        ~s|("id", "user_id", "role", "created_at", "updated_at", "$revisions") | <>
-        ~s|VALUES ($1, $2, $3::"hologram_data"."hologram_role_grant_role_$enum", $4, $4, '{}')|
+        ~s|("id", "user_id", "role", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
+        ~s|VALUES ($1, $2, $3::"hologram_data"."hologram_role_grant_role_$enum", $4, $4, $4, $4, '{}')|
 
     params = [
       Codec.encode(Entity.generate_id(), :uuid),

@@ -237,6 +237,8 @@ defmodule Hologram.Auth.RoleGrantTest do
                entity_id: nil,
                entity_type: nil,
                role: nil,
+               server_created_at: nil,
+               server_updated_at: nil,
                updated_at: nil,
                user: %NotIncluded{relationship: :user},
                user_id: nil
@@ -279,6 +281,8 @@ defmodule Hologram.Auth.RoleGrantTest do
     assert RoleGrant.__system_attributes__() == [
              {:created_at, :datetime, []},
              {:id, :uuid, []},
+             {:server_created_at, :datetime, []},
+             {:server_updated_at, :datetime, []},
              {:updated_at, :datetime, []}
            ]
   end

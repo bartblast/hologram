@@ -58,9 +58,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   defp insert_module2_row(b_value, c_value) do
     statement = """
     INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-      ("id", "a", "b", "c", "created_at", "updated_at", "$revisions")
+      ("id", "a", "b", "c", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
     VALUES ('00000000-0000-0000-0000-000000000001', TRUE, #{b_value}, #{c_value},
-            '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+            '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
     """
 
     {:ok, _result} = Connection.query(statement)
@@ -83,9 +83,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     |> Enum.each(fn {c_value, index} ->
       statement = """
       INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-        ("id", "a", "b", "c", "created_at", "updated_at", "$revisions")
+        ("id", "a", "b", "c", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-00000000000#{index}', TRUE, NULL, '#{c_value}',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(statement)
@@ -177,8 +177,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     {:ok, _result} =
       Connection.query("""
       INSERT INTO "hologram_data"."test_fixtures_entity_module1"
-        ("id", "created_at", "updated_at", "$revisions")
-      VALUES ('#{module1_id}', now(), now(), '{}')
+        ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+      VALUES ('#{module1_id}', now(), now(), now(), now(), '{}')
       """)
 
     insert_module2_row("NULL", "'x'")
@@ -186,8 +186,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     {:ok, _result} =
       Connection.query("""
       INSERT INTO "hologram_data"."test_fixtures_entity_module3"
-        ("id", "c_id", "created_at", "updated_at", "$revisions")
-      VALUES ('#{module3_id}', '#{module1_id}', now(), now(), '{}')
+        ("id", "c_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+      VALUES ('#{module3_id}', '#{module1_id}', now(), now(), now(), now(), '{}')
       """)
 
     {:ok, _result} =
@@ -201,9 +201,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   defp insert_module4_row(c_value) do
     insert_statement = """
     INSERT INTO "hologram_data"."test_fixtures_entity_module4"
-      ("id", "a", "b", "c", "d", "created_at", "updated_at", "$revisions")
+      ("id", "a", "b", "c", "d", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
     VALUES ('00000000-0000-0000-0000-000000000001', '2026-01-01', '2026-01-01 00:00:00+00',
-            '#{c_value}', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+            '#{c_value}', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
     """
 
     {:ok, _result} = Connection.query(insert_statement)
@@ -1462,10 +1462,10 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         {:ok, _result} =
           Connection.query("""
           INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-            ("id", "a", "b", "c", "y", "z", "created_at", "updated_at", "$revisions")
+            ("id", "a", "b", "c", "y", "z", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
           VALUES ('00000000-0000-0000-0000-00000000000#{index}', TRUE, NULL, 'abc',
                   '#{y_value}', '#{z_value}',
-                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
           """)
       end)
 
@@ -1703,9 +1703,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       insert_statement = """
       INSERT INTO "hologram_data"."test_fixtures_entity_module4"
-        ("id", "a", "b", "c", "d", "created_at", "updated_at", "$revisions")
+        ("id", "a", "b", "c", "d", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-000000000001', '2026-01-01', '2026-01-01 00:00:00+00',
-              'y', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              'y', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert_statement)
@@ -1902,20 +1902,20 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       {:ok, _result} =
         Connection.query("""
         INSERT INTO "hologram_data"."test_fixtures_entity_module26"
-          ("id", "name", "name_$sort", "created_at", "updated_at", "$revisions")
+          ("id", "name", "name_$sort", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
         VALUES ('00000000-0000-0000-0000-000000000001', 'general', NULL,
-                '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+                '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
         """)
 
       Enum.each(1..2, fn index ->
         {:ok, _result} =
           Connection.query("""
           INSERT INTO "hologram_data"."test_fixtures_entity_module27"
-            ("id", "channel_id", "code", "summary", "summary_$sort", "created_at", "updated_at",
+            ("id", "channel_id", "code", "summary", "summary_$sort", "created_at", "server_created_at", "server_updated_at", "updated_at",
              "$revisions")
           VALUES ('00000000-0000-0000-0000-00000000001#{index}',
                   '00000000-0000-0000-0000-000000000001', NULL, 'welcome', NULL,
-                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
           """)
       end)
 
