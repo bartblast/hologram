@@ -467,7 +467,7 @@ export default class Tabs {
       // A state that sent this tab back to the store (see #takeStore): what follows it is about
       // what the read brings, so it waits for the read. Only a tab that follows reads it, so there
       // is no lead to carry over - one the group hands it during the read is taken by the ready()
-      // that ends it (see #wait), unless the read fails and the tab leaves the group instead.
+      // that ends it (see #wait), which takes it from nowhere when the read failed.
       if (!Tabs.#ready) {
         Tabs.#held = held.slice(index + 1);
 
@@ -788,7 +788,7 @@ export default class Tabs {
   // names (see #takeState) - and the tab starting up again while it reads: what the group says
   // meanwhile is about the rows and the place the read brings, so it is held, and applied after
   // in the order it arrived (see ready()). A lead the group hands this tab meanwhile is taken then
-  // too, from the place the read left - unless the read fails, when the tab leaves the group.
+  // too, from the place the read left - or from nowhere, when the read fails.
   //
   // The read starts as the state arrives, so after every write the state was posted behind: a
   // leader repairs the store before it says what it holds, and posts frames only once they are
@@ -804,15 +804,17 @@ export default class Tabs {
   // - It holds another place: every row the stream vouched for goes, and every row the store holds
   //   comes in as the store holds it, and the place with them. A row only the page carried stays,
   //   carried, for a completeness claim to judge. Then the claims, which are about those rows.
-  // - It cannot be read: the tab leaves the group (see below).
+  // - It cannot be read: the tab leaves the group, or starts over if the group handed it the lead
+  //   meanwhile (see below).
   //
   // What that costs, a round trip at most. A tab that heard a frame the new leader passed over goes
   // back to the store's rows until the stream sends that frame again; a batch the dropped frame
   // landed folds without those writes meanwhile, and a row a confirmed batch promoted is gone
   // until the frame that stored it is replayed. And a stream reconnecting while a tab handed the
   // lead still reads greets with sync, which the lead's own reconnect replaces. A read that fails
-  // costs more, and is rarer: the page keeps nothing from then on, and its own pending writes
-  // leave its screen, to land through the group's leader, which sends them from the queue.
+  // costs more, and is rarer: a tab that leaves keeps nothing from then on, and its own pending
+  // writes leave its screen, to land through the group's leader, which sends them from the queue;
+  // a tab that takes the lead instead asks the server for everything.
   static async #takeStore(message) {
     Tabs.#ready = false;
 
@@ -829,12 +831,17 @@ export default class Tabs {
     // leaves the group, as a tab whose store cannot be read at boot does (see DataLayer.boot), and
     // stops using the store: it was never the one sending, so it takes a fresh identity, lets its
     // batches go and opens a stream of its own, which greets the server from the place it holds
-    // (see Tabs.dissolve). That holds for a lead handed to it during the read too - it never took
-    // it, and the group's next tab in line takes it instead.
+    // (see Tabs.dissolve).
     //
-    // A write this tab is still saving is saved and told to the group first: the group's leader
-    // then sends it at once. Told after, the message would go nowhere, and the write would wait
-    // in the store for whatever next wakes the leader. And the tab can have left meanwhile.
+    // Unless the group handed it the lead meanwhile. Leaving would let go of the lock, and with no
+    // tab waiting for it nobody would send the queue - its own writes among it - until a page
+    // load. So it takes the lead from nowhere instead: the place it holds goes, and the lead starts
+    // over (see #lead), which asks the server for everything and sends the queue under the group's
+    // identity.
+    //
+    // A write this tab is still saving is saved and told to the group first: a leader then sends it
+    // at once. Told after, the message would go nowhere, and the write would wait in the store for
+    // whatever next wakes the leader. And the tab can have left meanwhile.
     if (base === null) {
       await Batches.recorded();
 
@@ -842,17 +849,20 @@ export default class Tabs {
         return;
       }
 
-      Durability.detach();
-      Tabs.leader = false;
-      Tabs.dissolve();
+      if (!Tabs.#leadWhenReady) {
+        Durability.detach();
+        Tabs.dissolve();
 
-      return;
+        return;
+      }
+
+      SyncStream.syncCursor = null;
     }
 
     // Ready again whatever happens below: a tab that never is holds everything the group says for
     // the rest of its life.
     try {
-      if (base.cursor === null) {
+      if (base === null || base.cursor === null) {
         Tabs.#takeRules(message);
       } else {
         if (base.records !== null) {

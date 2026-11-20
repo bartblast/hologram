@@ -2019,18 +2019,49 @@ describe("Tabs", () => {
         assert.isFalse(disowning.called);
       });
 
-      // It never took the lead, so it leaves as the follower it was, and the next tab in line leads.
-      it("leaves the group as a follower when it was handed the lead while it read", async () => {
+      // Leaving would let go of the lock, and with nobody waiting for it nobody would send the queue.
+      it("starts over as the leader when it was handed the lead while its writes were saved", async () => {
+        let saved;
+
+        sinon.stub(Durability, "readBase").resolves(null);
+
+        const detaching = sinon.stub(Durability, "detach");
+
+        sinon
+          .stub(Batches, "recorded")
+          .returns(new Promise((resolve) => (saved = resolve)));
+
+        const led = sinon.spy();
+        const {group, release} = await follow({onLead: led});
+
+        Tabs.receive(state("place-2"));
+        await waitForEventLoop();
+
+        release();
+        await waitForEventLoop();
+
+        saved();
+        await waitForEventLoop();
+
+        assert.isTrue(led.calledOnce);
+        assert.isNull(SyncStream.syncCursor);
+        assert.isFalse(detaching.called);
+        assert.isFalse(await isLockFree(group));
+      });
+
+      it("starts over as the leader when it was handed the lead while a read failed", async () => {
         let read;
 
         sinon
           .stub(Durability, "readBase")
           .returns(new Promise((resolve) => (read = resolve)));
 
-        sinon.stub(Durability, "detach");
-
+        const detaching = sinon.stub(Durability, "detach");
         const disowning = sinon.stub(Batches, "disown");
-        const led = sinon.spy();
+
+        let placed;
+
+        const led = sinon.spy(() => (placed = SyncStream.syncCursor));
         const {group, release} = await follow({onLead: led});
 
         Tabs.receive(state("place-2"));
@@ -2038,14 +2069,16 @@ describe("Tabs", () => {
         release();
         await waitForEventLoop();
 
-        assert.isTrue(Tabs.leader);
-
         read(null);
         await waitForEventLoop();
 
-        assert.isFalse(led.called);
-        assert.isTrue(disowning.calledOnce);
-        assert.isTrue(await isLockFree(group));
+        // From nowhere: leaving would let go of the lock with nobody waiting for it.
+        assert.isTrue(led.calledOnce);
+        assert.isNull(placed);
+        assert.equal(Tabs.name, group);
+        assert.isFalse(detaching.called);
+        assert.isFalse(disowning.called);
+        assert.isFalse(await isLockFree(group));
       });
 
       // Not ready, it would hold everything its group says for the rest of its life.
