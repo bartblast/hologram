@@ -441,6 +441,74 @@ defmodule Hologram.Job.WorkerTest do
       assert_receive {:ran, Module1, "a"}, @timeout_ms
     end
 
+    # A browser picks the id of a row it creates, so a job of another type can hold the same id -
+    # and it never failed.
+    test "leaves out only the job of the type whose run went down" do
+      queues = start_queues(%{})
+      test_pid = self()
+      crashing = crashing_run_stub(test_pid, fn -> Process.exit(self(), :kill) end)
+      running = run_stub(test_pid, queues)
+
+      run = fn
+        Module1, id -> crashing.(Module1, id)
+        job_type, id -> running.(job_type, id)
+      end
+
+      worker = start_worker_on!(queues, release: release_stub(test_pid), run: run)
+      await_first_look()
+
+      add_jobs(queues, Module1, ["a"])
+      wake(worker)
+      assert_receive {:ran, Module1, "a"}, @timeout_ms
+      assert_receive {:released, "a"}, @timeout_ms
+      :sys.get_state(worker)
+      flush_asks()
+
+      # The wake leaves Module1's "a" out until the next poll, and not Module3's.
+      add_jobs(queues, Module3, ["a"])
+      wake(worker)
+
+      skip_ids = MapSet.new(["a"])
+
+      assert_receive {:asked, Module1, ^skip_ids}, @timeout_ms
+      assert_receive {:asked, Module3, module_3_skip_ids}, @timeout_ms
+      assert module_3_skip_ids == MapSet.new()
+      assert_receive {:ran, Module3, "a"}, @timeout_ms
+    end
+
+    test "leaves out only the job of the type whose run lock another session holds" do
+      queues = start_queues(%{})
+      test_pid = self()
+      locking = run_stub(test_pid, queues, fn _id -> :locked end)
+      blocking = blocking_run_stub(test_pid, queues)
+
+      run = fn
+        Module1, id -> locking.(Module1, id)
+        job_type, id -> blocking.(job_type, id)
+      end
+
+      worker = start_worker_on!(queues, max_concurrency: fn _job_type -> 1 end, run: run)
+      await_first_look()
+
+      # Module3's "b" runs while Module1's "a" is left out. Once "b" ends, the look of Module3 alone
+      # that follows finds Module3's "a".
+      add_jobs(queues, Module1, ["a"])
+      add_jobs(queues, Module3, ["b"])
+      wake(worker)
+      assert_receive {:ran, Module1, "a"}, @timeout_ms
+      assert_receive {:running, Module3, "b", run_pid}, @timeout_ms
+
+      # The look after Module1's :locked answer, which has passed "a" over.
+      skip_ids = MapSet.new(["a"])
+
+      assert_receive {:asked, Module1, ^skip_ids}, @timeout_ms
+
+      add_jobs(queues, Module3, ["a"])
+      send(run_pid, :finish)
+
+      assert_receive {:running, Module3, "a", _run_pid}, @timeout_ms
+    end
+
     # A hold on the data model refuses the claim, and asking again at once would be refused the
     # same way for as long as the hold stands.
     test "leaves a job whose run finds the data model under a hold until the next wake" do
@@ -795,6 +863,36 @@ defmodule Hologram.Job.WorkerTest do
 
         wake(worker)
         assert_receive {:ran, Module1, "a"}, @timeout_ms
+      end)
+    end
+
+    # Only the type's own runs hold locks the sweep would find held: another type's run with the
+    # same id is no reason to leave this type's row running.
+    test "sweeps the type of a run that went down, leaving out that type's own runs alone" do
+      queues = start_queues(%{})
+      test_pid = self()
+      blocking = blocking_run_stub(test_pid, queues)
+      crashing = crashing_run_stub(test_pid, fn -> Process.exit(self(), :kill) end)
+
+      run = fn
+        Module1, id -> crashing.(Module1, id)
+        job_type, id -> blocking.(job_type, id)
+      end
+
+      worker = start_worker_on!(queues, run: run, sweep: sweep_stub(test_pid))
+      assert_receive {:swept, _job_types, _skip_ids}, @timeout_ms
+      await_first_look()
+
+      add_jobs(queues, Module3, ["x"])
+      wake(worker)
+      assert_receive {:running, Module3, "x", _run_pid}, @timeout_ms
+
+      add_jobs(queues, Module1, ["x"])
+
+      capture_log(fn ->
+        wake(worker)
+        assert_receive {:swept, [Module1], skip_ids}, @timeout_ms
+        assert skip_ids == MapSet.new()
       end)
     end
 

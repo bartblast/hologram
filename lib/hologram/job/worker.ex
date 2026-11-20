@@ -160,7 +160,7 @@ defmodule Hologram.Job.Worker do
     ended_state = %{state | runs: runs}
 
     if result in [:held, :locked] do
-      passed_state = pass_over(ended_state, id)
+      passed_state = pass_over(ended_state, job_type, id)
 
       {:noreply, fill(passed_state, [job_type])}
     else
@@ -194,13 +194,13 @@ defmodule Hologram.Job.Worker do
     state =
       case reason do
         {%DBConnection.ConnectionError{}, _stacktrace} ->
-          pass_over(%{state | runs: runs}, id)
+          pass_over(%{state | runs: runs}, job_type, id)
 
         _other ->
-          %{state | gone_down: MapSet.put(state.gone_down, id), runs: runs}
+          %{state | gone_down: MapSet.put(state.gone_down, {job_type, id}), runs: runs}
       end
 
-    case guard(fn -> state.sweep.([job_type], running_ids(state.runs)) end) do
+    case guard(fn -> state.sweep.([job_type], running_ids(state.runs, job_type)) end) do
       {:ok, :ok} -> {:noreply, fill(state, [job_type])}
       _stop_or_skip -> {:noreply, state}
     end
@@ -234,19 +234,24 @@ defmodule Hologram.Job.Worker do
     Enum.reduce_while(job_types, state, &fill_type(&2, &1, logging))
   end
 
-  # The skip set holds the type's own runs, not every type's - an id of another type's is never in
-  # this type's table, and would only make the read longer - and the jobs left out of the looks for
-  # now, of every type, which are few.
+  # The skip set holds the type's own jobs alone - its runs, and the ones left out of the looks for
+  # now. An id is unique only within its type's table, and a browser picks the id of a row it
+  # creates, so a job of another type can hold the same id: skipping it would hold up a job that
+  # never failed.
   #
   # The limit is read inside the guard, like the look: a job type whose module is gone - deleted in
   # dev while one of its runs was in flight - raises reading it, and crashing on that would kill
   # every other run on the node.
   defp fill_type(state, job_type, logging) do
+    left_out =
+      for {^job_type, id} <- MapSet.union(state.passed_over, state.gone_down),
+          into: MapSet.new(),
+          do: id
+
     skip_ids =
       state.runs
       |> running_ids(job_type)
-      |> MapSet.union(state.passed_over)
-      |> MapSet.union(state.gone_down)
+      |> MapSet.union(left_out)
 
     look = fn ->
       free = state.max_concurrency.(job_type) - running_count(state, job_type)
@@ -328,8 +333,8 @@ defmodule Hologram.Job.Worker do
     end
   end
 
-  defp pass_over(state, id) do
-    %{state | passed_over: MapSet.put(state.passed_over, id)}
+  defp pass_over(state, job_type, id) do
+    %{state | passed_over: MapSet.put(state.passed_over, {job_type, id})}
   end
 
   # A model hold refuses a claim before it changes anything, so the row stays queued. A hold that
@@ -346,7 +351,7 @@ defmodule Hologram.Job.Worker do
   end
 
   # The jobs this node runs, whose locks its own session holds: a sweep would find them held, and a
-  # look must not start one twice.
+  # look must not start one twice. The ids of every type's runs, or of one type's.
   defp running_ids(runs) do
     MapSet.new(runs, fn {_ref, {_job_type, id}} -> id end)
   end
