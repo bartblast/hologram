@@ -15,7 +15,7 @@ defmodule HologramMinimalTests.MixProject do
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
-       ref: "f537dc1b48edf4e79106d50bf6a3316a0c7f9c97"},
+       ref: "b361a2d706f73595543976e64adc933cca6ab669"},
       {:jason, "~> 1.0"},
       {:phoenix, "~> 1.7"}
     ]
