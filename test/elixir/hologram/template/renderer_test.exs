@@ -3040,10 +3040,17 @@ defmodule Hologram.Template.RendererTest do
       %{tree: tree} = render_page(Module48, @params, @server, @opts)
 
       printed_with_fills =
-        print_dom(tree, fills: %{"boot_data" => "<boot />", "chunk_script_tags" => "<chunks />"})
+        print_dom(tree,
+          fills: %{
+            "boot_data" => "<boot />",
+            "chunk_script_tags" => "<chunks />",
+            "data_model_script_tag" => "<data_model />"
+          }
+        )
 
       assert String.contains?(printed_with_fills, "<boot />")
       assert String.contains?(printed_with_fills, "<chunks />")
+      assert String.contains?(printed_with_fills, "<data_model />")
       refute String.contains?(printed_with_fills, "hologram-fill")
       refute String.contains?(printed_with_fills, "Type.")
     end
@@ -4125,6 +4132,22 @@ defmodule Hologram.Template.RendererTest do
       assert Renderer.chunk_script_tags(["AAAAAAAA", "BBBBBBBB"], @csp_nonce) ==
                ~s'<script nonce="#{@csp_nonce}" async src="/hologram/chunk-AAAAAAAA.js"></script>' <>
                  ~s'<script nonce="#{@csp_nonce}" async src="/hologram/chunk-BBBBBBBB.js"></script>'
+    end
+  end
+
+  describe "data_model_script_tag/2" do
+    test "the script tag of the data model bundle" do
+      assert Renderer.data_model_script_tag("/hologram/data-model-AAAAAAAA.js", nil) ==
+               ~s'<script async src="/hologram/data-model-AAAAAAAA.js"></script>'
+    end
+
+    test "the CSP nonce on the script tag" do
+      assert Renderer.data_model_script_tag("/hologram/data-model-AAAAAAAA.js", @csp_nonce) ==
+               ~s'<script nonce="#{@csp_nonce}" async src="/hologram/data-model-AAAAAAAA.js"></script>'
+    end
+
+    test "no script tag for a build with no data model bundle" do
+      assert Renderer.data_model_script_tag(nil, @csp_nonce) == ""
     end
   end
 

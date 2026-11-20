@@ -240,6 +240,60 @@ export default class Hologram {
     }
   }
 
+  // Made public to make tests easier
+  //
+  // Sets globalThis.Hologram.sync from the data model bundle, which a build with a data layer loads
+  // next to the runtime (see Hologram.Compiler.build_data_model_js/1). The bundle cannot set it when
+  // it runs: its terms are built with the runtime's classes, and it can run before the runtime does.
+  // So it leaves a function behind and dispatches hologram:dataModelLoaded, and this calls the
+  // function with the deps, whichever of the two scripts ran first. Resolves at once when the
+  // runtime set the constants itself, which a build without a data layer does, to null.
+  //
+  // The document's async scripts hold back its load event, so a bundle that is not in when the
+  // document has loaded never came: it could not be fetched, or the document names none. Rejected
+  // then, rather than leaving the boot waiting in silence.
+  static defineDataModel() {
+    if (globalThis.Hologram.sync !== undefined) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      const settle = () => {
+        document.removeEventListener("hologram:dataModelLoaded", settle);
+        window.removeEventListener("load", settle);
+
+        const define = globalThis.Hologram.pendingDataModel;
+
+        if (define === undefined) {
+          reject(
+            new HologramRuntimeError("Failed to load the data model bundle"),
+          );
+
+          return;
+        }
+
+        delete globalThis.Hologram.pendingDataModel;
+
+        try {
+          define(Hologram.#deps);
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      if (
+        globalThis.Hologram.pendingDataModel !== undefined ||
+        document.readyState === "complete"
+      ) {
+        settle();
+      } else {
+        document.addEventListener("hologram:dataModelLoaded", settle);
+        window.addEventListener("load", settle);
+      }
+    });
+  }
+
   // Public API for dispatching actions from JavaScript.
   // Converts plain JS values to Hologram types and schedules the action for execution.
   // Example: globalThis.Hologram.dispatchAction("increment", "page", {amount: 5})
@@ -2087,11 +2141,15 @@ export default class Hologram {
   // Executed only once, on the initial page load.
   // Deps: [:maps.get/2]
   static async #init() {
-    // First, since the ETS tables restored below can hold stored functions, which compile through a
+    // First, since everything below can read the data model: the handlers registered here as much
+    // as the boot itself.
+    await $.defineDataModel();
+
+    // Next, since the ETS tables restored below can hold stored functions, which compile through a
     // script element that needs the nonce.
     App.loadCspNonce();
 
-    // Next, since the snapshot check below reads the page digest and the asset manifest from it.
+    // Then, since the snapshot check below reads the page digest and the asset manifest from it.
     $.readBootData();
 
     window.addEventListener("error", (event) => {
@@ -2143,9 +2201,10 @@ export default class Hologram {
     // compared with.
     IdentityTracker.init(globalThis.Hologram.identityTag);
 
-    // Recorded before anything is awaited: a jump to a #fragment can come at any point from here
-    // on. Neither branch below changes the URL, and a snapshot restored at boot is of the page the
-    // document was loaded for, under that URL.
+    // Recorded before anything else is awaited: a jump to a #fragment can come at any point from
+    // here on, and the data model awaited above comes before the handlers that read this. Neither
+    // branch below changes the URL, and a snapshot restored at boot is of the page the document was
+    // loaded for, under that URL.
     $.pagePath = window.location.pathname;
 
     // The entry carries an id when the tab has been on it before: gone back or forward to,

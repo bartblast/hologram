@@ -2565,6 +2565,40 @@ defmodule Hologram.ControllerTest do
                ~r'<script nonce="[^"]+" async src="/hologram/chunk-DDDDDDDD\.js"></script>'
     end
 
+    test "loads the data model bundle, before the runtime, when the build has one" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+      AssetPathRegistry.register("hologram/data-model.js", "/hologram/data-model-AAAAAAAA.js")
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      data_model_tag =
+        ~r'<script nonce="[^"]+" async src="/hologram/data-model-AAAAAAAA\.js"></script>'
+
+      assert [{data_model_tag_index, _length}] =
+               Regex.run(data_model_tag, conn.resp_body, return: :index)
+
+      [{runtime_tag_index, _length}] =
+        Regex.run(~r'<script[^>]* src="/hologram/runtime-', conn.resp_body, return: :index)
+
+      assert data_model_tag_index < runtime_tag_index
+    end
+
+    test "loads no data model bundle when the build has none" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      refute conn.resp_body =~ "data-model"
+    end
+
     test "stamps the nonce the client is given on every script tag, chunk tags included" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
 
@@ -2618,6 +2652,27 @@ defmodule Hologram.ControllerTest do
       # real block from an injected one by.
       assert conn.resp_body =~ ~s'<script nonce="#{@csp_nonce}" type="application/json"'
       assert length(Regex.scan(~r/nonce=/, conn.resp_body)) == 1
+    end
+
+    test "gives the data model script tag no nonce when scripts are not among the stamped kinds" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+      AssetPathRegistry.register("hologram/data-model.js", "/hologram/data-model-AAAAAAAA.js")
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> Plug.Conn.fetch_cookies()
+        |> handle_page_request(Module34, %{}, [],
+          csp_nonce: @csp_nonce,
+          csp_nonced_elements: ["link", "style"],
+          csrf_token: @masked_csrf_token,
+          initial_page?: true,
+          instance_id: "test-instance-id"
+        )
+
+      assert conn.resp_body =~
+               ~s'<script async src="/hologram/data-model-AAAAAAAA.js"></script>'
     end
 
     test "carries the boot data in a block with the nonce the client is given" do

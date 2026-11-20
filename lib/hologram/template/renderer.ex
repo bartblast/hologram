@@ -251,6 +251,28 @@ defmodule Hologram.Template.Renderer do
     end)
   end
 
+  @doc """
+  Builds the script tag of the data model bundle at the given path, printed where the Runtime
+  component's `data_model_script_tag` marker sits (see `print_dom/2`), or nothing when the build
+  has no data model bundle (see `Hologram.Compiler.build_data_model_js/1`). The path is the asset
+  path registry's, which names the compiler's own file and needs no escaping.
+
+  The script tag carries the given Content Security Policy nonce like the chunk script tags do (see
+  `chunk_script_tags/2`), or no nonce when it is `nil`.
+
+  ## Examples
+
+      iex> data_model_script_tag("/hologram/data-model-AAAAAAAA.js", "abc123")
+      ~s(<script nonce="abc123" async src="/hologram/data-model-AAAAAAAA.js"></script>)
+  """
+  @spec data_model_script_tag(String.t() | nil, String.t() | nil) :: String.t()
+  def data_model_script_tag(nil, _csp_nonce), do: ""
+
+  def data_model_script_tag(data_model_bundle_path, csp_nonce) do
+    nonce_attribute_html = if csp_nonce, do: ~s( nonce="#{csp_nonce}"), else: ""
+    ~s(<script#{nonce_attribute_html} async src="#{data_model_bundle_path}"></script>)
+  end
+
   # TODO: revisit this shape when the vdom renderer and the template format are rewritten. It was
   # chosen for a client that rebuilds boxed terms from it; a client that walks plain JavaScript
   # literals wants a different one, and the object-attribute forms ruled out here become eligible
