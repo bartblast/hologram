@@ -216,13 +216,18 @@ describe("Batches", () => {
       sealed(creating("t1", "first"));
 
       const flushing = Batches.flush();
-      await waitForEventLoop();
 
-      assert.isFalse(sendStub.called);
-      assert.equal(Batches.pending.length, 1);
+      // Let go of whatever an assertion does: a flush left waiting keeps the sender busy for every
+      // test after this one.
+      try {
+        await waitForEventLoop();
 
-      written();
-      await flushing;
+        assert.isFalse(sendStub.called);
+        assert.equal(Batches.pending.length, 1);
+      } finally {
+        written();
+        await flushing;
+      }
 
       assert.isTrue(sendStub.calledOnce);
     });
