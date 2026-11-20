@@ -1821,6 +1821,82 @@ defmodule Hologram.Sync.SessionTest do
       refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
     end
 
+    # The client files the row once the batch is confirmed, whatever its session was told.
+    test "tells the client to drop a row its own batch created that its user may not read" do
+      windows(%{})
+
+      start_session!(replica_id: @replica_id)
+      await_fill()
+
+      hidden =
+        %{public: false}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      route([
+        live_effect(
+          :put_entity,
+          PolicyModule1,
+          hidden.id,
+          %{"public" => false},
+          ref(@replica_id, 4)
+        )
+      ])
+
+      assert_receive {:sync_deltas, _cursor, deltas, 4}
+      assert deltas == [Frame.unsync_entity(hidden.id, PolicyModule1)]
+    end
+
+    test "tells nothing of a row a batch created that its user may not read when it serves no replica" do
+      windows(%{})
+
+      start_session!([])
+      await_fill()
+
+      hidden =
+        %{public: false}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      route([
+        live_effect(
+          :put_entity,
+          PolicyModule1,
+          hidden.id,
+          %{"public" => false},
+          ref(@replica_id, 4)
+        )
+      ])
+
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
+    test "tells nothing of a row another replica's batch created that its user may not read" do
+      windows(%{})
+
+      start_session!(replica_id: @replica_id)
+      await_fill()
+
+      hidden =
+        %{public: false}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      another_replica_id = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
+
+      route([
+        live_effect(
+          :put_entity,
+          PolicyModule1,
+          hidden.id,
+          %{"public" => false},
+          ref(another_replica_id, 4)
+        )
+      ])
+
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
     test "passes over a batch the fill already holds" do
       task = create("before")
       windows(%{})
@@ -2153,6 +2229,7 @@ defmodule Hologram.Sync.SessionTest do
       part = %{
         checked: %{},
         overtaking_seqs: %{},
+        own_puts: %{},
         own_seqs: %{},
         pair_effects: %{},
         pairs: %{},
@@ -2393,6 +2470,7 @@ defmodule Hologram.Sync.SessionTest do
       part = %{
         checked: %{},
         overtaking_seqs: %{},
+        own_puts: %{},
         own_seqs: %{},
         pair_effects: %{},
         pairs: %{},
@@ -2699,6 +2777,7 @@ defmodule Hologram.Sync.SessionTest do
     %{
       checked: %{PolicyProject => PackedIds.pack([project.id])},
       overtaking_seqs: %{},
+      own_puts: %{},
       own_seqs: %{},
       pair_effects: %{},
       pairs: %{},
@@ -2719,6 +2798,7 @@ defmodule Hologram.Sync.SessionTest do
     %{
       checked: %{},
       overtaking_seqs: %{},
+      own_puts: %{},
       own_seqs: %{},
       pair_effects: %{},
       pairs: %{},
