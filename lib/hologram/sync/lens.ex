@@ -18,14 +18,36 @@ defmodule Hologram.Sync.Lens do
   # at the tab's point answers the two things the ops can't: whether an attribute turned
   # server-only off was server-only for the tab, and which entity type the tab took as its user.
 
-  defstruct global_roles: %{}, types: %{}
+  alias Hologram.DB.Codec
+  alias Hologram.Entity
+
+  defstruct global_roles: %{}, resolved: nil, types: %{}
 
   @type old(name) :: name | :new
 
   @type t :: %__MODULE__{
           global_roles: %{module => old(module)},
+          resolved: resolved | nil,
           types: %{module => type_entry}
         }
+
+  # The lens in what a frame spells: labels, wire keys and encoded enum values (see `resolve/2`).
+  @type resolved :: %{
+          entity_types: MapSet.t(module),
+          by_label: %{String.t() => module},
+          by_old_label: %{String.t() => module},
+          wire: %{module => wire_entry}
+        }
+
+  @type wire_entry :: %{
+          edges: %{String.t() => old(String.t())},
+          enums: %{atom => %{String.t() => old(String.t())}},
+          keys: %{atom => old(atom)},
+          label: old(String.t())
+        }
+
+  # What a frame spells of a type the lens changes nothing of, bar its label.
+  @untouched_wire %{edges: %{}, enums: %{}, keys: %{}, label: nil}
 
   @type type_entry :: %{
           attributes: %{atom => old(atom)},
@@ -80,6 +102,101 @@ defmodule Hologram.Sync.Lens do
   end
 
   @doc """
+  Returns the current entity type of the given type label as the tab spells it - a type it names
+  by its name at its point of the history - or nil for a label naming no type of the current model.
+  Asked of a resolved lens (see `resolve/2`).
+  """
+  @spec current_type(t, String.t()) :: module | nil
+  def current_type(%__MODULE__{resolved: resolved} = lens, old_label) do
+    case Map.fetch(resolved.by_old_label, old_label) do
+      {:ok, entity_type} ->
+        entity_type
+
+      :error ->
+        entity_type = existing_module(old_label)
+
+        # A current type under a name the walk touched was renamed to it, or created under it:
+        # the tab's type of that name is another, or none.
+        if MapSet.member?(resolved.entity_types, entity_type) and
+             not Map.has_key?(lens.types, entity_type),
+           do: entity_type
+    end
+  end
+
+  @doc """
+  Returns the given message of a sync session to its client - deltas or a completeness marker -
+  translated into the tab's names, and any other message as it is (see `resolve/2`).
+
+  Every delta's type takes its old label, and a delta of a type new since is dropped. A row's data
+  and revisions take the old keys, without the keys of what is new since, and its enum values
+  their old labels. A patch left with nothing to say is dropped, and so is an edge of a
+  relationship new since. Verdicts pass as they are: a verdict is keyed by a digest of its
+  condition, so one whose condition the tab's rules spell the same way keeps its key and meaning,
+  and one they spell otherwise is a key the tab never asks for.
+
+  A row holding an enum value new since has no label the tab knows: it goes as a dropped delta.
+  """
+  @spec message(t, tuple) :: tuple
+  def message(lens, {:sync_deltas, cursor, deltas, claim}) do
+    {:sync_deltas, cursor, Enum.flat_map(deltas, &delta(lens, &1)), claim}
+  end
+
+  def message(lens, {:sync_synced, {:types, types}, cursor}) do
+    old_types =
+      types
+      |> Enum.map(&old_type(lens, &1))
+      |> Enum.reject(&(&1 == :new))
+
+    {:sync_synced, {:types, old_types}, cursor}
+  end
+
+  def message(_lens, message), do: message
+
+  @doc """
+  Returns the given lens with what a frame spells worked out for it, from the given entity types
+  of the current model: each type's old label, the wire keys of its attributes and relationships -
+  a to-one's reference field, a to-many's set - with their old names, and the old labels of its
+  enum values. An inverse of a to-many whose relationship is new since is a set the tab never had.
+  Other inverses keep their names: they are declared in code, not in the model, so the history
+  says nothing of them. An inverse of a to-one never travels, its rows' reference fields saying
+  what it holds.
+  """
+  @spec resolve(t, list(module)) :: t
+  def resolve(lens, entity_types) do
+    current_types = MapSet.new(entity_types)
+
+    # A type new since is dropped whatever its module declares, listed or not.
+    new_types =
+      for {entity_type, %{old: :new}} <- lens.types,
+          into: %{},
+          do: {entity_type, %{@untouched_wire | label: :new}}
+
+    wire =
+      entity_types
+      |> Enum.map(&{&1, wire_entry(lens, &1)})
+      |> Enum.reject(fn {entity_type, entry} -> untouched?(lens, entity_type, entry) end)
+      |> Map.new()
+      |> Map.merge(new_types)
+
+    # A renamed type the current model lists, so the two ways `current_type/2` answers agree.
+    by_old_label =
+      for {entity_type, %{old: old}} <- lens.types,
+          old != :new,
+          MapSet.member?(current_types, entity_type),
+          into: %{},
+          do: {label(old), entity_type}
+
+    resolved = %{
+      by_label: Map.new(wire, fn {entity_type, _entry} -> {label(entity_type), entity_type} end),
+      by_old_label: by_old_label,
+      entity_types: current_types,
+      wire: wire
+    }
+
+    %{lens | resolved: resolved}
+  end
+
+  @doc """
   Returns what the tab calls the given attribute of the given entity type, or :new.
   """
   @spec old_attribute(t, module, atom) :: old(atom)
@@ -127,6 +244,160 @@ defmodule Hologram.Sync.Lens do
   """
   @spec old_type(t, module) :: old(module)
   def old_type(lens, entity_type), do: type_entry(lens, entity_type).old
+
+  defp delta(lens, %{type: label} = delta) do
+    wire = wire_for(lens, label)
+
+    cond do
+      wire.label == :new -> []
+      Map.has_key?(delta, :data) -> translate_data(%{delta | type: wire.label}, wire)
+      true -> [%{delta | type: wire.label}]
+    end
+  end
+
+  defp existing_module(label) do
+    String.to_existing_atom("Elixir." <> label)
+  rescue
+    ArgumentError -> nil
+  end
+
+  defp label(module), do: Codec.encode_enum_value(module)
+
+  defp old_label(:new), do: :new
+
+  defp old_label(name), do: label(name)
+
+  defp old_value(wire, key, value) do
+    case wire.enums do
+      %{^key => values} when is_binary(value) -> Map.get(values, value, value)
+      _not_an_enum -> value
+    end
+  end
+
+  defp translate_data(%{op: op, data: data} = delta, wire)
+       when op in [:add_relationship, :del_relationship] do
+    case Map.get(wire.edges, data.relationship, data.relationship) do
+      :new -> []
+      old -> [%{delta | data: %{data | relationship: old}}]
+    end
+  end
+
+  defp translate_data(%{op: op} = delta, _wire)
+       when op in [:keep_hashed, :unsync_hashed] do
+    [delta]
+  end
+
+  defp translate_data(%{op: op, data: data} = delta, wire) do
+    translated =
+      Enum.reduce_while(data, %{}, fn {key, value}, acc ->
+        case translate_field(wire, key, value) do
+          :new -> {:halt, :unservable}
+          :dropped -> {:cont, acc}
+          {old_key, old_value} -> {:cont, Map.put(acc, old_key, old_value)}
+        end
+      end)
+
+    cond do
+      translated == :unservable -> []
+      op == :patch_entity and says_nothing?(translated) -> []
+      true -> [%{delta | data: translated}]
+    end
+  end
+
+  defp translate_field(wire, :"$revisions", revisions) do
+    old_revisions =
+      for {key, revision} <- revisions,
+          old_key = Map.get(wire.keys, key, key),
+          old_key != :new,
+          into: %{},
+          do: {old_key, revision}
+
+    {:"$revisions", old_revisions}
+  end
+
+  defp translate_field(_wire, :"$verdicts", verdicts), do: {:"$verdicts", verdicts}
+
+  defp translate_field(wire, key, value) do
+    case {Map.get(wire.keys, key, key), old_value(wire, key, value)} do
+      {:new, _value} -> :dropped
+      {_old_key, :new} -> :new
+      {old_key, old_value} -> {old_key, old_value}
+    end
+  end
+
+  defp says_nothing?(data) do
+    Enum.all?(data, fn
+      {:"$revisions", revisions} -> revisions == %{}
+      _value -> false
+    end)
+  end
+
+  defp untouched?(lens, entity_type, entry) do
+    not Map.has_key?(lens.types, entity_type) and entry.keys == %{} and entry.edges == %{}
+  end
+
+  defp wire_for(lens, label) do
+    case Map.fetch(lens.resolved.by_label, label) do
+      {:ok, entity_type} -> Map.fetch!(lens.resolved.wire, entity_type)
+      :error -> %{@untouched_wire | label: label}
+    end
+  end
+
+  defp wire_entry(lens, entity_type) do
+    entry = type_entry(lens, entity_type)
+
+    attribute_keys = Map.new(entry.attributes)
+
+    {relationship_keys, edges} =
+      Enum.reduce(entity_type.__relationships__(), {%{}, %{}}, fn {name, type, _opts},
+                                                                  {keys, edges} ->
+        case {old_relationship(lens, entity_type, name), is_list(type)} do
+          {^name, _to_many?} ->
+            {keys, edges}
+
+          {:new, false} ->
+            {Map.put(keys, reference_key(name), :new), edges}
+
+          {old, false} ->
+            {Map.put(keys, reference_key(name), reference_key(old)), edges}
+
+          {old, true} ->
+            {Map.put(keys, name, old), Map.put(edges, edge_name(name), edge_name(old))}
+        end
+      end)
+
+    new_inverses =
+      for {name, _type, _opts} <- entity_type.__inverse_relationships__(),
+          inverse = Entity.inverse_relationship(entity_type, name),
+          not inverse.reference?,
+          old_relationship(lens, inverse.target, inverse.forward) == :new,
+          do: name
+
+    enums =
+      Map.new(entry.enums, fn {attribute, values} ->
+        {attribute, Map.new(values, fn {value, old} -> {label(value), old_label(old)} end)}
+      end)
+
+    %{
+      edges: Map.merge(edges, Map.new(new_inverses, &{edge_name(&1), :new})),
+      enums: enums,
+      keys:
+        attribute_keys
+        |> Map.merge(relationship_keys)
+        |> Map.merge(Map.new(new_inverses, &{&1, :new})),
+      label: old_label(entry.old)
+    }
+  end
+
+  # An edge names its relationship as a string (see `Hologram.Sync.Pot`).
+  defp edge_name(:new), do: :new
+
+  defp edge_name(name), do: Atom.to_string(name)
+
+  # The names come from the release's own migrations, so the atoms this makes are bounded by the
+  # history. A tab's old reference field may name no field any current struct has.
+  # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+  defp reference_key(name), do: :"#{name}_id"
 
   # The walk keeps the user entity type under its name at each step, beside the lens: a file
   # renaming it can also designate it under its new name, which moves nothing (see

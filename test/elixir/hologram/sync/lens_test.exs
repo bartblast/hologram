@@ -3,7 +3,13 @@ defmodule Hologram.Sync.LensTest do
 
   import Hologram.Sync.Lens
 
+  alias Hologram.DB.Codec
+  alias Hologram.Entity.Metadata
+  alias Hologram.Sync.Frame
   alias Hologram.Sync.Lens
+  alias Hologram.Test.Fixtures.Entity.Module30
+  alias Hologram.Test.Fixtures.Entity.Module34
+  alias Hologram.Test.Fixtures.Entity.Module39
 
   # Op maps as `use Hologram.Migration` records them. The lens reads only the ops, so the modules
   # they name need not exist.
@@ -416,6 +422,329 @@ defmodule Hologram.Sync.LensTest do
       ]
 
       assert build(@model, ops) == :unservable
+    end
+  end
+
+  # The fixtures the translation reads: Module39 has an enum `kind` (:guest, :staff), a to-one
+  # `member` and a to-many `mentors`, both of Module34. Module30 has a to-many `follows` with its
+  # inverse `followers`, and a to-one `parent` with its inverse `replies`.
+  @entity_types [Module30, Module34, Module39]
+
+  @id_1 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e01"
+  @id_2 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e02"
+
+  defp resolved!(ops, model \\ @model) do
+    ops
+    |> lens!(model)
+    |> resolve(@entity_types)
+  end
+
+  # Edges as `Hologram.Sync.Pot` hands them to `Hologram.Sync.Frame`: the relationship a string.
+  defp edge_deltas(op, relationships) do
+    edges =
+      for relationship <- relationships do
+        %{entity_id: @id_1, op: op, relationship: relationship, target_id: @id_2, type: Module30}
+      end
+
+    Frame.deltas(%{appeared: [], edges: edges, patched: [], unsynced: []}, nil)
+  end
+
+  defp deltas(lens, deltas) do
+    {:sync_deltas, "cursor", translated, 7} = message(lens, {:sync_deltas, "cursor", deltas, 7})
+
+    translated
+  end
+
+  defp label(module), do: Codec.encode_enum_value(module)
+
+  describe "message/2" do
+    test "a put takes the old keys and revisions, without what is new since" do
+      lens =
+        resolved!([
+          %{op: :rename_attribute, entity: Module39, from: :points, to: :score},
+          %{op: :add_relationship, entity: Module39, name: :mentors, type: [Module34], opts: []},
+          %{op: :rename_relationship, entity: Module39, from: :buddy, to: :member}
+        ])
+
+      row = %Module39{
+        __meta__: %Metadata{revisions: %{kind: 1, member_id: 2, score: 3}},
+        id: @id_1,
+        kind: :staff,
+        member_id: @id_2,
+        mentors: [%Module34{id: @id_2}],
+        score: 5
+      }
+
+      [put] = deltas(lens, [Frame.put_entity(row, %{})])
+
+      assert put.type == label(Module39)
+
+      assert put.data == %{
+               "$revisions": %{buddy_id: 2, kind: 1, points: 3},
+               buddy_id: @id_2,
+               created_at: nil,
+               id: @id_1,
+               kind: "staff",
+               points: 5,
+               updated_at: nil
+             }
+    end
+
+    test "a to-many renamed since goes under its old name, and its edges too, while its inverse keeps its own" do
+      lens =
+        resolved!([%{op: :rename_relationship, entity: Module30, from: :likes, to: :follows}])
+
+      put = %{
+        data: %{followers: [@id_2], follows: [@id_2], id: @id_1},
+        id: @id_1,
+        op: :put_entity,
+        type: label(Module30)
+      }
+
+      assert deltas(lens, [put | edge_deltas(:add_relationship, ["follows", "followers"])]) == [
+               %{put | data: %{followers: [@id_2], id: @id_1, likes: [@id_2]}}
+               | edge_deltas(:add_relationship, ["likes", "followers"])
+             ]
+    end
+
+    test "a to-many new since leaves out its set, its inverse's set and the edges of both" do
+      lens =
+        resolved!([
+          %{op: :add_relationship, entity: Module30, name: :follows, type: [Module30], opts: []}
+        ])
+
+      put = %{
+        data: %{body: "hi", followers: [@id_2], follows: [@id_2], id: @id_1},
+        id: @id_1,
+        op: :put_entity,
+        type: label(Module30)
+      }
+
+      edges = edge_deltas(:del_relationship, ["follows", "followers"])
+
+      assert deltas(lens, [put | edges]) == [%{put | data: %{body: "hi", id: @id_1}}]
+    end
+
+    test "a to-one renamed since takes its old reference field" do
+      lens =
+        resolved!([%{op: :rename_relationship, entity: Module30, from: :reply_to, to: :parent}])
+
+      put = %{
+        data: %{body: "hi", id: @id_1, parent_id: @id_2},
+        id: @id_1,
+        op: :put_entity,
+        type: label(Module30)
+      }
+
+      assert deltas(lens, [put]) == [%{put | data: %{body: "hi", id: @id_1, reply_to_id: @id_2}}]
+    end
+
+    test "a to-one new since leaves out its reference field and its revision" do
+      lens =
+        resolved!([
+          %{op: :add_relationship, entity: Module39, name: :member, type: Module34, opts: []}
+        ])
+
+      row = %Module39{
+        __meta__: %Metadata{revisions: %{member_id: 2, score: 3}},
+        id: @id_1,
+        member_id: @id_2,
+        score: 5
+      }
+
+      [put] = deltas(lens, [Frame.put_entity(row, %{})])
+
+      refute Map.has_key?(put.data, :member_id)
+      assert put.data[:"$revisions"] == %{score: 3}
+      assert put.data.score == 5
+    end
+
+    test "a patch takes the old keys and revisions, a to-one's among them" do
+      lens =
+        resolved!([
+          %{op: :rename_relationship, entity: Module39, from: :buddy, to: :member},
+          %{op: :add_attribute, entity: Module39, name: :score, type: :integer, opts: []}
+        ])
+
+      row = %Module39{
+        __meta__: %Metadata{revisions: %{member_id: 2, score: 3}},
+        id: @id_1,
+        member_id: @id_2,
+        score: 5
+      }
+
+      news = %{
+        appeared: [],
+        edges: [],
+        patched: [{row, %{member_id: @id_2, score: 5}, nil}],
+        unsynced: []
+      }
+
+      assert [%{op: :patch_entity} = patch] = deltas(lens, Frame.deltas(news, nil))
+      assert patch.data == %{"$revisions": %{buddy_id: 2}, buddy_id: @id_2}
+    end
+
+    test "an enum value takes its old label, and one of an attribute renamed since too" do
+      lens =
+        resolved!([
+          %{
+            op: :rename_enum_value,
+            entity: Module39,
+            attribute: :category,
+            from: :worker,
+            to: :staff
+          },
+          %{op: :rename_attribute, entity: Module39, from: :category, to: :kind}
+        ])
+
+      put = %{
+        data: %{id: @id_1, kind: "staff"},
+        id: @id_1,
+        op: :put_entity,
+        type: label(Module39)
+      }
+
+      guest = %{put | data: %{id: @id_1, kind: "guest"}}
+      unset = %{put | data: %{id: @id_1, kind: nil}}
+
+      assert deltas(lens, [put, guest, unset]) == [
+               %{put | data: %{category: "worker", id: @id_1}},
+               %{put | data: %{category: "guest", id: @id_1}},
+               %{put | data: %{category: nil, id: @id_1}}
+             ]
+    end
+
+    test "a row holding an enum value new since is dropped" do
+      lens =
+        resolved!([
+          %{op: :add_enum_value, entity: Module39, attribute: :kind, value: :staff, opts: []}
+        ])
+
+      put = %{
+        data: %{id: @id_1, kind: "staff"},
+        id: @id_1,
+        op: :put_entity,
+        type: label(Module39)
+      }
+
+      patch = %{put | op: :patch_entity}
+
+      assert deltas(lens, [put, patch]) == []
+    end
+
+    test "a patch of only what is new since is dropped, unless it carries verdicts" do
+      lens =
+        resolved!([
+          %{op: :add_attribute, entity: Module39, name: :score, type: :integer, opts: []}
+        ])
+
+      patch = %{
+        data: %{"$revisions": %{score: 4}, score: 9},
+        id: @id_1,
+        op: :patch_entity,
+        type: label(Module39)
+      }
+
+      with_verdicts = %{patch | data: Map.put(patch.data, :"$verdicts", %{"read:ab" => true})}
+      with_kind = %{patch | data: %{"$revisions": %{kind: 5, score: 4}, kind: "guest", score: 9}}
+
+      assert deltas(lens, [patch, with_verdicts, with_kind]) == [
+               %{patch | data: %{"$revisions": %{}, "$verdicts": %{"read:ab" => true}}},
+               %{patch | data: %{"$revisions": %{kind: 5}, kind: "guest"}}
+             ]
+    end
+
+    test "drops, hashed drops and kept lists name the old type, and none of a type new since" do
+      lens =
+        resolved!([
+          %{op: :rename_entity, from: MyApp.Member, to: Module34},
+          %{op: :create_entity, entity: Module30}
+        ])
+
+      hashes = %{hashes: ["0123456789abcdef"], salt: "s"}
+
+      deltas = [
+        %{id: @id_1, op: :unsync_entity, type: label(Module34)},
+        %{data: hashes, op: :unsync_hashed, type: label(Module34)},
+        %{data: hashes, op: :keep_hashed, type: label(Module34)},
+        %{id: @id_1, op: :unsync_entity, type: label(Module30)},
+        %{data: hashes, op: :keep_hashed, type: label(Module30)}
+      ]
+
+      assert deltas(lens, deltas) == [
+               %{id: @id_1, op: :unsync_entity, type: "MyApp.Member"},
+               %{data: hashes, op: :unsync_hashed, type: "MyApp.Member"},
+               %{data: hashes, op: :keep_hashed, type: "MyApp.Member"}
+             ]
+    end
+
+    test "a delta of a type new since is dropped, listed or not" do
+      lens =
+        [%{op: :create_entity, entity: MyApp.Unlisted}]
+        |> lens!()
+        |> resolve(@entity_types)
+
+      assert deltas(lens, [%{id: @id_1, op: :unsync_entity, type: "MyApp.Unlisted"}]) == []
+    end
+
+    test "a type the lens changes nothing of passes as it is" do
+      lens =
+        resolved!([
+          %{op: :add_attribute, entity: Module39, name: :score, type: :integer, opts: []}
+        ])
+
+      put = %{
+        data: %{id: @id_1, nickname: "x"},
+        id: @id_1,
+        op: :put_entity,
+        type: label(Module34)
+      }
+
+      assert deltas(lens, [put]) == [put]
+    end
+
+    test "a types marker names the old types, without those new since" do
+      lens =
+        resolved!([
+          %{op: :rename_entity, from: MyApp.Member, to: Module34},
+          %{op: :create_entity, entity: Module30}
+        ])
+
+      assert message(lens, {:sync_synced, {:types, [Module30, Module34, Module39]}, "c"}) ==
+               {:sync_synced, {:types, [MyApp.Member, Module39]}, "c"}
+    end
+
+    test "any other message passes as it is" do
+      lens = resolved!([])
+
+      assert message(lens, {:sync_synced, :all, "c"}) == {:sync_synced, :all, "c"}
+      assert message(lens, {:sync_resync, :model_hash}) == {:sync_resync, :model_hash}
+    end
+  end
+
+  describe "current_type/2" do
+    test "an old label names the current type the tab's type became" do
+      lens =
+        resolved!([
+          %{op: :rename_entity, from: MyApp.Member, to: Module34},
+          %{op: :create_entity, entity: Module30}
+        ])
+
+      assert current_type(lens, "MyApp.Member") == Module34
+      assert current_type(lens, label(Module39)) == Module39
+      assert current_type(lens, label(Module34)) == nil
+      assert current_type(lens, label(Module30)) == nil
+      assert current_type(lens, "No.Such.Module.Anywhere") == nil
+      assert current_type(lens, label(Hologram.Sync.Lens)) == nil
+    end
+
+    test "an old label of a type the current model doesn't list names nothing" do
+      lens =
+        [%{op: :rename_entity, from: MyApp.Member, to: MyApp.Unlisted}]
+        |> lens!()
+        |> resolve(@entity_types)
+
+      assert current_type(lens, "MyApp.Member") == nil
     end
   end
 end
