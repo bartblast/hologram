@@ -122,10 +122,11 @@ defmodule Hologram.Auth do
   with it (see `Hologram.Policy.verdict_operations/1`), since the browser holds only the rows its
   user may read. Where no verdict speaks for the question, the browser answers no while the server
   may answer yes: a check on a new struct, any create among them, or on a struct an action changed
-  and hasn't written yet, a check about another user, or about a visitor in a signed-in session, a
-  check while a write of the browser's the server hasn't answered names a type the operation's rules
-  read, and a rule delegating `:create` to a row whose create rules read a row the browser doesn't
-  hold.
+  and hasn't written yet, a check on, or delegating to, a row the browser created that the server
+  hasn't sent back with its verdicts, a check about another user, or about a visitor in a signed-in
+  session, a check while a write of the browser's the server hasn't answered names a type the
+  operation's rules read, and a rule delegating `:create` to a row whose create rules read a row the
+  browser doesn't hold.
   """
   @spec can?(struct | Server.identity_id() | nil, atom | {atom, atom | list(atom)}, struct) ::
           boolean

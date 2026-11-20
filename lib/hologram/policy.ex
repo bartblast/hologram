@@ -906,11 +906,12 @@ defmodule Hologram.Policy do
   key. So a rule delegating `:create` to a row the client holds, whose create rules read a row
   the client doesn't, answers no on the client while the server may answer yes.
 
-  A field of an update counts by the deciding items of the limited lines covering it, though its
-  verdict answers those lines and the ones covering the whole row: a client answers a field with no
-  verdict of its own from the whole-row operation's, so a type with many limited fields and one
-  deciding whole-row rule sends one verdict rather than one per field. Fields covered by the same
-  lines share a key, so several pairs can hold one.
+  A field of an update counts by the items of the limited lines covering it, deciding ones and ones
+  reading a related row a reader may not hold, though its verdict answers those lines and the ones
+  covering the whole row: a client answers a field with no verdict of its own from the whole-row
+  operation's, so a type with many limited fields and one deciding whole-row rule sends one verdict
+  rather than one per field. Fields covered by the same lines share a key, so several pairs can hold
+  one.
 
   Cached, with the model facts, for the types of the project's compiled data model - a row's
   verdicts are worked out for every row a client is sent.

@@ -18,8 +18,9 @@ import Type from "../../type.mjs";
 // Hologram.Policy.Evaluator is the reference this mirrors, and Hologram.Auth is where its
 // checker lives on that side. The split is kept: rules are evaluated over plain values, and
 // what a rule REFERENCES - a role held somewhere - is answered by reading grant rows. The
-// server reads them with SELECT EXISTS, this reads them from the pot - bar a read rule's reference
-// or delegation through a row of a type nobody may read, which this answers as unknown.
+// server reads them with SELECT EXISTS, this reads them from the pot - bar a reference or
+// delegation through a related row this client does not hold, one its user may not read or of a
+// type nobody may read, which this answers as unknown.
 //
 // What the rows this client holds leave unknown, the server's verdict on the operation answers: its
 // can? answer for the session's user over the row as stored, sent with the row (see verdictHolds/4).
@@ -37,12 +38,13 @@ const GRANT_TYPE = "Hologram.Auth.RoleGrant";
 const CANONICAL_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-// What a condition holds as when this client cannot tell: a related row it would read is one it
-// does not hold - the server reads the row as stored, so taking it for a missing one could grant
-// what the server refuses (`project.status != :archived` over a project nobody synced) - or the
-// value it would read is a server-only attribute's, which no client ever holds. A rule grants only
-// on a definite yes, and `and` and `or` keep what they can still decide: false and unknown are
-// false, true or unknown is true.
+// What a condition, a role reference or a delegation holds as when this client cannot tell: a
+// related row it would read is one it does not hold - one its user may not read, which the server
+// reads as stored, so taking it for a missing one could grant what the server refuses
+// (`project.status != :archived` over a project the user may not read) - or the value it would read
+// is a server-only attribute's, which no client ever holds. A rule grants only on a definite yes,
+// and `and` and `or` keep what they can still decide: false and unknown are false, true or unknown
+// is true.
 const UNKNOWN = Symbol("unknown");
 
 // The sixteen bytes Hologram.Auth.RoleGrant derives every grant id under - drawn once, on
@@ -982,11 +984,13 @@ function askedFields(operation) {
 // change there is a change here. A rule covering the whole row is matched once however many
 // fields ask it.
 //
-// A field the held rows leave open is answered by the server's verdict under its key, which
-// answers its lines and the whole row's together. A field whose own lines hold no item only the
-// server decides has none, and the whole row's verdict answers it: when the whole-row rules hold
-// the field is covered. When they don't, the answer is no, which can deny where a line of the
-// field's own the held rows leave open would grant on the server - never grant wrongly.
+// A field the held rows leave open is answered by the server's verdict under its key, which answers
+// its lines and the whole row's together. A field whose own lines hold no item only the server
+// decides and read no related row a reader may not hold has none, and the whole row's verdict
+// answers it: when the whole-row rules hold the field is covered. When they don't, the answer is
+// no, which can deny where a line of the field's own would grant on the server - one delegating to
+// a create the held row's rules leave open, or to a held row whose rules leave it open and whose
+// own verdict can't speak, like one the browser created - never grant wrongly.
 function coversFields(entry, entityType, entity, fields, actorUserId) {
   const matched = new Map();
 

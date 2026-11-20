@@ -2838,6 +2838,21 @@ defmodule Hologram.PolicyTest do
              ]
     end
 
+    # Every reader holds the box, but not every reader of the box holds its workshop.
+    test "returns an operation reading a related row a held row leads to that a reader may not hold" do
+      assert verdict_operations(Policy.Module57) == [
+               {verdict_key(Policy.Module57, :update), :update}
+             ]
+    end
+
+    # The permit's read rule holds the role on the tool's workshop, read off the tool, which a
+    # reader of the permit may not hold.
+    test "returns a read rule's operation for a role reference through a row a reader may not hold" do
+      assert verdict_operations(Policy.Module48) == [
+               {verdict_key(Policy.Module48, :read), :read}
+             ]
+    end
+
     # Control: a role held one relationship away is looked up by the id the row itself holds.
     test "returns nothing for a role reference one relationship away" do
       assert verdict_operations(Policy.Module55) == []

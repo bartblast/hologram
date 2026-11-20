@@ -3143,8 +3143,9 @@ describe("Elixir_Hologram_Auth", () => {
       });
     });
 
-    // A client holds only the rows its user may read, so a delegation or a role reference reading a
-    // related row it doesn't hold is unknown, and the operation's verdict answers, as for a path.
+    // A client holds only the rows its user may read, so a delegation, a role reference or a set
+    // reading a related row it doesn't hold is unknown, and the operation's verdict answers, as for
+    // a path.
     describe("on a related row this client doesn't hold", () => {
       const DELETE_KEY = "delete:0011223344556677";
       const LABEL_KEY = "update:7766554433221100";
@@ -3265,6 +3266,26 @@ describe("Elixir_Hologram_Auth", () => {
           ),
           Type.boolean(true),
         );
+      });
+
+      // Control: an any over a set this client holds none of is unknown already, and the verdict
+      // answers it.
+      it("answers an any over a set it holds no matching row of from the verdict", () => {
+        defineModel({
+          delete: [
+            rule({
+              predicates: [{filter: [], quantifier: "any", source: ["tags"]}],
+            }),
+          ],
+        });
+
+        putVerdicts(DOCUMENT, {
+          delete: {reads: [DOCUMENT, TAG], verdict: DELETE_KEY},
+        });
+
+        putDocument({$verdicts: {[DELETE_KEY]: true}});
+
+        assert.deepStrictEqual(documentDeletes(ALICE), Type.boolean(true));
       });
 
       // Control: no verdict answers a create, so the held folder's create rule, which reads a
