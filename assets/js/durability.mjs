@@ -436,7 +436,11 @@ export default class Durability {
           return;
         }
 
-        const landed = new Set([...stored.result.landed, ...record.landed]);
+        // A record can predate the marks (see Batch#record): none stored is none landed.
+        const landed = new Set([
+          ...(stored.result.landed ?? []),
+          ...record.landed,
+        ]);
 
         queue.put({
           ...record,
@@ -522,8 +526,9 @@ export default class Durability {
               ([records, queued]) =>
                 resolve({
                   cursor: place,
+                  // A record can predate the marks (see Batch#record).
                   landed: (queued ?? []).map(({landed, seq}) => ({
-                    landed,
+                    landed: landed ?? [],
                     seq,
                   })),
                   owner,

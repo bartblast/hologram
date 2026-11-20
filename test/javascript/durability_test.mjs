@@ -1201,6 +1201,33 @@ describe("Durability", () => {
       );
     });
 
+    // The record's shape is frozen: a record an older bundle wrote has no marks at all.
+    it("takes a record with no marks as one with none landed", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const batch = new Batch(null);
+
+      batch.actorUserId = "u1";
+      batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
+      batch.seal(7);
+
+      const {landed: _landed, ...older} = batch.record();
+
+      await writeBatches([older]);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await Durability.persistLanded(batch);
+
+      assert.equal(Durability.mode, "indexeddb");
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.landed),
+        [[0]],
+      );
+    });
+
     // A later frame's mark has its own write coming, behind that frame's rows: written here, it
     // would go down ahead of them.
     it("writes the marks as they stood when asked, not when the record answers", async () => {
@@ -1421,6 +1448,20 @@ describe("Durability", () => {
 
       assert.deepStrictEqual((await Durability.readBase("place-0")).landed, [
         {landed: [0], seq: 7},
+      ]);
+    });
+
+    it("answers no marks for a stored batch that predates them", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const {landed: _landed, ...older} = sealedBatch(7).record();
+
+      await writeBatches([older]);
+
+      assert.deepStrictEqual((await Durability.readBase("place-0")).landed, [
+        {landed: [], seq: 7},
       ]);
     });
 
