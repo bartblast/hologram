@@ -156,6 +156,41 @@ defmodule Hologram.Query.Window do
     %{term | include: merged_includes(authored_include, embedded_include)}
   end
 
+  @doc """
+  Returns the entity types the given normalized query term reads, sorted: its own, every one it
+  includes, every one a path in its filter goes through, every one a quantifier's set goes through
+  and every one a derived field it reads is computed from - the types of the rows the client
+  answers it over, which it holds every row of only once each of them is complete.
+  """
+  @spec entity_types(Query.t()) :: [module]
+  def entity_types(term) do
+    term
+    |> embed(false)
+    |> collect_entity_types(MapSet.new())
+    |> Enum.sort()
+  end
+
+  # A derived field holding a value is included as nil - the rows it is computed from are embedded
+  # beside it, under their relationships, and read there.
+  defp collect_entity_types(term, acc) do
+    path_types =
+      term.filter
+      |> Stage.relationship_chains()
+      |> Enum.flat_map(fn relationship_names ->
+        Enum.scan(relationship_names, term.entity, &Derived.related_type(&2, &1))
+      end)
+
+    own_types =
+      acc
+      |> MapSet.put(term.entity)
+      |> MapSet.union(MapSet.new(path_types))
+
+    term.include
+    |> Map.values()
+    |> Enum.reject(&is_nil/1)
+    |> Enum.reduce(own_types, &collect_entity_types/2)
+  end
+
   # A narrowing's clause lists as alternatives - the ones of the disjunction it already is, or itself.
   defp alternatives([{:or, alternatives}]), do: alternatives
 

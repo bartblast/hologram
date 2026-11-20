@@ -1068,17 +1068,14 @@ describe("Renderer derived fields", () => {
       it("counts locally once every type the count reads is complete", () => {
         defineCounting("MyApp.DerivedTypesComplete");
 
-        globalThis.Hologram.sync.countTypes = {
-          "MyApp.DerivedTypesComplete": {total: [ROW]},
-        };
+        const key = carriedKey(
+          "MyApp.DerivedTypesComplete",
+          "total",
+          wantedCount(false),
+        );
 
-        LocalDatabase.syncCounts = {
-          [carriedKey(
-            "MyApp.DerivedTypesComplete",
-            "total",
-            wantedCount(false),
-          )]: 42,
-        };
+        LocalDatabase.syncCounts = {[key]: 42};
+        LocalDatabase.syncCountTypes = {[key]: [ROW]};
         LocalDatabase.markTypesSynced([ROW]);
 
         renderCounting("MyApp.DerivedTypesComplete");
@@ -1089,17 +1086,14 @@ describe("Renderer derived fields", () => {
       it("keeps carrying while a type the count reads is not complete", () => {
         defineCounting("MyApp.DerivedTypesFilling");
 
-        globalThis.Hologram.sync.countTypes = {
-          "MyApp.DerivedTypesFilling": {total: [ROW]},
-        };
+        const key = carriedKey(
+          "MyApp.DerivedTypesFilling",
+          "total",
+          wantedCount(false),
+        );
 
-        LocalDatabase.syncCounts = {
-          [carriedKey(
-            "MyApp.DerivedTypesFilling",
-            "total",
-            wantedCount(false),
-          )]: 42,
-        };
+        LocalDatabase.syncCounts = {[key]: 42};
+        LocalDatabase.syncCountTypes = {[key]: [ROW]};
 
         renderCounting("MyApp.DerivedTypesFilling");
 

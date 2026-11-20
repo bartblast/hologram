@@ -550,6 +550,7 @@ export default class DataLayer {
       // answered with travel beside them, and each page visit replaces them the way it replaces
       // what its own props read.
       LocalDatabase.syncCounts = mountData.syncCounts ?? {};
+      LocalDatabase.syncCountTypes = mountData.syncCountTypes ?? {};
     }
   }
 
@@ -689,9 +690,9 @@ export default class DataLayer {
   // for the rows it counts, counting locally would count a pot that is still filling and report a
   // number climbing towards the truth. The markers say when that stops - one per entity type, once
   // the client holds every row of it it may see, and the whole pot's. A count reads the types the
-  // build worked out for its field (`countTypes`), and counts for itself once every one of them is
-  // marked, on whichever page and in whichever tab. A field the build listed no types for waits for
-  // the whole pot.
+  // server worked out for it when it counted (`syncCountTypes`, see Carry.collect_count/4), and the
+  // client counts for itself once every one of them is marked, on whichever page and in whichever
+  // tab. A count carried with no types waits for the whole pot.
   //
   // The key names the component, the derived field and the query it ran, spelled the way the
   // server spells it (see QuerySpelling). The query holds every value it reads, so a row argument
@@ -705,21 +706,21 @@ export default class DataLayer {
       return null;
     }
 
-    if ($.#countsLocally(module, name)) {
+    const key = `${module}/${name.value}/${QuerySpelling.spell(term)}`;
+
+    if ($.#countsLocally(key)) {
       return null;
     }
-
-    const key = `${module}/${name.value}/${QuerySpelling.spell(term)}`;
 
     return LocalDatabase.syncCounts[key] ?? null;
   }
 
-  static #countsLocally(module, name) {
+  static #countsLocally(key) {
     if (LocalDatabase.isAllSynced()) {
       return true;
     }
 
-    const types = globalThis.Hologram.sync?.countTypes?.[module]?.[name.value];
+    const types = LocalDatabase.syncCountTypes[key];
 
     return (
       types !== undefined &&

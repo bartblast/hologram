@@ -922,10 +922,29 @@ defmodule Hologram.Template.RendererDerivedTest do
              }
     end
 
+    test "carries the entity types each count reads, under the count's key" do
+      create_entities()
+
+      boot_data =
+        Module175
+        |> render_page_html()
+        |> boot_data()
+
+      count_types = Map.fetch!(boot_data, "syncCountTypes")
+      counts = Map.fetch!(boot_data, "syncCounts")
+
+      assert Map.keys(count_types) == Map.keys(counts)
+
+      assert count_types
+             |> Map.values()
+             |> Enum.uniq() == [[inspect(Entity2)]]
+    end
+
     test "carries nothing for a page whose fields count nothing" do
       html = render_page_html(Module167)
 
       assert String.contains?(html, ~s|"syncCounts":{}|)
+      assert String.contains?(html, ~s|"syncCountTypes":{}|)
     end
   end
 

@@ -1444,4 +1444,61 @@ defmodule Hologram.Query.WindowTest do
       assert embed(term, false).include.recent_messages == term.include.recent_messages
     end
   end
+
+  describe "entity_types/1" do
+    setup do
+      put_derived_definitions([Module32, Module33, Module37, Module38])
+    end
+
+    test "reads its own type" do
+      assert entity_types(Stage.normalize(Module2)) == [Module2]
+    end
+
+    test "reads the types a path goes through" do
+      term =
+        Module3
+        |> filter(c.id != nil)
+        |> Stage.normalize()
+
+      assert entity_types(term) == [Module1, Module3]
+    end
+
+    test "reads the types it includes" do
+      term =
+        Module32
+        |> include(messages)
+        |> Stage.normalize()
+
+      assert entity_types(term) == [Module32, Module33]
+    end
+
+    test "reads the types a quantifier's set goes through" do
+      term =
+        Module37
+        |> filter(any(members))
+        |> count()
+        |> Stage.normalize()
+
+      assert entity_types(term) == [Module2, Module37]
+    end
+
+    test "reads the types a derived field it filters on is computed from" do
+      term =
+        Module37
+        |> filter(member_count > 3)
+        |> count()
+        |> Stage.normalize()
+
+      assert entity_types(term) == [Module2, Module37]
+    end
+
+    test "reads the types a derived field holding a value it includes is computed from" do
+      term =
+        Module32
+        |> include(message_count)
+        |> Stage.normalize()
+
+      assert entity_types(term) == [Module32, Module33]
+    end
+  end
 end

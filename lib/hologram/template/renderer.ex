@@ -399,6 +399,7 @@ defmodule Hologram.Template.Renderer do
           component_registry: %{"page" => %{module: MyPage, struct: %Component{}}},
           page_module: MyPage,
           page_params: %{param: "value"},
+          sync_count_types: %{},
           sync_counts: %{},
           sync_rows: %{}
         },
@@ -414,6 +415,7 @@ defmodule Hologram.Template.Renderer do
             component_registry: %{String.t() => %{module: module, struct: Component.t()}},
             page_module: module,
             page_params: %{atom => any},
+            sync_count_types: %{String.t() => [String.t()]},
             sync_counts: %{String.t() => integer},
             sync_rows: map
           },
@@ -495,6 +497,7 @@ defmodule Hologram.Template.Renderer do
       component_registry: component_registry_for_client,
       page_module: page_module,
       page_params: params,
+      sync_count_types: Carry.take_count_types(),
       sync_counts: Carry.take_counts(),
       sync_rows: Carry.take(server_struct.user_id)
     }

@@ -1046,6 +1046,7 @@ defmodule Hologram.Controller do
       selfEchoes: serialize_to_fragment(self_echoes),
       subReceiptAdds: serialize_to_fragment(sub_receipt_adds),
       subReceiptDrops: serialize_to_fragment(sub_receipt_drops),
+      syncCountTypes: mount_data.sync_count_types,
       syncCounts: mount_data.sync_counts,
       syncRows: mount_data.sync_rows
     }

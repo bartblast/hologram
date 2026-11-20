@@ -166,8 +166,11 @@ describe("DataLayer", () => {
       assert.deepStrictEqual(result, Type.integer(1));
     });
 
+    // The types the server carried with the count, under the count's own key.
     const countReading = (module, types) => {
-      globalThis.Hologram.sync.countTypes = {[module]: {count: types}};
+      LocalDatabase.syncCountTypes = {
+        [carriedKey(module, "count", notDoneCount())]: types,
+      };
     };
 
     // Whichever page the component is on, and whether or not the stream connected on it: a type's
@@ -226,8 +229,8 @@ describe("DataLayer", () => {
       assert.deepStrictEqual(result, Type.integer(42));
     });
 
-    // A field the build listed no types for can only count on the whole pot.
-    it("keeps carrying until everything is complete for a count with no types listed", () => {
+    // A count carried with no types can only count on the whole pot.
+    it("keeps carrying until everything is complete for a count carried with no types", () => {
       LocalDatabase.syncCounts = {
         [carriedKey("MyApp.Unlisted", "count", notDoneCount())]: 42,
       };
@@ -259,6 +262,31 @@ describe("DataLayer", () => {
       );
 
       assert.deepStrictEqual(result, Type.integer(7));
+    });
+
+    // The types travel per query, not per field: one instance's types being complete says nothing
+    // about another's.
+    it("waits for the types the query it ran reads, apart from another instance's", () => {
+      const synced = carriedKey("MyApp.TwoReads", "count", doneCount(true));
+      const filling = carriedKey("MyApp.TwoReads", "count", doneCount(false));
+
+      LocalDatabase.syncCounts = {[filling]: 42, [synced]: 7};
+      LocalDatabase.syncCountTypes = {
+        [filling]: ["MyApp.Project"],
+        [synced]: [TASK],
+      };
+      LocalDatabase.markTypesSynced([TASK]);
+
+      const answer = (done) =>
+        DataLayer.answerDerivedQuery(
+          "MyApp.TwoReads",
+          Type.atom("count"),
+          [Type.boolean(done)],
+          doneCount(done),
+        );
+
+      assert.deepStrictEqual(answer(true), Type.integer(1));
+      assert.deepStrictEqual(answer(false), Type.integer(42));
     });
 
     it("leaves a query that does not count alone", () => {
@@ -784,21 +812,24 @@ describe("DataLayer", () => {
 
       LocalDatabase.actorUserId = null;
       LocalDatabase.actorEntityId = null;
+      LocalDatabase.syncCountTypes = {};
       LocalDatabase.syncCounts = {};
     });
 
     afterEach(() => {
       LocalDatabase.actorUserId = null;
       LocalDatabase.actorEntityId = null;
+      LocalDatabase.syncCountTypes = {};
       LocalDatabase.syncCounts = {};
     });
 
-    it("files the rows the page carried, and the counts beside them", () => {
+    it("files the rows the page carried, and the counts beside them with their types", () => {
       const rows = {put_entity: {"MyApp.Task": [{id: "t1"}]}};
 
       DataLayer.ingestMountData({
         actorEntityId: "u1",
         actorUserId: "u1",
+        syncCountTypes: {"MyApp.Counting/count/": ["MyApp.Task"]},
         syncCounts: {"MyApp.Counting/count/": 3},
         syncRows: rows,
       });
@@ -810,6 +841,10 @@ describe("DataLayer", () => {
 
       assert.deepStrictEqual(LocalDatabase.syncCounts, {
         "MyApp.Counting/count/": 3,
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {
+        "MyApp.Counting/count/": ["MyApp.Task"],
       });
     });
 
@@ -827,10 +862,12 @@ describe("DataLayer", () => {
 
     it("takes counts the page did not carry as none", () => {
       LocalDatabase.syncCounts = {"MyApp.Stale/count/": 9};
+      LocalDatabase.syncCountTypes = {"MyApp.Stale/count/": ["MyApp.Task"]};
 
       DataLayer.ingestMountData({actorUserId: null, syncRows: {}});
 
       assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
     });
 
     it("leaves the database as it was for mount data carrying no rows", () => {

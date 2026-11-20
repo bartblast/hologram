@@ -345,6 +345,20 @@ defmodule Hologram.Sync.CarryTest do
              }
     end
 
+    test "records the entity types the count reads under the count's key" do
+      term =
+        Module3
+        |> Stage.filter([{[:c, :id], {:!=, nil}}])
+        |> Stage.count()
+        |> Stage.normalize()
+
+      collect_count(Module2, :total, term, 7)
+
+      assert take_count_types() == %{
+               count_key(:total, term) => [inspect(Module1), inspect(Module3)]
+             }
+    end
+
     # The same field running the same query twice is one answer, not two - the later one, which is
     # what a re-render would have produced.
     test "records one count per field and query" do
@@ -825,12 +839,13 @@ defmodule Hologram.Sync.CarryTest do
   end
 
   describe "start/0" do
-    test "clears the counts a previous render gathered" do
+    test "clears the counts a previous render gathered, and their types" do
       collect_count(Module2, :total, total_term(), 7)
 
       start()
 
       assert take_counts() == %{}
+      assert take_count_types() == %{}
     end
 
     test "arms the grant-scope recorder" do
@@ -894,6 +909,20 @@ defmodule Hologram.Sync.CarryTest do
       take_grant_scopes()
 
       assert take_grant_scopes() == MapSet.new()
+    end
+  end
+
+  describe "take_count_types/0" do
+    test "returns nothing when no count was collected" do
+      assert take_count_types() == %{}
+    end
+
+    test "leaves nothing behind for the next render" do
+      collect_count(Module2, :total, total_term(), 7)
+
+      take_count_types()
+
+      assert take_count_types() == %{}
     end
   end
 
