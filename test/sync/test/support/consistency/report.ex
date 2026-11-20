@@ -4,7 +4,7 @@ defmodule HologramSyncTests.Consistency.Report do
   # What a failed randomized run tells: a message short enough for CI's log, naming the seed, how
   # to replay it, the first problems with the commits behind each row and the client's connects and
   # cuts, and a trace with everything - the plan, every commit in lock order, each client's events
-  # and every problem - written to a file CI keeps.
+  # with the rows and pairs it received, and every problem - written to a file CI keeps.
 
   alias HologramSyncTests.Consistency.Plan
 
@@ -287,10 +287,25 @@ defmodule HologramSyncTests.Consistency.Report do
     |> Enum.map_join("; ", fn {op, hold} -> "#{Plan.describe(op)} (hold #{hold} ms)" end)
   end
 
+  # A client's events and the rows and pairs it received, in the order of the monotonic clock both
+  # read. A row's time is the arrival of the chunk that completed its frame, read before the events
+  # of that chunk's frames, so a chunk's rows come right before its frames' events, each in the
+  # order it arrived - a frame's ops count how many of them it brought.
   defp client_trace(client) do
+    received = Enum.map(client.records, &received_entry/1)
+    events = Enum.map(client.events, &Map.drop(&1, [:request_id]))
+
     [
       "  #{client.name}, user #{inspect(client.user_id)}, schedule #{inspect(client.schedule)}",
-      Enum.map(client.events, &"    #{inspect(Map.drop(&1, [:request_id]))}")
+      (received ++ events)
+      |> Enum.sort_by(& &1.at)
+      |> Enum.map(&"    #{inspect(&1, limit: :infinity)}")
     ]
+  end
+
+  defp received_entry(record) do
+    record
+    |> Map.drop([:opened_at, :received_at])
+    |> Map.merge(%{at: record.received_at, kind: :received})
   end
 end

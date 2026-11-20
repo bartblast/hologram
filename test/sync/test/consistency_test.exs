@@ -156,6 +156,16 @@ defmodule HologramSyncTests.ConsistencyTest do
 
     assert trace =~ "COMMITS IN LOCK ORDER"
 
+    # The card the client received sits among its events by time, right after the cut at 5.
+    lines = String.split(trace, "\n")
+    received = Enum.find_index(lines, &(&1 =~ "kind: :received"))
+
+    assert received
+
+    assert Enum.at(lines, received - 1) =~ "kind: :closed"
+    assert Enum.at(lines, received) =~ ~s(carried: %{"title" => "stale"})
+    assert Enum.at(lines, received) =~ "cursor_tx: 1234"
+
     assert trace =~ "writer 1 (ops): tag_card card-1 tag-1 - no entity with id"
     assert trace =~ "writer 2 (ops): rename x - %DBConnection.ConnectionError{"
   end
