@@ -23,7 +23,16 @@ defmodule HologramSyncTests.ConsistencyTest do
     plan = Plan.generate(options.seed, options.steps)
 
     for run <- 1..options.runs do
-      outcome = Run.run(plan, base_url())
+      outcome =
+        try do
+          Run.run(plan, base_url())
+        catch
+          kind, reason ->
+            kind
+            |> Exception.format(reason, __STACKTRACE__)
+            |> Report.crash_message(options, run)
+            |> flunk()
+        end
 
       if Report.failed?(outcome) do
         path = Report.write(outcome, plan, run, @trace_dir)
@@ -31,6 +40,20 @@ defmodule HologramSyncTests.ConsistencyTest do
         flunk(Report.message(outcome, options, run, path))
       end
     end
+  end
+
+  test "a run that raises names the seed, the replay and the error" do
+    message =
+      :error
+      |> Exception.format(%RuntimeError{message: "the seed rolled back"}, [])
+      |> Report.crash_message(%{runs: 2, seed: 7, steps: 3}, 1)
+
+    assert message =~ "seed 7 (run 1 of 2)"
+
+    assert message =~
+             "SYNC_SEED=7 SYNC_STEPS=3 mix test --include randomized test/consistency_test.exs"
+
+    assert message =~ "the seed rolled back"
   end
 
   test "a failed run's message names the seed, the replay and the commits behind the row" do

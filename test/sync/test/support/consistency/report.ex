@@ -17,6 +17,27 @@ defmodule HologramSyncTests.Consistency.Report do
   def failed?(outcome), do: problems(outcome) != []
 
   @doc """
+  Returns the message of a run of the given seed that raised or exited before it could report, at
+  any point of the run, with how to replay it and what went wrong, as `Exception.format/3` spells
+  it.
+  """
+  @spec crash_message(
+          String.t(),
+          %{runs: pos_integer, seed: integer, steps: pos_integer},
+          pos_integer
+        ) ::
+          String.t()
+  def crash_message(error, options, run) do
+    """
+    The randomized sync run failed for seed #{options.seed} (run #{run} of #{options.runs}) before it could report.
+
+    #{replay(options)}
+
+    #{error}
+    """
+  end
+
+  @doc """
   Returns the message of a failed run of the given seed, the given run of how many, its trace at
   the given path.
   """
@@ -33,8 +54,7 @@ defmodule HologramSyncTests.Consistency.Report do
     The randomized sync run failed for seed #{options.seed} (run #{run} of #{options.runs}).
     The plan is random, so this failure may not come from the change under test.
 
-    Replay: SYNC_SEED=#{options.seed} SYNC_STEPS=#{options.steps} mix test --include randomized test/consistency_test.exs
-    A replay gives the same plan, not the same interleaving: SYNC_RUNS=<n> runs it n times.
+    #{replay(options)}
     Trace: #{path}
 
     #{summary(outcome)}
@@ -55,6 +75,12 @@ defmodule HologramSyncTests.Consistency.Report do
     File.write!(path, trace(outcome, plan))
 
     path
+  end
+
+  defp replay(options) do
+    "Replay: SYNC_SEED=#{options.seed} SYNC_STEPS=#{options.steps} mix test --include randomized " <>
+      "test/consistency_test.exs\nA replay gives the same plan, not the same interleaving: " <>
+      "SYNC_RUNS=<n> runs it n times."
   end
 
   defp summary(outcome) do
