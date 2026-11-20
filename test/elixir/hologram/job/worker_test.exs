@@ -102,7 +102,7 @@ defmodule Hologram.Job.WorkerTest do
   end
 
   defp release_stub(test_pid) do
-    fn id ->
+    fn _job_type, id ->
       send(test_pid, {:released, id})
 
       :ok
@@ -153,7 +153,7 @@ defmodule Hologram.Job.WorkerTest do
       opts
       |> Keyword.put_new(:max_concurrency, fn _job_type -> 10 end)
       |> Keyword.put_new(:queued, fn _job_type, _skip_ids, _count -> [] end)
-      |> Keyword.put_new(:release, fn _id -> :ok end)
+      |> Keyword.put_new(:release, fn _job_type, _id -> :ok end)
       |> Keyword.put_new(:run, fn _job_type, _id -> :done end)
       |> Keyword.put_new(:sweep, fn _job_types, _skip_ids -> :ok end)
       |> Keyword.put_new(:poll_interval_ms, :timer.minutes(1))
@@ -295,7 +295,7 @@ defmodule Hologram.Job.WorkerTest do
     # abandoned.
     test "requires a run lock connection when given no run" do
       assert_raise KeyError, ~r/:run_lock/, fn ->
-        init(release: fn _id -> :ok end, runs: self())
+        init(release: fn _job_type, _id -> :ok end, runs: self())
       end
     end
 
@@ -307,7 +307,7 @@ defmodule Hologram.Job.WorkerTest do
 
     test "requires the supervisor the runs are started under" do
       assert_raise KeyError, ~r/:runs/, fn ->
-        init(release: fn _id -> :ok end, run: fn _job_type, _id -> :done end)
+        init(release: fn _job_type, _id -> :ok end, run: fn _job_type, _id -> :done end)
       end
     end
   end

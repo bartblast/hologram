@@ -23,11 +23,12 @@ defmodule Hologram.Job.RunnerTest do
   end
 
   # Whether some other session - another worker, or a sweep - could take the job's run lock.
-  defp lock_free?(id) do
+  defp lock_free?(job) do
     other = start_supervised!(Supervisor.child_spec(RunLock, id: make_ref()))
-    free? = RunLock.acquire(other, id)
+    name = lock_name(job.__struct__, job.id)
+    free? = RunLock.acquire(other, name)
 
-    if free?, do: RunLock.release(other, id)
+    if free?, do: RunLock.release(other, name)
 
     free?
   end
@@ -70,7 +71,17 @@ defmodule Hologram.Job.RunnerTest do
 
       assert {:claimed, _job} = claim(Module1, job.id, run_lock)
 
-      refute lock_free?(job.id)
+      refute lock_free?(job)
+    end
+
+    # A browser picks the id of a row it creates, so a job of another type can hold one id too.
+    test "claims a job while one of another type with the same id runs", %{run_lock: run_lock} do
+      first = Job.create!(Module1)
+      second = Job.create!(Module3, [id: first.id, outcome: :ok], trust: true)
+      other = start_supervised!(Supervisor.child_spec(RunLock, id: make_ref()))
+
+      assert {:claimed, _job} = claim(Module1, first.id, other)
+      assert {:claimed, _job} = claim(Module3, second.id, run_lock)
     end
 
     test "takes no run lock for a job that is not queued", %{run_lock: run_lock} do
@@ -79,7 +90,7 @@ defmodule Hologram.Job.RunnerTest do
       :ok = EntityOperations.update(Module1, job.id, %{status: :done})
 
       assert claim(Module1, job.id, run_lock) == :taken
-      assert lock_free?(job.id)
+      assert lock_free?(job)
     end
 
     # Only a key two jobs share gets here, or a claim on another node that failed and has not given
@@ -88,7 +99,7 @@ defmodule Hologram.Job.RunnerTest do
       job = Job.create!(Module1)
       other = start_supervised!(Supervisor.child_spec(RunLock, id: make_ref()))
 
-      assert RunLock.acquire(other, job.id)
+      assert RunLock.acquire(other, lock_name(Module1, job.id))
 
       assert claim(Module1, job.id, run_lock) == :locked
       assert EntityOperations.get(Module1, job.id).status == :queued
@@ -193,7 +204,7 @@ defmodule Hologram.Job.RunnerTest do
       job = job(:ok)
       other = start_supervised!(Supervisor.child_spec(RunLock, id: make_ref()))
 
-      assert RunLock.acquire(other, job.id)
+      assert RunLock.acquire(other, lock_name(Module3, job.id))
 
       assert process(Module3, job.id, run_lock) == :locked
       assert EntityOperations.get(Module3, job.id).status == :queued
@@ -233,14 +244,14 @@ defmodule Hologram.Job.RunnerTest do
       job = job(:ok)
 
       assert process(Module3, job.id, run_lock) == :done
-      assert lock_free?(job.id)
+      assert lock_free?(job)
     end
 
     test "gives up the run lock once the job has failed", %{run_lock: run_lock} do
       job = job(:raise)
 
       assert process(Module3, job.id, run_lock) == :failed
-      assert lock_free?(job.id)
+      assert lock_free?(job)
     end
 
     # The lock is the claim's, which process did not make - giving it up would leave a run in
@@ -251,7 +262,7 @@ defmodule Hologram.Job.RunnerTest do
       assert {:claimed, _job} = claim(Module3, job.id, run_lock)
       assert process(Module3, job.id, run_lock) == :taken
 
-      refute lock_free?(job.id)
+      refute lock_free?(job)
     end
 
     # Another node's sweep failed the row while run/1 ran - its lock was lost mid-run, so the run
@@ -265,7 +276,7 @@ defmodule Hologram.Job.RunnerTest do
 
       assert row.status == :failed
       assert row.error == "swept"
-      assert lock_free?(job.id)
+      assert lock_free?(job)
     end
 
     test "records nothing for a job whose row is gone", %{run_lock: run_lock} do
@@ -274,7 +285,7 @@ defmodule Hologram.Job.RunnerTest do
       assert process(Module3, job.id, run_lock) == :done
 
       assert EntityOperations.get(Module3, job.id) == nil
-      assert lock_free?(job.id)
+      assert lock_free?(job)
     end
 
     test "records the outcome outside the creating user's authority", %{run_lock: run_lock} do
@@ -285,6 +296,21 @@ defmodule Hologram.Job.RunnerTest do
       # denied - which is what makes this an assertion about whose write it is.
       assert as_user(user, fn -> process(Module3, job.id, run_lock) end) == :done
       assert EntityOperations.get(Module3, job.id).status == :done
+    end
+  end
+
+  describe "lock_name/2" do
+    # A browser picks the id of a row it creates, so two job types can hold one id - and two runs
+    # sharing a lock would stack on one session, where the release for one frees the other's.
+    test "names the run locks of two job types' jobs with one id apart" do
+      id = Entity.generate_id()
+
+      assert lock_name(Module1, id) != lock_name(Module3, id)
+    end
+
+    test "names a job's run lock the same way every time" do
+      assert lock_name(Module1, "01a1f90b-3867-7fb8-b6ec-32bdc35da5d7") ==
+               "Hologram.Test.Fixtures.Job.Module1:01a1f90b-3867-7fb8-b6ec-32bdc35da5d7"
     end
   end
 

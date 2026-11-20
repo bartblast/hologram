@@ -53,7 +53,8 @@ defmodule Hologram.Job.Runner do
     result
   catch
     kind, reason ->
-      if Process.delete(@uncommitted_lock_key), do: release_quietly(run_lock, id)
+      if Process.delete(@uncommitted_lock_key),
+        do: release_quietly(run_lock, lock_name(job_type, id))
 
       :erlang.raise(kind, reason, __STACKTRACE__)
   end
@@ -101,10 +102,23 @@ defmodule Hologram.Job.Runner do
 
           outcome_status(outcome)
         after
-          release_quietly(run_lock, id)
+          release_quietly(run_lock, lock_name(job_type, id))
         end
     end
   end
+
+  @doc """
+  Returns the name of the run lock of the job of the given type with the given id.
+
+  Named by the type as well as the id, since an id is unique only within its type's table - a
+  browser picks the id of a row it creates, so two job types can hold one id. Sharing a lock, the
+  two would stack on one session when both run on a node, and the release the worker makes for a
+  run that went down would free the other's.
+
+  Frozen for good, like the key derived from it (see Hologram.Job.RunLock.key/1).
+  """
+  @spec lock_name(module, String.t()) :: String.t()
+  def lock_name(job_type, id), do: inspect(job_type) <> ":" <> id
 
   @doc """
   Returns the oldest queued jobs of the given job type, at most the given count of them, oldest
@@ -178,7 +192,7 @@ defmodule Hologram.Job.Runner do
   defp claim_row(job_type, id, run_lock) do
     case EntityOperations.get(job_type, id, lock: :no_key_update) do
       %{status: :queued} = job ->
-        if RunLock.acquire(run_lock, id) do
+        if RunLock.acquire(run_lock, lock_name(job_type, id)) do
           Process.put(@uncommitted_lock_key, true)
 
           :ok = EntityOperations.update(job_type, id, %{status: :running})
@@ -236,15 +250,15 @@ defmodule Hologram.Job.Runner do
   # release that exits - the connection gone, or killed for leaving it unanswered - is let go: the
   # lock went with the session either way, and the runs go down with the connection. What it
   # must not do is replace the error the claim or the run is leaving with.
-  defp release_quietly(run_lock, id) do
-    RunLock.release(run_lock, id)
+  defp release_quietly(run_lock, name) do
+    RunLock.release(run_lock, name)
   catch
     :exit, _reason -> :ok
   end
 
   # Raises what the query answers with otherwise, the way the other statements a sweep runs do.
-  defp run_lock_free?(id) do
-    case Connection.query("SELECT pg_try_advisory_xact_lock($1)", [RunLock.key(id)]) do
+  defp run_lock_free?(name) do
+    case Connection.query("SELECT pg_try_advisory_xact_lock($1)", [RunLock.key(name)]) do
       {:ok, %Postgrex.Result{rows: [[free?]]}} -> free?
       {:error, error} -> raise error
     end
@@ -260,7 +274,7 @@ defmodule Hologram.Job.Runner do
   defp sweep_row(job_type, id) do
     {:ok, :ok} =
       Connection.transaction(fn ->
-        with true <- run_lock_free?(id),
+        with true <- run_lock_free?(lock_name(job_type, id)),
              %{status: :running} <- EntityOperations.get(job_type, id, lock: :no_key_update) do
           :ok =
             EntityOperations.update(job_type, id, %{error: @cut_short_error, status: :failed})

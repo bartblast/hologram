@@ -52,11 +52,11 @@ defmodule Hologram.Job.Worker do
   `:queued`, `:sweep`, `:run`, `:release` and `:max_concurrency` are what the worker looks for
   jobs, fails runs cut short, runs a job, gives up a run's lock and reads a job type's limit with.
   They default to `Hologram.Job.Runner.queued/3`, `Hologram.Job.Runner.sweep/2`,
-  `Hologram.Job.Runner.process/3`, `Hologram.Job.RunLock.release/2` and
-  `Hologram.Job.max_concurrency/1`, the run and the release on the `:run_lock` connection, so
-  `:run_lock` is required unless both `:run` and `:release` are given. Only tests give them: the
-  seams are what let this process be exercised without a database, the way the dispatcher takes
-  the handler it routes through.
+  `Hologram.Job.Runner.process/3`, `Hologram.Job.RunLock.release/2` of the run's lock name (see
+  `Hologram.Job.Runner.lock_name/2`) and `Hologram.Job.max_concurrency/1`, the run and the release
+  on the `:run_lock` connection, so `:run_lock` is required unless both `:run` and `:release` are
+  given. Only tests give them: the seams are what let this process be exercised without a
+  database, the way the dispatcher takes the handler it routes through.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
@@ -189,7 +189,7 @@ defmodule Hologram.Job.Worker do
       when is_map_key(state.runs, ref) do
     {{job_type, id}, runs} = Map.pop!(state.runs, ref)
 
-    :ok = state.release.(id)
+    :ok = state.release.(job_type, id)
 
     state =
       case reason do
@@ -206,7 +206,7 @@ defmodule Hologram.Job.Worker do
     end
   end
 
-  defp default_release(run_lock), do: &RunLock.release(run_lock, &1)
+  defp default_release(run_lock), do: &RunLock.release(run_lock, Runner.lock_name(&1, &2))
 
   defp default_run(run_lock), do: &Runner.process(&1, &2, run_lock)
 

@@ -2,8 +2,9 @@ defmodule Hologram.Job.RunLock do
   @moduledoc false
 
   # The connection a node's runs hold their run locks on: one session-level advisory lock per job
-  # running, named by the job's id, taken as the job is claimed and given up once its outcome is
-  # recorded. A running row whose lock any session can take has nobody running it.
+  # running, named by the job's type and id (see Hologram.Job.Runner.lock_name/2), taken as the job
+  # is claimed and given up once its outcome is recorded. A running row whose lock any session can
+  # take has nobody running it.
   #
   # Session-scoped rather than transactional because a run spans three transactions and reaches
   # outside the database between them, and because PostgreSQL frees a session lock when the
@@ -82,8 +83,8 @@ defmodule Hologram.Job.RunLock do
   """
 
   @doc """
-  Takes the run lock of the job with the given id on the given connection, unless another session
-  holds it. Returns whether it was taken.
+  Takes the run lock with the given name (see Hologram.Job.Runner.lock_name/2) on the given
+  connection, unless another session holds it. Returns whether it was taken.
 
   Never waits on another session: a lock another session holds is a run in progress, and nothing
   should wait on a run. Locks taken twice by one session stack, so each lock taken needs exactly
@@ -95,9 +96,9 @@ defmodule Hologram.Job.RunLock do
   session yet (see await_connected/1), like them too.
   """
   @spec acquire(GenServer.server(), String.t()) :: boolean
-  def acquire(connection, id) do
+  def acquire(connection, name) do
     [%Postgrex.Result{rows: [[taken]]}] =
-      query!(connection, "SELECT pg_try_advisory_lock(#{key(id)})")
+      query!(connection, "SELECT pg_try_advisory_lock(#{key(name)})")
 
     taken == "t"
   end
@@ -125,7 +126,8 @@ defmodule Hologram.Job.RunLock do
   end
 
   @doc """
-  Returns the advisory lock key the run lock of the job with the given id is named by.
+  Returns the advisory lock key of the run lock with the given name (see
+  Hologram.Job.Runner.lock_name/2).
 
   A key in PostgreSQL's single-key space rather than the two-key one Hologram.DB.SetLock names row
   locks in, where a lock held for a whole run would stop writes entering a set the job's row owns.
@@ -133,22 +135,22 @@ defmodule Hologram.Job.RunLock do
   key matches only by hash chance.
   """
   @spec key(String.t()) :: integer
-  def key(id) do
-    <<key::signed-integer-size(64), _rest::binary>> = :crypto.hash(:sha256, @key_prefix <> id)
+  def key(name) do
+    <<key::signed-integer-size(64), _rest::binary>> = :crypto.hash(:sha256, @key_prefix <> name)
 
     key
   end
 
   @doc """
-  Gives up the run lock of the job with the given id on the given connection, and returns :ok.
+  Gives up the run lock with the given name on the given connection, and returns :ok.
 
   A lock the session does not hold is left as it is - PostgreSQL answers with a warning, which is
   ignored. Raises when the connection has no session yet (see await_connected/1), and exits when
   the server leaves the statement unanswered for 5 seconds, which ends the connection.
   """
   @spec release(GenServer.server(), String.t()) :: :ok
-  def release(connection, id) do
-    query!(connection, "SELECT pg_advisory_unlock(#{key(id)})")
+  def release(connection, name) do
+    query!(connection, "SELECT pg_advisory_unlock(#{key(name)})")
 
     :ok
   end

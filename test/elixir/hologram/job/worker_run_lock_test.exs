@@ -7,7 +7,9 @@ defmodule Hologram.Job.WorkerRunLockTest do
 
   alias Hologram.Entity
   alias Hologram.Job.RunLock
+  alias Hologram.Job.Runner
   alias Hologram.Job.Worker
+  alias Hologram.Test.Fixtures.Job.Module1
   alias Hologram.Test.TCPProxy
 
   @moduletag :database
@@ -81,6 +83,35 @@ defmodule Hologram.Job.WorkerRunLockTest do
 
     assert_receive {:DOWN, ^monitor_ref, :process, ^left, :killed}, 5_000
     wait_until(fn -> RunLock.acquire(other, id) end)
+  end
+
+  # A run killed after its claim never reached its own release, so the worker's is what frees the
+  # lock - under the run's lock name, or the row would look live for as long as the session lasts.
+  test "gives up the lock of a run that went down, under the run's lock name" do
+    id = Entity.generate_id()
+    name = Runner.lock_name(Module1, id)
+    run_lock = start_run_lock()
+    other = start_run_lock()
+    {:ok, given?} = Agent.start_link(fn -> false end)
+
+    queued = fn
+      Module1, _skip_ids, _count ->
+        if Agent.get_and_update(given?, &{&1, true}), do: [], else: [%{id: id}]
+
+      _job_type, _skip_ids, _count ->
+        []
+    end
+
+    run = fn _job_type, _id ->
+      true = RunLock.acquire(run_lock, name)
+      Process.exit(self(), :kill)
+    end
+
+    capture_log(fn ->
+      start_worker(run_lock, queued: queued, run: run)
+
+      wait_until(fn -> RunLock.acquire(other, name) end)
+    end)
   end
 
   # While the database is away nothing can be claimed, and a worker looking anyway would crash on

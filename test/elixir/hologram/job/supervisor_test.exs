@@ -240,7 +240,7 @@ defmodule Hologram.Job.SupervisorTest do
              notifications: notifications,
              poll_interval_ms: 50,
              queued: queued,
-             release: fn _id -> :ok end,
+             release: fn _job_type, _id -> :ok end,
              run: fn _job_type, _id -> :done end,
              runs: __MODULE__.ListenerRuns,
              sweep: fn _job_types, _skip_ids -> :ok end}
