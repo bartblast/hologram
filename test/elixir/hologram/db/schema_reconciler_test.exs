@@ -50,6 +50,13 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                      "reconciliation - drop the \"hologram_system\" and " <>
                      "\"hologram_data\" schemas or point the config at another database"
 
+  # Upgrade steps standing in for a later release's: the first creates a table in hologram_system,
+  # which fails if it runs again, and the second changes it, which fails if the first never ran.
+  @create_probe_step {2, [~s{CREATE TABLE "hologram_system"."upgrade_probe" ("id" integer)}]}
+
+  @alter_probe_step {3,
+                     [~s{ALTER TABLE "hologram_system"."upgrade_probe" ADD COLUMN "note" text}]}
+
   defp drop_hologram_schemas do
     {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_system" CASCADE))
     {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
@@ -222,6 +229,35 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         ~s(UPDATE "hologram_system"."schema_object" SET "name" = $2 WHERE "kind" = 'enum_type' AND "name" = $1),
         [from, to]
       )
+  end
+
+  # The columns of the probe table the upgrade steps above create, none when it doesn't exist.
+  defp probe_columns do
+    statement = """
+    SELECT a.attname
+    FROM pg_catalog.pg_attribute a
+    JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'hologram_system' AND c.relname = 'upgrade_probe'
+      AND a.attnum > 0 AND NOT a.attisdropped
+    ORDER BY a.attnum
+    """
+
+    {:ok, %{rows: rows}} = Connection.query(statement)
+
+    Enum.map(rows, fn [name] -> name end)
+  end
+
+  # The test config logs warnings and up - the upgrade lines are info.
+  defp capture_info_log(fun) do
+    level = Logger.level()
+    Logger.configure(level: :info)
+
+    try do
+      ExUnit.CaptureLog.capture_log([level: :info], fun)
+    after
+      Logger.configure(level: level)
+    end
   end
 
   defp set_system_schema_version(version) do
@@ -783,6 +819,80 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                  system_schema_version: 0,
                  last_reconciled_at: ~U[2026-07-21 08:00:00.000000Z]
              }
+    end
+
+    test "upgrades the system tables of a database at an older layout, step by step" do
+      reconcile(reconcile_context([Module1]))
+
+      context =
+        [Module1]
+        |> reconcile_context()
+        |> Map.put(:system_upgrades, [@create_probe_step, @alter_probe_step])
+
+      log = capture_info_log(fn -> reconcile(context) end)
+
+      assert probe_columns() == ["id", "note"]
+      assert read_marker().system_schema_version == 3
+
+      assert Regex.scan(~r/upgraded the system tables to layout version (\d+)/, log,
+               capture: :all_but_first
+             ) == [["2"], ["3"]]
+    end
+
+    test "runs only the upgrade steps above the database's layout" do
+      reconcile(reconcile_context([Module1]))
+
+      [Module1]
+      |> reconcile_context()
+      |> Map.put(:system_upgrades, [@create_probe_step])
+      |> reconcile()
+
+      log =
+        capture_info_log(fn ->
+          [Module1]
+          |> reconcile_context()
+          |> Map.put(:system_upgrades, [@create_probe_step, @alter_probe_step])
+          |> reconcile()
+        end)
+
+      assert probe_columns() == ["id", "note"]
+      assert read_marker().system_schema_version == 3
+      refute log =~ "layout version 2"
+      assert log =~ "upgraded the system tables to layout version 3"
+    end
+
+    test "claims a virgin database at the running layout without running a step" do
+      [Module1]
+      |> reconcile_context()
+      |> Map.put(:system_upgrades, [@create_probe_step])
+      |> reconcile()
+
+      assert probe_columns() == []
+      assert read_marker().system_schema_version == 2
+    end
+
+    test "rolls the upgrade back with a refused reconciliation, and logs none" do
+      reconcile(reconcile_context([Module1]))
+
+      {:ok, _result} = Connection.query(~s{CREATE TABLE "hologram_data"."alien" ("x" int8)})
+
+      context =
+        [Module1]
+        |> reconcile_context()
+        |> Map.put(:system_upgrades, [@create_probe_step])
+
+      expected_msg =
+        ~s(unknown table "alien" in the hologram_data schema - ) <>
+          "this schema is model-managed - move the object to another schema or remove it"
+
+      log =
+        capture_info_log(fn ->
+          assert_error RuntimeError, expected_msg, fn -> reconcile(context) end
+        end)
+
+      assert probe_columns() == []
+      assert read_marker().system_schema_version == 1
+      refute log =~ "upgraded the system tables"
     end
 
     test "returns no ops when the schema already matches" do
