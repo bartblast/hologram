@@ -4096,6 +4096,38 @@ defmodule Hologram.Sync.SessionTest do
       refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
     end
 
+    test "tells the verdicts a whole type read again moved in frames of the frame size", %{
+      locked: locked,
+      project: project
+    } do
+      put_app_env(:sync, rows_per_frame: 1)
+      other = DB.create!(PolicyProject.new(%{public: true}))
+      windows(%{})
+
+      session = start_session!([])
+      await_fill()
+
+      for row <- [project, other] do
+        :ok = EntityOperations.add_relationship(PolicyProject, row.id, :labels, locked.id)
+      end
+
+      send(session, {:live, whole_type_part()})
+
+      assert_receive {:sync_deltas, first_cursor, [%{id: first_id, op: :patch_entity}], first_seq}
+      assert_receive {:sync_deltas, last_cursor, [%{id: last_id, op: :patch_entity}], last_seq}
+
+      # In id order, all under the session's number, and only the batch's last frame carries its
+      # place.
+      assert [first_id, last_id] == Enum.sort([project.id, other.id])
+      assert first_seq == last_seq
+      assert first_cursor == nil
+      assert last_cursor != nil
+
+      send(session, {:live, whole_type_part()})
+
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
     test "tells nothing of a held row's verdicts a whole type read again left as they were" do
       windows(%{})
 

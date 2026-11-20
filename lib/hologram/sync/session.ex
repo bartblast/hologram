@@ -1439,10 +1439,17 @@ defmodule Hologram.Sync.Session do
 
   defp send_verdict_patches(state, []), do: state
 
+  # Split by the frame size, as a returning client is told its verdicts (see `tell_verdicts/2`): a
+  # grant on a whole type can move the verdicts of every row of it the client holds.
   defp send_verdict_patches(state, stale) do
-    news = %{appeared: [], edges: [], patched: Verdicts.patches([], stale), unsynced: []}
+    stale
+    |> Enum.sort_by(fn {row, _verdicts} -> row.id end)
+    |> Enum.chunk_every(Catchup.rows_per_frame())
+    |> Enum.reduce(state, fn chunk, acc ->
+      news = %{appeared: [], edges: [], patched: Verdicts.patches([], chunk), unsynced: []}
 
-    send_frames(state, news, %{}, state.applied_seq)
+      send_frames(acc, news, %{}, acc.applied_seq)
+    end)
   end
 
   # Frames carrying the given news, the rows handed over split across them by the frame size and
