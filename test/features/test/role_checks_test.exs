@@ -171,7 +171,7 @@ defmodule HologramFeatureTests.RoleChecksTest do
   feature "shows no role to a session with no user at all", %{session: session} do
     create_document("ephemeris")
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/policies/4")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/policies/4")
 
     assert html =~ ~r{<strong id="documents"><code>ephemeris</code></strong>}
     assert html =~ ~r{<strong id="admin"><code>false</code></strong>}
