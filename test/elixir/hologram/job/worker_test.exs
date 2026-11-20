@@ -235,8 +235,9 @@ defmodule Hologram.Job.WorkerTest do
           assert Process.alive?(worker)
         end)
 
-      # Only an earlier go at what the first poll does and logs.
-      assert log == ""
+      # Only an earlier go at what the first poll does and logs. Asserted on the worker's own lines,
+      # since the capture holds every process's, the other async tests' included.
+      refute log =~ "the job worker"
     end
 
     test "stays up, and logs nothing, when the look as it starts raises" do
@@ -263,7 +264,7 @@ defmodule Hologram.Job.WorkerTest do
 
       # A worker can start before the job tables are there, in a test env, and a log line then
       # would only be noise.
-      assert log == ""
+      refute log =~ "the job worker"
     end
   end
 
@@ -285,7 +286,7 @@ defmodule Hologram.Job.WorkerTest do
           :sys.get_state(worker)
         end)
 
-      assert log == ""
+      refute log =~ "the job worker"
     end
   end
 
@@ -500,6 +501,36 @@ defmodule Hologram.Job.WorkerTest do
       assert_receive {:asked, Module2}, @timeout_ms
     end
 
+    # A job type whose module is gone - deleted in dev while one of its runs was in flight - raises
+    # reading its limit, and crashing on that would kill every other run on the node.
+    test "looks at the other types when a type's limit can't be read" do
+      queues = start_queues(%{})
+
+      max_concurrency = fn
+        Module1 ->
+          raise UndefinedFunctionError, module: Module1, function: :__job_max_concurrency__
+
+        _job_type ->
+          10
+      end
+
+      log =
+        capture_log(fn ->
+          worker = start_worker_on!(queues, max_concurrency: max_concurrency)
+          await_first_look()
+
+          add_jobs(queues, Module3, ["a"])
+          wake(worker)
+
+          assert_receive {:ran, Module3, "a"}, @timeout_ms
+
+          # The look the wake makes, which the start look may have run "a" ahead of.
+          :sys.get_state(worker)
+        end)
+
+      assert log =~ "UndefinedFunctionError"
+    end
+
     # Crashing would kill every run on the node, through the kill as the next worker starts, for a
     # wait the next wake or poll gets past.
     test "keeps its runs going when a look can't get a database connection" do
@@ -601,6 +632,9 @@ defmodule Hologram.Job.WorkerTest do
           wake(worker)
 
           assert_receive {:ran, Module3, "a"}, @timeout_ms
+
+          # The look the wake makes, which the start look may have run "a" ahead of.
+          :sys.get_state(worker)
         end)
 
       assert log =~ "no such table"
@@ -674,7 +708,7 @@ defmodule Hologram.Job.WorkerTest do
         ] do
       # A run that went down never answered, so its lock may still be held, its row may be left
       # running, and its claim, tried again at once, would most likely go down the same way.
-      test "gives up the lock of a run that #{label}, sweeps its type, and leaves the job until the next wake" do
+      test "gives up the lock of a run that #{label}, sweeps its type, and leaves the job until the next poll" do
         queues = start_queues(%{})
         test_pid = self()
 
@@ -704,6 +738,64 @@ defmodule Hologram.Job.WorkerTest do
         assert_receive {:asked, Module1, ^skip_ids}, @timeout_ms
         assert Process.alive?(worker)
       end
+    end
+
+    # A wake comes with every write, so a claim that goes down each time would otherwise be tried
+    # again at the rate the app writes.
+    test "leaves the job of a run that went down out of the looks until the next poll" do
+      queues = start_queues(%{})
+      test_pid = self()
+
+      worker =
+        start_worker_on!(queues,
+          release: release_stub(test_pid),
+          run: crashing_run_stub(test_pid, fn -> Process.exit(self(), :kill) end)
+        )
+
+      await_first_look()
+      add_jobs(queues, Module1, ["a"])
+      wake(worker)
+      assert_receive {:ran, Module1, "a"}, @timeout_ms
+      assert_receive {:released, "a"}, @timeout_ms
+
+      skip_ids = MapSet.new(["a"])
+
+      # Past the run's DOWN, so the asks left are the ones the wake below makes.
+      :sys.get_state(worker)
+      flush_asks()
+
+      wake(worker)
+      assert_receive {:asked, Module1, ^skip_ids}, @timeout_ms
+      refute_receive {:ran, Module1, "a"}, 100
+
+      send(worker, :poll)
+
+      assert_receive {:ran, Module1, "a"}, @timeout_ms
+    end
+
+    test "leaves the job of a run that went down on a busy pool out only until the next wake" do
+      queues = start_queues(%{})
+      test_pid = self()
+
+      refusing =
+        crashing_run_stub(test_pid, fn ->
+          raise DBConnection.ConnectionError, "connection not available"
+        end)
+
+      worker = start_worker_on!(queues, release: release_stub(test_pid), run: refusing)
+      await_first_look()
+      add_jobs(queues, Module1, ["a"])
+
+      capture_log(fn ->
+        wake(worker)
+        assert_receive {:ran, Module1, "a"}, @timeout_ms
+
+        # Its DOWN handled, so the wake below comes after it.
+        assert_receive {:released, "a"}, @timeout_ms
+
+        wake(worker)
+        assert_receive {:ran, Module1, "a"}, @timeout_ms
+      end)
     end
 
     test "frees the run's slot" do

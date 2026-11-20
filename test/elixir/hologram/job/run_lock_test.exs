@@ -372,8 +372,7 @@ defmodule Hologram.Job.RunLockTest do
   end
 
   describe "start_link/1" do
-    # What a node that stops or a worker that crashes leaves behind: a session that ended, and with
-    # it every lock it held.
+    # What a node that stops leaves behind: a session that ended, and with it every lock it held.
     test "frees the session's locks when the connection stops" do
       id = Entity.generate_id()
       holder = start_session()

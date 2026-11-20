@@ -75,17 +75,17 @@ defmodule HologramFeatureTests.MutationsTest do
   end
 
   # The row reads running once the claim commits, a moment before run/1 registers its process.
-  defp await_hold_run do
+  defp await_hold_run(label) do
     Enum.reduce_while(1..100, nil, fn _attempt, _acc ->
-      case Process.whereis(HoldRun) do
-        nil ->
+      case :global.whereis_name({HoldRun, label}) do
+        :undefined ->
           Process.sleep(50)
           {:cont, nil}
 
         pid ->
           {:halt, pid}
       end
-    end) || flunk("the held run never registered")
+    end) || flunk("the held run #{label} never registered")
   end
 
   defp create_hold_run_write(label) do
@@ -541,26 +541,34 @@ defmodule HologramFeatureTests.MutationsTest do
     assert error =~ "the run was cut short before its outcome was recorded"
   end
 
-  # The held run stands for a slow job, like a web push waiting on a remote service. The restock
-  # created in the same batch runs and finishes while it's still running.
-  feature "runs a job while another one is still running", %{session: session} do
+  # The held runs stand for slow jobs, like web pushes waiting on a remote service. Two of one type
+  # run at once, and the restock created in the same batch runs and finishes while they're still
+  # running.
+  feature "runs jobs while others are still running", %{session: session} do
     item = create_item(0)
 
     session = log_in(session)
 
-    post_batch(session, 1, [create_hold_run_write("a"), create_restock_write(item.id, 1)])
+    writes = [
+      create_hold_run_write("a"),
+      create_hold_run_write("b"),
+      create_restock_write(item.id, 1)
+    ]
+
+    post_batch(session, 1, writes)
 
     assert await_response(session) ==
              %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
 
     session
-    |> assert_text(css("#held_jobs"), "a:running")
+    |> assert_text(css("#held_jobs"), "a:running,b:running")
     |> assert_text(css("#jobs"), "1:done")
-    |> assert_text(css("#held_jobs"), "a:running")
+    |> assert_text(css("#held_jobs"), "a:running,b:running")
 
-    send(await_hold_run(), :go)
+    send(await_hold_run("a"), :go)
+    send(await_hold_run("b"), :go)
 
-    assert_text(session, css("#held_jobs"), "a:done")
+    assert_text(session, css("#held_jobs"), "a:done,b:done")
   end
 
   feature "runs a job created by a command, as the session's user", %{session: session} do

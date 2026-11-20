@@ -176,8 +176,9 @@ defmodule Hologram.Job.RunnerTest do
   end
 
   describe "process/3" do
-    # A lock request that timed out may still be granted, and only the worker's restart gives that
-    # lock up - so nothing on the way may swallow the exit.
+    # A lock request exits only when its connection is gone, taking the lock with it if it was
+    # granted - and the run must go down with it rather than carry on with no lock held, so nothing
+    # on the way may swallow the exit.
     test "lets a lock request that exits end the run" do
       job = job(:ok)
 

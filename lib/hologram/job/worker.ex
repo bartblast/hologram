@@ -81,6 +81,7 @@ defmodule Hologram.Job.Worker do
     state = %{
       max_concurrency: Keyword.get(opts, :max_concurrency, &Job.max_concurrency/1),
       notifications: Keyword.get(opts, :notifications),
+      gone_down: MapSet.new(),
       passed_over: MapSet.new(),
       poll_interval_ms: Keyword.get(opts, :poll_interval_ms, default_poll_interval_ms()),
       queued: Keyword.get(opts, :queued, &Runner.queued/3),
@@ -174,16 +175,29 @@ defmodule Hologram.Job.Worker do
   # it frees the other run's lock, which stacked under this one - a 64-bit hash colliding.
   #
   # A claim that went down leaves its row queued, so the job is left out of the looks until the
-  # next wake or poll, or it would be claimed again at once, going down the same way each time. A
-  # run that went down after its claim leaves its row running with no lock held, so its type is
-  # swept now rather than at the next poll.
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, state)
+  # next poll, or it would be claimed again at once, going down the same way each time - with a
+  # crash report, a release and a sweep for each. Not until the next wake, as a job left queued
+  # under a lock is: a wake comes with every write, this node's own claims and outcomes included,
+  # so a claim going down each time would be tried at the rate the app writes. A run that went down
+  # on a pool that couldn't hand over a connection is the exception, left out until the next wake
+  # only: the pool is busiest under the load that brings the most wakes, and the job would
+  # otherwise wait a poll interval for a wait that is most likely over. A run that went down
+  # after its claim leaves its row running with no lock held, so its type is swept now rather than
+  # at the next poll.
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state)
       when is_map_key(state.runs, ref) do
     {{job_type, id}, runs} = Map.pop!(state.runs, ref)
 
     :ok = state.release.(id)
 
-    state = pass_over(%{state | runs: runs}, id)
+    state =
+      case reason do
+        {%DBConnection.ConnectionError{}, _stacktrace} ->
+          pass_over(%{state | runs: runs}, id)
+
+        _other ->
+          %{state | gone_down: MapSet.put(state.gone_down, id), runs: runs}
+      end
 
     case guard(fn -> state.sweep.([job_type], running_ids(state.runs)) end) do
       {:ok, :ok} -> {:noreply, fill(state, [job_type])}
@@ -225,21 +239,28 @@ defmodule Hologram.Job.Worker do
     Enum.reduce_while(job_types, state, &fill_type(&2, &1, logging))
   end
 
-  # The skip set holds the type's own runs, not every type's: an id of another type's is never in
-  # this type's table, and would only make the read longer.
+  # The skip set holds the type's own runs, not every type's - an id of another type's is never in
+  # this type's table, and would only make the read longer - and the jobs left out of the looks for
+  # now, of every type, which are few.
+  #
+  # The limit is read inside the guard, like the look: a job type whose module is gone - deleted in
+  # dev while one of its runs was in flight - raises reading it, and crashing on that would kill
+  # every other run on the node.
   defp fill_type(state, job_type, logging) do
-    free = state.max_concurrency.(job_type) - running_count(state, job_type)
-
     skip_ids =
       state.runs
       |> running_ids(job_type)
       |> MapSet.union(state.passed_over)
+      |> MapSet.union(state.gone_down)
 
-    with true <- free > 0,
-         {:ok, jobs} <- guard(fn -> state.queued.(job_type, skip_ids, free) end, logging) do
-      {:cont, Enum.reduce(jobs, state, &start_run(&2, job_type, &1.id))}
-    else
-      false -> {:cont, state}
+    look = fn ->
+      free = state.max_concurrency.(job_type) - running_count(state, job_type)
+
+      if free > 0, do: state.queued.(job_type, skip_ids, free), else: []
+    end
+
+    case guard(look, logging) do
+      {:ok, jobs} -> {:cont, Enum.reduce(jobs, state, &start_run(&2, job_type, &1.id))}
       :skip -> {:cont, state}
       :stop -> {:halt, state}
     end
@@ -362,8 +383,9 @@ defmodule Hologram.Job.Worker do
 
   defp sweep_if(_state, _job_types, :look), do: {:ok, :ok}
 
-  # Every wake and poll starts with nothing passed over, so a job left queued is tried again then.
-  # The poll also sweeps: the runs cut short on other nodes are failed within one poll interval.
+  # Every wake and poll starts with nothing passed over, so a job left queued is tried again then,
+  # and every poll with no claim that went down left out (see the DOWN handler). The poll also
+  # sweeps: the runs cut short on other nodes are failed within one poll interval.
   # Not on every wake, since a wake comes with every write, claims and outcomes included, and a
   # sweep costs a transaction per running row.
   defp wake_up(state, look_or_sweep) do
@@ -373,7 +395,11 @@ defmodule Hologram.Job.Worker do
     # was working.
     drain_wakes()
 
-    state = %{state | passed_over: MapSet.new()}
+    state =
+      case look_or_sweep do
+        :sweep -> %{state | gone_down: MapSet.new(), passed_over: MapSet.new()}
+        :look -> %{state | passed_over: MapSet.new()}
+      end
 
     # A sweep that fails for a reason of one type's own still lets the look run.
     with {:ok, job_types} <- guard(&job_types/0),
