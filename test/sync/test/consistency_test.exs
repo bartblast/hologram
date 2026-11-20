@@ -69,7 +69,14 @@ defmodule HologramSyncTests.ConsistencyTest do
       ],
       failures: [],
       history: %{
-        aborted: [],
+        aborted: [
+          %{ops: ["tag_card card-1 tag-1"], reason: "no entity with id", writer: "writer 1"},
+          %{
+            ops: ["rename x"],
+            reason: %DBConnection.ConnectionError{message: "closed"},
+            writer: "writer 2"
+          }
+        ],
         entries: [
           %{
             after_lock_at: 1,
@@ -119,8 +126,14 @@ defmodule HologramSyncTests.ConsistencyTest do
 
     on_exit(fn -> File.rm_rf!(dir) end)
 
-    assert dir
-           |> then(&Report.write(outcome, plan, 1, &1))
-           |> File.read!() =~ "COMMITS IN LOCK ORDER"
+    trace =
+      outcome
+      |> Report.write(plan, 1, dir)
+      |> File.read!()
+
+    assert trace =~ "COMMITS IN LOCK ORDER"
+
+    assert trace =~ "writer 1: tag_card card-1 tag-1 - no entity with id"
+    assert trace =~ "writer 2: rename x - %DBConnection.ConnectionError{"
   end
 end
