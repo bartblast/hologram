@@ -4,6 +4,7 @@ defmodule Hologram.DB.SupervisorTest do
   import Hologram.DB.Supervisor
 
   alias Hologram.DB
+  alias Hologram.DB.IndexBuilder
   alias Hologram.DB.QueryCache
   alias Hologram.Job
   alias Hologram.Sync
@@ -29,5 +30,27 @@ defmodule Hologram.DB.SupervisorTest do
                    type: :supervisor
                  }
                ]}}
+  end
+
+  describe "children/1" do
+    test "leaves the index builder out in dev and test" do
+      for env <- [:dev, :test] do
+        assert children(env) == [DB, QueryCache, Sync.Supervisor, Job.Supervisor]
+      end
+    end
+
+    # Last, so the node serves while it builds.
+    test "starts the index builder last where migrations manage the database" do
+      assert children(:prod) == [
+               DB,
+               QueryCache,
+               Sync.Supervisor,
+               Job.Supervisor,
+               {IndexBuilder, []}
+             ]
+
+      # Started again when an earlier child's restart takes it down, and killed outright on a stop.
+      assert %{restart: :transient, shutdown: :brutal_kill} = IndexBuilder.child_spec([])
+    end
   end
 end

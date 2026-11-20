@@ -11,6 +11,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Mapper
   alias Hologram.DB.Protocol
   alias Hologram.DB.QueryRunner
@@ -30,6 +31,9 @@ defmodule Hologram.DB do
   alias Hologram.WriteError
 
   @mapping_key {__MODULE__, :mapping}
+
+  # The index plan the last reconciliation this node ran converged the database to.
+  @plan_key {__MODULE__, :plan}
 
   # How long the boot waits between two tries while the database cannot be reached. Each try also
   # waits for the pool to give up on a checkout, about 4 seconds with DBConnection's defaults, then
@@ -85,7 +89,8 @@ defmodule Hologram.DB do
 
   @doc """
   Inserts the given entity as a full row - every column is named and bound explicitly -
-  stamping created_at and updated_at with the same current UTC timestamp.
+  stamping created_at, updated_at, server_created_at and server_updated_at with the same
+  current UTC timestamp.
 
   Returns {:ok, entity} with the stamped entity, or {:error, violations} - the map
   Entity.validate/1 returns, naming each field that broke its declaration: the declared
@@ -377,9 +382,9 @@ defmodule Hologram.DB do
   come from this module at run time, quoted in the SQL - a join table's name carries `$`, and an
   attribute may be named by a reserved word (`"user"` unquoted is the database role). An
   attribute's column has the attribute's name, a to-one relationship's column is `<name>_id`,
-  every table has `id`, `created_at` and `updated_at`, and a join table has `source_id` and
-  `target_id`. Columns whose names contain `$` are the framework's own, and what they hold can
-  change between versions. Select attributes by name.
+  every table has `id`, `created_at`, `updated_at`, `server_created_at` and `server_updated_at`,
+  and a join table has `source_id` and `target_id`. Columns whose names contain `$` are the
+  framework's own, and what they hold can change between versions. Select attributes by name.
 
   Policies do not apply: the read sees every row. A read on behalf of a user keeps to what that
   user may see in the SQL itself.
@@ -481,11 +486,11 @@ defmodule Hologram.DB do
 
   @doc """
   Updates the entity of the given type with the given id, setting exactly the changed
-  columns plus updated_at - there is no full-row variant. Changes (a map or keyword list)
-  are keyed by declared attribute names and to-one reference fields (`<relationship name>_id`) -
-  a to-one reference is set, reassigned, or cleared (nil) through its reference field. Changing
-  any other name, system attributes included, raises Hologram.MisuseError - as do empty changes
-  and an id that names no entity.
+  columns plus updated_at and server_updated_at - there is no full-row variant. Changes (a map
+  or keyword list) are keyed by declared attribute names and to-one reference fields
+  (`<relationship name>_id`) - a to-one reference is set, reassigned, or cleared (nil) through
+  its reference field. Changing any other name, system attributes included, raises
+  Hologram.MisuseError - as do empty changes and an id that names no entity.
 
   Returns :ok, or {:error, violations} - the map Entity.validate/2 returns, naming each
   field the changes leave breaking a declaration: the declared constraints a changed value
@@ -768,20 +773,23 @@ defmodule Hologram.DB do
   @spec reconcile_at_boot() :: :ignore
   def reconcile_at_boot do
     await_database()
-    SchemaReconciler.reconcile(reconciliation_context())
+    reconcile_with_plan(reconciliation_context())
 
     :ignore
   end
 
   @doc """
-  Returns the context for a schema reconciliation run: the cached mapping, the guard
-  facts (otp_app and env as strings), and the marker diagnostics (the Hologram version
-  and the current UTC timestamp).
+  Returns the context for a schema reconciliation run: the cached mapping, the index plan
+  over it (see `Hologram.DB.IndexPlan.plan/2`), the guard facts (otp_app and env as strings),
+  and the marker diagnostics (the Hologram version and the current UTC timestamp).
   """
   @spec reconciliation_context() :: %{atom => any}
   def reconciliation_context do
+    mapping = mapping()
+
     %{
-      mapping: mapping(),
+      mapping: mapping,
+      plan: IndexPlan.plan(mapping),
       otp_app: Atom.to_string(Reflection.otp_app()),
       env: Atom.to_string(Hologram.env()),
       hologram_version: to_string(Application.spec(:hologram, :vsn)),
@@ -831,7 +839,26 @@ defmodule Hologram.DB do
       mapping = Mapper.derive!(entity_types, role_modules)
       :persistent_term.put(@mapping_key, mapping)
 
-      SchemaReconciler.reconcile(reconciliation_context())
+      reconcile_with_plan(reconciliation_context())
+    end
+
+    :ok
+  end
+
+  @doc """
+  Reconciles the schema again when the index plan the build's dump gives now differs from the one
+  this node last converged the database to - the live-reload path once a compile has derived or
+  kept the data layer, since a change to a query alone changes the plan without touching the model. A no-op
+  when the database is not running. Returns :ok.
+  """
+  @spec reload_indexes() :: :ok
+  def reload_indexes do
+    if Process.whereis(__MODULE__) do
+      context = reconciliation_context()
+
+      if context.plan != :persistent_term.get(@plan_key, nil) do
+        reconcile_with_plan(context)
+      end
     end
 
     :ok
@@ -951,6 +978,11 @@ defmodule Hologram.DB do
   # received value.
   defp put_values(attribute_ops) do
     for {name, {:put, value}} <- attribute_ops, into: %{}, do: {name, value}
+  end
+
+  defp reconcile_with_plan(context) do
+    SchemaReconciler.reconcile(context)
+    :persistent_term.put(@plan_key, context.plan)
   end
 
   # The value the write gave the field, ahead of which it is spelled - or nothing, for a field

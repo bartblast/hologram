@@ -18,6 +18,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.QueryChains
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.DB.Codec
+  alias Hologram.DB.IndexPlan
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
@@ -25,10 +26,12 @@ defmodule Hologram.Compiler do
   alias Hologram.Job
   alias Hologram.Policy
   alias Hologram.Policy.Edges
+  alias Hologram.Query.Shape
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Runtime.Serializer
+  alias Hologram.Sync.Fill
   alias Hologram.Sync.Frame
 
   # The declaration options a write is judged against, which is why they are the ones baked into
@@ -614,6 +617,59 @@ defmodule Hologram.Compiler do
       Path.join([opts[:build_dir], Reflection.chunk_registry_plt_dump_file_name()])
 
     {chunk_registry_plt, chunk_registry_plt_dump_path}
+  end
+
+  @doc """
+  Returns the access needs of the statements the server runs that the build knows of (see
+  `Hologram.DB.IndexPlan.needs/3`), given the shapes of the queries the code writes (see
+  `list_query_shapes/1`):
+
+    * each synced type's fill, policied,
+    * each entity type bare, as `DB.read/1` reads it, raw and policied,
+    * each query chain the code writes, raw - recorded wherever it is written, a derived field's
+      body included, so a chain only the browser reads can add an index no statement uses, which
+      costs writes where missing one would cost a scan. A shape the stages refuse when replayed,
+      or one on a type the mapping doesn't hold, gives nothing.
+
+  Policied is under the read rules of a signed-in session and of an anonymous one. The read rules
+  give the needs a policied read of any shape shares, so a query the code writes - raw, policied
+  as `DB.read/1` reads it, or as a derived field's render reads it - needs no more than its raw
+  needs and its type's bare ones. A query built at run time, which records no shape, has its
+  type's bare needs.
+  """
+  @spec build_index_needs(list(module), list(Shape.t()), %{module => %{atom => any}}) ::
+          list(IndexPlan.need())
+  def build_index_needs(synced_types, query_shapes, mapping) do
+    fill_terms = Enum.map(synced_types, &Fill.term(&1, synced_types))
+
+    bare_terms =
+      mapping
+      |> Map.keys()
+      |> Enum.sort()
+      |> Enum.map(&Stage.normalize/1)
+
+    server_terms =
+      for shape <- query_shapes,
+          {:ok, term} <- [Shape.replay(shape)],
+          Map.has_key?(mapping, term.entity),
+          do: term
+
+    raw_needs = Enum.flat_map(bare_terms ++ server_terms, &IndexPlan.needs(&1, mapping))
+    policied_needs = Enum.flat_map(fill_terms ++ bare_terms, &policied_needs(&1, mapping))
+
+    Enum.uniq(raw_needs ++ policied_needs)
+  end
+
+  @doc """
+  Builds the index needs PLT, whose one item is the access needs the build derived (see
+  `build_index_needs/3`), and returns it with the path to dump it at.
+  """
+  @spec build_index_needs_plt(list(IndexPlan.need()), T.opts()) :: {PLT.t(), T.file_path()}
+  def build_index_needs_plt(index_needs, opts) do
+    plt = PLT.start(items: [needs: index_needs], supervisor: opts[:supervisor])
+    dump_path = Path.join([opts[:build_dir], Reflection.index_needs_plt_dump_file_name()])
+
+    {plt, dump_path}
   end
 
   @doc """
@@ -1991,6 +2047,34 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the shapes of the queries the modules recorded in the given module info PLT write on an
+  entity type (see `Hologram.Query.Shape`), by module. A module recording none is left out.
+  """
+  @spec list_query_shapes(PLT.t()) :: %{module => list(Shape.t())}
+  def list_query_shapes(module_info_plt) do
+    for {module, info} <- PLT.get_all(module_info_plt),
+        shapes = Map.get(info, :query_shapes, []),
+        shapes != [],
+        into: %{},
+        do: {module, shapes}
+  end
+
+  @doc """
+  Returns the shapes of the queries the given modules write on an entity type, by module, read
+  from the given module info PLT (see `list_query_shapes/1`). A module recording none, or one the
+  PLT doesn't hold, is left out.
+  """
+  @spec list_query_shapes(PLT.t(), list(module)) :: %{module => list(Shape.t())}
+  def list_query_shapes(module_info_plt, modules) do
+    for module <- modules,
+        {:ok, info} <- [PLT.get(module_info_plt, module)],
+        shapes = Map.get(info, :query_shapes, []),
+        shapes != [],
+        into: %{},
+        do: {module, shapes}
+  end
+
+  @doc """
   Lists the literal refs the template of the given module IR declares, and the components it
   renders, as `t:template_refs/0`. A ref whose name only an expression knows, like
   `$ref={@input_ref}`, is left out. So is a component a dynamic tag renders. A component's slot
@@ -2986,29 +3070,24 @@ defmodule Hologram.Compiler do
   defp quantified_type(hops, [entity_type | _types_above]),
     do: Derived.path_target(entity_type, hops)
 
-  # The verdict key and the read types of a deciding item - a clause standing in a rule's
-  # predicates, a role reference as {:to, reference} or a delegation as {:via, via} - as members of
-  # its object, none for any other.
-  defp render_verdict_members(item, {entity_type, operation}) do
-    if Policy.deciding_quantifier?(entity_type, operation, item) do
-      reads_js =
-        entity_type
-        |> Policy.verdict_reads(item)
-        |> Enum.map_join(",", &render_entity_type_label/1)
-        |> then(&"[#{&1}]")
-
-      verdict_js =
-        entity_type
-        |> Policy.verdict_key(operation, item)
-        |> Jason.encode!()
-
-      [{"reads", reads_js}, {"verdict", verdict_js}]
-    else
-      []
-    end
+  # Whether the given role reference, as {:to, reference}, or delegation, as {:via, via}, of a rule
+  # is one the client can't decide, which it answers as unknown, leaving the rule to the server's
+  # verdict on the operation.
+  defp deciding_item?(item, {entity_type, operation}) do
+    Policy.deciding_quantifier?(entity_type, operation, item)
   end
 
-  defp render_verdict_members(_item, nil), do: []
+  # The needs of the given term under the read rules of a signed-in session and of an anonymous one.
+  defp policied_needs(term, mapping) do
+    rules =
+      term.entity
+      |> Policy.build()
+      |> Map.get(:read, [])
+
+    Enum.flat_map([false, true], fn anonymous? ->
+      IndexPlan.needs(term, mapping, %{anonymous?: anonymous?, rules: rules})
+    end)
+  end
 
   defp resolve_derived_definition(entity_type, name, ir_plt) do
     if name in entity_type.__derived_builder_calls__() do
@@ -4908,7 +4987,8 @@ defmodule Hologram.Compiler do
       {"policy", render_policy(entity_type)},
       {"relationships", render_relationships(entity_type)},
       {"roles", render_roles(entity_type)},
-      {"serverOnly", server_only}
+      {"serverOnly", server_only},
+      {"verdicts", render_verdicts(entity_type)}
     ]
   end
 
@@ -5095,6 +5175,27 @@ defmodule Hologram.Compiler do
     |> render_json_object()
   end
 
+  # The server's verdicts a client answers an operation by when the rows it holds leave the answer
+  # open, by operation key as the policy is: each one's verdict key, which the row's $verdicts holds
+  # it under, and the types its rules read, whose unanswered writes by the client make it stale
+  # (see Policy.verdict_operations/1 and Policy.operation_reads/2).
+  defp render_verdicts(entity_type) do
+    entity_type
+    |> Policy.verdict_operations()
+    |> Enum.map(fn {key, operation} ->
+      reads_js =
+        entity_type
+        |> Policy.operation_reads(operation)
+        |> Enum.map_join(",", &render_entity_type_label/1)
+        |> then(&"[#{&1}]")
+
+      entry_js = render_json_object([{"reads", reads_js}, {"verdict", Jason.encode!(key)}])
+
+      {Policy.operation_key(operation), entry_js}
+    end)
+    |> render_json_object()
+  end
+
   defp render_policy_rules(entity_type, operation, rules) do
     rules
     |> Enum.map_join(",", &render_policy_rule(entity_type, operation, &1))
@@ -5134,10 +5235,10 @@ defmodule Hologram.Compiler do
 
   # A quantifier is an object too, in the shape the kernel's filters take it: the set its source
   # leads to, read on the row it is about or on one above it, and the condition each of the set's
-  # rows is matched with, read on that row with the rows above it. A deciding one standing in a
-  # rule's predicates carries the key the server's verdict on it is sent under and the types it
-  # reads, whose unanswered writes by the client make the verdict stale.
-  defp render_policy_clause(types, {quantifier, {source, clauses}} = clause, verdict_context)
+  # rows is matched with, read on that row with the rows above it. A deciding one renders the same:
+  # the rows the client holds of its set decide what one row can and leave the rest unknown, and
+  # over a derived set they decide nothing.
+  defp render_policy_clause(types, {quantifier, {source, clauses}}, _verdict_context)
        when quantifier in [:all, :any, :none] do
     related_type = quantified_type(source, types)
 
@@ -5152,29 +5253,26 @@ defmodule Hologram.Compiler do
       {"source", render_derived_name(source)}
     ]
 
-    render_json_object(members ++ render_verdict_members(clause, verdict_context))
+    render_json_object(members)
   end
 
-  # A deciding predicate standing in a rule's predicates is the key the server's verdict on it is
-  # sent under and the types it reads. One reading a server-only attribute, whose value no client
-  # holds, is those alone, since the client answers it from the verdict and nothing else. One that
-  # in a read rule reads a row of a type no client holds carries its triple too: the client answers
-  # it from the rows it holds when they decide it - an empty reference on the path reads no row -
-  # and from the verdict otherwise.
-  defp render_policy_clause(types, {_name, _operator, _value} = clause, verdict_context) do
-    case render_verdict_members(clause, verdict_context) do
-      [] ->
-        render_policy_triple(types, clause)
-
-      members ->
-        {entity_type, _operation} = verdict_context
-
-        if Policy.reads_server_only?(entity_type, clause) do
-          render_json_object(members)
-        else
-          render_json_object([{"predicate", render_policy_triple(types, clause)} | members])
-        end
+  # A predicate standing in a rule's predicates that reads a server-only attribute, whose value no
+  # client holds, is a marker the client answers as unknown - its compared value stays off the
+  # bundle. Every other predicate is its triple: one reading a row of a type no client holds reads
+  # it as unknown unless an empty reference on its path reads no row.
+  #
+  # A clause reading a server-only attribute is deciding for that alone, so only whether it stands
+  # in a rule's predicates is left to ask - inside a quantifier, with no context, it stays a triple.
+  defp render_policy_clause(types, {_name, _operator, _value} = clause, {entity_type, _operation}) do
+    if Policy.reads_server_only?(entity_type, clause) do
+      render_json_object([{"server", "true"}])
+    else
+      render_policy_triple(types, clause)
     end
+  end
+
+  defp render_policy_clause(types, {_name, _operator, _value} = clause, nil) do
+    render_policy_triple(types, clause)
   end
 
   defp render_policy_triple(types, {name, operator, value}) do
@@ -5235,9 +5333,8 @@ defmodule Hologram.Compiler do
   end
 
   # The chain a role is held through, spelled the way a delegation spells its chain. A deciding one
-  # - in a read rule, one reading a row of a type no client holds - carries a fifth element, the key
-  # the server's verdict on it is sent under and the types it reads, which the client answers it
-  # from instead.
+  # - in a read rule, one reading a row of a type no client holds - carries a fifth element, true,
+  # and the client answers it as unknown.
   defp render_policy_reference(
          entity_type,
          {:rel, relationship_names, role_names} = reference,
@@ -5245,11 +5342,7 @@ defmodule Hologram.Compiler do
        ) do
     target_type = Entity.path_target(entity_type, relationship_names)
 
-    verdict_entries =
-      case render_verdict_members({:to, reference}, verdict_context) do
-        [] -> []
-        members -> [render_json_object(members)]
-      end
+    verdict_entries = if deciding_item?({:to, reference}, verdict_context), do: ["true"], else: []
 
     render_policy_reference_entry(
       "rel",
@@ -5286,8 +5379,7 @@ defmodule Hologram.Compiler do
 
   # Operation first, as the server's tuple holds it - the array shape grant references bake as. A
   # deciding one - in a read rule, one whose chain passes a row of a type no client holds - carries
-  # a third element, the key the server's verdict on it is sent under and the types it reads, which
-  # the client answers it from instead.
+  # a third element, true, and the client answers it as unknown.
   defp render_policy_delegation(nil, _verdict_context), do: "null"
 
   defp render_policy_delegation({operation, relationship_names} = via, verdict_context) do
@@ -5296,11 +5388,7 @@ defmodule Hologram.Compiler do
       |> Policy.operation_key()
       |> Jason.encode!()
 
-    verdict_js =
-      case render_verdict_members({:via, via}, verdict_context) do
-        [] -> ""
-        members -> ",#{render_json_object(members)}"
-      end
+    verdict_js = if deciding_item?({:via, via}, verdict_context), do: ",true", else: ""
 
     "[#{operation_js},#{render_policy_name(relationship_names)}#{verdict_js}]"
   end

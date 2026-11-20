@@ -20,9 +20,10 @@ defmodule HologramFeatureTests.PolicyQuantifiersTest do
   # rows are written from the test process: what reaches the screen afterwards came through the
   # stream telling the session's user what the write moved, or through the resume.
   #
-  # The browser checks the rules over sets on its own: a milestone's update from the member rows it
-  # holds, and a project's delete - while none of its milestones exists - from the milestones it
-  # holds, or the server's verdict when it holds none.
+  # The browser checks the rules over sets from the rows it holds: a milestone's update from the
+  # member rows it holds, or the server's verdict when none of them matches, since it holds only
+  # its user's own, and a project's delete - while none of its milestones exists - from the
+  # milestones it holds, or the server's verdict when it holds none.
   setup do
     tables =
       Enum.map_join(

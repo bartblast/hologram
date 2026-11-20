@@ -15,6 +15,7 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Sync.Session
   alias HologramFeatureTests.Entities.Account
+  alias HologramFeatureTests.Entities.Bench
   alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Bookmark
   alias HologramFeatureTests.Entities.Bottle
@@ -22,6 +23,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Cabin
   alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Crate
+  alias HologramFeatureTests.Entities.Docket
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Event
   alias HologramFeatureTests.Entities.Folder
@@ -35,7 +37,9 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Message
   alias HologramFeatureTests.Entities.Milestone
   alias HologramFeatureTests.Entities.Note
+  alias HologramFeatureTests.Entities.Notice
   alias HologramFeatureTests.Entities.Parcel
+  alias HologramFeatureTests.Entities.Permit
   alias HologramFeatureTests.Entities.Post
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Project
@@ -47,13 +51,16 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Shelf
   alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Shop
+  alias HologramFeatureTests.Entities.Sticker
   alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Ticket
   alias HologramFeatureTests.Entities.Todo
+  alias HologramFeatureTests.Entities.Tool
   alias HologramFeatureTests.Entities.Topic
   alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Entities.Vault
+  alias HologramFeatureTests.Entities.Workshop
   alias HologramFeatureTests.Jobs.KillWorker
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTestsWeb.Endpoint
@@ -735,6 +742,18 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Returns the URL of the app's plain HTTP listener, for a test that fetches from the server
+  without a browser. The listener is up in HTTPS mode too, where `Endpoint.url/0` names the TLS
+  listener: the clients such a test uses don't trust the test cert.
+  """
+  def http_url do
+    {:ok, {_ip, port}} = Endpoint.server_info(:http)
+    url = %{Endpoint.struct_url() | port: port, scheme: "http"}
+
+    URI.to_string(url)
+  end
+
+  @doc """
   Keeps the browser from putting the document the `session` shows into its back/forward cache,
   so that coming back to it with Back or Forward loads a new document. Adds an `unload` listener,
   which makes a page ineligible for Chrome's back/forward cache.
@@ -1144,6 +1163,7 @@ defmodule HologramFeatureTests.Helpers do
     tables =
       [
         Account,
+        Bench,
         Booking,
         Bookmark,
         Bottle,
@@ -1151,6 +1171,7 @@ defmodule HologramFeatureTests.Helpers do
         Cabin,
         Channel,
         Crate,
+        Docket,
         Document,
         Event,
         Folder,
@@ -1165,7 +1186,9 @@ defmodule HologramFeatureTests.Helpers do
         Message,
         Milestone,
         Note,
+        Notice,
         Parcel,
+        Permit,
         Post,
         Product,
         Project,
@@ -1179,16 +1202,22 @@ defmodule HologramFeatureTests.Helpers do
         Shelf,
         Ship,
         Shop,
+        Sticker,
         Stop,
         Ticket,
         Todo,
+        Tool,
         Topic,
         Trip,
         User,
-        Vault
+        Vault,
+        Workshop
       ]
       |> Enum.map(&Mapper.table_name/1)
-      |> Enum.concat([DB.join_table_name(Message, :labels)])
+      |> Enum.concat([
+        DB.join_table_name(Docket, :stickers),
+        DB.join_table_name(Message, :labels)
+      ])
       |> Enum.map_join(", ", &~s("hologram_data"."#{&1}"))
 
     {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])

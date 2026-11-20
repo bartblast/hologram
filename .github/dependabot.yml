@@ -65,6 +65,14 @@ updates:
       - dependency-name: "hologram"
 
   - package-ecosystem: "mix"
+    directory: "/test/sync"
+    multi-ecosystem-group: "dependencies"
+    patterns:
+      - "*"
+    ignore:
+      - dependency-name: "hologram"
+
+  - package-ecosystem: "mix"
     directory: "/test/umbrella"
     multi-ecosystem-group: "dependencies"
     patterns:

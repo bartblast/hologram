@@ -101,6 +101,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
               id: nil,
               owner: %NotIncluded{relationship: :owner},
               owner_id: nil,
+              server_created_at: nil,
+              server_updated_at: nil,
               updated_at: nil
 
     @spec __attributes__() :: list({atom, atom, keyword})
@@ -144,7 +146,149 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     @spec __system_attributes__() :: list({atom, atom, keyword})
     def __system_attributes__ do
-      [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
+      [
+        {:created_at, :datetime, []},
+        {:id, :uuid, []},
+        {:server_created_at, :datetime, []},
+        {:server_updated_at, :datetime, []},
+        {:updated_at, :datetime, []}
+      ]
+    end
+
+    @spec __uniques__() :: list(list(atom))
+    def __uniques__, do: []
+
+    @spec new(%{optional(atom) => any} | keyword) :: struct
+    def new(values \\ []), do: Entity.new(__MODULE__, values)
+  end
+
+  # Two entity types whose reference columns derive one plain index name - the plan's collision,
+  # which no mapping check sees.
+  defmodule PlanCollisionEntityFixture do
+    defstruct __meta__: %Metadata{},
+              created_at: nil,
+              id: nil,
+              b_c: %NotIncluded{relationship: :b_c},
+              b_c_id: nil,
+              server_created_at: nil,
+              server_updated_at: nil,
+              updated_at: nil
+
+    @spec __attributes__() :: list({atom, atom, keyword})
+    def __attributes__, do: []
+
+    @spec __derived__() :: list({atom, atom | module | list(module), keyword})
+    def __derived__, do: []
+
+    @spec __derived_builder_calls__() :: list(atom)
+    def __derived_builder_calls__, do: []
+
+    @spec __derived_locations__() :: %{atom => {String.t(), pos_integer}}
+    def __derived_locations__, do: %{}
+
+    @spec __inverse_relationships__() :: list({atom, module | list(module), keyword})
+    def __inverse_relationships__, do: []
+
+    @spec __is_hologram_entity__() :: boolean
+    def __is_hologram_entity__, do: true
+
+    @spec __policies__() :: list({Entity.operation(), term, atom | nil, keyword})
+    def __policies__, do: []
+
+    @spec __policy_hints__() :: list(list(Hologram.Query.Stage.name_hint()))
+    def __policy_hints__, do: []
+
+    @spec __policy_sources__() :: list(module)
+    def __policy_sources__, do: []
+
+    @spec __relationship_locations__() :: %{atom => {String.t(), pos_integer}}
+    def __relationship_locations__, do: %{}
+
+    @spec __relationships__() :: list({atom, module | list(module), keyword})
+    def __relationships__, do: [{:b_c, Entity1, []}]
+
+    @spec __role_declarations__() :: list({atom, keyword, module})
+    def __role_declarations__, do: []
+
+    @spec __roles__() :: list({atom, keyword})
+    def __roles__, do: []
+
+    @spec __system_attributes__() :: list({atom, atom, keyword})
+    def __system_attributes__ do
+      [
+        {:created_at, :datetime, []},
+        {:id, :uuid, []},
+        {:server_created_at, :datetime, []},
+        {:server_updated_at, :datetime, []},
+        {:updated_at, :datetime, []}
+      ]
+    end
+
+    @spec __uniques__() :: list(list(atom))
+    def __uniques__, do: []
+
+    @spec new(%{optional(atom) => any} | keyword) :: struct
+    def new(values \\ []), do: Entity.new(__MODULE__, values)
+  end
+
+  defmodule PlanCollisionEntityFixtureB do
+    defstruct __meta__: %Metadata{},
+              created_at: nil,
+              id: nil,
+              c: %NotIncluded{relationship: :c},
+              c_id: nil,
+              server_created_at: nil,
+              server_updated_at: nil,
+              updated_at: nil
+
+    @spec __attributes__() :: list({atom, atom, keyword})
+    def __attributes__, do: []
+
+    @spec __derived__() :: list({atom, atom | module | list(module), keyword})
+    def __derived__, do: []
+
+    @spec __derived_builder_calls__() :: list(atom)
+    def __derived_builder_calls__, do: []
+
+    @spec __derived_locations__() :: %{atom => {String.t(), pos_integer}}
+    def __derived_locations__, do: %{}
+
+    @spec __inverse_relationships__() :: list({atom, module | list(module), keyword})
+    def __inverse_relationships__, do: []
+
+    @spec __is_hologram_entity__() :: boolean
+    def __is_hologram_entity__, do: true
+
+    @spec __policies__() :: list({Entity.operation(), term, atom | nil, keyword})
+    def __policies__, do: []
+
+    @spec __policy_hints__() :: list(list(Hologram.Query.Stage.name_hint()))
+    def __policy_hints__, do: []
+
+    @spec __policy_sources__() :: list(module)
+    def __policy_sources__, do: []
+
+    @spec __relationship_locations__() :: %{atom => {String.t(), pos_integer}}
+    def __relationship_locations__, do: %{}
+
+    @spec __relationships__() :: list({atom, module | list(module), keyword})
+    def __relationships__, do: [{:c, Entity1, []}]
+
+    @spec __role_declarations__() :: list({atom, keyword, module})
+    def __role_declarations__, do: []
+
+    @spec __roles__() :: list({atom, keyword})
+    def __roles__, do: []
+
+    @spec __system_attributes__() :: list({atom, atom, keyword})
+    def __system_attributes__ do
+      [
+        {:created_at, :datetime, []},
+        {:id, :uuid, []},
+        {:server_created_at, :datetime, []},
+        {:server_updated_at, :datetime, []},
+        {:updated_at, :datetime, []}
+      ]
     end
 
     @spec __uniques__() :: list(list(atom))
@@ -173,6 +317,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   # A module of the test build that no page and no runtime function reaches.
   @unreached_module Hologram.Test.Fixtures.Compiler.CallGraph.Module9
+
+  # A module no page reaches that writes queries on an entity type, and the need of its read.
+  @query_shape_module Hologram.Test.Fixtures.Query.Shape.Module1
+  @query_shape_need %{
+    table: "test_fixtures_entity_module2",
+    eq: MapSet.new(["a"]),
+    range: nil,
+    order: ["b"]
+  }
 
   # Pages whose inits put an Ecto schema into state; only the second calls a reflection function on
   # a module it does not name (see the dynamic call gate tests).
@@ -219,11 +372,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
   end
 
-  # How many times the page types PLT and the queries PLT are dumped while the given function
-  # runs, in that order: each goes through a private function of the task, whose local calls are
-  # counted.
+  # How many times the index needs PLT, the page types PLT and the queries PLT are dumped while the
+  # given function runs, in that order: each goes through a private function of the task, whose
+  # local calls are counted.
   defp count_data_layer_dumps(fun) do
     mfas = [
+      {Mix.Tasks.Compile.Hologram, :dump_index_needs_plt, 2},
       {Mix.Tasks.Compile.Hologram, :dump_page_types_plt, 2},
       {Mix.Tasks.Compile.Hologram, :dump_queries_plt, 2}
     ]
@@ -248,13 +402,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   # How many times the call graph and the module info PLT are dumped while the given function runs.
   # PLT.dump/2 also writes the page digest PLT and the chunk registry PLT, once before the batches
-  # and once after each, and the page types PLT and the queries PLT, once before the batches,
-  # through private functions whose local calls are counted and taken off.
+  # and once after each, and the index needs PLT, the page types PLT and the queries PLT, once
+  # before the batches, through private functions whose local calls are counted and taken off.
   defp count_dumps(fun) do
     counted = [
       {CallGraph, :dump, 2, [:call_count]},
       {PLT, :dump, 2, [:call_count]},
       {Mix.Tasks.Compile.Hologram, :dump_chunk_registry_plt, 2, [:local, :call_count]},
+      {Mix.Tasks.Compile.Hologram, :dump_index_needs_plt, 2, [:local, :call_count]},
       {Mix.Tasks.Compile.Hologram, :dump_page_digest_plt, 2, [:local, :call_count]},
       {Mix.Tasks.Compile.Hologram, :dump_page_types_plt, 2, [:local, :call_count]},
       {Mix.Tasks.Compile.Hologram, :dump_queries_plt, 2, [:local, :call_count]}
@@ -271,6 +426,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         call_graph_dumps,
         plt_dumps,
         chunk_registry_dumps,
+        index_needs_dumps,
         page_digest_dumps,
         page_types_dumps,
         queries_dumps
@@ -282,7 +438,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       [
         call_graph_dumps,
-        plt_dumps - chunk_registry_dumps - page_digest_dumps - page_types_dumps - queries_dumps
+        plt_dumps - chunk_registry_dumps - index_needs_dumps - page_digest_dumps -
+          page_types_dumps - queries_dumps
       ]
     after
       Enum.each(counted, fn {module, function, arity, flags} ->
@@ -883,6 +1040,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test_module_info_plt(opts)
     test_page_bundles(opts)
     test_page_digest_plt(opts)
+    test_index_needs_plt(opts)
     test_page_types_plt(opts)
     test_queries_plt(opts)
     test_runtime_bundle(opts)
@@ -1076,6 +1234,49 @@ defmodule Mix.Tasks.Compile.HologramTest do
     # The page renders a component whose derived field queries Entity2, so a session on it fills
     # that type first.
     assert Entity2 in page_types_items[PageModule18]
+  end
+
+  # The needs of what the server runs: here, a registered query's filter, an entity type's read
+  # rule and a query server code writes (Hologram.Test.Fixtures.Query.Shape.Module1).
+  defp test_index_needs_plt(opts) do
+    dump_path = Path.join(opts[:build_dir], Reflection.index_needs_plt_dump_file_name())
+
+    assert File.exists?(dump_path)
+
+    plt = PLT.start()
+    PLT.load(plt, dump_path)
+
+    assert %{needs: needs} = PLT.get_all(plt)
+
+    filter_need = %{
+      table: "test_fixtures_entity_module2",
+      eq: MapSet.new(["b"]),
+      range: nil,
+      order: []
+    }
+
+    rule_need = %{
+      table: "test_fixtures_entity_module41",
+      eq: MapSet.new(["public"]),
+      range: nil,
+      order: []
+    }
+
+    assert filter_need in needs
+    assert rule_need in needs
+    assert @query_shape_need in needs
+  end
+
+  defp load_index_needs(opts) do
+    plt = PLT.start()
+    PLT.load(plt, Path.join(opts[:build_dir], Reflection.index_needs_plt_dump_file_name()))
+
+    PLT.get!(plt, :needs)
+  end
+
+  defp put_index_needs(needs, opts) do
+    {plt, dump_path} = Compiler.build_index_needs_plt(needs, opts)
+    PLT.dump(plt, dump_path)
   end
 
   defp test_queries_plt(opts) do
@@ -1486,6 +1687,25 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
     end
 
+    test "fails the build on index plan errors even when compilation is skipped", %{opts: opts} do
+      System.delete_env("HOLOGRAM_START")
+
+      load_entity_fixture_app(:hologram_plan_collision_entity_fixture_app, [
+        PlanCollisionEntityFixture,
+        PlanCollisionEntityFixtureB
+      ])
+
+      error = assert_raise Hologram.CompileError, fn -> run(opts) end
+
+      assert error.message =~ "colliding derived names"
+
+      assert error.message =~
+               "an index on Mix.Tasks.Compile.HologramTest.PlanCollisionEntityFixture by b_c_id"
+
+      assert error.message =~
+               "an index on Mix.Tasks.Compile.HologramTest.PlanCollisionEntityFixtureB by c_id"
+    end
+
     test "fails the build on mapping errors even when compilation is skipped", %{opts: opts} do
       System.delete_env("HOLOGRAM_START")
 
@@ -1561,7 +1781,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       fake_edit(@unreached_module)
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0, 0]
     end
 
     # The runtime bundle carries the data layer's statement, so a statement derived again would be
@@ -1582,7 +1802,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       fake_edit(ComponentModule40)
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
     end
 
     # Page 23 reaches Module54, whose derived field calls a function of Module55, which is no
@@ -1592,7 +1812,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       fake_edit(ComponentModule55)
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
     end
 
     # The data layer reads a component only through the pages reaching it.
@@ -1603,7 +1823,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       fake_edit(ComponentModule43)
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0, 0]
     end
 
     test "an edit of a component reuses the derived definitions", %{opts: opts} do
@@ -1649,7 +1869,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       fake_edit(Entity2)
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
     end
 
     # Another Hologram build can derive and render differently, so the bundle inputs moving is
@@ -1660,7 +1880,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Application.put_env(:hologram, :client_stacktraces, not Hologram.client_stacktraces?())
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
       assert map_size(cache_state().data_layer.pages) == @num_pages
     end
 
@@ -1673,7 +1893,101 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       fake_edit(@unreached_module)
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+    end
+
+    test "a kept data layer whose index needs dump is gone is derived again", %{opts: opts} do
+      run(opts)
+
+      opts[:build_dir]
+      |> Path.join(Reflection.index_needs_plt_dump_file_name())
+      |> File.rm!()
+
+      fake_edit(@unreached_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+    end
+
+    # Whose data layer dumps can describe another build than the one this VM kept.
+    test "a kept data layer is derived again when another VM rewrote the module info dump", %{
+      opts: opts
+    } do
+      run(opts)
+      rewrite_module_info_dump(opts, & &1)
+      fake_edit(@unreached_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+    end
+
+    test "an edit that changes a module's query shapes derives the data layer again", %{
+      opts: opts
+    } do
+      run(opts)
+
+      %{data_layer: data_layer} = cache_state()
+      assert Map.has_key?(data_layer.query_shapes, @query_shape_module)
+
+      # As if the last derivation had seen the module write no query.
+      shapes_before = Map.delete(data_layer.query_shapes, @query_shape_module)
+      Cache.put_data_layer(%{data_layer | query_shapes: shapes_before})
+
+      opts
+      |> load_index_needs()
+      |> List.delete(@query_shape_need)
+      |> put_index_needs(opts)
+
+      fake_edit(@query_shape_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+      assert cache_state().data_layer.query_shapes == data_layer.query_shapes
+      assert @query_shape_need in load_index_needs(opts)
+    end
+
+    test "an edit that keeps a module's query shapes keeps the data layer", %{opts: opts} do
+      run(opts)
+      fake_edit(@query_shape_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0, 0]
+    end
+
+    test "a removed module's query shapes are forgotten", %{opts: opts} do
+      run(opts)
+
+      %{
+        data_layer: data_layer,
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        module_infos: module_infos
+      } = cache_state()
+
+      removed_shapes = [{Hologram.Test.Fixtures.Entity.Module2, [take: [1]]}]
+      query_shapes = Map.put(data_layer.query_shapes, :removed_module, removed_shapes)
+      Cache.put_data_layer(%{data_layer | query_shapes: query_shapes})
+
+      module_infos
+      |> Map.put(:removed_module, %{digest: "removed", query_shapes: removed_shapes})
+      |> put_kept_module_infos(dumped_at, MapSet.put(editable_modules, :removed_module))
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+      assert cache_state().data_layer.query_shapes == data_layer.query_shapes
+    end
+
+    # A compile state an older Hologram dumped, whose data layer was derived without them.
+    test "a kept data layer holding no query shapes reads every module's and is derived again", %{
+      opts: opts
+    } do
+      run(opts)
+
+      %{data_layer: data_layer} = cache_state()
+
+      data_layer
+      |> Map.delete(:query_shapes)
+      |> Cache.put_data_layer()
+
+      fake_edit(@unreached_module)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
+      assert cache_state().data_layer.query_shapes == data_layer.query_shapes
     end
 
     test "a run with no changes judges no operation ask", %{opts: opts} do
@@ -1757,7 +2071,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> Map.put(:removed_page, %{digest: "removed", page?: true})
       |> put_kept_module_infos(dumped_at, MapSet.put(editable_modules, :removed_page))
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
       refute Map.has_key?(cache_state().data_layer.pages, :removed_page)
       assert map_size(cache_state().data_layer.pages) == @num_pages
     end
@@ -1780,7 +2094,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # The edited component derives the data layer, which reads the definitions kept with it.
       resolutions =
         count_resolutions(fn ->
-          assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+          assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1, 1]
         end)
 
       assert resolutions == 0
@@ -1793,7 +2107,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Cache.reset()
       fake_recompile()
 
-      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0, 0]
       assert cache_state().data_layer == data_layer
     end
 
@@ -1807,7 +2121,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       dump_paths =
         Enum.map(
-          [Reflection.page_types_plt_dump_file_name(), Reflection.queries_plt_dump_file_name()],
+          [
+            Reflection.index_needs_plt_dump_file_name(),
+            Reflection.page_types_plt_dump_file_name(),
+            Reflection.queries_plt_dump_file_name()
+          ],
           &Path.join(opts[:build_dir], &1)
         )
 
@@ -1852,7 +2170,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         run(opts)
       end
 
-      assert Enum.map(dump_paths, &File.read!/1) == ["untouched", "untouched"]
+      assert Enum.map(dump_paths, &File.read!/1) == ["untouched", "untouched", "untouched"]
       assert Cache.get().data_layer == refused_data_layer
     end
 
@@ -1873,7 +2191,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       data_layer = cache_state().data_layer
 
       assert cache_state().runtime == nil
-      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0, 0]
       assert cache_state().data_layer == data_layer
     end
   end
@@ -1967,6 +2285,63 @@ defmodule Mix.Tasks.Compile.HologramTest do
                 Reflection.list_roles(module_info_plt)},
                :next_batch
              ]
+    end
+
+    test "a compile calls the index needs hook after the data model hook, before the first batch",
+         %{opts: opts} do
+      run(opts)
+      put_pending_kept_pages(1)
+
+      {record, recorded} = record_calls()
+
+      hooks = [
+        data_model_ready: fn _entity_types, _role_modules -> record.(:data_model_ready) end,
+        index_needs_ready: fn -> record.(:index_needs_ready) end,
+        next_batch: fn remaining_pages, _links ->
+          record.(:next_batch)
+          MapSet.to_list(remaining_pages)
+        end
+      ]
+
+      run(Keyword.merge(opts, hooks))
+
+      assert recorded.() == [:data_model_ready, :index_needs_ready, :next_batch]
+    end
+
+    test "a compile keeping the data layer calls the index needs hook", %{opts: opts} do
+      run(opts)
+      fake_edit(@unreached_module)
+
+      {record, recorded} = record_calls()
+      index_needs_ready = fn -> record.(:index_needs_ready) end
+
+      assert count_data_layer_dumps(fn ->
+               run(Keyword.put(opts, :index_needs_ready, index_needs_ready))
+             end) == [0, 0, 0]
+
+      assert recorded.() == [:index_needs_ready]
+    end
+
+    # The failed compile derived the data layer for the edit, so the next one keeps it only if the
+    # failed one left the picture the edit is in.
+    test "a compile after one the index needs hook failed keeps the data layer and calls it again",
+         %{opts: opts} do
+      run(opts)
+      fake_edit(ComponentModule40)
+
+      failing_opts = Keyword.put(opts, :index_needs_ready, fn -> raise "hook failed" end)
+      assert_raise RuntimeError, "hook failed", fn -> run(failing_opts) end
+
+      {record, recorded} = record_calls()
+      index_needs_ready = fn -> record.(:index_needs_ready) end
+
+      assert count_data_layer_dumps(fn ->
+               opts
+               |> Keyword.merge(force?: true, index_needs_ready: index_needs_ready)
+               |> run()
+             end) == [0, 0, 0]
+
+      assert recorded.() == [:index_needs_ready]
     end
 
     test "a compile reads no beam to list the data model", %{opts: opts} do
@@ -4970,6 +5345,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
       File.rm!(bundle_path)
 
       assert run(opts) == :ok
+    end
+
+    for dump_file_name <- [
+          Reflection.index_needs_plt_dump_file_name(),
+          Reflection.page_types_plt_dump_file_name(),
+          Reflection.queries_plt_dump_file_name()
+        ] do
+      test "a new VM whose #{dump_file_name} is gone compiles and writes it again", %{opts: opts} do
+        dump_path = Path.join(opts[:build_dir], unquote(dump_file_name))
+        File.rm!(dump_path)
+
+        assert run(opts) == :ok
+        assert File.exists?(dump_path)
+      end
     end
 
     test "a new VM with no record compiles", %{opts: opts} do

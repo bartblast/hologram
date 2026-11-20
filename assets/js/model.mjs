@@ -30,7 +30,13 @@ export default class Model {
   // back needs their types, so anything asking what a type DECLARES has to subtract them. Held
   // here rather than beside each reader: it is one list mirroring an Elixir one, and a second copy
   // is how the two drift.
-  static systemAttributes = ["created_at", "id", "updated_at"];
+  static systemAttributes = [
+    "created_at",
+    "id",
+    "server_created_at",
+    "server_updated_at",
+    "updated_at",
+  ];
 
   // IMPORTANT!
   // The twin of Hologram.Policy.framework_operations/0 - the seven operations the framework itself
@@ -494,17 +500,17 @@ export default class Model {
   // over (see Hologram.Compiler.render_rules/1): the entry of every type a build bakes whatever the
   // pages reach, so a type it leaves out declares no rule and no role.
   //
-  // A type this client holds takes the entry's rules, and its operations, derived fields and
-  // inverses join the ones the bundle baked - added or redefined, never taken away, because the
-  // bundle's own code can still ask about an operation or read a field the new build dropped. An
-  // operation left without rules is denied, which is what the new build answers for it. A type the
-  // client holds that the entries leave out keeps everything but its rules, which go, the server's
-  // default deny. A type the client does not hold is taken whole: rules a deploy added can read a
-  // type the bundle never carried, and a derived field redefined can lead to one, whose rows arrive
-  // with them. Its defaults and constraints arrive serialized, since a frame carries JSON where the
-  // bundle spells their terms as JavaScript, and are taken in as the bundle would have baked them.
-  // Every other part of a held entry stays the bundle's - the model is the same, which is what the
-  // handshake checked before sending these.
+  // A type this client holds takes the entry's rules and verdict entries, and its operations,
+  // derived fields and inverses join the ones the bundle baked - added or redefined, never taken
+  // away, because the bundle's own code can still ask about an operation or read a field the new
+  // build dropped. An operation left without rules is denied, which is what the new build answers
+  // for it. A type the client holds that the entries leave out keeps everything but its rules and
+  // verdict entries, which go, the server's default deny. A type the client does not hold is taken
+  // whole: rules a deploy added can read a type the bundle never carried, and a derived field
+  // redefined can lead to one, whose rows arrive with them. Its defaults and constraints arrive
+  // serialized, since a frame carries JSON where the bundle spells their terms as JavaScript, and
+  // are taken in as the bundle would have baked them. Every other part of a held entry stays the
+  // bundle's - the model is the same, which is what the handshake checked before sending these.
   static replaceRules(entries) {
     const model = globalThis.Hologram.sync.model;
 
@@ -520,8 +526,9 @@ export default class Model {
               ...new Set([...(held.operations ?? []), ...entry.operations]),
             ].sort(),
             policy: entry.policy,
+            verdicts: entry.verdicts,
           }
-        : {...held, policy: {}};
+        : {...held, policy: {}, verdicts: {}};
     }
 
     for (const [type, entry] of Object.entries(entries)) {

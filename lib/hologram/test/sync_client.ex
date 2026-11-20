@@ -6,8 +6,8 @@ defmodule Hologram.Test.SyncClient do
   # the client already understands - this connects the way the browser does (session cookie,
   # handshake redemption, SSE GET with the sync greeting) and hands frames over raw.
   #
-  # Consumed by the feature and cluster test apps, like FeatureHelpers beside it. Built on
-  # :httpc so it adds no dependency to either.
+  # Consumed by the feature, cluster and sync test apps, like FeatureHelpers beside it. Built on
+  # :httpc so it adds no dependency to any of them.
 
   alias Hologram.Entity.Model
   alias Hologram.Sync.Frame

@@ -655,9 +655,9 @@ defmodule Hologram.Template.RendererDerivedTest do
       refute String.contains?(carried, "token")
     end
 
-    # The server works a carried row's verdicts out over the row as stored, its server-only values
-    # among them - the wire then leaves those out of what the client is told.
-    test "carries a row's verdicts worked out over its server-only values" do
+    # The vault's read rule reads a server-only value, so the row carries the read verdict, true
+    # for the user it was sent to - and the wire leaves the value out of what the client is told.
+    test "carries a row's read verdict and not its server-only values" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module169, :dummy_module_169_digest)
       dump_query_cache(QueryCacheStub, true)
       QueryCache.init(nil)
@@ -671,7 +671,7 @@ defmodule Hologram.Template.RendererDerivedTest do
       |> PolicyKey.new()
       |> DB.create!()
 
-      [{verdict_key, _clause}] = Policy.deciding_quantifiers(PolicyVault)
+      verdict_key = Policy.verdict_key(PolicyVault, :read)
 
       assert [carried] =
                Module169
@@ -679,7 +679,7 @@ defmodule Hologram.Template.RendererDerivedTest do
                |> boot_data()
                |> get_in(["syncRows", "put_entity", inspect(PolicyVault)])
 
-      assert carried["$verdicts"] == %{verdict_key => false}
+      assert carried["$verdicts"] == %{verdict_key => true}
       refute Map.has_key?(carried, "code")
     end
 

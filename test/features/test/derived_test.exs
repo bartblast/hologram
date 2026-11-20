@@ -70,7 +70,7 @@ defmodule HologramFeatureTests.DerivedTest do
     |> visit(Page1)
     |> assert_text(css("#tickets"), ~r/^hotel$/)
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/derived/1")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/derived/1")
 
     assert html =~ ~r{id="tickets"><code>hotel</code>}
     assert html =~ ~r{id="summary"><code>HOTEL</code>}

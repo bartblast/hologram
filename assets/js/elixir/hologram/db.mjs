@@ -94,10 +94,6 @@ function basedOn(held, changes) {
   );
 }
 
-// A server-only attribute is refused by the WRITE rather than by validation: the value is
-// perfectly valid and server code may set it, so what makes it wrong is only that a browser is
-// the one asking. The wire drops the name, so sending it would be malformed rather than rejected -
-// which is why this is caught here, by name, before anything is built.
 // The edges an update records, each its own entry, in one order however the stages were called -
 // two clients making the same two edges send the same two writes.
 function edgeEntries(entity, entityType, relationshipOps) {
@@ -121,6 +117,10 @@ function structField(struct, name) {
   return struct.data[Type.encodeMapKey(Type.atom(name))][1];
 }
 
+// A server-only attribute is refused by the WRITE rather than by validation: the value is
+// perfectly valid and server code may set it, so what makes it wrong is only that a browser is
+// the one asking. The wire drops the name, so sending it would be malformed rather than rejected -
+// which is why this is caught here, by name, before anything is built.
 function refuseServerOnlyValues(entity, entityType) {
   for (const name of Model.entry(entityType).serverOnly) {
     const value = entity.data[Type.encodeMapKey(Type.atom(name))]?.[1];
@@ -547,7 +547,8 @@ function writeEntry(entity, entityType, stamp) {
 
 // What the verb answers: the struct as the row now stands, carrying the revisions this write set
 // and nothing of what it was asked to do. The server's own create answers the same way - the
-// metadata starts over, because what the struct was holding has been spent by the write.
+// metadata starts over, because what the struct was holding has been spent by the write. The
+// server's pair is the one difference: nil until the row reaches the server, which stamps it.
 function storedEntity(entity, entityType, stamp) {
   const timestamp = Model.boxValue(
     Model.wireDateTime(Clock.wallClockMs(stamp)),
@@ -573,6 +574,8 @@ function storedEntity(entity, entityType, stamp) {
   for (const [key, value] of [
     [Type.atom("__meta__"), metadata],
     [Type.atom("created_at"), timestamp],
+    [Type.atom("server_created_at"), Type.nil()],
+    [Type.atom("server_updated_at"), Type.nil()],
     [Type.atom("updated_at"), timestamp],
   ]) {
     stored.data[Type.encodeMapKey(key)] = [key, value];
@@ -808,14 +811,17 @@ const Elixir_Hologram_DB = {
     }
 
     const data = Model.unboxChanges(entityType, changes);
+    const entries = edgeEntries(entity, entityType, relationshipOps);
 
     if (Object.keys(changes).length > 0 || Object.keys(deltas).length > 0) {
-      batch.append(updateEntry(entity, entityType, id, held, data, deltas));
+      entries.unshift(updateEntry(entity, entityType, id, held, data, deltas));
     }
 
-    for (const edge of edgeEntries(entity, entityType, relationshipOps)) {
-      batch.append(edge);
-    }
+    // One call, several entries: the ones after the first say they came with it, so the server
+    // judges them all against the row the call started from, as its own update/1 does.
+    entries.forEach((entry, index) =>
+      batch.append(index === 0 ? entry : {...entry, same_call: true}),
+    );
 
     return Type.atom("ok");
   },

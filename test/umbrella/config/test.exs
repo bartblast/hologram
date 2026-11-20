@@ -1,7 +1,9 @@
 import Config
 
+# Port 0 has the OS pick a free port, so runs that overlap on one machine never share one. The
+# test helper reads the port the listener got and puts it into the endpoint's URL.
 config :app_1, App1.Endpoint,
-  http: [ip: {127, 0, 0, 1}, port: 4002],
+  http: [ip: {127, 0, 0, 1}, port: 0],
   secret_key_base: "cGXbx/UMm3qsyR8HYYVwO+/SWp1HAYxhFYHO/ugY6VaRenmQs4dCUoSzdxfMEMeS",
   server: true
 

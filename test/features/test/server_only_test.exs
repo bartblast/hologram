@@ -43,7 +43,7 @@ defmodule HologramFeatureTests.ServerOnlyTest do
     |> visit(PoliciesPage)
     |> assert_text(css("#documents"), "public_document")
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/policies")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/policies")
 
     assert String.contains?(html, "syncRows")
     assert String.contains?(html, "public_document")

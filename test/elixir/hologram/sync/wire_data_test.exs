@@ -81,6 +81,8 @@ defmodule Hologram.Sync.WireDataTest do
                :c => "text",
                :created_at => "2026-08-16T15:18:13.022508Z",
                :id => @entity_id,
+               :server_created_at => nil,
+               :server_updated_at => nil,
                :updated_at => "2026-08-16T16:20:00.000000Z",
                :"$revisions" => %{}
              }

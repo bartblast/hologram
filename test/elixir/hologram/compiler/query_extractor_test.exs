@@ -546,7 +546,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     test "raises on a query builder building an invalid query", %{ir_plt: ir_plt} do
       expected_msg =
         normalize_newlines("""
-        test/elixir/support/fixtures/compiler/query_extractor/module_141.ex:40: derived field :invalid in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module142 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :tier, :updated_at
+        test/elixir/support/fixtures/compiler/query_extractor/module_141.ex:40: derived field :invalid in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module142 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :server_created_at, :server_updated_at, :tier, :updated_at
 
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_141.ex:40: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module141.invalid/1
             #{@app} lib/my_app/member.ex:31: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module142.__derived_definition__/1\

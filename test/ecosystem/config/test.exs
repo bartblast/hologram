@@ -1,7 +1,9 @@
 import Config
 
+# Port 0 has the OS pick a free port, so runs that overlap on one machine never share one. The
+# test helper reads the port the listener got and puts it into the endpoint's URL.
 config :hologram_ecosystem_tests, HologramEcosystemTestsWeb.Endpoint,
-  http: [ip: {127, 0, 0, 1}, port: 4002],
+  http: [ip: {127, 0, 0, 1}, port: 0],
   secret_key_base: "Hn4xWc7PqZ2mTrV9sLbD6yKgE0uJfA3oNiX8eRtY1wMpS5dCzQvG7aBlUjOhIkF2",
   server: true
 

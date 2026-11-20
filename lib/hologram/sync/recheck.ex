@@ -4,8 +4,8 @@ defmodule Hologram.Sync.Recheck do
   # Who may read the rows a batch of changes touched, decided for every user with a sync session
   # on this node at once: one statement per entity type, whatever the number of users, each
   # returning the rows' current values beside their readers and the server's verdicts for them. A
-  # rule or a deciding item answering the same for every user is decided once per row, and the
-  # rest test each user as the acting user (see Hologram.DB.QueryCompiler.recheck/4).
+  # rule answering the same for every user is decided once per row, and the rest test each user as
+  # the acting user (see Hologram.DB.QueryCompiler.recheck/4).
   #
   # The values are read fresh here, never taken from the changes, so a row goes out as it is now.
 
@@ -20,7 +20,7 @@ defmodule Hologram.Sync.Recheck do
 
   @type verdicts :: %{
           anonymous: %{String.t() => boolean} | nil,
-          others: %{String.t() => boolean} | nil,
+          others: %{String.t() => boolean},
           users: %{String.t() => %{String.t() => boolean}}
         }
 
@@ -28,10 +28,10 @@ defmodule Hologram.Sync.Recheck do
   Returns, per entity type, every row of the given ids that one of the given users may read, keyed
   by id, with the row's current values, its readers and its verdicts. The readers are `:all` when
   every user may read it, anonymous ones included, and otherwise the set of the given users who may
-  - nil among them when an anonymous user may. The verdicts are the server's answers on the type's
-  deciding items for those readers, which `verdicts/2` gives per reader - none when the build has
-  no client checking permissions, which never reads one, as `Hologram.Sync.Frame.row_verdicts/2`
-  answers.
+  - nil among them when an anonymous user may. The verdicts are the server's answers on each
+  operation of the type it sends a verdict on for those readers, which `verdicts/2` gives per
+  reader - none when the build has no client checking permissions, which never reads one, as
+  `Hologram.Sync.Frame.row_verdicts/2` answers.
 
   Takes the ids to check per entity type, as canonical entity ids, and the users as ids, nil for an
   anonymous one - a user id in any other spelling reads as an anonymous one. An id is left out
@@ -50,7 +50,7 @@ defmodule Hologram.Sync.Recheck do
     # Asked only when a type has something to answer, as Frame.row_verdicts/2 asks.
     verdicts? =
       Enum.any?(rows_to_check, fn {entity_type, ids} ->
-        not Enum.empty?(ids) and Policy.deciding_quantifiers(entity_type) != []
+        not Enum.empty?(ids) and Policy.verdict_operations(entity_type) != []
       end) and QueryCache.permission_checking?()
 
     for {entity_type, ids} <- rows_to_check, not Enum.empty?(ids), into: %{} do
@@ -85,8 +85,8 @@ defmodule Hologram.Sync.Recheck do
   one.
 
   Only a reader of the row given to `run/2` may be asked: a signed-in user left out of the call is
-  given what a reader no anchor names answers, which needn't be theirs. Raises for an anonymous
-  user when none was given, and for a signed-in one the statement had to test but didn't.
+  given what a reader no operation's rules admit answers, which needn't be theirs. Raises for an
+  anonymous user when none was given.
   """
   @spec verdicts(verdicts, any) :: %{String.t() => boolean}
   def verdicts(verdicts, user_id), do: verdicts_as_canonical(verdicts, Auth.canonical_id(user_id))

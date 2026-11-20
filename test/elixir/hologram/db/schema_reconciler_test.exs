@@ -10,9 +10,11 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Connection
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Schema
+  alias Hologram.DB.SortKey
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -48,6 +50,13 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                      "reconciliation - drop the \"hologram_system\" and " <>
                      "\"hologram_data\" schemas or point the config at another database"
 
+  # Upgrade steps standing in for a later release's: the first creates a table in hologram_system,
+  # which fails if it runs again, and the second changes it, which fails if the first never ran.
+  @create_probe_step {2, [~s{CREATE TABLE "hologram_system"."upgrade_probe" ("id" integer)}]}
+
+  @alter_probe_step {3,
+                     [~s{ALTER TABLE "hologram_system"."upgrade_probe" ADD COLUMN "note" text}]}
+
   defp drop_hologram_schemas do
     {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_system" CASCADE))
     {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
@@ -56,9 +65,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   defp insert_module2_row(b_value, c_value) do
     statement = """
     INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-      ("id", "a", "b", "c", "created_at", "updated_at", "$revisions")
+      ("id", "a", "b", "c", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
     VALUES ('00000000-0000-0000-0000-000000000001', TRUE, #{b_value}, #{c_value},
-            '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+            '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
     """
 
     {:ok, _result} = Connection.query(statement)
@@ -81,9 +90,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     |> Enum.each(fn {c_value, index} ->
       statement = """
       INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-        ("id", "a", "b", "c", "created_at", "updated_at", "$revisions")
+        ("id", "a", "b", "c", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-00000000000#{index}', TRUE, NULL, '#{c_value}',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(statement)
@@ -100,14 +109,11 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     rows
   end
 
-  # Module27's mapping as it would stand if its channel reference were not unique: the plain
-  # reference index the column otherwise carries, and no unique one.
+  # Module27's mapping as it would stand if its channel reference were not unique: no unique index,
+  # so the index plan gives the reference column its plain one.
   defp non_unique_channel_context do
     [Module26, Module27]
     |> reconcile_context()
-    |> update_mapping_column(Module27, "channel_id", fn column ->
-      %{column | index: "test_fixtures_entity_module27_channel_id_$idx"}
-    end)
     |> update_mapping_indexes(Module27, fn indexes ->
       Map.delete(indexes, "test_fixtures_entity_module27_channel_id_$uidx")
     end)
@@ -178,8 +184,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     {:ok, _result} =
       Connection.query("""
       INSERT INTO "hologram_data"."test_fixtures_entity_module1"
-        ("id", "created_at", "updated_at", "$revisions")
-      VALUES ('#{module1_id}', now(), now(), '{}')
+        ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+      VALUES ('#{module1_id}', now(), now(), now(), now(), '{}')
       """)
 
     insert_module2_row("NULL", "'x'")
@@ -187,8 +193,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     {:ok, _result} =
       Connection.query("""
       INSERT INTO "hologram_data"."test_fixtures_entity_module3"
-        ("id", "c_id", "created_at", "updated_at", "$revisions")
-      VALUES ('#{module3_id}', '#{module1_id}', now(), now(), '{}')
+        ("id", "c_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+      VALUES ('#{module3_id}', '#{module1_id}', now(), now(), now(), now(), '{}')
       """)
 
     {:ok, _result} =
@@ -202,9 +208,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   defp insert_module4_row(c_value) do
     insert_statement = """
     INSERT INTO "hologram_data"."test_fixtures_entity_module4"
-      ("id", "a", "b", "c", "d", "created_at", "updated_at", "$revisions")
+      ("id", "a", "b", "c", "d", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
     VALUES ('00000000-0000-0000-0000-000000000001', '2026-01-01', '2026-01-01 00:00:00+00',
-            '#{c_value}', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+            '#{c_value}', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
     """
 
     {:ok, _result} = Connection.query(insert_statement)
@@ -223,6 +229,42 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         ~s(UPDATE "hologram_system"."schema_object" SET "name" = $2 WHERE "kind" = 'enum_type' AND "name" = $1),
         [from, to]
       )
+  end
+
+  # The columns of the probe table the upgrade steps above create, none when it doesn't exist.
+  defp probe_columns do
+    statement = """
+    SELECT a.attname
+    FROM pg_catalog.pg_attribute a
+    JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'hologram_system' AND c.relname = 'upgrade_probe'
+      AND a.attnum > 0 AND NOT a.attisdropped
+    ORDER BY a.attnum
+    """
+
+    {:ok, %{rows: rows}} = Connection.query(statement)
+
+    Enum.map(rows, fn [name] -> name end)
+  end
+
+  # A claim at layout 1, whatever steps the running Hologram has - the upgrade tests start there.
+  defp reconcile_at_layout_1(entity_types) do
+    entity_types
+    |> reconcile_context()
+    |> Map.put(:system_upgrades, [])
+    |> reconcile()
+  end
+
+  defp set_system_schema_version(version) do
+    statement = ~s(UPDATE "hologram_system"."database" SET "system_schema_version" = $1)
+    {:ok, _result} = Connection.query(statement, [version])
+  end
+
+  # What a reconciliation converges to: the model's schema with the index plan the context leaves to
+  # the reconciler, the framework's own lookups'.
+  defp expected_schema(context) do
+    Schema.from_mapping(context.mapping, IndexPlan.framework_plan(context.mapping))
   end
 
   defp reconcile_context(entity_types) do
@@ -251,7 +293,6 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       null: null,
       references: nil,
       fk_constraint: nil,
-      index: nil,
       source: {:attribute, :z}
     }
 
@@ -300,7 +341,6 @@ defmodule Hologram.DB.SchemaReconcilerTest do
           null: true,
           references: nil,
           fk_constraint: nil,
-          index: nil,
           source: {:attribute, attribute}
         }
       end)
@@ -341,7 +381,6 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       null: null,
       references: nil,
       fk_constraint: nil,
-      index: nil,
       source: {:attribute, :z}
     }
 
@@ -411,6 +450,26 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       assert backfill_companions!([op], reconcile_context([Module2]).mapping) == :ok
       assert module2_sort_pairs() == [["Łódź", nil]]
+    end
+  end
+
+  describe "check_system_schema_version!/2" do
+    test "returns :ok for a layout at or below the running one" do
+      context = %{system_upgrades: [{2, []}]}
+
+      assert check_system_schema_version!(%{system_schema_version: 1}, context) == :ok
+      assert check_system_schema_version!(%{system_schema_version: 2}, context) == :ok
+    end
+
+    test "raises for a layout above the running one" do
+      expected_msg =
+        "the configured database's system tables are at layout version 3, from a newer " <>
+          "Hologram - this Hologram knows layout versions up to 2 - upgrade Hologram or " <>
+          "point the config at another database"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        check_system_schema_version!(%{system_schema_version: 3}, %{system_upgrades: [{2, []}]})
+      end
     end
   end
 
@@ -594,7 +653,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     test "claims a virgin database" do
       drop_hologram_schemas()
 
-      assert ensure_managed!(@context) == :claimed
+      assert ensure_managed!(Map.put(@context, :system_upgrades, [])) == :claimed
 
       assert read_marker() == %{
                otp_app: "hologram",
@@ -608,11 +667,50 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       assert registry() == MapSet.new()
     end
 
+    test "claims a virgin database at the running layout" do
+      drop_hologram_schemas()
+
+      ensure_managed!(Map.put(@context, :system_upgrades, [{2, []}, {3, []}]))
+
+      assert read_marker().system_schema_version == 3
+    end
+
     test "returns :managed when the marker matches the context" do
       drop_hologram_schemas()
       ensure_managed!(@context)
 
       assert ensure_managed!(@context) == :managed
+    end
+
+    test "raises when the system tables are at a newer layout than the running one" do
+      drop_hologram_schemas()
+      ensure_managed!(@context)
+      set_system_schema_version(3)
+
+      expected_msg =
+        "the configured database's system tables are at layout version 3, from a newer " <>
+          "Hologram - this Hologram knows layout versions up to 2 - upgrade Hologram or " <>
+          "point the config at another database"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        ensure_managed!(Map.put(@context, :system_upgrades, [{2, []}]))
+      end
+    end
+
+    test "names another app ahead of a newer layout" do
+      drop_hologram_schemas()
+      ensure_managed!(@context)
+      set_system_schema_version(3)
+
+      expected_msg =
+        "the configured database belongs to app \"hologram\" - " <>
+          "the current app is \"other_app\" - point the config at the right database"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        @context
+        |> Map.merge(%{otp_app: "other_app", system_upgrades: [{2, []}]})
+        |> ensure_managed!()
+      end
     end
 
     test "raises when Hologram schemas exist without a marker" do
@@ -685,6 +783,43 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     end
   end
 
+  describe "log_system_upgrades/1" do
+    test "logs one info line per version, in order" do
+      log = capture_info_log(fn -> assert log_system_upgrades([2, 3]) == :ok end)
+
+      assert Regex.scan(
+               ~r/\[info\] Hologram: upgraded the system tables to layout version (\d+)/,
+               log,
+               capture: :all_but_first
+             ) == [["2"], ["3"]]
+    end
+  end
+
+  describe "pending_system_upgrades/1" do
+    setup do
+      drop_hologram_schemas()
+      ensure_managed!(Map.put(@context, :system_upgrades, []))
+      :ok
+    end
+
+    test "returns every step above the database's layout, in order" do
+      context = %{system_upgrades: [@create_probe_step, @alter_probe_step]}
+
+      assert pending_system_upgrades(context) == [@create_probe_step, @alter_probe_step]
+
+      set_system_schema_version(2)
+
+      assert pending_system_upgrades(context) == [@alter_probe_step]
+    end
+
+    test "returns none for a database at the running layout" do
+      set_system_schema_version(3)
+
+      assert pending_system_upgrades(%{system_upgrades: [@create_probe_step, @alter_probe_step]}) ==
+               []
+    end
+  end
+
   describe "read_marker/0" do
     test "returns nil when no marker has been written" do
       {:ok, _result} = Connection.query(~s(DELETE FROM "hologram_system"."database"))
@@ -711,9 +846,106 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       result = reconcile(context)
 
       assert result.status == :claimed
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
       assert {:table, "", "test_fixtures_entity_module1"} in registry()
       assert read_marker().last_reconciled_at == @context.timestamp
+    end
+
+    test "refreshes the marker and leaves its layout version as it was" do
+      reconcile(reconcile_context([Module1]))
+      set_system_schema_version(0)
+
+      context =
+        [Module1]
+        |> reconcile_context()
+        |> Map.merge(%{
+          hologram_version: "0.6.0",
+          timestamp: ~U[2026-07-21 08:00:00.000000Z],
+          system_upgrades: []
+        })
+
+      reconcile(context)
+
+      assert read_marker() == %{
+               @marker
+               | hologram_version: "0.6.0",
+                 system_schema_version: 0,
+                 last_reconciled_at: ~U[2026-07-21 08:00:00.000000Z]
+             }
+    end
+
+    test "upgrades the system tables of a database at an older layout, step by step" do
+      reconcile_at_layout_1([Module1])
+
+      context =
+        [Module1]
+        |> reconcile_context()
+        |> Map.put(:system_upgrades, [@create_probe_step, @alter_probe_step])
+
+      log = capture_info_log(fn -> reconcile(context) end)
+
+      assert probe_columns() == ["id", "note"]
+      assert read_marker().system_schema_version == 3
+
+      assert Regex.scan(~r/upgraded the system tables to layout version (\d+)/, log,
+               capture: :all_but_first
+             ) == [["2"], ["3"]]
+    end
+
+    test "runs only the upgrade steps above the database's layout" do
+      reconcile_at_layout_1([Module1])
+
+      [Module1]
+      |> reconcile_context()
+      |> Map.put(:system_upgrades, [@create_probe_step])
+      |> reconcile()
+
+      log =
+        capture_info_log(fn ->
+          [Module1]
+          |> reconcile_context()
+          |> Map.put(:system_upgrades, [@create_probe_step, @alter_probe_step])
+          |> reconcile()
+        end)
+
+      assert probe_columns() == ["id", "note"]
+      assert read_marker().system_schema_version == 3
+      refute log =~ "layout version 2"
+      assert log =~ "upgraded the system tables to layout version 3"
+    end
+
+    test "claims a virgin database at the running layout without running a step" do
+      [Module1]
+      |> reconcile_context()
+      |> Map.put(:system_upgrades, [@create_probe_step])
+      |> reconcile()
+
+      assert probe_columns() == []
+      assert read_marker().system_schema_version == 2
+    end
+
+    test "rolls the upgrade back with a refused reconciliation, and logs none" do
+      reconcile_at_layout_1([Module1])
+
+      {:ok, _result} = Connection.query(~s{CREATE TABLE "hologram_data"."alien" ("x" int8)})
+
+      context =
+        [Module1]
+        |> reconcile_context()
+        |> Map.put(:system_upgrades, [@create_probe_step])
+
+      expected_msg =
+        ~s(unknown table "alien" in the hologram_data schema - ) <>
+          "this schema is model-managed - move the object to another schema or remove it"
+
+      log =
+        capture_info_log(fn ->
+          assert_error RuntimeError, expected_msg, fn -> reconcile(context) end
+        end)
+
+      assert probe_columns() == []
+      assert read_marker().system_schema_version == 1
+      refute log =~ "upgraded the system tables"
     end
 
     test "returns no ops when the schema already matches" do
@@ -731,7 +963,32 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
+    end
+
+    test "builds the indexes of the plan the context carries, and drops one it no longer names" do
+      context = reconcile_context([Module1, Module2, Module3])
+      table = "test_fixtures_entity_module3"
+      wide = %{table: table, eq: MapSet.new(["b_id", "c_id"]), range: nil, order: []}
+
+      plan_with_wide =
+        context.mapping
+        |> IndexPlan.framework_needs()
+        |> Enum.concat([wide])
+        |> IndexPlan.select(context.mapping)
+
+      reconcile(Map.put(context, :plan, plan_with_wide))
+
+      # The wider index serves the lookup by b_id the framework needs, so b_id gets no index of its
+      # own, while c_id, which it doesn't lead with, keeps one.
+      assert Map.keys(Introspection.schema().tables[table].indexes) == [
+               "test_fixtures_entity_module3_b_id_c_id_$idx",
+               "test_fixtures_entity_module3_c_id_$idx"
+             ]
+
+      ExUnit.CaptureLog.capture_log(fn -> reconcile(context) end)
+
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges a unique attribute's index" do
@@ -739,7 +996,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges the index of each key declared with unique" do
@@ -747,7 +1004,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       assert Introspection.schema().tables["test_fixtures_entity_module52"].indexes[
                "test_fixtures_entity_module52_workspace_id_slug_$uidx"
@@ -767,7 +1024,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       result = reconcile(context)
 
       assert result.ops == [%{op: :rename_index, table: table, from: old_name, to: new_name}]
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       assert {:index, table, new_name} in registry()
       refute {:index, table, old_name} in registry()
@@ -833,7 +1090,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges a unique to-one's reference index" do
@@ -841,7 +1098,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       assert channel_indexes() == %{
                "test_fixtures_entity_module27_channel_id_$uidx" => %{
@@ -859,7 +1116,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       assert channel_indexes() == %{
                "test_fixtures_entity_module27_channel_id_$uidx" => %{
@@ -879,7 +1136,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       assert channel_indexes() == %{
                "test_fixtures_entity_module27_channel_id_$idx" => %{
@@ -897,7 +1154,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges a new optional unique column on a table with rows" do
@@ -914,7 +1171,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       {:ok, %{rows: rows}} = Connection.query(select_statement)
 
       assert rows == [[nil], [nil]]
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges enum types" do
@@ -922,7 +1179,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges a role type with no values and finds it converged on the next run" do
@@ -933,12 +1190,12 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       result = reconcile(context)
 
       assert result.ops == []
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges additive model changes" do
@@ -948,7 +1205,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       result = reconcile(context)
 
       assert result.status == :managed
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges destructive model changes and cleans the registry" do
@@ -957,7 +1214,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
       refute {:table, "", "test_fixtures_entity_module4"} in registry()
       refute {:enum_type, "", "test_fixtures_entity_module4_c_$enum"} in registry()
     end
@@ -973,7 +1230,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "converges an enum value removal when no rows hold it" do
@@ -986,7 +1243,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "fills NULLs with the declared default when making a column required" do
@@ -1006,7 +1263,35 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       {:ok, %{rows: rows}} = Connection.query(select_statement)
 
       assert rows == [[42]]
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
+    end
+
+    test "fills the sort and search keys of a string it fills when making the string required" do
+      optional_context =
+        [Module2]
+        |> reconcile_context()
+        |> update_mapping_column(Module2, "c", &%{&1 | null: true})
+
+      reconcile(optional_context)
+      insert_module2_row("NULL", "NULL")
+
+      long_default = "Abc" <> String.duplicate("x", 70)
+
+      context =
+        [Module2]
+        |> reconcile_context()
+        |> update_mapping_column(Module2, "c", &%{&1 | default: long_default})
+
+      reconcile(context)
+
+      select_statement =
+        ~s(SELECT "c", "c_$sort", "c_$search" FROM "hologram_data"."test_fixtures_entity_module2")
+
+      {:ok, %{rows: rows}} = Connection.query(select_statement)
+
+      assert rows == [
+               [long_default, SortKey.compute(long_default), SortKey.search_key(long_default)]
+             ]
     end
 
     test "fills existing rows with the declared default when adding a required column" do
@@ -1023,7 +1308,6 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         null: false,
         references: nil,
         fk_constraint: nil,
-        index: nil,
         source: {:attribute, :z}
       }
 
@@ -1040,7 +1324,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       {:ok, %{rows: rows}} = Connection.query(select_statement)
 
       assert rows == [[7]]
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "fills the sort-key companion of a column it adds" do
@@ -1053,7 +1337,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       reconcile(context)
 
       assert module2_sort_pairs() == [["apple", "apple"], ["Zürich", "zurich"]]
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "fills a companion whose source is cast to text in the same run" do
@@ -1110,7 +1394,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                  "keeping its links. If relationship :a of Hologram.Test.Fixtures.Entity.Module3 " <>
                  "is a new relationship, not a rename, delete its links or reset the database"
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       {:ok, %{rows: rows}} =
         Connection.query(
@@ -1126,7 +1410,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       refute Enum.any?(registry, fn {_kind, parent, name} -> old_name in [parent, name] end)
     end
 
-    test "renames a join table with its constraints and reverse index, registry included" do
+    test "renames a join table with its constraints, registry included" do
       reconcile(reconcile_context([Module1, Module2, Module3]))
       insert_module3_link()
 
@@ -1140,7 +1424,6 @@ defmodule Hologram.DB.SchemaReconcilerTest do
             %{
               join_table
               | name: new_name,
-                reverse_index: "#{new_name}_target_id_source_id_$idx",
                 pk_constraint: "#{new_name}_$pk",
                 source_fk_constraint: "#{new_name}_source_id_$fk",
                 target_fk_constraint: "#{new_name}_target_id_$fk"
@@ -1153,14 +1436,13 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
         assert op_kinds == [
                  :rename_table,
-                 :rename_index,
                  :rename_constraint,
                  :rename_constraint,
                  :rename_constraint
                ]
       end)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       {:ok, %{rows: rows}} =
         Connection.query(
@@ -1180,7 +1462,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                {:constraint, new_name, "#{new_name}_$pk"},
                {:constraint, new_name, "#{new_name}_source_id_$fk"},
                {:constraint, new_name, "#{new_name}_target_id_$fk"},
-               {:index, new_name, "#{new_name}_target_id_source_id_$idx"},
+               {:index, new_name,
+                "test_fixtures_entity_module3_a_$join_target_id_source_id_$idx"},
                {:table, "", new_name}
              ]
     end
@@ -1320,7 +1603,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         reconcile(context)
       end
 
-      assert Introspection.schema() == Schema.from_mapping(unique_c_context().mapping)
+      assert Introspection.schema() == expected_schema(unique_c_context())
     end
 
     test "raises when a type change makes rows repeat a key" do
@@ -1409,10 +1692,10 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         {:ok, _result} =
           Connection.query("""
           INSERT INTO "hologram_data"."test_fixtures_entity_module2"
-            ("id", "a", "b", "c", "y", "z", "created_at", "updated_at", "$revisions")
+            ("id", "a", "b", "c", "y", "z", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
           VALUES ('00000000-0000-0000-0000-00000000000#{index}', TRUE, NULL, 'abc',
                   '#{y_value}', '#{z_value}',
-                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
           """)
       end)
 
@@ -1448,7 +1731,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "raises when making a column required while rows hold NULL" do
@@ -1484,7 +1767,6 @@ defmodule Hologram.DB.SchemaReconcilerTest do
         null: false,
         references: nil,
         fk_constraint: nil,
-        index: nil,
         source: {:attribute, :z}
       }
 
@@ -1539,7 +1821,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                %{op: :rename_enum_type, from: old_name, to: enum_type}
              ]
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       {:ok, %{rows: rows}} =
         Connection.query(~s(SELECT "c"::text FROM "hologram_data"."test_fixtures_entity_module4"))
@@ -1590,7 +1872,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
       assert Introspection.schema().enum_types[enum_type] == ["x", "y", "z"]
 
       {:ok, %{rows: rows}} =
@@ -1613,7 +1895,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       ExUnit.CaptureLog.capture_log(fn -> reconcile(context) end)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
       assert Introspection.schema().enum_types[enum_type] == ["x"]
 
       {:ok, %{rows: rows}} =
@@ -1651,9 +1933,9 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       insert_statement = """
       INSERT INTO "hologram_data"."test_fixtures_entity_module4"
-        ("id", "a", "b", "c", "d", "created_at", "updated_at", "$revisions")
+        ("id", "a", "b", "c", "d", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-000000000001', '2026-01-01', '2026-01-01 00:00:00+00',
-              'y', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              'y', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert_statement)
@@ -1718,7 +2000,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       context = key_over_added_column_context("en", false)
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "builds a key over a column added without a default over rows repeating the rest" do
@@ -1728,7 +2010,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       context = key_over_added_column_context(nil, true)
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     # An optional column's default fills no existing row, so the rows hold NULL in it.
@@ -1739,7 +2021,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       context = key_over_added_column_context("en", true)
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
     end
 
     test "raises when a key meets rows that repeat it once a tightened column is filled" do
@@ -1770,7 +2052,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       end
 
       assert Introspection.schema() ==
-               Schema.from_mapping(key_over_b_c_context([Module2]).mapping)
+               expected_schema(key_over_b_c_context([Module2]))
     end
 
     test "raises when a filled row would repeat the key of a row holding the default" do
@@ -1834,7 +2116,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       reconcile(context)
 
-      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema() == expected_schema(context)
 
       {:ok, %{rows: rows}} =
         Connection.query(
@@ -1850,20 +2132,20 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       {:ok, _result} =
         Connection.query("""
         INSERT INTO "hologram_data"."test_fixtures_entity_module26"
-          ("id", "name", "name_$sort", "created_at", "updated_at", "$revisions")
+          ("id", "name", "name_$sort", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
         VALUES ('00000000-0000-0000-0000-000000000001', 'general', NULL,
-                '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+                '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
         """)
 
       Enum.each(1..2, fn index ->
         {:ok, _result} =
           Connection.query("""
           INSERT INTO "hologram_data"."test_fixtures_entity_module27"
-            ("id", "channel_id", "code", "summary", "summary_$sort", "created_at", "updated_at",
+            ("id", "channel_id", "code", "summary", "summary_$sort", "created_at", "server_created_at", "server_updated_at", "updated_at",
              "$revisions")
           VALUES ('00000000-0000-0000-0000-00000000001#{index}',
                   '00000000-0000-0000-0000-000000000001', NULL, 'welcome', NULL,
-                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
           """)
       end)
 
@@ -1910,6 +2192,31 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       {:ok, _result} = Connection.query(~s(DELETE FROM "hologram_system"."schema_object"))
 
       assert registry() == MapSet.new()
+    end
+  end
+
+  describe "system_schema_upgrades/0" do
+    # What a later release's step has to follow, so a claimed database's version can never skip
+    # a step or run one twice.
+    test "numbers its steps one above the last, from 2" do
+      steps = system_schema_upgrades()
+
+      expected_versions =
+        steps
+        |> Enum.with_index(2)
+        |> Enum.map(fn {_step, index} -> index end)
+
+      assert Enum.map(steps, fn {version, _statements} -> version end) == expected_versions
+    end
+  end
+
+  describe "system_schema_version/1" do
+    test "is 1 without upgrade steps" do
+      assert system_schema_version(%{system_upgrades: []}) == 1
+    end
+
+    test "is the last upgrade step's version" do
+      assert system_schema_version(%{system_upgrades: [{2, []}, {3, []}]}) == 3
     end
   end
 
@@ -2088,11 +2395,37 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     end
   end
 
-  describe "write_marker/1" do
-    test "stamps the writer's system schema layout version over the given one" do
-      write_marker(%{@marker | system_schema_version: 99})
+  describe "upgrade_system_tables!/1" do
+    setup do
+      drop_hologram_schemas()
+      ensure_managed!(Map.put(@context, :system_upgrades, []))
+      :ok
+    end
 
-      assert read_marker().system_schema_version == 1
+    test "runs the pending steps in order and returns their versions" do
+      context = %{system_upgrades: [@create_probe_step, @alter_probe_step]}
+
+      assert upgrade_system_tables!(context) == [2, 3]
+      assert probe_columns() == ["id", "note"]
+      assert read_marker().system_schema_version == 3
+    end
+
+    test "returns no versions for a database at the running layout" do
+      set_system_schema_version(3)
+
+      assert upgrade_system_tables!(%{system_upgrades: [@create_probe_step, @alter_probe_step]}) ==
+               []
+
+      assert probe_columns() == []
+      assert read_marker().system_schema_version == 3
+    end
+  end
+
+  describe "write_marker/1" do
+    test "writes the given layout version" do
+      write_marker(%{@marker | system_schema_version: 7})
+
+      assert read_marker().system_schema_version == 7
     end
 
     test "replaces the previous marker row" do

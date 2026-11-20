@@ -563,7 +563,8 @@ defmodule Hologram.LiveReload do
   Hologram compile with the given options, `:next_batch` and `:bundles_built`, through which the
   scheduler orders the pages and reloads the tabs batch by batch (see `handle_call/3`). The compile
   validates the data model and has the database schema reconciled with it (see
-  `reload_database/2`) before it builds anything. The runtime registries are reloaded once more at
+  `reload_database/2`) before it builds anything, and again with the indexes the queries it derived
+  need (see `reload_indexes/0`). The runtime registries are reloaded once more at
   the end, for a compile that built no bundle. Clients only ever reload into a converged database,
   since the schema is reconciled before the first batch is built and its tabs told to reload.
 
@@ -578,7 +579,10 @@ defmodule Hologram.LiveReload do
     # so it reloads with the runtime registries, and a compile that refused a query fails before
     # any registry is reloaded, leaving the previous dump in place.
     with :ok <- reload_code(endpoint),
-         :ok <- recompile_hologram([data_model_ready: &reload_database/2] ++ opts) do
+         :ok <-
+           recompile_hologram(
+             [data_model_ready: &reload_database/2, index_needs_ready: &reload_indexes/0] ++ opts
+           ) do
       reload_runtime()
       :ok
     end
@@ -593,6 +597,21 @@ defmodule Hologram.LiveReload do
   @spec reload_database(list(module), list(module)) :: :ok
   def reload_database(entity_types, role_modules) do
     DB.reload(entity_types, role_modules)
+  catch
+    :exit, reason ->
+      message = "database reload failed: " <> Exception.format_exit(reason)
+      reraise Hologram.CompileError, [message: message], __STACKTRACE__
+  end
+
+  @doc """
+  Reconciles the database schema with the index plan the compile's dump now gives, when it differs
+  from the one the database was last converged to (see `Hologram.DB.reload_indexes/0`): a compile
+  changing only queries changes the plan without touching the model. An exit is raised as a
+  `Hologram.CompileError`, like `reload_database/2`'s.
+  """
+  @spec reload_indexes() :: :ok
+  def reload_indexes do
+    DB.reload_indexes()
   catch
     :exit, reason ->
       message = "database reload failed: " <> Exception.format_exit(reason)

@@ -540,8 +540,8 @@ defmodule Hologram.DB.Preflight do
     |> Enum.filter(&(&1.unique and not Map.has_key?(&1, :non_plain) and column in &1.columns))
   end
 
-  # The column indexes a mapping derives are never unique, so the entity's own index entries
-  # hold every unique index of its table.
+  # The mapping derives unique indexes alone - the others are the index plan's - so the entity's
+  # own index entries hold every unique index of its table.
   defp unique_indexes(mapping, table) do
     indexes =
       case entity_mapping(mapping, table) do

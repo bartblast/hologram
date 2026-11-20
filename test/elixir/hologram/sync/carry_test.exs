@@ -58,11 +58,7 @@ defmodule Hologram.Sync.CarryTest do
   end
 
   defp delete_key do
-    Policy.verdict_key(
-      VerdictTask,
-      :delete,
-      {:none, {[:board, :cards], [{:author_id, :==, {:actor}}]}}
-    )
+    Policy.verdict_key(VerdictTask, :delete)
   end
 
   # A build with a page checking permissions on the client - the only kind whose rows carry
