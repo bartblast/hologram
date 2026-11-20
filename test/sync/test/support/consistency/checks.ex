@@ -76,10 +76,10 @@ defmodule HologramSyncTests.Consistency.Checks do
   end
 
   defp poll_converged(client, user_id, deadline) do
-    store_differences = diff(Client.store(client), Model.expected(Model.snapshot(), user_id))
+    {complete?, store} = Client.view(client)
+    store_differences = diff(store, Model.expected(Model.snapshot(), user_id))
 
-    differences =
-      if Client.complete?(client), do: store_differences, else: [:incomplete | store_differences]
+    differences = if complete?, do: store_differences, else: [:incomplete | store_differences]
 
     cond do
       differences == [] ->

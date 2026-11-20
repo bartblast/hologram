@@ -133,6 +133,13 @@ defmodule HologramSyncTests.Consistency.Client do
   @spec store(pid) :: %{module => %{String.t() => map}}
   def store(client), do: GenServer.call(client, :store)
 
+  @doc """
+  Returns whether the client's stream has told it, since it last connected, that it holds
+  everything, and what it holds (see `store/1`) - read in one go, so both describe one moment.
+  """
+  @spec view(pid) :: {boolean, %{module => %{String.t() => map}}}
+  def view(client), do: GenServer.call(client, :view)
+
   @impl GenServer
   def init(opts) do
     # So a supervisor stopping it runs terminate/2, which closes the stream: :httpc keeps a stream
@@ -184,6 +191,10 @@ defmodule HologramSyncTests.Consistency.Client do
   def handle_call(:records, _from, state), do: {:reply, Enum.reverse(state.records), state}
 
   def handle_call(:store, _from, state), do: {:reply, comparable_store(state), state}
+
+  def handle_call(:view, _from, state) do
+    {:reply, {state.complete?, comparable_store(state)}, state}
+  end
 
   @impl GenServer
   # Only the reconnect the client still waits for: a cut or a connect since then took it back, even

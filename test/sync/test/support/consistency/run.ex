@@ -253,12 +253,9 @@ defmodule HologramSyncTests.Consistency.Run do
   defp settle({client, first_differences}, entries) do
     expected = Model.expected(Model.snapshot(), client.user_id)
 
-    settled =
-      client.pid
-      |> Client.store()
-      |> Checks.diff(expected)
-
-    incomplete = if Client.complete?(client.pid), do: [], else: [:incomplete]
+    {complete?, store} = Client.view(client.pid)
+    settled = Checks.diff(store, expected)
+    incomplete = if complete?, do: [], else: [:incomplete]
     records = Client.records(client.pid)
 
     differences =
