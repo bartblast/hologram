@@ -103,7 +103,7 @@ defmodule Hologram.Sync.Frame do
   of. Grouping loses no ordering, because a frame's deltas are statements about one snapshot. A
   row and an edge of its own can both be in one, and often are - a row that arrives with a pair
   added in the same round is the ordinary case - but they cannot disagree: the row states the
-  whole target set of what the window embeds, the edge states one pair of it, and both were read
+  whole target set of the relationship, the edge states one pair of it, and both were read
   from the one round. Whichever is applied first, the same facts are left behind.
 
   The applied sequence number says how far the receiving replica's own writes are reflected in
@@ -141,7 +141,7 @@ defmodule Hologram.Sync.Frame do
   navigating needs no server. Until a query's types have arrived the client answers it from what
   the server rendered, because a store filled only part way would answer with part of the truth.
 
-  Per entity type rather than per page or per window, because a type is what a fill sends whole,
+  Per entity type rather than per page, because a type is what a fill sends whole,
   and whether it is complete is the same claim on every page and in every tab - which a page is
   not. The types are spelled the way a frame spells a row's type.
 
@@ -153,7 +153,7 @@ defmodule Hologram.Sync.Frame do
 
   Whether the marker names a place is about the CLIENT, not the scope. A first arrival holds a
   whole pot only once `:all` has been announced, so its types markers name none - the scope is
-  narrower than the claim. And nil for `:all` on a build whose windows have no places to speak of.
+  narrower than the claim. And nil for `:all` on a build whose log has no places to speak of.
   """
   @spec encode_synced_envelope(integer, :all | {:types, list(module)}, String.t() | nil) ::
           String.t()

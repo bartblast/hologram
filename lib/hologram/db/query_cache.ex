@@ -6,11 +6,10 @@ defmodule Hologram.DB.QueryCache do
   alias Hologram.Commons.SerializationUtils
   alias Hologram.DB
   alias Hologram.Entity.Derived
-  alias Hologram.Query
   alias Hologram.Reflection
 
   @doc """
-  Returns the path of the dump file the registered queries are read from.
+  Returns the path of the dump file the query cache is read from.
   """
   @callback dump_path() :: String.t()
 
@@ -34,7 +33,7 @@ defmodule Hologram.DB.QueryCache do
   end
 
   @doc """
-  Returns the implementation of the path of the dump file the registered queries are read from.
+  Returns the implementation of the path of the dump file the query cache is read from.
   """
   @spec dump_path() :: String.t()
   def dump_path do
@@ -42,28 +41,11 @@ defmodule Hologram.DB.QueryCache do
   end
 
   @doc """
-  Returns all query cache entries - a map from query content ID to its registry entry.
-  """
-  @spec entries() :: %{String.t() => %{atom => any}}
-  def entries do
-    :persistent_term.get(impl().persistent_term_key()).entries
-  end
-
-  @doc """
-  Returns {:ok, entry} for the given query content ID, or :error when no query
-  with the given ID is registered.
-  """
-  @spec fetch(String.t()) :: {:ok, %{atom => any}} | :error
-  def fetch(id) do
-    Map.fetch(entries(), id)
-  end
-
-  @doc """
   Returns true when the build has a page checking permissions on the client, or false otherwise -
-  as the build decided it, when it registered the queries.
+  as the build decided it.
 
-  Such a client answers each rule over the rows it holds, so it needs the related rows its queried
-  types' rules read beside the rows the queries return.
+  Such a client answers each rule over the rows it holds, so it needs the rows its types' rules
+  read synced too, and the server's verdicts carried on the rows.
   """
   @spec permission_checking?() :: boolean
   def permission_checking? do
@@ -71,25 +53,14 @@ defmodule Hologram.DB.QueryCache do
   end
 
   @doc """
-  Returns the entity types sync sends rows of, sorted - as the build listed them, when it
-  registered the queries (see `Hologram.Compiler.build_sync_constants/2`). A type left out is one
-  no browser code reads and no rule a browser answers reads, save through a type no session may
-  read, so no browser gets its rows.
+  Returns the entity types sync sends rows of, sorted - as the build listed them (see
+  `Hologram.Compiler.build_sync_constants/2`). A type left out is one no browser code reads and no
+  rule a browser answers reads, save through a type no session may read, so no browser gets its
+  rows.
   """
   @spec synced_types() :: list(module)
   def synced_types do
     :persistent_term.get(impl().persistent_term_key()).synced_types
-  end
-
-  @doc """
-  Returns the term the given window downloads, or nil when no registered query downloads it.
-
-  Windows are shared: several queries choosing among the same rows name one window between them,
-  and this is what the sync layer runs for all of them.
-  """
-  @spec window(String.t()) :: Query.t() | nil
-  def window(window_id) do
-    :persistent_term.get(impl().persistent_term_key()).windows[window_id]
   end
 
   @doc """
@@ -119,9 +90,8 @@ defmodule Hologram.DB.QueryCache do
     Application.get_env(:hologram, :query_cache_impl, __MODULE__)
   end
 
-  # Read rather than rebuilt: the build already collected every component's registered queries and
-  # validated them, so a boot that repeated the work would pay for it again and could only reach
-  # the same answer - or fail, long after the build that should have.
+  # Read rather than rebuilt: the build already worked all of this out from the call graph, which a
+  # release does not ship, so a boot could not repeat the work.
   defp populate do
     data =
       impl().dump_path()

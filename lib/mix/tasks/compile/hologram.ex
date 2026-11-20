@@ -64,8 +64,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     * the page types dump - the synced types a sync session on each page fills first when a
       client connects.
 
-    * the queries dump - the registered queries of every component, which the renderer and the
-      sync layer read.
+    * the queries dump - the derived fields' definitions, the synced types and whether a page checks
+      permissions on the client, which the renderer and the sync layer read.
 
   The bundles go to the build dir too, to its static dir (see `Hologram.Reflection.bundles_dir/0`),
   which `Hologram.Router` serves them from. Each build env has a build dir of its own, so a compile
@@ -1253,7 +1253,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # What the data layer derives from the build, validated and dumped for the running app: the synced
-  # types each page fills first, the registered queries of every component, and the statement the
+  # types each page fills first, what the renderer and the sync layer read, and the statement the
   # runtime script sets the client's data layer constants with, which is returned. What it was
   # derived from is kept with the statement (see Hologram.Compiler.Cache.put_data_layer/1). A
   # derivation that raises writes no dump and keeps nothing.
@@ -1344,18 +1344,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     component_queries = Map.merge(kept_component_queries, fresh_component_queries)
 
-    # A checking build's windows download the rows the rules read through relationships, so the
-    # registered windows are derived with it.
-    permission_checking? = Compiler.permission_checking?(reach_by_page)
-
-    # Every component of the build, not the ones pages reach: what reads this is the renderer and
-    # the sync layer, which answer for any component that renders. Built here and loaded at boot,
-    # like the page types, so a release starts without running the extractor at all.
-    queries =
-      component_queries
-      |> Map.take(context.component_modules)
-      |> Compiler.build_queries(entity_types, permission_checking?)
-
     sync_constants =
       Compiler.build_sync_constants(reach_by_page, module_info_plt)
 
@@ -1367,13 +1355,18 @@ defmodule Mix.Tasks.Compile.Hologram do
         Keyword.put(opts, :supervisor, context.supervisor)
       )
 
-    # The entity types sync sends rows of ride with the registered queries: the sync layer reads
-    # both, and both are loaded at boot.
+    # What the renderer and the sync layer read at boot: the derived fields' definitions, the entity
+    # types sync sends rows of, and whether a page checks permissions on the client - which makes
+    # the rows carry the server's verdicts and syncs the rows the rules read.
     {queries_plt, queries_plt_dump_path} =
-      queries
-      |> Map.put(:derived, derived.definitions)
-      |> Map.put(:synced_types, sync_constants.synced_types)
-      |> Compiler.build_queries_plt(Keyword.put(opts, :supervisor, context.supervisor))
+      Compiler.build_queries_plt(
+        %{
+          derived: derived.definitions,
+          permission_checking?: Compiler.permission_checking?(reach_by_page),
+          synced_types: sync_constants.synced_types
+        },
+        Keyword.put(opts, :supervisor, context.supervisor)
+      )
 
     # The runtime bundle sets the client's data layer constants, so what they render to is one of
     # its inputs: the model they render reads what the entity types declare now, so the two are

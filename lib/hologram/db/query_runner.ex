@@ -184,14 +184,14 @@ defmodule Hologram.DB.QueryRunner do
     end
   end
 
-  # Conflicts mirror the registry's placeholder-shape rule: one placeholder name binds one
-  # logical type - identical rebinding is reuse, a differing kind or type raises.
+  # One placeholder name binds one logical type - identical rebinding is reuse, a differing kind or
+  # type raises.
   defp binding_description(:list, type), do: inspect({:list, type})
 
   defp binding_description(:scalar, type), do: inspect(type)
 
-  # Conflicts mirror the registry's placeholder-shape rule: one placeholder name binds one
-  # logical type - identical rebinding is reuse, a differing kind or type raises.
+  # One placeholder name binds one logical type - identical rebinding is reuse, a differing kind or
+  # type raises.
   defp collect_definition(acc, placeholder_name, {kind, type, _opts} = definition) do
     case Map.fetch(acc, placeholder_name) do
       {:ok, {^kind, ^type, _existing_opts}} ->

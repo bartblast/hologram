@@ -221,8 +221,8 @@ defmodule Hologram.Sync.WireDataTest do
       assert row(entity).a == [@entity_id, @target_id]
     end
 
-    # Empty and not-included cannot be confused: a window that includes the relationship says []
-    # when there are no pairs, and one that does not include it says nothing at all.
+    # Empty and not-included cannot be confused: a row whose relationship is included says [] when
+    # there are no pairs, and one that does not include it says nothing at all.
     test "writes an included to-many relationship holding nothing as an empty list" do
       entity =
         struct(Module3, %{

@@ -33,7 +33,7 @@ defmodule Hologram.ApplicationTest do
 
     # The supervisor-started cache reads its dump from its own process - an empty one keeps this
     # test off both the database and every component's queries.
-    dump_query_cache(QueryCacheStub, [])
+    dump_query_cache(QueryCacheStub)
 
     on_exit(fn ->
       if original_hologram_start_flag do

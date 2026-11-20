@@ -170,15 +170,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end)
   end
 
-  # A build refuses a component's queries three ways, and all mean unbuildable here: a validation
-  # objecting to the term (Hologram.CompileError), a query stage refusing its own arguments while
-  # the extractor evaluates the capture (Hologram.MisuseError), and a derived field the queries
-  # read that this build never resolved (ArgumentError). The question is whether the build can
-  # produce this component's queries at all, not which tier said no.
+  # The extractor refuses a component's queries three ways, and all mean unbuildable here: a
+  # refusal of its own (Hologram.CompileError), a query stage refusing its own arguments while it
+  # evaluates the capture (Hologram.MisuseError), and a derived field the queries read that this
+  # build never resolved (ArgumentError). The question is whether the build can extract this
+  # component's queries at all, not which tier said no.
   defp buildable_queries?(module, entity_types) do
-    [module]
-    |> Compiler.extract_component_queries(entity_types, PLT.start())
-    |> Compiler.build_queries(entity_types, false)
+    Compiler.extract_component_queries([module], entity_types, PLT.start())
 
     true
   rescue
@@ -1137,13 +1135,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> Map.keys()
       |> Enum.sort()
 
-    assert query_cache_keys == [
-             :derived,
-             :entries,
-             :permission_checking?,
-             :synced_types,
-             :windows
-           ]
+    assert query_cache_keys == [:derived, :permission_checking?, :synced_types]
 
     # Resolved by walking the query builder the derived field calls.
     assert queries.derived[{Entity36, :unread_count}] ==

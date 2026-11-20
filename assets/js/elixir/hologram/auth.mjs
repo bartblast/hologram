@@ -809,9 +809,9 @@ function canonicalId(value) {
 // have moved the answer. So is one about a row that came with no verdict.
 //
 // An answer can settle a batch before the frame carrying its round arrives, and between the two
-// the verdict predates the write again. The window closes itself: a write moving a verdict re-runs
-// the windows over the row, whose frame brings the new one, and a write that moves none sends
-// none, since the verdict held stands. Held rows still refute it in between.
+// the verdict predates the write again. The gap closes itself: a write moving a verdict is told to
+// the client with the row, whose frame brings the new one, and a write that moves none sends none,
+// since the verdict held stands. Held rows still refute it in between.
 function verdictHolds(entityType, entity, entry, actorUserId) {
   // The server works a session's verdicts out for its user as rules read it, a visitor for an id
   // naming no user entity.

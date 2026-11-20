@@ -9,132 +9,65 @@ defmodule Hologram.Query.Window do
 
   @quantifiers [:all, :any, :none]
 
-  # What a query downloads, as opposed to what it answers. A client holds the rows its queries
-  # could need rather than the ones they select right now, so changing a value re-runs the query
-  # over what is already there instead of asking for more.
+  # The rows a query reads beside the ones it returns, as includes: what the server renders a
+  # query with, so the rows a path, a quantifier, a derived field or a rule reads arrive with the
+  # ones it returns, and the types it reads, which sync has to send (see entity_types/1).
+  #
+  # A PATH reads rows the query does not return, so every path the filter names - on either side
+  # of a comparison, inside alternatives - has its relationships embedded as to-one includes,
+  # merged with the query's own.
+  #
+  # A QUANTIFIER reads the rows of a related set, so every set a quantifier reads - nested ones and
+  # the rows along its source included - is embedded as an include, the rows its condition's paths
+  # read with it. A set read off its rows' own reference field is narrowed by the quantifier's
+  # condition: `any` and `none` are decided by the related rows the condition matches, so only
+  # those are embedded. `all` is decided by the rows the condition does NOT match, so its set is
+  # embedded whole, and so is a set read through the ids filed for its row - a to-many, or an
+  # inverse of one - since a row states the whole set it names. A set before the last link of a
+  # source is embedded whole too, since every row of it leads to related rows. Two narrowings of
+  # one set are joined with `or`, and a whole one wins.
+  #
+  # A narrowing keeps only what bounds the rows whatever the run's values are:
+  #
+  # - A predicate with a PLACEHOLDER on either side - as the value, or as the compared attribute -
+  #   bounds nothing, since the answer for every value it may take has to be there. It is dropped.
+  # - A path predicate that matches a missing related row - `channel.archived != true`,
+  #   `channel.name == nil`, a membership holding nil, an equality with another attribute - bounds
+  #   nothing either: a reader who may not read the related row reads it as missing. It is dropped.
+  # - A DISJUNCTION narrows each alternative to what bounds it, and is dropped whole when an
+  #   alternative loses every predicate, since that alternative admits every row. Dropping a
+  #   conjunct widens what arrives, which is safe; dropping an alternative would narrow it.
+  # - A nested `any` stays, narrowed by the same rules: a reader holding fewer related rows makes
+  #   it false more often, never true. A nested `none` or `all` is dropped, since a reader holding
+  #   fewer related rows can make it true where the stored rows make it false.
+  # - A part reading a row above the set bounds nothing about the set's own rows, and is left out.
+  #
+  # A DERIVED FIELD is computed from the rows its definition reads, so those are embedded where the
+  # field is read: under the relationships its sources go through, narrowed by its definition's
+  # literal conditions as a quantifier's set is.
+  #
+  # A client that checks permissions answers each rule over the rows it holds, and a rule can read
+  # rows other than the one it decides about - the row a `via:` leads to, the rows before the last
+  # relationship of a `to:` reference, the rows along a `when:` path, the sets a quantifier reads.
+  # So when the build has a page checking permissions on the client, the chains the rules of the
+  # type a query returns read (see `Hologram.Policy.related_chains/1`) are embedded whole, the way
+  # a path's relationships are, and so are those of every type it includes, under that include. A
+  # chain stops before its first type no session may read (see
+  # `Hologram.Policy.readable_prefix/2`): no client is ever sent such a row. A row embedded for a
+  # path or for a rule gets no rule chains of its own: whatever a delegation reads through it is in
+  # the delegating type's chains already, and a rule reading a row of its own type would otherwise
+  # never stop embedding.
 
   @doc """
-  Returns the window term of the given query term - the same query with the predicates that
-  cannot say anything about the download taken out.
+  Returns the given query term with the rows it reads beside the ones it returns embedded as
+  includes, merged with its own, the sub-terms of its includes embedded the same way: the
+  relationships its paths go through, the sets its quantifiers read, the rows the derived fields it
+  reads are computed from and, when the build has a page checking permissions on the client, the
+  chains the rules of the types it returns and includes read (see the module's comment for how
+  each is narrowed).
 
-  A predicate is dropped when a PLACEHOLDER stands on either side of it - as the value, whatever the
-  operator, or as the attribute being compared. Both are unknown when the window is derived, so
-  the predicate bounds nothing, and the answer for every value it may take has to be in what
-  arrives. What keeps that download finite is elsewhere - the model bounds an enum or a boolean by
-  what it declares, and the read policy bounds a reference by the rows the actor may see, which is
-  applied to the download in any case.
-
-  A predicate comparing to a LITERAL stays: an app whose only query asks for todo projects is
-  saying the others are never needed. So does one comparing two ATTRIBUTES of the row
-  (`end_date < start_date`) - it says something about the row whatever value anything takes - and
-  one reading a PATH, by the same rule, unless a missing related row satisfies it (see below):
-  `channel.archived == false` keeps the messages of unarchived channels.
-
-  An include is whole - a narrowed set is a derived field. A set the window embeds for a quantifier
-  or a derived field is downloaded whole too when the client reads it through the ids filed for its
-  row - a to-many, or an inverse of one - every related row the read rules admit. A row on the wire
-  states the whole set it names, and every window holding the row shares that one set in the
-  client, so a narrowed set would stand for the complete one another window reads, and an edge the
-  narrowing leaves out would be reported gone. A set read off its rows' own reference field - an
-  inverse of a to-one - is narrowed as any query is.
-
-  A PATH reads rows the query does not return, and the client answers the query over what it
-  holds, so every path the filter names - kept or dropped, on either side of a comparison, inside
-  alternatives - has its relationships embedded in the window as to-one includes, merged with the
-  query's own. The related rows arrive with the window and are kept current with it, and a change
-  to one reaches the window the way a change to an included row does.
-
-  A path to a row a reader may not read reads as missing for that reader, while the window reads
-  the row as stored. So a path predicate that matches a missing value - `channel.archived != true`,
-  `channel.name == nil`, `channel.kind in [nil, :dm]`, `channel.kind not in [:dm]`, or an equality
-  or inequality with another attribute, `x == channel.y` - bounds nothing: the window would leave
-  out a row the reader's own answer keeps. It is dropped. One that never matches a missing value -
-  an equality with a value, `!= nil`, a membership without nil, a negated one with nil, an ordering
-  comparison - stays.
-
-  A DISJUNCTION cannot drop a predicate the same way. Dropping a conjunct widens what arrives,
-  which is safe - dropping an alternative narrows it, and `status == :todo or owner_id == ^user_id`
-  would then download only the todo rows, while the query also answers for a user's own rows in
-  every other status. So each alternative is narrowed to its literal predicates and the disjunction
-  stays, unless an alternative loses every predicate: that alternative admits every row for some
-  value of its placeholders, so the disjunction bounds nothing and is dropped whole, the clauses
-  beside it staying. A nested disjunction follows the same rule from the inside out. Narrowing
-  can move an alternative among the others, so the filter is put back in canonical order - two
-  queries differing only in a pinned alternative must name one window.
-
-  A QUANTIFIER reads the rows of a related set, and the client answers it over the ones it holds,
-  so every set a quantifier reads - nested ones and the rows along its source included - is
-  embedded in the window as an include, the rows its condition's paths read with it, and a change
-  to one of them reaches the window the way a change to an included row does. A set read off its
-  rows' own reference field is narrowed by the quantifier's condition, as the queried rows are by
-  theirs: `any` and `none` are decided by the related rows the condition matches, so only those are
-  downloaded, the parts of the condition that bound nothing - a placeholder, a row above the set -
-  left out. `all` is decided by the rows the condition does NOT match, so its set is downloaded
-  whole, and so is a set the client reads through ids, for the reason above. A set before the last
-  link of a source is downloaded whole too, whatever else narrows it, since every row of it leads
-  to related rows. Two narrowings of one set are joined with `or`, and a whole one wins.
-
-  The window runs over every row, and a client is handed the rows it may read - so a predicate may
-  only bound the download when a client reading fewer related rows can never answer it true where
-  the window answers false. An `any` passes: fewer related rows make it false more often, never
-  true, so it stays, narrowed by these same rules - one losing every predicate still asks that the
-  set holds a row. `none` and `all` fail it - a channel whose only flagged message a reader may not
-  read has none of that reader's flagged messages - so they are dropped, widening the download.
-
-  A client that checks permissions answers each rule over what it holds too, and a rule can read
-  rows other than the one it decides about - the row a `via:` leads to, the rows before the last
-  relationship of a `to:` reference, the rows along a `when:` path, the sets a quantifier reads.
-  A set is embedded whole, whatever narrowing the query's own quantifiers or includes give it: the
-  rule may be answered by any of its rows the reader may read. So when the build has a page
-  checking permissions on the client, the chains the rules of the type a query returns read (see
-  `Hologram.Policy.related_chains/1`) are embedded the way a path's relationships are, and so are
-  those of every type it includes, under that include. A chain stops before its first type no
-  session may read (see `Hologram.Policy.readable_prefix/2`): no client is ever sent such a row,
-  and the server's verdict answers what a read rule's conditions, role references and delegations
-  read of it. A row embedded for a path or for a rule gets no rule chains of its own: the template
-  never sees it, whatever a delegation reads through it is in the delegating type's chains
-  already, and a rule reading a row of its own type would otherwise never stop embedding.
-
-  Sort, skip and take are emptied rather than dropped. They shape what a query answers rather
-  than what it downloads, so two queries reading the same rows in different orders share one
-  window - but a window IS a query term and is run as one, so it keeps a term's shape and states
-  that it asks for every row, in no order.
-
-  KNOWN CONSEQUENCE, recorded rather than worked around: a query whose only bound is a placeholder
-  downloads everything the policy admits. A thirty-day message window written as
-  `created_at > ^cutoff` downloads the channel's whole history, because a cutoff computed
-  per render says nothing at compile time. Bounding it needs the thirty days written into the
-  query itself - a relative bound the compiler can read and the server evaluates per run - which
-  the filter surface does not offer yet.
-  """
-  @spec derive(Query.t(), boolean) :: Query.t()
-  def derive(term, permission_checking?) do
-    filter =
-      term.filter
-      |> window_clauses([term.entity])
-      |> Stage.normalized_filter()
-
-    include =
-      term.include
-      |> Enum.reject(fn {name, _sub_term} -> Derived.declared?(term.entity, name) end)
-      |> Map.new(fn {name, sub_term} ->
-        {name, derive(sub_term, permission_checking?)}
-      end)
-      |> put_embedded_includes(term, permission_checking?)
-
-    %Query{entity: term.entity, filter: filter, include: include}
-  end
-
-  @doc """
-  Returns the given query term with the relationships its filters' paths go through embedded as
-  to-one includes, merged with its own, the sub-terms of its includes embedded the same way - the
-  term that reads the rows a path reads alongside the rows it returns. When the build has a page
-  checking permissions on the client, the chains the rules of the types it returns and includes
-  read are embedded beside them, the way `derive/2` embeds them into the window.
-
-  The term's own clauses stay as written - it answers the query as authored. The sets its
-  quantifiers read are embedded the way the window embeds them, narrowed alike, beside the
-  authored includes - an authored include of the same set, whole, is left as authored.
+  The term's own clauses stay as written - it answers the query as authored. An authored include
+  of a set a quantifier reads, whole, is left as authored.
 
   A term with nothing to embed comes back unchanged.
   """
@@ -221,7 +154,7 @@ defmodule Hologram.Query.Window do
     Enum.uniq(name_reads ++ source_reads)
   end
 
-  # What a derived field's query narrows its set by in the window: its conditions about the set's
+  # What a derived field's query narrows its embedded set by: its conditions about the set's
   # rows alone - none reading the owning row, which says nothing at build time - and only for a set
   # read off its rows' own reference field, as a quantifier's set is narrowed.
   defp definition_narrowing(term, root, set_chain, owner_chain) do
@@ -232,7 +165,7 @@ defmodule Hologram.Query.Window do
     with %{reference?: true} <- Entity.inverse_relationship(set_owner_type, set_name),
          [_clause | _clauses] = narrowing <-
            term.filter
-           |> window_clauses(scope)
+           |> narrowed_clauses(scope)
            |> Enum.filter(&self_contained?(&1, 0))
            |> Stage.normalized_filter() do
       narrowing
@@ -317,7 +250,7 @@ defmodule Hologram.Query.Window do
   end
 
   # A chain read through the rows derived fields hold, as the chains to the rows they are computed
-  # from - the chains the window embeds. A field choosing its rows with if holds the rows of every
+  # from - the chains embedded. A field choosing its rows with if holds the rows of every
   # query its branches name, so a chain through it maps onto each, and onto none for a field
   # holding none.
   defp mapped_chains(_entity_type, []), do: [[]]
@@ -591,8 +524,8 @@ defmodule Hologram.Query.Window do
     end)
   end
 
-  # A to-one include carries no clauses, so a path's relationship joins one the window already
-  # has by adding what it includes - and a set a quantifier embedded keeps its narrowing.
+  # A to-one include carries no clauses, so a path's relationship joins one already embedded by
+  # adding what it includes - and a set a quantifier embedded keeps its narrowing.
   defp put_path_include(include, _entity_type, []), do: include
 
   defp put_path_include(include, entity_type, [relationship_name | later_names]) do
@@ -820,7 +753,7 @@ defmodule Hologram.Query.Window do
          %{reference?: true} <- Entity.inverse_relationship(owner_type, set_name),
          [_clause | _clauses] = narrowing <-
            inner
-           |> window_clauses(scope)
+           |> narrowed_clauses(scope)
            |> Enum.filter(&self_contained?(&1, 0))
            |> Stage.normalized_filter() do
       narrowing
@@ -837,8 +770,8 @@ defmodule Hologram.Query.Window do
 
   defp source_start(hops, [entity_type | _rows_above]), do: {entity_type, hops}
 
-  defp window_clause({:or, alternatives}, scope) do
-    narrowed = Enum.map(alternatives, &window_clauses(&1, scope))
+  defp narrowed_clause({:or, alternatives}, scope) do
+    narrowed = Enum.map(alternatives, &narrowed_clauses(&1, scope))
 
     if Enum.any?(narrowed, &(&1 == [])) do
       []
@@ -849,12 +782,12 @@ defmodule Hologram.Query.Window do
 
   # An any narrows the download whatever a reader may not see, by its condition narrowed the same
   # way. none and all do not - a reader seeing fewer related rows can answer either true where the
-  # window, reading every row, answers false.
+  # stored rows answer false.
   #
   # A derived value, or an any over a derived set, is computed over the rows a reader holds, which
-  # can be fewer than the window reads - so no comparison of one bounds the download safely, and it
+  # can be fewer than are stored - so no comparison of one bounds the set safely, and it
   # is dropped like one a placeholder stands in.
-  defp window_clause({:any, {source, clauses}}, scope) do
+  defp narrowed_clause({:any, {source, clauses}}, scope) do
     {start_type, hops} = source_start(source, scope)
 
     if derived_end?(start_type, hops) do
@@ -862,20 +795,21 @@ defmodule Hologram.Query.Window do
     else
       related_type = Derived.path_target(start_type, hops)
 
-      [{:any, {source, window_clauses(clauses, [related_type | scope])}}]
+      [{:any, {source, narrowed_clauses(clauses, [related_type | scope])}}]
     end
   end
 
-  defp window_clause({quantifier, {_source, _clauses}}, _scope) when quantifier in [:all, :none],
-    do: []
+  defp narrowed_clause({quantifier, {_source, _clauses}}, _scope)
+       when quantifier in [:all, :none],
+       do: []
 
-  defp window_clause(triple, scope) do
+  defp narrowed_clause(triple, scope) do
     if placeholder_bound?(triple) or missing_path_match?(triple) or reads_derived?(triple, scope),
       do: [],
       else: [triple]
   end
 
-  defp window_clauses(clauses, scope), do: Enum.flat_map(clauses, &window_clause(&1, scope))
+  defp narrowed_clauses(clauses, scope), do: Enum.flat_map(clauses, &narrowed_clause(&1, scope))
 
   defp within?({:outer, levels, _name}, depth), do: levels <= depth
 

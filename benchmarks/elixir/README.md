@@ -94,14 +94,6 @@ build_page_js/5        233.59        4.28 ms    ±12.15%        4.30 ms        5
 ```
 
 
-### ✅ compiler » build_queries_3
-
-```
-Name                      ips        average  deviation         median         99th %
-build_queries/3       18.46 K       54.17 μs    ±15.05%       51.46 μs       82.92 μs
-```
-
-
 ### ✅ compiler » build_sync_constants_2
 
 ```

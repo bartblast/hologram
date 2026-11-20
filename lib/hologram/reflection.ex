@@ -1154,7 +1154,7 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Returns the file name of the dump of the registered queries PLT.
+  Returns the file name of the dump of the queries PLT.
   """
   @spec queries_plt_dump_file_name() :: String.t()
   def queries_plt_dump_file_name do

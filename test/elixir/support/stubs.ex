@@ -10,7 +10,6 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
-  alias Hologram.Compiler
   alias Hologram.DB.QueryCache
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
@@ -119,10 +118,7 @@ defmodule Hologram.Test.Stubs do
 
     :persistent_term.erase(stub.persistent_term_key())
 
-    dump_query_cache(stub, [
-      Hologram.Test.Fixtures.Component.Module40,
-      Hologram.Test.Fixtures.Component.Module41
-    ])
+    dump_query_cache(stub)
 
     if start_link do
       QueryCache.start_link([])
@@ -132,15 +128,13 @@ defmodule Hologram.Test.Stubs do
   end
 
   @doc """
-  Writes the query cache dump the given stub reads, holding the registered queries of the given
-  component modules, no derived definitions and the given synced types, every entity type unless a
-  test names the ones that sync - the compile task's artifact, built the same way but for a chosen
-  set, for a build with or without a page checking permissions on the client.
+  Writes the query cache dump the given stub reads, holding no derived definitions, whether a page
+  checks permissions on the client, and the given synced types, every entity type unless a test
+  names the ones that sync - the compile task's artifact, for a chosen build.
   """
-  @spec dump_query_cache(module, list(module), boolean, list(module)) :: :ok
+  @spec dump_query_cache(module, boolean, list(module)) :: :ok
   def dump_query_cache(
         stub,
-        component_modules,
         permission_checking? \\ false,
         synced_types \\ Reflection.list_entities()
       ) do
@@ -148,17 +142,12 @@ defmodule Hologram.Test.Stubs do
 
     File.rm(dump_path)
 
-    entity_types = Reflection.list_entities()
-
-    queries =
-      component_modules
-      |> Compiler.extract_component_queries(entity_types, PLT.start())
-      |> Compiler.build_queries(entity_types, permission_checking?)
-      |> Map.put(:derived, %{})
-      |> Map.put(:synced_types, synced_types)
-
     PLT.start()
-    |> PLT.put(Map.to_list(queries))
+    |> PLT.put(
+      derived: %{},
+      permission_checking?: permission_checking?,
+      synced_types: synced_types
+    )
     |> PLT.dump(dump_path)
 
     :ok

@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler do
   @moduledoc false
 
-  alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.FileUtils
@@ -27,7 +26,6 @@ defmodule Hologram.Compiler do
   alias Hologram.Policy
   alias Hologram.Policy.Edges
   alias Hologram.Query
-  alias Hologram.Query.Registry
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
@@ -54,8 +52,8 @@ defmodule Hologram.Compiler do
   # that reads grant rows in the browser. The grant verbs join can?/3 because each asks the gate
   # locally before it writes, and the role checks because they read the grant rows themselves.
   #
-  # What being a checker buys a page: the grants window in the page's own list (first-render
-  # completeness) and, build-wide, that policy rules and roles are baked at all.
+  # What being a checker buys a page: the grant type and the types its rules read among the page's
+  # own types, filled first (first-render completeness), and, build-wide, that they sync at all.
   @permission_mfas [
     {Hologram.Auth, :can?, 3},
     {Hologram.Auth, :grant_role, 3},
@@ -438,8 +436,8 @@ defmodule Hologram.Compiler do
   Whether the data model has a grant store is not asked: one with no user entity type has none,
   but its pages still check rules that name no role - an app with no logins calls `can?/3` for
   the anonymous session, and the browser answers it from the server's verdicts like any other. What
-  needs the grant store checks for it on its own: the grants window where `build_queries/3`
-  registers it, the grant type's rows in `build_sync_constants/2`.
+  needs the grant store, the grant type's rows, checks for it on its own (see
+  `build_sync_constants/2`).
   """
   @spec permission_checking?(%{module => kept_page_reach}) :: boolean
   def permission_checking?(reach_by_page) do
@@ -850,53 +848,9 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Derives what a running Hologram app holds for the given registered queries of components, as
-  `extract_component_queries/3` extracts them: the registry entries keyed by query content id, the
-  term behind each window keyed by window id, and whether the build has a page checking permissions
-  on the client.
-
-  The components are every component of the build rather than the ones pages reach, because what
-  reads the result is the renderer and the sync layer, which answer for any component that renders.
-
-  The grants window is among the windows when the given entity types hold the role grant store,
-  which a data model does exactly when it designates a user entity type. So is the user window (see
-  `Hologram.Auth.user_window/2`). Whether the build has a page checking permissions on the client is
-  given (see `permission_checking?/1`): such a client's windows also download the related rows its
-  types' rules read, the user window's among them.
-
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_3/README.md
-  """
-  @spec build_queries(%{module => component_queries}, list(module), boolean) :: %{
-          entries: %{String.t() => %{atom => any}},
-          permission_checking?: boolean,
-          windows: %{String.t() => Query.t()}
-        }
-  def build_queries(component_queries, entity_types, permission_checking?) do
-    # In module order, so that the registry does not depend on the map's order.
-    terms =
-      component_queries
-      |> Enum.sort()
-      |> Enum.flat_map(fn {_module, queries} -> queries.terms end)
-
-    entries = Registry.build(terms, permission_checking?)
-
-    windows =
-      entries
-      |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
-      |> put_grants_window(entity_types)
-      |> put_user_window(entity_types, permission_checking?)
-
-    %{
-      entries: entries,
-      permission_checking?: permission_checking?,
-      windows: windows
-    }
-  end
-
-  @doc """
-  Builds the registered queries PLT, whose items are what a running app reads of them - the
-  entries, prop params and windows, and the derived definitions and synced types the compile task
-  puts beside them - and returns it with the path to dump it at.
+  Builds the queries PLT, whose items are what a running app reads of the data layer - the derived
+  fields' definitions, the entity types sync sends rows of, and whether a page checks permissions
+  on the client - and returns it with the path to dump it at.
   """
   @spec build_queries_plt(%{atom => any}, T.opts()) :: {PLT.t(), T.file_path()}
   def build_queries_plt(queries, opts) do
@@ -2277,8 +2231,8 @@ defmodule Hologram.Compiler do
 
   When the given module info PLT records a user entity type, the grant type joins the entity
   types: a client holds grant rows, and a row of a type the model does not name cannot be read back
-  at all. No query names that type - the grants window is registered rather than extracted - so it
-  is added here rather than derived.
+  at all. No browser code names that type - `can?/3` reads it inside the framework - so it is
+  added here rather than derived.
 
   Every entity type declaring a policy or a role joins them too, with every type those types' rules
   read through relationships and every type the derived fields holding rows and the inverses of all
@@ -2449,7 +2403,7 @@ defmodule Hologram.Compiler do
   This is NOT the same as the build's own `:entity_types` being empty, which says only that no
   page reaches a query, no type declares a rule or a role, and the model has no user entity type. Such an app HAS a database
   and will answer a greeting, so its bundle keeps saying so: the client greets, its session
-  opens with no windows, and its model is empty because nothing syncs yet - not because nothing
+  syncs no type, and its model is empty because nothing syncs yet - not because nothing
   can.
 
   The model is rendered from what the entity types declare when this is called, which is why the
@@ -5926,43 +5880,6 @@ defmodule Hologram.Compiler do
 
   defp declared_roles_description(role_names) do
     "declared roles are: #{Enum.map_join(role_names, ", ", &inspect/1)}"
-  end
-
-  # Registered whenever the app HAS a grant store, because this is a lookup table: an entry nothing
-  # asks for costs one map key, where a missing entry would answer :no_window to a client asking.
-  #
-  # An app designating no user entity type has no grant store - the grant entity joins the data
-  # model only with one, so it is among the entity types exactly then - and there is no table to
-  # evaluate the window against and nothing to register.
-  defp put_grants_window(windows, entity_types) do
-    if RoleGrant in entity_types do
-      window = Auth.grants_window()
-
-      Map.put_new(windows, Registry.id(window), window)
-    else
-      windows
-    end
-  end
-
-  # Registered whenever the data model designates a user entity type, for the reason the grants
-  # window is: an entry nothing asks for costs one map key.
-  defp put_user_window(windows, entity_types, permission_checking?) do
-    # The first by name, as Reflection.user_entity/1 picks it for the sync constants.
-    user_entity =
-      entity_types
-      |> Enum.filter(&Reflection.user_entity?/1)
-      |> Enum.sort()
-      |> List.first()
-
-    case user_entity do
-      nil ->
-        windows
-
-      user_entity ->
-        window = Auth.user_window(user_entity, permission_checking?)
-
-        Map.put_new(windows, Registry.id(window), window)
-    end
   end
 
   defp put_page_user_type(entity_types, user_entity, %{reads_session_user?: true})

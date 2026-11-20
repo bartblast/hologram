@@ -10,7 +10,7 @@ defmodule Hologram.Query do
   # that sets it, with one exception: one/1 and count/1 set cardinality, since a term cannot be
   # both. A term records fields, not the order the stages were called in - filter appends,
   # sort replaces, include adds a key or merges into one - so two pipes reaching the same
-  # fields are one query, which is what Hologram.Query.Registry.id/1 relies on. A term is always
+  # fields are one query, which is what comparing two terms relies on. A term is always
   # about one entity type, so a struct written without one is refused at the literal.
   #
   # A term with a source is a derived field's query: it reads a set reached from a row of the owning

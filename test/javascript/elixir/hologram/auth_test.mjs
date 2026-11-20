@@ -314,8 +314,8 @@ describe("Elixir_Hologram_Auth", () => {
           serverOnly: [],
         },
         // USER has no entry of its own, and that is what a real build looks like: the model
-        // carries a type when a QUERY reaches it, and the grants window is a bare RoleGrant
-        // query. Nothing here asks the target anything - the relationship is what makes user_id
+        // carries a type when browser code reaches it, and the grant rows are read by the
+        // framework, not by a query naming the user type. Nothing here asks the target anything - the relationship is what makes user_id
         // a reference field rather than an attribute, which is the shape a grant row has.
         [GRANT]: {
           attributes: {

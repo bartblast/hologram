@@ -67,13 +67,10 @@ defmodule Hologram.Template.RendererDerivedTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module163
   alias Hologram.Test.Fixtures.Template.Renderer.Module164
   alias Hologram.Test.Fixtures.Template.Renderer.Module165
-  alias Hologram.Test.Fixtures.Template.Renderer.Module166
   alias Hologram.Test.Fixtures.Template.Renderer.Module167
-  alias Hologram.Test.Fixtures.Template.Renderer.Module168
   alias Hologram.Test.Fixtures.Template.Renderer.Module169
   alias Hologram.Test.Fixtures.Template.Renderer.Module170
   alias Hologram.Test.Fixtures.Template.Renderer.Module171
-  alias Hologram.Test.Fixtures.Template.Renderer.Module172
   alias Hologram.Test.Fixtures.Template.Renderer.Module173
   alias Hologram.Test.Fixtures.Template.Renderer.Module174
   alias Hologram.Test.Fixtures.Template.Renderer.Module175
@@ -91,17 +88,7 @@ defmodule Hologram.Template.RendererDerivedTest do
     setup_chunk_registry(ChunkRegistryStub)
     setup_query_cache(QueryCacheStub, false)
 
-    dump_query_cache(QueryCacheStub, [
-      Module149,
-      Module150,
-      Module151,
-      Module157,
-      Module158,
-      Module161,
-      Module162,
-      Module170,
-      Module171
-    ])
+    dump_query_cache(QueryCacheStub)
 
     QueryCache.init(nil)
 
@@ -319,7 +306,7 @@ defmodule Hologram.Template.RendererDerivedTest do
     # A type browser code never names never syncs, so the browser could only show the rows the
     # render carried, and never update them.
     test "raises on a query reading a type sync doesn't send" do
-      dump_query_cache(QueryCacheStub, [], false, [Module1])
+      dump_query_cache(QueryCacheStub, false, [Module1])
       QueryCache.init(nil)
 
       assert_error Hologram.MisuseError,
@@ -328,7 +315,7 @@ defmodule Hologram.Template.RendererDerivedTest do
     end
 
     test "raises on a count reading a type sync doesn't send" do
-      dump_query_cache(QueryCacheStub, [], false, [Module1])
+      dump_query_cache(QueryCacheStub, false, [Module1])
       QueryCache.init(nil)
 
       node = {:component, Module174, [{"a", [expression: {true}]}], []}
@@ -481,18 +468,18 @@ defmodule Hologram.Template.RendererDerivedTest do
   end
 
   describe "derived includes" do
-    # The window of an include of derived fields is built from their definitions, which the
-    # compile resolves before the queries are registered.
+    # What an include of derived fields embeds is built from their definitions, which the compile
+    # resolves before anything renders.
     setup do
       put_derived_definitions([Module32, Module37, Module38])
 
-      dump_query_cache(QueryCacheStub, [Module164])
+      dump_query_cache(QueryCacheStub)
       QueryCache.init(nil)
 
       :ok
     end
 
-    # The window reads the rows a derived field is computed from beside the rows the query returns,
+    # The query reads the rows a derived field is computed from beside the rows it returns,
     # and the template is handed the derived values without them.
     test "hands the template the derived fields the query included" do
       {:ok, channel} = create(Module32.new(name: "general"))
@@ -516,7 +503,7 @@ defmodule Hologram.Template.RendererDerivedTest do
 
     # The template is handed a derived set's rows with the author their definition includes - read
     # under the author type's read policy, which lets nobody read one, so nil rather than the
-    # sentinel - and not the messages the window embeds to compute them.
+    # sentinel - and not the messages the query embeds to compute them.
     test "hands the template a derived set's rows with what its definition includes" do
       {:ok, room} = create(Module37.new(name: "general"))
       {:ok, author} = create(Module1.new())
@@ -582,7 +569,7 @@ defmodule Hologram.Template.RendererDerivedTest do
         {Module167, :dummy_module_167_digest}
       ])
 
-      dump_query_cache(QueryCacheStub, [Module162, Module166])
+      dump_query_cache(QueryCacheStub)
       QueryCache.init(nil)
 
       :ok
@@ -672,7 +659,7 @@ defmodule Hologram.Template.RendererDerivedTest do
     # among them - the wire then leaves those out of what the client is told.
     test "carries a row's verdicts worked out over its server-only values" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module169, :dummy_module_169_digest)
-      dump_query_cache(QueryCacheStub, [Module168], true)
+      dump_query_cache(QueryCacheStub, true)
       QueryCache.init(nil)
 
       vault =
@@ -814,7 +801,7 @@ defmodule Hologram.Template.RendererDerivedTest do
     setup do
       setup_page_rendering([{Module173, :dummy_module_173_digest}])
 
-      dump_query_cache(QueryCacheStub, [Module172], true)
+      dump_query_cache(QueryCacheStub, true)
       QueryCache.init(nil)
 
       :ok
@@ -898,7 +885,7 @@ defmodule Hologram.Template.RendererDerivedTest do
     end
 
     test "carries no rule's rows when no client checks permissions" do
-      dump_query_cache(QueryCacheStub, [Module172], false)
+      dump_query_cache(QueryCacheStub, false)
       QueryCache.init(nil)
 
       %{user: user} = create_parented_entities()
@@ -918,7 +905,7 @@ defmodule Hologram.Template.RendererDerivedTest do
         {Module175, :dummy_module_175_digest}
       ])
 
-      dump_query_cache(QueryCacheStub, [Module166, Module174])
+      dump_query_cache(QueryCacheStub)
       QueryCache.init(nil)
 
       :ok
@@ -977,7 +964,7 @@ defmodule Hologram.Template.RendererDerivedTest do
     setup do
       setup_page_rendering([{Module126, :dummy_module_126_digest}])
 
-      dump_query_cache(QueryCacheStub, [])
+      dump_query_cache(QueryCacheStub)
       QueryCache.init(nil)
 
       :ok

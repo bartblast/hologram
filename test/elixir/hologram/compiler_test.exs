@@ -4,7 +4,6 @@ defmodule Hologram.CompilerTest do
 
   import Hologram.Compiler
 
-  alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.FileUtils
@@ -20,19 +19,15 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Placeholder
-  alias Hologram.Query.Registry
   alias Hologram.Query.Stage
-  alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Runtime.Serializer
   alias Hologram.Sync.Frame
 
   alias Hologram.Test.Fixtures.Component.Module1, as: ComponentModule1
   alias Hologram.Test.Fixtures.Component.Module37, as: OtherContextComponent
-  alias Hologram.Test.Fixtures.Component.Module39, as: ComponentModule39
   alias Hologram.Test.Fixtures.Component.Module40, as: ComponentModule40
   alias Hologram.Test.Fixtures.Component.Module41, as: ComponentModule41
-  alias Hologram.Test.Fixtures.Component.Module42, as: ComponentModule42
   alias Hologram.Test.Fixtures.Component.Module53, as: ComponentModule53
   alias Hologram.Test.Fixtures.Component.Module54, as: ComponentModule54
   alias Hologram.Test.Fixtures.Component.Module55, as: ComponentModule55
@@ -311,12 +306,6 @@ defmodule Hologram.CompilerTest do
         reads_session_user?: reads_session_user?
       }
     }
-  end
-
-  defp user_window_id(permission_checking?) do
-    UserEntity
-    |> Auth.user_window(permission_checking?)
-    |> Registry.id()
   end
 
   # A copy of the given module info PLT in which no entity type is the user entity type: a data model
@@ -1387,7 +1376,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  # The gate reads the graph the bundles come from, so what registers the window is what actually
+  # The gate reads the graph the bundles come from, so what syncs the grant rows is what actually
   # ships - not every mention of the check in the project.
   # can?/3 and the grant verbs read grant rows in the browser, which is what makes a page a
   # permission checker - and every one of them is hand-ported, or a page reaching it would have the
@@ -1637,185 +1626,9 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_queries/3" do
-    setup do
-      [entity_types: Reflection.list_entities()]
-    end
-
-    test "collects the entries of the given components", %{entity_types: entity_types} do
-      component_queries =
-        extract_component_queries(
-          [ComponentModule40, ComponentModule41],
-          entity_types,
-          PLT.start()
-        )
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      module_40_term =
-        Entity2
-        |> filter(a: true)
-        |> sort(c)
-        |> Stage.normalize()
-
-      module_41_term =
-        Entity2
-        |> filter(b >= ^%Placeholder{name: :min_b})
-        |> Stage.normalize()
-
-      assert queries.entries == Registry.build([module_40_term, module_41_term], false)
-    end
-
-    # The grants window rides with every build's windows, whether or not a page subscribes to it -
-    # the build decides who asks, this is only where an id resolves back to a term.
-    test "registers the grants window beside the windows the queries download", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([ComponentModule40], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      grants_window = Auth.grants_window()
-
-      assert queries.windows[Registry.id(grants_window)] == grants_window
-    end
-
-    # No user entity type, no grant store: there is no table to evaluate the window against.
-    test "registers no grants window when the given entity types hold no role grant store", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([ComponentModule40], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types -- [RoleGrant], false)
-
-      refute Map.has_key?(queries.windows, Registry.id(Auth.grants_window()))
-    end
-
-    # Like the grants window, whether or not a page subscribes to it.
-    test "registers the user window beside the windows the queries download", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([ComponentModule40], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      user_window = Auth.user_window(UserEntity, false)
-
-      assert queries.windows[Registry.id(user_window)] == user_window
-    end
-
-    test "registers a checking build's user window derived as one", %{entity_types: entity_types} do
-      component_queries =
-        extract_component_queries([ComponentModule40], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, true)
-
-      user_window = Auth.user_window(UserEntity, true)
-
-      assert queries.windows[Registry.id(user_window)] == user_window
-    end
-
-    test "registers no user window when the given entity types hold no user entity type", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([ComponentModule40], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types -- [UserEntity], false)
-
-      refute Map.has_key?(queries.windows, user_window_id(false))
-    end
-
-    # A client checking permissions answers each rule over what it holds, so the window also
-    # downloads the rows the rules read - two rows along this type's delegation chain.
-    test "embeds the rows a type's rules read into its windows when a client checks permissions",
-         %{
-           entity_types: entity_types
-         } do
-      component_queries =
-        extract_component_queries([ComponentModule39], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, true)
-
-      [term] = component_queries[ComponentModule39].terms
-      window = queries.entries[Registry.id(term)].window
-
-      assert window == Window.derive(term, true)
-
-      assert window.include == %{
-               parent: %Query{
-                 entity: DelegationPolicyEntity,
-                 include: %{parent: %Query{entity: PolicyEntity}}
-               }
-             }
-
-      assert queries.windows[Registry.id(window)] == window
-    end
-
-    test "embeds no rule's rows when no client checks permissions", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([ComponentModule39], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      [term] = component_queries[ComponentModule39].terms
-
-      assert queries.entries[Registry.id(term)].window.include == %{}
-    end
-
-    test "records whether the build has a page checking permissions on the client", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([ComponentModule40], entity_types, PLT.start())
-
-      assert build_queries(component_queries, entity_types, true).permission_checking?
-      refute build_queries(component_queries, entity_types, false).permission_checking?
-    end
-
-    test "collects a registered query reading a type with server-only attributes it does not reference",
-         %{entity_types: entity_types} do
-      component_queries =
-        extract_component_queries([ComponentModule42], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      assert map_size(queries.entries) == 1
-    end
-
-    test "collects a registered query including derived fields and quantifying over a derived set",
-         %{entity_types: entity_types} do
-      put_derived_definitions([Entity37, Entity38])
-
-      term =
-        Entity37
-        |> filter(any(messages.channel.recent_messages))
-        |> include([pinned_count, recent_messages])
-        |> Stage.normalize()
-
-      component_queries = %{
-        DerivedQueries => %{terms: [term]}
-      }
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      assert map_size(queries.entries) == 1
-    end
-  end
-
   describe "build_queries_plt/2" do
-    test "holds the entries, derived queries and windows, and dumps beside the other build artifacts" do
-      entity_types = Reflection.list_entities()
-
-      queries =
-        [ComponentModule41]
-        |> extract_component_queries(entity_types, PLT.start())
-        |> build_queries(entity_types, false)
+    test "holds what the running app reads of the data layer, and dumps beside the other build artifacts" do
+      queries = %{derived: %{}, permission_checking?: false, synced_types: [Entity2]}
 
       opts = [build_dir: "/my_build_dir"]
 
@@ -1913,8 +1726,8 @@ defmodule Hologram.CompilerTest do
       refute MapSet.member?(sync_constants.entity_types, Entity10)
     end
 
-    # The grant type reaches the model by being checked rather than by being queried - its window
-    # is registered rather than extracted - so a client would otherwise hold rows of a type the
+    # The grant type reaches the model by being checked rather than by being queried - no browser
+    # code names it - so a client would otherwise hold rows of a type the
     # model never described. The page queries no grants and checks no permissions, so the user
     # entity type is the only thing it can come from.
     test "names the grant type when the data model designates a user entity type", %{
