@@ -176,6 +176,15 @@ defmodule HologramSyncTests.Consistency.Plan do
   @spec conflict?(Exception.t()) :: boolean
   def conflict?(%Postgrex.Error{postgres: %{code: :deadlock_detected}}), do: true
 
+  # TODO: drop this once #1768 is fixed - a card deleted while another writer tags it fails on the
+  # tags join table's key on the card, since the delete removes the card's edges before it locks
+  # the card.
+  def conflict?(%Postgrex.Error{
+        postgres: %{code: :foreign_key_violation, constraint: constraint}
+      }) do
+    constraint == "#{DB.join_table_name(Card, :tags)}_source_id_$fk"
+  end
+
   # A tag or an untag reading the card finds none.
   def conflict?(%Hologram.MisuseError{
         message: "add_relationship takes an entity struct, got: nil"

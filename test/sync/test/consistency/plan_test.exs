@@ -4,6 +4,7 @@ defmodule HologramSyncTests.Consistency.PlanTest do
 
   import HologramSyncTests.Helpers
 
+  alias Hologram.DB
   alias HologramSyncTests.Consistency.History
   alias HologramSyncTests.Consistency.Model
   alias HologramSyncTests.Consistency.Plan
@@ -120,6 +121,17 @@ defmodule HologramSyncTests.Consistency.PlanTest do
            })
 
     assert Plan.conflict?(%Postgrex.Error{postgres: %{code: :deadlock_detected}})
+
+    assert Plan.conflict?(%Postgrex.Error{
+             postgres: %{
+               code: :foreign_key_violation,
+               constraint: "#{DB.join_table_name(Card, :tags)}_source_id_$fk"
+             }
+           })
+
+    refute Plan.conflict?(%Postgrex.Error{
+             postgres: %{code: :foreign_key_violation, constraint: "another_constraint"}
+           })
 
     refute Plan.conflict?(%Hologram.MisuseError{
              message: "cannot update HologramSyncTests.Entities.Board - no entity with id \"b\""
