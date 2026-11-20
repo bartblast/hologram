@@ -2152,6 +2152,7 @@ defmodule Hologram.Sync.SessionTest do
 
       part = %{
         checked: %{},
+        moved: %{},
         overtaking_seqs: %{},
         own_seqs: %{},
         pair_effects: %{},
@@ -2212,6 +2213,144 @@ defmodule Hologram.Sync.SessionTest do
         })
 
       assert status.message == {:live, :redacted}
+    end
+  end
+
+  # A client built against an older model reads only some of the types this build syncs, and is
+  # told of no other, filled, coming back or watching.
+  describe "a session given fewer types than the build syncs" do
+    test "fills only the types it is given" do
+      task = create("first")
+
+      %{public: true}
+      |> PolicyModule1.new()
+      |> DB.create!()
+
+      windows(%{})
+
+      start_session!(synced_types: [Module2])
+
+      assert [%{id: id, type: "Hologram.Test.Fixtures.Entity.Module2"}] = await_fill()
+      assert id == task.id
+    end
+
+    test "takes a returning client to hold only rows of the types it is given" do
+      test_pid = self()
+      read_ids = read_ids_in_sandbox()
+
+      windows(%{})
+
+      start_session!(
+        gap: [],
+        read_ids: fn entity_type, actor_user_id ->
+          send(test_pid, {:read_ids, entity_type})
+          read_ids.(entity_type, actor_user_id)
+        end,
+        synced_types: [Module2]
+      )
+
+      assert_receive {:read_ids, Module2}
+      refute_receive {:read_ids, _other_type}, 100
+    end
+
+    test "tells a returning client nothing of the gap's rows of a type it isn't given" do
+      task = create("missed")
+
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      windows(%{})
+
+      gap = [
+        logged(:put_entity, PolicyModule1, row.id, %{"public" => true}, {100, 1}),
+        logged(:put_entity, Module2, task.id, %{"a" => true, "c" => "missed"}, {100, 2})
+      ]
+
+      start_session!(gap: gap, synced_types: [Module2])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert [%{id: id, op: :put_entity}] = deltas
+      assert id == task.id
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
+    # A grant change can move every row of a type for a user, which the session reads again whole -
+    # never one of a type the client isn't given.
+    test "reads no type it isn't given again whole" do
+      test_pid = self()
+
+      read_fill = fn entity_type, actor_user_id, replica_id, synced_types ->
+        send(test_pid, {:read_fill, entity_type})
+        read_fill_in_sandbox(entity_type, actor_user_id, replica_id, synced_types)
+      end
+
+      windows(%{})
+
+      session = start_session!(read_fill: read_fill, synced_types: [Module2])
+      await_fill()
+      assert_receive {:read_fill, Module2}
+
+      send(session, {:live, hand_built_part(whole_types: [PolicyModule1])})
+      await_live(session)
+
+      refute_receive {:read_fill, _entity_type}, 100
+    end
+
+    # A part a returning client can't trust what it holds against tells the rows the batch may have
+    # hidden by hash - never one of a type the client isn't given, whose label an old tab may not
+    # know.
+    test "tells no row of a type it isn't given by hash" do
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      windows(%{})
+
+      session = start_session!(gap: [], synced_types: [Module2])
+
+      # Caught up, so the session judges what came before its trust edge without trusting what it
+      # holds.
+      assert_receive {:sync_synced, :all, _cursor}
+
+      packed = PackedIds.pack([row.id])
+
+      part =
+        hand_built_part(
+          checked: %{PolicyModule1 => packed},
+          moved: %{PolicyModule1 => packed},
+          readable: %{PolicyModule1 => %{}},
+          tx_range: {1, 1}
+        )
+
+      send(session, {:live, part})
+      await_live(session)
+
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
+    test "tells nothing of a batch's rows of a type it isn't given" do
+      windows(%{})
+
+      start_session!(synced_types: [Module2])
+      await_fill()
+
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      route([live_effect(:put_entity, PolicyModule1, row.id, %{"public" => true})])
+
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+
+      task = create("created")
+      route([live_effect(:put_entity, Module2, task.id, %{"a" => true, "c" => "created"})])
+
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], nil}
+      assert id == task.id
     end
   end
 
@@ -2392,6 +2531,7 @@ defmodule Hologram.Sync.SessionTest do
 
       part = %{
         checked: %{},
+        moved: %{},
         overtaking_seqs: %{},
         own_seqs: %{},
         pair_effects: %{},
@@ -2484,6 +2624,29 @@ defmodule Hologram.Sync.SessionTest do
       assert id == arrived.id
       assert data[:"$verdicts"] == project_verdicts(false)
     end
+  end
+
+  # A part as `Hologram.Sync.Live.parts/5` builds one, for every type the suite's build syncs,
+  # telling nothing unless the given fields say otherwise.
+  defp hand_built_part(fields) do
+    Map.merge(
+      %{
+        checked: %{},
+        moved: %{},
+        overtaking_seqs: %{},
+        own_seqs: %{},
+        pair_effects: %{},
+        pairs: %{},
+        place: {Oplog.current_xmax() + 1, 0},
+        readable: %{},
+        synced_types: QueryCache.synced_types(),
+        tx_range: {Oplog.current_xmax() + 1, Oplog.current_xmax() + 1},
+        verdicts: %{},
+        whole_types: [],
+        written: %{}
+      },
+      Map.new(fields)
+    )
   end
 
   # Drops what the session sent so far, so a test reads only what follows.

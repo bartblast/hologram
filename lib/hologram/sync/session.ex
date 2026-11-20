@@ -117,6 +117,11 @@ defmodule Hologram.Sync.Session do
 
   `:outbox` holds the options of the outbox frames go out through, none by default (see
   `Hologram.Sync.Outbox.new/2`).
+
+  `:synced_types` are the entity types the client is sent rows of, the types this build syncs (see
+  `Hologram.DB.QueryCache.synced_types/0`) by default - fewer for a client built against an older
+  model, whose code reads only some of them. A batch's part names every type this build syncs, and
+  the session tells the client only of the ones it is given.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
@@ -160,6 +165,7 @@ defmodule Hologram.Sync.Session do
       read_part: Keyword.get(opts, :read_part, &Live.part/6),
       replica_id: Keyword.get(opts, :replica_id),
       resuming: resuming,
+      synced_types: Keyword.get_lazy(opts, :synced_types, &QueryCache.synced_types/0),
       told_verdicts: %{},
       trust_edge: nil,
       types_hash: Keyword.fetch!(opts, :types_hash),
@@ -221,7 +227,7 @@ defmodule Hologram.Sync.Session do
   # telling half of it, and the client comes back through the doors once the model is released.
   def handle_info({:live, part}, state) do
     state
-    |> tell_part_unless_filled(part)
+    |> tell_part_unless_filled(narrow(part, state))
     |> noreply_sleeping_when_idle()
   rescue
     Hologram.StaleModelError -> {:stop, {:shutdown, :model_held}, state}
@@ -297,7 +303,7 @@ defmodule Hologram.Sync.Session do
   # hidden by then and never reach the client - so the rows the sets name that the client never got
   # are kept among the ones it was told to drop, and a later removal of a pair naming one is told.
   defp fill(state) do
-    synced_types = QueryCache.synced_types()
+    synced_types = state.synced_types
 
     page_types =
       state.page_types
@@ -420,7 +426,7 @@ defmodule Hologram.Sync.Session do
 
   defp read_held(state) do
     held =
-      Enum.reduce(QueryCache.synced_types(), Held.new(), fn entity_type, acc ->
+      Enum.reduce(state.synced_types, Held.new(), fn entity_type, acc ->
         Held.put(acc, entity_type, state.read_ids.(entity_type, state.actor_user_id))
       end)
 
@@ -445,7 +451,7 @@ defmodule Hologram.Sync.Session do
       # rules' edges.
       edges: Edges.index(QueryCache.permission_checking?()),
       keep_salt: if(grant_lost?(gap, state.actor_user_id), do: state.drop_salt),
-      synced_types: QueryCache.synced_types()
+      synced_types: state.synced_types
     }
 
     {told, _settled, _reread} =
@@ -488,14 +494,15 @@ defmodule Hologram.Sync.Session do
     overtaken_above = min(highest_tx, context.edge) - 1
 
     read =
-      state.read_part.(
-        effects,
+      effects
+      |> state.read_part.(
         state.actor_user_id,
         context.edges,
         context.synced_types,
         place,
         overtaken_above
       )
+      |> narrow(state)
 
     part = %{
       without_settled(read, settled)
@@ -669,6 +676,36 @@ defmodule Hologram.Sync.Session do
         [%{news | appeared: first}] ++
           Enum.map(rest, &%{appeared: &1, edges: [], patched: [], unsynced: []})
     end
+  end
+
+  # The part of a batch about the entity types this client is sent rows of. The dispatcher reads a
+  # live batch for every type this build syncs, and a client given fewer is told nothing of the
+  # rest: no row of them, and no pair with an end among them, since no set it is sent names their
+  # rows. A catch-up's chunks are read for the client's own types, which this leaves as they are.
+  #
+  # Only ever narrower than the part: a live reload can drop a type from what the build syncs while
+  # a session given it runs, and a part read without the type has no pairs to state its sets by.
+  defp narrow(%{synced_types: synced_types} = part, %{synced_types: synced_types}), do: part
+
+  defp narrow(part, state) do
+    served = MapSet.new(state.synced_types)
+    served? = &MapSet.member?(served, &1)
+
+    pair_served? = fn {{source, _name, target}, _packed} ->
+      served?.(source) and served?.(target)
+    end
+
+    %{
+      part
+      | checked: Map.filter(part.checked, fn {entity_type, _ids} -> served?.(entity_type) end),
+        moved: Map.filter(part.moved, fn {entity_type, _ids} -> served?.(entity_type) end),
+        pair_effects: Map.filter(part.pair_effects, pair_served?),
+        pairs: Map.filter(part.pairs, pair_served?),
+        readable: Map.filter(part.readable, fn {entity_type, _rows} -> served?.(entity_type) end),
+        synced_types: Enum.filter(part.synced_types, served?),
+        verdicts: Map.filter(part.verdicts, fn {entity_type, _rows} -> served?.(entity_type) end),
+        whole_types: Enum.filter(part.whole_types, served?)
+    }
   end
 
   # A batch whose every transaction committed before a first arrival's fill place is one the fill
