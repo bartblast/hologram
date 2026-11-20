@@ -121,10 +121,10 @@ defmodule HologramSyncTests.Consistency.Client do
   def records(client), do: GenServer.call(client, :records)
 
   @doc """
-  Stops the client, closing its stream.
+  Stops the client, closing its stream, waiting at most the given milliseconds.
   """
-  @spec stop(pid) :: :ok
-  def stop(client), do: GenServer.stop(client)
+  @spec stop(pid, timeout) :: :ok
+  def stop(client, timeout \\ :infinity), do: GenServer.stop(client, :normal, timeout)
 
   @doc """
   Returns what the client holds of the model's types, in the shape `Model.expected/2` answers: the

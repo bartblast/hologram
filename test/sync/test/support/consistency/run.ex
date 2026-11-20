@@ -33,6 +33,9 @@ defmodule HologramSyncTests.Consistency.Run do
   @read_ms 10_000
   @quiet_ms 500
 
+  # How long a client has to close its stream when the run stops it.
+  @stop_ms 5_000
+
   @typedoc """
   What a run found: the differences check 1 left in each client's store, the records check 2
   flagged, the clients' failures and the run's own, and the clients whose gap outgrew a replay
@@ -199,7 +202,7 @@ defmodule HologramSyncTests.Consistency.Run do
           read_failures ++
           Enum.map(
             dead,
-            &%{client: &1.name, failure: "crashed: #{inspect(crash_reason(&1.pid))}"}
+            &%{client: &1.name, failure: dead_failure(&1.pid)}
           ) ++
           for(
             report <- reports,
@@ -229,6 +232,13 @@ defmodule HologramSyncTests.Consistency.Run do
       {_client, report}, {reports, dead} -> {[report | reports], dead}
     end)
     |> then(fn {reports, dead} -> {Enum.reverse(reports), Enum.reverse(dead)} end)
+  end
+
+  # A client still alive stopped answering - stuck in a callback - and one that died says why.
+  defp dead_failure(pid) do
+    if Process.alive?(pid),
+      do: "stopped answering calls",
+      else: "crashed: #{inspect(crash_reason(pid))}"
   end
 
   # Why a linked client died, from the exit signal the run trapped.
@@ -352,8 +362,15 @@ defmodule HologramSyncTests.Consistency.Run do
     Map.merge(planned, %{differences: [], events: [], leaks: [], pid: pid, records: []})
   end
 
+  # Every client is stopped, whatever the others do: one that died meanwhile, or one stuck in a
+  # callback - a connect whose request the server never answers - is killed rather than waited on.
   defp stop_client(client) do
-    if Process.alive?(client.pid), do: Client.stop(client.pid)
+    Client.stop(client.pid, @stop_ms)
+  catch
+    :exit, _reason ->
+      # Unlinked first, so its exit signal can't reach this process once it no longer traps exits.
+      Process.unlink(client.pid)
+      Process.exit(client.pid, :kill)
   end
 
   defp await(condition, timeout_ms) do
