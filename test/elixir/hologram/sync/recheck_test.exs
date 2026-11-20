@@ -17,6 +17,10 @@ defmodule Hologram.Sync.RecheckTest do
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
+  alias Hologram.Test.Fixtures.Policy.Module46, as: PolicyModule46
+  alias Hologram.Test.Fixtures.Policy.Module47, as: PolicyModule47
+  alias Hologram.Test.Fixtures.Policy.Module48, as: PolicyModule48
+  alias Hologram.Test.Fixtures.Policy.Module49, as: PolicyModule49
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
   alias Hologram.Test.Fixtures.Policy.Module6, as: PolicyModule6
   alias Hologram.Test.Fixtures.Policy.Module8, as: PolicyModule8
@@ -41,6 +45,10 @@ defmodule Hologram.Sync.RecheckTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module28
   alias Hologram.Test.Fixtures.Policy.Readers.Module29
   alias Hologram.Test.Fixtures.Policy.Readers.Module3
+  alias Hologram.Test.Fixtures.Policy.Readers.Module30
+  alias Hologram.Test.Fixtures.Policy.Readers.Module31
+  alias Hologram.Test.Fixtures.Policy.Readers.Module32
+  alias Hologram.Test.Fixtures.Policy.Readers.Module33
   alias Hologram.Test.Fixtures.Policy.Readers.Module4
   alias Hologram.Test.Fixtures.Policy.Readers.Module5
   alias Hologram.Test.Fixtures.Policy.Readers.Module6
@@ -706,6 +714,69 @@ defmodule Hologram.Sync.RecheckTest do
       )
     end
 
+    # Each tool's lines read a workshop through a delegation to the tool's workshop's update rule
+    # and through a role held on its bench's workshop, a different one, beside a none over its
+    # pegs, which a loose peg refutes. Alice edits the bench's workshop and Bob the tool's, and
+    # Carol owns the bench's workshop: reading either path through the other's workshop flips an
+    # answer.
+    test "answers a delegation and a role reference through a path in a non-read operation",
+         context do
+      tool_workshop = create(Module30)
+      bench_workshop = create(Module30)
+      bench = create(Module31, %{workshop_id: bench_workshop.id})
+      tool = create(Module32, %{bench_id: bench.id, workshop_id: tool_workshop.id})
+      loose_tool = create(Module32, %{bench_id: bench.id, workshop_id: tool_workshop.id})
+      create(Module33, %{loose: true, tool_id: loose_tool.id})
+
+      Auth.grant_role(context.alice, :editor, bench_workshop)
+      Auth.grant_role(context.bob, :editor, tool_workshop)
+      Auth.grant_role(context.carol, :owner, bench_workshop)
+
+      readable = assert_verdicts_as_auth(Module32, [tool, loose_tool], context.users)
+      delete_key = Policy.verdict_key(Module32, :delete)
+      label_key = Policy.verdict_key(Module32, {:update, :label})
+
+      expected = %{
+        context.alice => %{delete_key => false, label_key => true},
+        context.bob => %{delete_key => true, label_key => false},
+        context.carol => %{delete_key => false, label_key => false},
+        nil => %{delete_key => false, label_key => false}
+      }
+
+      for user_id <- context.users do
+        assert verdicts(verdicts_of(readable, tool), user_id) == expected[user_id]
+
+        assert verdicts(verdicts_of(readable, loose_tool), user_id) ==
+                 %{delete_key => false, label_key => false}
+      end
+    end
+
+    # Only a workshop's owner and members read it, its benches and its tools' permits, so the
+    # server answers every operation of a tool reading one: one tool has an approved permit and the
+    # other an unapproved one, and Alice edits the bench's workshop.
+    test "answers the operations reading related rows a reader may not hold", context do
+      workshop = create(PolicyModule46, %{archived: true})
+      bench = create(PolicyModule47, %{workshop_id: workshop.id})
+      approved = create(PolicyModule49, %{bench_id: bench.id, workshop_id: workshop.id})
+      unapproved = create(PolicyModule49, %{bench_id: bench.id, workshop_id: workshop.id})
+      create(PolicyModule48, %{approved: true, tool_id: approved.id})
+      create(PolicyModule48, %{tool_id: unapproved.id})
+
+      Auth.grant_role(context.alice, :editor, workshop)
+
+      readable = assert_verdicts_as_auth(PolicyModule49, [approved, unapproved], context.users)
+      bench_key = Policy.verdict_key(PolicyModule49, {:update, :bench})
+      delete_key = Policy.verdict_key(PolicyModule49, :delete)
+
+      for user_id <- context.users do
+        assert verdicts(verdicts_of(readable, approved), user_id)[bench_key] == true
+        assert verdicts(verdicts_of(readable, unapproved), user_id)[bench_key] == false
+      end
+
+      assert verdicts(verdicts_of(readable, approved), context.alice)[delete_key] == true
+      assert verdicts(verdicts_of(readable, approved), context.bob)[delete_key] == false
+    end
+
     test "answers no anonymous user when none was given", context do
       {board, _empty} = boards(context)
 
@@ -731,12 +802,11 @@ defmodule Hologram.Sync.RecheckTest do
     end
 
     test "answers no verdicts for a type the server sends none on", context do
-      project = create(Module1)
-      create(Module2, %{project_id: project.id, user_id: context.alice})
+      membership = create(Module2, %{user_id: context.alice})
 
-      readable = run(%{Module1 => [project.id]}, context.users)
+      readable = run(%{Module2 => [membership.id]}, context.users)
 
-      assert verdicts(verdicts_of(readable[Module1], project), context.alice) == %{}
+      assert verdicts(verdicts_of(readable[Module2], membership), context.alice) == %{}
     end
 
     # Nothing to answer, so whether a client checks permissions is never asked - the query cache is
@@ -745,12 +815,11 @@ defmodule Hologram.Sync.RecheckTest do
          context do
       :persistent_term.erase(QueryCacheStub.persistent_term_key())
 
-      project = create(Module1)
-      create(Module2, %{project_id: project.id, user_id: context.alice})
+      membership = create(Module2, %{user_id: context.alice})
 
-      readable = run(%{Module1 => [project.id]}, context.users)
+      readable = run(%{Module2 => [membership.id]}, context.users)
 
-      assert verdicts(verdicts_of(readable[Module1], project), context.alice) == %{}
+      assert verdicts(verdicts_of(readable[Module2], membership), context.alice) == %{}
     end
 
     test "answers a user id in another spelling as an anonymous user", context do

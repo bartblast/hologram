@@ -15,6 +15,7 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Sync.Session
   alias HologramFeatureTests.Entities.Account
+  alias HologramFeatureTests.Entities.Bench
   alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Bookmark
   alias HologramFeatureTests.Entities.Bulletin
@@ -34,7 +35,9 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Message
   alias HologramFeatureTests.Entities.Milestone
   alias HologramFeatureTests.Entities.Note
+  alias HologramFeatureTests.Entities.Notice
   alias HologramFeatureTests.Entities.Parcel
+  alias HologramFeatureTests.Entities.Permit
   alias HologramFeatureTests.Entities.Post
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Project
@@ -50,11 +53,14 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Ticket
   alias HologramFeatureTests.Entities.Todo
+  alias HologramFeatureTests.Entities.Tool
   alias HologramFeatureTests.Entities.Topic
   alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Entities.Vault
-  alias HologramFeatureTests.Jobs.KillWorker
+  alias HologramFeatureTests.Entities.Workshop
+  alias HologramFeatureTests.Jobs.HoldRun
+  alias HologramFeatureTests.Jobs.KillRun
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTestsWeb.Endpoint
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
@@ -1156,6 +1162,7 @@ defmodule HologramFeatureTests.Helpers do
     tables =
       [
         Account,
+        Bench,
         Booking,
         Bookmark,
         Bulletin,
@@ -1166,9 +1173,10 @@ defmodule HologramFeatureTests.Helpers do
         Event,
         Folder,
         GuestEntry,
+        HoldRun,
         Inspection,
         Item,
-        KillWorker,
+        KillRun,
         Label,
         Leg,
         Membership,
@@ -1176,7 +1184,9 @@ defmodule HologramFeatureTests.Helpers do
         Message,
         Milestone,
         Note,
+        Notice,
         Parcel,
+        Permit,
         Post,
         Product,
         Project,
@@ -1194,10 +1204,12 @@ defmodule HologramFeatureTests.Helpers do
         Stop,
         Ticket,
         Todo,
+        Tool,
         Topic,
         Trip,
         User,
-        Vault
+        Vault,
+        Workshop
       ]
       |> Enum.map(&Mapper.table_name/1)
       |> Enum.concat([

@@ -4425,6 +4425,7 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
+                 ~s/"server_created_at":"datetime","server_updated_at":"datetime",/ <>
                  ~s/"updated_at":"datetime"},"constraints":{},"creatorRoles":[],/ <>
                  ~s/"defaults":{"c":Type.atom("x")},"derived":{},/ <>
                  ~s/"enumValues":{"c":["x","y"]},"expandedRoles":{},"frameworkAttributes":[],"inverses":{},/ <>
@@ -5175,7 +5176,9 @@ defmodule Hologram.CompilerTest do
     # A deciding quantifier renders as any other, since the rows a client holds of its set decide
     # what one row can, and the server's verdict answers its operation whole: the key the verdict is
     # sent under and the types whose unanswered writes make it stale. The read rule's any reads no
-    # none or all, and the whole-row update rule none either, so neither operation has a verdict.
+    # none or all, and the whole-row update rule none either, and every member and label is read by
+    # everyone, so neither operation has a verdict. The publish line reads a member's user, which a
+    # reader may not hold, so it has one too.
     test "bakes a deciding quantifier as it is and its operation's verdict key and reads", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
@@ -5218,6 +5221,7 @@ defmodule Hologram.CompilerTest do
 
       member_types = [BakedMember, BakedProject]
       label_types = [BakedLabel, BakedMember, BakedProject]
+      user_types = [BakedMember, BakedProject, Hologram.Test.Fixtures.Entity.Module14]
 
       field_types = [
         BakedLabel,
@@ -5229,6 +5233,7 @@ defmodule Hologram.CompilerTest do
       verdicts_js =
         ~s/"verdicts":{"archive":#{verdict_entry_js(BakedProject, :archive, member_types)},/ <>
           ~s/"delete":#{verdict_entry_js(BakedProject, :delete, member_types)},/ <>
+          ~s/"publish":#{verdict_entry_js(BakedProject, :publish, user_types)},/ <>
           ~s/"share":#{verdict_entry_js(BakedProject, :share, label_types)},/ <>
           ~s/"update:name":#{verdict_entry_js(BakedProject, {:update, :name}, field_types)}}/
 
@@ -5272,6 +5277,63 @@ defmodule Hologram.CompilerTest do
              )
 
       refute String.contains?(js, ~s/"update:name":/)
+    end
+
+    # Only a workshop's owner and members read it, its benches and its tools' permits, so each of
+    # the tool's operations reading one has a verdict, a create line only under its name.
+    test "bakes the verdicts of operations reading related rows a reader may not hold", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types:
+            MapSet.new([
+              Hologram.Test.Fixtures.Policy.Module46,
+              Hologram.Test.Fixtures.Policy.Module47,
+              Hologram.Test.Fixtures.Policy.Module48,
+              Hologram.Test.Fixtures.Policy.Module49,
+              RoleGrant
+            ])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      tool = Hologram.Test.Fixtures.Policy.Module49
+      workshop_types = [Hologram.Test.Fixtures.Policy.Module46]
+      delegation_types = [RoleGrant, Hologram.Test.Fixtures.Policy.Module46]
+
+      permit_types = [
+        Hologram.Test.Fixtures.Policy.Module46,
+        Hologram.Test.Fixtures.Policy.Module48,
+        tool
+      ]
+
+      bench_types = [
+        RoleGrant,
+        Hologram.Test.Fixtures.Policy.Module46,
+        Hologram.Test.Fixtures.Policy.Module47
+      ]
+
+      verdicts_js =
+        ~s/"verdicts":{"delete":#{verdict_entry_js(tool, :delete, delegation_types)},/ <>
+          ~s/"draft":#{verdict_entry_js(tool, :draft, workshop_types)},/ <>
+          ~s/"read":#{verdict_entry_js(tool, :read, workshop_types)},/ <>
+          ~s/"update":#{verdict_entry_js(tool, :update, workshop_types)},/ <>
+          ~s/"update:bench":#{verdict_entry_js(tool, {:update, :bench}, permit_types)},/ <>
+          ~s/"update:label":#{verdict_entry_js(tool, {:update, :label}, bench_types)}}/
+
+      assert String.contains?(js, verdicts_js)
     end
 
     # A bounded set computed over the rows a client holds can hold rows the server's doesn't, so an

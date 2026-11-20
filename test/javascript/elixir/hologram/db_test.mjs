@@ -368,6 +368,15 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
+    // The server stamps its pair when the row reaches it, so a browser's create has none yet.
+    it("answers a row with no server times", () => {
+      const result = create(struct(TASK, {done: false, title: "alpha"}));
+      const stored = result.data[1];
+
+      assert.deepStrictEqual(field(stored, "server_created_at"), Type.nil());
+      assert.deepStrictEqual(field(stored, "server_updated_at"), Type.nil());
+    });
+
     it("answers a row whose every settable field takes the write's stamp", () => {
       const result = create(struct(TASK, {done: false, title: "alpha"}));
       const metadata = field(result.data[1], "__meta__");
@@ -470,6 +479,8 @@ describe("Elixir_Hologram_DB", () => {
         created_at: TIMESTAMP,
         done: false,
         id: ID_1,
+        server_created_at: null,
+        server_updated_at: null,
         title: "Łódź",
         title$sort: "lodz",
         updated_at: TIMESTAMP,

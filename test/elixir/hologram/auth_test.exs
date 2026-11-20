@@ -36,6 +36,10 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module38
   alias Hologram.Test.Fixtures.Policy.Module39
   alias Hologram.Test.Fixtures.Policy.Module4
+  alias Hologram.Test.Fixtures.Policy.Module46
+  alias Hologram.Test.Fixtures.Policy.Module47
+  alias Hologram.Test.Fixtures.Policy.Module48
+  alias Hologram.Test.Fixtures.Policy.Module49
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module8
   alias Hologram.Test.Fixtures.Policy.Readers.Module20, as: ReadersModule20
@@ -2860,7 +2864,8 @@ defmodule Hologram.AuthTest do
     end
 
     # The field's verdict answers every line covering it, so it holds while the feature line does,
-    # though the archive line no longer holds once the project has a locked label.
+    # though the archive line no longer holds once the project has a locked label. The close, read
+    # and whole-row update lines read the project's tasks and members, which a reader may not hold.
     test "answers each operation over the rows as stored" do
       project = DB.create!(PolicyProject.new())
 
@@ -2872,8 +2877,11 @@ defmodule Hologram.AuthTest do
       assert verdicts(nil, project) ==
                policy_verdicts([
                  {:archive, true},
+                 {:close, false},
                  {:feature, true},
                  {:publish, true},
+                 {:read, true},
+                 {:update, false},
                  {{:update, :name}, true}
                ])
 
@@ -2882,10 +2890,54 @@ defmodule Hologram.AuthTest do
       assert verdicts(nil, project) ==
                policy_verdicts([
                  {:archive, false},
+                 {:close, false},
                  {:feature, true},
                  {:publish, true},
+                 {:read, true},
+                 {:update, false},
                  {{:update, :name}, true}
                ])
+    end
+
+    # Only a workshop's owner and members read it, its benches and its tools' permits. Alice edits
+    # the bench's workshop and Bob the tool's, which is archived, and the tool has an approved
+    # permit: the server reads each related row as stored, whoever may read it.
+    test "answers the operations reading related rows a reader may not hold over the rows as stored" do
+      alice = create_user("workshop_alice@example.com")
+      bob = create_user("workshop_bob@example.com")
+
+      create = fn entity_type, values ->
+        values
+        |> entity_type.new()
+        |> DB.create!()
+      end
+
+      tool_workshop = create.(Module46, %{archived: true})
+      bench_workshop = create.(Module46, %{})
+      bench = create.(Module47, %{workshop_id: bench_workshop.id})
+      tool = create.(Module49, %{bench_id: bench.id, workshop_id: tool_workshop.id})
+      create.(Module48, %{approved: true, tool_id: tool.id})
+
+      grant_role(alice, :editor, bench_workshop)
+      grant_role(bob, :editor, tool_workshop)
+
+      answers = fn delete?, label? ->
+        Map.new(
+          [
+            {:delete, delete?},
+            {:draft, false},
+            {:read, true},
+            {:update, false},
+            {{:update, :bench}, true},
+            {{:update, :label}, label?}
+          ],
+          fn {operation, answer} -> {Policy.verdict_key(Module49, operation), answer} end
+        )
+      end
+
+      assert verdicts(alice.id, tool) == answers.(false, true)
+      assert verdicts(bob.id, tool) == answers.(true, false)
+      assert verdicts(nil, tool) == answers.(false, false)
     end
 
     # No client holds a project, a vault or a shelf, so the server answers the read rules reading

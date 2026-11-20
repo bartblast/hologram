@@ -52,10 +52,12 @@ PLT.dump(module_info_plt, module_info_plt_dump_path)
 PLT.stop(module_info_plt)
 
 # A running app holds every derived field's definition before anything reads its policies - the
-# build puts them, and the query cache at boot. A support fixture whose rule reads a derived set has
-# every write, frame and edges index read that set's definition, so each such fixture's are put for
-# the whole run - one added later belongs in this list.
+# build puts them, and the query cache at boot. A support fixture whose rule reads a derived set, or
+# whose verdicts' keys digest a derived field's definition, has every write, frame and edges index
+# read that definition, so each such fixture's are put for the whole run - one added later belongs
+# in this list.
 Hologram.Test.Helpers.put_derived_definitions([
+  Hologram.Test.Fixtures.Entity.Module42,
   Hologram.Test.Fixtures.Policy.Module22,
   Hologram.Test.Fixtures.Policy.Module30,
   Hologram.Test.Fixtures.Policy.Module31,

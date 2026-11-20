@@ -3143,6 +3143,171 @@ describe("Elixir_Hologram_Auth", () => {
       });
     });
 
+    // A client holds only the rows its user may read, so a delegation, a role reference or a set
+    // reading a related row it doesn't hold is unknown, and the operation's verdict answers, as for
+    // a path.
+    describe("on a related row this client doesn't hold", () => {
+      const DELETE_KEY = "delete:0011223344556677";
+      const LABEL_KEY = "update:7766554433221100";
+
+      const toFolderParent = ["rel", ["folder", "parent"], FOLDER, ["admin"]];
+
+      const documentDeletes = (
+        userId,
+        entity = document({folder_id: FOLDER_ID}),
+      ) => can(Type.bitstring(userId), Type.atom("delete"), entity);
+
+      const delegatingModel = () => {
+        defineModel(
+          {delete: [rule({via: ["update", ["folder"]]})]},
+          {update: [rule({predicates: [["archived", "==", false]]})]},
+        );
+
+        putVerdicts(DOCUMENT, {delete: {reads: [FOLDER], verdict: DELETE_KEY}});
+      };
+
+      const referencingModel = () => {
+        defineModel({delete: [rule({to: [toFolderParent]})]});
+
+        putVerdicts(DOCUMENT, {
+          delete: {reads: [FOLDER, GRANT], verdict: DELETE_KEY},
+        });
+      };
+
+      beforeEach(() => {
+        LocalDatabase.actorUserId = ALICE;
+        LocalDatabase.actorEntityId = ALICE;
+      });
+
+      it("answers a delegation through a row it doesn't hold from the verdict", () => {
+        delegatingModel();
+        putDocument({$verdicts: {[DELETE_KEY]: true}});
+
+        assert.deepStrictEqual(documentDeletes(ALICE), Type.boolean(true));
+      });
+
+      // Control: the verdict alone answers, and only for the session's user.
+      it("grants nothing on a false verdict or another user's on a delegation through a row it doesn't hold", () => {
+        delegatingModel();
+        putDocument({$verdicts: {[DELETE_KEY]: false}});
+
+        assert.deepStrictEqual(documentDeletes(ALICE), Type.boolean(false));
+
+        putDocument({$verdicts: {[DELETE_KEY]: true}});
+
+        assert.deepStrictEqual(documentDeletes(BOB), Type.boolean(false));
+      });
+
+      // Control: the held folder's rule decides, whatever the verdict.
+      it("answers a delegation to a held row from that row, whatever the verdict", () => {
+        delegatingModel();
+        putDocument({$verdicts: {[DELETE_KEY]: false}});
+        putFolder();
+
+        assert.deepStrictEqual(documentDeletes(ALICE), Type.boolean(true));
+      });
+
+      // Control: an empty reference leads nowhere, which holds nothing on the server either.
+      it("grants nothing on a delegation through an empty reference, whatever the verdict", () => {
+        delegatingModel();
+        putDocument({$verdicts: {[DELETE_KEY]: true}, folder_id: null});
+
+        assert.deepStrictEqual(
+          documentDeletes(ALICE, document({folder_id: null})),
+          Type.boolean(false),
+        );
+      });
+
+      it("answers a role reference through a row it doesn't hold from the verdict", () => {
+        referencingModel();
+        putDocument({$verdicts: {[DELETE_KEY]: true}});
+
+        assert.deepStrictEqual(documentDeletes(ALICE), Type.boolean(true));
+      });
+
+      // Control: the held folder names its parent, on which the grant decides, whatever the
+      // verdict.
+      it("answers a role reference through a held row from the grants, whatever the verdict", () => {
+        referencingModel();
+        putDocument({$verdicts: {[DELETE_KEY]: false}});
+        LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, parent_id: PARENT_ID});
+
+        LocalDatabase.putRow(
+          GRANT,
+          grantRow({entity_id: PARENT_ID, entity_type: FOLDER, role: "admin"}),
+        );
+
+        assert.deepStrictEqual(documentDeletes(ALICE), Type.boolean(true));
+      });
+
+      // Control: the held folder names no parent, so the role is held on no row, on the server too.
+      it("grants nothing on a role reference through a held row whose reference is empty, whatever the verdict", () => {
+        referencingModel();
+        putDocument({$verdicts: {[DELETE_KEY]: true}});
+        LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, parent_id: null});
+
+        assert.deepStrictEqual(documentDeletes(ALICE), Type.boolean(false));
+      });
+
+      it("answers a field's role reference through a row it doesn't hold from the field's verdict", () => {
+        defineModel({"update:title": [rule({to: [toFolderParent]})]});
+
+        putVerdicts(DOCUMENT, {
+          "update:title": {reads: [FOLDER, GRANT], verdict: LABEL_KEY},
+        });
+
+        putDocument({$verdicts: {[LABEL_KEY]: true}});
+
+        assert.deepStrictEqual(
+          can(
+            Type.bitstring(ALICE),
+            updateOf(Type.atom("title")),
+            document({folder_id: FOLDER_ID}),
+          ),
+          Type.boolean(true),
+        );
+      });
+
+      // Control: an any over a set this client holds none of is unknown already, and the verdict
+      // answers it.
+      it("answers an any over a set it holds no matching row of from the verdict", () => {
+        defineModel({
+          delete: [
+            rule({
+              predicates: [{filter: [], quantifier: "any", source: ["tags"]}],
+            }),
+          ],
+        });
+
+        putVerdicts(DOCUMENT, {
+          delete: {reads: [DOCUMENT, TAG], verdict: DELETE_KEY},
+        });
+
+        putDocument({$verdicts: {[DELETE_KEY]: true}});
+
+        assert.deepStrictEqual(documentDeletes(ALICE), Type.boolean(true));
+      });
+
+      // Control: no verdict answers a create, so the held folder's create rule, which reads a
+      // parent this client doesn't hold, leaves the delegation to it open, and with no verdict of
+      // its own the document's delete is no.
+      it("grants nothing on a delegation to a create the held row's rules leave open", () => {
+        defineModel(
+          {delete: [rule({via: ["create", ["folder"]]})]},
+          {
+            create: [
+              rule({predicates: [[["parent", "archived"], "==", false]]}),
+            ],
+          },
+        );
+
+        putDocument({});
+        LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, parent_id: PARENT_ID});
+
+        assert.deepStrictEqual(documentDeletes(ALICE), Type.boolean(false));
+      });
+    });
+
     // The verdict answers the operation whole, so the rows this client holds answer first, and the
     // verdict only where they leave the answer open.
     describe("on an operation's rules", () => {

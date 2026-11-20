@@ -889,14 +889,29 @@ defmodule Hologram.Policy do
   Returns the operations of the given entity type the server sends its verdict on with each of its
   rows, as `{key, operation}` pairs sorted by key (see `verdict_key/2`): every key of its compiled
   policy whose own rules hold a deciding item (see `deciding_quantifier?/3`) - a clause standing in
-  their predicates, a role reference or a delegation. A client answers such an operation from the
-  verdict when the rows it holds leave the answer open. `:read` counts like any other key.
+  their predicates, a role reference or a delegation - and every key but `:create` whose own rules
+  hold an item reading a related row a reader of the row may not hold: a row along a clause's paths
+  and sets, before a role reference's last relationship, or along a delegation's chain. A client
+  holds only the rows its user may read, so it answers a path, a set, a role reference or a
+  delegation reaching a missing row as unknown. A client answers such an operation from the verdict
+  when the rows it holds leave the answer open. `:read` counts like any other key.
 
-  A field of an update counts by the deciding items of the limited lines covering it, though its
-  verdict answers those lines and the ones covering the whole row: a client answers a field with no
-  verdict of its own from the whole-row operation's, so a type with many limited fields and one
-  deciding whole-row rule sends one verdict rather than one per field. Fields covered by the same
-  lines share a key, so several pairs can hold one.
+  A related row counts as held when every session may read every row of its type - a read rule
+  with no condition, role reference or delegation - or when every read rule of the row before it
+  admits only readers of it - delegating the read to it, or naming only roles held on it that a
+  read rule of its type with no condition or delegation admits - hop by hop along the chain.
+
+  A create check asks about a struct no row stores yet, which no verdict answers, so `:create`
+  counts by its deciding items alone. A named create line counts under its name like any other
+  key. So a rule delegating `:create` to a row the client holds, whose create rules read a row
+  the client doesn't, answers no on the client while the server may answer yes.
+
+  A field of an update counts by the items of the limited lines covering it, deciding ones and ones
+  reading a related row a reader may not hold, though its verdict answers those lines and the ones
+  covering the whole row: a client answers a field with no verdict of its own from the whole-row
+  operation's, so a type with many limited fields and one deciding whole-row rule sends one verdict
+  rather than one per field. Fields covered by the same lines share a key, so several pairs can hold
+  one.
 
   Cached, with the model facts, for the types of the project's compiled data model - a row's
   verdicts are worked out for every row a client is sent.
@@ -1203,13 +1218,16 @@ defmodule Hologram.Policy do
 
   defp definition_inverses(_owner, _definition), do: []
 
+  # A create check asks about a struct no row stores yet, which no verdict answers, so a create
+  # key's verdict would go out with every row for nothing when its rules only read a related row.
   defp derived_verdict_operations(entity_type) do
     entity_type
     |> build()
     |> Enum.filter(fn {operation, rules} ->
-      rules
-      |> Enum.flat_map(&rule_items/1)
-      |> Enum.any?(&deciding_quantifier?(entity_type, operation, &1))
+      items = Enum.flat_map(rules, &rule_items/1)
+
+      Enum.any?(items, &deciding_quantifier?(entity_type, operation, &1)) or
+        (operation != :create and Enum.any?(items, &reads_unheld_row?(entity_type, &1)))
     end)
     |> Enum.map(fn {operation, _rules} -> {verdict_key(entity_type, operation), operation} end)
     |> Enum.sort()
@@ -1552,6 +1570,77 @@ defmodule Hologram.Policy do
     |> predicate_chains([clause])
     |> Enum.any?(&(readable_prefix(entity_type, &1) != &1))
   end
+
+  # Whether an item reads a row through relationships that a reader of the rule's row may not hold:
+  # one along a clause's paths and sets, before a role reference's last relationship, or along a
+  # delegation's chain, the row it leads to included. The delegated rules' own reads are left out:
+  # a client holding the row they are asked of answers them there, its verdict included.
+  defp reads_unheld_row?(entity_type, item) do
+    chains =
+      case item do
+        {:to, reference} -> reference_chains([reference])
+        {:via, {_operation, chain}} -> [chain]
+        clause -> predicate_chains(entity_type, [clause])
+      end
+
+    Enum.any?(chains, &(not held_chain?(entity_type, &1)))
+  end
+
+  # Whether every reader of a row of the given type holds every row along the given chain from it,
+  # hop by hop: whoever reads the row reads the row a held hop leads to, so the next hop is asked
+  # from there. A client is sent every row of a synced type its user may read, and the types any
+  # rule reads are synced.
+  defp held_chain?(entity_type, chain) do
+    result =
+      Enum.reduce_while(chain, entity_type, fn name, type ->
+        related_type = Entity.related_type(type, name)
+
+        if held_hop?(type, name, related_type),
+          do: {:cont, related_type},
+          else: {:halt, :unheld}
+      end)
+
+    result != :unheld
+  end
+
+  # A hop is held when every session may read every row it can lead to, or when each read rule of
+  # the row it starts from admits only readers of the row it leads to - a rule holds only when its
+  # delegation and one of its role references do. A type with no read rules passes: no client is
+  # sent its rows, so none carries a verdict.
+  defp held_hop?(entity_type, relationship_name, related_type) do
+    related_read_rules =
+      related_type
+      |> build()
+      |> Map.get(:read, [])
+
+    Enum.any?(related_read_rules, &match?(%{predicates: [], to: nil, via: nil}, &1)) or
+      entity_type
+      |> build()
+      |> Map.get(:read, [])
+      |> Enum.all?(&admits_only_readers?(&1, relationship_name, related_read_rules))
+  end
+
+  # Whether a read rule admits only readers of the row the given relationship leads to: it
+  # delegates the read there, or each of its role references is held on that row, by a role some
+  # read rule of it with no condition and no delegation admits the holders of - a role held on the
+  # row is held on it or type-wide, which an own reference covers.
+  defp admits_only_readers?(%{via: {:read, [relationship_name]}}, relationship_name, _rules),
+    do: true
+
+  defp admits_only_readers?(%{to: [_reference | _references] = references}, name, rules) do
+    own_role_names =
+      for %{predicates: [], to: [_reference | _references] = to, via: nil} <- rules,
+          {:own, role_names} <- to,
+          role_name <- role_names,
+          do: role_name
+
+    Enum.all?(references, fn
+      {:rel, [^name], role_names} -> Enum.all?(role_names, &(&1 in own_role_names))
+      _reference -> false
+    end)
+  end
+
+  defp admits_only_readers?(_rule, _relationship_name, _rules), do: false
 
   defp reference_chains(nil), do: []
 

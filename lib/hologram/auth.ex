@@ -116,6 +116,17 @@ defmodule Hologram.Auth do
   asks the same of every field in the list, each covered by some line that holds - what an update
   changing them all needs. The bare `:update` counts only the lines covering the whole row. A field
   is one of `Hologram.Policy.update_fields/1`, a to-one by its relationship name.
+
+  In the browser, a rule reading a related row the user may not read - through a condition, a set, a
+  role reference or a delegation - is answered from the server's verdict on the row as stored, sent
+  with it (see `Hologram.Policy.verdict_operations/1`), since the browser holds only the rows its
+  user may read. Where no verdict speaks for the question, the browser answers no while the server
+  may answer yes: a check on a new struct, any create among them, or on a struct an action changed
+  and hasn't written yet, a check on, or delegating to, a row the browser created that the server
+  hasn't sent back with its verdicts, a check about another user, or about a visitor in a signed-in
+  session, a check while a write of the browser's the server hasn't answered names a type the
+  operation's rules read, and a rule delegating `:create` to a row whose create rules read a row the
+  browser doesn't hold.
   """
   @spec can?(struct | Server.identity_id() | nil, atom | {atom, atom | list(atom)}, struct) ::
           boolean

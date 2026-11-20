@@ -113,8 +113,8 @@ defmodule Hologram.Migration.GrantStoreTest do
   defp insert_grant(entity_type \\ nil, entity_id \\ nil, role \\ "editor") do
     statement = """
     INSERT INTO "hologram_data"."hologram_role_grant"
-      ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "updated_at", "$revisions")
-    VALUES ($1, $2, $3, $4, $5, now(), now(), '{}')
+      ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+    VALUES ($1, $2, $3, $4, $5, now(), now(), now(), now(), '{}')
     """
 
     id = RoleGrant.derive_id_from_labels(@user_id, entity_type, entity_id, role)
@@ -137,8 +137,8 @@ defmodule Hologram.Migration.GrantStoreTest do
   defp insert_repeated_grant(entity_type, entity_id, role) do
     statement = """
     INSERT INTO "hologram_data"."hologram_role_grant"
-      ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "updated_at", "$revisions")
-    VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now(), '{}')
+      ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+    VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now(), now(), now(), '{}')
     """
 
     params = [Ecto.UUID.dump!(@user_id), role, entity_type, Ecto.UUID.dump!(entity_id)]
@@ -189,8 +189,8 @@ defmodule Hologram.Migration.GrantStoreTest do
 
   defp insert_user(table) do
     statement = """
-    INSERT INTO "hologram_data"."#{table}" ("id", "created_at", "updated_at", "$revisions")
-    VALUES ($1, now(), now(), '{}')
+    INSERT INTO "hologram_data"."#{table}" ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+    VALUES ($1, now(), now(), now(), now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(@user_id)])

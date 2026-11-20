@@ -49,6 +49,8 @@ defmodule Hologram.Migration.RendererTest do
                "$revisions",
                "created_at",
                "id",
+               "server_created_at",
+               "server_updated_at",
                "title",
                "title_$search",
                "title_$sort",

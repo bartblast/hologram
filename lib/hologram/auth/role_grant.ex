@@ -88,6 +88,8 @@ defmodule Hologram.Auth.RoleGrant do
             granted_by_id: nil,
             id: nil,
             role: nil,
+            server_created_at: nil,
+            server_updated_at: nil,
             updated_at: nil,
             user: %NotIncluded{relationship: :user},
             user_id: nil
@@ -101,6 +103,8 @@ defmodule Hologram.Auth.RoleGrant do
           granted_by_id: Entity.id() | nil,
           id: Entity.id() | nil,
           role: atom | module | nil,
+          server_created_at: DateTime.t() | nil,
+          server_updated_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil,
           user: struct | NotIncluded.t() | nil,
           user_id: Entity.id() | nil
@@ -200,7 +204,13 @@ defmodule Hologram.Auth.RoleGrant do
   """
   @spec __system_attributes__() :: list({atom, atom, keyword})
   def __system_attributes__ do
-    [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
+    [
+      {:created_at, :datetime, []},
+      {:id, :uuid, []},
+      {:server_created_at, :datetime, []},
+      {:server_updated_at, :datetime, []},
+      {:updated_at, :datetime, []}
+    ]
   end
 
   @doc """

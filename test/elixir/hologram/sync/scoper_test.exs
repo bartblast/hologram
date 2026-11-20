@@ -183,8 +183,10 @@ defmodule Hologram.Sync.ScoperTest do
       assert affected(events([PolicyModule2]), [{:board, window}], edges) == [:board]
     end
 
+    # Such a build follows no verdict's edges (see Edges.index/1), and the publish line's verdict
+    # reads the parent's row too.
     test "leaves out a window of a build no client checks permissions in when such a type changes" do
-      edges = Edges.derive(Reflection.list_entities())
+      edges = Edges.index(false)
 
       window =
         PolicyModule1

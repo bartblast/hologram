@@ -47,9 +47,9 @@ defmodule Hologram.MigratorTest do
     |> Enum.with_index(1)
     |> Enum.each(fn {value, index} ->
       statement = """
-      INSERT INTO "hologram_data"."my_app_task" ("id", "#{column}", "created_at", "updated_at", "$revisions")
+      INSERT INTO "hologram_data"."my_app_task" ("id", "#{column}", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-00000000000#{index}', #{value},
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(statement)
@@ -143,6 +143,8 @@ defmodule Hologram.MigratorTest do
                "created_at",
                "id",
                "priority",
+               "server_created_at",
+               "server_updated_at",
                "title",
                "title_$search",
                "title_$sort",
@@ -214,9 +216,9 @@ defmodule Hologram.MigratorTest do
       apply_pending([create], Model.empty(), @context)
 
       insert = """
-      INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "updated_at", "$revisions")
+      INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-000000000001', 'existing',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert)
@@ -259,9 +261,9 @@ defmodule Hologram.MigratorTest do
       model = apply_pending([create], Model.empty(), @context)
 
       insert = """
-      INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "updated_at", "$revisions")
+      INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-000000000003', 'existing',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert)
@@ -307,18 +309,18 @@ defmodule Hologram.MigratorTest do
 
       insert_user = """
       INSERT INTO "hologram_data"."test_fixtures_entity_module14"
-        ("id", "created_at", "updated_at", "$revisions")
-      VALUES ($1, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+        ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+      VALUES ($1, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert_user, [Ecto.UUID.dump!(user_id)])
 
       insert_grants = """
       INSERT INTO "hologram_data"."hologram_role_grant"
-        ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "updated_at", "$revisions")
+        ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES
-        ($1, $3, 'editor', 'MyApp.Task', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}'),
-        ($2, $3, 'editor', 'MyApp.Other', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+        ($1, $3, 'editor', 'MyApp.Task', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}'),
+        ($2, $3, 'editor', 'MyApp.Other', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} =
@@ -396,17 +398,17 @@ defmodule Hologram.MigratorTest do
       user_id = "00000000-0000-0000-0000-0000000000a1"
 
       insert_user = """
-      INSERT INTO "hologram_data"."acme_user" ("id", "created_at", "updated_at", "$revisions")
-      VALUES ($1, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+      INSERT INTO "hologram_data"."acme_user" ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+      VALUES ($1, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert_user, [Ecto.UUID.dump!(user_id)])
 
       insert_grant = """
       INSERT INTO "hologram_data"."hologram_role_grant"
-        ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "updated_at", "$revisions")
+        ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ($1, $2, 'editor', 'MyApp.Other', $3,
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} =
@@ -426,7 +428,15 @@ defmodule Hologram.MigratorTest do
 
       assert table_columns("acme_user") == []
       assert table_columns("hologram_role_grant") == []
-      assert table_columns("my_app_other") == ["$revisions", "created_at", "id", "updated_at"]
+
+      assert table_columns("my_app_other") == [
+               "$revisions",
+               "created_at",
+               "id",
+               "server_created_at",
+               "server_updated_at",
+               "updated_at"
+             ]
     end
 
     test "skips the migrations another applier already recorded" do
@@ -520,9 +530,9 @@ defmodule Hologram.MigratorTest do
       model = apply_pending([create], Model.empty(), @context)
 
       insert = """
-      INSERT INTO "hologram_data"."my_app_task" ("id", "created_at", "updated_at", "$revisions")
+      INSERT INTO "hologram_data"."my_app_task" ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-000000000002',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert)
@@ -569,11 +579,11 @@ defmodule Hologram.MigratorTest do
       model = apply_pending([create], Model.empty(), @context)
 
       insert = """
-      INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "updated_at", "$revisions")
+      INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-000000000003', 'taken',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}'),
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}'),
              ('00000000-0000-0000-0000-000000000004', 'taken',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert)

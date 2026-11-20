@@ -22,7 +22,7 @@ defmodule Hologram.Entity.Validator do
   # refused where it is written, as no condition.
   @policy_option_names [:as, :except, :only, :to, :via]
 
-  @reserved_names [:created_at, :id, :updated_at]
+  @reserved_names [:created_at, :id, :server_created_at, :server_updated_at, :updated_at]
 
   # The two operations that may name the role they cover
   @role_operations [:grant_role, :revoke_role]
@@ -564,7 +564,8 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the options given to the use Hologram.Job directive at compile time.
 
-  Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys).
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys,
+  a :max_concurrency that is not a positive integer literal).
   """
   @spec validate_use_job_opts!(module, T.opts()) :: :ok
   def validate_use_job_opts!(module, opts) do
@@ -574,10 +575,21 @@ defmodule Hologram.Entity.Validator do
           "invalid options #{inspect(opts)} for use Hologram.Job in #{inspect(module)} - options must be a keyword list"
     end
 
-    Enum.each(opts, fn {key, _value} ->
-      raise Hologram.CompileError,
-        message:
-          "unknown option #{inspect(key)} for use Hologram.Job in #{inspect(module)} - use Hologram.Job takes no options"
+    # The options are the use line's code, unevaluated: an integer literal is an integer here, and a
+    # negative one is a call to -, so the guard refuses it with every other non-integer.
+    Enum.each(opts, fn
+      {:max_concurrency, value} when is_integer(value) and value > 0 ->
+        :ok
+
+      {:max_concurrency, value} ->
+        raise Hologram.CompileError,
+          message:
+            "invalid max_concurrency #{Macro.to_string(value)} for use Hologram.Job in #{inspect(module)} - it must be a positive integer, written as a literal"
+
+      {key, _value} ->
+        raise Hologram.CompileError,
+          message:
+            "unknown option #{inspect(key)} for use Hologram.Job in #{inspect(module)} - use Hologram.Job takes only :max_concurrency"
     end)
 
     :ok
@@ -862,7 +874,7 @@ defmodule Hologram.Entity.Validator do
       |> declared_fields()
       |> Enum.map(fn {field_name, _declaration} -> field_name end)
 
-    ["created_at", "id", "updated_at"] ++ declared_names
+    ["created_at", "id", "server_created_at", "server_updated_at", "updated_at"] ++ declared_names
   end
 
   # The first target that appears earlier in the list, nil when every target appears once.
