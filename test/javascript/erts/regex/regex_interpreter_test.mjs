@@ -304,11 +304,36 @@ describe("RegexInterpreter", () => {
         );
       });
 
-      it("folds a char into a property class member under caseless", () => {
+      it("matches any cased letter with an Lu class member under caseless", () => {
         assert.deepEqual(
           match("[\\p{Lu}]", "a", {caseless: true, unicode: true}),
           {start: 0, end: 1},
         );
+      });
+
+      it("matches an uncased letter with an Lu class member under caseless", () => {
+        // The subject is kra, a lowercase letter with no uppercase form
+        assert.deepEqual(
+          match("[\\p{Lu}]", "ĸ", {caseless: true, unicode: true}),
+          {start: 0, end: 1},
+        );
+      });
+
+      it("rejects lowercase letter with a negated Lu class member under caseless", () => {
+        assert.isNull(match("[\\P{Lu}]", "a", {caseless: true}));
+      });
+
+      it("rejects an uncased letter with a negated Lu class under caseless", () => {
+        // The subject is kra, a lowercase letter with no uppercase form
+        assert.isNull(
+          match("[^\\p{Lu}]", "ĸ", {caseless: true, unicode: true}),
+        );
+      });
+
+      it("keeps a property class member fold-free under caseless", () => {
+        // The subject is iota, which folds together with the combining
+        // ypogegrammeni, a nonspacing mark
+        assert.isNull(match("[\\p{Mn}]", "ι", {caseless: true, unicode: true}));
       });
 
       it("matches shorthand member", () => {
@@ -429,6 +454,38 @@ describe("RegexInterpreter", () => {
         assert.isNull(match("\\p{Lu}", "a"));
       });
 
+      it("matches lowercase letter with \\p{Lu} under caseless", () => {
+        assert.deepEqual(match("\\p{Lu}", "a", {caseless: true}), {
+          start: 0,
+          end: 1,
+        });
+      });
+
+      it("matches lowercase letter with \\p{Lu} under caseless unicode", () => {
+        assert.deepEqual(
+          match("\\p{Lu}", "a", {caseless: true, unicode: true}),
+          {start: 0, end: 1},
+        );
+      });
+
+      it("matches lowercase letter with \\p{Lu} in an inline caseless scope", () => {
+        assert.deepEqual(match("(?i:\\p{Lu})\\p{Lu}", "aA", {unicode: true}), {
+          start: 0,
+          end: 2,
+        });
+      });
+
+      it("matches lowercase letter with \\P{Lu} after an inline caseless scope", () => {
+        assert.deepEqual(match("(?i:\\p{Lu})\\P{Lu}", "aa", {unicode: true}), {
+          start: 0,
+          end: 2,
+        });
+      });
+
+      it("rejects lowercase letter with \\P{Lu} under caseless", () => {
+        assert.isNull(match("\\P{Lu}", "a", {caseless: true, unicode: true}));
+      });
+
       it("matches non-letter with \\P{L}", () => {
         assert.deepEqual(match("\\P{L}", "a1"), {start: 1, end: 2});
       });
@@ -457,6 +514,51 @@ describe("RegexInterpreter", () => {
 
       it("includes underscore in \\p{Xwd}", () => {
         assert.deepEqual(match("\\p{Xwd}", "_"), {start: 0, end: 1});
+      });
+
+      it("includes nonspacing marks in \\p{Xwd}", () => {
+        // The subject is the combining acute accent
+        assert.deepEqual(match("\\p{Xwd}", "\u0301", {unicode: true}), {
+          start: 0,
+          end: 1,
+        });
+      });
+
+      it("includes connector punctuation in \\p{Xwd}", () => {
+        // The subject is the undertie
+        assert.deepEqual(match("\\p{Xwd}", "\u203f", {unicode: true}), {
+          start: 0,
+          end: 1,
+        });
+      });
+
+      it("includes the Mongolian vowel separator in \\p{Xsp}", () => {
+        assert.deepEqual(match("\\p{Xsp}", "\u180e", {unicode: true}), {
+          start: 0,
+          end: 1,
+        });
+      });
+
+      it("matches universal character name chars with \\p{Xuc}", () => {
+        assert.deepEqual(match("\\p{Xuc}", "a@"), {start: 1, end: 2});
+      });
+
+      it("matches Common script chars by script", () => {
+        // The subject is the middle dot, whose script extensions are
+        // other scripts
+        assert.deepEqual(match("\\p{Common}", "\u00b7", {unicode: true}), {
+          start: 0,
+          end: 1,
+        });
+      });
+
+      it("matches Inherited script chars by script", () => {
+        // The subject is the Devanagari stress sign udatta, whose script
+        // extensions are other scripts
+        assert.deepEqual(match("\\p{Inherited}", "\u0951", {unicode: true}), {
+          start: 0,
+          end: 1,
+        });
       });
     });
 

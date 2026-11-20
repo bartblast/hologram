@@ -4362,6 +4362,36 @@ defmodule Hologram.CompilerTest do
       assert File.read!(package_json_digest_path) == expected_digest
     end
 
+    @tag timeout: 300_000
+    test "installs the deps an existing package-lock.json file names", %{assets_dir: assets_dir} do
+      lib_package_lock_json_path = Path.join(@assets_dir, "package-lock.json")
+      package_lock_json_path = Path.join(assets_dir, "package-lock.json")
+      File.cp!(lib_package_lock_json_path, package_lock_json_path)
+
+      install_js_deps(assets_dir)
+
+      esbuild_package_json_path =
+        Path.join([assets_dir, "node_modules", "esbuild", "package.json"])
+
+      assert File.exists?(esbuild_package_json_path)
+    end
+
+    test "leaves an existing package-lock.json file as it was", %{assets_dir: assets_dir} do
+      package_json_path = Path.join(assets_dir, "package.json")
+      File.write!(package_json_path, ~s({"name":"fixture","version":"1.0.0"}))
+
+      # A plain npm install rewrites it, since its root version doesn't match package.json.
+      package_lock_json =
+        ~s({"name":"fixture","version":"0.9.0","lockfileVersion":3,"requires":true,"packages":{"":{"name":"fixture","version":"0.9.0"}}})
+
+      package_lock_json_path = Path.join(assets_dir, "package-lock.json")
+      File.write!(package_lock_json_path, package_lock_json)
+
+      install_js_deps(assets_dir)
+
+      assert File.read!(package_lock_json_path) == package_lock_json
+    end
+
     test "removes the record of the last install when npm install command fails", %{
       assets_dir: assets_dir
     } do
