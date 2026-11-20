@@ -25,7 +25,6 @@ defmodule Hologram.Compiler do
   alias Hologram.Job
   alias Hologram.Policy
   alias Hologram.Policy.Edges
-  alias Hologram.Query
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
@@ -126,12 +125,6 @@ defmodule Hologram.Compiler do
           definitions: %{{module, atom} => Derived.definition()},
           read_modules: [module]
         }
-
-  @typedoc """
-  The registered queries of one component or page: the normalized terms its derived fields build
-  (see `Hologram.Compiler.QueryExtractor.extract_derived_queries/3`).
-  """
-  @type component_queries :: %{terms: [Query.t()]}
 
   @typedoc """
   What the data layer keeps of a page's reach between compiles: whether the page's client code
@@ -1561,36 +1554,6 @@ defmodule Hologram.Compiler do
       [binary_path] -> binary_path
       _none_or_several -> Path.join([node_modules_path, ".bin", "esbuild"])
     end
-  end
-
-  @doc """
-  Extracts the registered queries of the given component modules, each once, keyed by module (see
-  `component_queries`). The entity types are the ones of the build, over which a query whose entity
-  type is an argument is replayed.
-
-  The IR the derived fields' functions are walked over is read from the given IR PLT, the
-  compile's, and the components it lacks are built into it first, in one go.
-
-  Raises what `Hologram.Compiler.QueryExtractor.extract_derived_queries/3` raises.
-
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/extract_component_queries_3/README.md
-  """
-  @spec extract_component_queries([module], [module], PLT.t()) :: %{module => component_queries}
-  def extract_component_queries(component_modules, entity_types, ir_plt) do
-    # The IR the derived fields' functions are walked over, built in one go for the batch: a
-    # derived field's function is hoisted into its component, so the components declaring one. A
-    # helper a walk reaches is built at its first use.
-    component_modules
-    |> Enum.filter(&declares_derived_fields?/1)
-    |> then(&build_missing_ir!(ir_plt, &1))
-
-    Map.new(component_modules, fn module ->
-      derived_queries = QueryExtractor.extract_derived_queries(module, entity_types, ir_plt)
-
-      terms = Enum.flat_map(derived_queries, fn {_name, derived_terms} -> derived_terms end)
-
-      {module, %{terms: terms}}
-    end)
   end
 
   @doc """
@@ -4012,10 +3975,6 @@ defmodule Hologram.Compiler do
       _attr ->
         nil
     end)
-  end
-
-  defp declares_derived_fields?(module) do
-    Reflection.has_function?(module, :__derived__, 0) and module.__derived__() != []
   end
 
   # Any literal is resolved, composites included, as long as every part of it is one too - a single

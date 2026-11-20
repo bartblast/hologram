@@ -15,7 +15,7 @@ alias Hologram.Compiler
 # share of the synced types each page fills first.
 Benchee.run(
   %{
-    "build_sync_constants/2" => fn {reach_by_page, _component_queries, module_info_plt} ->
+    "build_sync_constants/2" => fn {reach_by_page, module_info_plt} ->
       Compiler.build_sync_constants(reach_by_page, module_info_plt)
     end
   },

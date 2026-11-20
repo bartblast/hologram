@@ -2,20 +2,18 @@ defmodule Hologram.Compiler.QueryExtractorCoverTest do
   # async: false - cover-compiling a module changes how every concurrent test
   # resolves its beam, so the covered window must not overlap other tests.
   use Hologram.Test.BasicCase, async: false
-  use Hologram.DB
 
   import Hologram.Compiler.QueryExtractor
 
   alias Hologram.Commons.PLT
-  alias Hologram.Query.Placeholder
-  alias Hologram.Query.Stage
-  alias Hologram.Reflection
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module129
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19
-  alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Query
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module143
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module144
+  alias Hologram.Test.Fixtures.Entity.Module33, as: Entity33
+  alias Hologram.Test.Fixtures.Entity.Module36, as: Entity36
 
-  describe "extract_derived_queries/3" do
-    test "registers the queries a cover-compiled helper module builds" do
+  describe "derived_definition/3" do
+    test "follows a cover-compiled query builder" do
       # Stop the cover server only when this test started it - an externally
       # started server (mix test --cover) owns its lifecycle and data.
       case :cover.start() do
@@ -23,21 +21,21 @@ defmodule Hologram.Compiler.QueryExtractorCoverTest do
         {:error, {:already_started, _pid}} -> :ok
       end
 
-      {:ok, _cover_compiled} = :cover.compile_beam(Module19)
+      {:ok, _cover_compiled} = :cover.compile_beam(Module143)
 
-      nil_clause_term =
-        Entity2
-        |> filter(a: true)
-        |> Stage.normalize()
+      # A fresh PLT, so that the builder's IR is built from its beam while it is cover-compiled.
+      {definition, read_modules} = derived_definition(Module144, :recent, PLT.start())
 
-      bound_clause_term =
-        Entity2
-        |> filter(b >= ^%Placeholder{name: :min_b})
-        |> Stage.normalize()
+      assert definition ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity36, [:channel, :messages]},
+                  take: 2
+                }}
 
-      assert extract_derived_queries(Module129, Reflection.list_entities(), PLT.start()) == [
-               entities: [nil_clause_term, bound_clause_term]
-             ]
+      assert read_modules == [Module143]
     end
   end
 end

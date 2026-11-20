@@ -330,14 +330,6 @@ Comparison:
 ```
 
 
-### ✅ compiler » extract_component_queries_3
-
-```
-Name                                  ips        average  deviation         median         99th %
-extract_component_queries/3       11.32 K       88.33 μs     ±9.96%       87.79 μs      108.63 μs
-```
-
-
 ### ✅ compiler » list_reach_by_page_2
 
 ```
@@ -369,23 +361,6 @@ do load        0.22 K        4.54 ms     ±7.61%        4.49 ms        5.25 ms
 Comparison: 
 no load       71.88 K
 do load        0.22 K - 326.65x slower +4.53 ms
-```
-
-
-### ✅ compiler » query_extractor » extract_derived_queries_3
-
-```
-Name                                                       ips        average  deviation         median         99th %
-no derived fields                                    2824.92 K        0.35 μs  ±4334.57%        0.25 μs        0.46 μs
-field naming its entity                                58.26 K       17.17 μs   ±292.71%       14.21 μs       81.50 μs
-field whose entity is an argument, 1 candidate         57.26 K       17.46 μs    ±91.88%       15.83 μs       47.07 μs
-field whose entity is an argument, 21 candidates       13.03 K       76.74 μs   ±231.43%       71.50 μs      159.21 μs
-
-Comparison: 
-no derived fields                                    2824.92 K
-field naming its entity                                58.26 K - 48.49x slower +16.81 μs
-field whose entity is an argument, 1 candidate         57.26 K - 49.33x slower +17.11 μs
-field whose entity is an argument, 21 candidates       13.03 K - 216.80x slower +76.39 μs
 ```
 
 

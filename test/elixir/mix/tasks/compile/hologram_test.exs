@@ -14,7 +14,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Compiler.DataModelInputs
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
-  alias Hologram.Compiler.QueryExtractor
   alias Hologram.Compiler.Tracer
   alias Hologram.Entity
   alias Hologram.Entity.Derived.Validator, as: DerivedValidator
@@ -26,7 +25,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, as: QueryExtractorModule53
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84, as: QueryExtractorModule84
   alias Hologram.Test.Fixtures.Component.Module40, as: ComponentModule40
   alias Hologram.Test.Fixtures.Component.Module43, as: ComponentModule43
   alias Hologram.Test.Fixtures.Component.Module54, as: ComponentModule54
@@ -156,42 +154,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
     def new(values \\ []), do: Entity.new(__MODULE__, values)
   end
 
-  # This project's components include the ones the extractor and the validators exist to REFUSE -
-  # a derived field whose helper recurses, one that reads a field off an integer, a query on a
-  # type declaring no allow lines. A real app has none, so the task sweeps every component there and the
-  # build fails on the first mistake, which is the point. Here they are filtered by ASKING the builder rather
-  # than by listing modules, so a negative fixture added later joins the filter instead of breaking
-  # this suite.
-  defp buildable_component_modules do
-    entity_types = Reflection.list_entities()
-
-    Enum.filter(Reflection.list_components(), fn module ->
-      not declares_query?(module) or buildable_queries?(module, entity_types)
-    end)
-  end
-
-  # The extractor refuses a component's queries three ways, and all mean unbuildable here: a
-  # refusal of its own (Hologram.CompileError), a query stage refusing its own arguments while it
-  # evaluates the capture (Hologram.MisuseError), and a derived field the queries read that this
-  # build never resolved (ArgumentError). The question is whether the build can extract this
-  # component's queries at all, not which tier said no.
-  defp buildable_queries?(module, entity_types) do
-    Compiler.extract_component_queries([module], entity_types, PLT.start())
-
-    true
-  rescue
-    ArgumentError -> false
-    Hologram.CompileError -> false
-    Hologram.MisuseError -> false
-  end
-
-  # Only a component declaring a derived field can be refused - one without produces no terms, so
-  # neither the extractor nor the validations have anything to object to. Asking the cheap question
-  # first keeps this out of the suite's timing.
-  defp declares_query?(module) do
-    Reflection.has_function?(module, :__derived__, 0) and module.__derived__() != []
-  end
-
   # A page whose template holds a link to another page, and that page.
   @linked_page Hologram.Test.Fixtures.Page.Module2
   @linking_page Hologram.Test.Fixtures.Page.Module5
@@ -255,11 +217,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
     after
       :erlang.trace_pattern(mfa, false, [:local, :call_count])
     end
-  end
-
-  # How many components' registered queries are extracted while the given function runs.
-  defp count_extractions(fun) do
-    count_calls({QueryExtractor, :extract_derived_queries, 3}, fun)
   end
 
   # How many times the page types PLT and the queries PLT are dumped while the given function
@@ -1266,7 +1223,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assets_dir: @assets_dir,
       build_dir: @build_dir,
       build_lib_dir: @build_lib_dir,
-      component_modules: buildable_component_modules(),
+      component_modules: Reflection.list_components(),
       esbuild_bin_path: Compiler.esbuild_bin_path(node_modules_path),
       js_dir: Path.join(@lib_assets_dir, "js"),
       legacy_bundles_dir: @legacy_bundles_dir,
@@ -1600,98 +1557,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   describe "data layer" do
-    test "a run with no changes extracts no component's queries", %{opts: opts} do
-      run(opts)
-
-      assert count_extractions(fn -> run(opts) end) == 0
-    end
-
-    test "an edit of a module no page reaches extracts no component's queries", %{opts: opts} do
-      run(opts)
-      fake_edit(@unreached_module)
-
-      assert count_extractions(fn -> run(opts) end) == 0
-    end
-
-    test "an edit of a page extracts its own queries and no component's", %{opts: opts} do
-      run(opts)
-      fake_edit(Module1)
-
-      assert count_extractions(fn -> run(opts) end) == 1
-    end
-
-    # Page 18 is the one page that reaches Module84. A page holds derived fields of its own, so
-    # the edit reaches its queries as it reaches a component's.
-    test "an edit of a component extracts its queries and those of the pages reaching it", %{
-      opts: opts
-    } do
-      run(opts)
-      fake_edit(QueryExtractorModule84)
-
-      assert count_extractions(fn -> run(opts) end) == 2
-    end
-
-    # No page reaches Module40, so the call graph doesn't hold it, and its kept entry goes stale with
-    # an edit of the component itself.
-    test "an edit of a component no page reaches extracts its queries", %{opts: opts} do
-      run(opts)
-
-      refute ComponentModule40 in CallGraph.modules(cache_state().call_graph)
-
-      fake_edit(ComponentModule40)
-
-      assert count_extractions(fn -> run(opts) end) == 1
-    end
-
-    # Page 23 is the one page that reaches Module54, whose derived field calls a function of
-    # Module55, which is no component. The call is an edge of the graph, so the edit reaches both.
-    test "an edit of a module a component's derived field calls extracts the queries of that component and the pages reaching it",
-         %{opts: opts} do
-      run(opts)
-      fake_edit(ComponentModule55)
-
-      assert count_extractions(fn -> run(opts) end) == 2
-    end
-
-    # The extractor replays a query whose entity type is an argument over every entity type, and
-    # the query validations read what the entity types declare.
-    test "an edit of an entity type extracts every component's queries", %{opts: opts} do
-      run(opts)
-      num_components = map_size(cache_state().data_layer.components)
-
-      fake_edit(Entity2)
-
-      assert count_extractions(fn -> run(opts) end) == num_components
-    end
-
-    # Page 18 reaches Module84. Taken out of the graph, Module84 is built into it again by the walk
-    # an edit of the page starts, as a component a page starts reaching is. The edited page's own
-    # queries are the other extraction.
-    test "a component a walk builds into the graph has its queries extracted", %{opts: opts} do
-      run(opts)
-
-      take_out_of_graph(QueryExtractorModule84)
-      fake_edit(PageModule18)
-
-      assert count_extractions(fn -> run(opts) end) == 2
-      assert QueryExtractorModule84 in CallGraph.modules(cache_state().call_graph)
-    end
-
-    test "the kept component queries after an edit are the ones a cold compile extracts", %{
-      opts: opts
-    } do
-      run(opts)
-      fake_edit(QueryExtractorModule84)
-      run(opts)
-
-      components = cache_state().data_layer.components
-
-      start_cold(opts)
-      run(opts)
-
-      assert cache_state().data_layer.components == components
-    end
-
     test "an edit of a module no page reaches writes neither data layer dump", %{opts: opts} do
       run(opts)
       fake_edit(@unreached_module)
@@ -1715,16 +1580,37 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "an edit of a component derives the data layer again", %{opts: opts} do
       run(opts)
-      fake_edit(QueryExtractorModule84)
+      fake_edit(ComponentModule40)
 
       assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
+    # Page 23 reaches Module54, whose derived field calls a function of Module55, which is no
+    # component. The call is an edge of the graph, so the edit lists the page's reach again.
+    test "an edit of a module a reached component's derived field calls derives the data layer again",
+         %{opts: opts} do
+      run(opts)
+      fake_edit(ComponentModule55)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
+    # The data layer reads a component only through the pages reaching it.
+    test "an edit of a component no page reaches keeps the data layer", %{opts: opts} do
+      run(opts)
+
+      refute ComponentModule43 in CallGraph.modules(cache_state().call_graph)
+
+      fake_edit(ComponentModule43)
+
+      assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
     end
 
     test "an edit of a component reuses the derived definitions", %{opts: opts} do
       run(opts)
       derived = load_dumped_derived(opts)
 
-      fake_edit(QueryExtractorModule84)
+      fake_edit(ComponentModule40)
 
       assert count_resolutions(fn -> run(opts) end) == 0
       assert load_dumped_derived(opts) == derived
@@ -1766,7 +1652,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
     end
 
-    # Another Hologram build can extract and render differently, so the bundle inputs moving is
+    # Another Hologram build can derive and render differently, so the bundle inputs moving is
     # reason enough, with no module edited.
     test "a run whose bundle inputs changed derives the data layer again", %{opts: opts} do
       on_exit(fn -> Application.delete_env(:hologram, :client_stacktraces) end)
@@ -1877,36 +1763,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert map_size(cache_state().data_layer.pages) == @num_pages
     end
 
-    test "a removed component is forgotten from the kept component queries", %{opts: opts} do
-      run(opts)
-
-      %{
-        data_layer: data_layer,
-        dumped_at: dumped_at,
-        editable_modules: editable_modules,
-        module_infos: module_infos
-      } = cache_state()
-
-      removed_entry = %{terms: []}
-      components = Map.put(data_layer.components, :removed_component, removed_entry)
-      Cache.put_data_layer(%{data_layer | components: components})
-
-      module_infos
-      |> Map.put(:removed_component, %{component?: true, digest: "removed"})
-      |> put_kept_module_infos(dumped_at, MapSet.put(editable_modules, :removed_component))
-
-      run(opts)
-
-      refute Map.has_key?(cache_state().data_layer.components, :removed_component)
-    end
-
     test "a compile keeps what the data layer derived", %{opts: opts} do
       run(opts)
 
       %{data_layer: data_layer, runtime: runtime} = cache_state()
 
       assert map_size(data_layer.pages) == @num_pages
-      assert Enum.all?(opts[:component_modules], &Map.has_key?(data_layer.components, &1))
       assert data_layer.sync_constants_js == runtime.sync_constants_js
     end
 
@@ -1917,14 +1779,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert %{
                checks_permissions?: false,
-               components: [QueryExtractorModule84, LayoutFixture, PageModule18]
+               components: [ComponentModule40, LayoutFixture, PageModule18]
              } =
                cache_state().data_layer.pages[PageModule18]
     end
 
     test "a new VM reuses the derived definitions from the compile state dump", %{opts: opts} do
       run(opts)
-      fake_edit_in_dump(QueryExtractorModule84, opts)
+      fake_edit_in_dump(ComponentModule40, opts)
       Cache.reset()
       fake_recompile()
 
@@ -1983,11 +1845,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       Cache.put_data_layer(refused_data_layer)
 
-      # An edit that derives the data layer again without listing the page again: a component
-      # joining the build, which only its own entry follows.
-      fake_edit(ComponentModule43)
+      # An edit that derives the data layer again without listing the page again: a query builder
+      # an entity type's derived field calls, which no page reaches, makes the derived definitions
+      # stale.
+      assert QueryExtractorModule53 in data_layer.derived.read_modules
 
-      failing_opts = Keyword.update!(opts, :component_modules, &[ComponentModule43 | &1])
+      refute Enum.any?(data_layer.pages, fn {_page, page_reach} ->
+               MapSet.member?(page_reach.modules, QueryExtractorModule53)
+             end)
+
+      fake_edit(QueryExtractorModule53)
 
       expected_msg =
         "the query in #{inspect(page_module)}.template/0 reads " <>
@@ -1995,7 +1862,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
           "default deny returns no rows to any session. Add allow lines, or drop the query."
 
       assert_error Hologram.CompileError, ~r/: #{Regex.escape(expected_msg)}$/, fn ->
-        run(failing_opts)
+        run(opts)
       end
 
       assert Enum.map(dump_paths, &File.read!/1) == ["untouched", "untouched"]
@@ -2679,9 +2546,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
       refute @unreached_module in CallGraph.modules(cache_state().call_graph)
     end
 
-    # Page 23 reaches Module54, whose derived field reads an argument, so the page's rebuild reads
-    # the component's IR and its queries are extracted again from the same IR. The first run loads
-    # the dumps, which hold no IR, so the rebuild builds what the page reads too.
+    # Page 23 reaches Module54, so the page's rebuild reads the component's IR, and the data layer
+    # reads the same IR. The first run loads the dumps, which hold no IR, so the rebuild builds
+    # what the page reads too.
     test "an edit of a component builds its IR once", %{opts: opts} do
       run(opts)
       fake_edit(ComponentModule54)
@@ -2693,8 +2560,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert built_modules == Enum.uniq(built_modules)
     end
 
-    # Every component's queries are extracted again, and the components and capture targets whose
-    # IR the last compile dropped are built for it.
+    # The derived definitions are resolved again, and the modules whose IR the last compile dropped
+    # are built for it.
     test "an edit of an entity type builds each module's IR once", %{opts: opts} do
       run(opts)
       fake_edit(Entity2)
@@ -4538,8 +4405,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       module_info_plt = PLT.start(items: Map.to_list(module_infos))
 
-      # The components the run validated are the ones its options name (see
-      # buildable_component_modules/0).
+      # The components the run validated are the ones its options name.
       templatable_modules = Compiler.list_pages(module_info_plt) ++ opts[:component_modules]
 
       # The kept IR PLT holds no IR of a component no page reaches, so the full validation builds
@@ -4562,8 +4428,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       module_info_plt = PLT.start(items: Map.to_list(module_infos))
 
-      # The components the build accepts, which this project's own suite narrows (see
-      # buildable_component_modules/0).
+      # The components the build accepts, the ones its options name.
       templatable_modules = Compiler.list_pages(module_info_plt) ++ opts[:component_modules]
 
       # The kept IR PLT holds no IR of a component no page reaches, so the full summary builds its

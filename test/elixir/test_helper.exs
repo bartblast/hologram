@@ -25,7 +25,7 @@ exclude_opts =
     {:win32, _name} -> [:skip_on_windows]
   end
 
-# Make OTP's :cover available (tools app) - the extractor tests exercise
+# Make OTP's :cover available (tools app) - the compiler cover tests exercise
 # cover-compiled modules, and the reference must resolve at test compile time.
 Mix.ensure_application!(:tools)
 

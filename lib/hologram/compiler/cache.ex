@@ -16,13 +16,12 @@ defmodule Hologram.Compiler.Cache do
   # each page's and component's template uses, so that a compile validates only the templates its
   # edit can affect, and each module's stack trace metadata, so that a compile rebuilds only the
   # entries of the modules it changed. So is what the data layer was derived from, so that a compile
-  # derives again only the pages' part an edit reaches and the queries of the components it
-  # touched. The inputs every bundle depends on besides its modules (Hologram's own code and
-  # JavaScript, the esbuild version, the client stack traces setting) are kept with the bundles, so
-  # that a compile whose inputs differ forgets them. Started on first use and not linked to the
-  # caller, so it outlives the compile that started it. A compile that finds the module infos
-  # untrusted here (no editable modules kept) starts from the build dir, so nothing depends on the
-  # cache for correctness.
+  # derives again only the pages' part an edit reaches. The inputs every bundle depends on besides
+  # its modules (Hologram's own code and JavaScript, the esbuild version, the client stack traces
+  # setting) are kept with the bundles, so that a compile whose inputs differ forgets them. Started
+  # on first use and not linked to the caller, so it outlives the compile that started it. A compile
+  # that finds the module infos untrusted here (no editable modules kept) starts from the build dir,
+  # so nothing depends on the cache for correctness.
   # The cache also registers Hologram.Compiler.Tracer when it starts, and owns its table: the
   # modules the tracer records are only of use to a compile that has the kept state to apply them
   # to, so the two live and die together.
@@ -70,11 +69,10 @@ defmodule Hologram.Compiler.Cache do
           template_refs: %{module => Compiler.template_refs()} | nil
         }
 
-  # What the data layer was derived from and what it rendered: the registered queries of every
-  # component of the build, the definitions of its derived fields, what the data layer read of each
-  # page's reach, and the statement the runtime script sets the client's data layer constants with.
+  # What the data layer was derived from and what it rendered: the definitions of its derived
+  # fields, what the data layer read of each page's reach, and the statement the runtime script sets
+  # the client's data layer constants with.
   @type data_layer_state :: %{
-          components: %{module => Compiler.component_queries()},
           derived: Compiler.derived_definitions(),
           pages: %{module => Compiler.kept_page_reach()},
           sync_constants_js: String.t()
@@ -464,10 +462,10 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
-  Keeps what the data layer was derived from and what it rendered: the registered queries of every
-  component of the build, what the data layer read of each page's reach, and the statement the
-  runtime script sets the client's data layer constants with. nil forgets it, so that the next
-  compile derives the whole data layer again.
+  Keeps what the data layer was derived from and what it rendered: the definitions of its derived
+  fields, what the data layer read of each page's reach, and the statement the runtime script sets
+  the client's data layer constants with. nil forgets it, so that the next compile derives the
+  whole data layer again.
   """
   @spec put_data_layer(data_layer_state | nil) :: :ok
   def put_data_layer(data_layer_state) do

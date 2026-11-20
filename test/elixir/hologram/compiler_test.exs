@@ -18,19 +18,11 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Entity.Model
   alias Hologram.Policy
   alias Hologram.Query
-  alias Hologram.Query.Placeholder
-  alias Hologram.Query.Stage
   alias Hologram.Reflection
   alias Hologram.Runtime.Serializer
   alias Hologram.Sync.Frame
 
-  alias Hologram.Test.Fixtures.Component.Module1, as: ComponentModule1
   alias Hologram.Test.Fixtures.Component.Module37, as: OtherContextComponent
-  alias Hologram.Test.Fixtures.Component.Module40, as: ComponentModule40
-  alias Hologram.Test.Fixtures.Component.Module41, as: ComponentModule41
-  alias Hologram.Test.Fixtures.Component.Module53, as: ComponentModule53
-  alias Hologram.Test.Fixtures.Component.Module54, as: ComponentModule54
-  alias Hologram.Test.Fixtures.Component.Module55, as: ComponentModule55
   alias Hologram.Test.Fixtures.Entity.Derived.Module2, as: DerivedModule2
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
@@ -147,7 +139,6 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module49
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84, as: QueryExtractorModule84
 
   @app "(hologram #{Application.spec(:hologram, :vsn)})"
   @root_dir Reflection.root_dir()
@@ -267,27 +258,15 @@ defmodule Hologram.CompilerTest do
   end
 
   # What the data layer folds its outputs from, for the given pages, derived the way the compile task
-  # derives it: each page's reach on the given graph folded into what the data layer keeps, and the
-  # queries of the components the pages reach.
+  # derives it: each page's reach on the given graph folded into what the data layer keeps.
   defp derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages) do
-    reach_by_page =
-      pages
-      |> list_reach_by_page(call_graph)
-      |> build_kept_page_reach(permission_checking_pages, module_info_plt, PLT.start())
-
-    entity_types = Reflection.list_entities(module_info_plt)
-
-    component_queries =
-      reach_by_page
-      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
-      |> Enum.uniq()
-      |> extract_component_queries(entity_types, PLT.start())
-
-    {reach_by_page, component_queries}
+    pages
+    |> list_reach_by_page(call_graph)
+    |> build_kept_page_reach(permission_checking_pages, module_info_plt, PLT.start())
   end
 
   defp derive_sync_constants(pages, call_graph, module_info_plt, permission_checking_pages) do
-    {reach_by_page, _component_queries} =
+    reach_by_page =
       derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages)
 
     build_sync_constants(reach_by_page, module_info_plt)
@@ -1544,7 +1523,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      {reach_by_page, _component_queries} =
+      reach_by_page =
         derive_kept_reach([PageModule18], call_graph, module_info_plt, [PageModule18])
 
       assert permission_checking?(reach_by_page)
@@ -1554,7 +1533,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      {reach_by_page, _component_queries} =
+      reach_by_page =
         derive_kept_reach([PageModule18], call_graph, module_info_plt, [])
 
       refute permission_checking?(reach_by_page)
@@ -2128,7 +2107,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      {reach_by_page, _component_queries} =
+      reach_by_page =
         derive_kept_reach(Reflection.list_pages(), call_graph, module_info_plt, [])
 
       assert validate_query_chains!(reach_by_page, module_info_plt) == :ok
@@ -2138,7 +2117,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      {reach_by_page, _component_queries} =
+      reach_by_page =
         derive_kept_reach([PageModule24], call_graph, module_info_plt, [])
 
       assert [%{mfa: {PageModule24, :__derived_holders__, 0}, root: Entity16}] =
@@ -2149,7 +2128,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      {reach_by_page, _component_queries} =
+      reach_by_page =
         derive_kept_reach([PageModule25], call_graph, module_info_plt, [])
 
       assert reach_by_page[PageModule25].query_chains == []
@@ -7297,110 +7276,6 @@ defmodule Hologram.CompilerTest do
       launcher_path = Path.join([node_modules_path, ".bin", "esbuild"])
 
       assert esbuild_bin_path(node_modules_path) == launcher_path
-    end
-  end
-
-  describe "extract_component_queries/3" do
-    setup do
-      [entity_types: Reflection.list_entities(), ir_plt: PLT.start()]
-    end
-
-    test "builds the modules a derived field calls that the PLT lacks into it", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      extract_component_queries([ComponentModule54], entity_types, ir_plt)
-
-      assert PLT.member?(ir_plt, ComponentModule55)
-    end
-
-    test "extracts the queries of every given component, keyed by module", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      module_40_term =
-        Entity2
-        |> filter(a: true)
-        |> sort(c)
-        |> Stage.normalize()
-
-      module_41_term =
-        Entity2
-        |> filter(b >= ^%Placeholder{name: :min_b})
-        |> Stage.normalize()
-
-      assert extract_component_queries(
-               [ComponentModule40, ComponentModule41],
-               entity_types,
-               ir_plt
-             ) ==
-               %{
-                 ComponentModule40 => %{
-                   terms: [module_40_term]
-                 },
-                 ComponentModule41 => %{
-                   terms: [module_41_term]
-                 }
-               }
-    end
-
-    test "reads the IR of the modules a derived field calls the PLT holds instead of building it",
-         %{
-           entity_types: entity_types,
-           ir_plt: ir_plt
-         } do
-      build_missing_ir!(ir_plt, [ComponentModule54, ComponentModule55])
-
-      count =
-        count_calls({IR, :for_module, 2}, fn ->
-          extract_component_queries([ComponentModule54], entity_types, ir_plt)
-        end)
-
-      assert count == 0
-    end
-
-    test "records nothing for a component declaring no derived field", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      assert extract_component_queries([ComponentModule1], entity_types, ir_plt) == %{
-               ComponentModule1 => %{terms: []}
-             }
-    end
-
-    test "extracts the queries a component's derived fields build", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      queries = extract_component_queries([QueryExtractorModule84], entity_types, ir_plt)
-
-      assert queries == %{
-               QueryExtractorModule84 => %{
-                 terms: [%Query{entity: Entity2, filter: [{:a, :==, true}], sort: [id: :asc]}]
-               }
-             }
-    end
-
-    test "answers for no component with no entry", %{entity_types: entity_types, ir_plt: ir_plt} do
-      assert extract_component_queries([], entity_types, ir_plt) == %{}
-    end
-
-    # The refusal is the query stage's rather than a validation's - the derived field includes a
-    # name its entity type does not declare, so the extraction never reaches a term to object to.
-    test "raises for a derived field the extractor refuses", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      expected_msg =
-        normalize_newlines("""
-        test/elixir/support/fixtures/component/module_53.ex:8: derived field :entities in Hologram.Test.Fixtures.Component.Module53 builds an invalid query - unknown relationship :unknown in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c
-
-            #{@app} test/elixir/support/fixtures/component/module_53.ex:8: Hologram.Test.Fixtures.Component.Module53.__derived_entities__/0\
-        """)
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_component_queries([ComponentModule53], entity_types, ir_plt)
-      end
     end
   end
 

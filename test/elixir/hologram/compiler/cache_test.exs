@@ -24,12 +24,14 @@ defmodule Hologram.Compiler.CacheTest do
 
   defp data_layer_state do
     %{
-      components: %{Module1 => %{terms: []}},
+      derived: %{definitions: %{}, read_modules: []},
       pages: %{
         Module2 => %{
+          atoms: MapSet.new(),
           checks_permissions?: false,
           components: [Module1],
           modules: MapSet.new([Module1, Module2]),
+          query_chains: [],
           reads_session_user?: false
         }
       },
