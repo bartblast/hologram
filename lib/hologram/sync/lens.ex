@@ -669,6 +669,7 @@ defmodule Hologram.Sync.Lens do
 
   # The names come from the release's own migrations, so the atoms this makes are bounded by the
   # history. A tab's old reference field may name no field any current struct has.
+  # sobelow_skip ["DOS.BinToAtom"]
   # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
   defp reference_key(name), do: :"#{name}_id"
 
