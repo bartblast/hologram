@@ -73,8 +73,11 @@ defmodule Hologram.Sync.Lens do
   # How long a process waiting for another to work out a history or a lens sleeps between looks.
   @wait_ms 5
 
-  # How long an answer not kept is shared with the processes that waited for it.
+  # How long an answer not kept is shared with whoever asks for it.
   @shared_ms 1_000
+
+  # How often a waiting process asks for the lock again.
+  @lock_ms 100
 
   # What a frame spells of a type the lens changes nothing of, bar its label.
   @untouched_wire %{edges: %{}, enums: %{}, keys: %{}, label: nil}
@@ -673,8 +676,11 @@ defmodule Hologram.Sync.Lens do
   # kept. Kept only while the model is the one it was worked out for: a live reload compiling
   # between the two reads would otherwise keep a lens of one model under another's hash.
   #
-  # An answer not kept - and a raise, a read the database failed - is shared for a moment with the
-  # processes waiting for it, so a wave doesn't work it out again one process after another.
+  # An answer not kept - and a raise, a read the database failed - is shared for a moment with every
+  # caller, waiting or arriving, so a wave doesn't work it out again one process after another. A
+  # tab whose stream a failed read ended greets again within that moment and is answered the same.
+  # Waiting processes look at the answer every few milliseconds and ask for the lock less often,
+  # since every ask is a call to the node's lock server.
   defp cached(key, current_hash, compute) do
     case fresh(key) do
       nil -> compute_or_wait(key, current_hash, compute)
@@ -713,9 +719,20 @@ defmodule Hologram.Sync.Lens do
         :global.del_lock(lock, [node()])
       end
     else
-      Process.sleep(@wait_ms)
+      wait(key, current_hash, compute, div(@lock_ms, @wait_ms))
+    end
+  end
 
-      cached(key, current_hash, compute)
+  # A holder that dies keeps nothing, so a waiter asks for the lock again now and then.
+  defp wait(key, current_hash, compute, 0), do: cached(key, current_hash, compute)
+
+  defp wait(key, current_hash, compute, looks_left) do
+    Process.sleep(@wait_ms)
+
+    case fresh(key) do
+      nil -> wait(key, current_hash, compute, looks_left - 1)
+      {:recent, outcome} -> replay(outcome)
+      answer -> answer
     end
   end
 
@@ -727,14 +744,21 @@ defmodule Hologram.Sync.Lens do
     end
   end
 
+  # A hold is never shared: a caller arriving after the model is released has to read it again.
   defp compute_outcome(compute) do
     {:value, compute.()}
+  rescue
+    error in Hologram.StaleModelError -> reraise error, __STACKTRACE__
   catch
     kind, reason -> {:raise, kind, reason, __STACKTRACE__}
   end
 
   defp kept({:value, {:keep, answer}}, key, current_hash) do
-    if Model.hash() == current_hash, do: keep(key, current_hash, answer)
+    if Model.hash() == current_hash do
+      keep(key, current_hash, answer)
+    else
+      share(key, {:value, answer})
+    end
 
     answer
   end
