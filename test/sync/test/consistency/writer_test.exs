@@ -5,6 +5,7 @@ defmodule HologramSyncTests.Consistency.WriterTest do
   import HologramSyncTests.Helpers
 
   alias Hologram.DB
+  alias Hologram.DB.Connection
   alias HologramSyncTests.Consistency.Checks
   alias HologramSyncTests.Consistency.Client
   alias HologramSyncTests.Consistency.History
@@ -58,9 +59,11 @@ defmodule HologramSyncTests.Consistency.WriterTest do
   } do
     test_pid = self()
 
+    # Held until PostgreSQL shows the waiter waiting on an advisory lock, so the waiter really
+    # reached the lock while the holder had it.
     hold = fn ->
       send(test_pid, :holding)
-      Process.sleep(300)
+      send(test_pid, {:waiter_seen, await_lock_waiter()})
     end
 
     holder =
@@ -71,12 +74,11 @@ defmodule HologramSyncTests.Consistency.WriterTest do
     assert_receive :holding, 5_000
     waiter = Task.async(fn -> Writer.commit(history, :waiter, [create_tag("waiter", 0)]) end)
 
-    assert {:committed, holder_entry} = Task.await(holder)
+    assert {:committed, holder_entry} = Task.await(holder, 10_000)
     assert {:committed, waiter_entry} = Task.await(waiter)
 
-    assert waiter_entry.after_lock_at - holder_entry.after_lock_at >=
-             System.convert_time_unit(300, :millisecond, :native)
-
+    assert_received {:waiter_seen, true}
+    assert holder_entry.after_lock_at < waiter_entry.after_lock_at
     assert tag_names(holder_entry.state) == ["holder"]
     assert tag_names(waiter_entry.state) == ["holder", "waiter"]
   end
@@ -128,6 +130,30 @@ defmodule HologramSyncTests.Consistency.WriterTest do
 
     stale = %{List.last(records) | carried: %{"title" => "never written"}}
     assert [_leak] = Checks.leaks([stale], History.entries(history), member.id)
+  end
+
+  defp await_lock_waiter(attempts \\ 250) do
+    {:ok, %{rows: [[waiting]]}} =
+      Connection.query(
+        """
+        SELECT count(*) FROM pg_locks
+        WHERE locktype = 'advisory' AND NOT granted AND objid = 1598 AND objsubid = 1
+          AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+        """,
+        []
+      )
+
+    cond do
+      waiting > 0 ->
+        true
+
+      attempts == 0 ->
+        false
+
+      true ->
+        Process.sleep(20)
+        await_lock_waiter(attempts - 1)
+    end
   end
 
   defp create_tag(name, hold_ms) do
