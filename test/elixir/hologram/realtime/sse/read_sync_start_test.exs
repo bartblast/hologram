@@ -210,15 +210,16 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
                 }}
     end
 
-    # A client of another model is sent only the types its bundle names, and its place names those.
+    # A client of another model is sent only the types its bundle names, and its place names those -
+    # here none, where the build syncs `Module2`.
     test "names the types an old client is served in the place it is handed" do
-      serving = %{lens: :a_lens, model_hash: Model.hash(), types: [Module2]}
+      serving = %{lens: :a_lens, model_hash: Model.hash(), types: []}
 
       assert {:ok, start} = read_sync_start(nil, nil, @policy_hash, false, true, serving)
 
       assert start.lens == :a_lens
-      assert start.synced_types == [Module2]
-      assert start.types_hash == Cursor.types_hash([Module2], false, Model.hash())
+      assert start.synced_types == []
+      assert start.types_hash == Cursor.types_hash([], false, Model.hash())
     end
 
     # A live reload between the handshake and these reads can change the model the old client's lens
@@ -233,15 +234,9 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
       {tx, seq} = seed(200)
 
       # Filled with the build's own types, which the old client isn't served.
-      cursor =
-        Cursor.encode(
-          tx,
-          seq,
-          @policy_hash,
-          Cursor.types_hash([Module2, MyApp.Other], false, Model.hash())
-        )
+      cursor = Cursor.encode(tx, seq, @policy_hash, types_hash())
 
-      serving = %{lens: :a_lens, model_hash: Model.hash(), types: [Module2]}
+      serving = %{lens: :a_lens, model_hash: Model.hash(), types: []}
 
       assert {:ok, %{cursor: nil, resync_reason: :synced_types}} =
                read_sync_start(cursor, nil, @policy_hash, false, true, serving)
