@@ -562,7 +562,8 @@ defmodule Hologram.Realtime.SSE do
   # any of them looked. The reads are then of rules other than the ones the handshake compared the
   # client's with, and a returning client would resume under the old ones. So the rules are asked
   # for once more after the reads, and other rules answer `:rules_changed`, for the start to be made
-  # again from the handshake.
+  # again from the handshake. So does another model than the one an old client's lens translates
+  # from.
   #
   # `serving` is how the handshake serves the client (see `Hologram.Sync.Handshake.check/1`): an old
   # client's lens and the types it is sent travel on to its session, and its place names those
@@ -587,9 +588,12 @@ defmodule Hologram.Realtime.SSE do
     # The types this build syncs, which a place names beside the rules: a client filled with others
     # holds no rows of a type added since. Whether its browser checks permissions: a client filled
     # without the checks holds rows carrying no verdicts. And the model the rows were read under,
-    # which a migration can change at rest.
+    # which a migration can change at rest. Read once, so the place and the check of an old client's
+    # lens below are of one model.
+    model_hash = Model.hash()
+
     types_hash =
-      Cursor.types_hash(synced_types, QueryCache.permission_checking?(), Model.hash())
+      Cursor.types_hash(synced_types, QueryCache.permission_checking?(), model_hash)
 
     resumes = resume? and cursor != nil
     resync_reason = if resumes, do: resync_reason(cursor, policy_hash, types_hash)
@@ -605,10 +609,19 @@ defmodule Hologram.Realtime.SSE do
       types_hash: types_hash
     }
 
-    if Policy.hash() == policy_hash, do: {:ok, start}, else: :rules_changed
+    if Policy.hash() == policy_hash and model_unchanged?(serving, model_hash),
+      do: {:ok, start},
+      else: :rules_changed
   rescue
     StaleModelError -> :held
   end
+
+  # An old client's lens translates rows of the model running when it was built, and a live reload
+  # can have changed it since: the start is then made again, as for rules that changed.
+  defp model_unchanged?(%{lens: nil}, _model_hash), do: true
+
+  defp model_unchanged?(%{model_hash: lens_model_hash}, model_hash),
+    do: lens_model_hash == model_hash
 
   # The options a sync session is started with, for the given user and page, under the rules of the
   # given policy hash, from what the start read decided (see `read_sync_start/6`) and what was read
@@ -1190,8 +1203,9 @@ defmodule Hologram.Realtime.SSE do
           :held ->
             {conn, {:held, resume?}}
 
-          # The rules changed after the handshake, and nothing was sent yet: the start is made
-          # again from the handshake, under the rules the build enforces now.
+          # The rules changed after the handshake - or the model an old client's lens translates
+          # from - and nothing was sent yet: the start is made again from the handshake, under the
+          # rules and the model the build has now.
           :rules_changed ->
             start_syncing(conn, user_id, resume?)
         end

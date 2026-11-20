@@ -50,8 +50,9 @@ defmodule Hologram.Sync.Handshake do
   shape. It keeps its bundle's rules, which decide only what its pages offer.
 
   `serving` says how: `%{lens: nil, types: nil}` for a client of this model, sent the entity types
-  this build syncs as they are, and for one of another `%{lens: lens, types: types}`, with the lens
-  it is served through and the current entity types of the ones its greeting names. Every one has
+  this build syncs as they are, and for one of another `%{lens: lens, model_hash: hash, types:
+  types}`, with the lens it is served through, the hash of the model the lens translates from and
+  the current entity types of the ones its greeting names. Every one has
   to be a type this build syncs: one only an older build's code read has no rows coming, so a client
   naming it is told to reload, and so is one whose greeting says nothing of its types - a bundle
   built before bundles named them, or one whose list was too long to carry.
@@ -62,7 +63,7 @@ defmodule Hologram.Sync.Handshake do
   """
   @spec check(map) ::
           {:sync, module, String.t() | nil, String.t(), boolean,
-           %{lens: Lens.t() | nil, types: list(module) | nil}}
+           %{optional(:model_hash) => String.t(), lens: Lens.t() | nil, types: list(module) | nil}}
           | {:reload, atom}
           | :held
           | :no_sync
@@ -82,8 +83,7 @@ defmodule Hologram.Sync.Handshake do
     cond do
       not Model.exists?() -> :no_sync
       protocol_version != Frame.protocol_version() -> {:reload, :protocol_version}
-      model_hash != Model.hash() -> sync_old(greeting, page, model_hash)
-      true -> sync(greeting, page)
+      true -> sync_model(greeting, page, model_hash, Model.hash())
     end
   rescue
     StaleModelError -> :held
@@ -100,11 +100,21 @@ defmodule Hologram.Sync.Handshake do
      stale_rules?(greeting[:policy_hash], policy_hash), %{lens: nil, types: nil}}
   end
 
+  defp sync_model(greeting, page, current_hash, current_hash), do: sync(greeting, page)
+
+  defp sync_model(greeting, page, model_hash, _current_hash),
+    do: sync_old(greeting, page, model_hash)
+
+  # The lens is of the model running when it was built, which a live reload can change before the
+  # session starts - so the serving names it, and the start checks it still runs (see
+  # `Hologram.Realtime.SSE.read_sync_start/6`).
   defp sync_old(greeting, page, model_hash) do
     with labels when is_list(labels) <- greeting[:synced_types],
          {:ok, lens} <- Lens.for_hash(model_hash),
          {:ok, types} <- served_types(lens, labels) do
-      {:sync, page, greeting[:cursor], Policy.hash(), false, %{lens: lens, types: types}}
+      serving = %{lens: lens, model_hash: lens.model_hash, types: types}
+
+      {:sync, page, greeting[:cursor], Policy.hash(), false, serving}
     else
       _unservable -> {:reload, :model_hash}
     end

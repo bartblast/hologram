@@ -148,8 +148,12 @@ defmodule Hologram.Sync.HandshakeTest do
     test "serves a client built against an earlier point of the history through a lens" do
       stand_history()
 
-      assert {:sync, MyApp.BoardPage, nil, @policy_hash, false, %{lens: lens, types: [Module2]}} =
+      assert {:sync, MyApp.BoardPage, nil, @policy_hash, false,
+              %{lens: lens, model_hash: model_hash, types: [Module2]}} =
                check(old_greeting(%{cursor: nil}))
+
+      # The model the lens translates from, which the start checks again.
+      assert model_hash == Model.hash()
 
       assert Lens.old_type(lens, Module2) == MyApp.OldTask
       assert Lens.old_attribute(lens, Module2, :c) == :title

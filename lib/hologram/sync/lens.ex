@@ -27,12 +27,15 @@ defmodule Hologram.Sync.Lens do
   alias Hologram.Entity.Model
   alias Hologram.Migration.Loader
 
-  defstruct global_roles: %{}, resolved: nil, types: %{}
+  # `model_hash` is the hash of the running model the lens translates from, set by `for_hash/1`
+  # for whoever starts a session with it to check that model still runs.
+  defstruct global_roles: %{}, model_hash: nil, resolved: nil, types: %{}
 
   @type old(name) :: name | :"$new"
 
   @type t :: %__MODULE__{
           global_roles: %{module => old(module)},
+          model_hash: String.t() | nil,
           resolved: resolved | nil,
           types: %{module => type_entry}
         }
@@ -667,7 +670,10 @@ defmodule Hologram.Sync.Lens do
   # never written again for the same current model.
   defp cached_lens(current_hash, version, history, entity_types) do
     cached({__MODULE__, :lens, current_hash, version}, current_hash, fn ->
-      {:keep, lens_at(version, history, entity_types)}
+      case lens_at(version, history, entity_types) do
+        {:ok, lens} -> {:keep, {:ok, %{lens | model_hash: current_hash}}}
+        :error -> {:keep, :error}
+      end
     end)
   end
 
@@ -676,8 +682,9 @@ defmodule Hologram.Sync.Lens do
   # kept. Kept only while the model is the one it was worked out for: a live reload compiling
   # between the two reads would otherwise keep a lens of one model under another's hash.
   #
-  # An answer not kept - and a raise, a read the database failed - is shared for a moment with every
-  # caller, waiting or arriving, so a wave doesn't work it out again one process after another. A
+  # An answer not kept for good - and a raise, a read the database failed - is shared for a moment
+  # with every caller, waiting or arriving, so a wave doesn't work it out again one process after
+  # another. Except one worked out across a model change, which is of a model no longer running. A
   # tab whose stream a failed read ended greets again within that moment and is answered the same.
   # Waiting processes look at the answer every few milliseconds and ask for the lock less often,
   # since every ask is a call to the node's lock server.
@@ -753,12 +760,11 @@ defmodule Hologram.Sync.Lens do
     kind, reason -> {:raise, kind, reason, __STACKTRACE__}
   end
 
+  # An answer worked out across a model change is neither kept nor shared: it is of a model that no
+  # longer runs, and the start of the session it was asked for checks the model again and starts
+  # over (see `Hologram.Realtime.SSE.read_sync_start/6`).
   defp kept({:value, {:keep, answer}}, key, current_hash) do
-    if Model.hash() == current_hash do
-      keep(key, current_hash, answer)
-    else
-      share(key, {:value, answer})
-    end
+    if Model.hash() == current_hash, do: keep(key, current_hash, answer)
 
     answer
   end

@@ -15,7 +15,8 @@ defmodule Hologram.Sync.Lens.ForHashTest do
   end
 
   # The keys of the answers kept for good - an answer not kept is shared for a moment, as
-  # `{:recent, until, outcome}`, with whoever asks for it.
+  # `{:recent, until, outcome}`, with whoever asks for it, unless it was worked out across a model
+  # change.
   defp kept_keys do
     for {key, value} <- :persistent_term.get(),
         is_tuple(key) and tuple_size(key) > 1 and elem(key, 0) == Lens,
