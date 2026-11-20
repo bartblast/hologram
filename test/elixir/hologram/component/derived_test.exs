@@ -7,6 +7,8 @@ defmodule Hologram.Component.DerivedTest do
   alias Hologram.Component.NotComputed
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Component.Module37
+  alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
+  alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Page.Module17
 
@@ -68,6 +70,51 @@ defmodule Hologram.Component.DerivedTest do
       assert compute(entries, Module37, %{}, %{}, %{}, query_opts(run_query)) == %{
                entities: Stage.normalize(Entity2)
              }
+    end
+
+    test "raises on a query reading a type that declares no allow lines, before running it" do
+      entries = [entry(:rows, [Entity1], [], fn -> filter(Entity1, []) end)]
+
+      assert_error Hologram.MisuseError,
+                   "derived field :rows in Hologram.Test.Fixtures.Component.Module37 reads " <>
+                     "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
+                     "default deny returns no rows to any session. Add allow lines, or drop the query.",
+                   fn -> compute(entries, Module37, %{}, %{}, %{}, query_opts(&no_query/3)) end
+    end
+
+    test "raises on a query filtering on a server-only attribute, before running it" do
+      entries = [
+        entry(:rows, [Entity15], [:token], fn token -> filter(Entity15, token == ^token) end)
+      ]
+
+      assert_error Hologram.MisuseError,
+                   "derived field :rows in Hologram.Test.Fixtures.Component.Module37 filters or " <>
+                     "sorts on server_only attributes (Hologram.Test.Fixtures.Entity.Module15 " <>
+                     ":token) - the client never holds those values, so it could not evaluate the " <>
+                     "reference locally. Drop the reference, or read the rows through the trusted " <>
+                     "backend API.",
+                   fn ->
+                     compute(entries, Module37, %{token: "t"}, %{}, %{}, query_opts(&no_query/3))
+                   end
+    end
+
+    test "raises on a query sorting on a server-only attribute" do
+      entries = [entry(:rows, [Entity15], [], fn -> sort(Entity15, secret_note) end)]
+
+      assert_error Hologram.MisuseError,
+                   ~r/^derived field :rows in .+ filters or sorts on server_only attributes \(Hologram\.Test\.Fixtures\.Entity\.Module15 :secret_note\)/,
+                   fn -> compute(entries, Module37, %{}, %{}, %{}, query_opts(&no_query/3)) end
+    end
+
+    test "raises on a query claiming trust" do
+      entries = [entry(:rows, [Entity15], [], fn -> trust(filter(Entity15, label == "x")) end)]
+
+      assert_error Hologram.MisuseError,
+                   "derived field :rows in Hologram.Test.Fixtures.Component.Module37 claims the " <>
+                     "server's authority with trust() - a component's query is read for the " <>
+                     "session user on both tiers, so it cannot claim another. Drop trust(), or " <>
+                     "read through the backend API in a command.",
+                   fn -> compute(entries, Module37, %{}, %{}, %{}, query_opts(&no_query/3)) end
     end
 
     test "raises on a query of another shape than the type" do

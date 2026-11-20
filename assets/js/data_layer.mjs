@@ -11,6 +11,7 @@ import ManuallyPortedElixirHologramEntity from "./elixir/hologram/entity.mjs";
 import ManuallyPortedElixirHologramJob from "./elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQueryStage from "./elixir/hologram/query/stage.mjs";
 import Model from "./model.mjs";
+import QueryCheck from "./query_check.mjs";
 import QueryKernel from "./query_kernel.mjs";
 import QuerySpelling from "./query_spelling.mjs";
 import ReloadNotice from "./reload_notice.mjs";
@@ -574,6 +575,11 @@ export default class DataLayer {
   // runs.
   static openBatch(target) {
     Batches.open(target);
+  }
+
+  // Why the given normalized term can't be a derived field's query, or null (see QueryCheck).
+  static queryRefusal(term) {
+    return QueryCheck.refusal(term);
   }
 
   // Settles once what this tab's actions wrote is in the store, for a page about to be loaded afresh

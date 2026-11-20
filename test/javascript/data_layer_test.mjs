@@ -15,6 +15,7 @@ import ManuallyPortedElixirHologramJob from "../../assets/js/elixir/hologram/job
 import ManuallyPortedElixirHologramQueryStage from "../../assets/js/elixir/hologram/query/stage.mjs";
 import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
+import QueryCheck from "../../assets/js/query_check.mjs";
 import QuerySpelling from "../../assets/js/query_spelling.mjs";
 import ReloadNotice from "../../assets/js/reload_notice.mjs";
 import Replica from "../../assets/js/replica.mjs";
@@ -898,6 +899,38 @@ describe("DataLayer", () => {
       DataLayer.openBatch("my_component");
 
       sinon.assert.calledOnceWithExactly(opening, "my_component");
+    });
+  });
+
+  describe("queryRefusal()", () => {
+    it("answers why the browser can't answer a query, as QueryCheck does", () => {
+      globalThis.Hologram.sync = {
+        model: {
+          "MyApp.Task": {
+            attributes: {id: "uuid", token: "string"},
+            relationships: {},
+            serverOnly: ["token"],
+          },
+        },
+      };
+
+      Model.reset();
+
+      const term = {
+        cardinality: "set",
+        entity: "MyApp.Task",
+        filter: [["token", "==", "x"]],
+        include: {},
+        skip: null,
+        sort: [],
+        take: null,
+      };
+
+      assert.strictEqual(
+        DataLayer.queryRefusal(term),
+        QueryCheck.refusal(term),
+      );
+      assert.match(DataLayer.queryRefusal(term), /^filters or sorts/);
     });
   });
 

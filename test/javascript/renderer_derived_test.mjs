@@ -789,6 +789,19 @@ describe("Renderer derived fields", () => {
       );
     });
 
+    it("raises on a query filtering on a server-only attribute", () => {
+      globalThis.Hologram.sync.model[ROW].serverOnly = ["a"];
+      Model.reset();
+
+      defineRipe("MyApp.ServerOnlyQuery");
+
+      assertBoxedError(
+        () => render(componentNode("MyApp.ServerOnlyQuery")),
+        "Hologram.MisuseError",
+        "derived field :ripe in MyApp.ServerOnlyQuery filters or sorts on server_only attributes (Hologram.Test.Fixtures.Entity.Module2 :a) - the client never holds those values, so it could not evaluate the reference locally. Drop the reference, or read the rows through the trusted backend API.",
+      );
+    });
+
     it("raises on a query of another shape than the type", () => {
       defineComponent("MyApp.WrongShape", {
         queries: ["total"],

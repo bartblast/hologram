@@ -1405,7 +1405,10 @@ export default class Renderer {
   // ones added.
   //
   // WARNING: must match compute/6 on the server, messages included - but for a value each tier
-  // spells with its own inspect, which spell structs and the key order of maps differently.
+  // spells with its own inspect, which spell structs and the key order of maps differently, for a
+  // claim of trust, which the client's trust/1 refuses in its own words where the field's function
+  // calls it, and for a query reading a type with no allow lines, which only the server refuses
+  // (see QueryCheck).
   // Deps: [:maps.put/3]
   static #computeDerived(
     moduleProxy,
@@ -1668,6 +1671,7 @@ export default class Renderer {
       const term = Hologram.dataLayer.normalizeQuery(value);
 
       Renderer.#validateDerivedQueryType(term, entry, module);
+      Renderer.#validateDerivedQuery(term, entry, module);
 
       return Hologram.dataLayer.answerDerivedQuery(
         module,
@@ -4425,6 +4429,20 @@ export default class Renderer {
     if (!matches) {
       Interpreter.raiseMisuseError(
         `derived field ${Interpreter.inspect(entry.name)} in ${module} is declared ${Interpreter.inspect(type)}, but its query is ${Renderer.#derivedQueryDescription(term)}`,
+      );
+    }
+  }
+
+  // Based on Hologram.Component.Derived's validate_query!/3
+  //
+  // Read through the data layer's handle, as the query is answered, since only a build declaring
+  // entity types ships the code that checks it.
+  static #validateDerivedQuery(term, entry, module) {
+    const refusal = Hologram.dataLayer.queryRefusal(term);
+
+    if (refusal !== null) {
+      Interpreter.raiseMisuseError(
+        `derived field ${Interpreter.inspect(entry.name)} in ${module} ${refusal}`,
       );
     }
   }

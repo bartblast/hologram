@@ -17,6 +17,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.QueryExtractor
+  alias Hologram.Component.Derived.QueryCheck
   alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.Entity.Derived
@@ -940,9 +941,9 @@ defmodule Hologram.Compiler do
       |> Enum.map(fn {module, queries} -> {module, queries.terms} end)
       |> Enum.sort()
 
-    Enum.each(module_queries, &validate_readable_queries!/1)
-    Enum.each(module_queries, &validate_client_evaluable_queries!/1)
-    Enum.each(module_queries, &validate_untrusted_queries!/1)
+    Enum.each(module_queries, &validate_queries!(&1, :dead_refusal))
+    Enum.each(module_queries, &validate_queries!(&1, :server_only_refusal))
+    Enum.each(module_queries, &validate_queries!(&1, :trust_refusal))
 
     terms = Enum.flat_map(module_queries, fn {_module, module_terms} -> module_terms end)
     entries = Registry.build(terms, permission_checking?)
@@ -5901,54 +5902,6 @@ defmodule Hologram.Compiler do
     "declared roles are: #{Enum.map_join(role_names, ", ", &inspect/1)}"
   end
 
-  defp dead_include_message(module, dead_entity_types) do
-    "the registered query in #{inspect(module)} includes #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny leaves the embed empty in every row. Add allow lines, or drop the include."
-  end
-
-  defp dead_path_message(module, dead_entity_types) do
-    "the registered query in #{inspect(module)} filters through #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny reads every such row as missing. Add allow lines, or drop the path."
-  end
-
-  defp dead_root_message(module, dead_entity_types) do
-    "the registered query in #{inspect(module)} reads #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny returns no rows to any session. Add allow lines, or drop the query."
-  end
-
-  defp declare_verb([_single_entity_type]), do: "declares"
-
-  defp declare_verb(_entity_types), do: "declare"
-
-  # A derived field holding a value includes no rows, so it names no type.
-  defp included_entity_types(term) do
-    term.include
-    |> Map.values()
-    |> Enum.reject(&is_nil/1)
-    |> Enum.flat_map(&queried_entity_types/1)
-    |> Enum.uniq()
-  end
-
-  defp listing(entity_types) do
-    Enum.map_join(entity_types, ", ", &inspect/1)
-  end
-
-  # The types a term's paths and quantifiers lead through, its includes' included: every type a hop
-  # or a quantifier's set reaches - a derived set's rows among them - which a policied read applies
-  # the read policy of.
-  defp path_entity_types(term) do
-    hop_types =
-      term.filter
-      |> Stage.relationship_chains()
-      |> Enum.flat_map(fn relationship_names ->
-        Enum.scan(relationship_names, term.entity, &Derived.related_type(&2, &1))
-      end)
-
-    term.include
-    |> Map.values()
-    |> Enum.reject(&is_nil/1)
-    |> Enum.flat_map(&path_entity_types/1)
-    |> Enum.concat(hop_types)
-    |> Enum.uniq()
-  end
-
   # Registered whenever the app HAS a grant store, because this is a lookup table: what decides
   # whether any client subscribes is the BUILD, which knows whether a page can check permissions
   # locally. An entry nothing asks for costs one map key, where a missing entry would answer
@@ -5999,22 +5952,6 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp queried_entity_types(term) do
-    nested_types =
-      term.include
-      |> Map.values()
-      |> Enum.reject(&is_nil/1)
-      |> Enum.flat_map(&queried_entity_types/1)
-
-    Enum.uniq([term.entity | nested_types])
-  end
-
-  defp server_only_listing(references) do
-    Enum.map_join(references, ", ", fn {entity_type, names} ->
-      "#{inspect(entity_type)} #{Enum.map_join(names, ", ", &inspect/1)}"
-    end)
-  end
-
   defp server_only_mfa_message(page_module, {module, function, arity}) do
     "page #{inspect(page_module)} reaches #{inspect(module)}.#{function}/#{arity} in its client " <>
       "code - the SQL surface runs only on the server, so the browser could not answer it. Call " <>
@@ -6030,114 +5967,14 @@ defmodule Hologram.Compiler do
     "#{Enum.map_join(init, ", ", &inspect/1)} and #{inspect(last)}"
   end
 
-  defp server_only_query_message(module, references) do
-    "the registered query in #{inspect(module)} filters or sorts on server_only attributes (#{server_only_listing(references)}) - the client never holds those values, so it could not evaluate the reference locally. Drop the reference, or read the rows through the trusted backend API."
-  end
-
-  # Pairs each entity type with the server-only attributes a term's filter and sort name on it -
-  # the term's own type first, then the types its paths lead to - walking include sub-terms, whose
-  # sets carry the order their relationship declares. A derived field's own reads are checked where
-  # its definition is resolved.
-  defp server_only_references(term) do
-    filter_references =
-      term.filter
-      |> Stage.predicate_references()
-      |> Enum.map(fn {relationship_names, name} ->
-        {Derived.path_target(term.entity, relationship_names), name}
-      end)
-
-    sort_references =
-      Enum.map(term.sort, fn {name, _direction} -> {term.entity, name} end)
-
-    references_by_type =
-      (filter_references ++ sort_references)
-      |> Enum.filter(fn {entity_type, name} ->
-        name in Entity.server_only_attribute_names(entity_type)
-      end)
-      |> Enum.group_by(fn {entity_type, _name} -> entity_type end, fn {_type, name} -> name end)
-
-    {own_references, path_references} = Map.split(references_by_type, [term.entity])
-
-    nested_references =
-      term.include
-      |> Map.values()
-      |> Enum.reject(&is_nil/1)
-      |> Enum.flat_map(&server_only_references/1)
-
-    sorted_path_references =
-      Enum.sort_by(path_references, fn {entity_type, _names} -> inspect(entity_type) end)
-
-    own_references
-    |> Enum.concat(sorted_path_references)
-    |> Enum.map(fn {entity_type, names} -> {entity_type, sorted_unique(names)} end)
-    |> Enum.concat(nested_references)
-  end
-
-  defp sorted_unique(names) do
-    names
-    |> Enum.uniq()
-    |> Enum.sort()
-  end
-
-  defp trusted_query_message(module) do
-    "the registered query in #{inspect(module)} claims the server's authority with trust() - a component's query is read for the session user on both tiers, so it cannot claim another. Drop trust(), or read through the backend API in a command."
-  end
-
-  # A registered query is provisioned to the client, which evaluates it locally over rows that
-  # never carry a server-only value - so it must not reference one.
-  defp validate_client_evaluable_queries!({module, module_terms}) do
+  # A registered query is read for the session user on the server and answered again on the client
+  # from its own database, so it reads only what some rule admits, names nothing the client never
+  # holds, and claims no authority (see Hologram.Component.Derived.QueryCheck).
+  defp validate_queries!({module, module_terms}, check) do
     Enum.each(module_terms, fn term ->
-      case server_only_references(term) do
-        [] ->
-          :ok
-
-        references ->
-          raise Hologram.CompileError, message: server_only_query_message(module, references)
-      end
-    end)
-  end
-
-  defp validate_readable_includes!(module, term) do
-    dead_entity_types =
-      term
-      |> included_entity_types()
-      |> Policy.dead_entity_types()
-
-    if dead_entity_types != [] do
-      raise Hologram.CompileError, message: dead_include_message(module, dead_entity_types)
-    end
-
-    :ok
-  end
-
-  # A path through a type with no allow lines reads nothing on it: the policied read applies the
-  # hop type's read policy, so every such hop is missing for every session.
-  defp validate_readable_paths!(module, term) do
-    dead_entity_types =
-      term
-      |> path_entity_types()
-      |> Policy.dead_entity_types()
-
-    if dead_entity_types != [] do
-      raise Hologram.CompileError, message: dead_path_message(module, dead_entity_types)
-    end
-
-    :ok
-  end
-
-  # A registered query naming an entity type with no allow lines is statically dead: the policied
-  # read path composes default deny into every statement it reaches. The root, an include target and
-  # a type a path goes through fail differently, so they are checked and reported apart - and a dead
-  # root is reported alone, because a query returning no rows produces no embeds to be empty either.
-  defp validate_readable_queries!({module, module_terms}) do
-    Enum.each(module_terms, fn term ->
-      case Policy.dead_entity_types([term.entity]) do
-        [] ->
-          validate_readable_includes!(module, term)
-          validate_readable_paths!(module, term)
-
-        dead_entity_types ->
-          raise Hologram.CompileError, message: dead_root_message(module, dead_entity_types)
+      if refusal = apply(QueryCheck, check, [term]) do
+        raise Hologram.CompileError,
+          message: "the registered query in #{inspect(module)} #{refusal}"
       end
     end)
   end
@@ -6201,17 +6038,6 @@ defmodule Hologram.Compiler do
     raise Hologram.CompileError,
       message:
         "unknown operation #{inspect(operation)} in #{ask_location(ask)} - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
-  end
-
-  # A registered query is read for the session user on the server and replayed on the client from
-  # its own database - there is no server authority to claim on the client, and a claim the server
-  # honored would hand the client rows it may not hold.
-  defp validate_untrusted_queries!({module, module_terms}) do
-    Enum.each(module_terms, fn term ->
-      if term.trust do
-        raise Hologram.CompileError, message: trusted_query_message(module)
-      end
-    end)
   end
 
   defp grants_window_id do

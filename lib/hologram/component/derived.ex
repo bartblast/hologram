@@ -10,6 +10,7 @@ defmodule Hologram.Component.Derived do
   # the client, which the call graph reaches through the capture __derived__/0 holds.
 
   alias Hologram.Compiler.AST
+  alias Hologram.Component.Derived.QueryCheck
   alias Hologram.Component.NotComputed
   alias Hologram.Query
   alias Hologram.Query.Stage
@@ -33,12 +34,16 @@ defmodule Hologram.Component.Derived do
   With the `:stateless` option a component renders without a cid, so it has no state to read.
 
   Raises Hologram.MisuseError when an argument has no value, when a result doesn't match the field's
-  type, when a field the build didn't register returns a query, and Hologram.StateError when a
-  stateless component's field reads state.
+  type, when a field the build didn't register returns a query, when a field's query reads a type
+  with no allow lines, filters or sorts on a server-only attribute or claims trust (see
+  `Hologram.Component.Derived.QueryCheck`), and Hologram.StateError when a stateless component's
+  field reads state.
 
   WARNING: must match the client renderer's #computeDerived (renderer.mjs), messages included - but
   for a value each tier spells with its own inspect, which spell structs and the key order of maps
-  differently.
+  differently, for a claim of trust, which the client's trust/1 refuses in its own words where the
+  field's function calls it, and for a query reading a type with no allow lines, which only the
+  server refuses (see `Hologram.Component.Derived.QueryCheck`).
   """
   @spec compute([map], module, map, map, map, keyword) :: map
   def compute(entries, module, props, state, computed, opts) do
@@ -277,6 +282,7 @@ defmodule Hologram.Component.Derived do
         term = Stage.normalize(value)
 
         validate_query_type!(term, entry, module)
+        validate_query!(term, entry, module)
 
         opts
         |> Keyword.fetch!(:run_query)
@@ -727,6 +733,18 @@ defmodule Hologram.Component.Derived do
       raise Hologram.MisuseError,
         message:
           "derived field #{inspect(entry.name)} in #{Reflection.module_name(module)} is declared #{inspect(entry.type)}, but its query is #{query_description(term)}"
+    end
+
+    :ok
+  end
+
+  # Before the query runs: the check on server-only attributes is what keeps a filter on one from
+  # telling the browser which rows hold which hidden value.
+  defp validate_query!(term, entry, module) do
+    if refusal = QueryCheck.refusal(term) do
+      raise Hologram.MisuseError,
+        message:
+          "derived field #{inspect(entry.name)} in #{Reflection.module_name(module)} #{refusal}"
     end
 
     :ok
