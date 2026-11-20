@@ -74,12 +74,19 @@ defmodule HologramSyncTests.Consistency.Writer do
 
     {:ok, _result} = Connection.query("SELECT pg_advisory_xact_lock($1)", [@lock_key])
     after_lock_at = System.monotonic_time()
+    # Strictly increasing across processes, unlike the monotonic time, which two reads can share.
+    lock_order = System.unique_integer([:monotonic, :positive])
 
     {:ok, %{rows: [[xid]]}} = Connection.query("SELECT pg_current_xact_id()::text", [])
     state = Model.snapshot()
 
     before_commit.()
 
-    %{after_lock_at: after_lock_at, state: state, xid: String.to_integer(xid)}
+    %{
+      after_lock_at: after_lock_at,
+      lock_order: lock_order,
+      state: state,
+      xid: String.to_integer(xid)
+    }
   end
 end

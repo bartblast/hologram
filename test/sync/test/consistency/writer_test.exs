@@ -78,7 +78,7 @@ defmodule HologramSyncTests.Consistency.WriterTest do
     assert {:committed, waiter_entry} = Task.await(waiter)
 
     assert_received {:waiter_seen, true}
-    assert holder_entry.after_lock_at < waiter_entry.after_lock_at
+    assert holder_entry.lock_order < waiter_entry.lock_order
     assert tag_names(holder_entry.state) == ["holder"]
     assert tag_names(waiter_entry.state) == ["holder", "waiter"]
   end

@@ -7,8 +7,11 @@ defmodule HologramSyncTests.Consistency.HistoryTest do
   test "lists committed transactions in the order they got the commit lock" do
     history = start_supervised!(History)
 
-    for {after_lock_at, writer} <- [{20, :second}, {10, :first}, {30, :third}] do
-      :ok = History.put_committed(history, %{after_lock_at: after_lock_at, writer: writer})
+    # The last two read the same monotonic time, so only their place in lock order tells them apart.
+    for {lock_order, writer} <- [{2, :second}, {1, :first}, {3, :third}] do
+      entry = %{after_lock_at: min(lock_order, 2) * 10, lock_order: lock_order, writer: writer}
+
+      :ok = History.put_committed(history, entry)
     end
 
     writers =

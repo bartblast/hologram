@@ -5,19 +5,21 @@ defmodule HologramSyncTests.Consistency.History do
   # back - what check 2 picks the states a frame could have been read from out of.
   #
   # Writers append once their transaction has returned, so two can arrive in either order. Commit
-  # order is lock order, and each entry's `after_lock_at` is read while its transaction holds the
-  # lock every writer takes last, so sorting by it gives commit order.
+  # order is lock order, and each entry's `lock_order` is taken while its transaction holds the lock
+  # every writer takes last, so sorting by it gives commit order - `after_lock_at` too, save that two
+  # monotonic time reads can be equal.
 
   use Agent
 
   @typedoc """
   A committed transaction: its id, when it got the commit lock and when it had committed, as
-  `System.monotonic_time/0` in native units, the writer and the operations it ran, and the state of
-  the tables it left (see `HologramSyncTests.Consistency.Model.snapshot/0`).
+  `System.monotonic_time/0` in native units, its place in lock order, the writer and the operations
+  it ran, and the state of the tables it left (see `HologramSyncTests.Consistency.Model.snapshot/0`).
   """
   @type entry :: %{
           after_lock_at: integer,
           committed_at: integer,
+          lock_order: integer,
           ops: list(String.t()),
           state: map,
           writer: term,
@@ -46,7 +48,7 @@ defmodule HologramSyncTests.Consistency.History do
   """
   @spec entries(pid) :: list(entry)
   def entries(history) do
-    Agent.get(history, &Enum.sort_by(&1.committed, fn entry -> entry.after_lock_at end))
+    Agent.get(history, &Enum.sort_by(&1.committed, fn entry -> entry.lock_order end))
   end
 
   @doc """
