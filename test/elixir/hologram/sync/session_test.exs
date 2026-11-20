@@ -2446,7 +2446,7 @@ defmodule Hologram.Sync.SessionTest do
       locked: locked,
       project: project
     } do
-      windows(%{})
+      page_types(%{})
 
       session = start_session!([])
       await_fill()
@@ -2465,7 +2465,7 @@ defmodule Hologram.Sync.SessionTest do
       locked: locked,
       project: project
     } do
-      windows(%{})
+      page_types(%{})
 
       read_fill = fn entity_type, actor_user_id, replica_id, synced_types ->
         {rows, read_seq} =
@@ -2495,7 +2495,7 @@ defmodule Hologram.Sync.SessionTest do
       locked: locked,
       project: project
     } do
-      windows(%{})
+      page_types(%{})
 
       session = start_session!([])
       await_fill()
@@ -2522,7 +2522,7 @@ defmodule Hologram.Sync.SessionTest do
         |> PolicyProject.new()
         |> DB.create!()
 
-      windows(%{})
+      page_types(%{})
 
       session = start_session!([])
       await_fill()
@@ -2549,7 +2549,7 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "tells nothing of a held row's verdicts a whole type read again left as they were" do
-      windows(%{})
+      page_types(%{})
 
       session = start_session!([])
       await_fill()
