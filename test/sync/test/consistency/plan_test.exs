@@ -83,18 +83,23 @@ defmodule HologramSyncTests.Consistency.PlanTest do
 
       assert {:committed, _seed} = Writer.commit(history, :seed, writes(plan.seed_ops))
 
-      plan.writers
-      |> Enum.flat_map(& &1.transactions)
-      |> Enum.sort_by(& &1.order)
-      |> Enum.each(fn transaction ->
+      transactions =
+        plan.writers
+        |> Enum.flat_map(& &1.transactions)
+        |> Enum.sort_by(& &1.order)
+
+      Enum.each(transactions, fn transaction ->
         assert {:committed, _entry} = Writer.commit(history, :replay, writes(transaction.ops))
       end)
 
       assert History.aborted(history) == []
 
-      view = planned_view(Model.snapshot())
+      state = Model.snapshot()
 
-      assert view == plan.planned
+      assert planned_view(state) == plan.planned
+
+      assert written_values(state) ==
+               planned_values(plan.seed_ops ++ Enum.flat_map(transactions, & &1.ops))
     end
   end
 
@@ -108,6 +113,35 @@ defmodule HologramSyncTests.Consistency.PlanTest do
   test "spells an operation in words" do
     assert Plan.describe({:rename, HologramSyncTests.Entities.Tag, "t", :name, "name 3"}) ==
              "rename HologramSyncTests.Entities.Tag t name name 3"
+  end
+
+  # Each row's name or title, as the given operations leave them taken in order.
+  defp planned_values(ops) do
+    Enum.reduce(ops, %{}, fn
+      {:create_board, id, _space_id, name, _archived}, acc -> Map.put(acc, {Board, id}, name)
+      {:create_card, id, _board_id, title}, acc -> Map.put(acc, {Card, id}, title)
+      {:create_notice, id, title}, acc -> Map.put(acc, {Notice, id}, title)
+      {:create_space, id, name}, acc -> Map.put(acc, {Space, id}, name)
+      {:create_tag, id, name}, acc -> Map.put(acc, {Tag, id}, name)
+      {:create_user, id, name}, acc -> Map.put(acc, {User, id}, name)
+      {:delete_card, id}, acc -> Map.delete(acc, {Card, id})
+      {:rename, type, id, _field, value}, acc -> Map.put(acc, {type, id}, value)
+      _other, acc -> acc
+    end)
+  end
+
+  defp written_values(state) do
+    for {type, field} <- [
+          {Board, "name"},
+          {Card, "title"},
+          {Notice, "title"},
+          {Space, "name"},
+          {Tag, "name"},
+          {User, "name"}
+        ],
+        {id, row} <- state.rows[type],
+        into: %{},
+        do: {{type, id}, row[field]}
   end
 
   defp planned_users(plan) do
