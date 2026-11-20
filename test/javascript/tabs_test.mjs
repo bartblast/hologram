@@ -2005,6 +2005,88 @@ describe("Tabs", () => {
         }
       });
 
+      // The tab before moved a counter from 1 to 2, stored the frame and the batch's landed mark,
+      // and closed before posting either. This tab holds the batch unlanded and the counter at 1,
+      // takes up the store, then takes the lead, and the server confirms the batch it sends again.
+      it("moves a counter the store already holds moved only once, when it takes the lead after reading the store", async () => {
+        globalThis.Hologram.sync.model["MyApp.Task"] = {
+          attributes: {count: "integer", id: "uuid"},
+          enumValues: {},
+          relationships: {},
+          serverOnly: [],
+        };
+
+        Model.reset();
+
+        sinon.stub(Batches, "flush");
+
+        LocalDatabase.putRow("MyApp.Task", {
+          $revisions: {},
+          count: 1,
+          id: "t1",
+        });
+
+        Batches.adopt([
+          {
+            actorUserId: null,
+            landed: [],
+            seq: 7,
+            writes: [
+              {
+                deltas: {count: 1},
+                id: "t1",
+                op: "update",
+                stamp: 1_798_246_400_125_952,
+                type: "MyApp.Task",
+              },
+            ],
+          },
+        ]);
+
+        let read;
+
+        sinon
+          .stub(Durability, "readBase")
+          .returns(new Promise((resolve) => (read = resolve)));
+
+        const led = sinon.spy();
+
+        try {
+          const {release} = await follow({onLead: led});
+
+          Tabs.receive(state("place-2"));
+
+          release();
+          await waitForEventLoop();
+
+          read({
+            cursor: "place-2",
+            landed: [{landed: [0], seq: 7}],
+            owner: null,
+            records: [
+              {
+                facts: {},
+                id: "t1",
+                row: {$revisions: {}, count: 2, id: "t1"},
+                type: "MyApp.Task",
+              },
+            ],
+          });
+
+          await waitForEventLoop();
+
+          assert.isTrue(led.calledOnce);
+
+          Batches.settle(7, {dropped: {}, kept: {}, status: "confirmed"});
+
+          assert.equal(LocalDatabase.baseRow("MyApp.Task", "t1").count, 2);
+        } finally {
+          Batches.reset();
+          Clock.reset();
+          Model.reset();
+        }
+      });
+
       // A completeness claim judges it: the server may no longer send it.
       it("keeps a row only the page carried, still carried", async () => {
         sinon.stub(Durability, "readBase").resolves({
