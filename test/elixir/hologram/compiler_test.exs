@@ -212,7 +212,7 @@ defmodule Hologram.CompilerTest do
 
   # A statement setting the client's data layer constants, as the runtime script takes it rendered
   # (see build_sync_constants_js/1), for the tests of what the script carries besides.
-  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "", policyHash: null, protocolVersion: 1, userEntity: null};/
+  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "", policyHash: null, protocolVersion: 1, syncedTypes: [], userEntity: null};/
 
   @tmp_dir Reflection.tmp_dir()
 
@@ -2665,12 +2665,20 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | policy_hash: "my_policy_hash"}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: "my_policy_hash", protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: "my_policy_hash", protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
     end
 
     test "renders the model hash the sync constants carry" do
       assert build_sync_constants_js(@empty_sync_constants) ==
-               ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
+    end
+
+    # Spelled as the model's keys are, which is how a query term names its entity type.
+    test "renders the entity types sync sends rows of" do
+      sync_constants = %{@empty_sync_constants | synced_types: [Entity15, Entity16]}
+
+      assert build_sync_constants_js(sync_constants) =~
+               ~s/syncedTypes: ["Hologram.Test.Fixtures.Entity.Module15","Hologram.Test.Fixtures.Entity.Module16"], /
     end
 
     # Spelled as the model's keys are, which is how a query term names its entity type.
@@ -2687,7 +2695,7 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | role_modules: [RoleModule1, RoleModule2]}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
     end
 
     # A client computes a derived field itself, from the definition the build resolved - spelled in
@@ -5698,7 +5706,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
              )
     end
 

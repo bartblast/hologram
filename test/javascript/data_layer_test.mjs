@@ -969,6 +969,43 @@ describe("DataLayer", () => {
       );
       assert.match(DataLayer.queryRefusal(term), /^filters or sorts/);
     });
+
+    // In the order the server refuses them: what the browser may not hold, then what sync never
+    // sends.
+    it("refuses a type sync never sends once nothing else is refused", () => {
+      globalThis.Hologram.sync = {
+        model: {
+          "MyApp.Task": {
+            attributes: {id: "uuid", token: "string"},
+            relationships: {},
+            serverOnly: ["token"],
+          },
+        },
+        syncedTypes: [],
+      };
+
+      Model.reset();
+
+      const term = (filter) => ({
+        cardinality: "set",
+        entity: "MyApp.Task",
+        filter,
+        include: {},
+        skip: null,
+        sort: [],
+        take: null,
+      });
+
+      assert.match(
+        DataLayer.queryRefusal(term([["token", "==", "x"]])),
+        /^filters or sorts/,
+      );
+
+      assert.match(
+        DataLayer.queryRefusal(term([])),
+        /^reads MyApp\.Task, which browser code never names/,
+      );
+    });
   });
 
   describe("rendered()", () => {
@@ -1111,7 +1148,11 @@ describe("DataLayer", () => {
       globalThis.Hologram.sync = {
         model: {
           [USER]: {
-            attributes: {email: "string", id: "uuid", password_hash: "string"},
+            attributes: {
+              email: "string",
+              id: "uuid",
+              password_hash: "string",
+            },
             relationships: {},
             serverOnly: ["password_hash"],
           },

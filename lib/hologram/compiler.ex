@@ -2402,7 +2402,8 @@ defmodule Hologram.Compiler do
   never reaches a browser. A name the code only builds at run time names nothing here, and a
   derived query reading such a type is refused on its render (see
   `Hologram.Template.Renderer`). The server reads the list (see
-  `Hologram.DB.QueryCache.synced_types/0`), the client does not.
+  `Hologram.DB.QueryCache.synced_types/0`), and the client is told it, refusing a query that reads
+  another type the same way (see `build_sync_constants_js/1`).
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_2/README.md
   """
@@ -2479,7 +2480,8 @@ defmodule Hologram.Compiler do
   `globalThis.Hologram.sync`, from the given sync constants (see `build_sync_constants/2`): the
   global roles with the role modules carrying each, the model of the entity types the client holds,
   the hash of the project's data model, the hash of the rules it was rendered with, the sync
-  protocol version, and the user entity type.
+  protocol version, the entity types sync sends rows of - which a query the browser answers may
+  only read - and the user entity type.
 
   What the runtime bundle was built against, said by the bundle itself. It has to be baked in
   rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
@@ -2516,9 +2518,15 @@ defmodule Hologram.Compiler do
       expanded_roles = render_global_expanded_roles(sync_constants.role_modules)
 
       policy_hash = Jason.encode!(sync_constants.policy_hash)
+
+      synced_types =
+        sync_constants.synced_types
+        |> Enum.map(&Codec.encode_enum_value/1)
+        |> Jason.encode!()
+
       user_entity = render_user_entity(sync_constants.user_entity)
 
-      ~s/globalThis.Hologram.sync = {expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}, userEntity: #{user_entity}};/
+      ~s/globalThis.Hologram.sync = {expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}, syncedTypes: #{synced_types}, userEntity: #{user_entity}};/
     end
   end
 

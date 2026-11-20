@@ -1005,6 +1005,8 @@ defmodule Hologram.Template.Renderer do
   # Hologram.Compiler.build_sync_constants/2), so a type reached only through a name the code builds
   # at run time is missing - and without this the browser would show the rows the render carried and
   # never update them.
+  #
+  # WARNING: must match the client's QueryCheck.unsyncedRefusal (query_check.mjs), messages included.
   defp validate_synced_types!(module, name, term) do
     synced_types = QueryCache.synced_types()
 

@@ -578,9 +578,11 @@ export default class DataLayer {
     Batches.open(target);
   }
 
-  // Why the given normalized term can't be a derived field's query, or null (see QueryCheck).
+  // Why the given normalized term can't be a derived field's query, or null (see QueryCheck): what it
+  // asks for that the browser may not hold, then a type it reads that sync never sends - in the
+  // order the server refuses them.
   static queryRefusal(term) {
-    return QueryCheck.refusal(term);
+    return QueryCheck.refusal(term) ?? QueryCheck.unsyncedRefusal(term);
   }
 
   // Settles once what this tab's actions wrote is in the store, for a page about to be loaded afresh

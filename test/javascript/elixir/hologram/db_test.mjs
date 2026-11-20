@@ -647,7 +647,11 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("appends one entry carrying only the amounts it moves", () => {
-      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 3, $revisions: {stock: 12}});
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 3,
+        $revisions: {stock: 12},
+      });
 
       const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
 
@@ -667,7 +671,11 @@ describe("Elixir_Hologram_DB", () => {
     // A delta is never merged, so there is nothing for it to be based on - and the entry says so
     // by carrying neither data nor based_on.
     it("says a move was based on nothing", () => {
-      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 3, $revisions: {stock: 12}});
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 3,
+        $revisions: {stock: 12},
+      });
 
       const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
 
@@ -678,7 +686,11 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("answers a refusal judging a move on the value it arrives at", () => {
-      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 0, $revisions: {stock: 12}});
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 0,
+        $revisions: {stock: 12},
+      });
 
       const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
 
@@ -725,7 +737,11 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("shows a moved counter moved, its revision left alone", () => {
-      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 3, $revisions: {stock: 12}});
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 3,
+        $revisions: {stock: 12},
+      });
 
       const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
 
@@ -1372,7 +1388,11 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("raises describing a bound the value broke, quoting the value", () => {
-      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 3, $revisions: {stock: 12}});
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 3,
+        $revisions: {stock: 12},
+      });
 
       const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
 
@@ -1451,6 +1471,17 @@ describe("Elixir_Hologram_DB", () => {
 
     it("answers an empty list when the type holds nothing", () => {
       assert.deepStrictEqual(read(task), Type.list([]));
+    });
+
+    // The rows of a type sync never sends are never kept current, so reading them is refused.
+    it("refuses a query reading a type sync doesn't send", () => {
+      globalThis.Hologram.sync.syncedTypes = [];
+
+      assertBoxedError(
+        () => read(task),
+        "Hologram.MisuseError",
+        `DB.read can't answer the query: it reads ${TASK}, which browser code never names, so sync never sends its rows - name the entity type, or the relationship or derived field leading to it, as written in browser code, like include(project) or %Project{}`,
+      );
     });
 
     it("answers the rows a filter admits", () => {
@@ -1568,6 +1599,16 @@ describe("Elixir_Hologram_DB", () => {
   });
 
   describe("read/2", () => {
+    it("refuses a type sync doesn't send, as read/1 does", () => {
+      globalThis.Hologram.sync.syncedTypes = [];
+
+      assertBoxedError(
+        () => readById(task, Type.bitstring(ID_1)),
+        "Hologram.MisuseError",
+        `DB.read can't answer the query: it reads ${TASK}, which browser code never names, so sync never sends its rows - name the entity type, or the relationship or derived field leading to it, as written in browser code, like include(project) or %Project{}`,
+      );
+    });
+
     it("answers the row with the given id", () => {
       LocalDatabase.putRow(TASK, row(ID_1));
 

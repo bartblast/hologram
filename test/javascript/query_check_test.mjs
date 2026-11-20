@@ -4,6 +4,7 @@ import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
 import Model from "../../assets/js/model.mjs";
 import QueryCheck from "../../assets/js/query_check.mjs";
+import derivedModel from "./support/fixtures/derived_model.mjs";
 
 defineRuntimeGlobals();
 
@@ -62,6 +63,214 @@ describe("QueryCheck", () => {
 
   afterEach(() => {
     Model.reset();
+  });
+
+  describe("unsyncedRefusal()", () => {
+    const LONELY = "MyApp.Lonely";
+
+    const syncing = (...types) => {
+      globalThis.Hologram.sync.syncedTypes = types;
+    };
+
+    const tail = (types) =>
+      `reads ${types.join(", ")}, which browser code never names, so sync never sends ${types.length === 1 ? "its rows" : "their rows"} - name the entity type, or the relationship or derived field leading to it, as written in browser code, like include(project) or %Project{}`;
+
+    beforeEach(() => {
+      globalThis.Hologram.sync.model[LONELY] = entry({});
+
+      globalThis.Hologram.sync.model[OWNER].derived = {
+        ...globalThis.Hologram.sync.model[OWNER].derived,
+        secretLabel: {
+          definition: {name: ["secret", "label"]},
+          kind: "scalar",
+        },
+        lonelyCount: {
+          definition: {
+            query: {
+              ...term(LONELY, {cardinality: "count"}),
+              source: {chain: ["lonelies"], owner: OWNER},
+            },
+          },
+          kind: "scalar",
+        },
+      };
+
+      globalThis.Hologram.sync.model[OWNER].relationships.lonelies = {
+        kind: "to_many",
+        type: LONELY,
+      };
+
+      Model.reset();
+    });
+
+    it("checks nothing for a bundle without the list of synced types", () => {
+      assert.isNull(QueryCheck.unsyncedRefusal(term(DEAD)));
+    });
+
+    it("passes a query reading only synced types", () => {
+      syncing(OWNER, SECRET);
+
+      const query = term(OWNER, {
+        filter: [[["secret", "token"], "==", "x"]],
+        include: {secrets: term(SECRET)},
+      });
+
+      assert.isNull(QueryCheck.unsyncedRefusal(query));
+    });
+
+    it("refuses a query on a type sync doesn't send", () => {
+      syncing(OWNER);
+
+      assert.strictEqual(
+        QueryCheck.unsyncedRefusal(term(SECRET)),
+        tail([SECRET]),
+      );
+    });
+
+    it("refuses a type a query includes", () => {
+      syncing(OWNER);
+
+      const query = term(OWNER, {include: {secrets: term(SECRET)}});
+
+      assert.strictEqual(QueryCheck.unsyncedRefusal(query), tail([SECRET]));
+    });
+
+    it("refuses a type a path goes through", () => {
+      syncing(OWNER);
+
+      const query = term(OWNER, {filter: [[["secret", "label"], "==", "x"]]});
+
+      assert.strictEqual(QueryCheck.unsyncedRefusal(query), tail([SECRET]));
+    });
+
+    it("refuses a type a quantifier's set goes through", () => {
+      syncing(OWNER);
+
+      const filter = [{quantifier: "any", source: ["secrets"], filter: []}];
+
+      assert.strictEqual(
+        QueryCheck.unsyncedRefusal(term(OWNER, {filter})),
+        tail([SECRET]),
+      );
+    });
+
+    it("refuses the rows of a derived set a quantifier reads", () => {
+      syncing(OWNER);
+
+      const filter = [{quantifier: "any", source: ["secretSet"], filter: []}];
+
+      assert.strictEqual(
+        QueryCheck.unsyncedRefusal(term(OWNER, {filter})),
+        tail([SECRET]),
+      );
+    });
+
+    it("refuses a type a derived field the query filters on reads", () => {
+      syncing(OWNER);
+
+      const query = term(OWNER, {filter: [["secretLabel", "==", "x"]]});
+
+      assert.strictEqual(QueryCheck.unsyncedRefusal(query), tail([SECRET]));
+    });
+
+    it("refuses the types a derived field the query includes reads, sorted", () => {
+      syncing(OWNER);
+
+      const query = term(OWNER, {
+        include: {lonelyCount: null, secretLabel: null},
+      });
+
+      assert.strictEqual(
+        QueryCheck.unsyncedRefusal(query),
+        tail([LONELY, SECRET]),
+      );
+    });
+
+    it("refuses a type a derived field the query sorts on reads", () => {
+      syncing(OWNER, SECRET);
+
+      const query = term(OWNER, {sort: [["lonelyCount", "asc"]]});
+
+      assert.strictEqual(QueryCheck.unsyncedRefusal(query), tail([LONELY]));
+    });
+  });
+
+  // The types the server lists for the same terms over the same fixtures
+  // (Hologram.Query.Window.entity_types/1), named as the derived model fixture names them.
+  describe("unsyncedRefusal() over the build's derived fields", () => {
+    const readTypes = (query) => {
+      const refusal = QueryCheck.unsyncedRefusal(query);
+
+      return refusal.match(/^reads (.+?), which/)[1].split(", ");
+    };
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {model: derivedModel, syncedTypes: []};
+      Model.reset();
+    });
+
+    it("reads what a derived field naming its own row one level out reads", () => {
+      const query = term("MyApp.Message", {
+        filter: [["later_count", ">", 1]],
+      });
+
+      assert.deepStrictEqual(readTypes(query), [
+        "MyApp.Channel",
+        "MyApp.Message",
+      ]);
+    });
+
+    it("reads what an included derived field's source leads to", () => {
+      const query = term("MyApp.Room", {include: {unread_count: null}});
+
+      assert.deepStrictEqual(readTypes(query), ["MyApp.Post", "MyApp.Room"]);
+    });
+
+    it("reads what a derived field naming its own row two levels out reads", () => {
+      const query = term("MyApp.Team", {sort: [["named_tag_count", "asc"]]});
+
+      assert.deepStrictEqual(readTypes(query), [
+        "MyApp.Note",
+        "MyApp.Tag",
+        "MyApp.Team",
+      ]);
+    });
+
+    it("reads what a derived field's branches read, through another derived field", () => {
+      const query = term("MyApp.Member", {filter: [["level", "==", "busy"]]});
+
+      assert.deepStrictEqual(readTypes(query), [
+        "MyApp.Channel",
+        "MyApp.Member",
+        "MyApp.Message",
+      ]);
+    });
+
+    it("reads what a concatenation's parts read", () => {
+      const query = term("MyApp.Member", {include: {display_name: null}});
+
+      assert.deepStrictEqual(readTypes(query), [
+        "MyApp.Channel",
+        "MyApp.Member",
+      ]);
+    });
+
+    it("reads what a condition's comparison with another row reads", () => {
+      const query = term("MyApp.Member", {
+        filter: [["named_after_channel", "==", true]],
+      });
+
+      assert.deepStrictEqual(readTypes(query), [
+        "MyApp.Channel",
+        "MyApp.Member",
+      ]);
+    });
+
+    it("tells a type the bundle's model doesn't hold as unsynced", () => {
+      const query = term("MyApp.Nope", {filter: [["x", "==", 1]]});
+
+      assert.deepStrictEqual(readTypes(query), ["MyApp.Nope"]);
+    });
   });
 
   describe("refusal()", () => {

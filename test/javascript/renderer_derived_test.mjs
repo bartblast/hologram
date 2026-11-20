@@ -911,6 +911,18 @@ describe("Renderer derived fields", () => {
       );
     });
 
+    it("raises on a query reading a type sync doesn't send", () => {
+      globalThis.Hologram.sync.syncedTypes = [];
+
+      defineRipe("MyApp.UnsyncedQuery");
+
+      assertBoxedError(
+        () => render(componentNode("MyApp.UnsyncedQuery")),
+        "Hologram.MisuseError",
+        `derived field :ripe in MyApp.UnsyncedQuery reads ${ROW}, which browser code never names, so sync never sends its rows - name the entity type, or the relationship or derived field leading to it, as written in browser code, like include(project) or %Project{}`,
+      );
+    });
+
     it("raises on a query filtering on a server-only attribute", () => {
       globalThis.Hologram.sync.model[ROW].serverOnly = ["a"];
       Model.reset();

@@ -12,6 +12,7 @@ import {grantEntry, grantId} from "./auth.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
+import QueryCheck from "../../query_check.mjs";
 import QueryKernel from "../../query_kernel.mjs";
 import Type from "../../type.mjs";
 
@@ -688,6 +689,16 @@ const Elixir_Hologram_DB = {
     const term = Elixir_Hologram_Query_Stage["normalize/1"](query);
 
     assertNoPlaceholders(term);
+
+    // Read from the rows sync keeps current, so a type it never sends would answer from rows that
+    // never change.
+    const unsynced = QueryCheck.unsyncedRefusal(term);
+
+    if (unsynced !== null) {
+      Interpreter.raiseMisuseError(
+        `DB.read can't answer the query: it ${unsynced}`,
+      );
+    }
 
     const result = QueryKernel.run(term);
 
