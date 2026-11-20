@@ -3017,7 +3017,8 @@ defmodule Hologram.Compiler do
       # and derived field they declare. A component's or a page's hold what the app wrote, its prop
       # and state defaults among them, so they are read like the rest of its code.
       declares_model? =
-        Reflection.entity?(module, module_info_plt) or Reflection.ecto_schema?(module)
+        Reflection.entity?(module, module_info_plt) or
+          Reflection.ecto_schema?(module, module_info_plt)
 
       module_mfas
       |> Enum.reject(fn {_module, function, _arity} ->
@@ -5523,15 +5524,15 @@ defmodule Hologram.Compiler do
 
   # Whether the given module's code is read - neither Elixir's, whose applications live under the
   # given directory, nor Hologram's, whose test fixtures stand in for an app's modules. Told by the
-  # module's name and where it was loaded from rather than by the application holding it, which
-  # need not be loaded while the app compiles.
+  # module's name and where its code is rather than by the application holding it, which need not
+  # be loaded while the app compiles. Asked only of a module the module info PLT records, which is
+  # an Elixir module: nothing here reads its BEAM file.
   defp app_module?(module, elixir_lib_dir) do
     name = Atom.to_string(module)
 
     cond do
       String.starts_with?(name, "Elixir.Hologram.Test.") -> true
       String.starts_with?(name, "Elixir.Hologram.") -> false
-      not Reflection.elixir_module?(module) -> false
       true -> not loaded_from?(module, elixir_lib_dir)
     end
   end

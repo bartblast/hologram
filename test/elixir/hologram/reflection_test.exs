@@ -531,6 +531,41 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "ecto_schema?/2" do
+    setup do
+      [module_info_plt: PLT.start()]
+    end
+
+    test "module the PLT holds is answered from it, without consulting the code path", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Aaa.Bbb, %{ecto_schema?: true})
+
+      assert ecto_schema?(Aaa.Bbb, module_info_plt)
+    end
+
+    test "the PLT wins over the module", %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, Module8, %{ecto_schema?: false})
+
+      refute ecto_schema?(Module8, module_info_plt)
+    end
+
+    test "module the PLT does not hold is decided the ecto_schema?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      assert ecto_schema?(Module8, module_info_plt)
+      refute ecto_schema?(Calendar.ISO, module_info_plt)
+    end
+
+    test "entry without the flag is decided the ecto_schema?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Module8, %{digest: 1})
+
+      assert ecto_schema?(Module8, module_info_plt)
+    end
+  end
+
   describe "exception?/1" do
     test "module which is an exception" do
       assert exception?(ArgumentError)

@@ -370,6 +370,19 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Like ecto_schema?/1, but answered from the given module info PLT when it records the module, so
+  that a module not loaded is not read from its BEAM file. A module the PLT does not record is
+  decided the ecto_schema?/1 way.
+  """
+  @spec ecto_schema?(any, PLT.t()) :: boolean
+  def ecto_schema?(term, module_info_plt) do
+    case module_info_flag(module_info_plt, term, :ecto_schema?) do
+      {:ok, ecto_schema?} -> ecto_schema?
+      :error -> ecto_schema?(term)
+    end
+  end
+
+  @doc """
   Returns true if the given term is an existing Elixir module, or false otherwise.
 
   Some Erlang modules use Elixir-style naming for interop (e.g. the atom `Luerl`,
