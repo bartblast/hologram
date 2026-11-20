@@ -29,8 +29,9 @@ export default class SyncStream {
   static rules = null;
 
   // Whether this tab's own stream has served it sync since the page loaded - so its bundle's rules
-  // are the ones the server enforces, or it was handed those (see rulesForGroup). Until then they
-  // are only what the bundle was built with, which a deploy since can have left behind.
+  // are the ones the server enforces, or it was handed those, or the server runs a newer model and
+  // serves this bundle by its own rules (see rulesForGroup). Until then they are only what the
+  // bundle was built with, which a deploy since can have left behind.
   static served = false;
 
   // Why the server stopped serving this tab, or null while it is served. Kept for the life of the
@@ -388,9 +389,11 @@ export default class SyncStream {
 
   // The rules the group's stream syncs under, as a frame carries them, for a tab joining it (see
   // Tabs.postState): the ones a server handed this tab, or, when it handed none, this bundle's own
-  // - a server hands over its rules exactly when a bundle's differ from them, and before anything
-  // else it serves. None before this tab's stream has served it anything: a bundle built before a
-  // deploy would hand on rules the deploy left behind.
+  // - a server of the same model hands over its rules exactly when a bundle's differ from them,
+  // and before anything else it serves. One running a newer model hands over none: its rules name
+  // what its model calls things, and this bundle's stand for what its pages offer. A group shares
+  // one model, so the rules it is handed on fit its rows. None before this tab's stream has served
+  // it anything: a bundle built before a deploy would hand on rules the deploy left behind.
   static rulesForGroup() {
     if ($.rules !== null) {
       return $.rules;

@@ -144,8 +144,10 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
                {:ok,
                 %{
                   cursor: nil,
+                  lens: nil,
                   resync_reason: nil,
                   rules: nil,
+                  synced_types: nil,
                   types_hash: types_hash()
                 }}
     end
@@ -161,8 +163,10 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
                {:ok,
                 %{
                   cursor: cursor,
+                  lens: nil,
                   resync_reason: nil,
                   rules: nil,
+                  synced_types: nil,
                   types_hash: types_hash()
                 }}
     end
@@ -178,8 +182,10 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
                {:ok,
                 %{
                   cursor: nil,
+                  lens: nil,
                   resync_reason: :policy_hash,
                   rules: nil,
+                  synced_types: nil,
                   types_hash: types_hash()
                 }}
     end
@@ -196,10 +202,41 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
                {:ok,
                 %{
                   cursor: nil,
+                  lens: nil,
                   resync_reason: :synced_types,
                   rules: nil,
+                  synced_types: nil,
                   types_hash: types_hash()
                 }}
+    end
+
+    # A client of another model is sent only the types its bundle names, and its place names those.
+    test "names the types an old client is served in the place it is handed" do
+      serving = %{lens: :a_lens, types: [Module2]}
+
+      assert {:ok, start} = read_sync_start(nil, nil, @policy_hash, false, true, serving)
+
+      assert start.lens == :a_lens
+      assert start.synced_types == [Module2]
+      assert start.types_hash == Cursor.types_hash([Module2], false, Model.hash())
+    end
+
+    test "names the types an old client is served, not the build's, in the place it resumes from" do
+      {tx, seq} = seed(200)
+
+      # Filled with the build's own types, which the old client isn't served.
+      cursor =
+        Cursor.encode(
+          tx,
+          seq,
+          @policy_hash,
+          Cursor.types_hash([Module2, MyApp.Other], false, Model.hash())
+        )
+
+      serving = %{lens: :a_lens, types: [Module2]}
+
+      assert {:ok, %{cursor: nil, resync_reason: :synced_types}} =
+               read_sync_start(cursor, nil, @policy_hash, false, true, serving)
     end
 
     # A deploy that starts syncing a type moves no row of it, so only the place's own record of the
@@ -213,8 +250,10 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
                {:ok,
                 %{
                   cursor: nil,
+                  lens: nil,
                   resync_reason: :synced_types,
                   rules: nil,
+                  synced_types: nil,
                   types_hash: types_hash()
                 }}
     end

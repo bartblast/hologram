@@ -527,6 +527,25 @@ defmodule Hologram.Realtime.SSETest do
       assert opts[:fill_place] == {200, 0}
       assert opts[:replica_id] == nil
     end
+
+    test "hands the session how an old client is served" do
+      start =
+        nil
+        |> sync_start()
+        |> Map.merge(%{lens: :a_lens, synced_types: [MyApp.Card]})
+
+      opts = sync_session_opts(nil, MyApp.Page, @policy_hash, start, connection())
+
+      assert opts[:lens] == :a_lens
+      assert opts[:synced_types] == [MyApp.Card]
+    end
+
+    test "hands a client of this model no lens and the build's types" do
+      opts = sync_session_opts(nil, MyApp.Page, @policy_hash, sync_start(nil), connection())
+
+      assert opts[:lens] == nil
+      assert opts[:synced_types] == nil
+    end
   end
 
   describe "encode_reload_envelope/2" do

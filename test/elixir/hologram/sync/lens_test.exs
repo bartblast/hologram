@@ -6,6 +6,7 @@ defmodule Hologram.Sync.LensTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.Entity.Metadata
+  alias Hologram.Entity.Model
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Lens
   alias Hologram.Test.Fixtures.Entity.Module21
@@ -959,6 +960,119 @@ defmodule Hologram.Sync.LensTest do
         ])
 
       assert servable_members(lens, %Module40{}) == %Module40{}
+    end
+  end
+
+  describe "for_hash/3" do
+    # Three files: the first creates Module39 with `points`, the second renames it to `score`, the
+    # third renames it back, so the first and the third record one hash.
+    defp history(overrides \\ %{}) do
+      migrations = [
+        %{
+          ops: [
+            %{op: :create_entity, entity: Module39},
+            %{op: :add_attribute, entity: Module39, name: :points, type: :integer, opts: []}
+          ],
+          version: "20260101000000"
+        },
+        %{
+          ops: [%{op: :rename_attribute, entity: Module39, from: :points, to: :score}],
+          version: "20260102000000"
+        },
+        %{
+          ops: [%{op: :rename_attribute, entity: Module39, from: :score, to: :points}],
+          version: "20260103000000"
+        },
+        %{
+          ops: [%{op: :rename_attribute, entity: Module39, from: :points, to: :score}],
+          version: "20260104000000"
+        }
+      ]
+
+      recorded = %{
+        "20260101000000" => "h1",
+        "20260102000000" => "h2",
+        "20260103000000" => "h1",
+        "20260104000000" => "h2"
+      }
+
+      overrides
+      |> Map.get(:recorded, recorded)
+      |> history(Map.get(overrides, :migrations, migrations))
+    end
+
+    test "serves a hash from the latest point that records it" do
+      assert {:ok, lens} = for_hash("h1", history(), @entity_types)
+
+      assert old_attribute(lens, Module39, :score) == :points
+      assert current_type(lens, label(Module39)) == Module39
+    end
+
+    test "serves the latest point, with no file after it, through a lens that changes nothing" do
+      assert {:ok, lens} = for_hash("h2", history(), @entity_types)
+
+      assert old_attribute(lens, Module39, :score) == :score
+      assert old_type(lens, Module39) == Module39
+    end
+
+    test "serves nothing for a hash no point records" do
+      assert for_hash("h9", history(), @entity_types) == :error
+    end
+
+    test "serves nothing from a point the release has no migration for" do
+      %{migrations: migrations, recorded: recorded} = history()
+      without_point = history(recorded, List.delete_at(migrations, 3))
+
+      assert for_hash("h2", without_point, @entity_types) == :error
+    end
+
+    test "serves nothing from a point before a recorded version the release lacks" do
+      %{migrations: migrations, recorded: recorded} = history()
+      lacking = history(Map.put(recorded, "20260105000000", "h3"), migrations)
+
+      assert for_hash("h1", lacking, @entity_types) == :error
+    end
+
+    test "serves nothing across a change renaming can't give back" do
+      %{migrations: migrations, recorded: recorded} = history()
+
+      deleting =
+        List.replace_at(migrations, 3, %{
+          ops: [%{op: :delete_attribute, entity: Module39, name: :points}],
+          version: "20260104000000"
+        })
+
+      assert for_hash("h1", history(recorded, deleting), @entity_types) == :error
+    end
+
+    test "serves nothing from a point whose files a fold refuses" do
+      %{migrations: migrations, recorded: recorded} = history()
+
+      drafted =
+        List.update_at(migrations, 0, fn migration ->
+          draft = %{op: :resolve!, kind: :rename, payload: %{}, line: 1}
+
+          %{migration | ops: [draft | migration.ops]}
+        end)
+
+      # The history's own fold would refuse it too, so the history is built from the files without
+      # the draft, and the point folded through the drafted ones.
+      history = %{history(recorded, migrations) | migrations: drafted}
+
+      assert for_hash("h1", history, @entity_types) == :error
+    end
+
+    # A Hologram whose model term differs from the one that applied a file builds bundles under a
+    # hash the table never recorded.
+    test "serves a hash this Hologram works out for a point the table records another for" do
+      %{migrations: migrations} = history()
+
+      first_model = Model.fold(Model.empty(), hd(migrations).ops)
+
+      assert {:ok, lens} =
+               for_hash(Model.hash(first_model), history(), @entity_types)
+
+      assert old_attribute(lens, Module39, :score) == :points
     end
   end
 

@@ -173,7 +173,7 @@ defmodule Hologram.Sync.Session do
       read_part: Keyword.get(opts, :read_part, &Live.part/6),
       replica_id: Keyword.get(opts, :replica_id),
       resuming: resuming,
-      synced_types: Keyword.get_lazy(opts, :synced_types, &QueryCache.synced_types/0),
+      synced_types: Keyword.get(opts, :synced_types) || QueryCache.synced_types(),
       told_verdicts: %{},
       trust_edge: nil,
       types_hash: Keyword.fetch!(opts, :types_hash),

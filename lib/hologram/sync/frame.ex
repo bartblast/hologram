@@ -192,8 +192,10 @@ defmodule Hologram.Sync.Frame do
   It is a notice rather than an order, and what the client makes of it is the client's business:
   it is told that nothing will be synced to it, not told to restart. A client that threw its page
   away over this would be throwing away what someone was doing to fix a mismatch they did not
-  cause - and the direction of travel is the other way, towards serving a client of an older
-  model through adapter chains rather than asking it to catch up.
+  cause. A client of an older model is served through a lens where one can be built (see
+  `Hologram.Sync.Lens`), so this goes to one only when its model changed in a way renaming can't give
+  back, the history doesn't know its model, or it reads a type this build doesn't sync or doesn't
+  say which it reads (see `Hologram.Sync.Handshake.check/1`).
   """
   @spec encode_reload_envelope(integer, atom) :: String.t()
   def encode_reload_envelope(id, reason) do

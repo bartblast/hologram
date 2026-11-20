@@ -563,22 +563,33 @@ defmodule Hologram.Realtime.SSE do
   # client's with, and a returning client would resume under the old ones. So the rules are asked
   # for once more after the reads, and other rules answer `:rules_changed`, for the start to be made
   # again from the handshake.
+  #
+  # `serving` is how the handshake serves the client (see `Hologram.Sync.Handshake.check/1`): an old
+  # client's lens and the types it is sent travel on to its session, and its place names those
+  # types.
   @doc false
-  @spec read_sync_start(String.t() | nil, term | nil, String.t(), boolean, boolean) ::
+  @spec read_sync_start(String.t() | nil, term | nil, String.t(), boolean, boolean, map) ::
           {:ok, map} | :held | :rules_changed
-  def read_sync_start(cursor, _user_id, policy_hash, stale_rules?, resume?) do
+  def read_sync_start(
+        cursor,
+        _user_id,
+        policy_hash,
+        stale_rules?,
+        resume?,
+        serving \\ %{lens: nil, types: nil}
+      ) do
     rules = if stale_rules?, do: Rules.rendered()
+
+    # A client of another model is sent only the types its bundle names (see
+    # `Hologram.Sync.Handshake.check/1`), and a place names those.
+    synced_types = serving.types || QueryCache.synced_types()
 
     # The types this build syncs, which a place names beside the rules: a client filled with others
     # holds no rows of a type added since. Whether its browser checks permissions: a client filled
     # without the checks holds rows carrying no verdicts. And the model the rows were read under,
     # which a migration can change at rest.
     types_hash =
-      Cursor.types_hash(
-        QueryCache.synced_types(),
-        QueryCache.permission_checking?(),
-        Model.hash()
-      )
+      Cursor.types_hash(synced_types, QueryCache.permission_checking?(), Model.hash())
 
     resumes = resume? and cursor != nil
     resync_reason = if resumes, do: resync_reason(cursor, policy_hash, types_hash)
@@ -587,8 +598,10 @@ defmodule Hologram.Realtime.SSE do
     # for itself, once its turn comes.
     start = %{
       cursor: if(resumes and resync_reason == nil, do: cursor),
+      lens: serving.lens,
       resync_reason: resync_reason,
       rules: rules,
+      synced_types: serving.types,
       types_hash: types_hash
     }
 
@@ -598,7 +611,7 @@ defmodule Hologram.Realtime.SSE do
   end
 
   # The options a sync session is started with, for the given user and page, under the rules of the
-  # given policy hash, from what the start read decided (see `read_sync_start/5`) and what was read
+  # given policy hash, from what the start read decided (see `read_sync_start/6`) and what was read
   # beside the connection's identity: its replica, how far that replica's batches are applied, and
   # where the log stood. Public so tests can check what the session is handed without standing up
   # a stream.
@@ -617,10 +630,12 @@ defmodule Hologram.Realtime.SSE do
       applied_seq: connection.applied_seq,
       client: self(),
       fill_place: connection.fill_place,
+      lens: start[:lens],
       page: page,
       policy_hash: policy_hash,
       read_gap: read_gap,
       replica_id: connection.replica_id,
+      synced_types: start[:synced_types],
       types_hash: types_hash
     ]
   end
@@ -1165,8 +1180,8 @@ defmodule Hologram.Realtime.SSE do
       # places the session hands over: read again for each, a live reload between two reads could
       # let a client resume under the old rules and be handed places vouching for the new ones.
       # They are asked for once more after the start reads, as a check that nothing moved them.
-      {:sync, page, cursor, policy_hash, stale_rules?} ->
-        case read_sync_start(cursor, user_id, policy_hash, stale_rules?, resume?) do
+      {:sync, page, cursor, policy_hash, stale_rules?, serving} ->
+        case read_sync_start(cursor, user_id, policy_hash, stale_rules?, resume?, serving) do
           {:ok, start} ->
             start_session(conn, greeting, user_id, page, policy_hash, start)
 

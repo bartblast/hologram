@@ -21,7 +21,11 @@ defmodule Hologram.Sync.Lens do
 
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
+  alias Hologram.DB.Connection
+  alias Hologram.DB.Mapper
   alias Hologram.Entity
+  alias Hologram.Entity.Model
+  alias Hologram.Migration.Loader
 
   defstruct global_roles: %{}, resolved: nil, types: %{}
 
@@ -38,6 +42,13 @@ defmodule Hologram.Sync.Lens do
   # letter or an underscore unless they are modules, and entity types and global roles are
   # modules.
   @new :"$new"
+
+  @type history :: %{
+          migrations: list(%{atom => any}),
+          model_hash: String.t(),
+          positions: %{String.t() => String.t()},
+          recorded: %{String.t() => String.t()}
+        }
 
   # The lens in what a frame spells: labels, wire keys and encoded enum values (see `resolve/2`).
   @type resolved :: %{
@@ -58,6 +69,12 @@ defmodule Hologram.Sync.Lens do
         }
 
   @grant_label Codec.encode_enum_value(RoleGrant)
+
+  # How long a process waiting for another to work out a history or a lens sleeps between looks.
+  @wait_ms 5
+
+  # How long an answer not kept is shared with the processes that waited for it.
+  @shared_ms 1_000
 
   # What a frame spells of a type the lens changes nothing of, bar its label.
   @untouched_wire %{edges: %{}, enums: %{}, keys: %{}, label: nil}
@@ -112,6 +129,95 @@ defmodule Hologram.Sync.Lens do
       :unservable -> :unservable
       {lens, _user_entity} -> {:ok, lens}
     end
+  end
+
+  @doc """
+  Returns the lens a tab built against the data model of the given hash is served through,
+  resolved for the current model's entity types, or `:error` when it can't be served through one:
+  the hash names no point of the release's migration history, or a change since it can't be given
+  back by renaming (see `build/2`).
+
+  The point is the latest version the hash stands for (see `history/2`). Once a history leading to
+  the running model is read, it is kept for that model, and each point's lens is built once and
+  kept under a key of its own, so a lens a session holds is never replaced under it. Each is
+  worked out by one process at a time, so a wave of old tabs reconnecting after a deploy reads the
+  table and builds a point's lens once, and a hash naming no point then costs one map lookup. A
+  history leading elsewhere is not kept, nor is a read the database fails, which raises.
+  """
+  @spec for_hash(String.t()) :: {:ok, t} | :error
+  def for_hash(model_hash) do
+    current_hash = Model.hash()
+    entity_types = Model.entity_types()
+
+    with {:ok, history} <- cached_history(current_hash),
+         {:ok, version} <- position(history, model_hash) do
+      cached_lens(current_hash, version, history, entity_types)
+    end
+  end
+
+  @doc """
+  Returns the history `for_hash/3` reads, from every version the migration table records with its
+  model hash and the release's migrations as `Hologram.Migration.Loader.list!/0` gives them.
+
+  Each version stands for the hash the table records for it, and for the hash this Hologram works
+  out for the model its file leaves: a deploy of a Hologram whose model term differs from the one
+  that applied a file builds bundles under a hash the table never recorded. Only the running
+  Hologram's is worked out, so a bundle of a release in between whose Hologram spelled the term
+  another way still can't be placed. A hash standing for several versions - a rename and back -
+  stands for the latest, which holds the same model.
+
+  The history also holds the hash of the model all the files fold to, which is the running model's
+  when the release is consistent.
+  """
+  @spec history(%{String.t() => String.t()}, list(%{atom => any})) :: history
+  def history(recorded, migrations) do
+    {model, computed} =
+      Enum.reduce(migrations, {Model.empty(), []}, fn migration, {model, acc} ->
+        folded = Model.fold(model, migration.ops)
+
+        {folded, [{migration.version, Model.hash(folded)} | acc]}
+      end)
+
+    positions =
+      recorded
+      |> Enum.concat(computed)
+      |> Enum.reduce(%{}, fn {version, model_hash}, acc ->
+        Map.update(acc, model_hash, version, &max(&1, version))
+      end)
+
+    %{
+      migrations: migrations,
+      model_hash: Model.hash(model),
+      positions: positions,
+      recorded: recorded
+    }
+  end
+
+  @doc """
+  Returns what `for_hash/1` answers for the given hash, given the history (see `history/2`) and the
+  current model's entity types.
+
+  A recorded point the release has no migration for can't be served from, and neither can one
+  before a recorded version the release lacks, since its ops are what the lens is built from.
+  """
+  @spec for_hash(String.t(), history, list(module)) :: {:ok, t} | :error
+  def for_hash(model_hash, history, entity_types) do
+    with {:ok, version} <- position(history, model_hash) do
+      lens_at(version, history, entity_types)
+    end
+  end
+
+  @doc """
+  Drops what `for_hash/1` keeps, for tests that change the migration table.
+  """
+  @spec reset_cache() :: :ok
+  def reset_cache do
+    for {key, _value} <- :persistent_term.get(),
+        is_tuple(key) and tuple_size(key) > 1 and elem(key, 0) == __MODULE__ do
+      :persistent_term.erase(key)
+    end
+
+    :ok
   end
 
   @doc """
@@ -540,6 +646,178 @@ defmodule Hologram.Sync.Lens do
   # history. A tab's old reference field may name no field any current struct has.
   # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
   defp reference_key(name), do: :"#{name}_id"
+
+  # A history whose files fold to another model than the running one - a dev node between a model
+  # edit and the migration generated for it - places a tab at a point it may not hold, so it serves
+  # none. Not kept: the files can change while the model hash stays.
+  defp cached_history(current_hash) do
+    cached({__MODULE__, :history, current_hash}, current_hash, fn ->
+      case read_history() do
+        {:ok, %{model_hash: ^current_hash} = history} -> {:keep, {:ok, history}}
+        {:ok, _other_model} -> {:pass, :error}
+        :error -> {:pass, :error}
+      end
+    end)
+  end
+
+  # Each point's lens, or that it can't be served, under a key of its own: one per version, and
+  # never written again for the same current model.
+  defp cached_lens(current_hash, version, history, entity_types) do
+    cached({__MODULE__, :lens, current_hash, version}, current_hash, fn ->
+      {:keep, lens_at(version, history, entity_types)}
+    end)
+  end
+
+  # Worked out by one process at a time: the others look again every few milliseconds, so a wave of
+  # old tabs reconnecting after a deploy reads the table once and finds the answer as soon as it is
+  # kept. Kept only while the model is the one it was worked out for: a live reload compiling
+  # between the two reads would otherwise keep a lens of one model under another's hash.
+  #
+  # An answer not kept - and a raise, a read the database failed - is shared for a moment with the
+  # processes waiting for it, so a wave doesn't work it out again one process after another.
+  defp cached(key, current_hash, compute) do
+    case fresh(key) do
+      nil -> compute_or_wait(key, current_hash, compute)
+      {:recent, outcome} -> replay(outcome)
+      answer -> answer
+    end
+  end
+
+  defp fresh(key) do
+    case :persistent_term.get(key, nil) do
+      {:recent, until, outcome} ->
+        if System.monotonic_time(:millisecond) < until, do: {:recent, outcome}
+
+      kept ->
+        kept
+    end
+  end
+
+  defp replay({:value, answer}), do: answer
+
+  defp replay({:raise, kind, reason, stacktrace}), do: :erlang.raise(kind, reason, stacktrace)
+
+  defp share(key, outcome) do
+    until = System.monotonic_time(:millisecond) + @shared_ms
+
+    :persistent_term.put(key, {:recent, until, outcome})
+  end
+
+  defp compute_or_wait(key, current_hash, compute) do
+    lock = {key, self()}
+
+    if :global.set_lock(lock, [node()], 0) do
+      try do
+        compute_once(key, current_hash, compute)
+      after
+        :global.del_lock(lock, [node()])
+      end
+    else
+      Process.sleep(@wait_ms)
+
+      cached(key, current_hash, compute)
+    end
+  end
+
+  defp compute_once(key, current_hash, compute) do
+    case fresh(key) do
+      nil -> kept(compute_outcome(compute), key, current_hash)
+      {:recent, outcome} -> replay(outcome)
+      answer -> answer
+    end
+  end
+
+  defp compute_outcome(compute) do
+    {:value, compute.()}
+  catch
+    kind, reason -> {:raise, kind, reason, __STACKTRACE__}
+  end
+
+  defp kept({:value, {:keep, answer}}, key, current_hash) do
+    if Model.hash() == current_hash, do: keep(key, current_hash, answer)
+
+    answer
+  end
+
+  defp kept({:value, {:pass, answer}}, key, _current_hash) do
+    share(key, {:value, answer})
+
+    answer
+  end
+
+  defp kept({:raise, kind, reason, stacktrace} = outcome, key, _current_hash) do
+    share(key, outcome)
+
+    :erlang.raise(kind, reason, stacktrace)
+  end
+
+  # One current model's history and lenses at a time: a dev node's model changes with every edit,
+  # and the ones kept for the models before are never asked for again.
+  defp keep({__MODULE__, :history, _current_hash} = key, current_hash, answer) do
+    for {{__MODULE__, _kind, kept_hash} = kept_key, _value} <- :persistent_term.get(),
+        kept_hash != current_hash do
+      :persistent_term.erase(kept_key)
+    end
+
+    for {{__MODULE__, :lens, kept_hash, _version} = kept_key, _value} <- :persistent_term.get(),
+        kept_hash != current_hash do
+      :persistent_term.erase(kept_key)
+    end
+
+    :persistent_term.put(key, answer)
+  end
+
+  defp keep(key, _current_hash, answer), do: :persistent_term.put(key, answer)
+
+  defp lens_at(version, history, entity_types) do
+    versions = MapSet.new(history.migrations, & &1.version)
+    later_recorded = for {recorded, _hash} <- history.recorded, recorded > version, do: recorded
+
+    if MapSet.member?(versions, version) and
+         Enum.all?(later_recorded, &MapSet.member?(versions, &1)) do
+      {through, later} = Enum.split_with(history.migrations, &(&1.version <= version))
+
+      with {:ok, old_model} <- fold_through(through),
+           {:ok, lens} <- build(old_model, Enum.flat_map(later, & &1.ops)) do
+        {:ok, resolve(lens, entity_types)}
+      else
+        _unservable -> :error
+      end
+    else
+      :error
+    end
+  end
+
+  defp fold_through(migrations) do
+    {:ok, Enum.reduce(migrations, Model.empty(), &Model.fold(&2, &1.ops))}
+  rescue
+    Hologram.CompileError -> :error
+  end
+
+  defp position(history, model_hash) do
+    Map.fetch(history.positions, model_hash)
+  end
+
+  defp read_history do
+    statement = ~s(SELECT "version", "model_hash" FROM "#{Mapper.system_schema()}"."migration")
+
+    # A read the database fails raises, as every other read starting a stream does: the stream
+    # ends and the browser greets again, where an answer of `:error` would tell it never to expect
+    # sync from this page.
+    case Connection.query(statement) do
+      {:ok, %Postgrex.Result{rows: rows}} ->
+        recorded = Map.new(rows, fn [version, model_hash] -> {version, model_hash} end)
+
+        {:ok, history(recorded, Loader.list!())}
+
+      {:error, error} ->
+        raise error
+    end
+  rescue
+    # A dev build's files can hold a draft no fold takes (see `Hologram.Entity.Model.fold/3`), and
+    # an old tab is then told to reload rather than taking the stream down with it.
+    Hologram.CompileError -> :error
+  end
 
   # The walk keeps the user entity type under its name at each step, beside the lens: a file
   # renaming it can also designate it under its new name, which moves nothing (see
