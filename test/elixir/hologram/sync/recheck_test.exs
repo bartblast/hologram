@@ -41,6 +41,10 @@ defmodule Hologram.Sync.RecheckTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module28
   alias Hologram.Test.Fixtures.Policy.Readers.Module29
   alias Hologram.Test.Fixtures.Policy.Readers.Module3
+  alias Hologram.Test.Fixtures.Policy.Readers.Module30
+  alias Hologram.Test.Fixtures.Policy.Readers.Module31
+  alias Hologram.Test.Fixtures.Policy.Readers.Module32
+  alias Hologram.Test.Fixtures.Policy.Readers.Module33
   alias Hologram.Test.Fixtures.Policy.Readers.Module4
   alias Hologram.Test.Fixtures.Policy.Readers.Module5
   alias Hologram.Test.Fixtures.Policy.Readers.Module6
@@ -704,6 +708,43 @@ defmodule Hologram.Sync.RecheckTest do
         [project, create(PolicyModule17, %{public: true})],
         context.users
       )
+    end
+
+    # Each tool's lines read a workshop through a delegation to the tool's workshop's update rule
+    # and through a role held on its bench's workshop, a different one, beside a none over its
+    # pegs, which a loose peg refutes. Alice edits the bench's workshop and Bob the tool's, and
+    # Carol owns the bench's workshop: reading either path through the other's workshop flips an
+    # answer.
+    test "answers a delegation and a role reference through a path in a non-read operation",
+         context do
+      tool_workshop = create(Module30)
+      bench_workshop = create(Module30)
+      bench = create(Module31, %{workshop_id: bench_workshop.id})
+      tool = create(Module32, %{bench_id: bench.id, workshop_id: tool_workshop.id})
+      loose_tool = create(Module32, %{bench_id: bench.id, workshop_id: tool_workshop.id})
+      create(Module33, %{loose: true, tool_id: loose_tool.id})
+
+      Auth.grant_role(context.alice, :editor, bench_workshop)
+      Auth.grant_role(context.bob, :editor, tool_workshop)
+      Auth.grant_role(context.carol, :owner, bench_workshop)
+
+      readable = assert_verdicts_as_auth(Module32, [tool, loose_tool], context.users)
+      delete_key = Policy.verdict_key(Module32, :delete)
+      label_key = Policy.verdict_key(Module32, {:update, :label})
+
+      expected = %{
+        context.alice => %{delete_key => false, label_key => true},
+        context.bob => %{delete_key => true, label_key => false},
+        context.carol => %{delete_key => false, label_key => false},
+        nil => %{delete_key => false, label_key => false}
+      }
+
+      for user_id <- context.users do
+        assert verdicts(verdicts_of(readable, tool), user_id) == expected[user_id]
+
+        assert verdicts(verdicts_of(readable, loose_tool), user_id) ==
+                 %{delete_key => false, label_key => false}
+      end
     end
 
     test "answers no anonymous user when none was given", context do
