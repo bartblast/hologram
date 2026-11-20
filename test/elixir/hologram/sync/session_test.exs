@@ -2407,7 +2407,9 @@ defmodule Hologram.Sync.SessionTest do
 
       {:ok, lens} = Lens.build(Model.empty(), ops)
 
-      Lens.resolve(lens, [Module2, Module39, Module40, PolicyModule1, RoleGrant])
+      resolved = Lens.resolve(lens, [Module2, Module39, Module40, PolicyModule1, RoleGrant])
+
+      %{resolved | model_hash: Model.hash()}
     end
 
     defp create_member(kind) do
@@ -2449,6 +2451,24 @@ defmodule Hologram.Sync.SessionTest do
 
       assert_receive {:sync_deltas, _cursor, [%{data: data, op: :patch_entity}], nil}
       assert data.title == "after"
+    end
+
+    # A live reload can change the model while the session sits idle, with nothing held when the
+    # part is read, and the lens is of the model before.
+    test "stops rather than tell a part through a lens of a model no longer running" do
+      task = create("before")
+
+      session = start_session!(lens: tab_lens(), synced_types: [Module2])
+      await_fill()
+
+      :sys.replace_state(session, fn state -> put_in(state.lens.model_hash, "0ld") end)
+      ref = Process.monitor(session)
+
+      DB.update!(Module2, task.id, c: "after")
+      route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})])
+
+      assert_receive {:DOWN, ^ref, :process, ^session, {:shutdown, :model_held}}, 1_000
+      refute_received {:sync_deltas, _cursor, _deltas, _claim}
     end
 
     test "fills no row holding a value the tab's model lacks" do

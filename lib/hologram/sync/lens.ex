@@ -28,7 +28,8 @@ defmodule Hologram.Sync.Lens do
   alias Hologram.Migration.Loader
 
   # `model_hash` is the hash of the running model the lens translates from, set by `for_hash/1`
-  # for whoever starts a session with it to check that model still runs.
+  # for the stream starting a session with it, and the session before everything it sends, to check
+  # that model still runs.
   defstruct global_roles: %{}, model_hash: nil, resolved: nil, types: %{}
 
   @type old(name) :: name | :"$new"

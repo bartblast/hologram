@@ -28,6 +28,7 @@ defmodule Hologram.Sync.Session do
   alias Hologram.DB.Oplog
   alias Hologram.DB.QueryCache
   alias Hologram.Entity
+  alias Hologram.Entity.Model
   alias Hologram.Policy.Edges
   alias Hologram.Query.Registry
   alias Hologram.Sync.Catchup
@@ -128,7 +129,8 @@ defmodule Hologram.Sync.Session do
   `Hologram.Sync.Lens.resolve/2`), or nil for a client of the current one. Every message goes out
   translated into the client's names, and a row it has no label for - one holding an enum value
   added since, or a grant of a role or an entity type added since - is kept from it as one its user
-  may not read.
+  may not read. Once the model the lens was built for no longer runs, the session ends with
+  `{:shutdown, :model_held}` rather than send anything more through it.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
@@ -641,7 +643,20 @@ defmodule Hologram.Sync.Session do
   # it would have between messages.
   defp tell_client(%{cut: cut} = state, _message) when cut != nil, do: state
 
-  defp tell_client(state, message) do
+  # A lens is of the model running when the handshake looked it up, and a live reload can change the
+  # model while the session sits idle, under no hold by the time its next part is read. Through a
+  # lens of the model before, the part's rows would reach the client under the wrong names - so
+  # the session ends as under a hold, and the client comes back through the doors to a lens of the
+  # model now running.
+  defp tell_client(%{lens: %Lens{model_hash: model_hash}} = state, message) do
+    if model_hash == Model.hash(),
+      do: put_message(state, message),
+      else: cut(state, {:shutdown, :model_held})
+  end
+
+  defp tell_client(state, message), do: put_message(state, message)
+
+  defp put_message(state, message) do
     case Outbox.put(state.outbox, translate(state.lens, message)) do
       {:ok, outbox} -> %{state | outbox: outbox}
       :stalled -> cut(state, :client_stalled)
