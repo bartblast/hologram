@@ -616,6 +616,71 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
+    it("marks every entry after the call's first as coming with it", () => {
+      const entity = addRelationship(
+        addRelationship(
+          putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
+          Type.atom("tags"),
+          Type.bitstring("g1"),
+        ),
+        Type.atom("tags"),
+        Type.bitstring("g2"),
+      );
+
+      update(entity);
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => [write.op, write.same_call]),
+        [
+          ["update", undefined],
+          ["add_relationship", true],
+          ["add_relationship", true],
+        ],
+      );
+    });
+
+    it("marks the edges after the first of a call that changes only edges", () => {
+      const entity = addRelationship(
+        addRelationship(held(), Type.atom("tags"), Type.bitstring("g1")),
+        Type.atom("tags"),
+        Type.bitstring("g2"),
+      );
+
+      update(entity);
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => write.same_call),
+        [undefined, true],
+      );
+    });
+
+    it("marks nothing on a call that writes one entry", () => {
+      update(addRelationship(held(), Type.atom("tags"), Type.bitstring("g1")));
+
+      assert.notProperty(Batches.current().writes[0], "same_call");
+    });
+
+    it("leaves the first entry of the next call in the batch unmarked", () => {
+      update(
+        addRelationship(
+          putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
+          Type.atom("tags"),
+          Type.bitstring("g1"),
+        ),
+      );
+
+      update(putAttribute(held(), pairs([["title", Type.bitstring("y")]])));
+
+      assert.deepStrictEqual(
+        Batches.current().writes.map((write) => [write.op, write.same_call]),
+        [
+          ["update", undefined],
+          ["add_relationship", true],
+          ["update", undefined],
+        ],
+      );
+    });
+
     it("sends no claim on any entry", () => {
       const entity = addRelationship(
         putAttribute(held(), pairs([["title", Type.bitstring("x")]])),

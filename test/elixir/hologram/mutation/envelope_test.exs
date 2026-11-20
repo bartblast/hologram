@@ -79,6 +79,9 @@ defmodule Hologram.Mutation.EnvelopeTest do
     }
   end
 
+  # Marks the entry as part of the call the entry before it came from.
+  defp same_call(entry), do: Map.put(entry, "same_call", true)
+
   defp update(entity_type, data, opts \\ []) do
     base = %{
       "op" => "update",
@@ -225,6 +228,71 @@ defmodule Hologram.Mutation.EnvelopeTest do
       assert write.op == :delete_relationship
       assert write.relationship == :secrets
       assert write.target_id == @target_id
+    end
+
+    test "parses an edge from the same call as an update of the same row before it" do
+      entries = [
+        update(Module16, %{"name" => "x"}),
+        same_call(edge("add_relationship", Module16, "secrets"))
+      ]
+
+      assert {:ok, %Envelope{writes: [update, edge]}} = parse(raw(entries))
+
+      refute update.same_call
+      assert edge.same_call
+    end
+
+    test "parses an edge from the same call as an edge of the same row before it" do
+      entries = [
+        edge("add_relationship", Module16, "secrets"),
+        same_call(edge("delete_relationship", Module16, "secrets", target_id: @id))
+      ]
+
+      assert {:ok, %Envelope{writes: [_first, second]}} = parse(raw(entries))
+
+      assert second.same_call
+    end
+
+    test "reads an absent or null same_call as a write of its own call" do
+      unmarked = edge("delete_relationship", Module16, "secrets")
+
+      entries = [
+        update(Module16, %{"name" => "x"}),
+        edge("add_relationship", Module16, "secrets"),
+        Map.put(unmarked, "same_call", nil)
+      ]
+
+      assert {:ok, %Envelope{writes: writes}} = parse(raw(entries))
+
+      assert Enum.map(writes, & &1.same_call) == [false, false, false]
+    end
+
+    test "refuses a same_call write anywhere but on an edge joining an update or edge of its row" do
+      update = update(Module16, %{"name" => "x"})
+      edge = edge("add_relationship", Module16, "secrets")
+      created = create(Module16, %{})
+      deleted = delete(Module16)
+      not_an_edge = "same_call joins only an edge to the write before it"
+      no_row_write = "same_call joins a write to an update or edge of the same row before it"
+
+      cases = [
+        {[update, Map.put(edge, "same_call", "yes")], "same_call must be true when given"},
+        {[update, Map.put(edge, "same_call", false)], "same_call must be true when given"},
+        {[update, same_call(update)], not_an_edge},
+        {[update, same_call(created)], not_an_edge},
+        {[update, same_call(deleted)], not_an_edge},
+        {[same_call(edge)], no_row_write},
+        {[created, same_call(edge)], no_row_write},
+        {[deleted, same_call(edge)], no_row_write},
+        {[update(Module16, %{"name" => "x"}, id: @target_id), same_call(edge)], no_row_write},
+        {[update(Module2, %{"c" => "x"}), same_call(edge)], no_row_write}
+      ]
+
+      for {entries, message} <- cases do
+        index = length(entries) - 1
+
+        assert parse(raw(entries)) == {:error, "write #{index}: #{message}"}
+      end
     end
 
     test "parses every write of a batch, in the order they were sent" do
