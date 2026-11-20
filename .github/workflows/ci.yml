@@ -958,7 +958,7 @@ jobs:
   feature_tests_https:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
-    # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
+    # the account's limit of 20 concurrent jobs, not eight. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     # TODO: go back to !cancelled() alone with the concurrency stopgap at the top of the file (#1632).
@@ -1089,7 +1089,7 @@ jobs:
   cluster_tests:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
-    # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
+    # the account's limit of 20 concurrent jobs, not eight. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     # TODO: go back to !cancelled() alone with the concurrency stopgap at the top of the file (#1632).
@@ -1262,7 +1262,7 @@ jobs:
   cowboy_tests:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
-    # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
+    # the account's limit of 20 concurrent jobs, not eight. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     # TODO: go back to !cancelled() alone with the concurrency stopgap at the top of the file (#1632).
@@ -1427,7 +1427,7 @@ jobs:
   ecosystem_tests:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
-    # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
+    # the account's limit of 20 concurrent jobs, not eight. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     # TODO: go back to !cancelled() alone with the concurrency stopgap at the top of the file (#1632).
@@ -1592,7 +1592,7 @@ jobs:
   minimal_tests:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
-    # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
+    # the account's limit of 20 concurrent jobs, not eight. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     # TODO: go back to !cancelled() alone with the concurrency stopgap at the top of the file (#1632).
@@ -1736,10 +1736,174 @@ jobs:
       # Step: Execute minimal tests app Elixir tests.
       - name: Run minimal tests app Elixir tests
         run: mix test --warnings-as-errors
+  sync_tests:
+    runs-on: ubuntu-latest
+    # Started once the lib checks have ended, so that 21 jobs start together and one waits on
+    # the account's limit of 20 concurrent jobs, not eight. Not a dependency: it runs however
+    # the checks ended, and it is still done long before the longest jobs are.
+    needs: lib_checks
+    # TODO: go back to !cancelled() alone with the concurrency stopgap at the top of the file (#1632).
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) }}
+    name: Sync Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    defaults:
+      run:
+        working-directory: test/sync
+    strategy:
+      fail-fast: false
+      # Specify the Elixir and OTP versions to use when building
+      # and running the workflow steps.
+      matrix:
+        elixir:
+          # Run sync tests on latest pinned stable Elixir version only
+          - "1.20.0"
+        otp:
+          # Run sync tests on latest pinned stable OTP version only
+          - "29.0"
+        node:
+          # Run sync tests on latest LTS version only.
+          # Must match .tool-versions for dev/prod/CI parity.
+          - "24.13.0"
+    env:
+      IS_HIGHEST_MATRIX_COMBINATION: "true"
+    steps:
+      # Step: Setup Elixir + Erlang/OTP image as the base.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      # Step: Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Step: Setup Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+
+      ### SYNC TESTS APP CHECKS ###
+
+      # Step: Define how to cache the sync tests app Elixir dependencies.
+      - name: Cache sync tests app Elixir deps
+        id: cache-sync-tests-app-elixir-deps
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-sync-tests-app-elixir-deps
+        with:
+          path: test/sync/deps
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/sync/mix.lock') }}
+
+      # Step: Define how to cache the sync tests app Elixir build.
+      - name: Cache sync tests app Elixir build
+        id: cache-sync-tests-app-elixir-build
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-sync-tests-app-elixir-build
+        with:
+          path: test/sync/_build
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/sync/mix.lock') }}
+
+      # Step: Download sync tests app Elixir dependencies.
+      # If unchanged, uses the cached version.
+      - name: Download sync tests app Elixir deps
+        uses: nick-fields/retry@v4
+        with:
+          # TODO: set working directory with action input when https://github.com/nick-fields/retry/issues/89 is implemented
+          command: cd test/sync && mix deps.get
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Compile the sync tests app project treating any warnings as errors.
+      - name: Check sync tests app project compiles without warnings
+        run: mix compile --all-warnings --warnings-as-errors
+
+      # Step: Check if sync tests app mix.lock has any unused dependencies.
+      - name: Check sync tests app unused Elixir deps
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix deps.unlock --check-unused
+
+      # Step: Check that the sync tests app Elixir code has already been formatted.
+      - name: Check sync tests app Elixir code formatted
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix format --check-formatted
+
+      # Step: Run sync tests app Elixir static code analysis with Credo.
+      - name: Run sync tests app Elixir static code analysis with Credo
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix credo --strict
+
+      # Step: Restore sync tests app Dialyzer PLT cache.
+      # Cache key is based on Erlang/Elixir version and the mix.lock hash.
+      - name: Restore sync tests app Dialyzer PLT cache
+        id: restore-sync-tests-app-dialyzer-plt-cache
+        uses: actions/cache/restore@v6
+        with:
+          key: |
+            dialyzer-plt-sync-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/sync/mix.lock') }}
+          path: |
+            test/sync/priv/plts
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+
+      # Step: Create sync tests app Dialyzer PLTs if no cache was found.
+      - name: Create sync tests app Dialyzer PLTs
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-sync-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        run: mix dialyzer --plt
+
+      # Step: Save sync tests app Dialyzer PLT cache.
+      # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
+      # so we separate the cache restore and save steps in case running dialyzer fails.
+      - name: Save sync tests app Dialyzer PLT cache
+        id: save-sync-tests-app-dialyzer-plt-cache
+        uses: actions/cache/save@v6
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-sync-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        with:
+          key: |
+            dialyzer-plt-sync-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/sync/mix.lock') }}
+          path: |
+            test/sync/priv/plts
+
+      # Step: Run sync tests app Elixir static code analysis with Dialyzer.
+      - name: Run sync tests app Elixir static code analysis with Dialyzer
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix dialyzer --format github
+
+      # Step: Check that all sync tests app test scripts have valid file names.
+      - name: Check sync tests app test file names
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix holo.check.test_file_names test
+
+      # Step: Start the runner image's preinstalled Postgres server, aligned with the
+      # zero-config test defaults (localhost:5432, postgres/postgres) - the sync app
+      # declares entities, which activates the Hologram database.
+      - name: Start Postgres
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+
+      # Step: Execute sync tests app Elixir tests.
+      - name: Run sync tests app Elixir tests
+        run: mix test --warnings-as-errors
+
+      # Step: Archive the randomized consistency run's trace when it failed.
+      - name: Archive sync consistency traces
+        # Execute the step if the job has failed, but don't execute it if the job has been canceled.
+        if: ${{ !cancelled() && failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: sync-consistency-traces-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
+          path: test/sync/tmp/sync_consistency
   umbrella_tests:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
-    # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
+    # the account's limit of 20 concurrent jobs, not eight. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
     # TODO: go back to !cancelled() alone with the concurrency stopgap at the top of the file (#1632).
