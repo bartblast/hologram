@@ -15,10 +15,11 @@ defmodule Hologram.Job.Worker do
   alias Hologram.Reflection
 
   # How long a queued job can wait when the announcements stop arriving - a listener whose
-  # connection died, or a pooler that drops them. It bounds nothing while they do arrive, since
-  # every write announces itself and is answered at once. Policy rather than a derived figure: it
-  # trades a scan per interval against how late a job can run while the announcements are missing,
-  # and it is the figure the dispatcher carries for the same reason.
+  # connection died, or a pooler that drops them - and how long a run cut short on another node
+  # stays running before a sweep here fails it. It bounds nothing else while announcements
+  # arrive, since every write announces itself and is answered at once. Policy rather than a
+  # derived figure: it trades a scan per interval against how late a job can run while the
+  # announcements are missing, and it is the figure the dispatcher carries for the same reason.
   @default_poll_interval_ms :timer.seconds(5)
 
   @doc """
@@ -33,9 +34,10 @@ defmodule Hologram.Job.Worker do
   restarted on its own finds its predecessor's still held on a session that is still up, and the
   row of the run that crashed would look live for good.
 
-  `:pass` is what one sweep of the given job types does, and answers how many jobs it ran. It
-  defaults to `Hologram.Job.Runner.pass/2` on the `:run_lock` connection, so `:run_lock` is
-  required when `:pass` is not given. Only tests give `:pass`: the seam is what lets this process be
+  `:queued`, `:sweep` and `:run` are what the worker looks for jobs, fails runs cut short and runs
+  a job with. They default to `Hologram.Job.Runner.queued/3`, `Hologram.Job.Runner.sweep/2` and
+  `Hologram.Job.Runner.process/3`, the last on the `:run_lock` connection, so `:run_lock` is
+  required when `:run` is not given. Only tests give them: the seams are what let this process be
   exercised without a database, the way the dispatcher takes the handler it routes through.
   """
   @spec start_link(keyword) :: GenServer.on_start()
@@ -61,10 +63,12 @@ defmodule Hologram.Job.Worker do
 
     state = %{
       notifications: Keyword.get(opts, :notifications),
-      pass:
-        Keyword.get_lazy(opts, :pass, fn -> default_pass(Keyword.fetch!(opts, :run_lock)) end),
+      passed_over: MapSet.new(),
       poll_interval_ms: Keyword.get(opts, :poll_interval_ms, default_poll_interval_ms()),
-      run_lock: run_lock
+      queued: Keyword.get(opts, :queued, &Runner.queued/3),
+      run: Keyword.get_lazy(opts, :run, fn -> default_run(Keyword.fetch!(opts, :run_lock)) end),
+      run_lock: run_lock,
+      sweep: Keyword.get(opts, :sweep, &Runner.sweep/2)
     }
 
     {:ok, state, {:continue, :start_listening}}
@@ -82,25 +86,26 @@ defmodule Hologram.Job.Worker do
 
     schedule_poll(state.poll_interval_ms)
 
-    {:noreply, state}
+    # A sweep at once rather than at the first poll, so the run a predecessor left is failed now.
+    # No look yet: a job that takes down the process running it would take down each worker that
+    # restarts, one after the other, past the supervisor's limit - the first wake or poll looks.
+    {:noreply, sweep_at_start(state)}
   end
 
   @impl GenServer
   def handle_info(:wake, state) do
-    {:noreply, wake_up(state)}
+    {:noreply, wake_up(state, :look)}
   end
 
   def handle_info({:notification, _connection, _ref, _channel, _payload}, state) do
-    {:noreply, wake_up(state)}
+    {:noreply, wake_up(state, :look)}
   end
 
   def handle_info(:poll, state) do
     schedule_poll(state.poll_interval_ms)
 
-    {:noreply, wake_up(state)}
+    {:noreply, wake_up(state, :sweep)}
   end
-
-  defp default_pass(run_lock), do: &Runner.pass(&1, run_lock)
 
   defp default_poll_interval_ms do
     :hologram
@@ -108,8 +113,10 @@ defmodule Hologram.Job.Worker do
     |> Keyword.get(:poll_interval_ms, @default_poll_interval_ms)
   end
 
+  defp default_run(run_lock), do: &Runner.process(&1, &2, run_lock)
+
   # Every announcement and every nudge asks the same question, so the ones already waiting are
-  # answered by the pass about to run. The poll is left where it is: dropping it would stop the
+  # answered by the look about to run. The poll is left where it is: dropping it would stop the
   # timer that keeps asking.
   defp drain_wakes do
     receive do
@@ -118,6 +125,22 @@ defmodule Hologram.Job.Worker do
     after
       0 -> :ok
     end
+  end
+
+  # One job of each type a round, oldest first within a type and the types in module order, for as
+  # long as any type has one: a type whose jobs keep coming gets one turn a round, so it never holds
+  # up the types after it. Each job is asked for afresh, so one another node claimed meanwhile
+  # costs no claim that is bound to be refused.
+  defp fill(state, job_types) do
+    {state, ran_any?} =
+      Enum.reduce(job_types, {state, false}, fn job_type, {state, ran_any?} ->
+        case state.queued.(job_type, state.passed_over, 1) do
+          [] -> {state, ran_any?}
+          [job] -> {run_job(state, job_type, job.id), true}
+        end
+      end)
+
+    if ran_any?, do: fill(state, job_types), else: state
   end
 
   # The job types come off the mapping rather than from a sweep of the loaded modules: a sweep
@@ -141,33 +164,67 @@ defmodule Hologram.Job.Worker do
     end
   end
 
-  # A pass that ran something is followed by another: the jobs past the ones a pass takes of each
-  # type (see Hologram.Job.Runner.pass/2), a job created by one that just ran, or one that committed
-  # while the pass worked, are picked up now rather than at the next announcement.
-  defp run_passes(pass, job_types) do
-    if pass.(job_types) > 0, do: run_passes(pass, job_types)
+  # A job left queued - its run lock held by another session, or its claim refused by a hold on the
+  # data model - is left out of the looks until the next wake or poll: asked for again at once, it
+  # would be answered the same way, for as long as the lock or the hold lasts. One another worker
+  # took is not, since it is not queued any more and no look answers it again.
+  #
+  # A data model under a hold can't be read until it is released (see
+  # Hologram.Entity.Model.hold/0). A claim it refuses leaves the row queued. A run whose outcome
+  # write it refuses has given up its run lock with the row still running, and a sweep after the
+  # hold fails it as cut short.
+  defp run_job(state, job_type, id) do
+    result =
+      try do
+        state.run.(job_type, id)
+      rescue
+        Hologram.StaleModelError -> :held
+      end
+
+    if result in [:held, :locked] do
+      %{state | passed_over: MapSet.put(state.passed_over, id)}
+    else
+      state
+    end
   end
 
   defp schedule_poll(interval_ms) do
     Process.send_after(self(), :poll, interval_ms)
   end
 
-  defp wake_up(state) do
-    # Draining first is what makes the drain safe: the passes after it read the queue as it stands
-    # by then, so the wakes dropped here asked for nothing they will not do. A wake arriving after
-    # the read stays in the mailbox and gets its own pass, which is the job created while this one
-    # was working.
-    drain_wakes()
-
-    run_passes(state.pass, job_types())
+  # Only an earlier go at what the poll's sweep does anyway, so a sweep that raises - a hold on the
+  # data model, a pool not up yet, a database refusing the write - is left to the poll rather than
+  # crashing each worker that restarts, one after the other, past the supervisor's limit.
+  defp sweep_at_start(state) do
+    :ok = state.sweep.(job_types(), MapSet.new())
 
     state
   rescue
+    _error -> state
+  end
+
+  # Every wake and poll starts with nothing passed over, so a job left queued is tried again then.
+  # The poll also sweeps: the runs cut short on other nodes are failed within one poll interval.
+  # Not on every wake, since a wake comes with every write, claims and outcomes included, and a
+  # sweep costs a transaction per running row.
+  defp wake_up(state, look_or_sweep) do
+    # Draining first is what makes the drain safe: the look after it reads the queue as it stands
+    # by then, so the wakes dropped here asked for nothing it will not do. A wake arriving after
+    # the read stays in the mailbox and gets its own look, which is the job created while this one
+    # was working.
+    drain_wakes()
+
+    state = %{state | passed_over: MapSet.new()}
+    job_types = job_types()
+
+    if look_or_sweep == :sweep, do: :ok = state.sweep.(job_types, MapSet.new())
+
+    fill(state, job_types)
+  rescue
     # A data model under a hold can't be read until it is released (see
-    # Hologram.Entity.Model.hold/0). The pass is skipped rather than crashed, which would restart
-    # this process on every wake for as long as the hold stands, and the next poll or wake runs it.
-    # A job already running when the hold lands can't record its outcome, so it gives up its run
-    # lock with the row still running, and a pass after the hold fails it as cut short.
+    # Hologram.Entity.Model.hold/0). The look is skipped rather than crashed, which would restart
+    # this process on every wake for as long as the hold stands, and the next poll or wake looks
+    # again.
     Hologram.StaleModelError -> state
   end
 end

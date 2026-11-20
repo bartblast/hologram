@@ -17,8 +17,9 @@ defmodule Hologram.Job.Supervisor do
   # unanswered for 5 seconds, or the session settings for 150, kill the lock connection, which
   # counts once: the worker goes with it. A LISTEN left unanswered for 4 seconds, or the listener's
   # first statement for 150, kills the listener the same way, taking both others. A worker whose
-  # lock connection is up but whose pool is not yet crashes on each pass, once per poll and
-  # checkout, about 9 seconds.
+  # lock connection is up but whose pool is not yet crashes at each poll or wake whose sweep or look
+  # checks a connection out, once per failed checkout, under the limit - not as it starts, since the
+  # sweep it makes then gives way to the poll's.
 
   use Supervisor
 

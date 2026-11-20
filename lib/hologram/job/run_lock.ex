@@ -52,7 +52,7 @@ defmodule Hologram.Job.RunLock do
   #
   # Taking a lock is the call this matters most for. The claim takes it while holding the job's row,
   # so every other node claiming that row waits too - and gives up at the driver's 15 s query
-  # timeout, failing its pass on every try. A claim's call waits for the statements queued ahead of
+  # timeout, failing its claim on every try. A claim's call waits for the statements queued ahead of
   # it as well as its own, which on a healthy link is up to a round trip for each run in flight, far
   # under that. A link gone silent ends the connection within the bound of the statement in flight,
   # and every call queued behind it exits with it, which rolls the claim back and frees the row for

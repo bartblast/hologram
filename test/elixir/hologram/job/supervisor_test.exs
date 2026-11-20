@@ -50,7 +50,7 @@ defmodule Hologram.Job.SupervisorTest do
 
   describe "a lock call the server leaves unanswered" do
     # The run lock connection and the worker as this supervisor starts them, except that the lock
-    # connection goes through a proxy the test can silence and every pass takes a lock on it.
+    # connection goes through a proxy the test can silence and every look takes a lock on it.
     # Allowing a single restart is what shows the timeout counts once: the lock connection is
     # killed, and the worker it takes with it is restarted with it rather than on its own. Killed
     # is what tells the timeout apart from a lost session, which ends the connection itself.
@@ -62,16 +62,20 @@ defmodule Hologram.Job.SupervisorTest do
       run_lock = __MODULE__.RunLock
       test_pid = self()
 
-      pass = fn _job_types ->
-        send(test_pid, {:pass, self()})
+      queued = fn _job_type, _skip_ids, _count ->
+        send(test_pid, {:look, self()})
         RunLock.acquire(run_lock, Entity.generate_id())
 
-        0
+        []
       end
 
       children = [
         {RunLock, name: run_lock, port: port},
-        {Worker, pass: pass, poll_interval_ms: 50, run_lock: run_lock}
+        {Worker,
+         poll_interval_ms: 50,
+         queued: queued,
+         run_lock: run_lock,
+         sweep: fn _job_types, _skip_ids -> :ok end}
       ]
 
       supervisor =
@@ -86,14 +90,14 @@ defmodule Hologram.Job.SupervisorTest do
       supervisor_ref = Process.monitor(supervisor)
 
       capture_log(fn ->
-        assert_receive {:pass, worker}, 5_000
+        assert_receive {:look, worker}, 5_000
         old_run_lock = Process.whereis(run_lock)
         run_lock_ref = Process.monitor(old_run_lock)
 
         TCPProxy.freeze(proxy)
 
         assert_receive {:DOWN, ^run_lock_ref, :process, ^old_run_lock, :killed}, 10_000
-        assert_receive {:pass, new_worker} when new_worker != worker, 5_000
+        assert_receive {:look, new_worker} when new_worker != worker, 5_000
 
         assert Process.whereis(run_lock) not in [nil, old_run_lock]
         refute_received {:DOWN, ^supervisor_ref, :process, ^supervisor, _reason}
@@ -116,10 +120,10 @@ defmodule Hologram.Job.SupervisorTest do
       notifications = __MODULE__.Notifications
       test_pid = self()
 
-      pass = fn _job_types ->
-        send(test_pid, {:pass, self()})
+      queued = fn _job_type, _skip_ids, _count ->
+        send(test_pid, {:look, self()})
 
-        0
+        []
       end
 
       children = [
@@ -145,11 +149,16 @@ defmodule Hologram.Job.SupervisorTest do
         {:ok, _worker} =
           Supervisor.start_child(
             supervisor,
-            {Worker, notifications: notifications, pass: pass, poll_interval_ms: 50}
+            {Worker,
+             notifications: notifications,
+             poll_interval_ms: 50,
+             queued: queued,
+             run: fn _job_type, _id -> :done end,
+             sweep: fn _job_types, _skip_ids -> :ok end}
           )
 
         assert_receive {:DOWN, ^listener_ref, :process, ^old_listener, :killed}, 6_000
-        assert_receive {:pass, _new_worker}, 5_000
+        assert_receive {:look, _new_worker}, 5_000
 
         assert Process.whereis(notifications) not in [nil, old_listener]
         refute_received {:DOWN, ^supervisor_ref, :process, ^supervisor, _reason}

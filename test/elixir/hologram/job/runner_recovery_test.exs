@@ -1,8 +1,8 @@
 defmodule Hologram.Job.RunnerRecoveryTest do
-  # A run cut short ends failed: a pass fails each running job whose run lock no session holds, and
+  # A run cut short ends failed: a sweep fails each running job whose run lock no session holds, and
   # leaves the ones whose worker still holds it.
   #
-  # The worker and the pass have to be separate sessions with committed rows between them, as on
+  # The worker and the sweep have to be separate sessions with committed rows between them, as on
   # two nodes - under the sandboxed case every test is one never-committed transaction on one
   # connection - so this lives in the scratch tier with a database of its own.
   #
@@ -29,7 +29,6 @@ defmodule Hologram.Job.RunnerRecoveryTest do
 
     [
       job: route(scratch, fn -> Job.create!(Module1) end),
-      sweeper_lock: start_run_lock(scratch_opts),
       worker_lock: start_run_lock(scratch_opts)
     ]
   end
@@ -43,17 +42,17 @@ defmodule Hologram.Job.RunnerRecoveryTest do
     route(scratch, fn -> EntityOperations.get(Module1, id).status end)
   end
 
-  defp pass_over(scratch, run_lock) do
-    route(scratch, fn -> pass([Module1], run_lock) end)
+  defp sweep_over(scratch) do
+    route(scratch, fn -> sweep([Module1], MapSet.new()) end)
   end
 
   test "leaves a running job whose worker holds its lock, and fails it once the worker is gone",
        context do
-    %{job: job, scratch: scratch, sweeper_lock: sweeper_lock, worker_lock: worker_lock} = context
+    %{job: job, scratch: scratch, worker_lock: worker_lock} = context
 
     assert {:claimed, _job} = route(scratch, fn -> claim(Module1, job.id, worker_lock) end)
 
-    assert pass_over(scratch, sweeper_lock) == 0
+    assert sweep_over(scratch) == :ok
     assert status(scratch, job.id) == :running
 
     # What a node that stops leaves behind: a session that ended, and the server frees its lock
@@ -61,7 +60,7 @@ defmodule Hologram.Job.RunnerRecoveryTest do
     :ok = :gen_statem.stop(worker_lock)
 
     wait_until(fn ->
-      pass_over(scratch, sweeper_lock)
+      sweep_over(scratch)
 
       status(scratch, job.id) == :failed
     end)
@@ -71,7 +70,7 @@ defmodule Hologram.Job.RunnerRecoveryTest do
   end
 
   test "fails a job whose outcome could not be recorded", context do
-    %{job: job, scratch: scratch, sweeper_lock: sweeper_lock, worker_lock: worker_lock} = context
+    %{job: job, scratch: scratch, worker_lock: worker_lock} = context
     table = ~s|"hologram_data"."#{Mapper.table_name(Module1)}"|
 
     # Refuses every write but the claim's, so the outcome write fails.
@@ -96,22 +95,21 @@ defmodule Hologram.Job.RunnerRecoveryTest do
 
     # The worker's lock connection is still up: what frees the job is the release after the failed
     # outcome write.
-    assert pass_over(scratch, sweeper_lock) == 0
+    assert sweep_over(scratch) == :ok
     assert status(scratch, job.id) == :failed
   end
 
-  # A run that records its outcome and gives its lock up after the pass read the row as running:
-  # the pass finds the lock free, and only the read under the row lock tells it the run is over.
-  test "leaves a job whose outcome is recorded while the pass looks at it", context do
-    %{job: job, scratch: scratch, scratch_opts: scratch_opts, sweeper_lock: sweeper_lock} =
-      context
+  # A run that records its outcome and gives its lock up after the sweep read the row as running:
+  # the sweep finds the lock free, and only the read under the row lock tells it the run is over.
+  test "leaves a job whose outcome is recorded while the sweep looks at it", context do
+    %{job: job, scratch: scratch, scratch_opts: scratch_opts} = context
 
     table = ~s|"hologram_data"."#{Mapper.table_name(Module1)}"|
     test_pid = self()
 
     :ok = route(scratch, fn -> EntityOperations.update(Module1, job.id, %{status: :running}) end)
 
-    # The outcome write of a run, held open until the pass is waiting on its row.
+    # The outcome write of a run, held open until the sweep is waiting on its row.
     recorder =
       Task.async(fn ->
         {:ok, session} = Postgrex.start_link(scratch_opts)
@@ -135,7 +133,7 @@ defmodule Hologram.Job.RunnerRecoveryTest do
       Task.async(fn ->
         {:ok, session} = Postgrex.start_link(scratch_opts)
 
-        route(session, fn -> pass([Module1], sweeper_lock) end)
+        route(session, fn -> sweep([Module1], MapSet.new()) end)
       end)
 
     wait_for_blocked_sessions(scratch_opts, 1)
@@ -143,7 +141,7 @@ defmodule Hologram.Job.RunnerRecoveryTest do
     send(recorder.pid, :commit)
     assert {:ok, :ok} = Task.await(recorder)
 
-    assert Task.await(sweeper) == 0
+    assert Task.await(sweeper) == :ok
 
     row = route(scratch, fn -> EntityOperations.get(Module1, job.id) end)
 

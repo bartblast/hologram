@@ -22,11 +22,6 @@ defmodule Hologram.Job.Runner do
   # either way - and the worker that knew is gone.
   @cut_short_error "the run was cut short before its outcome was recorded - the node stopped, the worker crashed or lost its connection to the database, or the outcome write failed - so run/1 may have done all, part or none of its work"
 
-  # How many queued jobs of a type one pass runs at most. A bound rather than the whole queue, so
-  # that one pass never reads a backlog whole, and a type whose jobs keep coming is left after its
-  # turn rather than drained while the others wait.
-  @pass_size 100
-
   # Set while the claim's transaction holds a run lock it has not committed yet, so a claim that
   # raises after taking the lock knows to give it back.
   @uncommitted_lock_key {__MODULE__, :uncommitted_lock}
@@ -36,9 +31,10 @@ defmodule Hologram.Job.Runner do
   its run lock on the given RunLock connection, and moves it from queued to running in one
   transaction.
 
-  Returns `{:claimed, job}` with the row as this worker claimed it, or `:taken` when the row is not
-  queued any more - another worker claimed it first, it has already run, or it is gone - or when
-  another session holds its run lock.
+  Returns `{:claimed, job}` with the row as this worker claimed it, `:taken` when the row is not
+  queued any more - another worker claimed it first, it has already run, or it is gone - or
+  `:locked` when the row is queued but another session holds its run lock, so it stays queued for
+  a later try.
 
   The lock is taken before the claim commits, so whoever reads the row as running finds it held.
   A claim that raises or exits after taking it gives it back, and raises or exits as it was going
@@ -48,7 +44,7 @@ defmodule Hologram.Job.Runner do
   The claim is the framework's own write, made without an acting user: a job type grants no
   operation for it, and whose job it is has already been decided by whoever enqueued it.
   """
-  @spec claim(module, String.t(), GenServer.server()) :: {:claimed, struct} | :taken
+  @spec claim(module, String.t(), GenServer.server()) :: {:claimed, struct} | :taken | :locked
   def claim(job_type, id, run_lock) do
     {:ok, result} = Connection.transaction(fn -> claim_row(job_type, id, run_lock) end)
 
@@ -76,51 +72,26 @@ defmodule Hologram.Job.Runner do
   end
 
   @doc """
-  Runs the oldest queued jobs of the given job types, at most 100 of each type - oldest first within
-  a type, the types in the order given - and returns how many jobs this worker ran, which does not
-  count the ones another worker had already taken.
-
-  What it runs of a type is the queue as it stood when it asked (see queued/3): a job created while
-  the pass runs is left for the next one, and so are the jobs past the first 100, so that a type
-  whose jobs keep coming doesn't hold up the types after it. The caller passes again while a pass
-  runs something.
-
-  The run locks are taken on the given RunLock connection.
-
-  Before running a type's jobs, it fails each of its running jobs whose run lock no session holds
-  (see sweep/2). Those are not counted, since nothing ran.
-  """
-  @spec pass(list(module), GenServer.server()) :: non_neg_integer
-  def pass(job_types, run_lock) do
-    Enum.reduce(job_types, 0, fn job_type, count ->
-      :ok = sweep([job_type], MapSet.new())
-
-      queued = queued(job_type, MapSet.new(), @pass_size)
-
-      count + Enum.count(queued, &(process(job_type, &1.id, run_lock) != :taken))
-    end)
-  end
-
-  @doc """
   Runs the job of the given type with the given id once: claims it, calls its run/1 as the user who
   created it, and records what happened on its row.
 
-  Returns `:done` or `:failed` for a job this worker ran, or `:taken` when another worker had it.
+  Returns `:done` or `:failed` for a job this worker ran, `:taken` when the job was not queued any
+  more, or `:locked` when it is queued under a run lock another session holds (see claim/3).
 
   The job's run lock is held on the given RunLock connection from the claim until the outcome is
   recorded, and given up then even when recording it raises - until the outcome commits, the row
   must look like a run in progress. Giving it up never replaces the answer or the error: a release
   that exits means the connection, and the lock with it, is gone already.
 
-  The outcome is recorded only on a row still running. One a pass on another node has already
+  The outcome is recorded only on a row still running. One a sweep on another node has already
   failed keeps that verdict - its lock was lost mid-run, so this run looked abandoned - and a row
   that is gone has nothing to record it on. The answer is what run/1 did either way.
   """
-  @spec process(module, String.t(), GenServer.server()) :: :done | :failed | :taken
+  @spec process(module, String.t(), GenServer.server()) :: :done | :failed | :taken | :locked
   def process(job_type, id, run_lock) do
     case claim(job_type, id, run_lock) do
-      :taken ->
-        :taken
+      not_claimed when not_claimed in [:taken, :locked] ->
+        not_claimed
 
       {:claimed, job} ->
         try do
@@ -198,20 +169,27 @@ defmodule Hologram.Job.Runner do
   # touching the run lock. FOR NO KEY UPDATE, like every row lock a run takes: it is the lock the
   # update takes anyway, and a row being inserted with a reference to the job does not hold it up.
   #
-  # A queued row whose run lock another session holds is left queued and tried again by a later
-  # pass. The lock of a queued job is otherwise free, so only two things get here: a key shared by
-  # two jobs, where the job runs once the one it shares the key with has finished, and a claim on
-  # another node that failed after taking the lock and has not given it back yet.
+  # A queued row whose run lock another session holds is left queued and tried again later. The
+  # lock of a queued job is otherwise free, so only two things get here: a key shared by two jobs,
+  # where the job runs once the one it shares the key with has finished, and a claim on another node
+  # that failed after taking the lock and has not given it back yet. Answered apart from a row that
+  # is not queued, since only this one is worth leaving out of the next look: the other is running
+  # or over, so a look for queued jobs never answers it again.
   defp claim_row(job_type, id, run_lock) do
-    with %{status: :queued} = job <- EntityOperations.get(job_type, id, lock: :no_key_update),
-         true <- RunLock.acquire(run_lock, id) do
-      Process.put(@uncommitted_lock_key, true)
+    case EntityOperations.get(job_type, id, lock: :no_key_update) do
+      %{status: :queued} = job ->
+        if RunLock.acquire(run_lock, id) do
+          Process.put(@uncommitted_lock_key, true)
 
-      :ok = EntityOperations.update(job_type, id, %{status: :running})
+          :ok = EntityOperations.update(job_type, id, %{status: :running})
 
-      {:claimed, %{job | status: :running}}
-    else
-      _not_queued_or_locked -> :taken
+          {:claimed, %{job | status: :running}}
+        else
+          :locked
+        end
+
+      _not_queued ->
+        :taken
     end
   end
 
