@@ -88,7 +88,7 @@ defmodule HologramSyncTests.Consistency.WriterTest do
   } do
     fail = fn -> raise "boom after the lock" end
 
-    assert {:aborted, %{reason: "boom after the lock"}} =
+    assert {:aborted, %{reason: "boom after the lock", stage: :commit}} =
              Writer.commit(history, :failing, [create_tag("rolled back", 0)], before_commit: fail)
 
     assert {:committed, entry} = Writer.commit(history, :next, [create_tag("next", 0)])
@@ -100,7 +100,8 @@ defmodule HologramSyncTests.Consistency.WriterTest do
   test "leaves no state for a transaction that rolled back", %{history: history} do
     ops = [create_tag("rolled back", 0), {"fail", fn -> raise "boom" end, 0}]
 
-    assert {:aborted, %{reason: "boom", writer: :failing}} = Writer.commit(history, :failing, ops)
+    assert {:aborted, %{reason: "boom", stage: :ops, writer: :failing}} =
+             Writer.commit(history, :failing, ops)
 
     assert History.entries(history) == []
     assert [%{ops: ["create tag rolled back", "fail"]}] = History.aborted(history)

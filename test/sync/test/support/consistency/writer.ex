@@ -28,7 +28,9 @@ defmodule HologramSyncTests.Consistency.Writer do
   @doc """
   Runs the given operations in one transaction for the given writer, and adds it to the history as
   committed, or as aborted when an operation raised - a row a concurrent transaction deleted, or a
-  deadlock victim. Answers what it added.
+  deadlock victim - or something failed after them. Answers what it added. An aborted one names its
+  `:stage`: `:ops` when an operation raised, the conflicts a run expects, and `:commit` when the
+  lock, the state read or the commit failed, which a run doesn't.
 
   `:before_commit` runs once the state is read, with the commit lock held - for a test that holds a
   transaction there.
@@ -42,7 +44,7 @@ defmodule HologramSyncTests.Consistency.Writer do
       try do
         DB.transaction(fn -> run(ops, before_commit) end)
       rescue
-        exception -> {:error, Exception.message(exception)}
+        exception -> {:error, {:commit, exception}}
       end
 
     case result do
@@ -58,17 +60,43 @@ defmodule HologramSyncTests.Consistency.Writer do
 
         {:committed, committed}
 
-      {:error, reason} ->
-        aborted = %{ops: descriptions, reason: reason, writer: writer}
+      {:error, failure} ->
+        {stage, error} = staged(failure)
+
+        aborted = %{
+          error: error,
+          ops: descriptions,
+          reason: spell(error),
+          stage: stage,
+          writer: writer
+        }
+
         :ok = History.put_aborted(history, aborted)
 
         {:aborted, aborted}
     end
   end
 
+  # A failure the transaction itself rolled back with - a commit refused - is a failure after the
+  # operations too.
+  defp staged({:ops, _error} = failure), do: failure
+
+  defp staged({:commit, _error} = failure), do: failure
+
+  defp staged(reason), do: {:commit, reason}
+
+  defp spell(exception) when is_exception(exception), do: Exception.message(exception)
+
+  defp spell(reason), do: reason
+
   defp run(ops, before_commit) do
     Enum.each(ops, fn {_description, fun, hold_ms} ->
-      fun.()
+      try do
+        fun.()
+      rescue
+        exception -> DB.rollback({:ops, exception})
+      end
+
       Process.sleep(hold_ms)
     end)
 

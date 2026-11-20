@@ -165,6 +165,7 @@ defmodule HologramSyncTests.Consistency.Run do
 
   defp outcome(clients, history, crashes) do
     entries = History.entries(history)
+    aborted = History.aborted(history)
     converged = Enum.map(clients, &guarded(fn -> converge(&1) end))
 
     read_failures =
@@ -199,6 +200,7 @@ defmodule HologramSyncTests.Consistency.Run do
         ),
       failures:
         crashes ++
+          unexpected_aborts(aborted) ++
           read_failures ++
           Enum.map(
             dead,
@@ -209,11 +211,21 @@ defmodule HologramSyncTests.Consistency.Run do
             %{kind: :failure} = failure <- report.events,
             do: Map.put(failure, :client, report.name)
           ),
-      history: %{aborted: History.aborted(history), entries: entries},
+      history: %{aborted: aborted, entries: entries},
       leaks:
         for(report <- reports, leak <- report.leaks, do: Map.put(leak, :client, report.name)),
       missed_resyncs: for(report <- reports, missed_resync?(report), do: report.name)
     }
+  end
+
+  # A transaction rolled back for a conflict its operations met is part of a run. One rolled back for
+  # anything else - an operation failing another way, a lost connection among them, or the lock, the
+  # state read or the commit failing after them - isn't, and the workload it left out would go
+  # unseen.
+  defp unexpected_aborts(aborted) do
+    for entry <- aborted, not (entry.stage == :ops and Plan.conflict?(entry.error)) do
+      %{client: entry.writer, failure: "rolled back (#{entry.stage}): #{inspect(entry.reason)}"}
+    end
   end
 
   # A client that died has its calls exit here, which the run takes as the client having crashed.

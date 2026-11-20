@@ -255,7 +255,8 @@ defmodule HologramSyncTests.Consistency.Report do
       "ROLLED BACK",
       Enum.map(
         outcome.history.aborted,
-        &"  #{&1.writer}: #{Enum.join(&1.ops, "; ")} - #{spell_reason(&1.reason)}"
+        &("  #{&1.writer} (#{Map.get(&1, :stage, :ops)}): #{Enum.join(&1.ops, "; ")} - " <>
+            spell_reason(&1.reason))
       ),
       "",
       "CLIENTS",
@@ -274,8 +275,8 @@ defmodule HologramSyncTests.Consistency.Report do
     |> Enum.map(&"  #{inspect(&1, limit: :infinity)}")
   end
 
-  # A rollback's reason is an exception's message, or whatever the transaction rolled back with -
-  # an exception struct among them, which doesn't interpolate.
+  # A rollback's reason is an exception's message, or whatever else the transaction rolled back
+  # with, like `:rollback`, which isn't a string.
   defp spell_reason(reason) when is_binary(reason), do: reason
 
   defp spell_reason(reason), do: inspect(reason)

@@ -156,7 +156,7 @@ defmodule HologramSyncTests.ConsistencyTest do
 
     assert trace =~ "COMMITS IN LOCK ORDER"
 
-    assert trace =~ "writer 1: tag_card card-1 tag-1 - no entity with id"
-    assert trace =~ "writer 2: rename x - %DBConnection.ConnectionError{"
+    assert trace =~ "writer 1 (ops): tag_card card-1 tag-1 - no entity with id"
+    assert trace =~ "writer 2 (ops): rename x - %DBConnection.ConnectionError{"
   end
 end

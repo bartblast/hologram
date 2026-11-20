@@ -110,6 +110,28 @@ defmodule HologramSyncTests.Consistency.PlanTest do
     assert Plan.options(%{}) == %{runs: 1, seed: ExUnit.configuration()[:seed], steps: 60}
   end
 
+  test "takes a card gone and a deadlock as conflicts, and nothing else" do
+    assert Plan.conflict?(%Hologram.MisuseError{
+             message: "cannot update HologramSyncTests.Entities.Card - no entity with id \"c\""
+           })
+
+    assert Plan.conflict?(%Hologram.MisuseError{
+             message: "add_relationship takes an entity struct, got: nil"
+           })
+
+    assert Plan.conflict?(%Postgrex.Error{postgres: %{code: :deadlock_detected}})
+
+    refute Plan.conflict?(%Hologram.MisuseError{
+             message: "cannot update HologramSyncTests.Entities.Board - no entity with id \"b\""
+           })
+
+    refute Plan.conflict?(%Hologram.WriteError{message: "cannot create Card"})
+
+    refute Plan.conflict?(%DBConnection.ConnectionError{message: "connection is closed"})
+    refute Plan.conflict?(%Hologram.MisuseError{message: "update takes recorded changes"})
+    refute Plan.conflict?(%RuntimeError{message: "boom"})
+  end
+
   test "spells an operation in words" do
     assert Plan.describe({:rename, HologramSyncTests.Entities.Tag, "t", :name, "name 3"}) ==
              "rename HologramSyncTests.Entities.Tag t name name 3"

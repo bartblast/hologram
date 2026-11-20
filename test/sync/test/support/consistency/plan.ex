@@ -168,6 +168,32 @@ defmodule HologramSyncTests.Consistency.Plan do
   end
 
   @doc """
+  Returns whether the given exception, raised by an operation, is a conflict the plan expects when
+  the writers go at once: the card it names gone - only cards are ever deleted - or the transaction
+  picked as a deadlock's victim. Anything else an operation raises is a failure of the run, a plan
+  naming a row that never existed among them.
+  """
+  @spec conflict?(Exception.t()) :: boolean
+  def conflict?(%Postgrex.Error{postgres: %{code: :deadlock_detected}}), do: true
+
+  # A tag or an untag reading the card finds none.
+  def conflict?(%Hologram.MisuseError{
+        message: "add_relationship takes an entity struct, got: nil"
+      }),
+      do: true
+
+  def conflict?(%Hologram.MisuseError{
+        message: "delete_relationship takes an entity struct, got: nil"
+      }),
+      do: true
+
+  def conflict?(%Hologram.MisuseError{message: message}) do
+    String.contains?(message, "#{inspect(Card)} - no entity with id")
+  end
+
+  def conflict?(_exception), do: false
+
+  @doc """
   Returns the given operation in words, for the trace.
   """
   @spec describe(op) :: String.t()
