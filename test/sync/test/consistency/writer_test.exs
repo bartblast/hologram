@@ -19,19 +19,36 @@ defmodule HologramSyncTests.Consistency.WriterTest do
     %{history: start_supervised!(History)}
   end
 
-  # The first writer starts first and holds its transaction open, so the second gets the lock and
-  # commits before it - and the first's state, read under the lock after that, holds both tags.
+  # The first writer writes first and holds its transaction open until the second has committed -
+  # and the first's state, read under the lock after that, holds both tags.
   test "orders overlapping transactions by their commits, not their starts", %{history: history} do
-    first = Task.async(fn -> Writer.commit(history, :first, [create_tag("first", 300)]) end)
-    Process.sleep(100)
-    second = Task.async(fn -> Writer.commit(history, :second, [create_tag("second", 0)]) end)
+    test_pid = self()
 
+    write_and_wait = fn ->
+      create!(Tag, name: "first")
+      send(test_pid, :first_wrote)
+
+      receive do
+        :release -> :ok
+      end
+    end
+
+    first =
+      Task.async(fn ->
+        Writer.commit(history, :first, [{"create tag first", write_and_wait, 0}])
+      end)
+
+    assert_receive :first_wrote, 5_000
+
+    assert {:committed, _second} = Writer.commit(history, :second, [create_tag("second", 0)])
+
+    send(first.pid, :release)
     assert {:committed, _first} = Task.await(first)
-    assert {:committed, _second} = Task.await(second)
 
     assert [%{writer: :second} = earlier, %{writer: :first} = later] = History.entries(history)
     assert tag_names(earlier.state) == ["second"]
     assert tag_names(later.state) == ["first", "second"]
+    assert later.xid < earlier.xid
   end
 
   # The holder keeps the lock past reading its state, up to its commit, so the waiter's state, read
