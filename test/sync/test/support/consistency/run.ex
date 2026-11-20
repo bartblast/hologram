@@ -17,6 +17,7 @@ defmodule HologramSyncTests.Consistency.Run do
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.ReadEdge
+  alias Hologram.Sync.Sessions
   alias HologramSyncTests.Consistency.Checks
   alias HologramSyncTests.Consistency.Client
   alias HologramSyncTests.Consistency.History
@@ -26,8 +27,8 @@ defmodule HologramSyncTests.Consistency.Run do
   alias HologramSyncTests.Entities.Tag
 
   # How long every client has to converge once the writes stop, how long the server has to read
-  # the last commit off the log, and how long the stores must then stay as they are for a late
-  # frame moving one away to be seen.
+  # the last commit off the log and its sessions to tell their clients, and how long the stores
+  # must then stay as they are for a late frame moving one away to be seen.
   @converge_ms 20_000
   @read_ms 10_000
   @quiet_ms 500
@@ -172,6 +173,7 @@ defmodule HologramSyncTests.Consistency.Run do
           [%{client: "the run", failure: "the server never read the last commit off the log"}]
       end
 
+    Enum.each(Sessions.list(), fn {pid, _user_id} -> session_barrier(pid) end)
     Process.sleep(@quiet_ms)
 
     settled =
@@ -246,7 +248,8 @@ defmodule HologramSyncTests.Consistency.Run do
   end
 
   # Once the server has read every commit off the log and the quiet period passed, a store that
-  # converged has to still hold the same, still complete, and the records are all in.
+  # converged has to still hold the same, still complete, and the records are all in. A store that
+  # never converged has its differences told once, as the first poll left them.
   defp settle({client, first_differences}, entries) do
     expected = Model.expected(Model.snapshot(), client.user_id)
 
@@ -258,9 +261,14 @@ defmodule HologramSyncTests.Consistency.Run do
     incomplete = if Client.complete?(client.pid), do: [], else: [:incomplete]
     records = Client.records(client.pid)
 
+    differences =
+      if first_differences == [],
+        do: Enum.map(incomplete ++ settled, &{:after_quiet, &1}),
+        else: first_differences
+
     %{
       client
-      | differences: first_differences ++ Enum.map(incomplete ++ settled, &{:after_quiet, &1}),
+      | differences: differences,
         events: Client.events(client.pid),
         leaks: Checks.leaks(records, entries, client.user_id),
         records: records
@@ -278,6 +286,17 @@ defmodule HologramSyncTests.Consistency.Run do
       |> Enum.max()
 
     await(fn -> (ReadEdge.get(ReadEdge) || 0) > last_xid end, @read_ms)
+  end
+
+  # Every batch routed is in a session's mailbox once the read edge passes the last commit. A
+  # system message is handled after the callback running and every message ahead of it, so once a
+  # session answers one it has told its client all it was given. A session gone, or one still
+  # waiting on its client past the timeout, is left to the quiet period - its late frames carry the
+  # final state, so they can only show a problem, never cause one.
+  defp session_barrier(pid) do
+    :sys.get_state(pid, @read_ms)
+  catch
+    :exit, _reason -> :ok
   end
 
   # A client away until the writers were done has to have been told to start over when its gap

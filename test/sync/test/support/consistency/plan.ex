@@ -141,7 +141,7 @@ defmodule HologramSyncTests.Consistency.Plan do
 
   def apply_op({:move_card, id, board_id}), do: DB.update!(Card, id, board_id: board_id)
 
-  def apply_op({:remove_member, id}), do: DB.delete!(SpaceMember, id)
+  def apply_op({:remove_member, id, _space_id, _user_id}), do: DB.delete!(SpaceMember, id)
 
   def apply_op({:rename, type, id, field, value}), do: DB.update!(type, id, [{field, value}])
 
@@ -158,7 +158,7 @@ defmodule HologramSyncTests.Consistency.Plan do
     |> DB.update!()
   end
 
-  def apply_op({:unblock, id}), do: DB.delete!(NoticeBlock, id)
+  def apply_op({:unblock, id, _notice_id, _user_id}), do: DB.delete!(NoticeBlock, id)
 
   def apply_op({:untag_card, card_id, tag_id}) do
     Card
@@ -224,7 +224,7 @@ defmodule HologramSyncTests.Consistency.Plan do
       end
 
     %{
-      clients: clients(planned),
+      clients: clients(planned, steps),
       planned: planned,
       seed: seed,
       seed_ops: seed_ops,
@@ -473,7 +473,11 @@ defmodule HologramSyncTests.Consistency.Plan do
   end
 
   defp plan_op(planned, :remove_member, id) do
-    {{:remove_member, id}, %{planned | members: Map.delete(planned.members, id)}}
+    # The space and user ride along, so the trace names who lost what.
+    {space_id, user_id} = planned.members[id]
+
+    {{:remove_member, id, space_id, user_id},
+     %{planned | members: Map.delete(planned.members, id)}}
   end
 
   defp plan_op(planned, :revoke_viewer, {user_id, board_id} = grant) do
@@ -488,7 +492,9 @@ defmodule HologramSyncTests.Consistency.Plan do
   defp plan_op(planned, :tag_card, {card_id, tag_id}), do: tag(planned, card_id, tag_id)
 
   defp plan_op(planned, :unblock, id) do
-    {{:unblock, id}, %{planned | blocks: Map.delete(planned.blocks, id)}}
+    {notice_id, user_id} = planned.blocks[id]
+
+    {{:unblock, id, notice_id, user_id}, %{planned | blocks: Map.delete(planned.blocks, id)}}
   end
 
   defp plan_op(planned, :untag_card, {card_id, tag_id}) do
@@ -542,8 +548,9 @@ defmodule HologramSyncTests.Consistency.Plan do
   # for two users and an anonymous one that are cut often. Some reconnects cut again on the first
   # frame, so the cut lands part way through a fill or a catch-up. The second user's second tab is
   # cut once it holds everything and stays away until the writers are done, so its gap is most of
-  # the run's writes, past the sync app's `gap_limit`, and it's sent everything again.
-  defp clients(planned) do
+  # the run's writes, past the sync app's `gap_limit`, and it's sent everything again. The flaky
+  # tabs' absences grow with the steps, so a longer run cuts as often as a short one.
+  defp clients(planned, steps) do
     [first_user, second_user | _users] = planned.users
 
     specs =
@@ -556,17 +563,19 @@ defmodule HologramSyncTests.Consistency.Plan do
         ]
 
     Enum.map(specs, fn {name, user_id, kind} ->
-      %{name: name, schedule: schedule(kind), user_id: user_id}
+      %{name: name, schedule: schedule(kind, steps), user_id: user_id}
     end)
   end
 
-  defp schedule(:steady), do: []
+  defp schedule(:steady, _steps), do: []
 
-  defp schedule(:flaky) do
-    Enum.flat_map(1..(:rand.uniform(4) + 2), fn _index -> absence(:rand.uniform(300)) end)
+  defp schedule(:flaky, steps) do
+    absences = max(div(steps, 20), 1) + :rand.uniform(4) - 1
+
+    Enum.flat_map(1..absences, fn _index -> absence(:rand.uniform(300)) end)
   end
 
-  defp schedule(:away_long) do
+  defp schedule(:away_long, _steps) do
     [:await_synced, :cut, :await_writers, :connect]
   end
 

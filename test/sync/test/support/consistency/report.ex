@@ -84,7 +84,7 @@ defmodule HologramSyncTests.Consistency.Report do
 
     lines =
       ["#{index}. #{client_name} (user #{inspect(client && client.user_id)}): #{text}"] ++
-        commits_touching(row_id, outcome) ++ timeline(client)
+        commits_touching(row_id, client, outcome) ++ timeline(client)
 
     Enum.join(lines, "\n")
   end
@@ -100,7 +100,7 @@ defmodule HologramSyncTests.Consistency.Report do
 
     {leak.client,
      "received #{inspect(record.type)} #{record.id} carrying #{inspect(record.carried)} at " <>
-       "#{record.received_at}, on a connection opened at #{record.opened_at}, under cursor tx " <>
+       "#{record.received_at}, on a connection opened at #{record.opened_at}, bounded by tx " <>
        "#{inspect(record.cursor_tx)} - its user could read it with those values in none of the " <>
        "commits #{inspect(leak.candidates)} the frame could come from", record.id}
   end
@@ -116,7 +116,7 @@ defmodule HologramSyncTests.Consistency.Report do
   defp describe_difference({:after_quiet, difference}) do
     {text, row_id} = describe_difference(difference)
 
-    {"once the stores had converged and the evaluators drained: " <> text, row_id}
+    {"once the stores had converged and the server had read every commit: " <> text, row_id}
   end
 
   defp describe_difference(:incomplete), do: {"was never told it holds everything", nil}
@@ -137,12 +137,14 @@ defmodule HologramSyncTests.Consistency.Report do
     {"holds #{inspect(type)} #{id}'s #{name} as #{inspect(held)}, not #{inspect(expected)}", id}
   end
 
-  defp commits_touching(nil, _outcome), do: []
+  defp commits_touching(nil, _client, _outcome), do: []
 
-  # The commits naming the row or the rows its access goes through: what its fields point at, and
-  # what those point at in turn - a card's board and the board's space, a member's space and user.
-  defp commits_touching(row_id, outcome) do
-    related = related_ids(row_id, outcome.history.entries)
+  # The commits naming the row, the rows its access goes through - what its fields point at, and
+  # what those point at in turn: a card's board and the board's space, a member's space and user -
+  # or the client's user, which grants, removals and blocks name.
+  defp commits_touching(row_id, client, outcome) do
+    user_ids = if client && client.user_id, do: [client.user_id], else: []
+    related = related_ids(row_id, outcome.history.entries) ++ user_ids
 
     touching =
       for {entry, index} <- Enum.with_index(outcome.history.entries),

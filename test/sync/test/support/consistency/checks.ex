@@ -41,8 +41,9 @@ defmodule HologramSyncTests.Consistency.Checks do
   A frame could have been read from a state when the state could have committed before the frame
   arrived (its transaction got the commit lock before then), could still have been current when the
   connection carrying the frame opened (no later state had committed by the open),
-  and, under a cursor, is at or after every state left by a transaction below the cursor's: the
-  server read the place before the frame's rows, and every transaction below it had ended by then.
+  and, with a bounding transaction id - the frame's cursor's, or the place the client held when it
+  arrived - is at or after every state left by a transaction below it: the server read that place
+  before the frame's rows, and every transaction below it had ended by then.
   Each violation names the record and the states that bounded it, by position in the history.
   """
   @spec leaks(list(map), list(map), String.t() | nil) :: list(map)

@@ -110,7 +110,7 @@ defmodule HologramSyncTests.ConsistencyTest do
              "commit 1 (writer 2, xid 1235, lock 3, committed 4): archive_board board-1 true"
 
     assert message =~ "5 closed: :cut"
-    assert message =~ "at 10, on a connection opened at 0, under cursor tx 1234"
+    assert message =~ "at 10, on a connection opened at 0, bounded by tx 1234"
 
     dir =
       Path.join(System.tmp_dir!(), "sync_consistency_test_#{System.unique_integer([:positive])}")

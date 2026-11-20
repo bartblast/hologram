@@ -27,9 +27,13 @@ defmodule HologramSyncTests.Consistency.Client do
   @typedoc """
   A put or a patch of one of the model's rows, as the client received it: the monotonic time read
   before the connect that carried it started, the time the chunk completing its frame arrived, the
-  transaction id of the frame's cursor or nil when it carried none, the declared fields it
-  carried, and whether the client applied it - a patch for a row it doesn't hold is passed over,
-  and is a row the server sent all the same.
+  transaction id bounding it, the declared fields it carried, and whether the client applied it - a
+  patch for a row it doesn't hold is passed over, and is a row the server sent all the same.
+
+  The bound is the frame's cursor, or, for a frame carrying none, the place the client held when it
+  arrived: only a batch's last frame carries one, and the server read the batch's rows after every
+  transaction below the client's place had ended - a client cut off right there comes back from
+  it. Nil when the client held no place either.
   """
   @type received :: %{
           applied?: boolean,
@@ -298,6 +302,7 @@ defmodule HologramSyncTests.Consistency.Client do
   defp handle_frame(%{"event" => "sync_deltas", "data" => data}, state, received_at) do
     frame = Jason.decode!(data, objects: :ordered_objects)
     cursor = field(frame, "cursor")
+    bound = cursor || state.cursor
 
     applied =
       frame
@@ -307,7 +312,7 @@ defmodule HologramSyncTests.Consistency.Client do
         by_type
         |> pairs()
         |> Enum.reduce(acc, fn {type, items}, type_acc ->
-          apply_group(type_acc, op, type, plain(items), {cursor, received_at})
+          apply_group(type_acc, op, type, plain(items), {bound, received_at})
         end)
       end)
 

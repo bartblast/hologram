@@ -7,6 +7,7 @@ defmodule HologramSyncTests.Consistency.ClientTest do
   alias Hologram.Auth
   alias Hologram.DB
   alias Hologram.DB.QueryCache
+  alias Hologram.Sync.Cursor
   alias Hologram.Sync.Sessions
   alias HologramSyncTests.Consistency.Checks
   alias HologramSyncTests.Consistency.Client
@@ -125,6 +126,38 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     send(client, {:http, {request_id, :stream, chunk}})
 
     assert [%{cursor: "123.0", failure: "unreadable cursor"}] = Client.failures(client)
+  end
+
+  # Only a batch's last frame carries a place, and the batch's rows were read after every
+  # transaction below the place the client already held.
+  test "a client bounds a frame with no cursor by the place it held", %{users: [member | _users]} do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+
+    {:ok, tx, _seq, _policy_hash, _types_hash} =
+      client
+      |> Client.cursor()
+      |> Cursor.decode()
+
+    [%{request_id: request_id}] =
+      client
+      |> Client.events()
+      |> Enum.filter(&(&1.kind == :connect))
+
+    chunk = """
+    event: sync_deltas
+    data: {"cursor":null,"deltas":{"put_entity":{"HologramSyncTests.Entities.Tag":[{"id":"t","name":"t"}]}}}
+
+    """
+
+    send(client, {:http, {request_id, :stream, chunk}})
+
+    assert %{cursor_tx: ^tx, id: "t"} =
+             client
+             |> Client.records()
+             |> List.last()
   end
 
   # Stopped the way ExUnit stops it at a test's end, by its supervisor.
