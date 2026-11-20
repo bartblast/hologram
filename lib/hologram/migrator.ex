@@ -74,8 +74,10 @@ defmodule Hologram.Migrator do
   # nobody takes it exclusively, so the try always wins, and booting nodes hold it side by side.
   # A session holding it between statements has no transaction and no snapshot, so a concurrent
   # build never waits for it. Freed with the session, like the migration lock the boot holds: a
-  # node whose host vanishes without closing its connection keeps both until the server drops the
-  # session, and builders give way for that long.
+  # node whose host vanishes without closing its connection keeps what it holds until the server
+  # drops the session, and builders give way for that long - about a minute on a direct connection
+  # once the session is between statements, given its keepalives (see
+  # with_migration_connection/1), while a statement it was running runs to its end first.
   #
   # Every release holding the builder holds this key too - the builder never shipped without it.
   @boot_lock_key -8_943_570_201_190_700_407
@@ -458,6 +460,12 @@ defmodule Hologram.Migrator do
   takes, and one cut short is left invalid, to be built again. Set by the session's first
   statement rather than as startup parameters, which a pooler may refuse, and only the ones the
   server knows: `transaction_timeout` is PostgreSQL 17's.
+
+  It also runs with the pool's keepalives and user timeout (see
+  Hologram.DB.Config.keepalive_statement/0): a node that vanishes holding the migration lock or the
+  boot key holds up every other node's boot or index builds until the server drops its session.
+  Best effort, as for the pool: a server refusing them is warned about and the session used as it
+  is.
   """
   @spec with_migration_connection((-> any)) :: any
   def with_migration_connection(fun) do
@@ -481,6 +489,8 @@ defmodule Hologram.Migrator do
           FROM pg_catalog.pg_settings
           WHERE name IN ('lock_timeout', 'statement_timeout', 'transaction_timeout')
           """)
+
+        apply_keepalives()
 
         fun.()
       end)
@@ -1377,6 +1387,16 @@ defmodule Hologram.Migrator do
       missing_indexes(mapping) == [] and drift_ops(mapping) == [] and invalid_indexes() == []
   rescue
     _error -> false
+  end
+
+  # A connection lost here ends the session, which the next statement, or the exit the session
+  # sends, reports.
+  defp apply_keepalives do
+    case Connection.query(Config.keepalive_statement()) do
+      {:ok, _result} -> :ok
+      {:error, %DBConnection.ConnectionError{}} -> :ok
+      {:error, error} -> Config.warn_keepalives_refused(error)
+    end
   end
 
   # Never let go by hand: it frees with the session, as the migration lock the boot takes does.

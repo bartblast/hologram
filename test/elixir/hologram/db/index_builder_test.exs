@@ -673,6 +673,51 @@ defmodule Hologram.DB.IndexBuilderTest do
       assert length(String.split(log, "a booting node needs the migration lock")) == 2
     end
 
+    # Asked before it takes the lock, a builder that missed a boot taking the key would take its
+    # next step after the boot started waiting.
+    test "asks whether a booting node waits once it holds the lock, not before it polls", %{
+      chain: chain,
+      model: model,
+      scratch: scratch,
+      scratch_opts: scratch_opts
+    } do
+      holder = start_supervised!({Postgrex, scratch_opts}, id: :holder)
+      boot = start_supervised!({Postgrex, scratch_opts}, id: :boot)
+
+      assert %{rows: [[true]]} =
+               Postgrex.query!(holder, "SELECT pg_try_advisory_lock($1)", [@migration_lock_key])
+
+      builder =
+        Task.async(fn ->
+          {:ok, session} = Postgrex.start_link(scratch_opts)
+
+          route(session, fn -> converge(plan(model), chain, step_pause_ms: 0) end)
+        end)
+
+      # Polling for the lock the holder has.
+      wait_until(
+        fn ->
+          Process.info(builder.pid, :current_function) ==
+            {:current_function, {Process, :sleep, 1}}
+        end,
+        10_000
+      )
+
+      assert %{rows: [[true]]} =
+               Postgrex.query!(boot, "SELECT pg_try_advisory_lock_shared($1)", [@boot_lock_key])
+
+      Postgrex.query!(holder, "SELECT pg_advisory_unlock($1)", [@migration_lock_key])
+
+      # Past the builder's next poll, 5 s after its first.
+      Process.sleep(6_000)
+      route(scratch, fn -> assert index_validity(@index) == :absent end)
+
+      Postgrex.query!(boot, "SELECT pg_advisory_unlock_shared($1)", [@boot_lock_key])
+
+      assert Task.await(builder, 30_000) == :ok
+      route(scratch, fn -> assert index_validity(@index) == true end)
+    end
+
     test "returns a step it took that came up again, which another node undid", %{
       chain: chain,
       model: model,
@@ -826,6 +871,21 @@ defmodule Hologram.DB.IndexBuilderTest do
   end
 
   describe "Hologram.Migrator.with_migration_connection/1" do
+    # A node that vanishes holding the migration lock or the boot key would otherwise hold up the
+    # other nodes for hours.
+    test "sets the keepalives and the user timeout of the session", %{scratch: scratch} do
+      statement =
+        "SELECT current_setting('tcp_keepalives_idle'), current_setting('tcp_keepalives_interval'), current_setting('tcp_keepalives_count'), current_setting('tcp_user_timeout')"
+
+      route(scratch, fn ->
+        assert {:ok, %Postgrex.Result{rows: [["30", "10", "3", user_timeout]]}} =
+                 Migrator.with_migration_connection(fn -> Connection.query(statement) end)
+
+        # A platform without the user timeout keeps it at 0.
+        assert user_timeout in ["0", "60000"]
+      end)
+    end
+
     test "runs with no statement or lock timeout, whatever the database sets", %{
       scratch: scratch,
       scratch_opts: scratch_opts

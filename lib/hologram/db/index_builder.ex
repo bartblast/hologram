@@ -70,7 +70,8 @@ defmodule Hologram.DB.IndexBuilder do
 
   @retry_interval_ms 30_000
 
-  # Long enough for a builder on another node to get the lock between two steps.
+  # Leaves the lock free for a while between two steps, so a builder on another node gets it now and
+  # then.
   @step_pause_ms 1_500
 
   # How often it looks again for the lock another node holds, and how long it waits after giving
