@@ -219,7 +219,7 @@ defmodule Hologram.Job.WorkerTest do
 
     # Each worker restarting would otherwise crash at once on a sweep that keeps failing, past the
     # supervisor's limit - the poll's sweep tries again at its own pace.
-    test "stays up when the sweep as it starts raises" do
+    test "stays up, and logs nothing, when the sweep as it starts raises" do
       {:ok, refusing} = Agent.start_link(fn -> true end)
 
       sweep = fn _job_types, _skip_ids ->
@@ -235,11 +235,11 @@ defmodule Hologram.Job.WorkerTest do
           assert Process.alive?(worker)
         end)
 
-      assert log =~ "the job worker failed to look for jobs"
-      assert log =~ "refused"
+      # Only an earlier go at what the first poll does and logs.
+      assert log == ""
     end
 
-    test "stays up when the look as it starts raises" do
+    test "stays up, and logs nothing, when the look as it starts raises" do
       queues = start_queues(%{Module1 => ["a"]})
       {:ok, refusing} = Agent.start_link(fn -> true end)
       stub = queued_stub(self(), queues)
@@ -261,7 +261,31 @@ defmodule Hologram.Job.WorkerTest do
           assert_receive {:ran, Module1, "a"}, @timeout_ms
         end)
 
-      assert log =~ "the job worker failed to look for jobs"
+      # A worker can start before the job tables are there, in a test env, and a log line then
+      # would only be noise.
+      assert log == ""
+    end
+  end
+
+  describe "start_link/1, as it starts" do
+    test "logs nothing when it can't get a database connection" do
+      {:ok, refusing} = Agent.start_link(fn -> true end)
+
+      sweep = fn _job_types, _skip_ids ->
+        if Agent.get_and_update(refusing, &{&1, false}) do
+          raise DBConnection.ConnectionError, "connection not available"
+        end
+
+        :ok
+      end
+
+      log =
+        capture_log(fn ->
+          worker = start_worker!(sweep: sweep)
+          :sys.get_state(worker)
+        end)
+
+      assert log == ""
     end
   end
 
@@ -756,17 +780,22 @@ defmodule Hologram.Job.WorkerTest do
     test "looks when its sweep fails for a reason of its own" do
       queues = start_queues(%{})
 
-      capture_log(fn ->
-        start_worker_on!(queues,
-          poll_interval_ms: @poll_interval_ms,
-          sweep: fn _job_types, _skip_ids -> raise "no such table" end
-        )
+      log =
+        capture_log(fn ->
+          start_worker_on!(queues,
+            poll_interval_ms: @poll_interval_ms,
+            sweep: fn _job_types, _skip_ids -> raise "no such table" end
+          )
 
-        await_first_look()
-        add_jobs(queues, Module1, ["a"])
+          await_first_look()
+          add_jobs(queues, Module1, ["a"])
 
-        assert_receive {:ran, Module1, "a"}, @timeout_ms
-      end)
+          assert_receive {:ran, Module1, "a"}, @timeout_ms
+        end)
+
+      # Logged at the poll, which a sweep failing as the worker starts is left to.
+      assert log =~ "the job worker failed to look for jobs or to fail the runs cut short"
+      assert log =~ "no such table"
     end
 
     test "tries a job left queued again" do

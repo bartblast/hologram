@@ -115,10 +115,14 @@ defmodule Hologram.Job.Worker do
     schedule_poll(state.poll_interval_ms)
 
     # A sweep and a look at once rather than at the first poll: the runs a predecessor left are
-    # failed now, and the jobs queued while no worker ran start now.
-    with {:ok, job_types} <- guard(&job_types/0),
-         swept when swept != :stop <- guard(fn -> state.sweep.(job_types, MapSet.new()) end) do
-      {:noreply, fill(state, job_types)}
+    # failed now, and the jobs queued while no worker ran start now. Quiet about what fails, since
+    # each is only an earlier go at what the first poll does and logs: a worker can start before
+    # the job tables are there - in a test env, whose test helper converges the schema after the
+    # app starts - and an error logged then would only be noise.
+    with {:ok, job_types} <- guard(&job_types/0, :quiet),
+         swept when swept != :stop <-
+           guard(fn -> state.sweep.(job_types, MapSet.new()) end, :quiet) do
+      {:noreply, fill(state, job_types, :quiet)}
     else
       _stop_or_skip -> {:noreply, state}
     end
@@ -217,13 +221,13 @@ defmodule Hologram.Job.Worker do
   # types after it would fail the same way. One that fails for a reason of its own type's, like an
   # error on its table, skips that type alone, so it doesn't hold up the types after it. The next
   # wake or poll looks again, and a run that ends looks again at its own type.
-  defp fill(state, job_types) do
-    Enum.reduce_while(job_types, state, &fill_type(&2, &1))
+  defp fill(state, job_types, logging \\ :logged) do
+    Enum.reduce_while(job_types, state, &fill_type(&2, &1, logging))
   end
 
   # The skip set holds the type's own runs, not every type's: an id of another type's is never in
   # this type's table, and would only make the read longer.
-  defp fill_type(state, job_type) do
+  defp fill_type(state, job_type, logging) do
     free = state.max_concurrency.(job_type) - running_count(state, job_type)
 
     skip_ids =
@@ -232,7 +236,7 @@ defmodule Hologram.Job.Worker do
       |> MapSet.union(state.passed_over)
 
     with true <- free > 0,
-         {:ok, jobs} <- guard(fn -> state.queued.(job_type, skip_ids, free) end) do
+         {:ok, jobs} <- guard(fn -> state.queued.(job_type, skip_ids, free) end, logging) do
       {:cont, Enum.reduce(jobs, state, &start_run(&2, job_type, &1.id))}
     else
       false -> {:cont, state}
@@ -250,27 +254,31 @@ defmodule Hologram.Job.Worker do
   # server ended under the look. And a failure that keeps coming would crash each worker that
   # restarts, one after the other, past the supervisor's limit. Exits are not caught: a lock
   # connection gone is the supervisor's to restart, with the runs, and so is a pool that is down
-  # rather than busy.
-  defp guard(fun) do
+  # rather than busy. With :quiet, nothing is logged.
+  defp guard(fun, logging \\ :logged) do
     {:ok, fun.()}
   rescue
     Hologram.StaleModelError ->
       :stop
 
     error in DBConnection.ConnectionError ->
-      Logger.warning(
-        "Hologram: the job worker couldn't get a database connection, and looks again at the " <>
-          "next wake or poll: " <> Exception.message(error)
-      )
+      if logging == :logged do
+        Logger.warning(
+          "Hologram: the job worker couldn't get a database connection, and looks again at the " <>
+            "next wake or poll: " <> Exception.message(error)
+        )
+      end
 
       :stop
 
     error ->
-      Logger.error(
-        "Hologram: the job worker failed to look for jobs or to fail the runs cut short, and " <>
-          "tries again at the next wake or poll: " <>
-          Exception.format(:error, error, __STACKTRACE__)
-      )
+      if logging == :logged do
+        Logger.error(
+          "Hologram: the job worker failed to look for jobs or to fail the runs cut short, and " <>
+            "tries again at the next wake or poll: " <>
+            Exception.format(:error, error, __STACKTRACE__)
+        )
+      end
 
       :skip
   end
