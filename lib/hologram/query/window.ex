@@ -27,13 +27,11 @@ defmodule Hologram.Query.Window do
   # source is embedded whole too, since every row of it leads to related rows. Two narrowings of
   # one set are joined with `or`, and a whole one wins.
   #
-  # A narrowing keeps only what bounds the rows whatever the run's values are:
+  # A narrowing keeps only what bounds the rows for every reader, whatever rows it may read:
   #
-  # - A predicate with a PLACEHOLDER on either side - as the value, or as the compared attribute -
-  #   bounds nothing, since the answer for every value it may take has to be there. It is dropped.
   # - A path predicate that matches a missing related row - `channel.archived != true`,
   #   `channel.name == nil`, a membership holding nil, an equality with another attribute - bounds
-  #   nothing either: a reader who may not read the related row reads it as missing. It is dropped.
+  #   nothing: a reader who may not read the related row reads it as missing. It is dropped.
   # - A DISJUNCTION narrows each alternative to what bounds it, and is dropped whole when an
   #   alternative loses every predicate, since that alternative admits every row. Dropping a
   #   conjunct widens what arrives, which is safe; dropping an alternative would narrow it.
@@ -136,10 +134,7 @@ defmodule Hologram.Query.Window do
     name_reads =
       clauses
       |> Stage.predicate_references(prefixes)
-      |> Enum.filter(fn
-        {_relationships, {:placeholder, _name}} -> false
-        {relationships, name} -> derived_at?(root, relationships, name)
-      end)
+      |> Enum.filter(fn {relationships, name} -> derived_at?(root, relationships, name) end)
 
     source_reads =
       clauses
@@ -190,8 +185,6 @@ defmodule Hologram.Query.Window do
   end
 
   defp derived_name?(nil, _scope), do: false
-
-  defp derived_name?({:placeholder, _name}, _scope), do: false
 
   defp derived_name?({:outer, levels, name}, scope),
     do: derived_name?(name, [Enum.at(scope, levels)])
@@ -313,17 +306,6 @@ defmodule Hologram.Query.Window do
   defp path_name?([_hop, _name | _rest]), do: true
 
   defp path_name?(_name), do: false
-
-  defp placeholder?({:placeholder, _name}), do: true
-
-  defp placeholder?(values) when is_list(values), do: Enum.any?(values, &placeholder?/1)
-
-  defp placeholder?(_value), do: false
-
-  # A path holds names only, never a placeholder, so only its value can bound nothing.
-  defp placeholder_bound?({path, _operator, value}) when is_list(path), do: placeholder?(value)
-
-  defp placeholder_bound?({name, _operator, value}), do: placeholder?(name) or placeholder?(value)
 
   # What clauses read beside the rows they are about, embedded from the root row: the derived
   # fields they read, the sets their quantifiers read and the rows along their paths.
@@ -786,7 +768,7 @@ defmodule Hologram.Query.Window do
   #
   # A derived value, or an any over a derived set, is computed over the rows a reader holds, which
   # can be fewer than are stored - so no comparison of one bounds the set safely, and it
-  # is dropped like one a placeholder stands in.
+  # is dropped.
   defp narrowed_clause({:any, {source, clauses}}, scope) do
     {start_type, hops} = source_start(source, scope)
 
@@ -804,7 +786,7 @@ defmodule Hologram.Query.Window do
        do: []
 
   defp narrowed_clause(triple, scope) do
-    if placeholder_bound?(triple) or missing_path_match?(triple) or reads_derived?(triple, scope),
+    if missing_path_match?(triple) or reads_derived?(triple, scope),
       do: [],
       else: [triple]
   end

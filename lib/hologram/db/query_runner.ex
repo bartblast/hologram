@@ -6,10 +6,8 @@ defmodule Hologram.DB.QueryRunner do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryCompiler
-  alias Hologram.DB.SortKey
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Metadata
-  alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Stage
@@ -26,25 +24,17 @@ defmodule Hologram.DB.QueryRunner do
   their NotIncluded defaults. An included derived field holds its value, read by its
   declared type, or the rows its definition holds - a list, or one struct or nil - each
   embedding what the definition and the include ask for. One not included keeps its
-  NotIncluded default. Param values are given in the bindings map and encoded with the
-  slot's logical type.
+  NotIncluded default.
 
-  Bindings are validated before execution: a binding for a placeholder the query does not
-  define raises, and each given value must match the logical type of the attribute
-  its placeholder meets, enum membership included. A membership placeholder takes a list whose
-  elements are validated the same way - an empty list is legal and matches nothing.
-
-  Raises Hologram.MisuseError when a binding is invalid, when a placeholder value is missing, or
-  when a placeholder value or list element is nil - a sometimes-nil variable branches into
-  an explicit nil predicate instead.
+  Raises Hologram.MisuseError when the term holds a placeholder (see
+  `Hologram.Query.Stage.assert_no_placeholders!/1`).
   """
-  @spec run(Query.t(), %{module => %{atom => any}}, %{atom => any}) ::
-          list(struct) | struct | integer | nil
-  def run(term, mapping, bindings \\ %{}) do
-    validate_bindings!(term, bindings)
+  @spec run(Query.t(), %{module => %{atom => any}}) :: list(struct) | struct | integer | nil
+  def run(term, mapping) do
+    Stage.assert_no_placeholders!(term)
 
     compiled = QueryCompiler.compile(term, mapping)
-    values = Enum.map(compiled.params, &resolve_param!(&1, bindings))
+    values = Enum.map(compiled.params, fn {:value, encoded_value} -> encoded_value end)
 
     case Connection.query(compiled.sql, values) do
       {:ok, result} -> decode_result(result, term, mapping)
@@ -56,10 +46,10 @@ defmodule Hologram.DB.QueryRunner do
   # generates names no user entity, so the rules read it as an anonymous session - the way
   # Hologram.Auth.can?/3 and the recheck do.
   @doc false
-  @spec run_policied(Query.t(), %{module => %{atom => any}}, any, %{atom => any}) ::
+  @spec run_policied(Query.t(), %{module => %{atom => any}}, any) ::
           list(struct) | struct | integer | nil
-  def run_policied(term, mapping, session_user_id, bindings \\ %{}) do
-    {compiled, values} = compile_policied(term, mapping, session_user_id, bindings)
+  def run_policied(term, mapping, session_user_id) do
+    {compiled, values} = compile_policied(term, mapping, session_user_id)
 
     case Connection.query(compiled.sql, values) do
       {:ok, result} -> decode_result(result, term, mapping)
@@ -73,7 +63,7 @@ defmodule Hologram.DB.QueryRunner do
   @doc false
   @spec run_policied_aggregate(Query.t(), %{module => %{atom => any}}, any, String.t()) :: any
   def run_policied_aggregate(term, mapping, session_user_id, aggregate_sql) do
-    {compiled, values} = compile_policied(term, mapping, session_user_id, %{})
+    {compiled, values} = compile_policied(term, mapping, session_user_id)
     sql = ~s|SELECT #{aggregate_sql} FROM (#{compiled.sql}) AS "$rows"|
 
     case Connection.query(sql, values) do
@@ -92,7 +82,7 @@ defmodule Hologram.DB.QueryRunner do
   id in any other spelling names no user entity, so it reads as an anonymous one, the way
   `Hologram.Auth.can?/3` answers it.
 
-  Returns a map from the id of every row one of them may read to the row, decoded as `run/3`
+  Returns a map from the id of every row one of them may read to the row, decoded as `run/2`
   decodes it with no includes, its readers and its verdicts. The readers are `:all` when a rule
   answering the same for every user admits it, and otherwise the set of the given users who may
   read it, nil among them when an anonymous user may. An id is left out when its row is gone or
@@ -158,88 +148,6 @@ defmodule Hologram.DB.QueryRunner do
       {:error, error} ->
         raise error
     end
-  end
-
-  # A path binds as the attribute it ends at, on the type its relationships lead to.
-  # The relationships can run through a set a derived field holds - inside a quantifier over one.
-  defp attribute_definition(entity_type, path) when is_list(path) do
-    {relationship_names, [attribute_name]} = Enum.split(path, -1)
-
-    entity_type
-    |> Derived.path_target(relationship_names)
-    |> attribute_definition(attribute_name)
-  end
-
-  # A name matching no attribute definition is a to-one reference field - every reference
-  # column carries the entity id type, and a bound value is never nil (nil placeholders raise). A
-  # derived field holding a value binds as the type it declares.
-  defp attribute_definition(entity_type, attribute_name) do
-    definitions =
-      entity_type.__attributes__() ++
-        entity_type.__system_attributes__() ++ entity_type.__derived__()
-
-    case Enum.find(definitions, fn {name, _type, _opts} -> name == attribute_name end) do
-      {_name, type, opts} -> {type, opts}
-      nil -> {:uuid, []}
-    end
-  end
-
-  # One placeholder name binds one logical type - identical rebinding is reuse, a differing kind or
-  # type raises.
-  defp binding_description(:list, type), do: inspect({:list, type})
-
-  defp binding_description(:scalar, type), do: inspect(type)
-
-  # One placeholder name binds one logical type - identical rebinding is reuse, a differing kind or
-  # type raises.
-  defp collect_definition(acc, placeholder_name, {kind, type, _opts} = definition) do
-    case Map.fetch(acc, placeholder_name) do
-      {:ok, {^kind, ^type, _existing_opts}} ->
-        acc
-
-      {:ok, {existing_kind, existing_type, _existing_opts}} ->
-        raise MisuseError,
-          message:
-            "placeholder #{inspect(placeholder_name)} binds as #{binding_description(existing_kind, existing_type)} and #{binding_description(kind, type)} - rename one of the conflicting variables"
-
-      :error ->
-        Map.put(acc, placeholder_name, definition)
-    end
-  end
-
-  # A placeholder as a membership list element binds a single value of the attribute's
-  # type.
-  defp collect_param_definitions(term, acc) do
-    acc_with_filters =
-      term.filter
-      |> Stage.triples()
-      |> Enum.reduce(acc, fn
-        {attribute_name, operator, {:placeholder, placeholder_name}}, inner_acc ->
-          {type, opts} = attribute_definition(term.entity, attribute_name)
-          kind = if operator in [:in, :not_in], do: :list, else: :scalar
-
-          collect_definition(inner_acc, placeholder_name, {kind, type, opts})
-
-        {attribute_name, _operator, values}, inner_acc when is_list(values) ->
-          {type, opts} = attribute_definition(term.entity, attribute_name)
-
-          values
-          |> Enum.filter(&match?({:placeholder, _placeholder_name}, &1))
-          |> Enum.reduce(inner_acc, fn {:placeholder, placeholder_name}, deeper_acc ->
-            collect_definition(deeper_acc, placeholder_name, {:scalar, type, opts})
-          end)
-
-        _triple, inner_acc ->
-          inner_acc
-      end)
-
-    # A derived field holding a value is included with nothing under it.
-    term.include
-    |> Map.values()
-    |> Enum.reject(&is_nil/1)
-    |> Enum.reduce(acc_with_filters, fn sub_term, inner_acc ->
-      collect_param_definitions(sub_term, inner_acc)
-    end)
   end
 
   defp decode_embed(nil, _sub_term, _mapping), do: nil
@@ -399,36 +307,6 @@ defmodule Hologram.DB.QueryRunner do
     )
   end
 
-  defp encode_param!(values, name, {:list, type}) when is_list(values) do
-    Enum.map(values, fn
-      nil ->
-        raise MisuseError,
-          message:
-            "nil element in the list for placeholder #{inspect(name)} - use an explicit nil predicate instead"
-
-      value ->
-        Codec.encode(value, type)
-    end)
-  end
-
-  # The key slot of a string comparison carries the bound's key, computed here from the same
-  # value the raw slot carries - so the pair the statement compares is folded the way the
-  # column's own pair is.
-  defp encode_param!(value, _name, :sort_key), do: SortKey.compute(value)
-
-  # A search term binds as the pattern its LIKE matches, escaped and folded the way a written-out
-  # term is at compilation.
-  defp encode_param!(value, _name, {:pattern, shape, mode}),
-    do: QueryCompiler.search_pattern(value, shape, mode)
-
-  defp encode_param!(value, _name, type), do: Codec.encode(value, type)
-
-  defp expected_description(:enum, opts) do
-    "one of #{inspect(Keyword.fetch!(opts, :values))}"
-  end
-
-  defp expected_description(type, _opts), do: "a #{inspect(type)} value"
-
   defp field_name(%{source: :system, name: name}), do: String.to_existing_atom(name)
 
   defp field_name(%{source: {:attribute, name}}), do: name
@@ -443,8 +321,8 @@ defmodule Hologram.DB.QueryRunner do
     if anonymous, do: MapSet.put(readers, nil), else: readers
   end
 
-  defp compile_policied(term, mapping, session_user_id, bindings) do
-    validate_bindings!(term, bindings)
+  defp compile_policied(term, mapping, session_user_id) do
+    Stage.assert_no_placeholders!(term)
 
     actor_user_id = Auth.canonical_id(session_user_id)
 
@@ -454,7 +332,7 @@ defmodule Hologram.DB.QueryRunner do
     }
 
     compiled = QueryCompiler.compile(term, mapping, policy)
-    values = Enum.map(compiled.params, &resolve_param!(&1, bindings, actor_user_id))
+    values = Enum.map(compiled.params, &resolve_param(&1, actor_user_id))
 
     {compiled, values}
   end
@@ -467,26 +345,9 @@ defmodule Hologram.DB.QueryRunner do
 
   # The actor slot never appears in an anonymous statement - actor-referencing rules are
   # elided at composition, so there is no nil to bind.
-  defp resolve_param!(:actor, _bindings, actor_user_id), do: Codec.encode(actor_user_id, :uuid)
+  defp resolve_param(:actor, actor_user_id), do: Codec.encode(actor_user_id, :uuid)
 
-  defp resolve_param!(slot, bindings, _actor_user_id), do: resolve_param!(slot, bindings)
-
-  defp resolve_param!({:value, encoded_value}, _bindings), do: encoded_value
-
-  defp resolve_param!({:placeholder, name, type}, bindings) do
-    case Map.fetch(bindings, name) do
-      :error ->
-        raise MisuseError, message: "missing value for placeholder #{inspect(name)}"
-
-      {:ok, nil} ->
-        raise MisuseError,
-          message:
-            "nil value for placeholder #{inspect(name)} - use an explicit nil predicate instead"
-
-      {:ok, value} ->
-        encode_param!(value, name, type)
-    end
-  end
+  defp resolve_param({:value, encoded_value}, _actor_user_id), do: encoded_value
 
   # The same reading EntityOperations.revisions_from_row/2 does for a by-id read, beside the
   # field_name/1 clauses this module already keeps its own copy of.
@@ -499,79 +360,6 @@ defmodule Hologram.DB.QueryRunner do
       end
     end)
     |> Map.new()
-  end
-
-  defp validate_binding!(name, values, :list, type, opts) when is_list(values) do
-    Enum.each(values, fn
-      nil ->
-        :ok
-
-      value ->
-        if not Stage.value_fits?(value, type, opts) do
-          raise MisuseError,
-            message:
-              "invalid element #{inspect(value)} in the list for placeholder #{inspect(name)} - expected #{expected_description(type, opts)}"
-        end
-    end)
-  end
-
-  defp validate_binding!(name, value, :list, _type, _opts) do
-    raise MisuseError,
-      message:
-        "non-list value #{inspect(value)} for placeholder #{inspect(name)} - the placeholder binds a membership list"
-  end
-
-  defp validate_binding!(name, value, :scalar, type, opts) do
-    if not Stage.value_fits?(value, type, opts) do
-      raise MisuseError,
-        message:
-          "invalid value #{inspect(value)} for placeholder #{inspect(name)} - expected #{expected_description(type, opts)}"
-    end
-
-    :ok
-  end
-
-  # Nil values are skipped here on purpose - resolve_param! and encode_param!
-  # raise their dedicated messages for them.
-  defp validate_bindings!(term, bindings) do
-    param_definitions = collect_param_definitions(term, %{})
-
-    validate_known_params!(bindings, param_definitions)
-
-    Enum.each(param_definitions, fn {name, {kind, type, opts}} ->
-      case Map.fetch(bindings, name) do
-        {:ok, nil} -> :ok
-        {:ok, value} -> validate_binding!(name, value, kind, type, opts)
-        :error -> :ok
-      end
-    end)
-  end
-
-  defp validate_known_params!(bindings, param_definitions) do
-    unknown_names =
-      bindings
-      |> Map.keys()
-      |> Enum.reject(&Map.has_key?(param_definitions, &1))
-      |> Enum.sort()
-
-    if unknown_names != [] do
-      defined_names =
-        param_definitions
-        |> Map.keys()
-        |> Enum.sort()
-
-      description =
-        if defined_names == [] do
-          "the query defines no placeholders"
-        else
-          "the query defines placeholders #{inspect(defined_names)}"
-        end
-
-      raise MisuseError,
-        message: "unknown placeholder #{inspect(hd(unknown_names))} in bindings - #{description}"
-    end
-
-    :ok
   end
 
   # Each clause's answer under every key it answers.

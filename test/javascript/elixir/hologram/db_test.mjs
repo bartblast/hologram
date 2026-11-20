@@ -51,7 +51,6 @@ describe("Elixir_Hologram_DB", () => {
   const update = Elixir_Hologram_DB["update/1"];
   const updateById = Elixir_Hologram_DB["update/3"];
   const filter = Elixir_Hologram_Query_Stage["filter/2"];
-  const include = Elixir_Hologram_Query_Stage["include/2"];
   const one = Elixir_Hologram_Query_Stage["one/1"];
   const read = Elixir_Hologram_DB["read/1"];
   const readById = Elixir_Hologram_DB["read/2"];
@@ -1549,52 +1548,6 @@ describe("Elixir_Hologram_DB", () => {
       batch.append({id: ID_1, op: "delete", stamp: 1, type: TASK});
 
       assert.deepStrictEqual(read(task), Type.list([]));
-    });
-
-    it("raises for a query term carrying a placeholder", () => {
-      const placeholder = Type.struct("Hologram.Query.Placeholder", [
-        [Type.atom("name"), Type.atom("wanted")],
-      ]);
-
-      assertBoxedError(
-        () => read(filter(task, predicates([["title", placeholder]]))),
-        "Hologram.MisuseError",
-        "cannot read a query term containing placeholders - placeholder :wanted has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries",
-      );
-    });
-
-    it("raises for a query term carrying a placeholder beside an included derived value", () => {
-      const placeholder = Type.struct("Hologram.Query.Placeholder", [
-        [Type.atom("name"), Type.atom("wanted")],
-      ]);
-
-      const term = include(
-        filter(task, predicates([["title", placeholder]])),
-        Type.atom("tag_count"),
-      );
-
-      assertBoxedError(
-        () => read(term),
-        "Hologram.MisuseError",
-        "cannot read a query term containing placeholders - placeholder :wanted has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries",
-      );
-    });
-
-    it("raises for a query term carrying a placeholder inside an alternative", () => {
-      const placeholder = Type.struct("Hologram.Query.Placeholder", [
-        [Type.atom("name"), Type.atom("wanted")],
-      ]);
-
-      const alternatives = Type.list([
-        predicates([["title", placeholder]]),
-        predicates([["done", Type.boolean(true)]]),
-      ]);
-
-      assertBoxedError(
-        () => read(filter(task, predicates([["or", alternatives]]))),
-        "Hologram.MisuseError",
-        "cannot read a query term containing placeholders - placeholder :wanted has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries",
-      );
     });
   });
 

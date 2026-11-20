@@ -108,16 +108,6 @@ defmodule Hologram.Query.WindowTest do
       assert window.include.messages.filter == [{:position, :>, 1}]
     end
 
-    # The query answers for every value the placeholder takes, over the rows the path reads - so
-    # they are downloaded even when nothing about them bounds the download.
-    test "embeds the relationships of a path predicate comparing to a placeholder" do
-      window = embed(term(Module5, [{[:a, :b, :c], :==, {:placeholder, :search}}]), false)
-
-      assert window.include == %{
-               a: %Query{entity: Module3, include: %{b: %Query{entity: Module2}}}
-             }
-    end
-
     test "embeds the relationships of a path operand" do
       window = embed(term(Module3, [{:c_id, :==, {:attribute, [:b, :id]}}]), false)
 
@@ -252,22 +242,14 @@ defmodule Hologram.Query.WindowTest do
       assert window.include == %{messages: %Query{entity: Module28, filter: [{:body, :==, "x"}]}}
     end
 
-    test "narrows an any's set by its condition without a placeholder" do
-      filter = [
-        {:any, {[:messages], [{:body, :==, {:placeholder, :body}}, {:position, :>, 2}]}}
-      ]
-
-      window = embed(term(Module26, filter), false)
-
-      assert window.include == %{messages: %Query{entity: Module28, filter: [{:position, :>, 2}]}}
-    end
-
     test "embeds whole the set of an any whose condition loses every predicate" do
-      filter = [{:any, {[:messages], [{:body, :==, {:placeholder, :body}}]}}]
+      filter = [{:any, {[:messages], [{[:channel, :name], :!=, "x"}]}}]
 
       window = embed(term(Module26, filter), false)
 
-      assert window.include == %{messages: %Query{entity: Module28}}
+      assert window.include == %{
+               messages: %Query{entity: Module28, include: %{channel: %Query{entity: Module26}}}
+             }
     end
 
     test "narrows a none's set and embeds an all's whole" do
@@ -591,24 +573,16 @@ defmodule Hologram.Query.WindowTest do
       end
     end
 
-    test "leaves out a predicate whose attribute is a placeholder" do
-      assert narrowing([{{:placeholder, :field}, :==, "x"}]) == []
-    end
-
-    test "leaves out a membership predicate holding a placeholder among its values" do
-      assert narrowing([{:position, :in, [1, {:placeholder, :chosen}]}]) == []
-    end
-
-    test "narrows an alternative to its literal predicates" do
+    test "narrows an alternative to what bounds it" do
       clauses = [
-        {:or, [[{:body, :==, "a"}, {:position, :==, {:placeholder, :p}}], [{:position, :==, 1}]]}
+        {:or, [[{:body, :==, "a"}, {[:channel, :name], :!=, "x"}], [{:position, :==, 1}]]}
       ]
 
       assert narrowing(clauses) == [{:or, [[{:body, :==, "a"}], [{:position, :==, 1}]]}]
     end
 
     test "leaves out a disjunction when an alternative loses every predicate" do
-      clauses = [{:or, [[{:body, :==, "a"}], [{:position, :==, {:placeholder, :p}}]]}]
+      clauses = [{:or, [[{:body, :==, "a"}], [{[:channel, :name], :!=, "x"}]]}]
 
       assert narrowing(clauses) == []
     end
@@ -619,7 +593,7 @@ defmodule Hologram.Query.WindowTest do
          [
            [
              {:body, :==, "a"},
-             {:or, [[{:position, :==, 1}], [{:body, :==, {:placeholder, :search}}]]}
+             {:or, [[{:position, :==, 1}], [{[:channel, :name], :==, nil}]]}
            ],
            [{:position, :==, 2}]
          ]}
@@ -633,7 +607,7 @@ defmodule Hologram.Query.WindowTest do
         {:or,
          [
            [{:body, :==, "a"}, {:position, :==, 7}],
-           [{:body, :==, "a"}, {:position, :>=, {:placeholder, :min}}]
+           [{:body, :==, "a"}, {[:channel, :name], :in, [nil, "x"]}]
          ]}
       ]
 

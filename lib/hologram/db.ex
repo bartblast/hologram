@@ -292,10 +292,8 @@ defmodule Hologram.DB do
   integer for counting queries.
 
   The query is an entity type module (the whole entity set) or a query term built with
-  Hologram.Query stages. Directly executed query terms embed concrete runtime values - the query
-  registry is never involved. A term containing placeholder leaves raises Hologram.MisuseError:
-  placeholders exist only in compiler-registered queries. So does a derived field's query, which is
-  read through its field.
+  Hologram.Query stages, holding the values it compares with. A derived field's query raises
+  Hologram.MisuseError, since it is read through its field.
 
   A :string ordering reads the attribute's sort-key companion column, which every
   :string attribute derives.
@@ -303,7 +301,7 @@ defmodule Hologram.DB do
   With an acting user set, the query is read through that user's :read policies - the rows the
   policies grant, each included relationship filtered by its own type's :read rules, a
   single-result query answering nil and a counting query counting only what the user may read -
-  exactly as a template's registered query is. A session user id no user entity can have - an
+  exactly as a template's derived query is. A session user id no user entity can have - an
   app's own serial id - reads as an anonymous session would. Without an acting user the query is
   read raw: the trusted tier, for seeds, tasks and jobs.
 
@@ -315,7 +313,6 @@ defmodule Hologram.DB do
     term = Stage.normalize(query)
 
     assert_not_sourced!(term)
-    assert_no_placeholders!(term)
 
     actor_user_id = Context.actor_user_id()
 
@@ -915,18 +912,6 @@ defmodule Hologram.DB do
   end
 
   defp assert_not_sourced!(_term), do: :ok
-
-  defp assert_no_placeholders!(term) do
-    case Stage.placeholder_names(term) do
-      [] ->
-        :ok
-
-      [name | _rest] ->
-        raise MisuseError,
-          message:
-            "cannot read a query term containing placeholders - placeholder #{inspect(name)} has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
-    end
-  end
 
   # A to-one relationship or an inverse is a name a caller can reasonably expect a join table for and
   # not get, so it is told where that relationship's fact lives instead.

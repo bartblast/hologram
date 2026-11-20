@@ -726,11 +726,7 @@ function localName(name) {
 function membershipValues(values, name, entityType) {
   values.forEach((value) => validateOperandValue(name, value, entityType));
 
-  return values.map((value) =>
-    isStruct(value, "Hologram.Query.Placeholder")
-      ? placeholderLeaf(value)
-      : Model.unbox(value, nameType(entityType, name)),
-  );
+  return values.map((value) => Model.unbox(value, nameType(entityType, name)));
 }
 
 // Two includes of one relationship are one include: what each includes merges, by the same rule
@@ -860,21 +856,6 @@ function operatorTriples(name, tuple, entityType, scope) {
     return rangeTriples(name, operand, entityType);
   }
 
-  if (isStruct(operand, "Hologram.Query.Placeholder")) {
-    if (ORDERING_OPERATORS.includes(operator)) {
-      validateOrderableAttribute(name, entityType, operator);
-    } else if (SEARCH_OPERATORS.includes(operator)) {
-      validateSearchableAttribute(name, entityType, operator);
-    } else if (
-      !EQUALITY_OPERATORS.includes(operator) &&
-      !MEMBERSHIP_OPERATORS.includes(operator)
-    ) {
-      raiseUnknownOperator(operator, name);
-    }
-
-    return [[nameValue(name), operator, placeholderLeaf(operand)]];
-  }
-
   if (
     isAttributeOperand(operand) &&
     (EQUALITY_OPERATORS.includes(operator) ||
@@ -932,20 +913,13 @@ function operatorTriples(name, tuple, entityType, scope) {
   raiseUnknownOperator(operator, name);
 }
 
-function placeholderLeaf(placeholder) {
-  return {placeholder: field(placeholder, "name").value};
-}
-
 // Every shape a predicate value can take, dispatched in the order the Elixir clauses are written
-// in - the shapes that are structures (a range, a placeholder) before the general tuple, and the
-// general tuple before the plain value a bare term falls through to.
+// in - the shape that is a structure (a range) before the general tuple, and the general tuple
+// before the plain value a bare term falls through to. A Hologram.Query.Placeholder, which the
+// Elixir stages take for the build's chain check, never reaches the browser.
 function predicateTriples(name, value, entityType, scope) {
   if (isStruct(value, "Range")) {
     return rangeTriples(name, value, entityType);
-  }
-
-  if (isStruct(value, "Hologram.Query.Placeholder")) {
-    return [[nameValue(name), "==", placeholderLeaf(value)]];
   }
 
   if (isAttributeOperand(value)) {
@@ -1846,11 +1820,10 @@ function validateOperandName(operandName, entityType, hint = null) {
 // A value compared with a name fits the type of what the name reads, refused where it is written
 // rather than where it is run, as on the server: the browser would otherwise unbox it into a value
 // that compares as something else, like "yes" against a boolean matching the false rows. An enum's
-// value is one of the values it declares, which the refusal lists. Nil and a placeholder's value
-// are judged elsewhere, nil by the operator taking it and a placeholder's when the query is built
-// with real values. A float takes an integer too, the same number when compared.
+// value is one of the values it declares, which the refusal lists. Nil is judged by the operator
+// taking it. A float takes an integer too, the same number when compared.
 function validateOperandValue(name, value, entityType) {
-  if (Type.isNil(value) || isStruct(value, "Hologram.Query.Placeholder")) {
+  if (Type.isNil(value)) {
     return;
   }
 

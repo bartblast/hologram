@@ -1406,15 +1406,24 @@ describe("Elixir_Hologram_Query_Stage", () => {
         [Type.atom("step"), Type.integer(step)],
       ]);
 
-    const placeholder = (name) =>
-      Type.map([
-        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
-        [Type.atom("name"), Type.atom(name)],
-      ]);
-
     // Another attribute of the row, as a bare name on the right side of a comparison lowers to.
     const attribute = (name) =>
       Type.tuple([Type.atom("attribute"), Type.atom(name)]);
+
+    // The browser never builds a placeholder - only the build's check of a query does, on the
+    // server - so one handed over is a value like any other, and no attribute holds it.
+    it("refuses a placeholder as a value no attribute holds", () => {
+      const placeholder = Type.map([
+        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
+        [Type.atom("name"), Type.atom("chosen")],
+      ]);
+
+      assertBoxedError(
+        () => filter(task, predicates([["title", placeholder]])),
+        "Hologram.MisuseError",
+        "%{__struct__: Hologram.Query.Placeholder, name: :chosen} is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+      );
+    });
 
     it("reads a bare value as equality", () => {
       const query = filter(
@@ -1569,36 +1578,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
       assert.deepStrictEqual(query.filter, [
         ["owner_id", "==", "018f0000-0000-7000-8000-000000000001"],
-      ]);
-    });
-
-    it("reads a placeholder as the leaf a binding fills", () => {
-      const query = filter(
-        task,
-        predicates([["title", placeholder("chosen")]]),
-      );
-
-      assert.deepStrictEqual(query.filter, [
-        ["title", "==", {placeholder: "chosen"}],
-      ]);
-    });
-
-    it("reads a placeholder under an operator", () => {
-      const value = Type.tuple([Type.atom(">="), placeholder("min")]);
-      const query = filter(task, predicates([["position", value]]));
-
-      assert.deepStrictEqual(query.filter, [
-        ["position", ">=", {placeholder: "min"}],
-      ]);
-    });
-
-    it("reads a placeholder among the values of a membership list", () => {
-      const values = Type.list([placeholder("chosen"), Type.bitstring("b")]);
-      const value = Type.tuple([Type.atom("in"), values]);
-      const query = filter(task, predicates([["title", value]]));
-
-      assert.deepStrictEqual(query.filter, [
-        ["title", "in", [{placeholder: "chosen"}, "b"]],
       ]);
     });
 
@@ -3304,12 +3283,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
   describe("filter/2 - searches", () => {
     const path = (...names) => Type.list(names.map(Type.atom));
 
-    const placeholder = (name) =>
-      Type.map([
-        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
-        [Type.atom("name"), Type.atom(name)],
-      ]);
-
     const attribute = (name) => Type.tuple([Type.atom("attribute"), name]);
 
     const search = (operator, operand) =>
@@ -3396,17 +3369,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
       }
     });
 
-    it("builds a search triple with a placeholder term", () => {
-      const query = filter(
-        task,
-        predicates([["title", search("starts_with", placeholder("query"))]]),
-      );
-
-      assert.deepStrictEqual(query.filter, [
-        ["title", "starts_with", {placeholder: "query"}],
-      ]);
-    });
-
     it("builds a search triple with an empty term", () => {
       const query = filter(
         task,
@@ -3481,16 +3443,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
-    it("raises on a search with a placeholder term on an attribute that is not a string", () => {
-      const value = search("contains", placeholder("query"));
-
-      assertBoxedError(
-        () => filter(task, predicates([["position", value]])),
-        "Hologram.MisuseError",
-        "operator :contains requires a string attribute - attribute :position in MyApp.Task has type :integer",
-      );
-    });
-
     it("raises on a tuple as a search term", () => {
       const tuple = Type.tuple([Type.atom("a"), Type.atom("b")]);
 
@@ -3531,12 +3483,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
         [Type.atom("first"), Type.integer(first)],
         [Type.atom("last"), Type.integer(last)],
         [Type.atom("step"), Type.integer(1)],
-      ]);
-
-    const placeholder = (name) =>
-      Type.map([
-        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
-        [Type.atom("name"), Type.atom(name)],
       ]);
 
     const tuple = (operator, operand) =>
@@ -3765,14 +3711,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
 
       assert.deepStrictEqual(query.filter, [["rating", ">", 0]]);
-    });
-
-    it("accepts a placeholder whatever the attribute's type", () => {
-      const query = filter(task, predicates([["title", placeholder("title")]]));
-
-      assert.deepStrictEqual(query.filter, [
-        ["title", "==", {placeholder: "title"}],
-      ]);
     });
   });
 

@@ -66,6 +66,8 @@ defmodule Hologram.Query do
   # attribute of the row they lead to.
   @type path :: list(atom)
 
+  # A stand-in for a pinned value, only in the terms the build's chain check replays (see
+  # Hologram.Query.Placeholder) - a term that runs holds none.
   @type placeholder :: {:placeholder, atom}
 
   # The data form a filter is given in: a name or a placeholder paired with a value, an or: entry,

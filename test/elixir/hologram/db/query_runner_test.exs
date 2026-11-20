@@ -19,7 +19,6 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
-  alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module15
@@ -33,7 +32,6 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
-  alias Hologram.Test.Fixtures.Entity.Module31
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module34
@@ -126,8 +124,8 @@ defmodule Hologram.DB.QueryRunnerTest do
     entity
   end
 
-  describe "run_policied/4" do
-    # run_policied/4 composes read rules only, so the global reference (declared for :archive)
+  describe "run_policied/3" do
+    # run_policied/3 composes read rules only, so the global reference (declared for :archive)
     # is executed through the compiler and the connection directly.
     defp archivable_ids(actor_user_id) do
       policy = %{
@@ -369,7 +367,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert id == public_entity.id
     end
 
-    test "binds authored placeholders alongside the actor slot" do
+    test "binds authored values alongside the actor slot" do
       user = create_policy_user("runner_16@example.com")
 
       public_match =
@@ -392,18 +390,32 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       Auth.grant_role(user, :viewer, granted_match)
 
-      term = %{
-        Stage.normalize(PolicyModule1)
-        | filter: [{:priority, :==, {:placeholder, :priority}}]
-      }
+      term =
+        PolicyModule1
+        |> filter(priority: 5)
+        |> Stage.normalize()
 
       ids =
         term
-        |> run_policied(@policy_mapping, user.id, %{priority: 5})
+        |> run_policied(@policy_mapping, user.id)
         |> Enum.map(& &1.id)
         |> Enum.sort()
 
       assert ids == Enum.sort([public_match.id, granted_match.id])
+    end
+
+    test "raises on a term holding a placeholder" do
+      term =
+        PolicyModule1
+        |> filter(priority: ^%Placeholder{name: :priority})
+        |> Stage.normalize()
+
+      expected_msg =
+        "cannot run a query term holding the placeholder :priority - a placeholder only stands in for a pinned value while the build checks a query, so a query that runs holds its values: build the term from the values themselves"
+
+      assert_error MisuseError, expected_msg, fn ->
+        run_policied(term, @policy_mapping, nil)
+      end
     end
 
     test "hides an included row the policy denies the acting user" do
@@ -504,7 +516,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
   end
 
-  describe "run_policied/4 for quantified rules" do
+  describe "run_policied/3 for quantified rules" do
     defp quantified_mapping do
       Mapper.derive!(
         [
@@ -573,77 +585,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
   end
 
-  describe "run/3" do
-    test "binds a placeholder inside a disjunction" do
-      {_first, second, third} = create_module_2_entities()
-
-      term = %{
-        Stage.normalize(Module2)
-        | filter: [{:or, [[{:a, :==, false}], [{:b, :==, {:placeholder, :value}}]]}]
-      }
-
-      ids =
-        term
-        |> run(@mapping, %{value: 7})
-        |> Enum.map(& &1.id)
-        |> Enum.sort()
-
-      assert ids == Enum.sort([second.id, third.id])
-    end
-
-    test "binds membership element placeholders" do
-      {_first, _second, third} = create_module_2_entities()
-
-      term = %{Stage.normalize(Module2) | filter: [{:b, :in, [{:placeholder, :bound}, 3]}]}
-
-      assert [%{id: id, b: 7}] = run(term, @mapping, %{bound: 7})
-      assert id == third.id
-    end
-
-    # Constraint options are write-side semantics - a placeholder binding checks the type
-    # only, and an out-of-constraint value is a query matching nothing, not an
-    # invalid query.
-    test "binds placeholder values violating declared constraint options" do
-      {:ok, _entity} =
-        %{count: 5}
-        |> Module10.new()
-        |> create()
-
-      mapping = Mapper.derive!([Module10], [])
-      term = %{Stage.normalize(Module10) | filter: [{:count, :==, {:placeholder, :count}}]}
-
-      assert run(term, mapping, %{count: 999}) == []
-    end
-
-    test "binds placeholder values with the slot's type" do
-      {first, _second, _third} = create_module_2_entities()
-
-      term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
-      result = run(term, @mapping, %{search: "banana"})
-
-      assert [%{id: id, c: "banana"}] = result
-      assert id == first.id
-    end
-
-    test "binds a placeholder on a path with the type of the attribute it ends at" do
-      required = DB.create!(Module1.new())
-
-      target =
-        %{a: true, c: "banana"}
-        |> Module2.new()
-        |> DB.create!()
-
-      source =
-        %{b_id: target.id, c_id: required.id}
-        |> Module3.new()
-        |> DB.create!()
-
-      term = %{Stage.normalize(Module3) | filter: [{[:b, :c], :==, {:placeholder, :search}}]}
-
-      assert [%{id: id}] = run(term, @mapping, %{search: "banana"})
-      assert id == source.id
-    end
-
+  describe "run/2" do
     test "counts matching entities" do
       create_module_2_entities()
 
@@ -915,14 +857,6 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert [%Module9{a: [%Module8{source_id: 5}]}] = run(term, mapping)
     end
 
-    test "matches nothing for an empty membership list binding" do
-      create_module_2_entities()
-
-      term = %{Stage.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
-
-      assert run(term, @mapping, %{ids: []}) == []
-    end
-
     test "filters by a to-one reference field" do
       matching = create_module_3_entity()
       create_module_3_entity()
@@ -935,16 +869,6 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert [%Module3{id: id, c_id: c_id}] = run(term, @mapping)
       assert id == matching.id
       assert c_id == matching.c_id
-    end
-
-    test "filters by a to-one reference field bound as a placeholder" do
-      matching = create_module_3_entity()
-      create_module_3_entity()
-
-      term = %{Stage.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :target}}]}
-
-      assert [%Module3{id: id}] = run(term, @mapping, %{target: matching.c_id})
-      assert id == matching.id
     end
 
     test "returns entity structs filtered and ordered" do
@@ -988,194 +912,30 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert id == second.id
     end
 
-    test "raises on a malformed id placeholder value" do
-      term = %{Stage.normalize(Module2) | filter: [{:id, :==, {:placeholder, :entity_id}}]}
-
-      expected_msg =
-        ~s(invalid value "not-a-uuid" for placeholder :entity_id - expected a :uuid value)
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{entity_id: "not-a-uuid"})
-      end
-    end
-
-    # The uuid pattern alone takes a trailing newline, which the encoder refuses.
-    test "raises on an id placeholder value followed by a newline" do
-      term = %{Stage.normalize(Module2) | filter: [{:id, :==, {:placeholder, :entity_id}}]}
-      value = "018f0000-0000-7000-8000-000000000001\n"
-
-      expected_msg =
-        ~s(invalid value "018f0000-0000-7000-8000-000000000001\\n" for placeholder :entity_id - expected a :uuid value)
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{entity_id: value})
-      end
-    end
-
-    test "raises on a membership binding that is not a list" do
-      term = %{Stage.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
-
-      expected_msg =
-        "non-list value 5 for placeholder :ids - the placeholder binds a membership list"
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{ids: 5})
-      end
-    end
-
-    test "validates a placeholder binding beside an included derived value" do
-      term =
-        Module37
-        |> filter(name == ^%Placeholder{name: :name})
-        |> include(pinned_count)
-        |> Stage.normalize()
-
-      expected_msg = "invalid value 5 for placeholder :name - expected a :string value"
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{name: 5})
-      end
-    end
-
-    test "raises on a placeholder binding a derived field does not take" do
-      term =
-        Module37
-        |> filter(pinned_count > ^%Placeholder{name: :threshold})
-        |> Stage.normalize()
-
-      expected_msg =
-        ~s(invalid value "many" for placeholder :threshold - expected a :integer value)
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{threshold: "many"})
-      end
-    end
-
-    test "raises on a membership element of the wrong type" do
-      term = %{Stage.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
-
-      expected_msg =
-        ~s(invalid element "x" in the list for placeholder :ids - expected a :integer value)
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{ids: [1, "x"]})
-      end
-    end
-
-    test "raises on a missing placeholder value" do
+    test "raises on a term holding a placeholder" do
       term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
 
-      assert_error MisuseError, "missing value for placeholder :search", fn ->
+      expected_msg =
+        "cannot run a query term holding the placeholder :search - a placeholder only stands in for a pinned value while the build checks a query, so a query that runs holds its values: build the term from the values themselves"
+
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping)
       end
     end
 
-    test "raises on a nil membership element" do
-      term = %{Stage.normalize(Module2) | filter: [{:b, :in, {:placeholder, :ids}}]}
+    test "raises on a term ordered by a placeholder" do
+      term = %{Stage.normalize(Module2) | sort: [{{:placeholder, :search}, :asc}]}
 
       expected_msg =
-        "nil element in the list for placeholder :ids - use an explicit nil predicate instead"
+        "cannot run a query term holding the placeholder :search - a placeholder only stands in for a pinned value while the build checks a query, so a query that runs holds its values: build the term from the values themselves"
 
       assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{ids: [1, nil]})
-      end
-    end
-
-    test "raises on a nil placeholder value" do
-      term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
-
-      expected_msg = "nil value for placeholder :search - use an explicit nil predicate instead"
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{search: nil})
-      end
-    end
-
-    test "raises on a placeholder binding with conflicting types" do
-      term = %{
-        Stage.normalize(Module2)
-        | filter: [{:b, :==, {:placeholder, :x}}, {:b, :in, {:placeholder, :x}}]
-      }
-
-      expected_msg =
-        "placeholder :x binds as :integer and {:list, :integer} - rename one of the conflicting variables"
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{x: 5})
-      end
-    end
-
-    # A placeholder inside an alternative is validated like any other, before the statement runs.
-    test "raises on a wrongly typed placeholder inside a disjunction" do
-      term = %{
-        Stage.normalize(Module2)
-        | filter: [{:or, [[{:a, :==, true}], [{:b, :==, {:placeholder, :value}}]]}]
-      }
-
-      expected_msg = ~s(invalid value "x" for placeholder :value - expected a :integer value)
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{value: "x"})
-      end
-    end
-
-    test "raises on a placeholder value of the wrong type" do
-      term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
-
-      expected_msg = "invalid value 123 for placeholder :search - expected a :string value"
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{search: 123})
-      end
-    end
-
-    test "raises on a placeholder value on a path of the wrong type for the attribute it ends at" do
-      term = %{Stage.normalize(Module3) | filter: [{[:b, :c], :==, {:placeholder, :search}}]}
-
-      expected_msg = "invalid value 123 for placeholder :search - expected a :string value"
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{search: 123})
-      end
-    end
-
-    test "raises on an enum placeholder value inside a quantifier's condition outside the related row's declared set" do
-      term = %{
-        Stage.normalize(Module31)
-        | filter: [{:any, {[:items], [{:priority, :==, {:placeholder, :priority}}]}}]
-      }
-
-      expected_msg =
-        "invalid value :urgent for placeholder :priority - expected one of [:low, :medium, :high]"
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{priority: :urgent})
-      end
-    end
-
-    test "raises on an enum placeholder value outside the declared set" do
-      term = %{Stage.normalize(Module4) | filter: [{:c, :==, {:placeholder, :choice}}]}
-
-      expected_msg = "invalid value :z for placeholder :choice - expected one of [:x, :y]"
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{choice: :z})
-      end
-    end
-
-    test "raises on an unknown binding name" do
-      term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
-
-      expected_msg =
-        "unknown placeholder :serach in bindings - the query defines placeholders [:search]"
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, @mapping, %{search: "x", serach: "y"})
+        run(term, @mapping)
       end
     end
   end
 
-  describe "run/3 - derived counts and sets" do
+  describe "run/2 - derived counts and sets" do
     setup do
       put_derived_definitions([Module32, Module33, Module34, Module37, Module38, Module40])
     end
@@ -1292,16 +1052,16 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert derived_query_results(query, :name) == ["full"]
     end
 
-    # A float compares with an integer as the same number, as a filter value does.
-    test "takes an integer bound to a float placeholder" do
+    # A float compares with an integer as the same number.
+    test "compares a float field with an integer" do
       create_module_40_entity("full", [true, true])
       create_module_40_entity("sparse", [true])
 
       results =
         Module40
-        |> filter(note_weight > ^%Placeholder{name: :weight})
+        |> filter(note_weight > 1)
         |> Stage.normalize()
-        |> run(@derived_mapping, %{weight: 1})
+        |> run(@derived_mapping)
         |> Enum.map(& &1.name)
 
       assert results == ["full"]
@@ -1337,7 +1097,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
   end
 
-  describe "run/3 - derived fields" do
+  describe "run/2 - derived fields" do
     setup do
       put_derived_definitions([Module34, Module39])
 
@@ -1474,7 +1234,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
   end
 
-  describe "run/3 - derived includes" do
+  describe "run/2 - derived includes" do
     setup do
       put_derived_definitions([
         Module32,
@@ -1638,7 +1398,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
   end
 
-  describe "run/3 - quantifiers" do
+  describe "run/2 - quantifiers" do
     setup do
       {:ok, general} = create(Module26.new(name: "general"))
       {:ok, _quiet} = create(Module26.new(name: "quiet"))
@@ -1698,7 +1458,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
   end
 
-  describe "run_policied/4 - derived fields" do
+  describe "run_policied/3 - derived fields" do
     # A rule reads the rows its paths reach as stored, whatever the session may read of them - so
     # a derived field in a condition does too: the note the hidden row names is one an anonymous
     # session may not read, and the rule still reads it.
@@ -1803,7 +1563,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
   end
 
-  describe "run_policied/4 - quantifiers" do
+  describe "run_policied/3 - quantifiers" do
     test "leaves a related row the session may not read out of the set" do
       {:ok, general} = create(Module26.new(name: "general"))
       {:ok, _quiet} = create(Module26.new(name: "quiet"))

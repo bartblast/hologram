@@ -450,9 +450,5 @@ defmodule Hologram.Sync.Carry do
     spell_object([{"name", spell_value(name)}, {"outer", spell_number(levels)}])
   end
 
-  defp spell_value({:placeholder, name}) when is_atom(name) do
-    spell_object([{"placeholder", spell_string(Atom.to_string(name))}])
-  end
-
   defp spell_value(value), do: spell_unknown(value)
 end

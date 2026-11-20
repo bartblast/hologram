@@ -9,7 +9,6 @@ defmodule Hologram.Sync.CarryTest do
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
   alias Hologram.Policy
-  alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -789,13 +788,6 @@ defmodule Hologram.Sync.CarryTest do
 
       assert spell(query) ==
                ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["rating","<",float:c004000000000000]],"include":{},"skip":null,"sort":[],"take":null}|
-    end
-
-    test "spells a placeholder by its name" do
-      query = Stage.filter(Module2, c: %Placeholder{name: :search})
-
-      assert spell(query) ==
-               ~S|{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==",{"placeholder":"search"}]],"include":{},"skip":null,"sort":[["id","asc"]],"take":null}|
     end
 
     # What the client spells never starts with a question mark, so a shape this doesn't know can't
