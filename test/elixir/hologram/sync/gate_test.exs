@@ -4,10 +4,8 @@ defmodule Hologram.Sync.GateTest do
   alias Hologram.Sync.Gate
 
   setup do
-    put_app_env(:sync, catchups_at_once: 2)
-
     wait_for_process_cleanup(Gate)
-    start_supervised!(Gate)
+    start_supervised!({Gate, limit: 2})
 
     :ok
   end
@@ -45,7 +43,7 @@ defmodule Hologram.Sync.GateTest do
   end
 
   describe "ask/1" do
-    test "lets in as many at once as catchups_at_once/0 answers" do
+    test "lets in as many at once as its limit" do
       asker(:first)
       asker(:second)
       asker(:third)
@@ -53,6 +51,16 @@ defmodule Hologram.Sync.GateTest do
       assert_receive {:open, :first}
       assert_receive {:open, :second}
       refute_receive {:open, :third}, 100
+    end
+
+    test "lets in as many at once as catchups_at_once/0 answers when started with no limit" do
+      stop_supervised!(Gate)
+      start_supervised!(Gate)
+
+      for name <- [:first, :second, :third, :fourth, :fifth], do: asker(name)
+
+      for name <- [:first, :second, :third, :fourth], do: assert_receive({:open, ^name})
+      refute_receive {:open, :fifth}, 100
     end
 
     test "lets the next one in, in the order they asked, when one leaves" do
@@ -109,22 +117,7 @@ defmodule Hologram.Sync.GateTest do
   end
 
   describe "catchups_at_once/0" do
-    test "raises for anything but a positive integer" do
-      put_app_env(:sync, catchups_at_once: 0)
-
-      assert_raise ArgumentError, ~r/expects a positive integer, got: 0/, fn ->
-        Gate.catchups_at_once()
-      end
-    end
-
-    test "answers the configured number" do
-      assert Gate.catchups_at_once() == 2
-    end
-
-    test "answers 4 when none is configured" do
-      sync = Application.get_env(:hologram, :sync, [])
-      Application.put_env(:hologram, :sync, Keyword.delete(sync, :catchups_at_once))
-
+    test "answers 4" do
       assert Gate.catchups_at_once() == 4
     end
   end

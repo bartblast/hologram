@@ -52,13 +52,11 @@ defmodule Hologram.Sync.PoolTest do
 
     # Each catch-up the gate lets in has a connection of its own.
     test "answers how many catch-ups run at once when none is configured" do
-      put_app_env(:sync, catchups_at_once: 6)
-
       sync = Application.get_env(:hologram, :sync)
       Application.put_env(:hologram, :sync, Keyword.delete(sync, :pool_size))
 
       assert Pool.size() == Gate.catchups_at_once()
-      assert Pool.size() == 6
+      assert Pool.size() == 4
     end
 
     test "raises for anything but a non-negative integer" do
