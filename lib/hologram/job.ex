@@ -42,6 +42,14 @@ defmodule Hologram.Job do
   Attributes and relationships are what a job carries, so they are declared and typed rather
   than passed as a payload: a declaration is what a policy can name and what a migration can
   move forward.
+
+  Each node runs up to 10 jobs of a type at once. A job type that should run fewer at once, or
+  more, says so in its use line, with the number written out:
+
+      use Hologram.Job, max_concurrency: 2
+
+  The limit is per node and per job type, so a type running at its limit doesn't stop other types
+  from starting theirs.
   """
 
   alias Hologram.Auth.Context
@@ -55,6 +63,11 @@ defmodule Hologram.Job do
   alias Hologram.Reflection
   alias Hologram.WriteError
 
+  # How many jobs of a type a node runs at once unless the type sets its own limit. A fixed number
+  # rather than one worked out from the node, so the database connections the runs take can be
+  # counted per node.
+  @default_max_concurrency 10
+
   @doc """
   Runs the job.
 
@@ -67,6 +80,8 @@ defmodule Hologram.Job do
 
   defmacro __using__(opts) do
     Validator.validate_use_job_opts!(__CALLER__.module, opts)
+
+    max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
 
     quote do
       use Hologram.Entity
@@ -94,6 +109,17 @@ defmodule Hologram.Job do
       """
       @spec __is_hologram_job__() :: boolean
       def __is_hologram_job__, do: true
+
+      @doc """
+      Returns how many jobs of this type a node runs at once.
+
+      ## Examples
+
+          iex> __job_max_concurrency__()
+          10
+      """
+      @spec __job_max_concurrency__() :: pos_integer
+      def __job_max_concurrency__, do: unquote(max_concurrency)
     end
   end
 
@@ -163,6 +189,13 @@ defmodule Hologram.Job do
           reason: violations
     end
   end
+
+  @doc """
+  Returns how many jobs of the given job type a node runs at once: the `:max_concurrency` its use
+  line gives, 10 by default.
+  """
+  @spec max_concurrency(module) :: pos_integer
+  def max_concurrency(job_type), do: job_type.__job_max_concurrency__()
 
   @doc """
   Returns the names of the attributes every job type carries and only the framework sets, sorted: the acting user at the enqueue, the failure record, and the status.
