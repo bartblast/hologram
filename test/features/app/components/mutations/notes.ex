@@ -4,8 +4,8 @@ defmodule HologramFeatureTests.Components.Mutations.Notes do
 
   alias HologramFeatureTests.Entities.Note
 
-  # The notes reach this list through the ordinary read path - a registered query filled by the
-  # sync stream - so a note written by a batch POSTed from the page appears here without the page
+  # The notes reach this list through the ordinary read path - a derived query over the rows the
+  # sync stream keeps current - so a note written by a batch POSTed from the page appears here without the page
   # being fetched again. That is the whole claim the scenarios check.
   derived :notes, [Note], &notes_query/0
 

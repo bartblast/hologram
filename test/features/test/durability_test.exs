@@ -21,7 +21,6 @@ defmodule HologramFeatureTests.DurabilityTest do
   # Every table, not only the products: the client's pot is app-wide, so a row left in any synced
   # table could stand in for what the browser is supposed to have kept.
   setup do
-    await_evaluator_drain()
     truncate_every_entity_table()
 
     :ok

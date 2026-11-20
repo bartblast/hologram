@@ -5,8 +5,8 @@ defmodule HologramFeatureTests.Components.Mutations.Jobs do
   alias HologramFeatureTests.Jobs.KillWorker
   alias HologramFeatureTests.Jobs.RestockItem
 
-  # The jobs reach this list through the ordinary read path - a registered query filled by the sync
-  # stream - so a job the worker moved to done shows here without the page being fetched again.
+  # The jobs reach this list through the ordinary read path - a derived query over the rows the
+  # sync stream keeps current - so a job the worker moved to done shows here without the page being fetched again.
   derived :jobs, [RestockItem], &jobs_query/0
 
   derived :killed_jobs, [KillWorker], &killed_jobs_query/0

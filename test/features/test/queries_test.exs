@@ -32,14 +32,10 @@ defmodule HologramFeatureTests.QueriesTest do
   alias HologramFeatureTests.Queries.Page8
   alias HologramFeatureTests.Queries.Page9
 
-  # The client's local database is filled by evaluators that outlive a test, and a TRUNCATE never
-  # reaches the operations log they read, so they drain before the tables empty. The tables
-  # truncate in one statement: the foreign keys between them - a review's to its product, a
+  # The tables truncate in one statement: the foreign keys between them - a review's to its product, a
   # message's to its channel and the message labels' join table's to both its sides, among others -
   # make Postgres reject truncating a referenced table alone.
   setup do
-    await_evaluator_drain()
-
     entity_tables =
       Enum.map(
         [
@@ -160,7 +156,7 @@ defmodule HologramFeatureTests.QueriesTest do
 
   # Medium or higher except delta, by title. The read runs in the browser, over the rows the page's
   # queries synced, from conditions passed as data. zz is among them although component 11
-  # excludes it: component 12's window has no filter, so every ticket is local once the fill lands,
+  # excludes it: the browser holds every ticket the user may read once the fill lands,
   # which is what the click waits for - before it, the client holds only the rows the render
   # carried.
   feature "runs a filter built at runtime over local data", %{session: session} do

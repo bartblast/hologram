@@ -24,8 +24,6 @@ defmodule HologramFeatureTests.MutationsTest do
   # foreign keys to the user table and the restock job's to the item table make Postgres reject truncating a
   # referenced table alone.
   setup do
-    await_evaluator_drain()
-
     tables =
       Enum.map_join(
         [Item, KillWorker, Memo, Note, ProjectMember, RestockItem, RoleGrant, User],

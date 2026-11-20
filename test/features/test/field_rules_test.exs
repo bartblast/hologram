@@ -16,8 +16,6 @@ defmodule HologramFeatureTests.FieldRulesTest do
   # All the tables truncate in one statement: the memo, note, project member and role grant tables'
   # foreign keys to the user table make Postgres reject truncating the referenced table alone.
   setup do
-    await_evaluator_drain()
-
     tables =
       Enum.map_join(
         [Bulletin, Memo, Note, ProjectMember, RoleGrant, User],
