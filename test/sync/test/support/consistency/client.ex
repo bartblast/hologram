@@ -44,10 +44,6 @@ defmodule HologramSyncTests.Consistency.Client do
   @doc """
   Starts a client of the given `:user_id` (nil for an anonymous session) against `:base_url`,
   holding nothing and not connected.
-
-  `:cut_when` is a function given the client's events, newest first, after each frame it handles:
-  the first time it answers true the client cuts its stream there, passing over the rest of the
-  chunk the way a connection dropping would - for a test that needs a cut at one point of a fill.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
@@ -65,9 +61,15 @@ defmodule HologramSyncTests.Consistency.Client do
   Opens the client's stream, coming back from its cursor when it has one. Without one it begins a
   refill first, the way a browser greeting with no place does, so the marker ending the fill sweeps
   whatever the server no longer sends. Does nothing when the stream is already open.
+
+  `:cut_when` is a function given the client's events, newest first, after each frame this
+  connection carries: the first time it answers true the client cuts the stream there, passing
+  over the rest of the chunk the way a connection dropping would - for a cut at one point of a fill
+  or a catch-up. It goes with the connection, so one that never fires doesn't carry over to the
+  next, and a connect finding the stream open takes it back.
   """
-  @spec connect(pid) :: :ok
-  def connect(client), do: GenServer.call(client, :connect, 30_000)
+  @spec connect(pid, keyword) :: :ok
+  def connect(client, opts \\ []), do: GenServer.call(client, {:connect, opts}, 30_000)
 
   @doc """
   Returns the place the client would come back from, or nil.
@@ -140,7 +142,7 @@ defmodule HologramSyncTests.Consistency.Client do
        buffer: "",
        complete?: false,
        cursor: nil,
-       cut_when: Keyword.get(opts, :cut_when),
+       cut_when: nil,
        events: [],
        facts: %{},
        opened_at: nil,
@@ -157,7 +159,13 @@ defmodule HologramSyncTests.Consistency.Client do
   @impl GenServer
   def handle_call(:complete?, _from, state), do: {:reply, state.complete?, state}
 
-  def handle_call(:connect, _from, state), do: {:reply, :ok, open(state)}
+  def handle_call({:connect, opts}, _from, %{stream: nil} = state) do
+    {:reply, :ok, open(%{state | cut_when: Keyword.get(opts, :cut_when)})}
+  end
+
+  # Already connected: a cut armed for the connection that never fired goes, so it can't cut the
+  # stream later, when nothing is left to reconnect it.
+  def handle_call({:connect, _opts}, _from, state), do: {:reply, :ok, %{state | cut_when: nil}}
 
   def handle_call(:cursor, _from, state), do: {:reply, state.cursor, state}
 
@@ -216,7 +224,7 @@ defmodule HologramSyncTests.Consistency.Client do
       handled = handle_frame(frame, acc, received_at)
 
       if cut_now?(handled) do
-        {:halt, %{close(handled, :cut) | cut_when: nil}}
+        {:halt, close(handled, :cut)}
       else
         {:cont, handled}
       end
@@ -278,7 +286,9 @@ defmodule HologramSyncTests.Consistency.Client do
   defp close(state, reason) do
     SyncClient.close(state.stream)
 
-    event(%{state | buffer: "", complete?: false, stream: nil}, :closed, %{cause: reason})
+    closed = %{state | buffer: "", complete?: false, cut_when: nil, stream: nil}
+
+    event(closed, :closed, %{cause: reason})
   end
 
   defp cookie_path(nil), do: "/plain"

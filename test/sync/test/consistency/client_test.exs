@@ -43,9 +43,9 @@ defmodule HologramSyncTests.Consistency.ClientTest do
   test "a client cut off before its fill ends sweeps what it may no longer read", %{
     users: [member | _users]
   } do
-    client = start_client(member.id, cut_when: &(types_markers(&1) == length(Model.types())))
+    client = start_client(member.id)
 
-    Client.connect(client)
+    Client.connect(client, cut_when: &(types_markers(&1) == length(Model.types())))
     assert await(fn -> cut?(client) end)
 
     assert Client.cursor(client) == nil
@@ -216,7 +216,7 @@ defmodule HologramSyncTests.Consistency.ClientTest do
   test "a client told to start over keeps its rows until the fill says which to drop", %{
     users: [member | _users]
   } do
-    client = start_client(member.id, cut_when: &match?([%{frame: "sync_resync"} | _events], &1))
+    client = start_client(member.id)
 
     Client.connect(client)
     assert Checks.await_converged(client, member.id, 5_000) == :ok
@@ -224,7 +224,7 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     Client.cut(client)
     Client.put_cursor(client, "unreadable")
     delete_membership!(member)
-    Client.connect(client)
+    Client.connect(client, cut_when: &match?([%{frame: "sync_resync"} | _events], &1))
 
     assert await(fn -> "cursor" in resync_reasons(client) and cut_count(client) == 2 end)
     assert map_size(Client.store(client)[Space]) == 1
@@ -315,8 +315,8 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     for %{frame: "sync_resync", reason: reason} <- Client.events(client), do: reason
   end
 
-  defp start_client(user_id, opts \\ []) do
-    start_supervised!({Client, [base_url: base_url(), user_id: user_id] ++ opts}, id: make_ref())
+  defp start_client(user_id) do
+    start_supervised!({Client, base_url: base_url(), user_id: user_id}, id: make_ref())
   end
 
   defp wire_type(type) do
