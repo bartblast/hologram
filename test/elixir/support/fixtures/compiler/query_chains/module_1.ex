@@ -8,6 +8,9 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryChains.Module1 do
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
+  # string_sort/0 hands sort a spec its spec refuses on purpose, for the build check to refuse.
+  @dialyzer {:nowarn_function, string_sort: 0}
+
   def valid(min_b) do
     Entity2
     |> filter(a == true and b >= ^min_b)
