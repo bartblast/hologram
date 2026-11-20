@@ -264,14 +264,14 @@ defmodule Hologram.DB.QueryCompiler do
   @doc """
   Compiles the statement deciding, for the rows of the given entity type with the given ids, which
   of the given users may read each one, and returning each readable row's current values - and,
-  when the given verdicts flag asks for them, the server's verdicts on the type's deciding items
-  for the users who may read it (see `Hologram.Auth.verdicts/2`).
+  when the given verdicts flag asks for them, the server's verdicts on the operations of the type it
+  sends one on, for the users who may read it (see `Hologram.Auth.verdicts/2`).
 
   Returns a map with :sql and :params as `compile/3` does. Params begin with two markers for the
   caller to bind: `:ids` (`$1`), the row ids as a uuid array, and `:users` (`$2`), the ids of the
   signed-in users as a uuid array holding no NULL - a rule naming the acting user only to deny,
   like `owner_id != user_id()`, would admit a NULL one. `:users` is left out when no read rule
-  and no verdict depends on the user, since the statement then reads no users. The rules' own
+  and no verdict's rule depends on the user, since the statement then reads no users. The rules' own
   slots follow, as `{:value, _}`.
 
   Each result row holds the row's columns in `compile/3`'s order, then three more:
@@ -297,19 +297,21 @@ defmodule Hologram.DB.QueryCompiler do
   those of the rules a delegation asks, on the row it leads to - and only those of `:users` among
   them are tested. Otherwise every user of `:users` is tested on every row.
 
-  With verdicts asked for and a type with deciding items (see
-  `Hologram.Policy.Readers.classify_verdicts/1`), the map also holds `:verdict_clauses`, each
-  item's `{keys, class}` in the order its answers come in - the items answering the same for
-  every user first - and each result row four more, every answer a boolean that is never NULL:
+  With verdicts asked for, the map also holds `:verdicts`, the verdict keys of the type's
+  operations the server sends a verdict on (see `Hologram.Policy.verdict_operations/1`): `:read`,
+  the read operation's, whose verdict is true for every reader and takes nothing from the
+  statement, and `:operations`, the others', in the order their answers come in. With any of the
+  others, each result row holds two more columns and one per operation, every answer never NULL:
 
-    * `$everyone_verdicts` - the answers of the items answering the same for every user, decided
-      once per row.
-    * `$anonymous_verdicts` - the answers of the others for an anonymous user, each folded for
-      nobody as the rules are, when the anonymous flag asks for them, and an empty array otherwise.
-    * `$verdict_users` and `$user_verdicts` - the users tested on the others, and each one's
-      answers on them, in the same order: the readers - every user of `:users` when `$everyone`
-      is true - and, when each of those items is listed, only those of them its anchor names.
-      A reader left out answers each item's default.
+    * `$verdict_everyone` - for each operation, whether the rules answering it the same for every
+      user admit the row (see `Hologram.Policy.Readers.classify/2`), decided once per row.
+    * `$verdict_anonymous` - for each operation, whether its other rules admit an anonymous user,
+      folded for nobody as the read rules are, when the anonymous flag asks for it, and FALSE
+      otherwise.
+    * `$verdict_users_<n>` - the readers the other rules of the n-th operation admit, when its
+      `$verdict_everyone` answer is false, and an empty array otherwise. The readers are tested -
+      every user of `:users` on a row everyone may read - and when each of those rules is listed,
+      only those of them its anchor names.
   """
   @spec recheck(module, %{module => %{atom => any}}, boolean, boolean) :: %{atom => any}
   def recheck(entity_type, mapping, anonymous?, verdicts? \\ false) do
@@ -320,13 +322,13 @@ defmodule Hologram.DB.QueryCompiler do
     independent_rules = for {:independent, rule} <- classes, do: rule
     dependent_classes = Enum.reject(classes, &match?({:independent, _rule}, &1))
 
-    verdict_classes = if verdicts?, do: Readers.classify_verdicts(entity_type), else: []
-
-    {independent_verdicts, dependent_verdicts} =
-      Enum.split_with(verdict_classes, &match?({_clause, _keys, :independent}, &1))
+    verdict_operations = if verdicts?, do: recheck_verdict_operations(entity_type), else: []
 
     initial_params =
-      if dependent_classes == [] and dependent_verdicts == [], do: [:ids], else: [:users, :ids]
+      if dependent_classes == [] and
+           Enum.all?(verdict_operations, &match?({_key, _rules, []}, &1)),
+         do: [:ids],
+         else: [:users, :ids]
 
     {everyone_sql, params_after_everyone} =
       recheck_flag_sql(entity_type, mapping, %{rules: independent_rules}, initial_params)
@@ -349,7 +351,7 @@ defmodule Hologram.DB.QueryCompiler do
       recheck_readers_sql(entity_type, mapping, dependent_classes, params_after_anonymous)
 
     {row_sql, all_reversed_params} =
-      if verdict_classes == [] do
+      if verdict_operations == [] do
         # OFFSET 0 keeps Postgres from folding the subqueries into the statement around them, which
         # would copy each flag and the readers into every place that reads them, and decide them
         # again there.
@@ -365,11 +367,10 @@ defmodule Hologram.DB.QueryCompiler do
           %{
             anonymous?: anonymous?,
             anonymous_sql: anonymous_sql,
-            dependent_verdicts: dependent_verdicts,
             entity_mapping: entity_mapping,
             everyone_sql: everyone_sql,
-            independent_verdicts: independent_verdicts,
-            readers_sql: readers_sql
+            readers_sql: readers_sql,
+            verdict_operations: verdict_operations
           },
           params_after_readers
         )
@@ -383,15 +384,13 @@ defmodule Hologram.DB.QueryCompiler do
 
     compiled = %{params: Enum.reverse(all_reversed_params), sql: sql}
 
-    if verdict_classes == [] do
-      compiled
-    else
-      verdict_clauses =
-        Enum.map(independent_verdicts ++ dependent_verdicts, fn {_clause, keys, class} ->
-          {keys, class}
-        end)
+    if verdicts? do
+      read_keys = for {key, :read} <- Policy.verdict_operations(entity_type), do: key
+      operation_keys = Enum.map(verdict_operations, &elem(&1, 0))
 
-      Map.put(compiled, :verdict_clauses, verdict_clauses)
+      Map.put(compiled, :verdicts, %{operations: operation_keys, read: read_keys})
+    else
+      compiled
     end
   end
 
@@ -1410,11 +1409,34 @@ defmodule Hologram.DB.QueryCompiler do
   # own row of the candidates - every user of the users array. The names the recheck gives begin
   # with a $ like the compiler's aliases, and no mapped column takes any of them, so a rule's bare
   # column never resolves to them.
-  defp recheck_readers_sql(_entity_type, _mapping, [], reversed_params) do
+  defp recheck_readers_sql(entity_type, mapping, classes, reversed_params) do
+    # Wrapped, the membership stays a subplan Postgres hashes once per statement. Bare, it is
+    # pulled up into a join, which with one candidate per row scans every user for each row, and
+    # an array membership is hashed only while the plan sees the array as a constant.
+    pool = %{
+      member_sql: ~s|("$c"."$reader" IN (#{@recheck_users_sql})) IS TRUE|,
+      users_sql: @recheck_users_sql
+    }
+
+    recheck_admitted_sql(
+      entity_type,
+      mapping,
+      classes,
+      ~s|"$e"."$everyone"|,
+      pool,
+      reversed_params
+    )
+  end
+
+  # The users of the given pool the given classes' rules admit, each tested as the acting user, read
+  # off its own row of the candidates: the users the anchors name among the pool's when every class
+  # is listed, and every user of the pool otherwise. None when the given flag holds - the rules
+  # answering the same for everyone admit everyone then - or no class is given.
+  defp recheck_admitted_sql(_entity_type, _mapping, [], _everyone_sql, _pool, reversed_params) do
     {"'{}'::uuid[]", reversed_params}
   end
 
-  defp recheck_readers_sql(entity_type, mapping, classes, reversed_params) do
+  defp recheck_admitted_sql(entity_type, mapping, classes, everyone_sql, pool, reversed_params) do
     rules = Enum.map(classes, &elem(&1, 1))
     policy = %{actor_sql: ~s|"$c"."$reader"|, rules: rules}
 
@@ -1430,130 +1452,99 @@ defmodule Hologram.DB.QueryCompiler do
           |> Enum.map(fn {:listed, _rule, anchor} -> anchor end)
           |> anchors_candidates_sql(context, params_after_condition)
 
-        # Wrapped, the membership stays a subplan Postgres hashes once per statement. Bare, it is
-        # pulled up into a join, which with one candidate per row scans every user for each row, and
-        # an array membership is hashed only while the plan sees the array as a constant.
-        {union_sql(branches), ~s|("$c"."$reader" IN (#{@recheck_users_sql})) IS TRUE AND |,
-         params_after_candidates}
+        {union_sql(branches), "#{pool.member_sql} AND ", params_after_candidates}
       else
-        {@recheck_users_sql, "", params_after_condition}
+        {pool.users_sql, "", params_after_condition}
       end
 
-    readers_sql =
-      ~s|CASE WHEN "$e"."$everyone" THEN '{}'::uuid[] | <>
+    admitted_sql =
+      ~s|CASE WHEN #{everyone_sql} THEN '{}'::uuid[] | <>
         ~s|ELSE ARRAY(SELECT DISTINCT "$c"."$reader" | <>
         ~s|FROM (#{candidates_sql}) AS "$c"("$reader") WHERE #{filter_sql}#{condition_sql}) END|
 
-    {readers_sql, new_params}
+    {admitted_sql, new_params}
   end
 
-  # The recheck's row with its verdicts: the readers move into a lateral of their own, so the users
-  # tested on the clauses depending on the user can be read off them. OFFSET 0 keeps every lateral
-  # from being folded into the statement, as without verdicts.
+  # The recheck's row with the verdicts on each operation of the given ones: the flags of the rules
+  # answering the same for everyone join the row's own in its first lateral, the readers move into a
+  # lateral of their own, and the users each operation's other rules admit among them are read in a
+  # third. OFFSET 0 keeps every lateral from being folded into the statement, as without verdicts.
   defp recheck_verdict_row_sql(entity_type, mapping, parts, reversed_params) do
-    {everyone_verdicts_sql, params_after_everyone} =
-      verdict_flags_sql(entity_type, mapping, %{}, parts.independent_verdicts, reversed_params)
+    {everyone_flags, params_after_everyone} =
+      Enum.map_reduce(parts.verdict_operations, reversed_params, fn {_key, rules, _classes},
+                                                                    acc ->
+        recheck_flag_sql(entity_type, mapping, %{rules: rules}, acc)
+      end)
 
-    {anonymous_verdicts_sql, params_after_anonymous} =
-      if parts.anonymous? do
-        verdict_flags_sql(
-          entity_type,
-          mapping,
-          %{anonymous?: true},
-          parts.dependent_verdicts,
-          params_after_everyone
-        )
-      else
-        {"'{}'::boolean[]", params_after_everyone}
-      end
+    {anonymous_flags, params_after_anonymous} =
+      Enum.map_reduce(parts.verdict_operations, params_after_everyone, fn
+        {_key, _rules, classes}, acc when parts.anonymous? ->
+          policy = %{anonymous?: true, rules: Enum.map(classes, &elem(&1, 1))}
 
-    {tested_sql, new_params} =
-      recheck_tested_verdicts_sql(
-        entity_type,
-        mapping,
-        parts.dependent_verdicts,
-        params_after_anonymous
-      )
+          recheck_flag_sql(entity_type, mapping, policy, acc)
+
+        _operation, acc ->
+          {"FALSE", acc}
+      end)
+
+    # The users tested are the row's readers - every user of the users array on a row everyone may
+    # read - since no other user is sent the row.
+    pool = %{
+      member_sql:
+        ~s|CASE WHEN "$e"."$everyone" | <>
+          ~s|THEN ("$c"."$reader" IN (#{@recheck_users_sql})) IS TRUE | <>
+          ~s|ELSE "$c"."$reader" = ANY("$r"."$readers") END|,
+      users_sql:
+        ~s|SELECT "$u"."$user" | <>
+          ~s|FROM unnest(CASE WHEN "$e"."$everyone" THEN $2::uuid[] ELSE "$r"."$readers" END) | <>
+          ~s|AS "$u"("$user")|
+    }
+
+    {users_columns, new_params} =
+      parts.verdict_operations
+      |> Enum.with_index(1)
+      |> Enum.map_reduce(params_after_anonymous, fn {{_key, _rules, classes}, index}, acc ->
+        everyone_sql = ~s|"$e"."$verdict_everyone"[#{index}]|
+
+        {users_sql, new_acc} =
+          recheck_admitted_sql(entity_type, mapping, classes, everyone_sql, pool, acc)
+
+        {~s|#{users_sql} AS "$verdict_users_#{index}"|, new_acc}
+      end)
+
+    users_names =
+      Enum.map_join(1..length(parts.verdict_operations), ", ", &~s|"$v"."$verdict_users_#{&1}"|)
 
     row_sql =
       ~s|SELECT #{column_list(parts.entity_mapping)}, "$e"."$everyone", | <>
-        ~s|#{parts.anonymous_sql} AS "$anonymous", "$r"."$readers", "$e"."$everyone_verdicts", | <>
-        ~s|#{anonymous_verdicts_sql} AS "$anonymous_verdicts", | <>
-        ~s|"$v"."$verdict_users", "$v"."$user_verdicts" | <>
+        ~s|#{parts.anonymous_sql} AS "$anonymous", "$r"."$readers", "$e"."$verdict_everyone", | <>
+        ~s|ARRAY[#{Enum.join(anonymous_flags, ", ")}] AS "$verdict_anonymous", #{users_names} | <>
         ~s|FROM #{qualified_table(parts.entity_mapping.table)} | <>
         ~s|CROSS JOIN LATERAL (SELECT #{parts.everyone_sql} AS "$everyone", | <>
-        ~s|#{everyone_verdicts_sql} AS "$everyone_verdicts" OFFSET 0) AS "$e" | <>
+        ~s|ARRAY[#{Enum.join(everyone_flags, ", ")}] AS "$verdict_everyone" OFFSET 0) AS "$e" | <>
         ~s|CROSS JOIN LATERAL (SELECT #{parts.readers_sql} AS "$readers" OFFSET 0) AS "$r" | <>
-        ~s|CROSS JOIN LATERAL (#{tested_sql} OFFSET 0) AS "$v"|
+        ~s|CROSS JOIN LATERAL (SELECT #{Enum.join(users_columns, ", ")} OFFSET 0) AS "$v"|
 
     {row_sql, new_params}
   end
 
-  # The users tested on the clauses depending on the user, and each one's answers on them. The
-  # readers are tested - every user of the users array on a row everyone may read - and when each
-  # clause is listed, only those of them its anchor names: a reader the anchors can't name answers
-  # every clause's default, so testing them would tell nothing. The candidates repeat, so they are
-  # made distinct, and wrapped the way the readers' are, so the users array is hashed once.
-  defp recheck_tested_verdicts_sql(_entity_type, _mapping, [], reversed_params) do
-    {~s|SELECT '{}'::uuid[] AS "$verdict_users", '{}'::boolean[] AS "$user_verdicts"|,
-     reversed_params}
-  end
+  # Each operation the server sends a verdict on but read, whose verdict is true for every reader,
+  # with the rules answering it the same for everyone and the classes of the others, in key order -
+  # one per key, since fields covered by the same lines share one (see Policy.verdict_key/2).
+  defp recheck_verdict_operations(entity_type) do
+    pairs =
+      entity_type
+      |> Policy.verdict_operations()
+      |> Enum.uniq_by(fn {key, _operation} -> key end)
 
-  defp recheck_tested_verdicts_sql(entity_type, mapping, verdict_classes, reversed_params) do
-    {flags_sql, params_after_flags} =
-      verdict_flags_sql(
-        entity_type,
-        mapping,
-        %{actor_sql: ~s|"$t"."$user"|},
-        verdict_classes,
-        reversed_params
-      )
+    for {key, operation} <- pairs, operation != :read do
+      {independent, dependent} =
+        entity_type
+        |> Readers.classify(operation)
+        |> Enum.split_with(&match?({:independent, _rule}, &1))
 
-    {tested_sql, new_params} =
-      if Enum.all?(verdict_classes, &match?({_clause, _keys, {:listed, _anchor, _default}}, &1)) do
-        context = policy_context(entity_type, mapping, %{actor_sql: ~s|"$k"."$user"|})
-
-        {branches, params_after_candidates} =
-          verdict_classes
-          |> Enum.map(fn {_clause, _keys, {:listed, anchor, _default}} -> anchor end)
-          |> anchors_candidates_sql(context, params_after_flags)
-
-        candidates_sql =
-          ~s|(SELECT DISTINCT "$k"."$user" FROM (#{union_sql(branches)}) AS "$k"("$user") | <>
-            ~s|WHERE CASE WHEN "$e"."$everyone" | <>
-            ~s|THEN ("$k"."$user" IN (#{@recheck_users_sql})) IS TRUE | <>
-            ~s|ELSE "$k"."$user" = ANY("$r"."$readers") END)|
-
-        {candidates_sql, params_after_candidates}
-      else
-        {~s|unnest(CASE WHEN "$e"."$everyone" THEN $2::uuid[] ELSE "$r"."$readers" END)|,
-         params_after_flags}
-      end
-
-    sql =
-      ~s|SELECT coalesce(array_agg("$t"."$user"), '{}'::uuid[]) AS "$verdict_users", | <>
-        ~s|coalesce(array_agg(#{flags_sql}), '{}'::boolean[]) AS "$user_verdicts" | <>
-        ~s|FROM #{tested_sql} AS "$t"("$user")|
-
-    {sql, new_params}
-  end
-
-  # Each deciding item's answer, as a flag in an array, in the given order. An item renders as the
-  # rule of its own Policy.verdict_rule/1 gives it, so it is folded for nobody and reads its rows as
-  # a rule's conditions, references and delegations do.
-  defp verdict_flags_sql(_entity_type, _mapping, _policy, [], reversed_params) do
-    {"'{}'::boolean[]", reversed_params}
-  end
-
-  defp verdict_flags_sql(entity_type, mapping, policy, verdict_classes, reversed_params) do
-    {flags, new_params} =
-      Enum.map_reduce(verdict_classes, reversed_params, fn {item, _keys, _class}, acc ->
-        rule = Policy.verdict_rule(item)
-
-        recheck_flag_sql(entity_type, mapping, Map.put(policy, :rules, [rule]), acc)
-      end)
-
-    {"ARRAY[#{Enum.join(flags, ", ")}]", new_params}
+      {key, Enum.map(independent, &elem(&1, 1)), dependent}
+    end
   end
 
   # The candidates of the given rules' anchors on the row the context is about, each anchor once -

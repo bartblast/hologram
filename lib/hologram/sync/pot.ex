@@ -178,9 +178,10 @@ defmodule Hologram.Sync.Pot do
   `Hologram.Sync.Live.pairs_touching/2`). A handed-over row's sets keep only the rows the client
   holds once told, as `decide/3`'s do.
 
-  What a row it holds now holds is not told: a type read again because a grant moved changed who
-  may read its rows, not the rows - unless given `trust_held?: false`, as `decide/3` is, when every
-  row read is handed over.
+  What a row it holds now holds is not told: a type is read again because a grant moved who may
+  read its rows or what the verdicts sent with them answer, not the rows - unless given
+  `trust_held?: false`, as `decide/3` is, when every row read is handed over. The verdicts the grant
+  moved on the rows it holds are its caller's to tell (see `Hologram.Sync.Verdicts.stale/3`).
   """
   @spec reread(
           t,

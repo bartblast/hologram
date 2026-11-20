@@ -749,6 +749,20 @@ defmodule Hologram.Sync.SearchTest do
              }
     end
 
+    # A rule of an operation the server sends a verdict on can name the role, which moves the
+    # verdicts of every row of the type its holder may read.
+    test "names the holder of an own role granted on the whole type a verdict edge names" do
+      user = create!(Module14, email: "a@b.c")
+      edges = %{{PolicyModule1, {:verdicts}} => [{:own_grants, [:viewer]}]}
+
+      effects = grant_effects(fn -> Auth.grant_role(user, :viewer, PolicyModule1) end)
+
+      assert candidates(effects, edges) == %{
+               rows: %{},
+               whole_types: %{PolicyModule1 => MapSet.new([user.id])}
+             }
+    end
+
     test "lists nothing for a role the edge doesn't name" do
       user = create!(Module14, email: "a@b.c")
       resource = create!(PolicyModule1)

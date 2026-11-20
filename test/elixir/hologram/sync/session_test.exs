@@ -2467,6 +2467,125 @@ defmodule Hologram.Sync.SessionTest do
       assert deltas == [verdicts_patch(project, false)]
     end
 
+    # Nothing the batch wrote names the project, but a grant on the whole type reads it again, and
+    # its labels moved since its verdicts were told.
+    test "tells the verdicts a whole type read again moved on a held row", %{
+      locked: locked,
+      project: project
+    } do
+      windows(%{})
+
+      session = start_session!([])
+      await_fill()
+
+      :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
+
+      send(session, {:live, whole_type_part()})
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert deltas == [verdicts_patch(project, false)]
+    end
+
+    # The read holds this client's batch 8, which the session never told. The client takes a patch
+    # as a write to its row, so the verdicts go apart under the session's 7, as pairs do.
+    test "tells the verdicts a whole type read again moved under the session's own number", %{
+      locked: locked,
+      project: project
+    } do
+      windows(%{})
+
+      read_fill = fn entity_type, actor_user_id, replica_id, synced_types ->
+        {rows, read_seq} =
+          read_fill_in_sandbox(entity_type, actor_user_id, replica_id, synced_types)
+
+        {rows, if(Process.get(:reread?), do: 8, else: read_seq)}
+      end
+
+      session = start_session!(applied_seq: 7, read_fill: read_fill, replica_id: @replica_id)
+      await_fill()
+
+      :sys.replace_state(session, fn state ->
+        Process.put(:reread?, true)
+
+        state
+      end)
+
+      :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
+
+      send(session, {:live, whole_type_part()})
+
+      assert_receive {:sync_deltas, _cursor, deltas, 7}
+      assert deltas == [verdicts_patch(project, false)]
+    end
+
+    test "tells a held row's verdicts a whole type read again moved once", %{
+      locked: locked,
+      project: project
+    } do
+      windows(%{})
+
+      session = start_session!([])
+      await_fill()
+
+      :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
+
+      send(session, {:live, whole_type_part()})
+
+      assert_receive {:sync_deltas, _cursor, [_patch], _applied_seq}
+
+      send(session, {:live, whole_type_part()})
+
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
+    test "tells the verdicts a whole type read again moved in frames of the frame size", %{
+      locked: locked,
+      project: project
+    } do
+      put_app_env(:sync, rows_per_frame: 1)
+
+      other =
+        %{public: true}
+        |> PolicyProject.new()
+        |> DB.create!()
+
+      windows(%{})
+
+      session = start_session!([])
+      await_fill()
+
+      for row <- [project, other] do
+        :ok = EntityOperations.add_relationship(PolicyProject, row.id, :labels, locked.id)
+      end
+
+      send(session, {:live, whole_type_part()})
+
+      assert_receive {:sync_deltas, first_cursor, [%{id: first_id, op: :patch_entity}], first_seq}
+      assert_receive {:sync_deltas, last_cursor, [%{id: last_id, op: :patch_entity}], last_seq}
+
+      # In id order, all under the session's number, and only the batch's last frame carries its
+      # place.
+      assert [first_id, last_id] == Enum.sort([project.id, other.id])
+      assert first_seq == last_seq
+      assert first_cursor == nil
+      assert last_cursor != nil
+
+      send(session, {:live, whole_type_part()})
+
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
+    test "tells nothing of a held row's verdicts a whole type read again left as they were" do
+      windows(%{})
+
+      session = start_session!([])
+      await_fill()
+
+      send(session, {:live, whole_type_part()})
+
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
     test "hands a row over with the verdicts its part carries" do
       windows(%{})
 
@@ -2495,16 +2614,12 @@ defmodule Hologram.Sync.SessionTest do
     end
   end
 
-  # The fixture's named lines are limited to :name, so each deciding quantifier is answered under
-  # the field's key as well as under the line's name.
+  # The fixture's named lines are limited to :name, and the field's verdict answers every line
+  # covering it, so it holds while the feature line does.
   defp project_verdicts(archivable?) do
     Map.new(
-      for name <- [:archive, :feature, :publish],
-          key <- [name, {:update, :name}] do
-        [%{predicates: [clause]}] = Policy.build(PolicyProject)[name]
-
-        {Policy.verdict_key(PolicyProject, key, clause), name != :archive or archivable?}
-      end
+      [{:archive, archivable?}, {:feature, true}, {:publish, true}, {{:update, :name}, true}],
+      fn {operation, answer} -> {Policy.verdict_key(PolicyProject, operation), answer} end
     )
   end
 
@@ -2584,6 +2699,26 @@ defmodule Hologram.Sync.SessionTest do
       tx_range: {elem(place, 0), elem(place, 0)},
       verdicts: %{PolicyProject => %{project.id => verdicts}},
       whole_types: [],
+      written: %{}
+    }
+  end
+
+  # A part naming no row, whose grant reads the projects' whole type again for the session's user.
+  defp whole_type_part do
+    place = {Oplog.current_xmax() + 1, 0}
+
+    %{
+      checked: %{},
+      overtaking_seqs: %{},
+      own_seqs: %{},
+      pair_effects: %{},
+      pairs: %{},
+      place: place,
+      readable: %{},
+      synced_types: [PolicyModule1, PolicyProject],
+      tx_range: {elem(place, 0), elem(place, 0)},
+      verdicts: %{},
+      whole_types: [PolicyProject],
       written: %{}
     }
   end
