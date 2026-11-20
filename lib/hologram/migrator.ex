@@ -1334,6 +1334,11 @@ defmodule Hologram.Migrator do
   # another row's: a row holding it would hold the same four columns, which the store's unique
   # index refuses (see Hologram.Auth.RoleGrant.identity_columns/0) - and, where that index was
   # missing or unbuilt, the count before the first page (see the apply_op/2 clause).
+  #
+  # No node writes grants meanwhile: a value renamed in place takes no lock on the store, so a
+  # grant written under the old label during the file could keep the id that label derives. That
+  # holds while a deploy stops the old nodes before the new ones start - old and new nodes
+  # running against one database at once is not supported yet (#1627).
   defp rederive_grant_ids(op, after_id) do
     statement = DDL.grant_identity_statement(op.table, op.column)
 

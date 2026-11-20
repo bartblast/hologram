@@ -97,12 +97,12 @@ defmodule Hologram.DB.Preflight do
   Validates that the role grants a :rederive_grant_ids op gives new ids - the ones holding its
   new label - repeat no grant's four identity columns.
 
-  Returns :ok, or raises naming the store, the label the grants move from and to, and how many
-  keys repeat - the label before the rename is the one the database holds once the refusal
-  takes the file back. Two such grants
-  derive one id, and the primary key refuses the second whatever state the store's unique
-  index is in, so the rows are counted rather than the index asked about. They can repeat only
-  where that index was missing or unbuilt while they were written.
+  Returns :ok, or raises naming the store, the label this rename moves the grants from and to,
+  and how many keys repeat. The label it moves them from is the one the database holds once the
+  refusal takes the file back, unless an earlier rename in the same file moved them to it. Two
+  grants repeating one key derive one id, and the primary key refuses the second whatever state
+  the store's unique index is in, so the rows are counted rather than the index asked about.
+  They can repeat only where that index was missing or unbuilt while they were written.
   """
   @spec check_grant_repeats!(%{atom => any}) :: :ok
   def check_grant_repeats!(op) do

@@ -198,8 +198,9 @@ defmodule Hologram.Migration.Renderer do
   # held it already derives the id it has. Right after each relabel rather than once per file:
   # every row's id matches its labels again before the next rename, so a file swapping two
   # labels through a third never moves an id onto one another row still holds.
-  # The label the grants held before carries no rows by then, and rides along for a refusal to
-  # name them by - the file's transaction takes the relabel back with it.
+  # The label the grants held before rides along for a refusal to name them by - the file's
+  # transaction takes the relabel back with it, so it is the label they hold again, unless an
+  # earlier rename in the same file moved them to it.
   defp grant_relabel_ops([], _post_mapping, _attribute, _from, _to), do: []
 
   defp grant_relabel_ops(relabel_ops, post_mapping, attribute, from, to) do
