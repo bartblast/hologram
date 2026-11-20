@@ -27,6 +27,16 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryChains.Module1 do
 
   def pinned_predicates(predicates), do: Stage.filter(Entity2, predicates)
 
+  def pinned_alternatives(alternatives), do: filter(Entity2, ^[a: true, or: alternatives])
+
+  def pinned_any(condition), do: filter(Entity2, ^[a: true, any: condition])
+
+  def pinned_all(condition), do: filter(Entity2, ^[a: true, all: condition])
+
+  def pinned_none(condition), do: filter(Entity2, ^[a: true, none: condition])
+
+  def literal_or, do: Stage.filter(Entity2, or: {:==, "x"})
+
   def through_variable(query), do: sort(query, nonexistent)
 
   def through_reduce(conditions) do

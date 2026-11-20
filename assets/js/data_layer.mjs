@@ -24,6 +24,10 @@ import Type from "./type.mjs";
 // takes milliseconds; this is the bound for one that never answers.
 const SAVE_WAIT_MS = 3000;
 
+// How many query refusals are kept before the cache starts over: a query holding values a user
+// types has as many spellings as values, so the cache is bounded rather than grown forever.
+const QUERY_REFUSALS_LIMIT = 5000;
+
 // The client half of the data layer behind one class: each public static is a place where the
 // runtime hands control to the data layer. The data layer's own modules - the batches, the deltas,
 // the durable store, the local database, the model, the query kernel, the replica, the tabs and
@@ -31,6 +35,14 @@ const SAVE_WAIT_MS = 3000;
 //
 // The bodies assume the build carries a data model, so the sync constants are there.
 export default class DataLayer {
+  // The refusals queryRefusal() worked out, with the model generation and the synced types they
+  // were worked out against.
+  static #queryRefusals = {
+    generation: null,
+    refusals: new Map(),
+    syncedTypes: null,
+  };
+
   // Based on run_query!/4
   //
   // Answers the given normalized term a derived field of the given module is defined by, for the
@@ -581,8 +593,41 @@ export default class DataLayer {
   // Why the given normalized term can't be a derived field's query, or null (see QueryCheck): what it
   // asks for that the browser may not hold, then a type it reads that sync never sends - in the
   // order the server refuses them.
+  //
+  // Asked of every derived query on every render, so the answer is kept by the term's spelling,
+  // which names one query whatever object holds it. It depends only on the term, the model and the
+  // synced types, so it starts over when either of the last two changes.
   static queryRefusal(term) {
-    return QueryCheck.refusal(term) ?? QueryCheck.unsyncedRefusal(term);
+    const syncedTypes = globalThis.Hologram.sync?.syncedTypes;
+    const generation = Model.generation();
+    const cache = DataLayer.#queryRefusals;
+
+    if (
+      cache.syncedTypes !== syncedTypes ||
+      cache.generation !== generation ||
+      cache.refusals.size >= QUERY_REFUSALS_LIMIT
+    ) {
+      DataLayer.#queryRefusals = {generation, refusals: new Map(), syncedTypes};
+    }
+
+    const refusals = DataLayer.#queryRefusals.refusals;
+    const key = QuerySpelling.spell(term);
+
+    // A shape the spelling doesn't know is marked with a "!", and two of them can spell alike, so
+    // a term holding one is answered afresh rather than from the cache. A value holding a "!" is
+    // too, which only costs the walk.
+    if (key.includes("!")) {
+      return QueryCheck.refusal(term) ?? QueryCheck.unsyncedRefusal(term);
+    }
+
+    if (!refusals.has(key)) {
+      refusals.set(
+        key,
+        QueryCheck.refusal(term) ?? QueryCheck.unsyncedRefusal(term),
+      );
+    }
+
+    return refusals.get(key);
   }
 
   // Settles once what this tab's actions wrote is in the store, for a page about to be loaded afresh

@@ -3,8 +3,8 @@ alias Hologram.Compiler.CallGraph
 alias Hologram.Reflection
 
 # What the compile task pays to fold each page's reach into what the data layer keeps of it: the
-# modules the page reaches, the components among them, whether it checks permissions and the atoms
-# its app functions spell, each function read once from the IR PLT built beforehand. A cold
+# modules the page reaches, whether it or a component among them reads the session user, whether it
+# checks permissions, the atoms its app functions spell and the queries they write in one piece, each function read once from the IR PLT built beforehand. A cold
 # compile pays it for every page. A compile that derives the data layer pays it only for the pages
 # whose reach the edit can have moved, which it walks again (see the list_reach_by_page_2
 # benchmark for the walk).

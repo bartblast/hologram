@@ -1745,7 +1745,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
       removed_reach = %{
         atoms: MapSet.new(),
         checks_permissions?: false,
-        components: [],
         modules: MapSet.new(),
         query_chains: [],
         reads_session_user?: false
@@ -1770,18 +1769,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert map_size(data_layer.pages) == @num_pages
       assert data_layer.sync_constants_js == runtime.sync_constants_js
-    end
-
-    test "the kept reach of a page names the components it reaches, itself included", %{
-      opts: opts
-    } do
-      run(opts)
-
-      assert %{
-               checks_permissions?: false,
-               components: [ComponentModule40, LayoutFixture, PageModule18]
-             } =
-               cache_state().data_layer.pages[PageModule18]
     end
 
     test "a new VM reuses the derived definitions from the compile state dump", %{opts: opts} do

@@ -140,7 +140,6 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
 
-  @app "(hologram #{Application.spec(:hologram, :vsn)})"
   @root_dir Reflection.root_dir()
   @assets_dir Path.join(@root_dir, "assets")
   @js_dir Path.join(@assets_dir, "js")
@@ -279,7 +278,6 @@ defmodule Hologram.CompilerTest do
       PageModule18 => %{
         atoms: MapSet.new(atoms),
         checks_permissions?: checks_permissions?,
-        components: [],
         modules: MapSet.new(modules),
         query_chains: [],
         reads_session_user?: reads_session_user?
@@ -2702,7 +2700,7 @@ defmodule Hologram.CompilerTest do
       [module_info_plt: module_info_plt]
     end
 
-    test "keeps the modules a page reaches, the struct types it names included, and the components among them with the page, sorted",
+    test "keeps the modules a page reaches, the struct types it names included",
          %{module_info_plt: module_info_plt} do
       reach = %{
         mfas: [{Module1, :fun_1, 0}, {Module3, :fun_2, 1}, {Module2, :fun_3, 0}],
@@ -2713,21 +2711,11 @@ defmodule Hologram.CompilerTest do
                Module1 => %{
                  atoms: MapSet.new(),
                  checks_permissions?: false,
-                 components: [Module1, Module2, Module3],
                  modules: MapSet.new([Module1, Module2, Module3, Module4]),
                  query_chains: [],
                  reads_session_user?: false
                }
              }
-    end
-
-    test "leaves out a reached module the module info PLT does not hold as a component", %{
-      module_info_plt: module_info_plt
-    } do
-      reach = %{mfas: [{Module1, :fun_1, 0}, {Enum, :map, 2}], types: []}
-
-      assert %{Module1 => %{components: [Module1]}} =
-               build_kept_page_reach([{Module1, reach}], [], module_info_plt, PLT.start())
     end
 
     test "marks the pages given as checking permissions", %{module_info_plt: module_info_plt} do
@@ -2829,7 +2817,6 @@ defmodule Hologram.CompilerTest do
                  Module1 => %{
                    atoms: MapSet.new(),
                    checks_permissions?: false,
-                   components: [Module1],
                    modules: MapSet.new(),
                    query_chains: [],
                    reads_session_user?: false
@@ -2837,7 +2824,6 @@ defmodule Hologram.CompilerTest do
                  Module11 => %{
                    atoms: MapSet.new(),
                    checks_permissions?: false,
-                   components: [Module11],
                    modules: MapSet.new(),
                    query_chains: [],
                    reads_session_user?: false

@@ -189,6 +189,24 @@ defmodule Hologram.Compiler.QueryChainsTest do
       assert error.line == source_line(Module1, "def dead_cut(predicates)")
     end
 
+    # The run hands the list its alternatives or the quantifier its source and condition, which
+    # the build can't stand in for, so the chain ends at the stage.
+    test "passes a pinned predicate list holding alternatives or a quantifier only the run knows" do
+      for function <- [:pinned_alternatives, :pinned_any, :pinned_all, :pinned_none] do
+        assert validate_all!(Module1, function, 1) == :ok
+      end
+    end
+
+    # An attribute may be named or, and a comparison of it through an operator is read as any other
+    # attribute's.
+    test "checks a comparison of an attribute named like alternatives" do
+      assert_raise Hologram.CompileError,
+                   ~r/builds an invalid query - unknown attribute :or/,
+                   fn ->
+                     validate_all!(Module1, :literal_or, 0)
+                   end
+    end
+
     test "passes the steps before one only the run knows" do
       assert validate_all!(Module1, :pinned_predicates, 1) == :ok
     end

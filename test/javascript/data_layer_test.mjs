@@ -1006,6 +1006,73 @@ describe("DataLayer", () => {
         /^reads MyApp\.Task, which browser code never names/,
       );
     });
+
+    describe("its cache", () => {
+      const term = (filter) => ({
+        cardinality: "set",
+        entity: "MyApp.Task",
+        filter,
+        include: {},
+        skip: null,
+        sort: [],
+        take: null,
+      });
+
+      beforeEach(() => {
+        globalThis.Hologram.sync = {
+          model: {
+            "MyApp.Task": {
+              attributes: {id: "uuid", title: "string"},
+              relationships: {},
+              serverOnly: [],
+            },
+          },
+          syncedTypes: ["MyApp.Task"],
+        };
+
+        Model.reset();
+      });
+
+      // Every render asks again, so a query spelled alike - whatever object holds it - is answered
+      // from what the first ask worked out.
+      it("works out a query spelled alike once", () => {
+        const refusal = sinon.spy(QueryCheck, "refusal");
+
+        assert.isNull(DataLayer.queryRefusal(term([["title", "==", "x"]])));
+        assert.isNull(DataLayer.queryRefusal(term([["title", "==", "x"]])));
+
+        sinon.assert.calledOnce(refusal);
+      });
+
+      it("works out a query spelled otherwise anew", () => {
+        const refusal = sinon.spy(QueryCheck, "refusal");
+
+        DataLayer.queryRefusal(term([["title", "==", "x"]]));
+        DataLayer.queryRefusal(term([["title", "==", "y"]]));
+
+        sinon.assert.calledTwice(refusal);
+      });
+
+      it("works out anew once the synced types change", () => {
+        assert.isNull(DataLayer.queryRefusal(term([])));
+
+        globalThis.Hologram.sync.syncedTypes = [];
+
+        assert.match(DataLayer.queryRefusal(term([])), /^reads MyApp\.Task/);
+      });
+
+      // A rules frame reads the model afresh, which can make an attribute server-only.
+      it("works out anew once the model is read afresh", () => {
+        const query = term([["title", "==", "x"]]);
+
+        assert.isNull(DataLayer.queryRefusal(query));
+
+        globalThis.Hologram.sync.model["MyApp.Task"].serverOnly = ["title"];
+        Model.reset();
+
+        assert.match(DataLayer.queryRefusal(query), /^filters or sorts/);
+      });
+    });
   });
 
   describe("rendered()", () => {

@@ -20,23 +20,20 @@ defmodule Hologram.Component.Derived.QueryCheck do
 
   @doc """
   Returns why the given normalized query term can't be a derived field's query, as the rest of a
-  sentence about it, or nil when it can. The first refusal is returned, in the order
-  `dead_refusal/1`, `server_only_refusal/1`, `trust_refusal/1` check them.
+  sentence about it, or nil when it can: over a type no rule lets anyone read, then filtering or
+  sorting on a server-only attribute, then claiming trust, the first refusal returned.
   """
   @spec refusal(Query.t()) :: String.t() | nil
   def refusal(term) do
     dead_refusal(term) || server_only_refusal(term) || trust_refusal(term)
   end
 
-  @doc """
-  Returns why the given normalized query term reads nothing, as the rest of a sentence about it, or
-  nil when it may read rows: a type with no allow lines is read by no session, default deny
-  composing into every statement the read reaches. The root, an include target and a type a path
-  goes through fail differently, so they are told apart - and a dead root is told alone, because a
-  query returning no rows has no embeds to be empty either.
-  """
-  @spec dead_refusal(Query.t()) :: String.t() | nil
-  def dead_refusal(term) do
+  # Returns why the given normalized query term reads nothing, as the rest of a sentence about it, or
+  # nil when it may read rows: a type with no allow lines is read by no session, default deny
+  # composing into every statement the read reaches. The root, an include target and a type a path
+  # goes through fail differently, so they are told apart - and a dead root is told alone, because a
+  # query returning no rows has no embeds to be empty either.
+  defp dead_refusal(term) do
     case Policy.dead_entity_types([term.entity]) do
       [] ->
         dead_include_refusal(term) || dead_path_refusal(term)
@@ -46,13 +43,10 @@ defmodule Hologram.Component.Derived.QueryCheck do
     end
   end
 
-  @doc """
-  Returns why the given normalized query term can't be answered in the browser, as the rest of a
-  sentence about it, or nil when it can: its filter or sort names an attribute declared
-  server_only, whose value the browser never holds.
-  """
-  @spec server_only_refusal(Query.t()) :: String.t() | nil
-  def server_only_refusal(term) do
+  # Returns why the given normalized query term can't be answered in the browser, as the rest of a
+  # sentence about it, or nil when it can: its filter or sort names an attribute declared
+  # server_only, whose value the browser never holds.
+  defp server_only_refusal(term) do
     case server_only_references(term) do
       [] ->
         nil
@@ -62,12 +56,9 @@ defmodule Hologram.Component.Derived.QueryCheck do
     end
   end
 
-  @doc """
-  Returns why the given normalized query term claims an authority a derived field has none of, as
-  the rest of a sentence about it, or nil when it claims none.
-  """
-  @spec trust_refusal(Query.t()) :: String.t() | nil
-  def trust_refusal(term) do
+  # Returns why the given normalized query term claims an authority a derived field has none of, as
+  # the rest of a sentence about it, or nil when it claims none.
+  defp trust_refusal(term) do
     if term.trust do
       "claims the server's authority with trust() - a query in browser code is read for the session user on both tiers, so it cannot claim another. Drop trust(), or read through the backend API in a command."
     end

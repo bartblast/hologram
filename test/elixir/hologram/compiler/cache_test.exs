@@ -29,7 +29,6 @@ defmodule Hologram.Compiler.CacheTest do
         Module2 => %{
           atoms: MapSet.new(),
           checks_permissions?: false,
-          components: [Module1],
           modules: MapSet.new([Module1, Module2]),
           query_chains: [],
           reads_session_user?: false

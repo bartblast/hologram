@@ -129,15 +129,13 @@ defmodule Hologram.Compiler do
   @typedoc """
   What the data layer keeps of a page's reach between compiles: whether the page's client code
   reaches a permission check (see `pages_checking_permissions/1`), the atoms its client code spells
-  (see `build_kept_page_reach/4`), the components among the modules it reaches, sorted, those
-  modules, the struct types it names included, and whether one of those components reads the
-  session user from the context, and the queries its client code writes in one piece (see
-  `Hologram.Compiler.QueryChains`).
+  (see `build_kept_page_reach/4`), the modules it reaches, the struct types it names included,
+  whether one of the components among them reads the session user from the context, and the
+  queries its client code writes in one piece (see `Hologram.Compiler.QueryChains`).
   """
   @type kept_page_reach :: %{
           atoms: MapSet.t(atom),
           checks_permissions?: boolean,
-          components: [module],
           modules: MapSet.t(module),
           query_chains: [QueryChains.t()],
           reads_session_user?: boolean
@@ -421,9 +419,9 @@ defmodule Hologram.Compiler do
   Returns true when some page checks permissions on the client, or false otherwise - from what the
   data layer keeps of each page's reach (see `build_kept_page_reach/4`).
 
-  What it gates is build-wide: the related rows a checking client's windows download beside the
-  rows its queries return, the types sync sends for the rules to read, and the server's verdicts
-  its rows carry. The rules and roles ship with every build that has a data model (see
+  What it gates is build-wide: the related rows a checking query embeds beside the rows it returns
+  (see `Hologram.Query.Window.embed/2`), the types sync sends for the rules to read, and the
+  server's verdicts its rows carry. The rules and roles ship with every build that has a data model (see
   `build_sync_constants/2`).
 
   Whether the data model has a grant store is not asked: one with no user entity type has none,
@@ -665,10 +663,9 @@ defmodule Hologram.Compiler do
 
   @doc """
   Folds what each page's client code reaches, as `list_reach_by_page/2` lists it, into what the data
-  layer keeps of it (see `kept_page_reach`), keyed by page module. The components among the reached
-  modules are told by the given module info PLT, and the page is one of them: a page declares derived
-  fields as a component does, and their queries are its own. A page reads the session user when one
-  of its components declares a prop taking it from the context (`from_context: {Hologram, :user}`).
+  layer keeps of it (see `kept_page_reach`), keyed by page module. A page reads the session user when
+  one of the components among the reached modules, told by the given module info PLT, or the page
+  itself declares a prop taking it from the context (`from_context: {Hologram, :user}`).
   The pages checking permissions are given as `pages_checking_permissions/1` lists them, from the
   pages' reach on the call graph BEFORE manually ported MFAs are removed.
 
@@ -698,8 +695,6 @@ defmodule Hologram.Compiler do
         modules
         |> reached_components(module_info_plt)
         |> Enum.concat([page_module])
-        |> Enum.uniq()
-        |> Enum.sort()
 
       reads = Enum.map(reach.mfas, &Map.get(read_by_mfa, &1, %{atoms: MapSet.new(), chains: []}))
 
@@ -713,7 +708,6 @@ defmodule Hologram.Compiler do
       kept_reach = %{
         atoms: atoms,
         checks_permissions?: MapSet.member?(checking_pages, page_module),
-        components: components,
         modules: MapSet.new(modules),
         query_chains: query_chains,
         reads_session_user?: Enum.any?(components, &reads_session_user?/1)

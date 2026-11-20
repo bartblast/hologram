@@ -178,6 +178,19 @@ defmodule Hologram.Compiler.QueryChains do
     {quantifier, {literal!(source), predicates!(predicates)}}
   end
 
+  # An alternative or a quantifier whose value only the run knows has a shape the build can't read -
+  # a list of alternatives, a source with its condition - so a stand-in can't take its place. An
+  # attribute of the same name compared with a literal or through an operator is read as any
+  # attribute's comparison is.
+  defp entry(%IR.TupleType{data: [%IR.AtomType{value: name}, value]})
+       when name == :or or name in @quantifiers do
+    if literal(value) == :error and not operator_value_ir?(value) do
+      throw(:cut)
+    else
+      {name, value(value)}
+    end
+  end
+
   defp entry(%IR.TupleType{data: [name, value]}) do
     name_term =
       case literal(name) do
@@ -360,6 +373,11 @@ defmodule Hologram.Compiler.QueryChains do
       values
     end
   end
+
+  defp operator_value_ir?(%IR.TupleType{data: [%IR.AtomType{value: operator}, _operand]}),
+    do: operator in @operators
+
+  defp operator_value_ir?(_ir), do: false
 
   defp operator_value?({operator, _operand}) when operator in @operators, do: true
 

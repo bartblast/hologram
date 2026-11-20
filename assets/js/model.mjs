@@ -50,6 +50,10 @@ export default class Model {
 
   static #entries = {};
 
+  // Moves whenever the model's entries are read afresh, so what was worked out from them can tell
+  // it is out of date.
+  static #generation = 0;
+
   // A year the way Date.to_iso8601/1 spells one, which is how every date and datetime arrives:
   // four digits, or more with no leading zero, and a minus before a year below 0 - never before 0
   // itself. So one year is one spelling, as one day is, and the year of every date the server
@@ -527,8 +531,15 @@ export default class Model {
     Model.reset();
   }
 
+  // How many times the model's entries have been read afresh: a value worked out from the model is
+  // current while this stays what it was.
+  static generation() {
+    return Model.#generation;
+  }
+
   static reset() {
     Model.#entries = {};
+    Model.#generation += 1;
   }
 
   // The model entries this client holds, in the shape a server hands them over in (see

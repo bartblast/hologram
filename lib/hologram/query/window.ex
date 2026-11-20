@@ -198,7 +198,7 @@ defmodule Hologram.Query.Window do
     derived_at?(entity_type, relationship_names, last_name)
   end
 
-  # Narrowings of one set download what any of them needs: one disjunction of their clause lists,
+  # Narrowings of one set embed what any of them needs: one disjunction of their clause lists,
   # each list once, flattened from a disjunction they already form. A whole set - nil, or an empty
   # filter such as an authored include's - needs everything.
   defp joined_narrowing(narrowings) do
@@ -218,7 +218,7 @@ defmodule Hologram.Query.Window do
     end
   end
 
-  # The sets before the last link of a quantifier's own source, each downloaded whole: every row of
+  # The sets before the last link of a quantifier's own source, each embedded whole: every row of
   # one leads to related rows, so none narrows it - a set the source starts inside, a nested
   # quantifier's parent set, keeps its own narrowing.
   defp linked_sets(entity_type, chain, source) do
@@ -329,7 +329,7 @@ defmodule Hologram.Query.Window do
 
   # The rows the derived field of the given name, declared on the row the chain leads to, is
   # computed from, embedded under that row - recursively for the derived fields its definition
-  # reads. The field itself is never downloaded: a client computes it.
+  # reads. The field itself is never embedded: a client computes it.
   defp put_definition(include, root, chain, name, permission_checking?) do
     root
     |> mapped_chains(chain)
@@ -648,7 +648,7 @@ defmodule Hologram.Query.Window do
   end
 
   # A derived field's source reads every row along its chain: a set before its last one is the
-  # rows every path reaches, flattened, so it is downloaded whole whatever else narrows it.
+  # rows every path reaches, flattened, so it is embedded whole whatever else narrows it.
   # Each quantifier's set as the chain of relationships to it from the queried row, paired with what
   # narrows it - nil for the whole set.
   #
@@ -723,7 +723,7 @@ defmodule Hologram.Query.Window do
   end
 
   # Only a set read off its rows' own reference field can be narrowed - a set the client reads
-  # through ids is downloaded whole - and only by what decides any and none: the related rows the
+  # through ids is embedded whole - and only by what decides any and none: the related rows the
   # condition matches. all is decided by the rows it does not match.
   defp set_narrowing(quantifier, inner, entity_type, chain, prefixes) do
     {owner_chain, [set_name]} = Enum.split(chain, -1)
@@ -762,7 +762,7 @@ defmodule Hologram.Query.Window do
     end
   end
 
-  # An any narrows the download whatever a reader may not see, by its condition narrowed the same
+  # An any narrows the embedded set whatever a reader may not see, by its condition narrowed the same
   # way. none and all do not - a reader seeing fewer related rows can answer either true where the
   # stored rows answer false.
   #
