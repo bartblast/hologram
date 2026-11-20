@@ -67,8 +67,6 @@ defmodule Hologram.Policy do
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
-  @deciding_quantifiers_key {__MODULE__, :deciding_quantifiers}
-
   @hash_bytes 16
 
   @hash_key {__MODULE__, :hash}
@@ -80,6 +78,8 @@ defmodule Hologram.Policy do
   @quantifiers [:all, :any, :none]
 
   @verdict_digest_bytes 8
+
+  @verdict_operations_key {__MODULE__, :verdict_operations}
 
   # The operations the framework itself asks about: the four verbs' own and the three gates.
   # Always askable on every entity type, declared or not - default deny answers false.
@@ -306,14 +306,15 @@ defmodule Hologram.Policy do
   predicate included, reading a server-only attribute - the row's own, one a path or a quantifier's
   set leads to, or one an attribute operand or an outer name reads - or, in a read rule, any clause
   reading a row of a type no session may read (see `readable_type?/1`) along its paths and sets. A
-  client answers such a clause from the server's verdict (see `Hologram.Auth.verdicts/2`), since
-  the rows it holds of a set can't decide one for certain - a bounded or filtered set computed over
-  the rows it holds can hold rows the server's doesn't, so not even an `any` over one, and a count
-  it can't compute at all - it never holds a server-only value, and it never holds a row of a type
-  nobody may read. A rule for any other operation reading such a row fails the build instead,
-  unless the clause is deciding for another reason (see `Hologram.Policy.Validator`): a client
-  checks those on the structs its own actions change, which no verdict on the stored row answers.
-  The name dates from when only quantifiers were. Only the `:read` key counts as a read rule here:
+  client can't answer such a clause, so the server sends its verdict on the operation the clause's
+  rule grants (see `verdict_operations/1` and `Hologram.Auth.verdicts/2`): the rows a client holds
+  of a set can't decide one for certain - a bounded or filtered set computed over the rows it holds
+  can hold rows the server's doesn't, so not even an `any` over one, and a count it can't compute
+  at all - it never holds a server-only value, and it never holds a row of a type nobody may read.
+  A rule for any other operation reading such a row fails the build instead, unless the clause is
+  deciding for another reason (see `Hologram.Policy.Validator`): a client checks those on the
+  structs its own actions change, which no verdict on the stored row answers. The name dates from
+  when only quantifiers were. Only the `:read` key counts as a read rule here:
   a named read line's rules under its name read the rows a browser holds, like any other check.
 
   A read rule's role reference, given as `{:to, reference}`, is a deciding one when it reads a row
@@ -335,41 +336,6 @@ defmodule Hologram.Policy do
     deciding_clause?(clause, [entity_type]) or reads_set_value?(entity_type, clause) or
       reads_server_only?(entity_type, clause) or
       (operation == :read and reads_unreadable_type?(entity_type, clause))
-  end
-
-  @doc """
-  Returns the deciding items of the given entity type's rules, across every operation, as
-  `{key, item}` pairs sorted by key: every clause standing in a rule's predicates - a predicate or
-  a quantifier, at the top or in a disjunction's alternatives, not inside another quantifier -
-  every role reference of a rule's `to`, as `{:to, reference}`, and a rule's delegation, as
-  `{:via, {operation, chain}}`, that is a deciding one (see `deciding_quantifier?/3`), keyed by
-  `verdict_key/3`. An item written the same way twice in one operation is one pair.
-  `verdict_rule/1` gives the rule each one is answered as.
-
-  Cached, with the model facts, for the types of the project's compiled data model - a row's
-  verdicts are worked out for every row a client is sent.
-  """
-  @spec deciding_quantifiers(module) :: list({String.t(), tuple})
-  def deciding_quantifiers(entity_type) do
-    Model.ensure_released!()
-
-    cache =
-      case :persistent_term.get(@deciding_quantifiers_key, nil) do
-        nil ->
-          cache = Map.new(Model.entity_types(), &{&1, derived_deciding_quantifiers(&1)})
-
-          :persistent_term.put(@deciding_quantifiers_key, cache)
-
-          cache
-
-        cache ->
-          cache
-      end
-
-    case Map.fetch(cache, entity_type) do
-      {:ok, pairs} -> pairs
-      :error -> derived_deciding_quantifiers(entity_type)
-    end
   end
 
   @doc """
@@ -577,6 +543,37 @@ defmodule Hologram.Policy do
   def operation_key({name, role_name}), do: "#{name}:#{role_name}"
 
   @doc """
+  Returns the entity types the rules of the given operation of the given entity type read, sorted:
+  those `verdict_reads/2` gives each of their items - every clause standing in their predicates,
+  role reference and delegation, deciding or not (see `deciding_quantifier?/3`). The operation's
+  rules are the ones `operation_rules/2` gives. A client takes the server's verdict on the
+  operation as current only while none of its own unanswered writes names one of them, since any
+  part of the rules can move the answer.
+  """
+  @spec operation_reads(module, Entity.operation()) :: list(module)
+  def operation_reads(entity_type, operation) do
+    entity_type
+    |> build()
+    |> operation_rules(operation)
+    |> Enum.flat_map(&rule_items/1)
+    |> Enum.flat_map(&verdict_reads(entity_type, &1))
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
+  Returns the rules of the given compiled policy that `Hologram.Auth.can?/3` reads for the given
+  operation, an update naming one field at most: for a field of an update, those of the limited
+  update lines covering it and those covering the whole row (see `field_rules/2`), and for any
+  other operation its own.
+  """
+  @spec operation_rules(map, atom | {atom, atom}) :: list(map)
+  def operation_rules(policy, {:update, field}) when is_atom(field),
+    do: field_rules(policy, field)
+
+  def operation_rules(policy, operation), do: Map.get(policy, operation, [])
+
+  @doc """
   Returns the operations the given entity type can be asked about, sorted: the framework's own seven, and every name an allow line carries - its own lines and the ones taken from its policy modules alike, since both land in __policies__/0.
   """
   @spec operations(module) :: list(atom)
@@ -668,8 +665,9 @@ defmodule Hologram.Policy do
   @doc """
   Returns the relationships of the given chain, read from a row of the given entity type, before
   its first hop to a type no session may read (see `readable_type?/1`): the part of it a client can
-  hold rows along. Past that type no client gets a row, and the server's verdict answers what a
-  read rule's conditions, role references and delegations read of it.
+  hold rows along. Past that type no client gets a row: a client answers a read rule's condition,
+  role reference or delegation reading it as unknown, and the server's verdict on the operation
+  answers the rule.
   """
   @spec readable_prefix(module, list(atom)) :: list(atom)
   def readable_prefix(entity_type, chain) do
@@ -685,7 +683,8 @@ defmodule Hologram.Policy do
   Returns whether the given clause of a rule of the given entity type reads a server-only
   attribute - of the row, of one a path or a set leads to, or of one above inside a quantifier. A
   derived field never reads one, which the build refuses, so the names the clause writes are all
-  there is. No client ever holds such a value, so only the server's verdict answers the clause.
+  there is. No client ever holds such a value, so it answers the clause as unknown, and the
+  server's verdict on the operation answers the rule.
   """
   @spec reads_server_only?(module, tuple) :: boolean
   def reads_server_only?(entity_type, clause) do
@@ -701,7 +700,8 @@ defmodule Hologram.Policy do
   relationship of a role reference - its last reference id is read off the row before it - and the
   row a delegation leads to, with everything the delegated operation's rules read through it,
   prefixed with the delegation's chain. A set a derived field holds is left out, since the browser
-  answers a quantifier over one from the server's verdict.
+  answers a quantifier over one as unknown and the server's verdict on the operation answers the
+  rule.
 
   A chain is followed hop by hop, so the rows these chains lead to are what a client needs beside a
   row it holds to answer the type's rules over it. Rules reading only the row itself, the grant
@@ -745,10 +745,10 @@ defmodule Hologram.Policy do
   @doc false
   @spec reset_model_facts_cache() :: :ok
   def reset_model_facts_cache do
-    :persistent_term.erase(@deciding_quantifiers_key)
     :persistent_term.erase(@hash_key)
     :persistent_term.erase(@locked_set_links_key)
     :persistent_term.erase(@model_facts_key)
+    :persistent_term.erase(@verdict_operations_key)
 
     :ok
   end
@@ -841,46 +841,96 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns the key the server's verdict on the given deciding item of a rule of the given entity
-  type and operation is sent under, and the client finds it by: the operation's key, a colon, and a
-  short digest of the item - a clause with the definitions of the derived fields it reads, a role
-  reference alone, its roles expanded in it, and a delegation with the hash of the rules of every
-  type it reads (see `hash/1`) but the grant store's, whose rules every type's grant lifecycle lines
-  make. A changed item, or a changed definition or delegated rule it reads, gets a new key, so a
-  client holding a verdict on what a rule used to mean never reads it for what the rule means now -
-  a deploy changing only policies or derived fields reloads no bundle. The digest's encoding is
-  pinned, so a build and the node running it agree across OTP releases.
-  """
-  @spec verdict_key(module, Entity.operation(), tuple) :: String.t()
-  def verdict_key(_entity_type, operation, {:to, _reference} = item) do
-    "#{operation_key(operation)}:#{verdict_digest(item)}"
-  end
+  Returns the key the server's verdict on the given operation of the given entity type is sent
+  under, and the client finds it by: the operation's key - `update` for a field of an update - a
+  colon, and a short digest of what the answer rests on - the operation's rules (see
+  `operation_rules/2`), the definitions of the derived fields their clauses read, and the hash of
+  the rules of every type their delegations read (see `hash/1`) but the grant store's, whose rules
+  every type's grant lifecycle lines make. A changed rule, definition or delegated rule gets a new
+  key, so a client holding a verdict on what the rules used to mean never reads it for what they
+  mean now - a deploy changing only policies or derived fields reloads no bundle. The digest's
+  encoding is pinned, so a build and the node running it agree across OTP releases.
 
-  def verdict_key(entity_type, operation, {:via, _via} = item) do
-    rules_hash =
+  Fields of an update covered by the same lines answer alike, so they share one key, and a row
+  carries one verdict for them: a line naming every field but a few covers the rest with one. A
+  field the server sends a verdict on has lines of its own, so its rules are never the whole-row
+  operation's alone.
+  """
+  @spec verdict_key(module, Entity.operation()) :: String.t()
+  def verdict_key(entity_type, operation) do
+    rules =
       entity_type
-      |> verdict_related_reads(item)
+      |> build()
+      |> operation_rules(operation)
+      |> Enum.sort()
+
+    items = Enum.flat_map(rules, &rule_items/1)
+
+    clauses = Enum.reject(items, &match?({kind, _reference_or_via} when kind in [:to, :via], &1))
+
+    definitions =
+      entity_type
+      |> Derived.read_fields(clauses)
+      |> Enum.map(fn {type, name} -> {name, Derived.definition(type, name)} end)
+
+    rules_hash =
+      items
+      |> Enum.filter(&match?({:via, _via}, &1))
+      |> Enum.flat_map(&verdict_related_reads(entity_type, &1))
+      |> Enum.uniq()
+      |> Enum.sort()
       |> List.delete(RoleGrant)
       |> hash()
 
-    "#{operation_key(operation)}:#{verdict_digest({item, rules_hash})}"
-  end
-
-  def verdict_key(entity_type, operation, clause) do
-    definitions =
-      entity_type
-      |> Derived.read_fields([clause])
-      |> Enum.map(fn {type, name} -> {name, Derived.definition(type, name)} end)
-
-    "#{operation_key(operation)}:#{verdict_digest({clause, definitions})}"
+    "#{verdict_key_prefix(operation)}:#{verdict_digest({rules, definitions, rules_hash})}"
   end
 
   @doc """
-  Returns the entity types the given deciding item of a rule of the given entity type reads, sorted:
-  every type along its sets' sources and its paths, and through the derived fields it reads,
-  nested quantifiers included - a derived set's own reads among them - and for a quantifier the
-  rule's own. A client takes the server's verdict on the item as current only while none of its
-  own unanswered writes names one of them.
+  Returns the operations of the given entity type the server sends its verdict on with each of its
+  rows, as `{key, operation}` pairs sorted by key (see `verdict_key/2`): every key of its compiled
+  policy whose own rules hold a deciding item (see `deciding_quantifier?/3`) - a clause standing in
+  their predicates, a role reference or a delegation. A client answers such an operation from the
+  verdict when the rows it holds leave the answer open. `:read` counts like any other key.
+
+  A field of an update counts by the deciding items of the limited lines covering it, though its
+  verdict answers those lines and the ones covering the whole row: a client answers a field with no
+  verdict of its own from the whole-row operation's, so a type with many limited fields and one
+  deciding whole-row rule sends one verdict rather than one per field. Fields covered by the same
+  lines share a key, so several pairs can hold one.
+
+  Cached, with the model facts, for the types of the project's compiled data model - a row's
+  verdicts are worked out for every row a client is sent.
+  """
+  @spec verdict_operations(module) :: list({String.t(), Entity.operation()})
+  def verdict_operations(entity_type) do
+    Model.ensure_released!()
+
+    cache =
+      case :persistent_term.get(@verdict_operations_key, nil) do
+        nil ->
+          cache = Map.new(Model.entity_types(), &{&1, derived_verdict_operations(&1)})
+
+          :persistent_term.put(@verdict_operations_key, cache)
+
+          cache
+
+        cache ->
+          cache
+      end
+
+    case Map.fetch(cache, entity_type) do
+      {:ok, pairs} -> pairs
+      :error -> derived_verdict_operations(entity_type)
+    end
+  end
+
+  @doc """
+  Returns the entity types the given item of a rule of the given entity type reads, deciding or not
+  (see `deciding_quantifier?/3`), sorted: every type along its sets' sources and its paths, and
+  through the derived fields it reads, nested quantifiers included - a derived set's own reads among
+  them - and for a quantifier the rule's own. A client takes the server's verdict on an operation
+  as current only while none of its own unanswered writes names a type one of the operation's
+  items reads (see `operation_reads/2`).
 
   A predicate leaves the rule's own type out unless a path leads back to it. It reads the row itself
   and the rows its to-one paths lead to, and a struct a pending write changed is not the stored row,
@@ -906,10 +956,10 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns the entity types the given deciding item reads through relationships, sorted - those of
-  `verdict_reads/2` but the rule's own type, which is among them only when a relationship leads to
-  a row of it, a set of rows of the type itself. A role reference reads the rows along its chain
-  before the last relationship, and the grant store: a pending grant or revoke names it, and a
+  Returns the entity types the given item reads through relationships, deciding or not, sorted -
+  those of `verdict_reads/2` but the rule's own type, which is among them only when a relationship
+  leads to a row of it, a set of rows of the type itself. A role reference reads the rows along its
+  chain before the last relationship, and the grant store: a pending grant or revoke names it, and a
   changed grant works the verdicts out again. A delegation reads the rows along its chain, the row
   it leads to included, and what every rule it asks there reads through relationships - their
   clauses', role references' and delegations' reads, as their own items would.
@@ -965,21 +1015,6 @@ defmodule Hologram.Policy do
     |> Enum.uniq()
     |> Enum.sort()
   end
-
-  @doc """
-  Returns the rule the server answers the given deciding item as (see `deciding_quantifiers/1`): a
-  rule requiring the clause alone, or holding the role reference or the delegation alone.
-  """
-  @spec verdict_rule(tuple) :: %{
-          predicates: list(tuple),
-          to: list(tuple) | nil,
-          via: {Entity.operation(), list(atom)} | nil
-        }
-  def verdict_rule({:to, reference}), do: %{predicates: [], to: [reference], via: nil}
-
-  def verdict_rule({:via, via}), do: %{predicates: [], to: nil, via: via}
-
-  def verdict_rule(clause), do: %{predicates: [clause], to: nil, via: nil}
 
   defp build_global_reference([]), do: []
 
@@ -1168,17 +1203,15 @@ defmodule Hologram.Policy do
 
   defp definition_inverses(_owner, _definition), do: []
 
-  defp derived_deciding_quantifiers(entity_type) do
+  defp derived_verdict_operations(entity_type) do
     entity_type
     |> build()
-    |> Enum.flat_map(fn {operation, rules} ->
-      for rule <- rules,
-          item <-
-            standing_clauses(rule.predicates) ++ reference_items(rule.to) ++ via_items(rule.via),
-          deciding_quantifier?(entity_type, operation, item),
-          do: {verdict_key(entity_type, operation, item), item}
+    |> Enum.filter(fn {operation, rules} ->
+      rules
+      |> Enum.flat_map(&rule_items/1)
+      |> Enum.any?(&deciding_quantifier?(entity_type, operation, &1))
     end)
-    |> Enum.uniq()
+    |> Enum.map(fn {operation, _rules} -> {verdict_key(entity_type, operation), operation} end)
     |> Enum.sort()
   end
 
@@ -1370,7 +1403,7 @@ defmodule Hologram.Policy do
   # Every path a condition reads, the compared name and an attribute operand alike, and every set a
   # quantifier reads, whether or not its condition reads anything on it. A derived field reads what
   # its definition reads, written in place. A set a derived field holds is left out: the browser
-  # answers a quantifier over one from the server's verdict, never from rows it holds.
+  # answers a quantifier over one as unknown, never from rows it holds.
   defp predicate_chains(entity_type, predicates) do
     references =
       predicates
@@ -1642,8 +1675,8 @@ defmodule Hologram.Policy do
       end)
 
     # The chains the conditions follow, a quantifier over a derived set's rows included - which the
-    # related chains leave out, since a client answers such a quantifier from the server's verdict,
-    # while what the server decides still turns on the inverses its condition walks.
+    # related chains leave out, since a client answers such a quantifier as unknown, while what the
+    # server decides still turns on the inverses its condition walks.
     condition_chains = Stage.relationship_chains(predicates)
 
     inverses =
@@ -1658,8 +1691,18 @@ defmodule Hologram.Policy do
     %{derived: derived, inverses: inverses}
   end
 
-  # The types a rule reads through relationships from a row of the given type, as the server's
-  # verdicts on its items would read them (see verdict_related_reads/2).
+  defp verdict_key_prefix({:update, _field}), do: "update"
+
+  defp verdict_key_prefix(operation), do: operation_key(operation)
+
+  # The items of a rule: every clause standing in its predicates, each role reference of its to as
+  # {:to, reference}, and its delegation as {:via, via}.
+  defp rule_items(%{predicates: predicates, to: to, via: via}) do
+    standing_clauses(predicates) ++ reference_items(to) ++ via_items(via)
+  end
+
+  # The types a rule reads through relationships from a row of the given type, each of its items'
+  # (see verdict_related_reads/2).
   defp rule_related_reads(entity_type, %{predicates: predicates, to: to, via: via}) do
     items = predicates ++ reference_items(to) ++ via_items(via)
 
