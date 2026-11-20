@@ -282,7 +282,7 @@ defmodule Hologram.DB.DDLTest do
                  ~s{"entity_id"::text, "role"::text } <>
                  ~s{FROM "hologram_data"."hologram_role_grant" } <>
                  ~s{WHERE "role"::text = $1 AND "id" > $2::text::uuid } <>
-                 ~s{ORDER BY "id" LIMIT $3}
+                 ~s{ORDER BY "hologram_data"."hologram_role_grant"."id" LIMIT $3}
     end
   end
 

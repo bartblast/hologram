@@ -265,9 +265,12 @@ defmodule Hologram.DB.DDL do
   def grant_identity_statement(table, column) do
     identity_columns = Enum.map_join(RoleGrant.identity_columns(), ", ", &~s{"#{&1}"::text})
 
+    # Ordered by the stored uuid, named through its table: a bare "id" in ORDER BY would name the
+    # text id the SELECT returns, which sorts all the matching grants after the cursor on each page
+    # instead of reading the primary key index up to the limit.
     ~s{SELECT "id"::text, #{identity_columns} FROM #{qualified(table)} } <>
       ~s{WHERE #{Mapper.quote_identifier(column)}::text = $1 AND "id" > $2::text::uuid } <>
-      ~s{ORDER BY "id" LIMIT $3}
+      ~s{ORDER BY #{qualified(table)}."id" LIMIT $3}
   end
 
   @doc """
