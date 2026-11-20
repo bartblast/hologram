@@ -21,6 +21,8 @@ defmodule Hologram.Sync.SearchTest do
   alias Hologram.Test.Fixtures.Policy.Module20, as: PolicyModule20
   alias Hologram.Test.Fixtures.Policy.Module21, as: PolicyModule21
   alias Hologram.Test.Fixtures.Policy.Module25, as: PolicyModule25
+  alias Hologram.Test.Fixtures.Policy.Module38, as: PolicyModule38
+  alias Hologram.Test.Fixtures.Policy.Module39, as: PolicyModule39
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
@@ -266,12 +268,15 @@ defmodule Hologram.Sync.SearchTest do
              }
     end
 
-    # Module12's delete rule reads parent.parent.priority, which no read rule or verdict reads.
+    # Module39's update rule delegates to its channel's, which reads the channel's archived, and no
+    # read rule or verdict reads it: everyone reads every channel, so a client answers the rule
+    # from the channel it holds.
     test "follows no other operation's edges" do
-      %{top: top} = seed_chain()
+      channel = create!(PolicyModule38)
+      create!(PolicyModule39, channel_id: channel.id)
 
-      edges = Edges.derive([PolicyModule1, PolicyModule5, PolicyModule12])
-      effects = [effect(:patch_entity, PolicyModule1, top.id, %{"priority" => 3})]
+      edges = Edges.derive([PolicyModule38, PolicyModule39])
+      effects = [effect(:patch_entity, PolicyModule38, channel.id, %{"archived" => true})]
 
       assert candidates(effects, edges) == %{rows: %{}, whole_types: %{}}
     end

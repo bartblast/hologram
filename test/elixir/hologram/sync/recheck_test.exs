@@ -17,6 +17,10 @@ defmodule Hologram.Sync.RecheckTest do
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
+  alias Hologram.Test.Fixtures.Policy.Module46, as: PolicyModule46
+  alias Hologram.Test.Fixtures.Policy.Module47, as: PolicyModule47
+  alias Hologram.Test.Fixtures.Policy.Module48, as: PolicyModule48
+  alias Hologram.Test.Fixtures.Policy.Module49, as: PolicyModule49
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
   alias Hologram.Test.Fixtures.Policy.Module6, as: PolicyModule6
   alias Hologram.Test.Fixtures.Policy.Module8, as: PolicyModule8
@@ -747,6 +751,32 @@ defmodule Hologram.Sync.RecheckTest do
       end
     end
 
+    # Only a workshop's owner and members read it, its benches and its tools' permits, so the
+    # server answers every operation of a tool reading one: one tool has an approved permit and the
+    # other an unapproved one, and Alice edits the bench's workshop.
+    test "answers the operations reading related rows a reader may not hold", context do
+      workshop = create(PolicyModule46, %{archived: true})
+      bench = create(PolicyModule47, %{workshop_id: workshop.id})
+      approved = create(PolicyModule49, %{bench_id: bench.id, workshop_id: workshop.id})
+      unapproved = create(PolicyModule49, %{bench_id: bench.id, workshop_id: workshop.id})
+      create(PolicyModule48, %{approved: true, tool_id: approved.id})
+      create(PolicyModule48, %{tool_id: unapproved.id})
+
+      Auth.grant_role(context.alice, :editor, workshop)
+
+      readable = assert_verdicts_as_auth(PolicyModule49, [approved, unapproved], context.users)
+      bench_key = Policy.verdict_key(PolicyModule49, {:update, :bench})
+      delete_key = Policy.verdict_key(PolicyModule49, :delete)
+
+      for user_id <- context.users do
+        assert verdicts(verdicts_of(readable, approved), user_id)[bench_key] == true
+        assert verdicts(verdicts_of(readable, unapproved), user_id)[bench_key] == false
+      end
+
+      assert verdicts(verdicts_of(readable, approved), context.alice)[delete_key] == true
+      assert verdicts(verdicts_of(readable, approved), context.bob)[delete_key] == false
+    end
+
     test "answers no anonymous user when none was given", context do
       {board, _empty} = boards(context)
 
@@ -772,12 +802,11 @@ defmodule Hologram.Sync.RecheckTest do
     end
 
     test "answers no verdicts for a type the server sends none on", context do
-      project = create(Module1)
-      create(Module2, %{project_id: project.id, user_id: context.alice})
+      membership = create(Module2, %{user_id: context.alice})
 
-      readable = run(%{Module1 => [project.id]}, context.users)
+      readable = run(%{Module2 => [membership.id]}, context.users)
 
-      assert verdicts(verdicts_of(readable[Module1], project), context.alice) == %{}
+      assert verdicts(verdicts_of(readable[Module2], membership), context.alice) == %{}
     end
 
     # Nothing to answer, so whether a client checks permissions is never asked - the query cache is
@@ -786,12 +815,11 @@ defmodule Hologram.Sync.RecheckTest do
          context do
       :persistent_term.erase(QueryCacheStub.persistent_term_key())
 
-      project = create(Module1)
-      create(Module2, %{project_id: project.id, user_id: context.alice})
+      membership = create(Module2, %{user_id: context.alice})
 
-      readable = run(%{Module1 => [project.id]}, context.users)
+      readable = run(%{Module2 => [membership.id]}, context.users)
 
-      assert verdicts(verdicts_of(readable[Module1], project), context.alice) == %{}
+      assert verdicts(verdicts_of(readable[Module2], membership), context.alice) == %{}
     end
 
     test "answers a user id in another spelling as an anonymous user", context do
