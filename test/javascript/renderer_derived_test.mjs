@@ -787,6 +787,53 @@ describe("Renderer derived fields", () => {
       assert.deepStrictEqual(names(renderedVar("ripe")), ["banana", "cherry"]);
     });
 
+    // As a query the server built reaches the browser in state or context: the struct, boxed.
+    it("answers a query the server built, handed in as a prop value", () => {
+      const serverBuilt = Type.map([
+        [Type.atom("__struct__"), Type.alias("Hologram.Query")],
+        [Type.atom("cardinality"), Type.atom("set")],
+        [Type.atom("entity"), Type.alias(ROW)],
+        [
+          Type.atom("filter"),
+          Type.list([
+            Type.tuple([Type.atom("a"), Type.atom("=="), Type.boolean(true)]),
+          ]),
+        ],
+        [Type.atom("include"), Type.map()],
+        [Type.atom("skip"), Type.nil()],
+        [
+          Type.atom("sort"),
+          Type.list([Type.tuple([Type.atom("id"), Type.atom("asc")])]),
+        ],
+        [Type.atom("source"), Type.nil()],
+        [Type.atom("take"), Type.nil()],
+        [Type.atom("trust"), Type.boolean(false)],
+      ]);
+
+      defineComponent("MyApp.ServerBuiltQuery", {
+        derived: [
+          derivedEntry(
+            "ripe",
+            Type.list([Type.alias(ROW)]),
+            ["query"],
+            (query) => query,
+          ),
+        ],
+        props: [declaration("query")],
+      });
+
+      render(
+        componentNode("MyApp.ServerBuiltQuery", [
+          propDom("query", serverBuilt),
+        ]),
+      );
+
+      assert.deepStrictEqual(names(renderedVar("ripe")).sort(), [
+        "banana",
+        "cherry",
+      ]);
+    });
+
     it("answers an entity type handed in as a prop value for a field declared to hold its rows", () => {
       defineComponent("MyApp.HandedEntityType", {
         derived: [

@@ -2352,11 +2352,16 @@ export default class Renderer {
 
   // Based on Hologram.Component.Derived's query?/2
   //
-  // A query term is the plain object the ported query stages build, and an entity type stands for
-  // every row of it - for a field declared to hold its rows, since one holding a module as a plain
-  // value, like one declared :atom, never is.
+  // A query term is the plain object the ported query stages build, or the struct a query the
+  // server built arrives as, in state or context (the stages build it again). An entity type stands
+  // for every row of it - for a field declared to hold its rows, since one holding a module as a
+  // plain value, like one declared :atom, never is.
   static #isDerivedQuery(value, type) {
     if (value !== null && typeof value === "object" && "entity" in value) {
+      return true;
+    }
+
+    if (Type.isStruct(value, "Hologram.Query")) {
       return true;
     }
 

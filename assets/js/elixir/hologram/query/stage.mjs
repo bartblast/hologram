@@ -1319,9 +1319,110 @@ function toOneRelationshipNames(entityType) {
     .map(([name]) => name);
 }
 
+// A query the server built reaches the browser as the struct it is, carried in state or context:
+// plain data, not the term the stages here build. It is built again here from what it holds, through
+// the same stages, so its values are read by their attributes' types and checked as any query's
+// are, and what comes out normalizes to the term the server's does. Its clauses are stored as the
+// stages store them - {name, operator, value} - which the stages take written as a name and an
+// operator tuple, in whatever order and with whatever ordering it was built.
+function termFromStruct(struct) {
+  const structField = (name) => field(struct, name);
+  const stages = Elixir_Hologram_Query_Stage;
+
+  if (!Type.isNil(structField("source"))) {
+    Interpreter.raiseMisuseError(
+      `${Interpreter.inspect(struct)} reads the rows of a derived field's source, which only a derived field's definition does`,
+    );
+  }
+
+  if (Type.isTrue(structField("trust"))) {
+    stages["trust/1"](struct);
+  }
+
+  let term = toTerm(structField("entity"));
+
+  const clauses = structField("filter");
+
+  if (clauses.data.length > 0) {
+    term = stages["filter/2"](term, Type.list(clauses.data.map(structClause)));
+  }
+
+  const includeSpec = structIncludeSpec(structField("include"));
+
+  if (includeSpec.data.length > 0) {
+    term = stages["include/2"](term, includeSpec);
+  }
+
+  const sort = structField("sort");
+
+  if (sort.data.length > 0) {
+    term = stages["sort/2"](term, sort);
+  }
+
+  for (const bound of ["skip", "take"]) {
+    if (!Type.isNil(structField(bound))) {
+      term = stages[`${bound}/2`](term, structField(bound));
+    }
+  }
+
+  const cardinality = structField("cardinality").value;
+
+  return cardinality === "set" ? term : setCardinality(term, cardinality);
+}
+
+// A normalized clause as the stages take it: a disjunction of clause lists, a quantifier over a
+// source with its clause list, or a triple, written as its name and an operator tuple.
+function structClause(clause) {
+  if (clause.data.length === 3) {
+    const [name, operator, value] = clause.data;
+
+    return Type.tuple([name, Type.tuple([operator, value])]);
+  }
+
+  const [kind, body] = clause.data;
+
+  if (kind.value === "or") {
+    return Type.tuple([
+      kind,
+      Type.list(
+        body.data.map((alternative) =>
+          Type.list(alternative.data.map(structClause)),
+        ),
+      ),
+    ]);
+  }
+
+  const [source, innerClauses] = body.data;
+
+  return Type.tuple([
+    kind,
+    Type.tuple([source, Type.list(innerClauses.data.map(structClause))]),
+  ]);
+}
+
+// The include spec a struct's includes were built by: each name, with what is included under it.
+// A derived field holding a value is included with nothing under it.
+function structIncludeSpec(include) {
+  return Type.list(
+    Object.values(include.data).map(([name, subStruct]) => {
+      if (Type.isNil(subStruct)) {
+        return name;
+      }
+
+      const nested = structIncludeSpec(field(subStruct, "include"));
+
+      return nested.data.length === 0 ? name : Type.tuple([name, nested]);
+    }),
+  );
+}
+
 function toTerm(query) {
   if (isQueryTerm(query)) {
     return query;
+  }
+
+  if (isStruct(query, "Hologram.Query")) {
+    return termFromStruct(query);
   }
 
   const name = Type.isAlias(query) ? Interpreter.moduleExName(query) : null;
