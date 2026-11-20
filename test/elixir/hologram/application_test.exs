@@ -10,7 +10,7 @@ defmodule Hologram.ApplicationTest do
   use_module_stub :chunk_registry
   use_module_stub :page_digest_registry
   use_module_stub :page_module_resolver
-  use_module_stub :sync_page_windows
+  use_module_stub :sync_page_types
   use_module_stub :query_cache
 
   setup :set_mox_global
@@ -27,7 +27,7 @@ defmodule Hologram.ApplicationTest do
 
     setup_page_module_resolver(PageModuleResolverStub, false)
 
-    setup_sync_page_windows(SyncPageWindowsStub, false)
+    setup_sync_page_types(SyncPageTypesStub, false)
 
     setup_query_cache(QueryCacheStub, false)
 
@@ -65,7 +65,7 @@ defmodule Hologram.ApplicationTest do
       assert Hologram.Assets.ManifestCache in child_modules
       assert Hologram.Realtime.SubscriptionRegistry in child_modules
       assert Hologram.Router.PageModuleResolver in child_modules
-      assert Hologram.Sync.PageWindows in child_modules
+      assert Hologram.Sync.PageTypes in child_modules
 
       # Stop the app tree deterministically - link teardown is asynchronous and would race
       # the gateway restart and the other test's supervisor start.

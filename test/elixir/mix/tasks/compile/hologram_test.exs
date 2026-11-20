@@ -264,12 +264,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     count_calls({QueryExtractor, :extract_derived_queries, 3}, fun)
   end
 
-  # How many times the page windows PLT and the queries PLT are dumped while the given function
+  # How many times the page types PLT and the queries PLT are dumped while the given function
   # runs, in that order: each goes through a private function of the task, whose local calls are
   # counted.
   defp count_data_layer_dumps(fun) do
     mfas = [
-      {Mix.Tasks.Compile.Hologram, :dump_page_windows_plt, 2},
+      {Mix.Tasks.Compile.Hologram, :dump_page_types_plt, 2},
       {Mix.Tasks.Compile.Hologram, :dump_queries_plt, 2}
     ]
 
@@ -293,7 +293,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   # How many times the call graph and the module info PLT are dumped while the given function runs.
   # PLT.dump/2 also writes the page digest PLT and the chunk registry PLT, once before the batches
-  # and once after each, and the page windows PLT and the queries PLT, once before the batches,
+  # and once after each, and the page types PLT and the queries PLT, once before the batches,
   # through private functions whose local calls are counted and taken off.
   defp count_dumps(fun) do
     counted = [
@@ -301,7 +301,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       {PLT, :dump, 2, [:call_count]},
       {Mix.Tasks.Compile.Hologram, :dump_chunk_registry_plt, 2, [:local, :call_count]},
       {Mix.Tasks.Compile.Hologram, :dump_page_digest_plt, 2, [:local, :call_count]},
-      {Mix.Tasks.Compile.Hologram, :dump_page_windows_plt, 2, [:local, :call_count]},
+      {Mix.Tasks.Compile.Hologram, :dump_page_types_plt, 2, [:local, :call_count]},
       {Mix.Tasks.Compile.Hologram, :dump_queries_plt, 2, [:local, :call_count]}
     ]
 
@@ -317,7 +317,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         plt_dumps,
         chunk_registry_dumps,
         page_digest_dumps,
-        page_windows_dumps,
+        page_types_dumps,
         queries_dumps
       ] =
         Enum.map(counted, fn {module, function, arity, _flags} ->
@@ -327,7 +327,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       [
         call_graph_dumps,
-        plt_dumps - chunk_registry_dumps - page_digest_dumps - page_windows_dumps - queries_dumps
+        plt_dumps - chunk_registry_dumps - page_digest_dumps - page_types_dumps - queries_dumps
       ]
     after
       Enum.each(counted, fn {module, function, arity, flags} ->
@@ -928,7 +928,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test_module_info_plt(opts)
     test_page_bundles(opts)
     test_page_digest_plt(opts)
-    test_page_windows_plt(opts)
+    test_page_types_plt(opts)
     test_queries_plt(opts)
     test_runtime_bundle(opts)
   end
@@ -1106,22 +1106,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert page_digest_items[Module1] =~ ~r/^[A-Z2-7]{8}$/
   end
 
-  defp test_page_windows_plt(opts) do
-    page_windows_plt_dump_path =
-      Path.join(opts[:build_dir], Reflection.page_windows_plt_dump_file_name())
+  defp test_page_types_plt(opts) do
+    page_types_plt_dump_path =
+      Path.join(opts[:build_dir], Reflection.page_types_plt_dump_file_name())
 
-    assert File.exists?(page_windows_plt_dump_path)
+    assert File.exists?(page_types_plt_dump_path)
 
-    page_windows_plt = PLT.start()
-    PLT.load(page_windows_plt, page_windows_plt_dump_path)
-    page_windows_items = PLT.get_all(page_windows_plt)
+    page_types_plt = PLT.start()
+    PLT.load(page_types_plt, page_types_plt_dump_path)
+    page_types_items = PLT.get_all(page_types_plt)
 
-    assert map_size(page_windows_items) == @num_pages
+    assert map_size(page_types_items) == @num_pages
 
-    # The page renders a component whose derived field builds a query, so it downloads that query's
-    # window.
-    assert [window_id] = page_windows_items[PageModule18]
-    assert window_id =~ ~r/^[0-9a-f]{32}$/
+    # The page renders a component whose derived field queries Entity2, so a session on it fills
+    # that type first.
+    assert Entity2 in page_types_items[PageModule18]
   end
 
   defp test_queries_plt(opts) do
@@ -1165,17 +1164,17 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert RoleGrant in queries.synced_types
     refute Entity10 in queries.synced_types
 
-    # The two artifacts have to name one window between them: the page windows say which windows a
-    # page downloads, and this is where such an id resolves back to the term that fills it.
-    page_windows_plt = PLT.start()
+    # A session fills a page's types out of the synced ones, so the two dumps have to agree.
+    page_types_plt = PLT.start()
 
     PLT.load(
-      page_windows_plt,
-      Path.join(opts[:build_dir], Reflection.page_windows_plt_dump_file_name())
+      page_types_plt,
+      Path.join(opts[:build_dir], Reflection.page_types_plt_dump_file_name())
     )
 
-    assert [window_id] = PLT.get!(page_windows_plt, PageModule18)
-    assert Map.has_key?(queries.windows, window_id)
+    for {_page_module, page_types} <- PLT.get_all(page_types_plt) do
+      assert page_types -- queries.synced_types == []
+    end
   end
 
   defp test_runtime_bundle(opts) do
@@ -1791,7 +1790,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       opts[:build_dir]
-      |> Path.join(Reflection.page_windows_plt_dump_file_name())
+      |> Path.join(Reflection.page_types_plt_dump_file_name())
       |> File.rm!()
 
       fake_edit(@unreached_module)
@@ -1967,7 +1966,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       dump_paths =
         Enum.map(
-          [Reflection.page_windows_plt_dump_file_name(), Reflection.queries_plt_dump_file_name()],
+          [Reflection.page_types_plt_dump_file_name(), Reflection.queries_plt_dump_file_name()],
           &Path.join(opts[:build_dir], &1)
         )
 

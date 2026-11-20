@@ -14,7 +14,7 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.DB.QueryCache
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
-  alias Hologram.Sync.PageWindows, as: SyncPageWindows
+  alias Hologram.Sync.PageTypes, as: SyncPageTypes
 
   # The name `mix phx.digest` gives a copy of an empty file, so that a fixture copy holds the content
   # of the empty file at its key, as a copy the asset path registry serves does.
@@ -169,10 +169,10 @@ defmodule Hologram.Test.Stubs do
     :ok
   end
 
-  def setup_sync_page_windows(stub, start_link \\ true) do
-    stub_with(SyncPageWindowsMock, stub)
+  def setup_sync_page_types(stub, start_link \\ true) do
+    stub_with(SyncPageTypesMock, stub)
 
-    setup_sync_page_windows_dump(stub)
+    setup_sync_page_types_dump(stub)
 
     ets_table_name = stub.ets_table_name()
 
@@ -181,7 +181,7 @@ defmodule Hologram.Test.Stubs do
     end
 
     if start_link do
-      SyncPageWindows.start_link([])
+      SyncPageTypes.start_link([])
     end
 
     :ok
@@ -341,19 +341,19 @@ defmodule Hologram.Test.Stubs do
     end
   end
 
-  defmacro use_module_stub(:sync_page_windows) do
+  defmacro use_module_stub(:sync_page_types) do
     random_module = random_module()
 
     quote do
-      defmodule alias!(unquote(random_module).SyncPageWindowsStub) do
-        @behaviour SyncPageWindows
+      defmodule alias!(unquote(random_module).SyncPageTypesStub) do
+        @behaviour SyncPageTypes
 
         def dump_path do
           Path.join([
             Reflection.tmp_dir(),
             "tests",
             "stubs",
-            "sync_page_windows",
+            "sync_page_types",
             "dump_path_0",
             "#{unquote(random_string())}.plt"
           ])
@@ -362,7 +362,7 @@ defmodule Hologram.Test.Stubs do
         def ets_table_name, do: unquote(random_atom())
       end
 
-      alias alias!(unquote(random_module).SyncPageWindowsStub)
+      alias alias!(unquote(random_module).SyncPageTypesStub)
     end
   end
 
@@ -503,13 +503,13 @@ defmodule Hologram.Test.Stubs do
     :ok
   end
 
-  defp setup_sync_page_windows_dump(stub) do
+  defp setup_sync_page_types_dump(stub) do
     dump_path = stub.dump_path()
 
     File.rm(dump_path)
 
     PLT.start()
-    |> PLT.put(:page_a, ["window_a1", "window_a2"])
+    |> PLT.put(:page_a, [:type_a1, :type_a2])
     |> PLT.put(:page_b, [])
     |> PLT.dump(dump_path)
 

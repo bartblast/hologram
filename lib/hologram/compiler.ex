@@ -164,6 +164,7 @@ defmodule Hologram.Compiler do
   @type sync_constants :: %{
           entity_types: MapSet.t(module),
           model_hash: String.t() | nil,
+          page_types: %{module => list(module)},
           policy_hash: String.t() | nil,
           role_modules: list(module),
           synced_types: list(module),
@@ -346,96 +347,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns the ids of the windows each page downloads, keyed by page module and sorted, from what
-  the data layer keeps of each page's reach (see `build_kept_page_reach/4`) and the registered
-  queries of the components the pages reach (see `extract_component_queries/3`). Nothing is
-  extracted or walked here.
-
-  A page's windows are those of every component it can reach, not only the ones a given render
-  mounts. A panel that opens on a click is reachable without being rendered, and its rows have to
-  be on the client before the click rather than after it - which is the whole point of holding
-  the rows a page may need rather than the ones it is showing.
-
-  A page reaching no query at all has no windows, and answers with an empty list rather than
-  being left out.
-
-  A page that checks permissions on the client also downloads the grants window: what a client
-  evaluates permissions against is grant rows, so a page that checks them needs them held like any
-  other rows it reads. Only when the given module info PLT records a user entity type: a data model
-  without one has no grant store, so there are no grant rows to hold. Its pages still check the
-  rules, which name no role.
-
-  A page reading the session user from the context downloads the user window (see
-  `Hologram.Auth.user_window/2`): the client answers the context from its database on every render,
-  so the session user's row has to be held there. The user type is synced for such a page (see
-  `build_sync_constants/2`), which keeps the row current; the window puts it first in a fill and
-  catches a returning client up on it. Only when the given module info PLT records a user entity
-  type, for the same reason.
-
-  The window ids are derived with whether the build checks permissions on the client (see
-  `permission_checking?/1`), since a checking build's windows download the related rows the rules
-  read, and a page has to name the windows the registered queries hold.
-
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_windows_3/README.md
-  """
-  @spec build_page_windows(%{module => kept_page_reach}, %{module => component_queries}, PLT.t()) ::
-          %{module => list(String.t())}
-  def build_page_windows(reach_by_page, component_queries, module_info_plt) do
-    user_entity = Reflection.user_entity(module_info_plt)
-    grant_store? = user_entity != nil
-    permission_checking? = permission_checking?(reach_by_page)
-
-    # Each component's window ids are derived once, however many pages reach it.
-    window_ids_by_component =
-      reach_by_page
-      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
-      |> Enum.uniq()
-      |> Map.new(fn component_module ->
-        window_ids =
-          component_queries
-          |> Map.fetch!(component_module)
-          |> Map.fetch!(:terms)
-          |> Enum.map(&window_id(&1, permission_checking?))
-
-        {component_module, window_ids}
-      end)
-
-    Map.new(reach_by_page, fn {page_module, reach} ->
-      window_ids = Enum.flat_map(reach.components, &Map.fetch!(window_ids_by_component, &1))
-
-      # Deduplicated because the grants window is derivable by an ordinary query: the grant entity
-      # is an entity type like any other, so a page listing grants and checking permissions reaches
-      # one window by two routes - and a list naming it twice is subscribed to twice, monitored
-      # twice, and rounded twice for one set of rows.
-      # TODO: whether a checking page carries the grants window in its OWN list - complete
-      # before its :page marker, rather than arriving with the background set - is one of the
-      # two things the modularization work revisits. The other is the policy-baking gate.
-      page_window_ids =
-        if grant_store? and reach.checks_permissions? do
-          [grants_window_id() | window_ids]
-        else
-          window_ids
-        end
-
-      # Deduplicated for the same reason: a page querying the user entity whole reaches the user
-      # window by two routes.
-      page_window_ids =
-        if grant_store? and reach.reads_session_user? do
-          [user_window_id(user_entity, permission_checking?) | page_window_ids]
-        else
-          page_window_ids
-        end
-
-      sorted_window_ids =
-        page_window_ids
-        |> Enum.uniq()
-        |> Enum.sort()
-
-      {page_module, sorted_window_ids}
-    end)
-  end
-
-  @doc """
   Returns every place the build spells an entity operation at, sorted by the calling function:
   each call of `Hologram.Auth.can?/3` found in the IR of the functions the call graph names as
   its callers, with the line of the call and the operation it names - a literal atom, a literal
@@ -499,13 +410,13 @@ defmodule Hologram.Compiler do
 
   Takes the pages' reach on the call graph BEFORE manually ported MFAs are removed: every one of
   those MFAs is ported, so the graph the bundles are derived from no longer holds the vertex to ask
-  about. Reachability is read through the same page walk the bundles use, so what registers the
-  grants window is what actually ships - a `can?` reached only from command handlers, which run
-  on the server, does not.
+  about. Reachability is read through the same page walk the bundles use, so what syncs the grant
+  rows is what actually ships - a `can?` reached only from command handlers, which run on the
+  server, does not.
 
   Whether the app has a grant store at all is not asked here: a data model with no user entity
-  type has none - the framework's grant entity joins the data model only with one - and what
-  registers the grants window checks that where it reads this list (see `build_page_windows/3`).
+  type has none - the framework's grant entity joins the data model only with one - and what syncs
+  the grant rows checks that where it reads this list (see `build_sync_constants/2`).
   """
   @spec pages_checking_permissions([{module, page_reach}]) :: list(module)
   def pages_checking_permissions(reach_by_page) do
@@ -527,8 +438,8 @@ defmodule Hologram.Compiler do
   Whether the data model has a grant store is not asked: one with no user entity type has none,
   but its pages still check rules that name no role - an app with no logins calls `can?/3` for
   the anonymous session, and the browser answers it from the server's verdicts like any other. What
-  needs the grant store, the grants window and the grant type's rows, checks for it on its own (see
-  `build_page_windows/3`, `build_sync_constants/2`).
+  needs the grant store checks for it on its own: the grants window where `build_queries/3`
+  registers it, the grant type's rows in `build_sync_constants/2`.
   """
   @spec permission_checking?(%{module => kept_page_reach}) :: boolean
   def permission_checking?(reach_by_page) do
@@ -926,14 +837,14 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Builds the page windows PLT, where the keys are page modules and the values are the ids of the
-  windows each page downloads, and returns it with the path to dump it at.
+  Builds the page types PLT, where the keys are page modules and the values are the synced types a
+  session on each page fills first (see the `:page_types` of `build_sync_constants/2`), and returns
+  it with the path to dump it at.
   """
-  @spec build_page_windows_plt(%{module => list(String.t())}, T.opts()) ::
-          {PLT.t(), T.file_path()}
-  def build_page_windows_plt(page_windows, opts) do
-    plt = PLT.start(items: Map.to_list(page_windows), supervisor: opts[:supervisor])
-    dump_path = Path.join([opts[:build_dir], Reflection.page_windows_plt_dump_file_name()])
+  @spec build_page_types_plt(%{module => list(module)}, T.opts()) :: {PLT.t(), T.file_path()}
+  def build_page_types_plt(page_types, opts) do
+    plt = PLT.start(items: Map.to_list(page_types), supervisor: opts[:supervisor])
+    dump_path = Path.join([opts[:build_dir], Reflection.page_types_plt_dump_file_name()])
 
     {plt, dump_path}
   end
@@ -2416,6 +2327,12 @@ defmodule Hologram.Compiler do
   `Hologram.DB.QueryCache.synced_types/0`), and the client is told it, refusing a query that reads
   another type the same way (see `build_sync_constants_js/1`).
 
+  `:page_types` are each page's share of those, sorted by name: the types its own client code
+  reaches the same way, with the user type when it reads the session user, and the types its rules
+  read and the grant type when it checks permissions on the client. A session fills them first, so
+  the page the client opened is answered before the rest of the app's rows arrive (see
+  `Hologram.Sync.PageTypes`).
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_2/README.md
   """
   @spec build_sync_constants(%{module => kept_page_reach}, PLT.t()) :: sync_constants
@@ -2444,9 +2361,8 @@ defmodule Hologram.Compiler do
     # type, so the names are followed from it too.
     user_entity = Reflection.user_entity(module_info_plt)
 
-    {named_entity_types, _named_by} =
-      Enum.reduce(reach_by_page, {MapSet.new(), %{}}, fn {_page_module, reach},
-                                                         {types, named_by} ->
+    {reached_by_page, _named_by} =
+      Enum.map_reduce(reach_by_page, %{}, fn {page_module, reach}, named_by ->
         start_types =
           all_entity_types
           |> Enum.filter(&MapSet.member?(reach.modules, &1))
@@ -2456,7 +2372,12 @@ defmodule Hologram.Compiler do
         {page_types, named_by} =
           named_entity_types(start_types, start_types, reach.atoms, named_by)
 
-        {MapSet.union(types, page_types), named_by}
+        {{page_module, page_types}, named_by}
+      end)
+
+    named_entity_types =
+      Enum.reduce(reached_by_page, MapSet.new(), fn {_page_module, page_types}, types ->
+        MapSet.union(types, page_types)
       end)
 
     # A page reading the session user from the context answers it from the browser's database on
@@ -2476,12 +2397,31 @@ defmodule Hologram.Compiler do
       |> put_grant_type(all_entity_types)
       |> rules_entity_types()
 
+    # What each type's rules read, worked out once for the build and every checking page.
+    rule_types =
+      if permission_checking?(reach_by_page),
+        do: Map.new(reached_entity_types, &{&1, rule_entity_types(&1)}),
+        else: %{}
+
+    page_types =
+      Map.new(reached_by_page, fn {page_module, types} ->
+        checks_permissions? = reach_by_page[page_module].checks_permissions?
+        {page_module, synced_types(types, entity_types, checks_permissions?, rule_types)}
+      end)
+
     %{
       entity_types: entity_types,
       model_hash: model_hash(all_entity_types, role_modules),
+      page_types: page_types,
       policy_hash: policy_hash(all_entity_types),
       role_modules: role_modules,
-      synced_types: synced_types(reached_entity_types, entity_types, reach_by_page),
+      synced_types:
+        synced_types(
+          reached_entity_types,
+          entity_types,
+          permission_checking?(reach_by_page),
+          rule_types
+        ),
       user_entity: if(MapSet.member?(entity_types, user_entity), do: user_entity)
     }
   end
@@ -4443,23 +4383,19 @@ defmodule Hologram.Compiler do
 
   defp static_prop_value(_value_dom), do: :unknown
 
-  # The entity types sync sends rows of (see build_sync_constants/2): the reached ones, and in a
-  # build checking permissions on the client, the types their rules read rows of through
+  # The entity types sync sends rows of (see build_sync_constants/2), for the build or one page: the
+  # reached ones, and where permissions are checked on the client, the types their rules read rows of through
   # relationships and the grant type. A chain's types stop before its first type no session may
   # read (see `Hologram.Policy.readable_prefix/2`): no client gets such a row, nor any row reached
   # through it. Kept to the types of the client's model: a row of a type the model does not name
   # cannot be read back. What that drops is a type declaring no rule, like one a read rule
   # delegates to, whose rows no one may read anyway, and the grant type when the model designates
   # no user entity type, which has no grant store.
-  defp synced_types(reached_entity_types, model_entity_types, reach_by_page) do
+  defp synced_types(reached_entity_types, model_entity_types, checks_permissions?, rule_types) do
     types =
-      if permission_checking?(reach_by_page) do
+      if checks_permissions? do
         reached_entity_types
-        |> Enum.flat_map(fn entity_type ->
-          entity_type
-          |> Policy.related_chains()
-          |> Enum.flat_map(&chain_types(entity_type, Policy.readable_prefix(entity_type, &1)))
-        end)
+        |> Enum.flat_map(&Map.fetch!(rule_types, &1))
         |> MapSet.new()
         |> MapSet.union(reached_entity_types)
         |> MapSet.put(RoleGrant)
@@ -4470,6 +4406,14 @@ defmodule Hologram.Compiler do
     types
     |> MapSet.intersection(model_entity_types)
     |> Enum.sort()
+  end
+
+  # The types the given type's rules read through relationships, each chain up to its first type no
+  # session may read.
+  defp rule_entity_types(entity_type) do
+    entity_type
+    |> Policy.related_chains()
+    |> Enum.flat_map(&chain_types(entity_type, Policy.readable_prefix(entity_type, &1)))
   end
 
   # The types a permission check can ask about: those declaring a rule, and those
@@ -5984,10 +5928,8 @@ defmodule Hologram.Compiler do
     "declared roles are: #{Enum.map_join(role_names, ", ", &inspect/1)}"
   end
 
-  # Registered whenever the app HAS a grant store, because this is a lookup table: what decides
-  # whether any client subscribes is the BUILD, which knows whether a page can check permissions
-  # locally. An entry nothing asks for costs one map key, where a missing entry would answer
-  # :no_window to a client the build did tell to ask.
+  # Registered whenever the app HAS a grant store, because this is a lookup table: an entry nothing
+  # asks for costs one map key, where a missing entry would answer :no_window to a client asking.
   #
   # An app designating no user entity type has no grant store - the grant entity joins the data
   # model only with one, so it is among the entity types exactly then - and there is no table to
@@ -6003,10 +5945,9 @@ defmodule Hologram.Compiler do
   end
 
   # Registered whenever the data model designates a user entity type, for the reason the grants
-  # window is: the build decides whether any client subscribes, and an entry nothing asks for costs
-  # one map key.
+  # window is: an entry nothing asks for costs one map key.
   defp put_user_window(windows, entity_types, permission_checking?) do
-    # The first by name, as Reflection.user_entity/1 picks it for the page windows.
+    # The first by name, as Reflection.user_entity/1 picks it for the sync constants.
     user_entity =
       entity_types
       |> Enum.filter(&Reflection.user_entity?/1)
@@ -6115,22 +6056,6 @@ defmodule Hologram.Compiler do
     raise Hologram.CompileError,
       message:
         "unknown operation #{inspect(operation)} in #{ask_location(ask)} - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
-  end
-
-  defp grants_window_id do
-    Registry.id(Auth.grants_window())
-  end
-
-  defp user_window_id(user_entity, permission_checking?) do
-    user_entity
-    |> Auth.user_window(permission_checking?)
-    |> Registry.id()
-  end
-
-  defp window_id(term, permission_checking?) do
-    term
-    |> Window.derive(permission_checking?)
-    |> Registry.id()
   end
 
   defp template_ref_components({:component, module}), do: [module]

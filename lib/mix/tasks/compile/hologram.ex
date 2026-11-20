@@ -61,7 +61,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     * the compile inputs dump - what a compile with nothing to do is decided by, as the last compile
       that built every page saw it (see `Hologram.Compiler.CompileInputs`).
 
-    * the page windows dump - the windows each page downloads, which the sync layer reads when a
+    * the page types dump - the synced types a sync session on each page fills first when a
       client connects.
 
     * the queries dump - the registered queries of every component, which the renderer and the
@@ -1219,7 +1219,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # Whether the dumps the data layer derivation writes are in the build dir.
   defp data_layer_dumps_exist?(opts) do
     dump_file_names = [
-      Reflection.page_windows_plt_dump_file_name(),
+      Reflection.page_types_plt_dump_file_name(),
       Reflection.queries_plt_dump_file_name()
     ]
 
@@ -1252,8 +1252,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       kept_components_tracked? and data_layer_dumps_exist?(opts)
   end
 
-  # What the data layer derives from the build, validated and dumped for the running app: the
-  # windows each page downloads, the registered queries of every component, and the statement the
+  # What the data layer derives from the build, validated and dumped for the running app: the synced
+  # types each page fills first, the registered queries of every component, and the statement the
   # runtime script sets the client's data layer constants with, which is returned. What it was
   # derived from is kept with the statement (see Hologram.Compiler.Cache.put_data_layer/1). A
   # derivation that raises writes no dump and keeps nothing.
@@ -1269,7 +1269,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # other component keeps the entry the last derivation left.
   #
   # The derived definitions are put where the build reads them before anything is derived, since the
-  # windows and the registered queries read what the derived fields they name are defined as. The
+  # types and the registered queries read what the derived fields they name are defined as. The
   # table is the running app's in a dev server's VM, so a derivation that raises puts the kept ones
   # back, which the dumps it leaves in place were derived with.
   defp derive_data_layer!(context) do
@@ -1345,19 +1345,12 @@ defmodule Mix.Tasks.Compile.Hologram do
     component_queries = Map.merge(kept_component_queries, fresh_component_queries)
 
     # A checking build's windows download the rows the rules read through relationships, so the
-    # registered windows and the ids each page subscribes to are derived with it alike.
+    # registered windows are derived with it.
     permission_checking? = Compiler.permission_checking?(reach_by_page)
-
-    # Derived from every page's reach rather than from the bundles, so the dumps are whole before
-    # the first batch, whatever batch the batches stop at.
-    {page_windows_plt, page_windows_plt_dump_path} =
-      reach_by_page
-      |> Compiler.build_page_windows(component_queries, module_info_plt)
-      |> Compiler.build_page_windows_plt(Keyword.put(opts, :supervisor, context.supervisor))
 
     # Every component of the build, not the ones pages reach: what reads this is the renderer and
     # the sync layer, which answer for any component that renders. Built here and loaded at boot,
-    # like the page windows, so a release starts without running the extractor at all.
+    # like the page types, so a release starts without running the extractor at all.
     queries =
       component_queries
       |> Map.take(context.component_modules)
@@ -1365,6 +1358,14 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     sync_constants =
       Compiler.build_sync_constants(reach_by_page, module_info_plt)
+
+    # Derived from every page's reach rather than from the bundles, so the dumps are whole before
+    # the first batch, whatever batch the batches stop at.
+    {page_types_plt, page_types_plt_dump_path} =
+      Compiler.build_page_types_plt(
+        sync_constants.page_types,
+        Keyword.put(opts, :supervisor, context.supervisor)
+      )
 
     # The entity types sync sends rows of ride with the registered queries: the sync layer reads
     # both, and both are loaded at boot.
@@ -1381,7 +1382,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     # Both dumps once everything above passed, so that a derivation that raises leaves the dumps of
     # the last one that did not, which the kept data layer state describes.
-    dump_page_windows_plt(page_windows_plt, page_windows_plt_dump_path)
+    dump_page_types_plt(page_types_plt, page_types_plt_dump_path)
     dump_queries_plt(queries_plt, queries_plt_dump_path)
 
     Cache.put_data_layer(%{
@@ -1394,14 +1395,14 @@ defmodule Mix.Tasks.Compile.Hologram do
     sync_constants_js
   end
 
-  # The page windows PLT is dumped once, after the data layer is validated and before the batches:
-  # the windows are derived from every page's reach rather than from the bundles.
-  defp dump_page_windows_plt(page_windows_plt, page_windows_plt_dump_path) do
-    PLT.dump(page_windows_plt, page_windows_plt_dump_path)
+  # The page types PLT is dumped once, after the data layer is validated and before the batches:
+  # the types are derived from every page's reach rather than from the bundles.
+  defp dump_page_types_plt(page_types_plt, page_types_plt_dump_path) do
+    PLT.dump(page_types_plt, page_types_plt_dump_path)
   end
 
   # The queries PLT is dumped once, after the data layer is validated and before the batches, like
-  # the page windows PLT.
+  # the page types PLT.
   defp dump_queries_plt(queries_plt, queries_plt_dump_path) do
     PLT.dump(queries_plt, queries_plt_dump_path)
   end
@@ -1836,7 +1837,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # entries of components outside them, while the module info PLT still records them as components.
   # In an app the second part is empty, since the build's components are every component. This
   # project's own suite narrows them to the components the build accepts, while its fixture pages
-  # reach some it refuses, which the data layer keeps for the page windows.
+  # reach some it refuses, which the data layer keeps for the registered queries.
   defp list_tracked_component_modules(nil, component_modules, _module_info_plt) do
     component_modules
   end

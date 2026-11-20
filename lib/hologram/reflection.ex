@@ -64,7 +64,7 @@ defmodule Hologram.Reflection do
 
   @page_digest_plt_dump_file_name "page_digest.plt"
 
-  @page_windows_plt_dump_file_name "page_windows.plt"
+  @page_types_plt_dump_file_name "page_types.plt"
 
   @queries_plt_dump_file_name "queries.plt"
 
@@ -1052,11 +1052,11 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Returns the file name of the dump of the page windows PLT.
+  Returns the file name of the dump of the page types PLT.
   """
-  @spec page_windows_plt_dump_file_name() :: String.t()
-  def page_windows_plt_dump_file_name do
-    @page_windows_plt_dump_file_name
+  @spec page_types_plt_dump_file_name() :: String.t()
+  def page_types_plt_dump_file_name do
+    @page_types_plt_dump_file_name
   end
 
   @doc """

@@ -34,9 +34,8 @@ defmodule Hologram.Auth do
   per client by the policy the read path applies - each client receives its own grants plus the
   ones it may administer, and nothing else.
 
-  Derived here rather than in either caller so that the build (which decides which pages
-  subscribe to it) and the query cache (which resolves the id back to a term) name one window
-  and not two.
+  Derived here so that the build (which registers it) and the query cache (which resolves the id
+  back to a term) name one window and not two.
   """
   @spec grants_window() :: Query.t()
   def grants_window do
@@ -58,8 +57,8 @@ defmodule Hologram.Auth do
   arrives - one row for a type only its own user may read, every row for one anybody may read.
 
   Derived with whether the build checks permissions on the client, as every registered query's
-  window is, so the build (which decides which pages subscribe to it) and the query cache (which
-  resolves the id back to a term) name one window and not two.
+  window is, so the build (which registers it) and the query cache (which resolves the id back to a
+  term) name one window and not two.
   """
   @spec user_window(module, boolean) :: Query.t()
   def user_window(user_entity, permission_checking?) do

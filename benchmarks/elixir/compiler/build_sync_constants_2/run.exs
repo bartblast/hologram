@@ -11,7 +11,8 @@ alias Hologram.Compiler
 #
 # The fixtures give it every page of the suite. The result names the entity types the pages mention
 # and the ones their spelled names lead to, with the grant type, the policied types and the types
-# they lead to, which every build with a data model bakes, and the hash of every type's rules.
+# they lead to, which every build with a data model bakes, the hash of every type's rules, and the
+# share of the synced types each page fills first.
 Benchee.run(
   %{
     "build_sync_constants/2" => fn {reach_by_page, _component_queries, module_info_plt} ->

@@ -8,7 +8,7 @@ alias Hologram.DB.QueryCache
 alias Hologram.LiveReload
 alias Hologram.Reflection
 alias Hologram.Router.PageModuleResolver
-alias Hologram.Sync.PageWindows, as: SyncPageWindows
+alias Hologram.Sync.PageTypes, as: SyncPageTypes
 
 # Create tmp dir if it doesn't exist yet.
 File.mkdir_p!(Reflection.tmp_dir())
@@ -121,8 +121,8 @@ Application.put_env(:hologram, :page_module_resolver_impl, PageModuleResolverMoc
 Mox.defmock(PageDigestRegistryMock, for: PageDigestRegistry)
 Application.put_env(:hologram, :page_digest_registry_impl, PageDigestRegistryMock)
 
-Mox.defmock(SyncPageWindowsMock, for: SyncPageWindows)
-Application.put_env(:hologram, :sync_page_windows_impl, SyncPageWindowsMock)
+Mox.defmock(SyncPageTypesMock, for: SyncPageTypes)
+Application.put_env(:hologram, :sync_page_types_impl, SyncPageTypesMock)
 
 Mox.defmock(QueryCacheMock, for: QueryCache)
 Application.put_env(:hologram, :query_cache_impl, QueryCacheMock)

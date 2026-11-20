@@ -76,7 +76,6 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module13, as: PageModule13
   alias Hologram.Test.Fixtures.Page.Module18, as: PageModule18
   alias Hologram.Test.Fixtures.Page.Module19, as: PageModule19
-  alias Hologram.Test.Fixtures.Page.Module20, as: PageModule20
   alias Hologram.Test.Fixtures.Page.Module21, as: PageModule21
   alias Hologram.Test.Fixtures.Page.Module24, as: PageModule24
   alias Hologram.Test.Fixtures.Page.Module25, as: PageModule25
@@ -194,6 +193,7 @@ defmodule Hologram.CompilerTest do
   @empty_sync_constants %{
     entity_types: MapSet.new(),
     model_hash: "my_model_hash",
+    page_types: %{},
     policy_hash: nil,
     role_modules: [],
     synced_types: [],
@@ -289,13 +289,6 @@ defmodule Hologram.CompilerTest do
       |> extract_component_queries(entity_types, PLT.start())
 
     {reach_by_page, component_queries}
-  end
-
-  defp derive_page_windows(pages, call_graph, module_info_plt, permission_checking_pages) do
-    {reach_by_page, component_queries} =
-      derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages)
-
-    build_page_windows(reach_by_page, component_queries, module_info_plt)
   end
 
   defp derive_sync_constants(pages, call_graph, module_info_plt, permission_checking_pages) do
@@ -1279,42 +1272,36 @@ defmodule Hologram.CompilerTest do
     assert CallGraph.has_vertex?(call_graph, {Compiler, :build_call_graph, 1})
   end
 
-  describe "build_page_windows/3" do
-    setup %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      page_windows = derive_page_windows(Reflection.list_pages(), call_graph, module_info_plt, [])
+  describe "build_sync_constants/2 page types" do
+    # A checking page's types hold the types its rules read, which read the derived fields'
+    # definitions - put where the compile puts them before it derives the constants.
+    setup %{call_graph: call_graph, ir_plt: ir_plt, module_info_plt: module_info_plt} do
+      Reflection.list_entities()
+      |> resolve_derived_definitions(ir_plt)
+      |> Map.fetch!(:definitions)
+      |> Derived.put_definitions()
 
-      [page_windows: page_windows]
+      page_types =
+        derive_sync_constants(Reflection.list_pages(), call_graph, module_info_plt, []).page_types
+
+      [page_types: page_types]
     end
 
-    test "gives a page the window of a component's derived query", %{page_windows: page_windows} do
-      window_id =
-        Entity2
-        |> filter(a == true)
-        |> Stage.normalize()
-        |> Window.derive(false)
-        |> Registry.id()
-
-      assert page_windows[PageModule18] == [window_id]
+    test "gives a page the type a component's derived query reads", %{page_types: page_types} do
+      assert Entity2 in page_types[PageModule18]
     end
 
-    test "gives a page the window of its own derived query", %{page_windows: page_windows} do
-      window_id =
-        Entity2
-        |> filter(a == false)
-        |> Stage.normalize()
-        |> Window.derive(false)
-        |> Registry.id()
-
-      assert page_windows[PageModule19] == [window_id]
+    test "gives a page the type its own derived query reads", %{page_types: page_types} do
+      assert Entity2 in page_types[PageModule19]
     end
 
-    test "gives a page reaching no query no windows", %{page_windows: page_windows} do
-      assert page_windows[PageModule7] == []
+    test "gives a page reaching no query and naming no type no types", %{page_types: page_types} do
+      assert page_types[PageModule7] == []
     end
 
-    test "answers for every page it was given", %{page_windows: page_windows} do
+    test "answers for every page it was given", %{page_types: page_types} do
       answered_pages =
-        page_windows
+        page_types
         |> Map.keys()
         |> Enum.sort()
 
@@ -1322,143 +1309,81 @@ defmodule Hologram.CompilerTest do
     end
 
     # What a client evaluates permissions against is grant rows, so a page checking them on the
-    # client downloads them like any other rows it reads.
-    test "gives a permission-checking page the grants window", %{
+    # client fills them first like any other rows it reads.
+    test "gives a permission-checking page the grant type", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      page_windows =
-        derive_page_windows([PageModule7], call_graph, module_info_plt, [PageModule7])
+      page_types =
+        derive_sync_constants([PageModule7], call_graph, module_info_plt, [PageModule7]).page_types
 
-      assert page_windows[PageModule7] == [Registry.id(Auth.grants_window())]
+      assert page_types[PageModule7] == [RoleGrant]
     end
 
-    test "leaves the grants window out of a page that checks nothing", %{
-      page_windows: page_windows
-    } do
-      refute Registry.id(Auth.grants_window()) in page_windows[PageModule7]
-    end
-
-    test "keeps a permission-checking page's own windows beside the grants window", %{
+    test "leaves the grant type out of a page that checks nothing", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      page_windows =
-        derive_page_windows([PageModule18], call_graph, module_info_plt, [PageModule18])
+      sync_constants =
+        derive_sync_constants([PageModule7, PageModule18], call_graph, module_info_plt, [
+          PageModule7
+        ])
 
-      assert Registry.id(Auth.grants_window()) in page_windows[PageModule18]
-      assert length(page_windows[PageModule18]) == 2
-    end
-
-    # The grant entity is an entity type like any other, so a page's own query can derive the very
-    # window the permission check downloads - and then it is named once rather than subscribed to
-    # twice.
-    test "names the grants window once for a page whose own query derives it", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      page_windows =
-        derive_page_windows([PageModule20], call_graph, module_info_plt, [PageModule20])
-
-      assert page_windows[PageModule20] == [Registry.id(Auth.grants_window())]
+      assert RoleGrant in sync_constants.synced_types
+      refute RoleGrant in sync_constants.page_types[PageModule18]
     end
 
     # No user entity type, no grant store: there are no grant rows to hold.
-    test "leaves the grants window out of a checking page when the data model designates no user entity type",
+    test "leaves the grant type out of a checking page when the data model designates no user entity type",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
       plt_without_user_entity = without_user_entity(module_info_plt)
 
-      page_windows =
-        derive_page_windows([PageModule7], call_graph, plt_without_user_entity, [PageModule7])
+      page_types =
+        derive_sync_constants([PageModule7], call_graph, plt_without_user_entity, [PageModule7]).page_types
 
-      assert page_windows[PageModule7] == []
+      assert page_types[PageModule7] == []
     end
 
-    # The client answers {Hologram, :user} from its database, so a page reading it downloads the
+    # The client answers {Hologram, :user} from its database, so a page reading it reads the
     # session user's row like any row a query reads.
-    test "gives a page reading the session user from the context the user window", %{
-      page_windows: page_windows
+    test "gives a page reading the session user from the context the user type", %{
+      page_types: page_types
     } do
-      assert page_windows[SessionUserPage] == [user_window_id(false)]
+      assert page_types[SessionUserPage] == [UserEntity]
     end
 
-    test "leaves the user window out of a page that doesn't read the session user", %{
-      page_windows: page_windows
-    } do
-      refute user_window_id(false) in page_windows[PageModule7]
-    end
-
-    # The registered user window is derived with whether the build checks permissions, so the id a
-    # page names has to be derived the same way.
-    test "derives the user window's id with whether the build checks permissions", %{
+    # The browser decides the rules a checking page asks about, from the rows they read.
+    test "gives a checking page the types its rules read, as the build syncs them", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      page_windows =
-        derive_page_windows([SessionUserPage], call_graph, module_info_plt, [SessionUserPage])
+      sync_constants =
+        derive_sync_constants([PageModule21], call_graph, module_info_plt, [PageModule21])
 
-      assert user_window_id(true) in page_windows[SessionUserPage]
+      assert sync_constants.page_types[PageModule21] == sync_constants.synced_types
+      assert length(sync_constants.synced_types) > 2
     end
 
-    test "leaves the user window out when the data model designates no user entity type", %{
+    test "gives a page that checks nothing only the types its own code reads", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      plt_without_user_entity = without_user_entity(module_info_plt)
+      page_types =
+        derive_sync_constants([PageModule21], call_graph, module_info_plt, []).page_types
 
-      page_windows =
-        derive_page_windows([SessionUserPage], call_graph, plt_without_user_entity, [])
-
-      assert page_windows[SessionUserPage] == []
+      assert page_types[PageModule21] == [TwoHopDelegationPolicyEntity]
     end
 
-    # The registered windows of a checking build download the rows the rules read, so the ids a page
-    # subscribes to name those windows.
-    test "derives a checking build's window ids from the windows embedding the rows the rules read",
+    # What the rules read is worked out for the whole build when any page checks, but only a page
+    # that checks fills it first.
+    test "gives a page that checks nothing in a checking build only the types its own code reads",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      page_windows =
-        derive_page_windows([PageModule21], call_graph, module_info_plt, [PageModule21])
+      page_types =
+        derive_sync_constants([PageModule21, PageModule7], call_graph, module_info_plt, [
+          PageModule7
+        ]).page_types
 
-      window =
-        TwoHopDelegationPolicyEntity
-        |> sort(created_at)
-        |> Stage.normalize()
-        |> Window.derive(true)
-
-      assert page_windows[PageModule21] ==
-               Enum.sort([Registry.id(Auth.grants_window()), Registry.id(window)])
-    end
-
-    # No grant store, so no grants window - but the rules still read rows, which the windows embed.
-    test "derives a checking build's window ids from the windows embedding the rows the rules read when the data model designates no user entity type",
-         %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      plt_without_user_entity = without_user_entity(module_info_plt)
-
-      page_windows =
-        derive_page_windows([PageModule21], call_graph, plt_without_user_entity, [PageModule21])
-
-      window =
-        TwoHopDelegationPolicyEntity
-        |> sort(created_at)
-        |> Stage.normalize()
-        |> Window.derive(true)
-
-      assert page_windows[PageModule21] == [Registry.id(window)]
-    end
-
-    test "derives an unchecked build's window ids from the plain windows", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      page_windows = derive_page_windows([PageModule21], call_graph, module_info_plt, [])
-
-      window =
-        TwoHopDelegationPolicyEntity
-        |> sort(created_at)
-        |> Stage.normalize()
-        |> Window.derive(false)
-
-      assert page_windows[PageModule21] == [Registry.id(window)]
+      assert page_types[PageModule21] == [TwoHopDelegationPolicyEntity]
     end
   end
 
@@ -2091,6 +2016,7 @@ defmodule Hologram.CompilerTest do
       assert build_sync_constants(%{}, PLT.start()) == %{
                entity_types: MapSet.new(),
                model_hash: nil,
+               page_types: %{},
                policy_hash: nil,
                role_modules: [],
                synced_types: [],

@@ -1,21 +1,21 @@
-defmodule Hologram.Sync.PageWindowsTest do
+defmodule Hologram.Sync.PageTypesTest do
   use Hologram.Test.BasicCase, async: false
 
-  import Hologram.Sync.PageWindows
+  import Hologram.Sync.PageTypes
   import Hologram.Test.Stubs
   import Mox
 
   alias Hologram.Commons.ETS
   alias Hologram.Commons.PLT
   alias Hologram.Reflection
-  alias Hologram.Sync.PageWindows
+  alias Hologram.Sync.PageTypes
 
-  use_module_stub :sync_page_windows
+  use_module_stub :sync_page_types
 
   setup :set_mox_global
 
   defp dump(items) do
-    dump_path = SyncPageWindowsStub.dump_path()
+    dump_path = SyncPageTypesStub.dump_path()
 
     File.rm(dump_path)
 
@@ -43,52 +43,25 @@ defmodule Hologram.Sync.PageWindowsTest do
   end
 
   setup do
-    setup_sync_page_windows(SyncPageWindowsStub, false)
+    setup_sync_page_types(SyncPageTypesStub, false)
 
     dump(%{
-      MyApp.BoardPage => ["w_7f3a", "w_c412"],
+      MyApp.BoardPage => [MyApp.Card, MyApp.Column],
       MyApp.QuietPage => [],
-      MyApp.RemovedPage => ["w_gone"]
+      MyApp.RemovedPage => [MyApp.Gone]
     })
 
     :ok
   end
 
-  describe "all/0" do
-    test "returns the windows of every page, not only those of one" do
-      init(nil)
-
-      assert Enum.sort(all()) == ["w_7f3a", "w_c412", "w_gone"]
-    end
-
-    test "returns a window two pages both download once" do
-      dump(%{
-        MyApp.BoardPage => ["w_7f3a", "w_c412"],
-        MyApp.SettingsPage => ["w_c412"]
-      })
-
-      init(nil)
-
-      assert Enum.sort(all()) == ["w_7f3a", "w_c412"]
-    end
-
-    test "returns nothing for a build with no pages" do
-      dump(%{})
-
-      init(nil)
-
-      assert all() == []
-    end
-  end
-
   describe "init/1" do
-    test "reads the windows the build worked out" do
+    test "reads the types the build worked out" do
       assert init(nil) == {:ok, nil}
 
-      assert ETS.get_all(SyncPageWindowsStub.ets_table_name()) == %{
-               MyApp.BoardPage => ["w_7f3a", "w_c412"],
+      assert ETS.get_all(SyncPageTypesStub.ets_table_name()) == %{
+               MyApp.BoardPage => [MyApp.Card, MyApp.Column],
                MyApp.QuietPage => [],
-               MyApp.RemovedPage => ["w_gone"]
+               MyApp.RemovedPage => [MyApp.Gone]
              }
     end
   end
@@ -100,11 +73,11 @@ defmodule Hologram.Sync.PageWindowsTest do
       :ok
     end
 
-    test "returns the windows of a page that downloads some" do
-      assert lookup(MyApp.BoardPage) == ["w_7f3a", "w_c412"]
+    test "returns the types a page reads" do
+      assert lookup(MyApp.BoardPage) == [MyApp.Card, MyApp.Column]
     end
 
-    test "returns nothing for a page that downloads none" do
+    test "returns nothing for a page reading none" do
       assert lookup(MyApp.QuietPage) == []
     end
 
@@ -114,20 +87,19 @@ defmodule Hologram.Sync.PageWindowsTest do
   end
 
   describe "reload/0" do
-    test "picks up windows the build worked out since" do
+    test "picks up types the build worked out since" do
       init(nil)
 
-      dump(%{MyApp.BoardPage => ["w_new"]})
+      dump(%{MyApp.BoardPage => [MyApp.Lane]})
 
       reload()
 
-      assert lookup(MyApp.BoardPage) == ["w_new"]
+      assert lookup(MyApp.BoardPage) == [MyApp.Lane]
     end
 
-    # The window this guards is the one between clearing and filling. A session that looked in
-    # there would be handed no windows for a page that has them - and a session with nothing
-    # outstanding announces at once that the client's store is complete, so the client would be
-    # told it holds everything while holding nothing.
+    # What this guards is the moment between clearing and filling. A session that looked in there
+    # would be handed no types for a page that has them, and fill its page's rows in no particular
+    # place.
     test "never answers with nothing for a page it holds, however often it is reloaded" do
       init(nil)
 
@@ -139,15 +111,15 @@ defmodule Hologram.Sync.PageWindowsTest do
       send(reader, {:report, self()})
       assert_receive {:answers, answers}
 
-      assert answers == MapSet.new([["w_7f3a", "w_c412"]])
+      assert answers == MapSet.new([[MyApp.Card, MyApp.Column]])
     end
 
     test "forgets a page the build no longer has" do
       init(nil)
 
-      assert lookup(MyApp.RemovedPage) == ["w_gone"]
+      assert lookup(MyApp.RemovedPage) == [MyApp.Gone]
 
-      dump(%{MyApp.BoardPage => ["w_7f3a", "w_c412"]})
+      dump(%{MyApp.BoardPage => [MyApp.Card, MyApp.Column]})
 
       reload()
 
@@ -157,8 +129,8 @@ defmodule Hologram.Sync.PageWindowsTest do
 
   describe "dump_path/0" do
     test "reads from the build directory" do
-      assert PageWindows.dump_path() ==
-               Path.join([Reflection.build_dir(), Reflection.page_windows_plt_dump_file_name()])
+      assert PageTypes.dump_path() ==
+               Path.join([Reflection.build_dir(), Reflection.page_types_plt_dump_file_name()])
     end
   end
 end

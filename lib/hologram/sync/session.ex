@@ -29,7 +29,6 @@ defmodule Hologram.Sync.Session do
   alias Hologram.DB.QueryCache
   alias Hologram.Entity
   alias Hologram.Policy.Edges
-  alias Hologram.Query.Registry
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Fill
@@ -39,7 +38,7 @@ defmodule Hologram.Sync.Session do
   alias Hologram.Sync.Live
   alias Hologram.Sync.Outbox
   alias Hologram.Sync.PackedIds
-  alias Hologram.Sync.PageWindows
+  alias Hologram.Sync.PageTypes
   alias Hologram.Sync.Pool
   alias Hologram.Sync.Pot
   alias Hologram.Sync.Sessions
@@ -683,14 +682,12 @@ defmodule Hologram.Sync.Session do
 
   defp tell_part_unless_filled(state, part), do: tell_part(state, part)
 
-  # The entity types the page's windows read, which the fill sends first. Read from the terms the
-  # build gave the windows; nothing is subscribed to.
+  # The entity types the page's own code reads, which the fill sends first (see
+  # `Hologram.Sync.PageTypes`).
   defp page_types(page) do
     page
-    |> PageWindows.lookup()
-    |> Enum.map(&QueryCache.window/1)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.reduce(MapSet.new(), &MapSet.union(&2, Registry.entity_types(&1)))
+    |> PageTypes.lookup()
+    |> MapSet.new()
   end
 
   # A type read again whole for this user, because a grant moved what it may read of every row of
