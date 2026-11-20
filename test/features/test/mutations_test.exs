@@ -17,7 +17,7 @@ defmodule HologramFeatureTests.MutationsTest do
   alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Jobs.HoldRun
-  alias HologramFeatureTests.Jobs.KillWorker
+  alias HologramFeatureTests.Jobs.KillRun
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTests.MutationsPage
 
@@ -29,7 +29,7 @@ defmodule HologramFeatureTests.MutationsTest do
 
     tables =
       Enum.map_join(
-        [HoldRun, Item, KillWorker, Memo, Note, ProjectMember, RestockItem, RoleGrant, User],
+        [HoldRun, Item, KillRun, Memo, Note, ProjectMember, RestockItem, RoleGrant, User],
         ", ",
         fn entity_type ->
           ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
@@ -98,10 +98,10 @@ defmodule HologramFeatureTests.MutationsTest do
     }
   end
 
-  defp create_kill_worker_write(label) do
+  defp create_kill_run_write(label) do
     %{
       "op" => "create",
-      "type" => inspect(KillWorker),
+      "type" => inspect(KillRun),
       "id" => Entity.generate_id(),
       "data" => %{"label" => label},
       "stamp" => System.os_time(:millisecond) * 1024
@@ -530,14 +530,14 @@ defmodule HologramFeatureTests.MutationsTest do
   feature "fails a job whose run was killed mid-run", %{session: session} do
     session = log_in(session)
 
-    post_batch(session, 1, [create_kill_worker_write("x")])
+    post_batch(session, 1, [create_kill_run_write("x")])
 
     assert await_response(session) ==
              %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
 
     assert_text(session, css("#killed_jobs"), "x:failed")
 
-    assert [%KillWorker{status: :failed, error: error}] = DB.read(KillWorker)
+    assert [%KillRun{status: :failed, error: error}] = DB.read(KillRun)
     assert error =~ "the run was cut short before its outcome was recorded"
   end
 

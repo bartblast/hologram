@@ -1,4 +1,4 @@
-defmodule HologramFeatureTests.Jobs.KillWorker do
+defmodule HologramFeatureTests.Jobs.KillRun do
   use Hologram.Job
 
   attribute :label, :string
