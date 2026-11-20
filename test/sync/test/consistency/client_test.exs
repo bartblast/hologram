@@ -128,6 +128,52 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     assert [%{cursor: "123.0", failure: "unreadable cursor"}] = Client.failures(client)
   end
 
+  test "a client fails on a marker's cursor it can't read", %{users: [member | _users]} do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+
+    [%{request_id: request_id}] =
+      client
+      |> Client.events()
+      |> Enum.filter(&(&1.kind == :connect))
+
+    chunk = """
+    event: synced
+    data: {"cursor":"123.0","scope":"all"}
+
+    """
+
+    send(client, {:http, {request_id, :stream, chunk}})
+
+    assert [%{cursor: "123.0", failure: "unreadable cursor"}] = Client.failures(client)
+  end
+
+  test "a client fails on a cursor it can't read on a frame with no rows", %{
+    users: [member | _users]
+  } do
+    client = start_client(member.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, member.id, 5_000) == :ok
+
+    [%{request_id: request_id}] =
+      client
+      |> Client.events()
+      |> Enum.filter(&(&1.kind == :connect))
+
+    chunk = """
+    event: sync_deltas
+    data: {"cursor":"123.0","deltas":{}}
+
+    """
+
+    send(client, {:http, {request_id, :stream, chunk}})
+
+    assert [%{cursor: "123.0", failure: "unreadable cursor"}] = Client.failures(client)
+  end
+
   # Only a batch's last frame carries a place, and the batch's rows were read after every
   # transaction below the place the client already held.
   test "a client bounds a frame with no cursor by the place it held", %{users: [member | _users]} do

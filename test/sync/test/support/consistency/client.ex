@@ -530,9 +530,19 @@ defmodule HologramSyncTests.Consistency.Client do
     }
   end
 
+  # Kept as the browser keeps it, and checked the way the server reads one back: one its decoding
+  # can't read fails the run, whether a deltas frame or a marker carried it.
   defp keep_cursor(state, nil), do: state
 
-  defp keep_cursor(state, cursor), do: %{state | cursor: cursor}
+  defp keep_cursor(state, cursor) do
+    case cursor_tx(cursor) do
+      {:ok, _tx} ->
+        %{state | cursor: cursor}
+
+      :error ->
+        event(%{state | cursor: cursor}, :failure, %{cursor: cursor, failure: "unreadable cursor"})
+    end
+  end
 
   defp record(state, type, data, {cursor, received_at}, applied?) do
     case model_type(type) do
@@ -540,30 +550,32 @@ defmodule HologramSyncTests.Consistency.Client do
         state
 
       module ->
-        case cursor_tx(cursor) do
-          {:ok, cursor_tx} ->
-            record = %{
-              applied?: applied?,
-              carried: Map.take(data, Model.fields(module)),
-              cursor_tx: cursor_tx,
-              id: data["id"],
-              opened_at: state.opened_at,
-              received_at: received_at,
-              type: module
-            }
+        record = %{
+          applied?: applied?,
+          carried: Map.take(data, Model.fields(module)),
+          cursor_tx: bound_tx(cursor),
+          id: data["id"],
+          opened_at: state.opened_at,
+          received_at: received_at,
+          type: module
+        }
 
-            %{state | records: [record | state.records]}
-
-          :error ->
-            event(state, :failure, %{cursor: cursor, failure: "unreadable cursor"})
-        end
+        %{state | records: [record | state.records]}
     end
   end
 
-  # The transaction id a frame's cursor names - opaque to a browser, read here because check 2
-  # bounds what a frame may carry by it, and read the way the server reads one back. A cursor the
-  # server's own decoding can't read fails the run rather than being passed over, so a change to
-  # the format can't quietly switch the bound off.
+  # A bound check 2 can't read is a failure where the cursor was kept, so the record goes without
+  # one and is still checked against the other two bounds.
+  defp bound_tx(cursor) do
+    case cursor_tx(cursor) do
+      {:ok, tx} -> tx
+      :error -> nil
+    end
+  end
+
+  # The transaction id a cursor names - opaque to a browser, read here because check 2 bounds what a
+  # frame may carry by it, and read the way the server reads one back, so a change to the format
+  # shows up as a failure where the cursor is kept rather than quietly switching the bound off.
   defp cursor_tx(nil), do: {:ok, nil}
 
   defp cursor_tx(cursor) do
