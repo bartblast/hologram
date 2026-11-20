@@ -386,8 +386,27 @@ defmodule Hologram.Realtime.SSETest do
                policy_hash: nil,
                protocol_version: 1,
                replica_id: nil,
-               replica_token: nil
+               replica_token: nil,
+               synced_types: nil
              }
+    end
+
+    test "reads the entity types a bundle names" do
+      conn = Plug.Test.conn(:get, sync_query_string("&synced_types=MyApp.Card,MyApp.List"))
+
+      assert greeting(conn).synced_types == ["MyApp.Card", "MyApp.List"]
+    end
+
+    test "reads entity types sent as anything but one string as not said" do
+      conn = Plug.Test.conn(:get, sync_query_string("&synced_types[]=MyApp.Card"))
+
+      assert greeting(conn).synced_types == nil
+    end
+
+    test "reads an empty list of entity types as a bundle reading rows of no type" do
+      conn = Plug.Test.conn(:get, sync_query_string("&synced_types="))
+
+      assert greeting(conn).synced_types == []
     end
 
     test "reads the rules a bundle checking permissions was built with" do

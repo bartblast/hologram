@@ -292,6 +292,100 @@ describe("SyncStream", () => {
       });
     });
 
+    it("names the entity types the bundle reads rows of", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+        syncedTypes: ["MyApp.Card", "MyApp.List"],
+      };
+
+      assert.equal(
+        SyncStream.buildGreeting(pageModule).synced_types,
+        "MyApp.Card,MyApp.List",
+      );
+    });
+
+    it("names an empty list for a bundle reading rows of no type", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+        syncedTypes: [],
+      };
+
+      assert.equal(SyncStream.buildGreeting(pageModule).synced_types, "");
+    });
+
+    it("names no types for a bundle built before bundles named them", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      assert.isFalse(
+        Object.hasOwn(SyncStream.buildGreeting(pageModule), "synced_types"),
+      );
+    });
+
+    // Measured as the URL spells the list, with each comma taking three characters: a long label,
+    // a comma and a one-letter one fill the limit exactly.
+    it("names a list exactly as long as a greeting carries", () => {
+      const label = "MyApp.".padEnd(
+        SyncStream.MAX_SYNCED_TYPES_LENGTH - 4,
+        "x",
+      );
+
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+        syncedTypes: [label, "Y"],
+      };
+
+      assert.equal(
+        encodeURIComponent(globalThis.Hologram.sync.syncedTypes.join(","))
+          .length,
+        SyncStream.MAX_SYNCED_TYPES_LENGTH,
+      );
+
+      assert.equal(
+        SyncStream.buildGreeting(pageModule).synced_types,
+        `${label},Y`,
+      );
+
+      globalThis.Hologram.sync.syncedTypes = [label, "YZ"];
+
+      assert.isFalse(
+        Object.hasOwn(SyncStream.buildGreeting(pageModule), "synced_types"),
+      );
+    });
+
+    // The greeting rides the stream's URL, and one too long for the server takes the stream down.
+    it("names no types when the list is longer than a greeting carries", () => {
+      const label = "MyApp.Card".padEnd(100, "x");
+
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+        syncedTypes: Array.from(
+          {length: 40},
+          (_value, index) => `${label}${index}`,
+        ),
+      };
+
+      assert.ok(
+        globalThis.Hologram.sync.syncedTypes.join(",").length >
+          SyncStream.MAX_SYNCED_TYPES_LENGTH,
+      );
+
+      assert.isFalse(
+        Object.hasOwn(SyncStream.buildGreeting(pageModule), "synced_types"),
+      );
+    });
+
     // One sync session per browser: the tab that leads is served sync and hands what it receives
     // to the rest, so a follower greets the way a bundle with no sync at all does.
     it("says nothing for a tab that does not lead its group", () => {

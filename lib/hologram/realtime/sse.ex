@@ -186,7 +186,8 @@ defmodule Hologram.Realtime.SSE do
           policy_hash: conn.assigns[:hologram_sync_policy_hash] || params["policy_hash"],
           protocol_version: parse_protocol_version(protocol_version),
           replica_id: params["replica_id"],
-          replica_token: params["replica_token"]
+          replica_token: params["replica_token"],
+          synced_types: parse_synced_types(params["synced_types"])
         }
 
       # A client built before any of this existed says nothing about sync, and keeps its stream.
@@ -1086,6 +1087,17 @@ defmodule Hologram.Realtime.SSE do
   rescue
     ArgumentError -> page
   end
+
+  # The entity types a bundle names, as a frame spells them, and an empty list for a bundle reading
+  # rows of no type. Nil when the greeting doesn't say: a bundle built before bundles named them,
+  # one whose list is too long to carry, or a value that isn't one string.
+  defp parse_synced_types(nil), do: nil
+
+  defp parse_synced_types(""), do: []
+
+  defp parse_synced_types(labels) when is_binary(labels), do: String.split(labels, ",")
+
+  defp parse_synced_types(_not_a_list), do: nil
 
   defp parse_protocol_version(protocol_version) do
     case Integer.parse(protocol_version) do

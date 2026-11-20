@@ -2412,7 +2412,8 @@ defmodule Hologram.Compiler do
   type and its includes only - bar a type the model leaves out, which declares no rule, so no read
   rule admits its rows. A type only server code names, like an audit log, is left out, rules or not,
   and never reaches a browser. The server reads the list (see
-  `Hologram.DB.QueryCache.synced_types/0`), the client does not.
+  `Hologram.DB.QueryCache.synced_types/0`), and the client names it when it greets, so a server
+  running a newer model can tell which types a tab built with this one reads.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
@@ -2497,7 +2498,7 @@ defmodule Hologram.Compiler do
   entity types each derived field building a count reads, the derived fields whose function builds
   a query, the global roles with the role modules carrying each, the model of the entity types the
   client holds, the hash of the project's data model, the hash of the rules it was rendered with,
-  the sync protocol version, and the user entity type.
+  the sync protocol version, the entity types sync sends rows of, and the user entity type.
 
   What the runtime bundle was built against, said by the bundle itself. It has to be baked in
   rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
@@ -2536,9 +2537,15 @@ defmodule Hologram.Compiler do
       expanded_roles = render_global_expanded_roles(sync_constants.role_modules)
 
       policy_hash = Jason.encode!(sync_constants.policy_hash)
+
+      synced_types =
+        sync_constants.synced_types
+        |> Enum.map(&Codec.encode_enum_value/1)
+        |> Jason.encode!()
+
       user_entity = render_user_entity(sync_constants.user_entity)
 
-      ~s/globalThis.Hologram.sync = {countTypes: #{count_types}, derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}, userEntity: #{user_entity}};/
+      ~s/globalThis.Hologram.sync = {countTypes: #{count_types}, derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}, syncedTypes: #{synced_types}, userEntity: #{user_entity}};/
     end
   end
 

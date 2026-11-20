@@ -211,7 +211,7 @@ defmodule Hologram.CompilerTest do
 
   # A statement setting the client's data layer constants, as the runtime script takes it rendered
   # (see build_sync_constants_js/1), for the tests of what the script carries besides.
-  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "", policyHash: null, protocolVersion: 1, userEntity: null};/
+  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "", policyHash: null, protocolVersion: 1, syncedTypes: [], userEntity: null};/
 
   @tmp_dir Reflection.tmp_dir()
 
@@ -2656,12 +2656,19 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | policy_hash: "my_policy_hash"}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: "my_policy_hash", protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: "my_policy_hash", protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
     end
 
     test "renders the model hash the sync constants carry" do
       assert build_sync_constants_js(@empty_sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
+    end
+
+    test "renders the entity types sync sends rows of, as a frame spells them" do
+      sync_constants = %{@empty_sync_constants | synced_types: [Entity1, Entity2]}
+
+      assert build_sync_constants_js(sync_constants) ==
+               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, syncedTypes: ["Hologram.Test.Fixtures.Entity.Module1","Hologram.Test.Fixtures.Entity.Module2"], userEntity: null};/
     end
 
     test "renders the derived fields each component registers as queries" do
@@ -2671,7 +2678,7 @@ defmodule Hologram.CompilerTest do
       }
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84":["ripe","ripe_rows"]}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84":["ripe","ripe_rows"]}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
     end
 
     test "renders the entity types each derived field building a count reads" do
@@ -2683,7 +2690,7 @@ defmodule Hologram.CompilerTest do
       }
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module133":{"either_count":["Hologram.Test.Fixtures.Entity.Module1","Hologram.Test.Fixtures.Entity.Module3"],"ripe_count":["Hologram.Test.Fixtures.Entity.Module2"]}}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {countTypes: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module133":{"either_count":["Hologram.Test.Fixtures.Entity.Module1","Hologram.Test.Fixtures.Entity.Module3"],"ripe_count":["Hologram.Test.Fixtures.Entity.Module2"]}}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
     end
 
     # Spelled as the model's keys are, which is how a query term names its entity type.
@@ -2700,7 +2707,7 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | role_modules: [RoleModule1, RoleModule2]}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
     end
 
     # A client computes a derived field itself, from the definition the build resolved - spelled in
@@ -5653,7 +5660,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
              )
     end
 
