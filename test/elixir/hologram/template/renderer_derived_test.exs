@@ -316,6 +316,28 @@ defmodule Hologram.Template.RendererDerivedTest do
       assert carried_names == ["banana", "cherry"]
     end
 
+    # A type browser code never names never syncs, so the browser could only show the rows the
+    # render carried, and never update them.
+    test "raises on a query reading a type sync doesn't send" do
+      dump_query_cache(QueryCacheStub, [], false, [Module1])
+      QueryCache.init(nil)
+
+      assert_error Hologram.MisuseError,
+                   "derived field :entities in Hologram.Test.Fixtures.Template.Renderer.Module149 reads Hologram.Test.Fixtures.Entity.Module2, which browser code never names, so sync never sends its rows - name the entity type, or the relationship or derived field leading to it, as written in browser code, like include(project) or %Project{}",
+                   fn -> render_dom({:component, Module149, [], []}, @env, @server) end
+    end
+
+    test "raises on a count reading a type sync doesn't send" do
+      dump_query_cache(QueryCacheStub, [], false, [Module1])
+      QueryCache.init(nil)
+
+      node = {:component, Module174, [{"a", [expression: {true}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~r/^derived field :total in .+Module174 reads Hologram\.Test\.Fixtures\.Entity\.Module2, which browser code never names/,
+                   fn -> render_dom(node, @env, @server) end
+    end
+
     test "computes a field over a value the template passes under its name" do
       create_entities()
 

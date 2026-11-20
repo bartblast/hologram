@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.build_sync_constants/3
+Hologram.Compiler.build_sync_constants/2
 
 ## System
 
@@ -62,7 +62,7 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">build_sync_constants/3</td>
+    <td style="white-space: nowrap">build_sync_constants/2</td>
     <td style="white-space: nowrap; text-align: right">2.17 K</td>
     <td style="white-space: nowrap; text-align: right">460.90 &micro;s</td>
     <td style="white-space: nowrap; text-align: right">&plusmn;8.88%</td>

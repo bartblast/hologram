@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.build_kept_page_reach/3
+Hologram.Compiler.build_kept_page_reach/4
 
 ## System
 
@@ -62,7 +62,7 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">build_kept_page_reach/3</td>
+    <td style="white-space: nowrap">build_kept_page_reach/4</td>
     <td style="white-space: nowrap; text-align: right">565.97</td>
     <td style="white-space: nowrap; text-align: right">1.77 ms</td>
     <td style="white-space: nowrap; text-align: right">&plusmn;11.77%</td>

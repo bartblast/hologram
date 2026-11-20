@@ -72,7 +72,7 @@ defmodule Hologram.DB.QueryCache do
 
   @doc """
   Returns the entity types sync sends rows of, sorted - as the build listed them, when it
-  registered the queries (see `Hologram.Compiler.build_sync_constants/3`). A type left out is one
+  registered the queries (see `Hologram.Compiler.build_sync_constants/2`). A type left out is one
   no browser code reads and no rule a browser answers reads, save through a type no session may
   read, so no browser gets its rows.
   """

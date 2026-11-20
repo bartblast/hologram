@@ -41,7 +41,7 @@ defmodule Hologram.DB.QueryCacheTest do
       derived: %{},
       entries: entries,
       permission_checking?: false,
-      synced_types: [],
+      synced_types: Reflection.list_entities(),
       windows: expected_windows(entries)
     }
   end

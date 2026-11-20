@@ -34,7 +34,7 @@ defmodule Hologram.Benchmarks.DataLayer do
     reach_by_page =
       page_modules
       |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt)
+      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt, ir_plt)
 
     component_queries =
       reach_by_page

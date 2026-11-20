@@ -4,7 +4,7 @@ alias Hologram.Compiler
 # What the compile task pays to fold the windows every page downloads, once per compile that
 # derives the data layer: each component's window ids derived once from its kept queries, and each
 # page's collected from the components its kept reach names. No page is walked and no query is
-# extracted here: the data layer keeps both between compiles (see the build_kept_page_reach_3 and
+# extracted here: the data layer keeps both between compiles (see the build_kept_page_reach_4 and
 # extract_component_queries_3 benchmarks for what they cost when they are not kept).
 #
 # The fixtures give it 110 pages. 10 of them reach the two components with a parameterized query

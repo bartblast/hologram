@@ -1000,6 +1000,30 @@ defmodule Hologram.Template.Renderer do
       "like #{ref_example(ref)} for the items of a loop"
   end
 
+  # The browser answers a derived field's query from the rows sync sends it, so every type the query
+  # reads has to be one sync sends. The build lists those from the names browser code spells (see
+  # Hologram.Compiler.build_sync_constants/2), so a type reached only through a name the code builds
+  # at run time is missing - and without this the browser would show the rows the render carried and
+  # never update them.
+  defp validate_synced_types!(module, name, term) do
+    synced_types = QueryCache.synced_types()
+
+    unsynced_types =
+      term
+      |> Window.entity_types()
+      |> Enum.reject(&(&1 in synced_types))
+
+    if unsynced_types != [] do
+      rows = if length(unsynced_types) == 1, do: "its rows", else: "their rows"
+
+      raise Hologram.MisuseError,
+        message:
+          "derived field #{inspect(name)} in #{Reflection.module_name(module)} reads #{Enum.map_join(unsynced_types, ", ", &inspect/1)}, which browser code never names, so sync never sends #{rows} - name the entity type, or the relationship or derived field leading to it, as written in browser code, like include(project) or %Project{}"
+    end
+
+    :ok
+  end
+
   # WARNING: must match the client renderer's #valueDomToText: parts evaluate raw and concatenate,
   # with no escaping. An attribute value lands in the DOM through setAttribute on the client, a
   # prop is a value a component receives rather than markup, and the HTML projection escapes
@@ -1937,6 +1961,8 @@ defmodule Hologram.Template.Renderer do
   # Runs the given normalized query term a derived field of the given module is defined by, for the
   # given name. The arguments its function was called with are in the term, as the values it reads.
   defp run_query!(module, name, _args, term) do
+    validate_synced_types!(module, name, term)
+
     # A path reads rows the query does not return, and the client answers the query over what it
     # holds - so the rows along the paths are read with it, the read policy deciding which, and
     # carried beside the rows it returns. A client checking permissions answers each rule over what

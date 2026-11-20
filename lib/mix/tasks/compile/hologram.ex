@@ -1312,7 +1312,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     reach_by_page =
       listed_reach
-      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt)
+      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt, ir_plt)
       |> then(&Map.merge(context.kept_page_reach, &1))
 
     reached_components =
@@ -1361,7 +1361,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> Compiler.build_queries(entity_types, permission_checking?)
 
     sync_constants =
-      Compiler.build_sync_constants(reach_by_page, component_queries, module_info_plt)
+      Compiler.build_sync_constants(reach_by_page, module_info_plt)
 
     # The entity types sync sends rows of ride with the registered queries: the sync layer reads
     # both, and both are loaded at boot.

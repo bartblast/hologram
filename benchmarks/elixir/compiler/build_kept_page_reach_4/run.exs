@@ -3,7 +3,8 @@ alias Hologram.Compiler.CallGraph
 alias Hologram.Reflection
 
 # What the compile task pays to fold each page's reach into what the data layer keeps of it: the
-# modules the page reaches, the components among them and whether it checks permissions. A cold
+# modules the page reaches, the components among them, whether it checks permissions and the atoms
+# its app functions spell, each function read once from the IR PLT built beforehand. A cold
 # compile pays it for every page. A compile that derives the data layer pays it only for the pages
 # whose reach the edit can have moved, which it walks again (see the list_reach_by_page_2
 # benchmark for the walk).
@@ -11,8 +12,14 @@ alias Hologram.Reflection
 # The fixtures give it 110 pages.
 Benchee.run(
   %{
-    "build_kept_page_reach/3" => fn {listed_reach, permission_checking_pages, module_info_plt} ->
-      Compiler.build_kept_page_reach(listed_reach, permission_checking_pages, module_info_plt)
+    "build_kept_page_reach/4" => fn {listed_reach, permission_checking_pages, module_info_plt,
+                                     ir_plt} ->
+      Compiler.build_kept_page_reach(
+        listed_reach,
+        permission_checking_pages,
+        module_info_plt,
+        ir_plt
+      )
     end
   },
   before_scenario: fn _input ->
@@ -34,12 +41,12 @@ Benchee.run(
     # component reached through a runtime MFA is still one the page can reach.
     listed_reach = Compiler.list_reach_by_page(page_modules, call_graph)
 
-    {listed_reach, permission_checking_pages, module_info_plt}
+    {listed_reach, permission_checking_pages, module_info_plt, ir_plt}
   end,
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "Hologram.Compiler.build_kept_page_reach/3",
+     description: "Hologram.Compiler.build_kept_page_reach/4",
      file: Path.join(__DIR__, "README.md")}
   ],
   time: 10

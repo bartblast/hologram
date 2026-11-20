@@ -133,12 +133,17 @@ defmodule Hologram.Test.Stubs do
 
   @doc """
   Writes the query cache dump the given stub reads, holding the registered queries of the given
-  component modules, no derived definitions and the given synced types - the compile task's
-  artifact, built the same way but for a chosen set, for a build with or without a page checking
-  permissions on the client.
+  component modules, no derived definitions and the given synced types, every entity type unless a
+  test names the ones that sync - the compile task's artifact, built the same way but for a chosen
+  set, for a build with or without a page checking permissions on the client.
   """
   @spec dump_query_cache(module, list(module), boolean, list(module)) :: :ok
-  def dump_query_cache(stub, component_modules, permission_checking? \\ false, synced_types \\ []) do
+  def dump_query_cache(
+        stub,
+        component_modules,
+        permission_checking? \\ false,
+        synced_types \\ Reflection.list_entities()
+      ) do
     dump_path = stub.dump_path()
 
     File.rm(dump_path)

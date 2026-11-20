@@ -53,6 +53,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
   alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
+  alias Hologram.Test.Fixtures.Entity.Module16, as: Entity16
   alias Hologram.Test.Fixtures.Entity.Module17, as: Entity17
   alias Hologram.Test.Fixtures.Entity.Module19, as: Entity19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
@@ -88,6 +89,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module20, as: PageModule20
   alias Hologram.Test.Fixtures.Page.Module21, as: PageModule21
   alias Hologram.Test.Fixtures.Page.Module22, as: PageModule22
+  alias Hologram.Test.Fixtures.Page.Module24, as: PageModule24
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module12, as: PathPolicyEntity
@@ -157,6 +159,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module45
   alias Hologram.Test.Fixtures.Compiler.Module46
   alias Hologram.Test.Fixtures.Compiler.Module47
+  alias Hologram.Test.Fixtures.Compiler.Module48
+  alias Hologram.Test.Fixtures.Compiler.Module49
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84, as: QueryExtractorModule84
@@ -284,7 +288,7 @@ defmodule Hologram.CompilerTest do
     reach_by_page =
       pages
       |> list_reach_by_page(call_graph)
-      |> build_kept_page_reach(permission_checking_pages, module_info_plt)
+      |> build_kept_page_reach(permission_checking_pages, module_info_plt, PLT.start())
 
     entity_types = Reflection.list_entities(module_info_plt)
 
@@ -305,17 +309,18 @@ defmodule Hologram.CompilerTest do
   end
 
   defp derive_sync_constants(pages, call_graph, module_info_plt, permission_checking_pages) do
-    {reach_by_page, component_queries} =
+    {reach_by_page, _component_queries} =
       derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages)
 
-    build_sync_constants(reach_by_page, component_queries, module_info_plt)
+    build_sync_constants(reach_by_page, module_info_plt)
   end
 
   # What the data layer keeps of one page whose client code names only the given modules and
   # reaches no component, checking permissions on the client or not.
-  defp mentioning_reach(modules, checks_permissions?, reads_session_user? \\ false) do
+  defp mentioning_reach(modules, checks_permissions?, reads_session_user? \\ false, atoms \\ []) do
     %{
       PageModule18 => %{
+        atoms: MapSet.new(atoms),
         checks_permissions?: checks_permissions?,
         components: [],
         modules: MapSet.new(modules),
@@ -2160,7 +2165,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_sync_constants/3" do
+  describe "build_sync_constants/2" do
     # A build checking permissions hashes the rules of every entity type, which read the derived
     # fields' definitions - put where the compile puts them before it derives the constants.
     setup %{call_graph: call_graph, ir_plt: ir_plt, module_info_plt: module_info_plt} do
@@ -2348,7 +2353,7 @@ defmodule Hologram.CompilerTest do
     end
 
     test "records no model hash when the module info PLT records no entity type" do
-      assert build_sync_constants(%{}, %{}, PLT.start()) == %{
+      assert build_sync_constants(%{}, PLT.start()) == %{
                entity_types: MapSet.new(),
                model_hash: nil,
                policy_hash: nil,
@@ -2408,13 +2413,83 @@ defmodule Hologram.CompilerTest do
       refute Entity10 in sync_constants.synced_types
     end
 
+    # From the page's real code: the include's name is an atom in the derived field's function.
+    test "syncs the type a page's query includes, read from the page's code", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      synced_types =
+        derive_sync_constants([PageModule24], call_graph, module_info_plt, []).synced_types
+
+      assert Entity15 in synced_types
+      assert Entity16 in synced_types
+    end
+
+    test "syncs a type a page reaches only through a relationship its code names", %{
+      module_info_plt: module_info_plt
+    } do
+      named = mentioning_reach([Entity16], false, false, [:secrets])
+      unnamed = mentioning_reach([Entity16], false)
+
+      assert Entity15 in build_sync_constants(named, module_info_plt).synced_types
+      refute Entity15 in build_sync_constants(unnamed, module_info_plt).synced_types
+    end
+
+    test "follows the names a page's code spells from type to type", %{
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = mentioning_reach([Entity37], false, false, [:messages, :author])
+
+      assert build_sync_constants(reach_by_page, module_info_plt).synced_types == [
+               Entity1,
+               Entity37,
+               Entity38
+             ]
+    end
+
+    test "syncs the types a derived field a page's code names is computed from", %{
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = mentioning_reach([Entity37], false, false, [:member_count])
+
+      assert build_sync_constants(reach_by_page, module_info_plt).synced_types == [
+               Entity2,
+               Entity37
+             ]
+    end
+
+    test "follows the names from the user type of a page reading the session user", %{
+      module_info_plt: module_info_plt
+    } do
+      plt_with_holder_user_entity = with_user_entity(module_info_plt, Entity16)
+
+      named = mentioning_reach([], false, true, [:secrets])
+      unnamed = mentioning_reach([], false, true)
+
+      assert Entity15 in build_sync_constants(named, plt_with_holder_user_entity).synced_types
+      refute Entity15 in build_sync_constants(unnamed, plt_with_holder_user_entity).synced_types
+    end
+
+    # A name means something only on the types the page that spells it reaches.
+    test "follows a page's names from that page's types only", %{
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page =
+        Map.merge(
+          %{PageModule19 => mentioning_reach([Entity16], false)[PageModule18]},
+          mentioning_reach([Entity2], false, false, [:secrets])
+        )
+
+      refute Entity15 in build_sync_constants(reach_by_page, module_info_plt).synced_types
+    end
+
     # Like an audit log: a type with rules ships them to every client, but no browser code reads
     # its rows, so no browser gets any.
     test "leaves out of the synced types a policied type nothing reads", %{
       module_info_plt: module_info_plt
     } do
       sync_constants =
-        build_sync_constants(mentioning_reach([Entity4], false), %{}, module_info_plt)
+        build_sync_constants(mentioning_reach([Entity4], false), module_info_plt)
 
       assert MapSet.member?(sync_constants.entity_types, PolicyEntity)
       refute PolicyEntity in sync_constants.synced_types
@@ -2427,7 +2502,7 @@ defmodule Hologram.CompilerTest do
     } do
       reach_by_page = mentioning_reach([PathPolicyEntity], false)
 
-      assert build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types == [
+      assert build_sync_constants(reach_by_page, module_info_plt).synced_types == [
                PathPolicyEntity
              ]
     end
@@ -2441,7 +2516,7 @@ defmodule Hologram.CompilerTest do
     } do
       reach_by_page = mentioning_reach([PathPolicyEntity], true)
 
-      assert build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types == [
+      assert build_sync_constants(reach_by_page, module_info_plt).synced_types == [
                RoleGrant,
                Entity17,
                PolicyEntity,
@@ -2456,7 +2531,7 @@ defmodule Hologram.CompilerTest do
     test "syncs the types the rules read one step out", %{module_info_plt: module_info_plt} do
       reach_by_page = mentioning_reach([TaskPolicyEntity], true)
 
-      synced_types = build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types
+      synced_types = build_sync_constants(reach_by_page, module_info_plt).synced_types
 
       assert ProjectPolicyEntity in synced_types
       refute MemberPolicyEntity in synced_types
@@ -2469,7 +2544,7 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt
     } do
       sync_constants =
-        build_sync_constants(mentioning_reach([ParcelPolicyEntity], true), %{}, module_info_plt)
+        build_sync_constants(mentioning_reach([ParcelPolicyEntity], true), module_info_plt)
 
       assert CratePolicyEntity in sync_constants.synced_types
       refute VaultPolicyEntity in sync_constants.synced_types
@@ -2484,7 +2559,7 @@ defmodule Hologram.CompilerTest do
       reach_by_page =
         mentioning_reach([ParcelPolicyEntity, VaultPolicyEntity, OwnerPolicyEntity], true)
 
-      synced_types = build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types
+      synced_types = build_sync_constants(reach_by_page, module_info_plt).synced_types
 
       assert VaultPolicyEntity in synced_types
       assert OwnerPolicyEntity in synced_types
@@ -2494,7 +2569,7 @@ defmodule Hologram.CompilerTest do
     # Entity50 row and the client's model leaves the type out - a row of it could not be read back.
     test "syncs only types of the client's model", %{module_info_plt: module_info_plt} do
       sync_constants =
-        build_sync_constants(mentioning_reach([Entity51], true), %{}, module_info_plt)
+        build_sync_constants(mentioning_reach([Entity51], true), module_info_plt)
 
       refute MapSet.member?(sync_constants.entity_types, Entity50)
       assert sync_constants.synced_types == [RoleGrant, Entity51]
@@ -2507,7 +2582,7 @@ defmodule Hologram.CompilerTest do
     } do
       reach_by_page = mentioning_reach([Entity4], false, true)
 
-      assert build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types == [
+      assert build_sync_constants(reach_by_page, module_info_plt).synced_types == [
                UserEntity,
                Entity4
              ]
@@ -2521,7 +2596,7 @@ defmodule Hologram.CompilerTest do
       reach_by_page = mentioning_reach([Entity4], false, true)
       plt_with_unreached_user_entity = with_user_entity(module_info_plt, Entity10)
 
-      sync_constants = build_sync_constants(reach_by_page, %{}, plt_with_unreached_user_entity)
+      sync_constants = build_sync_constants(reach_by_page, plt_with_unreached_user_entity)
 
       assert MapSet.member?(sync_constants.entity_types, Entity10)
       assert Entity10 in sync_constants.synced_types
@@ -2536,7 +2611,7 @@ defmodule Hologram.CompilerTest do
       plt_with_path_user_entity = with_user_entity(module_info_plt, PathPolicyEntity)
 
       synced_types =
-        build_sync_constants(reach_by_page, %{}, plt_with_path_user_entity).synced_types
+        build_sync_constants(reach_by_page, plt_with_path_user_entity).synced_types
 
       for synced_type <- [
             RoleGrant,
@@ -2555,7 +2630,7 @@ defmodule Hologram.CompilerTest do
     } do
       reach_by_page = mentioning_reach([Entity4], false)
 
-      refute UserEntity in build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types
+      refute UserEntity in build_sync_constants(reach_by_page, module_info_plt).synced_types
     end
 
     test "syncs no user type for a page reading the session user when the data model designates none",
@@ -2563,7 +2638,7 @@ defmodule Hologram.CompilerTest do
       reach_by_page = mentioning_reach([Entity4], false, true)
       plt_without_user_entity = without_user_entity(module_info_plt)
 
-      assert build_sync_constants(reach_by_page, %{}, plt_without_user_entity).synced_types == [
+      assert build_sync_constants(reach_by_page, plt_without_user_entity).synced_types == [
                Entity4
              ]
     end
@@ -2575,7 +2650,7 @@ defmodule Hologram.CompilerTest do
       reach_by_page = mentioning_reach([PathPolicyEntity], true)
       plt_without_user_entity = without_user_entity(module_info_plt)
 
-      assert build_sync_constants(reach_by_page, %{}, plt_without_user_entity).synced_types == [
+      assert build_sync_constants(reach_by_page, plt_without_user_entity).synced_types == [
                Entity17,
                PolicyEntity,
                PathPolicyEntity,
@@ -3108,7 +3183,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_kept_page_reach/3" do
+  describe "build_kept_page_reach/4" do
     setup do
       info = fn component? ->
         %{digest: 1, mtime: 1, size: 1, page?: false, component?: component?}
@@ -3132,8 +3207,9 @@ defmodule Hologram.CompilerTest do
         types: [Module4]
       }
 
-      assert build_kept_page_reach([{Module1, reach}], [], module_info_plt) == %{
+      assert build_kept_page_reach([{Module1, reach}], [], module_info_plt, PLT.start()) == %{
                Module1 => %{
+                 atoms: MapSet.new(),
                  checks_permissions?: false,
                  components: [Module1, Module2, Module3],
                  modules: MapSet.new([Module1, Module2, Module3, Module4]),
@@ -3148,7 +3224,7 @@ defmodule Hologram.CompilerTest do
       reach = %{mfas: [{Module1, :fun_1, 0}, {Enum, :map, 2}], types: []}
 
       assert %{Module1 => %{components: [Module1]}} =
-               build_kept_page_reach([{Module1, reach}], [], module_info_plt)
+               build_kept_page_reach([{Module1, reach}], [], module_info_plt, PLT.start())
     end
 
     test "marks the pages given as checking permissions", %{module_info_plt: module_info_plt} do
@@ -3161,7 +3237,8 @@ defmodule Hologram.CompilerTest do
                build_kept_page_reach(
                  [{Module1, reach}, {Module11, reach}],
                  [Module1],
-                 module_info_plt
+                 module_info_plt,
+                 PLT.start()
                )
     end
 
@@ -3183,22 +3260,78 @@ defmodule Hologram.CompilerTest do
                build_kept_page_reach(
                  [{Module1, reading_reach}, {Module11, other_reach}],
                  [],
-                 module_info_plt
+                 module_info_plt,
+                 PLT.start()
                )
+    end
+
+    # What a page's code names of the model, read without walking it: the atom literals of every
+    # function it reaches but Elixir's, Hologram's and an entity type's generated ones, which name
+    # every relationship it declares.
+    test "keeps the atoms the functions a page reaches spell", %{
+      module_info_plt: module_info_plt
+    } do
+      info = %{digest: 1, mtime: 1, size: 1, page?: false, component?: false}
+
+      module_info_plt =
+        module_info_plt
+        |> PLT.put(Module48, info)
+        |> PLT.put(Entity16, Map.put(info, :entity?, true))
+        |> PLT.put(Enum, info)
+        |> PLT.put(Hologram.Commons.StringUtils, info)
+
+      # Enum.map/2 and StringUtils.starts_with_lowercase?/1 spell atoms of their own: :lists and
+      # String among them.
+      reach = %{
+        mfas: [
+          {Module48, :names, 0},
+          {Entity16, :__relationships__, 0},
+          {Enum, :map, 2},
+          {Hologram.Commons.StringUtils, :starts_with_lowercase?, 1}
+        ],
+        types: []
+      }
+
+      assert %{Module1 => %{atoms: atoms}} =
+               build_kept_page_reach([{Module1, reach}], [], module_info_plt, PLT.start())
+
+      assert atoms == MapSet.new([:not_a_relationship, :title])
+    end
+
+    # A component's generated functions hold what the app wrote, its prop defaults among them.
+    test "keeps the atoms a component's generated functions spell", %{
+      module_info_plt: module_info_plt
+    } do
+      info = %{digest: 1, mtime: 1, size: 1, page?: false, component?: true}
+      module_info_plt = PLT.put(module_info_plt, Module49, info)
+
+      reach = %{mfas: [{Module49, :__props__, 0}], types: []}
+
+      assert %{Module1 => %{atoms: atoms}} =
+               build_kept_page_reach([{Module1, reach}], [], module_info_plt, PLT.start())
+
+      assert :secrets in atoms
     end
 
     test "answers for every page it was given", %{module_info_plt: module_info_plt} do
       reach = %{mfas: [], types: []}
 
-      assert build_kept_page_reach([{Module1, reach}, {Module11, reach}], [], module_info_plt) ==
+      assert build_kept_page_reach(
+               [{Module1, reach}, {Module11, reach}],
+               [],
+               module_info_plt,
+               PLT.start()
+             ) ==
                %{
                  Module1 => %{
+                   atoms: MapSet.new(),
                    checks_permissions?: false,
                    components: [Module1],
                    modules: MapSet.new(),
                    reads_session_user?: false
                  },
                  Module11 => %{
+                   atoms: MapSet.new(),
                    checks_permissions?: false,
                    components: [Module11],
                    modules: MapSet.new(),

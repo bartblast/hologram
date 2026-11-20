@@ -44,11 +44,11 @@ build_ir_plt/0          1.37      728.76 ms     ±1.47%      727.00 ms      754.
 ```
 
 
-### ✅ compiler » build_kept_page_reach_3
+### ✅ compiler » build_kept_page_reach_4
 
 ```
 Name                              ips        average  deviation         median         99th %
-build_kept_page_reach/3        565.97        1.77 ms    ±11.77%        1.72 ms        2.41 ms
+build_kept_page_reach/4        565.97        1.77 ms    ±11.77%        1.72 ms        2.41 ms
 ```
 
 
@@ -110,11 +110,11 @@ build_queries/3       18.46 K       54.17 μs    ±15.05%       51.46 μs       
 ```
 
 
-### ✅ compiler » build_sync_constants_3
+### ✅ compiler » build_sync_constants_2
 
 ```
 Name                             ips        average  deviation         median         99th %
-build_sync_constants/3        2.17 K      460.90 μs     ±8.88%      454.92 μs      549.11 μs
+build_sync_constants/2        2.17 K      460.90 μs     ±8.88%      454.92 μs      549.11 μs
 ```
 
 
