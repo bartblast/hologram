@@ -952,6 +952,8 @@ defmodule Hologram.Job.WorkerTest do
       queues = start_queues(%{})
       start_worker_on!(queues, poll_interval_ms: @poll_interval_ms)
 
+      # Past the look as it starts, so only a poll can find the job.
+      await_first_look()
       add_jobs(queues, Module1, ["a"])
 
       assert_receive {:ran, Module1, "a"}, @timeout_ms
