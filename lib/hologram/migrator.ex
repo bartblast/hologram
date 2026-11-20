@@ -291,8 +291,10 @@ defmodule Hologram.Migrator do
   tables, and the marker are created, and :claimed is returned. A database whose marker
   matches the given context returns :managed. Every other state raises with a specific
   message: Hologram schemas without a marker, a marker belonging to another app or env,
-  or a database managed by schema reconciliation - dev's mechanism, which never shares a
-  database with production.
+  a database managed by schema reconciliation - dev's mechanism, which never shares a
+  database with production - or system tables at a newer layout than the running one (see
+  Hologram.DB.SchemaReconciler.system_schema_version/1, which reads the context's optional
+  :system_upgrades).
 
   The migration lock is the caller's to hold - run/3 takes it before this runs and keeps it
   for the whole procedure. That exclusion is what makes a virgin database safe, since it is
@@ -838,6 +840,7 @@ defmodule Hologram.Migrator do
                 "the migration applier never touches it"
 
       true ->
+        SchemaReconciler.check_system_schema_version!(marker, context)
         :managed
     end
   end
@@ -846,15 +849,10 @@ defmodule Hologram.Migrator do
 
   defp check_unique_keys!(_op), do: :ok
 
-  # The one path that builds the system tables, and so the one that decides which columns a
-  # database has forever: a database already claimed goes through check_marker!/1 above, which
-  # reads the marker and changes nothing. So a column added here later - `model_hash` on the
-  # migration table is one - reaches virgin databases only, and the first write that needs it
-  # fails on one claimed before it existed.
-  #
-  # Deliberate while the data layer is unreleased, and owed at its first release together with the
-  # bump it belongs to - see `@system_schema_version` in Hologram.DB.SchemaReconciler, which
-  # carries the whole reasoning. Until then a stale database is dropped and recreated.
+  # The one path that builds the system tables, at the running layout. A database already claimed
+  # goes through check_marker!/1 above, which refuses a newer layout and changes nothing - so a
+  # system table change reaches virgin databases only, which is what it takes until the data
+  # layer's first release (see Hologram.DB.SchemaReconciler.system_schema_upgrades/0).
   defp claim(context) do
     {:ok, _result} = Connection.query(~s(CREATE SCHEMA "#{Mapper.system_schema()}"))
     {:ok, _result} = Connection.query(~s(CREATE SCHEMA "#{Mapper.data_schema()}"))
@@ -866,6 +864,7 @@ defmodule Hologram.Migrator do
       env: context.env,
       managed_by: @managed_by,
       hologram_version: context.hologram_version,
+      system_schema_version: SchemaReconciler.system_schema_version(context),
       last_reconciled_at: context.timestamp
     })
 

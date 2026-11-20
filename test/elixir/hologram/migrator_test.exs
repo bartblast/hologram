@@ -32,6 +32,7 @@ defmodule Hologram.MigratorTest do
       env: @context.env,
       managed_by: managed_by,
       hologram_version: @context.hologram_version,
+      system_schema_version: 1,
       last_reconciled_at: @context.timestamp
     })
   end
@@ -962,10 +963,49 @@ defmodule Hologram.MigratorTest do
       assert applied_versions() == MapSet.new()
     end
 
+    test "claims a virgin database at the running layout" do
+      ensure_managed!(Map.put(@context, :system_upgrades, [{2, []}, {3, []}]))
+
+      assert SchemaReconciler.read_marker().system_schema_version == 3
+    end
+
     test "returns :managed when the marker matches the context" do
       ensure_managed!(@context)
 
       assert ensure_managed!(@context) == :managed
+    end
+
+    test "raises for system tables at a newer layout than the running one" do
+      claim_as("migrations")
+
+      {:ok, _result} =
+        Connection.query(~s(UPDATE "hologram_system"."database" SET "system_schema_version" = 3))
+
+      expected_msg =
+        "the configured database's system tables are at layout version 3, from a newer " <>
+          "Hologram - this Hologram knows layout versions up to 2 - upgrade Hologram or " <>
+          "point the config at another database"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        ensure_managed!(Map.put(@context, :system_upgrades, [{2, []}]))
+      end
+    end
+
+    test "raises for another app ahead of a newer layout" do
+      claim_as("migrations")
+
+      {:ok, _result} =
+        Connection.query(~s(UPDATE "hologram_system"."database" SET "system_schema_version" = 3))
+
+      expected_msg =
+        "the configured database belongs to app \"hologram\" - " <>
+          "the current app is \"other_app\" - point the config at the right database"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        @context
+        |> Map.merge(%{otp_app: "other_app", system_upgrades: [{2, []}]})
+        |> ensure_managed!()
+      end
     end
 
     test "raises for Hologram schemas without a marker" do

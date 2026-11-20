@@ -224,6 +224,11 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       )
   end
 
+  defp set_system_schema_version(version) do
+    statement = ~s(UPDATE "hologram_system"."database" SET "system_schema_version" = $1)
+    {:ok, _result} = Connection.query(statement, [version])
+  end
+
   # What a reconciliation converges to: the model's schema with the index plan the context leaves to
   # the reconciler, the framework's own lookups'.
   defp expected_schema(context) do
@@ -610,11 +615,50 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       assert registry() == MapSet.new()
     end
 
+    test "claims a virgin database at the running layout" do
+      drop_hologram_schemas()
+
+      ensure_managed!(Map.put(@context, :system_upgrades, [{2, []}, {3, []}]))
+
+      assert read_marker().system_schema_version == 3
+    end
+
     test "returns :managed when the marker matches the context" do
       drop_hologram_schemas()
       ensure_managed!(@context)
 
       assert ensure_managed!(@context) == :managed
+    end
+
+    test "raises when the system tables are at a newer layout than the running one" do
+      drop_hologram_schemas()
+      ensure_managed!(@context)
+      set_system_schema_version(3)
+
+      expected_msg =
+        "the configured database's system tables are at layout version 3, from a newer " <>
+          "Hologram - this Hologram knows layout versions up to 2 - upgrade Hologram or " <>
+          "point the config at another database"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        ensure_managed!(Map.put(@context, :system_upgrades, [{2, []}]))
+      end
+    end
+
+    test "names another app ahead of a newer layout" do
+      drop_hologram_schemas()
+      ensure_managed!(@context)
+      set_system_schema_version(3)
+
+      expected_msg =
+        "the configured database belongs to app \"hologram\" - " <>
+          "the current app is \"other_app\" - point the config at the right database"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        @context
+        |> Map.merge(%{otp_app: "other_app", system_upgrades: [{2, []}]})
+        |> ensure_managed!()
+      end
     end
 
     test "raises when Hologram schemas exist without a marker" do
@@ -716,6 +760,29 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       assert Introspection.schema() == expected_schema(context)
       assert {:table, "", "test_fixtures_entity_module1"} in registry()
       assert read_marker().last_reconciled_at == @context.timestamp
+    end
+
+    test "refreshes the marker and leaves its layout version as it was" do
+      reconcile(reconcile_context([Module1]))
+      set_system_schema_version(0)
+
+      context =
+        [Module1]
+        |> reconcile_context()
+        |> Map.merge(%{
+          hologram_version: "0.6.0",
+          timestamp: ~U[2026-07-21 08:00:00.000000Z],
+          system_upgrades: []
+        })
+
+      reconcile(context)
+
+      assert read_marker() == %{
+               @marker
+               | hologram_version: "0.6.0",
+                 system_schema_version: 0,
+                 last_reconciled_at: ~U[2026-07-21 08:00:00.000000Z]
+             }
     end
 
     test "returns no ops when the schema already matches" do
@@ -1965,6 +2032,31 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     end
   end
 
+  describe "system_schema_upgrades/0" do
+    # What a later release's step has to follow, so a claimed database's version can never skip
+    # a step or run one twice.
+    test "numbers its steps one above the last, from 2" do
+      steps = system_schema_upgrades()
+
+      expected_versions =
+        steps
+        |> Enum.with_index(2)
+        |> Enum.map(fn {_step, index} -> index end)
+
+      assert Enum.map(steps, fn {version, _statements} -> version end) == expected_versions
+    end
+  end
+
+  describe "system_schema_version/1" do
+    test "is 1 without upgrade steps" do
+      assert system_schema_version(%{system_upgrades: []}) == 1
+    end
+
+    test "is the last upgrade step's version" do
+      assert system_schema_version(%{system_upgrades: [{2, []}, {3, []}]}) == 3
+    end
+  end
+
   describe "update_registry/1" do
     setup do
       {:ok, _result} = Connection.query(~s(DELETE FROM "hologram_system"."schema_object"))
@@ -2141,10 +2233,10 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   end
 
   describe "write_marker/1" do
-    test "stamps the writer's system schema layout version over the given one" do
-      write_marker(%{@marker | system_schema_version: 99})
+    test "writes the given layout version" do
+      write_marker(%{@marker | system_schema_version: 7})
 
-      assert read_marker().system_schema_version == 1
+      assert read_marker().system_schema_version == 7
     end
 
     test "replaces the previous marker row" do
