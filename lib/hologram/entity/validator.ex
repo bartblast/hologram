@@ -562,7 +562,8 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the options given to the use Hologram.Job directive at compile time.
 
-  Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys).
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys,
+  a :max_concurrency that is not a positive integer literal).
   """
   @spec validate_use_job_opts!(module, T.opts()) :: :ok
   def validate_use_job_opts!(module, opts) do
@@ -572,10 +573,21 @@ defmodule Hologram.Entity.Validator do
           "invalid options #{inspect(opts)} for use Hologram.Job in #{inspect(module)} - options must be a keyword list"
     end
 
-    Enum.each(opts, fn {key, _value} ->
-      raise Hologram.CompileError,
-        message:
-          "unknown option #{inspect(key)} for use Hologram.Job in #{inspect(module)} - use Hologram.Job takes no options"
+    # The options are the use line's code, unevaluated: an integer literal is an integer here, and a
+    # negative one is a call to -, so the guard refuses it with every other non-integer.
+    Enum.each(opts, fn
+      {:max_concurrency, value} when is_integer(value) and value > 0 ->
+        :ok
+
+      {:max_concurrency, value} ->
+        raise Hologram.CompileError,
+          message:
+            "invalid max_concurrency #{Macro.to_string(value)} for use Hologram.Job in #{inspect(module)} - it must be a positive integer, written as a literal"
+
+      {key, _value} ->
+        raise Hologram.CompileError,
+          message:
+            "unknown option #{inspect(key)} for use Hologram.Job in #{inspect(module)} - use Hologram.Job takes only :max_concurrency"
     end)
 
     :ok

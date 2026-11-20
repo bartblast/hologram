@@ -14,15 +14,19 @@ defmodule Hologram.Sync.Gate do
 
   use GenServer
 
-  @default_catchups_at_once 4
+  @catchups_at_once 4
 
   @doc """
-  Starts the gate, letting in as many catch-ups at once as `catchups_at_once/0` answers when it
-  starts.
+  Starts the gate, letting in as many catch-ups at once as `catchups_at_once/0` answers.
+
+  `:limit` lets in another number at once. Only tests give it, to fill the gate with a few
+  catch-ups.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, nil, name: Keyword.get(opts, :name, __MODULE__))
+    limit = Keyword.get(opts, :limit, catchups_at_once())
+
+    GenServer.start_link(__MODULE__, limit, name: Keyword.get(opts, :name, __MODULE__))
   end
 
   @doc """
@@ -40,33 +44,13 @@ defmodule Hologram.Sync.Gate do
   end
 
   @doc """
-  Returns how many catch-ups a node runs at once: the `:catchups_at_once` key of the `:sync`
-  config, 4 by default. Anything but a positive integer raises: a gate letting nobody in would
-  leave every returning client waiting forever, with nothing to say so.
+  Returns how many catch-ups a node runs at once: 4.
 
   A fixed number rather than one worked out from the node, so the database connections they take
   can be counted per node.
   """
   @spec catchups_at_once() :: pos_integer
-  def catchups_at_once do
-    configured =
-      :hologram
-      |> Application.get_env(:sync, [])
-      |> Keyword.get(:catchups_at_once)
-
-    case configured do
-      nil ->
-        @default_catchups_at_once
-
-      count when is_integer(count) and count > 0 ->
-        count
-
-      other ->
-        raise ArgumentError,
-              "config :hologram, :sync, catchups_at_once: expects a positive integer, " <>
-                "got: #{inspect(other)}"
-    end
-  end
+  def catchups_at_once, do: @catchups_at_once
 
   @doc """
   Tells the given gate the calling process is done, which lets the next one in.
@@ -81,8 +65,8 @@ defmodule Hologram.Sync.Gate do
   # comes - taking it out of the queue would cost a pass over everyone waiting, and a deploy can
   # leave tens of thousands waiting while tabs close among them.
   @impl GenServer
-  def init(nil) do
-    {:ok, %{holders: %{}, limit: catchups_at_once(), queue: :queue.new(), waiting: MapSet.new()}}
+  def init(limit) do
+    {:ok, %{holders: %{}, limit: limit, queue: :queue.new(), waiting: MapSet.new()}}
   end
 
   @impl GenServer

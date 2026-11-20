@@ -79,7 +79,7 @@ defmodule Hologram.Job.RunnerClaimFailureTest do
     other = start_run_lock(scratch_opts)
     row = route(scratch, fn -> EntityOperations.get(Module1, job.id) end)
 
-    assert RunLock.acquire(other, job.id)
+    assert RunLock.acquire(other, lock_name(Module1, job.id))
     assert row.status == :queued
   end
 

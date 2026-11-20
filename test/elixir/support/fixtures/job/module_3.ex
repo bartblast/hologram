@@ -23,7 +23,6 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
       :ok_tuple,
       :raise,
       :record_actor,
-      :record_order,
       :swept,
       :throw
     ]
@@ -70,13 +69,7 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
     :ok
   end
 
-  def run(%{outcome: :record_order} = job) do
-    Process.put(:ran_order, [job.id | Process.get(:ran_order, [])])
-
-    :ok
-  end
-
-  # Fails its own row, standing for a pass on another node that found the run's lock gone.
+  # Fails its own row, standing for a sweep on another node that found the run's lock gone.
   def run(%{outcome: :swept} = job) do
     :ok = EntityOperations.update(__MODULE__, job.id, %{error: "swept", status: :failed})
 
