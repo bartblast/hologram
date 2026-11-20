@@ -3,13 +3,16 @@ defmodule Hologram.Sync.LensTest do
 
   import Hologram.Sync.Lens
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.Entity.Metadata
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Lens
+  alias Hologram.Test.Fixtures.Entity.Module21
   alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Entity.Module34
   alias Hologram.Test.Fixtures.Entity.Module39
+  alias Hologram.Test.Fixtures.Entity.Module40
 
   # Op maps as `use Hologram.Migration` records them. The lens reads only the ops, so the modules
   # they name need not exist.
@@ -59,11 +62,11 @@ defmodule Hologram.Sync.LensTest do
           %{op: :add_role, entity: @stop, name: :guide, opts: []}
         ])
 
-      assert old_type(lens, @stop) == :new
-      assert old_attribute(lens, @stop, :city) == :new
-      assert old_relationship(lens, @stop, :trip) == :new
-      assert old_enum_value(lens, @stop, :kind, :bus) == :new
-      assert old_role(lens, @stop, :guide) == :new
+      assert old_type(lens, @stop) == new_since()
+      assert old_attribute(lens, @stop, :city) == new_since()
+      assert old_relationship(lens, @stop, :trip) == new_since()
+      assert old_enum_value(lens, @stop, :kind, :bus) == new_since()
+      assert old_role(lens, @stop, :guide) == new_since()
       assert old_type(lens, @trip) == @trip
     end
 
@@ -96,14 +99,14 @@ defmodule Hologram.Sync.LensTest do
           %{op: :rename_entity, from: @stop, to: @journey}
         ])
 
-      assert old_type(lens, @journey) == :new
-      assert old_attribute(lens, @journey, :city) == :new
+      assert old_type(lens, @journey) == new_since()
+      assert old_attribute(lens, @journey, :city) == new_since()
     end
 
     test "an added attribute is new" do
       lens = lens!([%{op: :add_attribute, entity: @trip, name: :notes, type: :string, opts: []}])
 
-      assert old_attribute(lens, @trip, :notes) == :new
+      assert old_attribute(lens, @trip, :notes) == new_since()
       assert old_attribute(lens, @trip, :destination) == :destination
     end
 
@@ -141,7 +144,7 @@ defmodule Hologram.Sync.LensTest do
         ])
 
       assert old_attribute(lens, @trip, :place) == :destination
-      assert old_attribute(lens, @trip, :destination) == :new
+      assert old_attribute(lens, @trip, :destination) == new_since()
     end
 
     test "an added attribute renamed later stays new" do
@@ -151,7 +154,7 @@ defmodule Hologram.Sync.LensTest do
           %{op: :rename_attribute, entity: @trip, from: :notes, to: :remarks}
         ])
 
-      assert old_attribute(lens, @trip, :remarks) == :new
+      assert old_attribute(lens, @trip, :remarks) == new_since()
     end
 
     test "an added relationship is new, a renamed one keeps its old name" do
@@ -161,7 +164,7 @@ defmodule Hologram.Sync.LensTest do
           %{op: :rename_relationship, entity: @trip, from: :owner, to: :organizer}
         ])
 
-      assert old_relationship(lens, @trip, :stops) == :new
+      assert old_relationship(lens, @trip, :stops) == new_since()
       assert old_relationship(lens, @trip, :organizer) == :owner
       assert old_relationship(lens, @trip, :owner) == :owner
     end
@@ -173,9 +176,19 @@ defmodule Hologram.Sync.LensTest do
           %{op: :rename_enum_value, entity: @trip, attribute: :status, from: :done, to: :finished}
         ])
 
-      assert old_enum_value(lens, @trip, :status, :cancelled) == :new
+      assert old_enum_value(lens, @trip, :status, :cancelled) == new_since()
       assert old_enum_value(lens, @trip, :status, :finished) == :done
       assert old_enum_value(lens, @trip, :status, :draft) == :draft
+    end
+
+    test "an enum value named new that the walk never touched is itself" do
+      lens =
+        lens!([
+          %{op: :add_enum_value, entity: @trip, attribute: :status, value: :closed, opts: []}
+        ])
+
+      assert old_enum_value(lens, @trip, :status, :new) == :new
+      assert old_enum_value(lens, @trip, :status, :closed) == new_since()
     end
 
     test "an enum value renamed and back is itself" do
@@ -202,7 +215,7 @@ defmodule Hologram.Sync.LensTest do
           %{op: :rename_enum_value, entity: @trip, attribute: :state, from: :done, to: :finished}
         ])
 
-      assert old_enum_value(lens, @trip, :state, :cancelled) == :new
+      assert old_enum_value(lens, @trip, :state, :cancelled) == new_since()
       assert old_enum_value(lens, @trip, :state, :finished) == :done
       assert old_enum_value(lens, @trip, :status, :cancelled) == :cancelled
     end
@@ -213,7 +226,7 @@ defmodule Hologram.Sync.LensTest do
           %{op: :add_attribute, entity: @trip, name: :kind, type: :enum, opts: [values: [:a]]}
         ])
 
-      assert old_enum_value(lens, @trip, :kind, :a) == :new
+      assert old_enum_value(lens, @trip, :kind, :a) == new_since()
     end
 
     test "an added entity role is new, a renamed one keeps its old name" do
@@ -223,7 +236,7 @@ defmodule Hologram.Sync.LensTest do
           %{op: :rename_role, entity: @trip, from: :editor, to: :maintainer}
         ])
 
-      assert old_role(lens, @trip, :guide) == :new
+      assert old_role(lens, @trip, :guide) == new_since()
       assert old_role(lens, @trip, :maintainer) == :editor
       assert old_role(lens, @trip, :owner) == :owner
       assert old_role(lens, @stop, :maintainer) == :maintainer
@@ -238,7 +251,7 @@ defmodule Hologram.Sync.LensTest do
           %{op: :rename_role, from: @admin, to: @staff}
         ])
 
-      assert old_global_role(lens, auditor) == :new
+      assert old_global_role(lens, auditor) == new_since()
       assert old_global_role(lens, @staff) == @admin
       assert old_global_role(lens, @admin) == @admin
     end
@@ -295,7 +308,7 @@ defmodule Hologram.Sync.LensTest do
             model
           )
 
-        assert old_attribute(lens, @trip, :budget) == :new
+        assert old_attribute(lens, @trip, :budget) == new_since()
       end
     end
 
@@ -312,7 +325,7 @@ defmodule Hologram.Sync.LensTest do
           model
         )
 
-      assert old_attribute(lens, @journey, :cost) == :new
+      assert old_attribute(lens, @journey, :cost) == new_since()
     end
 
     test "an attribute the tab could read turned server-only off changes nothing" do
@@ -428,7 +441,7 @@ defmodule Hologram.Sync.LensTest do
   # The fixtures the translation reads: Module39 has an enum `kind` (:guest, :staff), a to-one
   # `member` and a to-many `mentors`, both of Module34. Module30 has a to-many `follows` with its
   # inverse `followers`, and a to-one `parent` with its inverse `replies`.
-  @entity_types [Module30, Module34, Module39]
+  @entity_types [Module30, Module34, Module39, RoleGrant]
 
   @id_1 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e01"
   @id_2 "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e02"
@@ -703,6 +716,84 @@ defmodule Hologram.Sync.LensTest do
       assert deltas(lens, [put]) == [put]
     end
 
+    test "a grant takes the old labels of its entity type and role" do
+      lens =
+        resolved!([
+          %{op: :rename_role, entity: Module39, from: :editor, to: :maintainer},
+          %{op: :rename_entity, from: MyApp.Member, to: Module34},
+          %{op: :rename_role, from: MyApp.Roles.Admin, to: MyApp.Roles.Staff}
+        ])
+
+      grant = fn entity_type, entity_id, role ->
+        %{
+          data: %{
+            entity_id: entity_id,
+            entity_type: entity_type && label(entity_type),
+            id: @id_1,
+            role: role,
+            user_id: @id_2
+          },
+          id: @id_1,
+          op: :put_entity,
+          type: label(RoleGrant)
+        }
+      end
+
+      [on_row, type_wide, global, untouched] =
+        deltas(lens, [
+          grant.(Module39, @id_2, "maintainer"),
+          grant.(Module34, nil, "member"),
+          grant.(nil, nil, "MyApp.Roles.Staff"),
+          grant.(Module30, @id_2, "maintainer")
+        ])
+
+      assert {on_row.data.entity_type, on_row.data.role} == {label(Module39), "editor"}
+      assert {type_wide.data.entity_type, type_wide.data.role} == {"MyApp.Member", "member"}
+      assert {global.data.entity_type, global.data.role} == {nil, "MyApp.Roles.Admin"}
+      assert {untouched.data.entity_type, untouched.data.role} == {label(Module30), "maintainer"}
+    end
+
+    test "a grants keep list passes as it is" do
+      lens = resolved!([%{op: :add_role, entity: Module39, name: :guide, opts: []}])
+
+      keep = %{
+        data: %{hashes: ["0123456789abcdef"], salt: "s"},
+        op: :keep_hashed,
+        type: label(RoleGrant)
+      }
+
+      assert deltas(lens, [keep]) == [keep]
+    end
+
+    test "a grant of a role or an entity type new since is dropped" do
+      lens =
+        resolved!([
+          %{op: :add_role, entity: Module39, name: :guide, opts: []},
+          %{op: :create_entity, entity: Module30},
+          %{op: :add_role, role: MyApp.Roles.Auditor, opts: []}
+        ])
+
+      grant = fn entity_type, role ->
+        %{
+          data: %{
+            entity_type: entity_type && label(entity_type),
+            id: @id_1,
+            role: role,
+            user_id: @id_2
+          },
+          id: @id_1,
+          op: :put_entity,
+          type: label(RoleGrant)
+        }
+      end
+
+      assert deltas(lens, [
+               grant.(Module39, "guide"),
+               grant.(Module30, "owner"),
+               grant.(nil, "MyApp.Roles.Auditor")
+             ]) == []
+    end
+
     test "a types marker names the old types, without those new since" do
       lens =
         resolved!([
@@ -719,6 +810,155 @@ defmodule Hologram.Sync.LensTest do
 
       assert message(lens, {:sync_synced, :all, "c"}) == {:sync_synced, :all, "c"}
       assert message(lens, {:sync_resync, :model_hash}) == {:sync_resync, :model_hash}
+    end
+  end
+
+  describe "servable?/2" do
+    test "a row holding an enum value new since isn't servable" do
+      lens =
+        lens!([
+          %{op: :add_enum_value, entity: Module39, attribute: :kind, value: :staff, opts: []}
+        ])
+
+      refute servable?(lens, %Module39{kind: :staff})
+      assert servable?(lens, %Module39{kind: :guest})
+      assert servable?(lens, %Module39{kind: nil})
+      assert servable?(lens, %Module34{})
+    end
+
+    test "a row holding an enum value named new that the tab has is servable" do
+      lens =
+        lens!([
+          %{op: :add_enum_value, entity: Module39, attribute: :kind, value: :staff, opts: []}
+        ])
+
+      assert servable?(lens, %Module39{kind: :new})
+    end
+
+    test "a row holding an enum value renamed away from new is servable, and told under new" do
+      lens =
+        lens!([
+          %{op: :rename_enum_value, entity: Module39, attribute: :kind, from: :new, to: :guest}
+        ])
+
+      assert servable?(lens, %Module39{kind: :guest})
+
+      put = %{
+        data: %{id: @id_1, kind: "guest"},
+        id: @id_1,
+        op: :put_entity,
+        type: label(Module39)
+      }
+
+      assert deltas(resolve(lens, @entity_types), [put]) == [
+               %{put | data: %{id: @id_1, kind: "new"}}
+             ]
+    end
+
+    test "a row of an enum attribute new since is servable, since the attribute is left out" do
+      lens =
+        lens!([
+          %{op: :add_attribute, entity: Module39, name: :kind, type: :enum, opts: [values: [:a]]},
+          %{op: :add_enum_value, entity: Module39, attribute: :kind, value: :staff, opts: []}
+        ])
+
+      assert servable?(lens, %Module39{kind: :staff})
+    end
+
+    test "a grant naming an entity type or a role new since isn't servable" do
+      lens =
+        lens!([
+          %{op: :add_role, entity: Module39, name: :guide, opts: []},
+          %{op: :create_entity, entity: Module30},
+          %{op: :add_role, role: MyApp.Roles.Auditor, opts: []}
+        ])
+
+      refute servable?(lens, %RoleGrant{entity_type: Module39, role: :guide})
+      refute servable?(lens, %RoleGrant{entity_type: Module30, role: :owner})
+      refute servable?(lens, %RoleGrant{entity_type: nil, role: MyApp.Roles.Auditor})
+      assert servable?(lens, %RoleGrant{entity_type: Module39, role: :owner})
+      assert servable?(lens, %RoleGrant{entity_type: nil, role: MyApp.Roles.Admin})
+    end
+  end
+
+  describe "withholds?/2" do
+    test "a type with an enum value new since can hold rows the tab is kept from" do
+      lens =
+        lens!([
+          %{op: :add_enum_value, entity: Module39, attribute: :kind, value: :staff, opts: []}
+        ])
+
+      assert withholds?(lens, Module39)
+      refute withholds?(lens, Module34)
+      refute withholds?(lens, RoleGrant)
+    end
+
+    test "a type's enum values new since keep nothing from the tab when it never gets them" do
+      new_attribute = [
+        %{op: :add_attribute, entity: Module39, name: :kind, type: :enum, opts: [values: [:a]]},
+        %{op: :add_enum_value, entity: Module39, attribute: :kind, value: :staff, opts: []}
+      ]
+
+      new_type = [
+        %{op: :create_entity, entity: Module39},
+        %{op: :add_enum_value, entity: Module39, attribute: :kind, value: :staff, opts: []}
+      ]
+
+      refute withholds?(lens!(new_attribute), Module39)
+      refute withholds?(lens!(new_type), Module39)
+    end
+
+    test "a server-only attribute's values new since keep nothing from the tab" do
+      # Module21's `balance` is server-only. The lens takes the ops as they come, so a value added
+      # to it stands for one added to a server-only enum attribute, which the tab is never sent.
+      lens =
+        lens!([
+          %{op: :add_enum_value, entity: Module21, attribute: :balance, value: :x, opts: []}
+        ])
+
+      refute withholds?(lens, Module21)
+      assert servable?(lens, %Module21{balance: :x})
+    end
+
+    test "grants can be kept from the tab once a role or an entity type is new" do
+      refute withholds?(
+               lens!([%{op: :rename_role, entity: Module39, from: :a, to: :b}]),
+               RoleGrant
+             )
+
+      assert withholds?(
+               lens!([%{op: :add_role, entity: Module39, name: :guide, opts: []}]),
+               RoleGrant
+             )
+
+      assert withholds?(lens!([%{op: :add_role, role: MyApp.Roles.Auditor, opts: []}]), RoleGrant)
+      assert withholds?(lens!([%{op: :create_entity, entity: Module30}]), RoleGrant)
+    end
+  end
+
+  describe "servable_members/2" do
+    test "a set leaves out the rows the tab is kept from" do
+      lens =
+        lens!([
+          %{op: :add_enum_value, entity: Module39, attribute: :kind, value: :staff, opts: []}
+        ])
+
+      staff = %Module39{id: @id_1, kind: :staff}
+      guest = %Module39{id: @id_2, kind: :guest}
+
+      # Module40's `players` holds Module39 rows.
+      row = %Module40{players: [staff, guest]}
+
+      assert servable_members(lens, row) == %Module40{players: [guest]}
+    end
+
+    test "a set not read with the row is left as it is" do
+      lens =
+        lens!([
+          %{op: :add_enum_value, entity: Module39, attribute: :kind, value: :staff, opts: []}
+        ])
+
+      assert servable_members(lens, %Module40{}) == %Module40{}
     end
   end
 

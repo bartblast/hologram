@@ -13,17 +13,19 @@ defmodule Hologram.Sync.Lens do
   # makes the chain unservable, and the tab is told to reload as before.
   #
   # The state is keyed by the names the model has at each step of the walk, and maps each to its
-  # name at the tab's point, or :new. A name the walk never touched is absent and means itself, so
-  # a chain renaming one attribute costs one entry, whatever the size of the model. The model term
-  # at the tab's point answers the two things the ops can't: whether an attribute turned
-  # server-only off was server-only for the tab, and which entity type the tab took as its user.
+  # name at the tab's point, or a marker saying it is new since (see `new_since/0`). A name the
+  # walk never touched is absent and means itself, so a chain renaming one attribute costs one
+  # entry, whatever the size of the model. The model term at the tab's point answers the two things
+  # the ops can't: whether an attribute turned server-only off was server-only for the tab, and
+  # which entity type the tab took as its user.
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.Entity
 
   defstruct global_roles: %{}, resolved: nil, types: %{}
 
-  @type old(name) :: name | :new
+  @type old(name) :: name | :"$new"
 
   @type t :: %__MODULE__{
           global_roles: %{module => old(module)},
@@ -31,11 +33,20 @@ defmodule Hologram.Sync.Lens do
           types: %{module => type_entry}
         }
 
+  # What the lens answers for a name new since. An atom no declared name can be: attribute and
+  # relationship names can't hold a `$`, enum values and entity role names begin with a lowercase
+  # letter or an underscore unless they are modules, and entity types and global roles are
+  # modules.
+  @new :"$new"
+
   # The lens in what a frame spells: labels, wire keys and encoded enum values (see `resolve/2`).
   @type resolved :: %{
-          entity_types: MapSet.t(module),
           by_label: %{String.t() => module},
           by_old_label: %{String.t() => module},
+          entity_types: MapSet.t(module),
+          grant_global_roles: %{String.t() => old(String.t())},
+          grant_roles: %{String.t() => %{String.t() => old(String.t())}},
+          grant_types: %{String.t() => old(String.t())},
           wire: %{module => wire_entry}
         }
 
@@ -45,6 +56,8 @@ defmodule Hologram.Sync.Lens do
           keys: %{atom => old(atom)},
           label: old(String.t())
         }
+
+  @grant_label Codec.encode_enum_value(RoleGrant)
 
   # What a frame spells of a type the lens changes nothing of, bar its label.
   @untouched_wire %{edges: %{}, enums: %{}, keys: %{}, label: nil}
@@ -134,7 +147,11 @@ defmodule Hologram.Sync.Lens do
   condition, so one whose condition the tab's rules spell the same way keeps its key and meaning,
   and one they spell otherwise is a key the tab never asks for.
 
-  A row holding an enum value new since has no label the tab knows: it goes as a dropped delta.
+  A grant's entity type and role take their old labels too: an entity role is named per entity
+  type, a global role by its module when the grant names no entity type.
+
+  A row the tab can't be told about (see `servable?/2`) is to be kept from it before this: one
+  reaching here goes as a dropped delta rather than with a label the tab doesn't know.
   """
   @spec message(t, tuple) :: tuple
   def message(lens, {:sync_deltas, cursor, deltas, claim}) do
@@ -145,7 +162,7 @@ defmodule Hologram.Sync.Lens do
     old_types =
       types
       |> Enum.map(&old_type(lens, &1))
-      |> Enum.reject(&(&1 == :new))
+      |> Enum.reject(&(&1 == @new))
 
     {:sync_synced, {:types, old_types}, cursor}
   end
@@ -167,9 +184,9 @@ defmodule Hologram.Sync.Lens do
 
     # A type new since is dropped whatever its module declares, listed or not.
     new_types =
-      for {entity_type, %{old: :new}} <- lens.types,
+      for {entity_type, %{old: @new}} <- lens.types,
           into: %{},
-          do: {entity_type, %{@untouched_wire | label: :new}}
+          do: {entity_type, %{@untouched_wire | label: @new}}
 
     wire =
       entity_types
@@ -181,7 +198,7 @@ defmodule Hologram.Sync.Lens do
     # A renamed type the current model lists, so the two ways `current_type/2` answers agree.
     by_old_label =
       for {entity_type, %{old: old}} <- lens.types,
-          old != :new,
+          old != @new,
           MapSet.member?(current_types, entity_type),
           into: %{},
           do: {label(old), entity_type}
@@ -190,6 +207,17 @@ defmodule Hologram.Sync.Lens do
       by_label: Map.new(wire, fn {entity_type, _entry} -> {label(entity_type), entity_type} end),
       by_old_label: by_old_label,
       entity_types: current_types,
+      grant_global_roles:
+        Map.new(lens.global_roles, fn {role, old} -> {label(role), old_label(old)} end),
+      grant_roles:
+        Map.new(lens.types, fn {entity_type, entry} ->
+          {label(entity_type),
+           Map.new(entry.roles, fn {role, old} -> {label(role), old_label(old)} end)}
+        end),
+      grant_types:
+        Map.new(lens.types, fn {entity_type, entry} ->
+          {label(entity_type), old_label(entry.old)}
+        end),
       wire: wire
     }
 
@@ -197,20 +225,92 @@ defmodule Hologram.Sync.Lens do
   end
 
   @doc """
-  Returns what the tab calls the given attribute of the given entity type, or :new.
+  Returns the given row with the rows of its to-many sets the tab can't be told about left out
+  (see `servable?/2`), so no set it is sent names a row it is kept from.
+  """
+  @spec servable_members(t, struct) :: struct
+  def servable_members(lens, %entity_type{} = row) do
+    to_many = for {name, [_target], _opts} <- entity_type.__relationships__(), do: name
+    inverses = for {name, _type, _opts} <- entity_type.__inverse_relationships__(), do: name
+
+    Enum.reduce(to_many ++ inverses, row, fn name, acc ->
+      case Map.get(acc, name) do
+        members when is_list(members) ->
+          Map.put(acc, name, Enum.filter(members, &servable?(lens, &1)))
+
+        _not_a_set ->
+          acc
+      end
+    end)
+  end
+
+  @doc """
+  Returns whether the tab can be told about the given row: not when it holds an enum value new
+  since, which the tab's code has no label for, nor for a role grant naming an entity type or a
+  role new since.
+  """
+  @spec servable?(t, struct) :: boolean
+  def servable?(lens, %RoleGrant{entity_type: nil, role: role}) do
+    old_global_role(lens, role) != @new
+  end
+
+  def servable?(lens, %RoleGrant{entity_type: entity_type, role: role}) do
+    old_type(lens, entity_type) != @new and old_role(lens, entity_type, role) != @new
+  end
+
+  def servable?(lens, %entity_type{} = row) do
+    lens
+    |> sent_enums(entity_type)
+    |> Enum.all?(fn {attribute, values} ->
+      value = Map.get(row, attribute)
+
+      is_nil(value) or not is_atom(value) or Map.get(values, value, value) != @new
+    end)
+  end
+
+  @doc """
+  Returns whether the tab can be kept from some row of the given entity type (see `servable?/2`) -
+  which a caller holding only ids has to read rows to find out.
+  """
+  @spec withholds?(t, module) :: boolean
+  def withholds?(lens, RoleGrant) do
+    Enum.any?(lens.global_roles, fn {_role, old} -> old == @new end) or
+      Enum.any?(lens.types, fn {_entity_type, entry} ->
+        entry.old == @new or Enum.any?(entry.roles, fn {_role, old} -> old == @new end)
+      end)
+  end
+
+  def withholds?(lens, entity_type) do
+    lens
+    |> sent_enums(entity_type)
+    |> Enum.any?(fn {_attribute, values} ->
+      Enum.any?(values, fn {_value, old} -> old == @new end)
+    end)
+  end
+
+  @doc """
+  Returns what the lens answers for a name new since, which the tab's model doesn't have.
+  """
+  @spec new_since() :: :"$new"
+  def new_since, do: @new
+
+  @doc """
+  Returns what the tab calls the given attribute of the given entity type, or the new-since
+  marker (see `new_since/0`).
   """
   @spec old_attribute(t, module, atom) :: old(atom)
   def old_attribute(lens, entity_type, name), do: old_member(lens, entity_type, :attributes, name)
 
   @doc """
   Returns what the tab calls the given value of the given enum attribute of the given entity type,
-  or :new - for a value added since, or a value of an attribute or a type added since.
+  or the new-since marker - for a value added since, or a value of an attribute or a type added
+  since.
   """
   @spec old_enum_value(t, module, atom, atom) :: old(atom)
   def old_enum_value(lens, entity_type, attribute, value) do
     case old_attribute(lens, entity_type, attribute) do
-      :new ->
-        :new
+      @new ->
+        @new
 
       _old_attribute ->
         values = Map.get(type_entry(lens, entity_type).enums, attribute, %{})
@@ -220,13 +320,14 @@ defmodule Hologram.Sync.Lens do
   end
 
   @doc """
-  Returns what the tab calls the given global role module, or :new.
+  Returns what the tab calls the given global role module, or the new-since marker.
   """
   @spec old_global_role(t, module) :: old(module)
   def old_global_role(lens, role), do: Map.get(lens.global_roles, role, role)
 
   @doc """
-  Returns what the tab calls the given relationship of the given entity type, or :new.
+  Returns what the tab calls the given relationship of the given entity type, or the new-since
+  marker.
   """
   @spec old_relationship(t, module, atom) :: old(atom)
   def old_relationship(lens, entity_type, name) do
@@ -234,13 +335,13 @@ defmodule Hologram.Sync.Lens do
   end
 
   @doc """
-  Returns what the tab calls the given role of the given entity type, or :new.
+  Returns what the tab calls the given role of the given entity type, or the new-since marker.
   """
   @spec old_role(t, module, atom) :: old(atom)
   def old_role(lens, entity_type, name), do: old_member(lens, entity_type, :roles, name)
 
   @doc """
-  Returns what the tab calls the given entity type, or :new.
+  Returns what the tab calls the given entity type, or the new-since marker.
   """
   @spec old_type(t, module) :: old(module)
   def old_type(lens, entity_type), do: type_entry(lens, entity_type).old
@@ -249,9 +350,17 @@ defmodule Hologram.Sync.Lens do
     wire = wire_for(lens, label)
 
     cond do
-      wire.label == :new -> []
-      Map.has_key?(delta, :data) -> translate_data(%{delta | type: wire.label}, wire)
-      true -> [%{delta | type: wire.label}]
+      wire.label == @new ->
+        []
+
+      label == @grant_label and delta.op in [:put_entity, :patch_entity] ->
+        translate_grant(lens, delta)
+
+      Map.has_key?(delta, :data) ->
+        translate_data(%{delta | type: wire.label}, wire)
+
+      true ->
+        [%{delta | type: wire.label}]
     end
   end
 
@@ -261,9 +370,17 @@ defmodule Hologram.Sync.Lens do
     ArgumentError -> nil
   end
 
+  defp grant_role(resolved, nil, role), do: Map.get(resolved.grant_global_roles, role, role)
+
+  defp grant_role(resolved, type_label, role) do
+    resolved.grant_roles
+    |> Map.get(type_label, %{})
+    |> Map.get(role, role)
+  end
+
   defp label(module), do: Codec.encode_enum_value(module)
 
-  defp old_label(:new), do: :new
+  defp old_label(@new), do: @new
 
   defp old_label(name), do: label(name)
 
@@ -277,7 +394,7 @@ defmodule Hologram.Sync.Lens do
   defp translate_data(%{op: op, data: data} = delta, wire)
        when op in [:add_relationship, :del_relationship] do
     case Map.get(wire.edges, data.relationship, data.relationship) do
-      :new -> []
+      @new -> []
       old -> [%{delta | data: %{data | relationship: old}}]
     end
   end
@@ -291,7 +408,7 @@ defmodule Hologram.Sync.Lens do
     translated =
       Enum.reduce_while(data, %{}, fn {key, value}, acc ->
         case translate_field(wire, key, value) do
-          :new -> {:halt, :unservable}
+          @new -> {:halt, :unservable}
           :dropped -> {:cont, acc}
           {old_key, old_value} -> {:cont, Map.put(acc, old_key, old_value)}
         end
@@ -304,11 +421,36 @@ defmodule Hologram.Sync.Lens do
     end
   end
 
+  # A grant's values name what the model declares: its entity type and its role, which is the
+  # entity type's own or, on a grant naming none, a global role. Its own attributes are the
+  # framework's and never change.
+  defp translate_grant(lens, %{data: data} = delta) do
+    resolved = lens.resolved
+    type_label = Map.get(data, :entity_type)
+    old_type = if type_label, do: Map.get(resolved.grant_types, type_label, type_label)
+    old_role = if Map.has_key?(data, :role), do: grant_role(resolved, type_label, data.role)
+
+    if old_type == @new or old_role == @new do
+      []
+    else
+      old_data =
+        data
+        |> replace_present(:entity_type, old_type)
+        |> replace_present(:role, old_role)
+
+      [%{delta | data: old_data}]
+    end
+  end
+
+  defp replace_present(data, key, value) do
+    if Map.has_key?(data, key), do: Map.put(data, key, value), else: data
+  end
+
   defp translate_field(wire, :"$revisions", revisions) do
     old_revisions =
       for {key, revision} <- revisions,
           old_key = Map.get(wire.keys, key, key),
-          old_key != :new,
+          old_key != @new,
           into: %{},
           do: {old_key, revision}
 
@@ -319,8 +461,8 @@ defmodule Hologram.Sync.Lens do
 
   defp translate_field(wire, key, value) do
     case {Map.get(wire.keys, key, key), old_value(wire, key, value)} do
-      {:new, _value} -> :dropped
-      {_old_key, :new} -> :new
+      {@new, _value} -> :dropped
+      {_old_key, @new} -> @new
       {old_key, old_value} -> {old_key, old_value}
     end
   end
@@ -355,8 +497,8 @@ defmodule Hologram.Sync.Lens do
           {^name, _to_many?} ->
             {keys, edges}
 
-          {:new, false} ->
-            {Map.put(keys, reference_key(name), :new), edges}
+          {@new, false} ->
+            {Map.put(keys, reference_key(name), @new), edges}
 
           {old, false} ->
             {Map.put(keys, reference_key(name), reference_key(old)), edges}
@@ -370,7 +512,7 @@ defmodule Hologram.Sync.Lens do
       for {name, _type, _opts} <- entity_type.__inverse_relationships__(),
           inverse = Entity.inverse_relationship(entity_type, name),
           not inverse.reference?,
-          old_relationship(lens, inverse.target, inverse.forward) == :new,
+          old_relationship(lens, inverse.target, inverse.forward) == @new,
           do: name
 
     enums =
@@ -379,18 +521,18 @@ defmodule Hologram.Sync.Lens do
       end)
 
     %{
-      edges: Map.merge(edges, Map.new(new_inverses, &{edge_name(&1), :new})),
+      edges: Map.merge(edges, Map.new(new_inverses, &{edge_name(&1), @new})),
       enums: enums,
       keys:
         attribute_keys
         |> Map.merge(relationship_keys)
-        |> Map.merge(Map.new(new_inverses, &{&1, :new})),
+        |> Map.merge(Map.new(new_inverses, &{&1, @new})),
       label: old_label(entry.old)
     }
   end
 
   # An edge names its relationship as a string (see `Hologram.Sync.Pot`).
-  defp edge_name(:new), do: :new
+  defp edge_name(@new), do: @new
 
   defp edge_name(name), do: Atom.to_string(name)
 
@@ -415,7 +557,7 @@ defmodule Hologram.Sync.Lens do
   end
 
   defp apply_op(%{op: :create_entity, entity: entity_type}, lens, _old_model) do
-    put_type(lens, entity_type, %{new_entry(entity_type) | old: :new})
+    put_type(lens, entity_type, %{new_entry(entity_type) | old: @new})
   end
 
   defp apply_op(%{op: :rename_entity, from: from, to: to}, lens, _old_model) do
@@ -426,7 +568,7 @@ defmodule Hologram.Sync.Lens do
   end
 
   defp apply_op(%{op: :add_attribute, entity: entity_type, name: name}, lens, _old_model) do
-    put_member(lens, entity_type, :attributes, name, :new)
+    put_member(lens, entity_type, :attributes, name, @new)
   end
 
   defp apply_op(
@@ -443,7 +585,7 @@ defmodule Hologram.Sync.Lens do
   end
 
   defp apply_op(%{op: :add_relationship, entity: entity_type, name: name}, lens, _old_model) do
-    put_member(lens, entity_type, :relationships, name, :new)
+    put_member(lens, entity_type, :relationships, name, @new)
   end
 
   defp apply_op(
@@ -455,7 +597,7 @@ defmodule Hologram.Sync.Lens do
   end
 
   defp apply_op(%{op: :add_enum_value} = op, lens, _old_model) do
-    update_enum(lens, op.entity, op.attribute, &Map.put(&1, op.value, :new))
+    update_enum(lens, op.entity, op.attribute, &Map.put(&1, op.value, @new))
   end
 
   defp apply_op(%{op: :rename_enum_value} = op, lens, _old_model) do
@@ -467,11 +609,11 @@ defmodule Hologram.Sync.Lens do
   end
 
   defp apply_op(%{op: :add_role, entity: entity_type, name: name}, lens, _old_model) do
-    put_member(lens, entity_type, :roles, name, :new)
+    put_member(lens, entity_type, :roles, name, @new)
   end
 
   defp apply_op(%{op: :add_role, role: role}, lens, _old_model) do
-    %{lens | global_roles: Map.put(lens.global_roles, role, :new)}
+    %{lens | global_roles: Map.put(lens.global_roles, role, @new)}
   end
 
   defp apply_op(%{op: :rename_role, entity: entity_type, from: from, to: to}, lens, _old_model) do
@@ -498,7 +640,7 @@ defmodule Hologram.Sync.Lens do
 
     case worst(Enum.map(changes, &attribute_change(&1, server_only?))) do
       :unservable -> :unservable
-      :new -> put_member(lens, entity_type, :attributes, name, :new)
+      @new -> put_member(lens, entity_type, :attributes, name, @new)
       :kept -> lens
     end
   end
@@ -530,7 +672,7 @@ defmodule Hologram.Sync.Lens do
   # An attribute the tab's model keeps from it (see `Hologram.Sync.WireData`): it never had it. One
   # that wasn't server-only for the tab is turned off again, which changes nothing.
   defp attribute_change({:server_only, flag}, server_only?) when flag in [false, nil] do
-    if server_only?, do: :new, else: :kept
+    if server_only?, do: @new, else: :kept
   end
 
   defp attribute_change(_change, _server_only?), do: :unservable
@@ -543,14 +685,30 @@ defmodule Hologram.Sync.Lens do
     entry = type_entry(lens, entity_type)
     members = Map.fetch!(entry, kind)
 
-    if entry.old == :new, do: :new, else: Map.get(members, name, name)
+    if entry.old == @new, do: @new, else: Map.get(members, name, name)
+  end
+
+  # The enum attributes of the given type the walk changed values of, that the tab is sent: an
+  # attribute new since is left out of what it is sent, and a server-only one is never sent, so
+  # their values can't keep a row from it. A type new since is never served.
+  defp sent_enums(lens, entity_type) do
+    entry = type_entry(lens, entity_type)
+    server_only = Entity.server_only_attribute_names(entity_type)
+
+    if entry.old == @new do
+      []
+    else
+      Enum.reject(entry.enums, fn {attribute, _values} ->
+        Map.get(entry.attributes, attribute) == @new or attribute in server_only
+      end)
+    end
   end
 
   # An attribute the tab had can only have become server-only since through a change the walk
   # refuses, so it is server-only for the tab exactly when the tab's model term says so.
   defp server_only_for_tab?(lens, old_model, entity_type, name) do
-    with old_type when old_type != :new <- old_type(lens, entity_type),
-         old_name when old_name != :new <- old_attribute(lens, entity_type, name),
+    with old_type when old_type != @new <- old_type(lens, entity_type),
+         old_name when old_name != @new <- old_attribute(lens, entity_type, name),
          %{attributes: attributes} <- Map.get(old_model.entities, old_type) do
       Enum.any?(attributes, fn {attribute, _type, opts} ->
         attribute == old_name and opts[:server_only] == true
@@ -604,7 +762,7 @@ defmodule Hologram.Sync.Lens do
   defp worst(answers) do
     cond do
       :unservable in answers -> :unservable
-      :new in answers -> :new
+      @new in answers -> @new
       true -> :kept
     end
   end
