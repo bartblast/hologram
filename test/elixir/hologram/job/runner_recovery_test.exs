@@ -43,7 +43,7 @@ defmodule Hologram.Job.RunnerRecoveryTest do
     route(scratch, fn -> EntityOperations.get(Module1, id).status end)
   end
 
-  defp sweep(scratch, run_lock) do
+  defp pass_over(scratch, run_lock) do
     route(scratch, fn -> pass([Module1], run_lock) end)
   end
 
@@ -53,7 +53,7 @@ defmodule Hologram.Job.RunnerRecoveryTest do
 
     assert {:claimed, _job} = route(scratch, fn -> claim(Module1, job.id, worker_lock) end)
 
-    assert sweep(scratch, sweeper_lock) == 0
+    assert pass_over(scratch, sweeper_lock) == 0
     assert status(scratch, job.id) == :running
 
     # What a node that stops leaves behind: a session that ended, and the server frees its lock
@@ -61,7 +61,7 @@ defmodule Hologram.Job.RunnerRecoveryTest do
     :ok = :gen_statem.stop(worker_lock)
 
     wait_until(fn ->
-      sweep(scratch, sweeper_lock)
+      pass_over(scratch, sweeper_lock)
 
       status(scratch, job.id) == :failed
     end)
@@ -96,7 +96,7 @@ defmodule Hologram.Job.RunnerRecoveryTest do
 
     # The worker's lock connection is still up: what frees the job is the release after the failed
     # outcome write.
-    assert sweep(scratch, sweeper_lock) == 0
+    assert pass_over(scratch, sweeper_lock) == 0
     assert status(scratch, job.id) == :failed
   end
 

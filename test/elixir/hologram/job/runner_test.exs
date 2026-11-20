@@ -208,6 +208,14 @@ defmodule Hologram.Job.RunnerTest do
       assert ran_order() == [module_3_job.id, module_1_job.id]
     end
 
+    # A type whose jobs keep coming would otherwise hold up the types after it for good.
+    test "runs at most 100 jobs of a type", %{run_lock: run_lock} do
+      for _index <- 1..101, do: Job.create!(Module1)
+
+      assert pass([Module1], run_lock) == 100
+      assert length(queued(Module1, MapSet.new(), 5)) == 1
+    end
+
     test "runs nothing when nothing is queued", %{run_lock: run_lock} do
       assert pass([Module1, Module3], run_lock) == 0
     end
@@ -353,6 +361,122 @@ defmodule Hologram.Job.RunnerTest do
       # denied - which is what makes this an assertion about whose write it is.
       assert as_user(user, fn -> process(Module3, job.id, run_lock) end) == :done
       assert EntityOperations.get(Module3, job.id).status == :done
+    end
+  end
+
+  describe "queued/3" do
+    # Each job is made a second older than the one created before it, an order no insertion order
+    # could produce by accident.
+    defp jobs_oldest_first(count) do
+      for index <- 1..count do
+        job = job(:ok)
+        set_created_at(Module3, job.id, DateTime.add(~U[2026-01-01 00:00:00.000000Z], -index))
+
+        job
+      end
+      |> Enum.reverse()
+      |> Enum.map(& &1.id)
+    end
+
+    defp queued_ids(skip_ids, count) do
+      Module3
+      |> queued(MapSet.new(skip_ids), count)
+      |> Enum.map(& &1.id)
+    end
+
+    test "answers the oldest queued jobs of the type, oldest first" do
+      [first, second, _third] = jobs_oldest_first(3)
+
+      assert queued_ids([], 2) == [first, second]
+    end
+
+    test "answers only jobs of the given type" do
+      Job.create!(Module1)
+      [job_id] = jobs_oldest_first(1)
+
+      assert queued_ids([], 5) == [job_id]
+    end
+
+    test "leaves out jobs that are not queued" do
+      [running, done, queued] = jobs_oldest_first(3)
+
+      :ok = EntityOperations.update(Module3, running, %{status: :running})
+      :ok = EntityOperations.update(Module3, done, %{status: :done})
+
+      assert queued_ids([], 5) == [queued]
+    end
+
+    test "leaves out the given ids, and still answers the count" do
+      [first, second, third, fourth] = jobs_oldest_first(4)
+
+      assert queued_ids([first, third], 2) == [second, fourth]
+    end
+
+    test "answers nothing when nothing is queued" do
+      assert queued(Module3, MapSet.new(), 5) == []
+    end
+
+    test "answers nothing for a count of 0" do
+      jobs_oldest_first(1)
+
+      assert queued(Module3, MapSet.new(), 0) == []
+    end
+  end
+
+  describe "sweep/2" do
+    # Running with no lock held, the way a node that stopped mid-run leaves it.
+    defp abandoned_job do
+      job = Job.create!(Module1)
+      :ok = EntityOperations.update(Module1, job.id, %{status: :running})
+
+      job
+    end
+
+    test "fails a running job whose run lock nobody holds" do
+      job = abandoned_job()
+
+      assert sweep([Module1], MapSet.new()) == :ok
+
+      row = EntityOperations.get(Module1, job.id)
+
+      assert row.status == :failed
+      assert row.error =~ "the run was cut short before its outcome was recorded"
+    end
+
+    test "leaves a running job whose run lock another session holds", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+
+      assert {:claimed, _job} = claim(Module1, job.id, run_lock)
+      assert sweep([Module1], MapSet.new()) == :ok
+
+      assert EntityOperations.get(Module1, job.id).status == :running
+    end
+
+    test "leaves a running job whose id it is given" do
+      job = abandoned_job()
+
+      assert sweep([Module1], MapSet.new([job.id])) == :ok
+
+      assert EntityOperations.get(Module1, job.id).status == :running
+    end
+
+    test "leaves queued jobs" do
+      job = Job.create!(Module1)
+
+      assert sweep([Module1], MapSet.new()) == :ok
+
+      assert EntityOperations.get(Module1, job.id).status == :queued
+    end
+
+    test "sweeps every type it is given" do
+      module_1_job = abandoned_job()
+      module_3_job = job(:ok)
+      :ok = EntityOperations.update(Module3, module_3_job.id, %{status: :running})
+
+      assert sweep([Module1, Module3], MapSet.new()) == :ok
+
+      assert EntityOperations.get(Module1, module_1_job.id).status == :failed
+      assert EntityOperations.get(Module3, module_3_job.id).status == :failed
     end
   end
 end

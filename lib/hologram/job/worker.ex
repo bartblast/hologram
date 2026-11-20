@@ -141,8 +141,9 @@ defmodule Hologram.Job.Worker do
     end
   end
 
-  # A pass that ran something is followed by another: a job created by one that just ran, or one
-  # that committed while the pass worked, is picked up now rather than at the next announcement.
+  # A pass that ran something is followed by another: the jobs past the ones a pass takes of each
+  # type (see Hologram.Job.Runner.pass/2), a job created by one that just ran, or one that committed
+  # while the pass worked, are picked up now rather than at the next announcement.
   defp run_passes(pass, job_types) do
     if pass.(job_types) > 0, do: run_passes(pass, job_types)
   end
@@ -152,8 +153,8 @@ defmodule Hologram.Job.Worker do
   end
 
   defp wake_up(state) do
-    # Draining first is what makes the drain safe: the pass after it reads the queue as it stands
-    # by then, so the wakes dropped here asked for nothing it will not do. A wake arriving after
+    # Draining first is what makes the drain safe: the passes after it read the queue as it stands
+    # by then, so the wakes dropped here asked for nothing they will not do. A wake arriving after
     # the read stays in the mailbox and gets its own pass, which is the job created while this one
     # was working.
     drain_wakes()
