@@ -818,6 +818,8 @@ export default class Tabs {
   // - It holds no place: the leader cleared it to start over, and the start-over that follows
   //   takes the rows and the place away. Only the rules and a stop are taken - completeness claimed
   //   over rows that are going would sweep the ones the fill is about to confirm.
+  // - It belongs to somebody else: another user's tab filled it since. The tab leaves the group,
+  //   as for a store it cannot read (see below).
   // - It holds another place: every row the stream vouched for goes, and every row the store holds
   //   comes in as the store holds it, and the place with them. A row only the page carried stays,
   //   carried, for a completeness claim to judge. Then the claims, which are about those rows.
@@ -830,8 +832,9 @@ export default class Tabs {
   // until the frame that stored it is replayed. And a stream reconnecting while a tab handed the
   // lead still reads greets with sync, which the lead's own reconnect replaces. A read that fails
   // costs more, and is rarer: a tab that leaves keeps nothing from then on, and its own pending
-  // writes leave its screen, to land through the group's leader, which sends them from the queue;
-  // a tab that takes the lead instead asks the server for everything.
+  // writes leave its screen, to land through the group's leader, which sends them from the queue -
+  // or, when it leaves a lead it was handed over another user's store, through the next tab in
+  // line or the next page load; a tab that takes the lead instead asks the server for everything.
   static async #takeStore(message) {
     Tabs.#ready = false;
 
@@ -856,18 +859,31 @@ export default class Tabs {
     // over (see #lead), which asks the server for everything and sends the queue under the group's
     // identity.
     //
+    // A store that belongs to somebody else is left the same way, lead or not. One store serves
+    // every user of the browser, each in a group of their own, and another user's tab filled it
+    // since: its rows are not this tab's to show, its place is not one this tab's group will ever
+    // bring it to, and leading from nowhere would have this tab clear and fill another user's
+    // store. It leaves as the follower it was, since it has let go of the store and took up no
+    // identity to send under. (The next tab in line, if any, still leads over that store: two
+    // groups writing one store at all is #1655's.)
+    //
     // A write this tab is still saving is saved and told to the group first: a leader then sends it
     // at once. Told after, the message would go nowhere, and the write would wait in the store for
     // whatever next wakes the leader. And the tab can have left meanwhile.
-    if (base === null) {
+    const foreign =
+      base !== null &&
+      (base.owner ?? null) !== (LocalDatabase.actorUserId ?? null);
+
+    if (base === null || foreign) {
       await Batches.recorded();
 
       if (Tabs.#token !== token) {
         return;
       }
 
-      if (!Tabs.#leadWhenReady) {
+      if (foreign || !Tabs.#leadWhenReady) {
         Durability.detach();
+        Tabs.leader = false;
         Tabs.dissolve();
 
         return;

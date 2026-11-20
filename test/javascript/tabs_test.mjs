@@ -1869,6 +1869,88 @@ describe("Tabs", () => {
         );
       });
 
+      // Another user's tab filled the store since: one store serves every user of the browser,
+      // each in a group of their own, and nothing in this tab's group would ever bring it there.
+      it("leaves the group when another user's tab filled the store", async () => {
+        sinon.stub(Durability, "readBase").resolves({
+          cursor: "place-2",
+          owner: "u2",
+          records: [record("t-stored", "stored")],
+        });
+
+        const detaching = sinon.stub(Durability, "detach");
+        const disowning = sinon.stub(Batches, "disown");
+
+        await follow();
+
+        Tabs.receive(state("place-2"));
+        await waitForEventLoop();
+
+        assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t-stored"));
+        assert.isNull(Tabs.name);
+        assert.isTrue(detaching.calledOnce);
+        assert.isTrue(disowning.calledOnce);
+        assert.isNull(SyncStream.syncCursor);
+      });
+
+      // Leading from nowhere would clear and fill another user's store.
+      it("leaves the group when another user's tab filled the store, though handed the lead", async () => {
+        let read;
+
+        sinon
+          .stub(Durability, "readBase")
+          .returns(new Promise((resolve) => (read = resolve)));
+
+        sinon.stub(Durability, "detach");
+
+        const disowning = sinon.stub(Batches, "disown");
+        const led = sinon.spy();
+        const {group, release} = await follow({onLead: led});
+
+        Tabs.receive(state("place-2"));
+
+        release();
+        await waitForEventLoop();
+
+        read({cursor: "place-2", owner: "u2", records: []});
+        await waitForEventLoop();
+
+        assert.isFalse(led.called);
+        assert.isTrue(disowning.calledOnce);
+        assert.isTrue(await isLockFree(group));
+      });
+
+      it("takes up the store its own user's group filled, when signed in", async () => {
+        const actor = LocalDatabase.actorUserId;
+
+        LocalDatabase.actorUserId = "u1";
+
+        sinon.stub(Durability, "readBase").resolves({
+          cursor: "place-2",
+          owner: "u1",
+          records: [record("t-stored", "stored")],
+        });
+
+        try {
+          await follow();
+
+          Tabs.receive(state("place-2"));
+          await waitForEventLoop();
+
+          assert.deepStrictEqual(
+            LocalDatabase.baseRow("MyApp.Task", "t-stored"),
+            {
+              id: "t-stored",
+              title: "stored",
+            },
+          );
+
+          assert.equal(SyncStream.syncCursor, "place-2");
+        } finally {
+          LocalDatabase.actorUserId = actor;
+        }
+      });
+
       // A completeness claim judges it: the server may no longer send it.
       it("keeps a row only the page carried, still carried", async () => {
         sinon.stub(Durability, "readBase").resolves({

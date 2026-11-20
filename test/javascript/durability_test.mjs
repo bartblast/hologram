@@ -1218,6 +1218,7 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await Durability.readBase("place-0"), {
         cursor: "place-1",
+        owner: "u1",
         records: [taskRecord("t1", "Draft copy")],
       });
     });
@@ -1230,6 +1231,7 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await Durability.readBase("place-1"), {
         cursor: "place-1",
+        owner: "u1",
         records: null,
       });
     });
@@ -1241,6 +1243,7 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await Durability.readBase(null), {
         cursor: "place-1",
+        owner: "u1",
         records: [taskRecord("t1", "Draft copy")],
       });
     });
@@ -1253,11 +1256,13 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await Durability.readBase("place-1"), {
         cursor: null,
+        owner: "u1",
         records: null,
       });
 
       assert.deepStrictEqual(await Durability.readBase(null), {
         cursor: null,
+        owner: "u1",
         records: null,
       });
     });
@@ -1271,6 +1276,7 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await Durability.readBase("place-1"), {
         cursor: "place-2",
+        owner: "u1",
         records: [taskRecord("t1", "Draft copy"), taskRecord("t2", "Later")],
       });
     });
@@ -1293,10 +1299,28 @@ describe("Durability", () => {
 
       assert.deepStrictEqual(await reading, {
         cursor: "place-1",
+        owner: "u1",
         records: [taskRecord("t1", "Draft copy")],
       });
 
       await writing;
+    });
+
+    // One store serves every user of the browser, each in a group of their own.
+    it("answers who the store belongs to", async () => {
+      await seedPreviousLoad({actorUserId: "u2"});
+      await Durability.open();
+      await Durability.load();
+
+      assert.equal((await Durability.readBase("place-1")).owner, "u2");
+    });
+
+    it("answers nobody as the owner of a store nobody signed in to", async () => {
+      await seedPreviousLoad({actorUserId: undefined});
+      await Durability.open();
+      await Durability.load();
+
+      assert.isNull((await Durability.readBase("place-1")).owner);
     });
 
     it("answers nothing in memory mode", async () => {

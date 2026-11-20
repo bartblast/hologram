@@ -450,7 +450,8 @@ export default class Durability {
   // same place is taken for the same rows, which is the equality repair rests on too. A store
   // holding no place has no rows to take up: they are a fill that never finished, which is why a
   // restore refuses them. Answers the stored place, with every stored record, or with
-  // `records: null` when the place is the given one or there is none.
+  // `records: null` when the place is the given one or there is none - and the user the store
+  // belongs to, since one store serves every user of the browser, each in a group of their own.
   //
   // ONE read-only transaction, the rows read in the callback of the place's own request: a write
   // landing between two transactions could leave the rows of one place beside another.
@@ -472,15 +473,22 @@ export default class Durability {
       return await new Promise((resolve, reject) => {
         transaction.onabort = () => reject(transaction.error);
 
-        const stored = transaction.objectStore(META).get("cursor");
+        const meta = transaction.objectStore(META);
 
+        // Requests on one transaction answer in the order they were made, so the owner is in by the
+        // time the place's callback runs.
+        const owned = meta.get("actorUserId");
+        const stored = meta.get("cursor");
+
+        owned.onerror = () => reject(owned.error);
         stored.onerror = () => reject(stored.error);
 
         stored.onsuccess = () => {
+          const owner = owned.result ?? null;
           const place = stored.result ?? null;
 
           if (place === cursor || place === null) {
-            resolve({cursor: place, records: null});
+            resolve({cursor: place, owner, records: null});
 
             return;
           }
@@ -489,7 +497,8 @@ export default class Durability {
             Durability.#request(
               transaction.objectStore(ENTITIES).getAll(),
             ).then(
-              (records) => resolve({cursor: place, records: records ?? []}),
+              (records) =>
+                resolve({cursor: place, owner, records: records ?? []}),
               reject,
             );
           } catch (error) {
