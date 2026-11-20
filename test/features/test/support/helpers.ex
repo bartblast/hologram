@@ -34,6 +34,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Message
   alias HologramFeatureTests.Entities.Milestone
   alias HologramFeatureTests.Entities.Note
+  alias HologramFeatureTests.Entities.Notice
   alias HologramFeatureTests.Entities.Parcel
   alias HologramFeatureTests.Entities.Post
   alias HologramFeatureTests.Entities.Product
@@ -1176,6 +1177,7 @@ defmodule HologramFeatureTests.Helpers do
         Message,
         Milestone,
         Note,
+        Notice,
         Parcel,
         Post,
         Product,
