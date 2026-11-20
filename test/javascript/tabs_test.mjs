@@ -1722,9 +1722,14 @@ describe("Tabs", () => {
         return {group, release};
       };
 
-      let rendering;
+      let actor, rendering;
 
       beforeEach(() => {
+        // Nobody is signed in, as the stored rows here say: a tab takes up only a store its own
+        // user's group filled, and the user is not reset between files.
+        actor = LocalDatabase.actorUserId;
+        LocalDatabase.actorUserId = null;
+
         rendering = sinon.stub(SyncStream, "scheduleRender");
 
         LocalDatabase.putRow("MyApp.Task", {id: "t-vouched", title: "held"});
@@ -1732,6 +1737,10 @@ describe("Tabs", () => {
         LocalDatabase.markCarried("MyApp.Task", "t-carried");
 
         SyncStream.syncCursor = "place-1";
+      });
+
+      afterEach(() => {
+        LocalDatabase.actorUserId = actor;
       });
 
       it("takes up the store when the group's state names another place", async () => {
@@ -3374,6 +3383,11 @@ describe("Tabs", () => {
 
       await hasArrived;
 
+      // Nobody is signed in, as the store says: a tab takes up only its own user's store.
+      const actor = LocalDatabase.actorUserId;
+
+      LocalDatabase.actorUserId = null;
+
       try {
         SyncStream.syncCursor = "place-1";
 
@@ -3381,12 +3395,13 @@ describe("Tabs", () => {
 
         assert.deepStrictEqual(seen, ["barrier", "state"]);
 
-        read({cursor: "place-2", records: []});
+        read({cursor: "place-2", owner: null, records: []});
         await waitForEventLoop();
 
         assert.deepStrictEqual(seen, ["barrier", "state", "frame"]);
       } finally {
         LocalDatabase.reset();
+        LocalDatabase.actorUserId = actor;
         SyncStream.syncCursor = null;
       }
     });
