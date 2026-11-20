@@ -59,6 +59,12 @@ defmodule Hologram.Job.RunLockTest do
     session
   end
 
+  defp message_queue_len(pid) do
+    {:message_queue_len, length} = Process.info(pid, :message_queue_len)
+
+    length
+  end
+
   defp query!(session, statement) do
     [result] = SimpleConnection.call(session, {:query, statement}, :infinity)
 
@@ -90,7 +96,61 @@ defmodule Hologram.Job.RunLockTest do
       session = start_silenced_session()
       monitor_ref = Process.monitor(session)
 
-      assert {:timeout, _call} = catch_exit(acquire(session, Entity.generate_id()))
+      assert {:killed, _call} = catch_exit(acquire(session, Entity.generate_id()))
+      assert_receive {:DOWN, ^monitor_ref, :process, ^session, :killed}, 1_000
+    end
+
+    # Jobs running at once queue their lock calls on one connection, and one waiting behind slow
+    # statements the server still answers must not count the wait against its own bound. Three
+    # statements of 2 seconds ahead of it make it wait about 6 - past a bound counted from the call,
+    # inside one counted per statement.
+    test "gives a call queued behind others the whole bound for its own statement" do
+      session = start_session()
+      watcher = start_session()
+      await_connected(session)
+
+      first = Task.async(fn -> query!(session, "SELECT pg_sleep(2)") end)
+
+      # In flight on the server, so the two below queue behind it rather than ahead.
+      wait_until(fn ->
+        %Postgrex.Result{rows: [[count]]} =
+          query!(
+            watcher,
+            "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND query = 'SELECT pg_sleep(2)' AND state = 'active'"
+          )
+
+        count == "1"
+      end)
+
+      queued =
+        for length <- 1..2 do
+          task = Task.async(fn -> query!(session, "SELECT pg_sleep(2)") end)
+          wait_until(fn -> message_queue_len(session) == length end)
+
+          task
+        end
+
+      assert acquire(session, Entity.generate_id())
+      results = Task.await_many([first | queued], 10_000)
+
+      assert Enum.all?(results, &match?(%Postgrex.Result{}, &1))
+      assert Process.alive?(session)
+    end
+
+    # Every call waiting behind a statement the server leaves unanswered exits with it - which is
+    # what rolls back a claim waiting there and frees the job's row for the other nodes.
+    test "exits every call queued behind a statement the server does not answer" do
+      session = start_silenced_session()
+      monitor_ref = Process.monitor(session)
+
+      # The connection serves one call at a time and the server answers neither, so whichever goes
+      # first, the other waits behind it until the kill.
+      calls =
+        for _index <- 1..2 do
+          Task.async(fn -> catch_exit(acquire(session, Entity.generate_id())) end)
+        end
+
+      assert [{:killed, _first}, {:killed, _second}] = Task.await_many(calls, 10_000)
       assert_receive {:DOWN, ^monitor_ref, :process, ^session, :killed}, 1_000
     end
 
@@ -187,6 +247,10 @@ defmodule Hologram.Job.RunLockTest do
       assert {:ok, %{setup_timeout_ms: timeout_ms}} = init(nil)
       assert timeout_ms == Config.first_statement_timeout_ms()
     end
+
+    test "bounds each call's statement by 5 seconds" do
+      assert {:ok, %{call_timeout_ms: 5_000}} = init(nil)
+    end
   end
 
   describe "handle_connect/1" do
@@ -242,7 +306,7 @@ defmodule Hologram.Job.RunLockTest do
       session = start_silenced_session()
       monitor_ref = Process.monitor(session)
 
-      assert {:timeout, _call} = catch_exit(release(session, Entity.generate_id()))
+      assert {:killed, _call} = catch_exit(release(session, Entity.generate_id()))
       assert_receive {:DOWN, ^monitor_ref, :process, ^session, :killed}, 1_000
     end
 
@@ -288,7 +352,7 @@ defmodule Hologram.Job.RunLockTest do
       session = start_silenced_session()
       monitor_ref = Process.monitor(session)
 
-      assert {:timeout, _call} = catch_exit(release_all(session))
+      assert {:killed, _call} = catch_exit(release_all(session))
       assert_receive {:DOWN, ^monitor_ref, :process, ^session, :killed}, 1_000
     end
 
@@ -456,6 +520,16 @@ defmodule Hologram.Job.RunLockTest do
                query!(start_session(), "SHOW tcp_user_timeout")
 
       assert timeout in ["0", "60000"]
+    end
+
+    # A call arriving while the idle ping is in flight waits for the ping, which the connection's
+    # bound on statements doesn't cover.
+    test "bounds the idle ping by 5 seconds" do
+      session = start_session()
+      await_connected(session)
+
+      assert {_state_name, %{protocol: %Postgrex.Protocol{ping_timeout: 5_000}}} =
+               :sys.get_state(session)
     end
 
     test "registers the connection under the given name" do

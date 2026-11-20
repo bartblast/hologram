@@ -38,7 +38,7 @@ defmodule Hologram.Job.Runner do
   The lock is taken before the claim commits, so whoever reads the row as running finds it held.
   A claim that raises or exits after taking it gives it back, and raises or exits as it was going
   to even when giving it back exits - the lock went with the connection then. Taking the lock exits
-  when the RunLock connection leaves it unanswered for 5 seconds, which ends that connection.
+  when the server leaves it unanswered for 5 seconds, which ends the RunLock connection.
 
   The claim is the framework's own write, made without an acting user: a job type grants no
   operation for it, and whose job it is has already been decided by whoever enqueued it.
