@@ -89,7 +89,8 @@ defmodule Hologram.DB do
 
   @doc """
   Inserts the given entity as a full row - every column is named and bound explicitly -
-  stamping created_at and updated_at with the same current UTC timestamp.
+  stamping created_at, updated_at, server_created_at and server_updated_at with the same
+  current UTC timestamp.
 
   Returns {:ok, entity} with the stamped entity, or {:error, violations} - the map
   Entity.validate/1 returns, naming each field that broke its declaration: the declared
@@ -384,9 +385,9 @@ defmodule Hologram.DB do
   come from this module at run time, quoted in the SQL - a join table's name carries `$`, and an
   attribute may be named by a reserved word (`"user"` unquoted is the database role). An
   attribute's column has the attribute's name, a to-one relationship's column is `<name>_id`,
-  every table has `id`, `created_at` and `updated_at`, and a join table has `source_id` and
-  `target_id`. Columns whose names contain `$` are the framework's own, and what they hold can
-  change between versions. Select attributes by name.
+  every table has `id`, `created_at`, `updated_at`, `server_created_at` and `server_updated_at`,
+  and a join table has `source_id` and `target_id`. Columns whose names contain `$` are the
+  framework's own, and what they hold can change between versions. Select attributes by name.
 
   Policies do not apply: the read sees every row. A read on behalf of a user keeps to what that
   user may see in the SQL itself.
@@ -488,11 +489,11 @@ defmodule Hologram.DB do
 
   @doc """
   Updates the entity of the given type with the given id, setting exactly the changed
-  columns plus updated_at - there is no full-row variant. Changes (a map or keyword list)
-  are keyed by declared attribute names and to-one reference fields (`<relationship name>_id`) -
-  a to-one reference is set, reassigned, or cleared (nil) through its reference field. Changing
-  any other name, system attributes included, raises Hologram.MisuseError - as do empty changes
-  and an id that names no entity.
+  columns plus updated_at and server_updated_at - there is no full-row variant. Changes (a map
+  or keyword list) are keyed by declared attribute names and to-one reference fields
+  (`<relationship name>_id`) - a to-one reference is set, reassigned, or cleared (nil) through
+  its reference field. Changing any other name, system attributes included, raises
+  Hologram.MisuseError - as do empty changes and an id that names no entity.
 
   Returns :ok, or {:error, violations} - the map Entity.validate/2 returns, naming each
   field the changes leave breaking a declaration: the declared constraints a changed value

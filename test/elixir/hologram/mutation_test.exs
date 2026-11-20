@@ -10,6 +10,7 @@ defmodule Hologram.MutationTest do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
+  alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Mutation.Record
@@ -311,6 +312,21 @@ defmodule Hologram.MutationTest do
              }
     end
 
+    # Written offline an hour ago and arriving now: the writer's pair says when it was made, the
+    # server's pair when it got here - which is what tells everyone else it is new.
+    test "files a create written earlier under its writer's time and its arrival" do
+      id = Entity.generate_id()
+      written_ms = System.os_time(:millisecond) - 3_600_000
+
+      run(envelope([public_write(id, stamp: written_ms * 1024)]), server())
+
+      row = EntityOperations.get(MutationModule2, id)
+
+      assert DateTime.to_unix(row.created_at, :millisecond) == written_ms
+      assert DateTime.compare(row.server_created_at, row.created_at) == :gt
+      assert row.server_updated_at == row.server_created_at
+    end
+
     test "records the batch on the effect it wrote" do
       id = Entity.generate_id()
       replica_id = Entity.generate_id()
@@ -429,6 +445,36 @@ defmodule Hologram.MutationTest do
       assert answer["kept"]["0"]["$revisions"]["priority"] == newer
 
       assert EntityOperations.get(MutationModule1, row.id).priority == 5
+    end
+
+    # Nothing changed on the server, so its update time says the row last changed when it did. A
+    # value planted months back, so a statement run in the same millisecond as the create could
+    # not leave the column looking untouched.
+    test "leaves server_updated_at alone when every value of an update loses" do
+      user = create_user("outrun_whole@example.com")
+      row = create_authored(user, priority: 5)
+      newer = row.__meta__.revisions.priority + 1_000_000
+      planted_at = ~U[2026-01-15 10:30:00.000000Z]
+
+      set_revisions(MutationModule1, row.id, %{"priority" => newer})
+
+      {:ok, _result} =
+        Connection.query(
+          ~s|UPDATE "hologram_data"."#{Mapper.table_name(MutationModule1)}" | <>
+            ~s|SET "server_updated_at" = $1 WHERE "id" = $2|,
+          [Codec.encode(planted_at, :datetime), Codec.encode(row.id, :uuid)]
+        )
+
+      write =
+        update_write(MutationModule1, row.id, %{"priority" => 9},
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: newer - 1
+        )
+
+      assert {:ok, %{"dropped" => %{"0" => %{"priority" => 9}}}} =
+               run(envelope([write]), server(user.id))
+
+      assert EntityOperations.get(MutationModule1, row.id).server_updated_at == planted_at
     end
 
     test "applies the rest of an update whose column was dropped" do

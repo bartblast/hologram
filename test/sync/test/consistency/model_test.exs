@@ -93,7 +93,7 @@ defmodule HologramSyncTests.Consistency.ModelTest do
     |> WireData.row()
     |> Jason.encode!()
     |> Jason.decode!()
-    |> Map.drop(~w(id created_at updated_at $revisions))
+    |> Map.drop(~w(id created_at server_created_at server_updated_at updated_at $revisions))
     |> Map.new(fn
       {name, ids} when is_list(ids) -> {name, Enum.sort(ids)}
       field -> field

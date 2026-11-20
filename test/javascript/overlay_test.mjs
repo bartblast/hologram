@@ -61,6 +61,8 @@ describe("Overlay", () => {
         done: false,
         id: "t1",
         project_id: "p1",
+        server_created_at: "2026-01-01T00:00:01.000000Z",
+        server_updated_at: "2026-01-01T00:00:02.000000Z",
         title: "Draft copy",
         title$sort: "draft copy",
         updated_at: "2026-01-01T00:00:00.000000Z",
@@ -124,6 +126,8 @@ describe("Overlay", () => {
         done: false,
         id: "t1",
         project_id: "p1",
+        server_created_at: null,
+        server_updated_at: null,
         title: "Łódź",
         title$sort: "lodz",
         updated_at: timestamp,
@@ -146,6 +150,17 @@ describe("Overlay", () => {
 
       assert.equal(row.created_at, "2025-08-23T05:33:20.123000Z");
       assert.equal(row.created_at, row.updated_at);
+    });
+
+    // The server's pair is when the row reaches the server, which a pending update has not - so
+    // the row keeps the times the server last gave it until its own row says otherwise.
+    it("leaves the server's pair of the base under a pending update", () => {
+      pushed(updateWrite({data: {title: "Ship it"}}));
+
+      const row = Overlay.foldRow(TODO, "t1", base());
+
+      assert.equal(row.server_created_at, "2026-01-01T00:00:01.000000Z");
+      assert.equal(row.server_updated_at, "2026-01-01T00:00:02.000000Z");
     });
 
     // Nothing but this client writes an id this client minted, so a base row under one can only be
