@@ -113,8 +113,9 @@ defmodule Hologram.Job do
   Creates a job of the given job type from the given values (a map or a keyword list), enqueuing it.
 
   The job is written as a row of its type, in whatever transaction the caller is already in, with
-  its status queued and its actor the acting user - nobody, on the trusted tier. It runs once,
-  after that transaction commits: a worker calls the job type's run/1 with the job, under the
+  its status queued and its actor the acting user - nobody, on the trusted tier, and nobody for a
+  trust claim made under a user id no user entity can have, like an app's own serial id. It runs
+  once, after that transaction commits: a worker calls the job type's run/1 with the job, under the
   acting user's authority, and records the outcome on it - or fails it, when the run is cut short
   before that. A transaction that rolls back leaves no job, so nothing runs.
 
@@ -128,7 +129,9 @@ defmodule Hologram.Job do
 
   Raises Hologram.MisuseError for a module that is not a job type, for an unknown option, and for a
   value of an attribute the framework sets. Raises Hologram.AccessDeniedError when a user is acting
-  and the job type declares no allow lines, since no rule can then grant the write.
+  and the job type declares no allow lines, since no rule can then grant the write, and when the
+  acting user id is one no user entity can have, unless the call claims trust: true - such a job
+  would run with no user, skipping every rule.
   """
   @spec create(module, %{optional(atom) => any} | keyword, keyword) ::
           {:ok, Entity.t()} | {:error, %{atom => list(atom | {atom, any})}}

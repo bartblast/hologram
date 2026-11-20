@@ -37,9 +37,9 @@ defmodule Hologram.Migration.TailBuildTest do
     timestamp: ~U[2026-08-13 09:15:22.000000Z]
   }
 
-  # Derived for the relationship the second file adds. Its table is created by the FIRST
+  # Derived for the unique attribute the second file declares. Its table is created by the FIRST
   # file, which is what sends this build to the tail rather than into the transaction.
-  @index "my_app_task_author_id_$idx"
+  @index "my_app_task_slug_$uidx"
 
   # The value of Hologram.Migrator's @advisory_lock_key, hardcoded for the same reason as in
   # the contention suite: the key is frozen, so a test that followed a change to it would
@@ -107,30 +107,36 @@ defmodule Hologram.Migration.TailBuildTest do
   setup %{scratch_opts: scratch_opts} do
     create =
       migration("20260813091522", [
-        %{op: :create_entity, entity: MyApp.User, line: 3},
-        %{op: :create_entity, entity: MyApp.Task, line: 4}
+        %{op: :create_entity, entity: MyApp.Task, line: 3},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :slug,
+          type: :string,
+          opts: [optional: true],
+          line: 4
+        }
       ])
 
     # my_app_task already stands when this file runs, so its index cannot be built inside
     # the file's transaction - the renderer puts it in the tail and stamps it concurrent.
-    relate =
+    unique =
       migration("20260813142237", [
         %{
-          op: :add_relationship,
+          op: :change_attribute,
           entity: MyApp.Task,
-          name: :author,
-          type: MyApp.User,
-          opts: [optional: true],
+          name: :slug,
+          changes: [unique: true],
           line: 3
         }
       ])
 
     first_model = Model.fold(Model.empty(), create.ops)
-    full_model = Model.fold(first_model, relate.ops)
+    full_model = Model.fold(first_model, unique.ops)
 
     observer = start_supervised!({Postgrex, scratch_opts}, id: :observer)
 
-    [chain: [create, relate], full_model: full_model, observer: observer]
+    [chain: [create, unique], full_model: full_model, observer: observer]
   end
 
   describe "run/3" do
@@ -332,7 +338,7 @@ defmodule Hologram.Migration.TailBuildTest do
       # Valid, not merely present - a concurrent build that fails partway leaves its index in
       # the catalog serving no query while every write maintains it.
       assert applied_versions_of(observer) == ["20260813091522", "20260813142237"]
-      assert index_flags(observer) == %{unique: false, valid: true}
+      assert index_flags(observer) == %{unique: true, valid: true}
 
       # And it let the key go, so the next node is not stranded behind a finished deploy.
       assert %{rows: [[true]]} =

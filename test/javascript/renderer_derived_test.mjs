@@ -1615,6 +1615,13 @@ describe("Renderer derived fields", () => {
     const renderUserPage = () =>
       Renderer.renderPage(Type.alias("MyApp.UserPage"), Type.map());
 
+    // LocalDatabase.reset() leaves the acting user alone on purpose, so it is put back here, or it
+    // reaches every suite that runs after this file.
+    afterEach(() => {
+      LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
+    });
+
     beforeEach(() => {
       globalThis.Hologram.sync.model[USER] = {
         attributes: {email: "string", id: "uuid"},
@@ -1624,6 +1631,7 @@ describe("Renderer derived fields", () => {
 
       globalThis.Hologram.sync.userEntity = USER;
       LocalDatabase.actorUserId = "u1";
+      LocalDatabase.actorEntityId = "u1";
       putUserRow("ann@example.com");
 
       defineComponent("MyApp.UserPage", {});
@@ -1716,6 +1724,7 @@ describe("Renderer derived fields", () => {
     // The server's value is the row as the page was rendered, and the database says it is gone.
     it("hands nil when the database holds no row of the session user", () => {
       LocalDatabase.actorUserId = "u2";
+      LocalDatabase.actorEntityId = "u2";
 
       renderUserPage();
 
@@ -1727,6 +1736,7 @@ describe("Renderer derived fields", () => {
 
     it("hands nil for an anonymous session", () => {
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
 
       renderUserPage();
 

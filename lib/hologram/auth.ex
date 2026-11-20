@@ -10,7 +10,6 @@ defmodule Hologram.Auth do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Mapper
-  alias Hologram.DB.Oplog
   alias Hologram.DB.QueryRunner
   alias Hologram.DB.SetLock
   alias Hologram.Entity
@@ -83,7 +82,9 @@ defmodule Hologram.Auth do
   """
   @spec carried_grants(MapSet.t({String.t() | nil, tuple | atom})) :: list(struct)
   def carried_grants(scopes) do
-    session_user_id = user_id()
+    # A user id no user entity can have reads as an anonymous session, which no grant row's read
+    # rules admit, so it carries none, as an anonymous session doesn't - without asking.
+    session_user_id = canonical_id(user_id())
 
     if session_user_id && MapSet.size(scopes) > 0 do
       scopes
@@ -199,31 +200,6 @@ defmodule Hologram.Auth do
       nil -> nil
       row -> related_id(row, last_name)
     end
-  end
-
-  # The grants the given user held before the given grant effects were written - what a resuming
-  # client's rules were answered against at the place it is coming back from: the grants it holds
-  # NOW, with everything the log says has happened to them since taken back off.
-  #
-  # Undone from the present BACKWARDS, which is what makes a grant given and taken back inside the
-  # run answer correctly - forwards, its creation would be undone before its deletion put it back,
-  # leaving a grant the user never held. Grant rows are only ever created and deleted, never
-  # patched, so undoing one is adding or removing a whole row and the order is the only subtlety.
-  #
-  # A deleted grant is rebuilt from what its effect recorded, which is why a delete carries the
-  # row it removed.
-  @doc false
-  @spec grants_before(String.t(), list(map)) :: list(struct)
-  def grants_before(user_id, grant_effects) do
-    current =
-      RoleGrant
-      |> Query.filter(user_id: ^user_id)
-      |> Stage.normalize()
-      |> QueryRunner.run(DB.mapping())
-
-    grant_effects
-    |> Enum.reverse()
-    |> Enum.reduce(current, &undo_grant_effect/2)
   end
 
   @doc """
@@ -501,6 +477,10 @@ defmodule Hologram.Auth do
   `Hologram.Server.put_user_id/2`), an entity id when the app signs its user entity in - or nil
   when the session is anonymous. Framework wrappers set the actor around the work they run, so the
   value always comes from an authenticated session and never from anything a client sends.
+
+  A user id no user entity can have - an app's own serial id, say - is returned as it is. The data
+  layer reads such a session as one with no user: its rules answer it as an anonymous session, and
+  its writes are judged by them rather than trusted.
   """
   @spec user_id() :: Server.identity_id() | nil
   defdelegate user_id, to: Context, as: :actor_user_id
@@ -1131,14 +1111,6 @@ defmodule Hologram.Auth do
       is_atom(relationship_target(entity_type, relationship_name))
   end
 
-  defp undo_grant_effect(%{op: :put_entity, entity_id: id}, grants) do
-    Enum.reject(grants, &(&1.id == id))
-  end
-
-  defp undo_grant_effect(%{op: :del_entity, data: data}, grants) do
-    [Oplog.entity_from_data(RoleGrant, data) | grants]
-  end
-
   defp unknown_global_role_message(role) do
     case Model.roles() do
       [] ->
@@ -1210,10 +1182,18 @@ defmodule Hologram.Auth do
   defp gate_entity(entity_type, entity_id), do: struct(entity_type, id: entity_id)
 
   # The roles the acting user holds that reach the entity, as the gate reads them: on the row
-  # itself or on its whole type, and the global roles held app-wide. Sorted, own names first.
+  # itself or on its whole type, and the global roles held app-wide. Sorted, own names first. No
+  # stored grant names an id no user entity can have, so there is nothing to look up for one.
   defp held_role_names(actor_user_id, entity_type, entity_id) do
+    case canonical_id(actor_user_id) do
+      nil -> []
+      user_id -> stored_role_names(user_id, entity_type, entity_id)
+    end
+  end
+
+  defp stored_role_names(user_id, entity_type, entity_id) do
     RoleGrant
-    |> Query.filter(user_id: ^actor_user_id)
+    |> Query.filter(user_id: ^user_id)
     |> Stage.normalize()
     |> QueryRunner.run(DB.mapping())
     |> Enum.filter(fn grant ->
@@ -1291,7 +1271,7 @@ defmodule Hologram.Auth do
       id: RoleGrant.derive_id(user_id, entity_type, entity_id, role),
       entity_id: entity_id,
       entity_type: entity_type,
-      granted_by_id: Context.actor_user_id(),
+      granted_by_id: Context.actor_entity_id(),
       role: role,
       user_id: user_id
     }

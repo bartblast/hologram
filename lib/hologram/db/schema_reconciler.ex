@@ -5,6 +5,7 @@ defmodule Hologram.DB.SchemaReconciler do
 
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Preflight
@@ -148,7 +149,10 @@ defmodule Hologram.DB.SchemaReconciler do
   the op stream, and refresh the marker (last_reconciled_at, hologram_version). After the
   transaction commits, each destructive action and each join table rename is logged as
   one concise line. The context carries :mapping plus the guard facts (:otp_app, :env)
-  and the marker diagnostics (:hologram_version, :timestamp).
+  and the marker diagnostics (:hologram_version, :timestamp), and optionally :plan, the
+  indexes the model leaves to `Hologram.DB.IndexPlan` - the target holds them beside the
+  model's own, and they go through the same diff, alien check and registry. Without one, the
+  plan is the framework's own lookups'.
   """
   @spec reconcile(%{atom => any}) :: %{atom => any}
   def reconcile(context) do
@@ -160,7 +164,7 @@ defmodule Hologram.DB.SchemaReconciler do
         status = ensure_managed!(context)
 
         actual = Introspection.schema()
-        target = Schema.from_mapping(context.mapping)
+        target = Schema.from_mapping(context.mapping, index_plan(context))
 
         {renames, changes} =
           actual
@@ -317,6 +321,10 @@ defmodule Hologram.DB.SchemaReconciler do
       {:ok, encoded_value} ->
         Preflight.check_fill!(mapping, op.table, op.column, encoded_value)
         fill_column(op.table, op.column, encoded_value)
+
+        # The filled rows held no value, so their companions are NULL too - and a string's
+        # equality reads its sort key, so a row left without one would match no `==`.
+        backfill_companions_of!(mapping, op.table, op.column)
     end
 
     execute_statements(DDL.statements(op))
@@ -332,6 +340,13 @@ defmodule Hologram.DB.SchemaReconciler do
   end
 
   defp apply_op(op, _mapping), do: execute_statements(DDL.statements(op))
+
+  # The indexes the model leaves to the plan, which the context carries (see
+  # Hologram.DB.reconciliation_context/0) - or, for a context built without one, as the tests
+  # build theirs, the ones the framework's own lookups need.
+  defp index_plan(%{plan: plan}), do: plan
+
+  defp index_plan(context), do: IndexPlan.framework_plan(context.mapping)
 
   defp apply_ops(ops, mapping) do
     Enum.each(ops, &apply_op(&1, mapping))
@@ -356,6 +371,22 @@ defmodule Hologram.DB.SchemaReconciler do
 
       [id, value] ->
         {:ok, _result} = Connection.query(update_sql, [derive.(value), id])
+    end)
+  end
+
+  defp backfill_companions_of!(mapping, table, source_name) do
+    {_entity_type, entity_mapping} =
+      Enum.find(mapping, fn {_entity_type, table_mapping} -> table_mapping.table == table end)
+
+    entity_mapping.columns
+    |> Enum.filter(&Mapper.derived?/1)
+    |> Enum.each(fn %{source: {_kind, attribute_name}} = companion ->
+      if Enum.any?(
+           entity_mapping.columns,
+           &(&1.name == source_name and &1.source == {:attribute, attribute_name})
+         ) do
+        backfill_op!(%{table: table, column: companion.name}, mapping)
+      end
     end)
   end
 

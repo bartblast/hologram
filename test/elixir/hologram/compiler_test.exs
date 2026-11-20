@@ -15,6 +15,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.DB.Mapper
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
   alias Hologram.Policy
@@ -68,6 +69,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module39, as: Entity39
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Entity.Module40, as: Entity40
+  alias Hologram.Test.Fixtures.Entity.Module41, as: Entity41
   alias Hologram.Test.Fixtures.Entity.Module42, as: Entity42
   alias Hologram.Test.Fixtures.Entity.Module43, as: Entity43
   alias Hologram.Test.Fixtures.Entity.Module44, as: Entity44
@@ -1370,8 +1372,7 @@ defmodule Hologram.CompilerTest do
       assert page_windows[PageModule20] == [Registry.id(Auth.grants_window())]
     end
 
-    # No user entity type, no grant store: a page checking permissions has nothing to check them
-    # against.
+    # No user entity type, no grant store: there are no grant rows to hold.
     test "leaves the grants window out of a checking page when the data model designates no user entity type",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
       plt_without_user_entity = without_user_entity(module_info_plt)
@@ -1435,6 +1436,23 @@ defmodule Hologram.CompilerTest do
 
       assert page_windows[PageModule21] ==
                Enum.sort([Registry.id(Auth.grants_window()), Registry.id(window)])
+    end
+
+    # No grant store, so no grants window - but the rules still read rows, which the windows embed.
+    test "derives a checking build's window ids from the windows embedding the rows the rules read when the data model designates no user entity type",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      plt_without_user_entity = without_user_entity(module_info_plt)
+
+      page_windows =
+        derive_page_windows([PageModule21], call_graph, plt_without_user_entity, [PageModule21])
+
+      window =
+        TwoHopDelegationPolicyEntity
+        |> sort(created_at)
+        |> Stage.normalize()
+        |> Window.derive(true)
+
+      assert page_windows[PageModule21] == [Registry.id(window)]
     end
 
     test "derives an unchecked build's window ids from the plain windows", %{
@@ -1616,13 +1634,15 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "permission_checking?/2" do
-    test "is true when a page checks permissions on the client and the data model designates a user entity type",
-         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+  describe "permission_checking?/1" do
+    test "is true when a page checks permissions on the client", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
       {reach_by_page, _component_queries} =
         derive_kept_reach([PageModule18], call_graph, module_info_plt, [PageModule18])
 
-      assert permission_checking?(reach_by_page, module_info_plt)
+      assert permission_checking?(reach_by_page)
     end
 
     test "is false when no page checks permissions on the client", %{
@@ -1632,19 +1652,7 @@ defmodule Hologram.CompilerTest do
       {reach_by_page, _component_queries} =
         derive_kept_reach([PageModule18], call_graph, module_info_plt, [])
 
-      refute permission_checking?(reach_by_page, module_info_plt)
-    end
-
-    test "is false when the data model designates no user entity type", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      plt_without_user_entity = without_user_entity(module_info_plt)
-
-      {reach_by_page, _component_queries} =
-        derive_kept_reach([PageModule18], call_graph, plt_without_user_entity, [PageModule18])
-
-      refute permission_checking?(reach_by_page, plt_without_user_entity)
+      refute permission_checking?(reach_by_page)
     end
   end
 
@@ -2628,14 +2636,19 @@ defmodule Hologram.CompilerTest do
              ]
     end
 
-    # No user entity type, no grant store to check permissions against, so no page checks them.
-    test "syncs none of the types the rules read when the data model designates no user entity type",
+    # No user entity type, no grant store, but a page checking permissions still reads the rules'
+    # rows.
+    test "syncs the types the rules read, without the grant type, when the data model designates no user entity type",
          %{module_info_plt: module_info_plt} do
       reach_by_page = mentioning_reach([PathPolicyEntity], true)
       plt_without_user_entity = without_user_entity(module_info_plt)
 
       assert build_sync_constants(reach_by_page, %{}, plt_without_user_entity).synced_types == [
-               PathPolicyEntity
+               Entity17,
+               PolicyEntity,
+               PathPolicyEntity,
+               ParentPolicyEntity,
+               DelegationPolicyEntity
              ]
     end
   end
@@ -3182,6 +3195,99 @@ defmodule Hologram.CompilerTest do
                PLT.get(plt, Module1)
 
       PLT.stop(plt)
+    end
+  end
+
+  describe "build_index_needs/5" do
+    @entity2_table "test_fixtures_entity_module2"
+    @entity41_table "test_fixtures_entity_module41"
+
+    defp index_need(table, eq, range \\ nil, order \\ []) do
+      %{table: table, eq: MapSet.new(eq), range: range, order: order}
+    end
+
+    defp index_needs(terms, windows \\ [], query_shapes \\ []) do
+      entries =
+        terms
+        |> Enum.map(&Stage.normalize/1)
+        |> Registry.build(false)
+
+      window_terms =
+        windows
+        |> Enum.with_index()
+        |> Map.new(fn {term, i} -> {"w#{i}", Stage.normalize(term)} end)
+
+      queries = %{entries: entries, windows: window_terms}
+
+      mapping = Mapper.derive!([Entity2, Entity34, Entity39, Entity40, Entity41], [])
+
+      build_index_needs(queries, [], query_shapes, mapping, false)
+    end
+
+    test "needs what a registered query filters on" do
+      assert index_need(@entity2_table, ["b"]) in index_needs([filter(Entity2, b == 1)])
+    end
+
+    test "needs what a registered count filters on" do
+      query =
+        Entity2
+        |> filter(b == 1)
+        |> count()
+
+      needs = index_needs([query])
+
+      assert index_need(@entity2_table, ["b"]) in needs
+    end
+
+    test "needs what a window filters on" do
+      assert index_need(@entity2_table, ["b"]) in index_needs([], [filter(Entity2, b == 1)])
+    end
+
+    test "needs what an entity type's read rules ask, whatever the build registers" do
+      assert index_need(@entity41_table, ["public"]) in index_needs([])
+    end
+
+    test "needs what a query server code writes reads" do
+      query_shape =
+        {Entity2,
+         [
+           filter: [[a: {:==, %Placeholder{name: :a}}]],
+           sort: [:b],
+           take: [5]
+         ]}
+
+      needs = index_needs([], [], [query_shape])
+
+      assert index_need(@entity2_table, ["a"], nil, ["b"]) in needs
+    end
+
+    test "leaves out a query shape the stages refuse" do
+      query_shape = {Entity2, [filter: [[unknown: {:==, 1}]]]}
+
+      assert index_needs([], [], [query_shape]) == index_needs([])
+    end
+
+    test "leaves out a query shape on a type the mapping doesn't hold" do
+      query_shape = {Entity1, [take: [1]]}
+
+      assert index_needs([], [], [query_shape]) == index_needs([])
+    end
+
+    test "lists each need once" do
+      needs = index_needs([filter(Entity2, b == 1)], [filter(Entity2, b == 1)])
+
+      assert needs == Enum.uniq(needs)
+    end
+  end
+
+  describe "build_index_needs_plt/2" do
+    test "holds the needs and dumps beside the other build artifacts" do
+      needs = [%{table: "my_table", eq: MapSet.new(["a"]), range: nil, order: []}]
+
+      {plt, dump_path} = build_index_needs_plt(needs, build_dir: "/my_build_dir")
+
+      assert PLT.get_all(plt) == %{needs: needs}
+      assert dump_path == "/my_build_dir/index_needs.plt"
     end
   end
 
@@ -8946,6 +9052,43 @@ defmodule Hologram.CompilerTest do
         end)
 
       assert count == 0
+    end
+  end
+
+  describe "list_query_shapes/1" do
+    test "returns the shapes each module recorded, leaving out a module recording none" do
+      shape_1 = {Entity2, [take: [1]]}
+      shape_2 = {Entity1, [take: [2]]}
+
+      module_info_plt =
+        PLT.start()
+        |> PLT.put(Module1, %{digest: 1, query_shapes: [shape_1, shape_2]})
+        |> PLT.put(Module2, %{digest: 2, query_shapes: [shape_1]})
+        |> PLT.put(Module3, %{digest: 3, query_shapes: []})
+        |> PLT.put(Module4, %{digest: 4})
+
+      assert list_query_shapes(module_info_plt) == %{
+               Module1 => [shape_1, shape_2],
+               Module2 => [shape_1]
+             }
+    end
+  end
+
+  describe "list_query_shapes/2" do
+    test "returns the shapes the given modules recorded, leaving out a module recording none or one the PLT doesn't hold" do
+      shape_1 = {Entity2, [take: [1]]}
+      shape_2 = {Entity1, [take: [2]]}
+
+      module_info_plt =
+        PLT.start()
+        |> PLT.put(Module1, %{digest: 1, query_shapes: [shape_1]})
+        |> PLT.put(Module2, %{digest: 2, query_shapes: [shape_2]})
+        |> PLT.put(Module3, %{digest: 3, query_shapes: []})
+        |> PLT.put(Module4, %{digest: 4})
+
+      modules = [Module1, Module3, Module4, Module5]
+
+      assert list_query_shapes(module_info_plt, modules) == %{Module1 => [shape_1]}
     end
   end
 

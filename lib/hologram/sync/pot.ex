@@ -39,6 +39,7 @@ defmodule Hologram.Sync.Pot do
   @type news :: %{
           appeared: list(struct),
           edges: list(map),
+          hidden: list({module, String.t(), list(String.t())}),
           patched: list({struct, map}),
           unsynced: list({String.t(), module})
         }
@@ -70,6 +71,13 @@ defmodule Hologram.Sync.Pot do
   none patched: for a batch that may already be in some of what the client holds and not in the
   rest, so what it holds of a row can be right while the pairs filed under other rows naming it are
   not. Handing the row over states its sets and tells those pairs.
+
+  Given `hidden_salt:`, the rows the batch may have moved out of the user's reach (the part's
+  `moved`) that the user may not read and the session doesn't take the client to hold are told too,
+  as `hidden`, by their hashes under that salt (see `Hologram.Sync.Frame.unsync_hashed/3`): for a
+  session whose held ids were read rather than told, where a row the client holds can be missing
+  from them. They stay out of the dropped: a removal of a pair naming one would name it by id.
+  Without a salt, `hidden` is empty.
   """
   @spec decide(t, map, keyword) :: {news, t}
   def decide(pot, part, opts \\ []) do
@@ -111,6 +119,7 @@ defmodule Hologram.Sync.Pot do
     news = %{
       appeared: Enum.map(appeared, &with_sets(&1, lookup, told.held, synced)),
       edges: edges,
+      hidden: hidden(pot, part, Keyword.get(opts, :hidden_salt)),
       patched: patched,
       unsynced: unsynced
     }
@@ -221,6 +230,7 @@ defmodule Hologram.Sync.Pot do
     news = %{
       appeared: Enum.map(appeared, &held_sets_only(&1, told.held)),
       edges: edges,
+      hidden: [],
       patched: [],
       unsynced: unsynced
     }
@@ -319,6 +329,23 @@ defmodule Hologram.Sync.Pot do
           do: {name, Enum.filter(members, &Held.member?(held, &1.__struct__, &1.id))}
 
     struct(row, sets)
+  end
+
+  # The moved rows of each type the user may not read and the client isn't taken to hold, in id order.
+  defp hidden(_pot, _part, nil), do: []
+
+  defp hidden(pot, part, salt) do
+    Enum.flat_map(part.moved, fn {entity_type, packed_ids} ->
+      {_held, not_held} = Held.split(pot.held, entity_type, packed_ids)
+      readable = Map.get(part.readable, entity_type, %{})
+
+      ids =
+        not_held
+        |> PackedIds.unpack()
+        |> Enum.reject(&Map.has_key?(readable, &1))
+
+      if ids == [], do: [], else: [{entity_type, salt, Enum.sort(ids)}]
+    end)
   end
 
   # How each checked row of one type is judged: the rows handed over whole, the patches, and the

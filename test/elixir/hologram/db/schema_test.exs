@@ -3,6 +3,7 @@ defmodule Hologram.DB.SchemaTest do
 
   import Hologram.DB.Schema
 
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Mapper
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module19
@@ -1248,7 +1249,7 @@ defmodule Hologram.DB.SchemaTest do
       target =
         [Hologram.Test.Fixtures.Entity.Module14]
         |> Mapper.derive!([])
-        |> from_mapping()
+        |> then(&from_mapping(&1, IndexPlan.framework_plan(&1)))
 
       store = target.tables["hologram_role_grant"]
       unique_name = "hologram_role_grant_user_id_entity_type_entity_id_role_$uidx"
@@ -1321,7 +1322,7 @@ defmodule Hologram.DB.SchemaTest do
              }
     end
 
-    test "carries a unique attribute's index beside the sort-key companion's" do
+    test "carries a unique attribute's index" do
       indexes = table(Module19, "test_fixtures_entity_module19").indexes
 
       assert indexes == %{
@@ -1334,16 +1335,6 @@ defmodule Hologram.DB.SchemaTest do
                  columns: ["slug"],
                  nulls_distinct: true,
                  unique: true
-               },
-               "test_fixtures_entity_module19_code_$sort_$idx" => %{
-                 columns: ["code_$sort"],
-                 nulls_distinct: true,
-                 unique: false
-               },
-               "test_fixtures_entity_module19_slug_$sort_$idx" => %{
-                 columns: ["slug_$sort"],
-                 nulls_distinct: true,
-                 unique: false
                }
              }
     end
@@ -1424,10 +1415,21 @@ defmodule Hologram.DB.SchemaTest do
              }
     end
 
-    test "derives an index per reference column" do
-      indexes = table(Module3, "test_fixtures_entity_module3").indexes
+    test "holds the index plan's indexes beside the model's, a join table's included" do
+      schema =
+        [Module3]
+        |> Mapper.derive!([])
+        |> then(&from_mapping(&1, IndexPlan.framework_plan(&1)))
 
-      assert indexes == %{
+      assert schema.tables["test_fixtures_entity_module3_a_$join"].indexes == %{
+               "test_fixtures_entity_module3_a_$join_target_id_source_id_$idx" => %{
+                 columns: ["target_id", "source_id"],
+                 nulls_distinct: true,
+                 unique: false
+               }
+             }
+
+      assert schema.tables["test_fixtures_entity_module3"].indexes == %{
                "test_fixtures_entity_module3_b_id_$idx" => %{
                  columns: ["b_id"],
                  nulls_distinct: true,
@@ -1441,7 +1443,7 @@ defmodule Hologram.DB.SchemaTest do
              }
     end
 
-    test "derives join tables with fixed columns, composite primary key, foreign keys, and reverse index" do
+    test "derives join tables with fixed columns, composite primary key and foreign keys" do
       assert table(Module3, "test_fixtures_entity_module3_a_$join") == %{
                columns: %{
                  "source_id" => %{type: "uuid", collation: nil, null: false},
@@ -1463,13 +1465,7 @@ defmodule Hologram.DB.SchemaTest do
                    constraint: "test_fixtures_entity_module3_a_$join_target_id_$fk"
                  }
                },
-               indexes: %{
-                 "test_fixtures_entity_module3_a_$join_target_id_source_id_$idx" => %{
-                   columns: ["target_id", "source_id"],
-                   nulls_distinct: true,
-                   unique: false
-                 }
-               }
+               indexes: %{}
              }
     end
 

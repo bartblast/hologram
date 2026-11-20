@@ -480,7 +480,7 @@ defmodule Hologram.Realtime.SSETest do
     @types_hash "00112233445566778899aabbccddeeff"
 
     defp sync_start(cursor) do
-      %{edges: nil, cursor: cursor, gap_end: nil, rules: nil, types_hash: @types_hash}
+      %{cursor: cursor, rules: nil, types_hash: @types_hash}
     end
 
     defp connection do

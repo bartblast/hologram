@@ -7,6 +7,7 @@ defmodule Hologram.Sync.SupervisorTest do
   alias Hologram.Sync.Dispatcher
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
+  alias Hologram.Sync.Gate
   alias Hologram.Sync.Live
   alias Hologram.Sync.ReadEdge
   alias Hologram.Sync.ResultStore
@@ -31,6 +32,7 @@ defmodule Hologram.Sync.SupervisorTest do
                ResultStore,
                Evaluators,
                ReadEdge,
+               Gate,
                Sessions.registry(),
                notifications(),
                Dispatcher
@@ -69,6 +71,15 @@ defmodule Hologram.Sync.SupervisorTest do
 
       assert Enum.find_index(ids, &(&1 == Sessions.registry())) >
                Enum.find_index(ids, &(&1 == ReadEdge))
+    end
+
+    # A gate replaced forgets whose turn it was, and the sessions caught up are replaced with the
+    # list after it.
+    test "keeps the session list behind the gate" do
+      ids = child_ids()
+
+      assert Enum.find_index(ids, &(&1 == Sessions.registry())) >
+               Enum.find_index(ids, &(&1 == Gate))
     end
 
     test "hears about appends on a connection of its own, outside the pool" do

@@ -704,7 +704,9 @@ describe("DataLayer", () => {
           "decrement/3",
           "delete_relationship/3",
           "filter/2",
+          "filter/3",
           "include/2",
+          "include/3",
           "increment/3",
           "normalize/1",
           "one/1",
@@ -712,6 +714,7 @@ describe("DataLayer", () => {
           "put_attribute/3",
           "skip/2",
           "sort/2",
+          "sort/3",
           "take/2",
           "trust/1",
         ]),
@@ -779,11 +782,13 @@ describe("DataLayer", () => {
       applying = sinon.stub(Deltas, "apply");
 
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
       LocalDatabase.syncCounts = {};
     });
 
     afterEach(() => {
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
       LocalDatabase.syncCounts = {};
     });
 
@@ -791,6 +796,7 @@ describe("DataLayer", () => {
       const rows = {put_entity: {"MyApp.Task": [{id: "t1"}]}};
 
       DataLayer.ingestMountData({
+        actorEntityId: "u1",
         actorUserId: "u1",
         syncCounts: {"MyApp.Counting/count/": 3},
         syncRows: rows,
@@ -798,11 +804,24 @@ describe("DataLayer", () => {
 
       sinon.assert.calledOnceWithExactly(applying, rows, {insertOnly: true});
 
+      assert.equal(LocalDatabase.actorEntityId, "u1");
       assert.equal(LocalDatabase.actorUserId, "u1");
 
       assert.deepStrictEqual(LocalDatabase.syncCounts, {
         "MyApp.Counting/count/": 3,
       });
+    });
+
+    // The server sends a user id no user entity can have as it is, beside no entity id.
+    it("files a user id no user entity can have beside no entity id", () => {
+      DataLayer.ingestMountData({
+        actorEntityId: null,
+        actorUserId: 7,
+        syncRows: {},
+      });
+
+      assert.isNull(LocalDatabase.actorEntityId);
+      assert.equal(LocalDatabase.actorUserId, 7);
     });
 
     it("takes counts the page did not carry as none", () => {
@@ -821,6 +840,7 @@ describe("DataLayer", () => {
       sinon.assert.notCalled(applying);
 
       assert.isNull(LocalDatabase.actorUserId);
+      assert.isNull(LocalDatabase.actorEntityId);
       assert.deepStrictEqual(LocalDatabase.syncCounts, {
         "MyApp.Held/count/": 9,
       });
@@ -1032,6 +1052,7 @@ describe("DataLayer", () => {
       Model.reset();
       LocalDatabase.reset();
       LocalDatabase.actorUserId = "u1";
+      LocalDatabase.actorEntityId = "u1";
 
       LocalDatabase.putRow(USER, {
         email: "ann@example.com",
@@ -1049,8 +1070,17 @@ describe("DataLayer", () => {
     afterEach(() => {
       LocalDatabase.reset();
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
       Overlay.reset();
       delete globalThis.Hologram.sync;
+    });
+
+    // The server reads a user id no user entity can have as no session user, even one spelled like
+    // a row's id, so this does too.
+    it("answers nil for a user id no user entity can have", () => {
+      LocalDatabase.actorEntityId = null;
+
+      assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
     });
 
     it("answers the acting user's row", () => {
@@ -1111,12 +1141,14 @@ describe("DataLayer", () => {
 
     it("answers nil when the acting user's row isn't held", () => {
       LocalDatabase.actorUserId = "u3";
+      LocalDatabase.actorEntityId = "u3";
 
       assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
     });
 
     it("answers nil for an anonymous session", () => {
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
 
       assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
     });
@@ -1124,6 +1156,7 @@ describe("DataLayer", () => {
     // The server reads no row for a session user id that is not a canonical entity id.
     it("answers nil for an actor id spelled like a member every object inherits", () => {
       LocalDatabase.actorUserId = "constructor";
+      LocalDatabase.actorEntityId = "constructor";
 
       assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
     });
@@ -1137,6 +1170,7 @@ describe("DataLayer", () => {
       });
 
       LocalDatabase.actorUserId = undefined;
+      LocalDatabase.actorEntityId = undefined;
 
       assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
     });

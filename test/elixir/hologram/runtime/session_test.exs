@@ -36,6 +36,12 @@ defmodule Hologram.Runtime.SessionTest do
 
       assert get_session(conn) == %{"role" => "admin"}
     end
+
+    test "strips the CSRF token key while preserving app entries" do
+      conn = conn_with_session(%{"hologram_csrf_token" => "token", "role" => "admin"})
+
+      assert get_session(conn) == %{"role" => "admin"}
+    end
   end
 
   describe "get_session_id/1" do
@@ -61,6 +67,12 @@ defmodule Hologram.Runtime.SessionTest do
 
     test "returns nil when no user ID is present" do
       assert get_user_id(conn_with_empty_session()) == nil
+    end
+
+    test "returns nil for a boolean persisted before booleans were refused" do
+      conn = conn_with_session(%{@user_id_key => false})
+
+      assert get_user_id(conn) == nil
     end
   end
 
@@ -152,6 +164,12 @@ defmodule Hologram.Runtime.SessionTest do
       assert Plug.Conn.get_session(conn, @user_id_key) == 42
     end
 
+    test "stores a string user ID" do
+      conn = put_user_id(conn_with_empty_session(), "user-1")
+
+      assert Plug.Conn.get_session(conn, @user_id_key) == "user-1"
+    end
+
     test "removes the user_id key when given nil" do
       conn =
         %{@user_id_key => 42}
@@ -159,6 +177,14 @@ defmodule Hologram.Runtime.SessionTest do
         |> put_user_id(nil)
 
       assert Plug.Conn.get_session(conn, @user_id_key) == nil
+    end
+
+    test "raises Hologram.MisuseError when given a boolean" do
+      assert_error Hologram.MisuseError,
+                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   fn ->
+                     put_user_id(conn_with_empty_session(), false)
+                   end
     end
   end
 end
