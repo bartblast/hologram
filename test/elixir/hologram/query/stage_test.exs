@@ -4105,6 +4105,60 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  describe "new_row_triples!/3" do
+    test "builds a triple reading the row one level above" do
+      assert new_row_triples!(Module2, [{{:outer, 1, :c}, {:==, "x"}}], []) ==
+               [{{:outer, 1, :c}, :==, "x"}]
+    end
+
+    test "builds a triple of the row itself" do
+      assert new_row_triples!(Module2, [c: {:==, "x"}], []) == [{:c, :==, "x"}]
+    end
+
+    test "builds a comparison of the row with the row above" do
+      assert new_row_triples!(Module2, [c: {:!=, {:attribute, {:outer, 1, :c}}}], []) ==
+               [{:c, :!=, {:attribute, {:outer, 1, :c}}}]
+    end
+
+    test "refuses a mistyped value for a name of the row above" do
+      assert_error MisuseError,
+                   "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string",
+                   fn -> new_row_triples!(Module2, [{{:outer, 1, :c}, {:==, 5}}], []) end
+    end
+
+    test "reads a hint at the depth of the clause, leaving the row above out" do
+      hints = [{:key, 0, :nope, "a value from the surrounding code is pinned", []}]
+
+      assert_error MisuseError,
+                   "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :server_created_at, :server_updated_at, :updated_at - a value from the surrounding code is pinned",
+                   fn -> new_row_triples!(Module2, [nope: {:==, {:attribute, :c}}], hints) end
+    end
+
+    test "reads a row field inside a quantifier on the rule's own row, not the new one" do
+      row_field = %RowField{owner: Module32, name: :name}
+
+      assert new_row_triples!(Module32, [any: {[:messages], [body: row_field]}], []) == [
+               {:any, {[:messages], [{:body, :==, {:attribute, {:outer, 1, :name}}}]}}
+             ]
+    end
+
+    test "refuses a row field at the top of the condition" do
+      row_field = %RowField{owner: Module2, name: :c}
+
+      assert_error MisuseError,
+                   "{:outer, 0, :c} names no row above the condition it stands in, which has no row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
+                   fn -> new_row_triples!(Module2, [c: row_field], []) end
+    end
+
+    test "counts only the written rows when refusing a level past the new row" do
+      assert_error MisuseError,
+                   "{:outer, 2, :c} names no row above the condition it stands in, which has no row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
+                   fn ->
+                     new_row_triples!(Module2, [c: {:==, {:attribute, {:outer, 2, :c}}}], [])
+                   end
+    end
+  end
+
   # Guards rather than bug tests: a policy condition builds its clauses here, and names the acting
   # user with the actor leaf a filter refuses.
   describe "predicate_triples!/2" do

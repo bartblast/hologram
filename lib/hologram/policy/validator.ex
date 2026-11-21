@@ -97,8 +97,8 @@ defmodule Hologram.Policy.Validator do
   defp actor_line_where(entity_type) do
     entity_type.__policies__()
     |> Enum.zip(entity_type.__policy_sources__())
-    |> Enum.find_value(fn {{_operation, _to, _via, predicates, _name, _fields} = policy, source} ->
-      clauses = Stage.predicate_triples!(entity_type, predicates)
+    |> Enum.find_value(fn {{operation, _to, _via, predicates, _name, _fields} = policy, source} ->
+      clauses = Policy.condition_clauses(entity_type, operation, predicates)
 
       if Stage.names_actor?(clauses), do: line_where(entity_type, policy, source)
     end)
@@ -419,6 +419,21 @@ defmodule Hologram.Policy.Validator do
     all_to_one?
   end
 
+  # The names of the row after the change the given clauses read outside any quantifier, each
+  # judged as the same name of the stored row is.
+  defp new_row_names(clauses) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} -> Enum.flat_map(alternatives, &new_row_names/1)
+      {quantifier, {_source, _inner}} when quantifier in [:all, :any, :none] -> []
+      {name, _operator, {:attribute, other}} -> new_row_name(name) ++ new_row_name(other)
+      {name, _operator, _value} -> new_row_name(name)
+    end)
+  end
+
+  defp new_row_name({:outer, 1, name}), do: [name]
+
+  defp new_row_name(_name), do: []
+
   # The given data-form predicates without their quantifiers, in a disjunction's alternatives too -
   # a quantifier's source and condition are judged when the predicates are read as a filter.
   defp unquantified_predicates(predicates) do
@@ -665,9 +680,15 @@ defmodule Hologram.Policy.Validator do
     |> Stage.written_names()
     |> Enum.each(&validate_set_free_name!(entity_type, &1))
 
-    clauses = Stage.predicate_triples!(entity_type, predicates, hints)
+    clauses = Policy.condition_clauses(entity_type, operation, predicates, hints)
 
-    validate_server_only_predicates!(entity_type, {operation, name}, clauses, where)
+    clauses
+    |> new_row_names()
+    |> Enum.each(&validate_set_free_name!(entity_type, &1))
+
+    stored_clauses = Policy.stored_spelling(clauses)
+
+    validate_server_only_predicates!(entity_type, {operation, name}, stored_clauses, where)
 
     :ok
   rescue

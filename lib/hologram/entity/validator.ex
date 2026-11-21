@@ -2329,7 +2329,7 @@ defmodule Hologram.Entity.Validator do
   defp validate_when_opt_shape!(module, operation, spec) do
     case Keyword.fetch(spec, :when) do
       {:ok, condition} ->
-        if not when_value_valid?(condition) do
+        if not when_value_valid?(condition, operation) do
           raise Hologram.CompileError,
             message:
               "invalid when option #{inspect(condition)} for #{describe_allow(operation, spec)} in #{inspect(module)} - a pinned condition must be a list of predicates, each pairing a name or a path with a value"
@@ -2384,14 +2384,20 @@ defmodule Hologram.Entity.Validator do
   end
 
   # A predicate names an attribute with an atom, or a related row's attribute with a path of two or
-  # more atoms.
-  defp when_value_valid?(condition) when is_list(condition) do
+  # more atoms. On an update line either can be wrapped to read the row after the change.
+  defp when_value_valid?(condition, operation) when is_list(condition) do
     Enum.all?(condition, fn
-      {name, _value} when is_atom(name) -> true
-      {[_hop, _name | _rest] = path, _value} -> Enum.all?(path, &is_atom/1)
+      {{:outer, 1, name}, _value} when operation == :update -> when_name_valid?(name)
+      {name, _value} -> when_name_valid?(name)
       _entry -> false
     end)
   end
 
-  defp when_value_valid?(_condition), do: false
+  defp when_value_valid?(_condition, _operation), do: false
+
+  defp when_name_valid?(name) when is_atom(name), do: true
+
+  defp when_name_valid?([_hop, _name | _rest] = path), do: Enum.all?(path, &is_atom/1)
+
+  defp when_name_valid?(_name), do: false
 end

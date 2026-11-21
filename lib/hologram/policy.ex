@@ -253,6 +253,7 @@ defmodule Hologram.Policy do
   @spec build(module) :: %{
           Entity.operation() =>
             list(%{
+              optional(:exact) => %{predicates: list(tuple)},
               predicates: list(tuple),
               to: list(tuple) | nil,
               via: {Entity.operation(), list(atom)} | nil
@@ -283,6 +284,18 @@ defmodule Hologram.Policy do
   def field_rules(policy, field) do
     Map.get(policy, {:update, field}, []) ++ Map.get(policy, :update, [])
   end
+
+  # The clauses a line's condition builds: an update line's are read with the row after the change
+  # one level above the rule's own row, which is what new() lowers to.
+  @doc false
+  @spec condition_clauses(module, Entity.operation(), Query.predicates(), list) :: list(tuple)
+  def condition_clauses(entity_type, operation, predicates, hints \\ [])
+
+  def condition_clauses(entity_type, :update, predicates, hints),
+    do: Stage.new_row_triples!(entity_type, predicates, hints)
+
+  def condition_clauses(entity_type, _operation, predicates, hints),
+    do: Stage.predicate_triples!(entity_type, predicates, hints)
 
   @doc """
   Returns the given entity type modules that declare no allow lines, sorted.
@@ -572,6 +585,13 @@ defmodule Hologram.Policy do
     do: field_rules(policy, field)
 
   def operation_rules(policy, operation), do: Map.get(policy, operation, [])
+
+  # The given clauses of an update line as what they read on the stored row: a name of the row after
+  # the change spelled as the same name of the rule's own row, which has the same type and the same
+  # chains - so whatever asks what a clause reads takes it as it takes any other.
+  @doc false
+  @spec stored_spelling(list(tuple)) :: list(tuple)
+  def stored_spelling(clauses), do: stored_spelling(clauses, 0)
 
   @doc """
   Returns the operations the given entity type can be asked about, sorted: the framework's own seven, and every name an allow line carries - its own lines and the ones taken from its policy modules alike, since both land in __policies__/0.
@@ -1468,13 +1488,82 @@ defmodule Hologram.Policy do
     end)
   end
 
+  # A rule reading the row after the change keeps its clauses as written under :exact, for what
+  # judges one specific change, and its own predicates are what's left for anything asking with no
+  # change in hand: whether some change could pass.
   defp line_rule(entity_type, operation, to, via, predicates) do
-    %{
-      predicates: Stage.predicate_triples!(entity_type, predicates),
+    clauses = condition_clauses(entity_type, operation, predicates)
+
+    rule = %{
+      predicates: planned_clauses(clauses),
       to: build_to(entity_type, to),
       via: delegation(operation, via)
     }
+
+    if reads_new_row?(clauses, 0),
+      do: Map.put(rule, :exact, %{predicates: clauses}),
+      else: rule
   end
+
+  # The given clauses without those reading the row after the change, which no row answers until
+  # there is a change: each counts as holding. An alternative left with nothing holds, and so does
+  # its disjunction. A quantifier goes whole, since dropping a clause inside a none would narrow it
+  # the wrong way.
+  defp planned_clauses(clauses) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} ->
+        planned = Enum.map(alternatives, &planned_clauses/1)
+
+        if [] in planned, do: [], else: [{:or, planned}]
+
+      clause ->
+        if reads_new_row?([clause], 0), do: [], else: [clause]
+    end)
+  end
+
+  # Whether the given clauses, nested in the given number of quantifiers, read the row after the
+  # change: the row one level past the rule's own.
+  defp reads_new_row?(clauses, depth) do
+    Enum.any?(clauses, fn
+      {:or, alternatives} ->
+        Enum.any?(alternatives, &reads_new_row?(&1, depth))
+
+      {quantifier, {source, inner}} when quantifier in @quantifiers ->
+        new_row_name?(source, depth) or reads_new_row?(inner, depth + 1)
+
+      {name, _operator, {:attribute, other}} ->
+        new_row_name?(name, depth) or new_row_name?(other, depth)
+
+      {name, _operator, _value} ->
+        new_row_name?(name, depth)
+    end)
+  end
+
+  defp new_row_name?({:outer, levels, _name}, depth), do: levels == depth + 1
+
+  defp new_row_name?(_name, _depth), do: false
+
+  defp stored_spelling(clauses, depth) do
+    Enum.map(clauses, fn
+      {:or, alternatives} ->
+        {:or, Enum.map(alternatives, &stored_spelling(&1, depth))}
+
+      {quantifier, {source, inner}} when quantifier in @quantifiers ->
+        {quantifier, {stored_name(source, depth), stored_spelling(inner, depth + 1)}}
+
+      {name, operator, {:attribute, other}} ->
+        {stored_name(name, depth), operator, {:attribute, stored_name(other, depth)}}
+
+      {name, operator, value} ->
+        {stored_name(name, depth), operator, value}
+    end)
+  end
+
+  defp stored_name({:outer, levels, name}, depth) when levels == depth + 1 do
+    if depth == 0, do: name, else: {:outer, depth, name}
+  end
+
+  defp stored_name(name, _depth), do: name
 
   # A limited update line is keyed by the fields it covers, any other line by its operation, per
   # role for a grant lifecycle one.

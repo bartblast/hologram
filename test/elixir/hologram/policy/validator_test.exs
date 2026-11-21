@@ -1646,6 +1646,87 @@ defmodule Hologram.Policy.ValidatorTest do
       assert validate_model!([InlinePolicyFixture91], []) == :ok
     end
 
+    test "returns :ok for an update line reading the row after the change" do
+      defmodule NewRowValidatorFixture1 do
+        use Hologram.Entity
+
+        attribute :status, :enum, values: [:approved, :pending], default: :pending
+
+        allow :read
+        allow :update, when: status == :pending and new(status) == :approved
+      end
+
+      assert validate_model!([NewRowValidatorFixture1], []) == :ok
+    end
+
+    test "rejects new() on a server-only attribute" do
+      defmodule NewRowValidatorFixture2 do
+        use Hologram.Entity
+
+        attribute :secret, :boolean, server_only: true
+
+        allow :read
+        allow :update, when: new(secret) == true
+      end
+
+      expected_msg =
+        "invalid predicate :secret for allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture2 - :secret is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, which a client answers from the server's verdict on the row it was sent"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NewRowValidatorFixture2], [])
+      end
+    end
+
+    test "rejects new() on a path ending at a derived field counting a related set" do
+      defmodule NewRowValidatorFixture3 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+
+        relationship :channel, Module32
+
+        allow :read
+        allow :update, when: new(channel.message_count) > 3
+      end
+
+      expected_msg =
+        "invalid predicate for allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture3 - channel.message_count counts messages - a policy condition reads a related set only through any, none or all"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NewRowValidatorFixture3], [])
+      end
+    end
+
+    test "rejects a pinned condition reading the row above on a line for another operation" do
+      expected_msg =
+        ~s/invalid when option [{{:outer, 1, :title}, {:==, "x"}}] for allow :read in Hologram.Policy.ValidatorTest.NewRowValidatorFixture4 - a pinned condition must be a list of predicates, each pairing a name or a path with a value/
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NewRowValidatorFixture4 do
+          use Hologram.Entity
+
+          attribute :title, :string
+
+          allow :read, when: ^[{{:outer, 1, :title}, {:==, "x"}}]
+        end
+      end
+    end
+
+    test "rejects a pinned condition wrapping the row above twice" do
+      expected_msg =
+        ~s/invalid when option [{{:outer, 1, {:outer, 1, :title}}, {:==, "x"}}] for allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture5 - a pinned condition must be a list of predicates, each pairing a name or a path with a value/
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NewRowValidatorFixture5 do
+          use Hologram.Entity
+
+          attribute :title, :string
+
+          allow :update, when: ^[{{:outer, 1, {:outer, 1, :title}}, {:==, "x"}}]
+        end
+      end
+    end
+
     test "rejects a condition through a path ending at a derived field counting a related set" do
       defmodule InlinePolicyFixture92 do
         use Hologram.Entity

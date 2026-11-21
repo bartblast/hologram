@@ -434,6 +434,18 @@ defmodule Hologram.Query.Stage do
   def predicate_triples!(entity_type, predicates, hints) when is_list(hints),
     do: scoped_triples!([entity_type], predicates, %{entries: hints, outer_rows: 0})
 
+  # Returns the clauses the given data-form predicates of an update line build, read on a row of the
+  # given type with the row after the change one level above it - which {:outer, levels, name} one
+  # past the quantifiers around it names. The scope marks that row, since it's no row a hint's depth,
+  # a row field or a refusal's count of the rows above a condition is about.
+  @doc false
+  @spec new_row_triples!(module, Query.predicates(), list(name_hint)) :: list(Query.clause())
+  def new_row_triples!(entity_type, predicates, hints) when is_list(hints) do
+    scope = [entity_type, {:new_row, entity_type}]
+
+    scoped_triples!(scope, predicates, %{entries: hints, outer_rows: 0})
+  end
+
   @doc false
   @spec put_attribute(Entity.t(), keyword | map) :: Entity.t()
   def put_attribute(entity, values) when is_list(values) or is_map(values) do
@@ -1060,11 +1072,17 @@ defmodule Hologram.Query.Stage do
     end
   end
 
+  # The quantifiers a clause is nested in: the rows of the scope past the term's own, the rows
+  # outside its clauses and an update line's row after the change left out.
+  defp hint_depth(%{outer_rows: outer_rows}, scope) do
+    length(written_rows(scope)) - 1 - outer_rows
+  end
+
   # The fix the query macros left for the name written in the given position at the depth the
   # scope says, if any - the depth being the quantifiers the clause is nested in, which the scope
   # holds after the rows outside the term's clauses.
-  defp name_hint(%{entries: entries, outer_rows: outer_rows}, position, name, scope) do
-    depth = length(scope) - 1 - outer_rows
+  defp name_hint(%{entries: entries} = name_hints, position, name, scope) do
+    depth = hint_depth(name_hints, scope)
 
     Enum.find_value(entries, fn
       {^position, ^depth, ^name, fix, _spellings} when is_binary(fix) -> fix
@@ -1086,7 +1104,11 @@ defmodule Hologram.Query.Stage do
 
   # name_type!/2 without the refusal - nil for a row out of the scope's reach.
   defp name_type(scope, {:outer, levels, _name}) do
-    if is_integer(levels) and levels >= 1 and levels < length(scope), do: Enum.at(scope, levels)
+    if is_integer(levels) and levels >= 1 and levels < length(scope) do
+      scope
+      |> Enum.at(levels)
+      |> scope_row_type()
+    end
   end
 
   defp name_type(scope, _name), do: hd(scope)
@@ -1094,11 +1116,13 @@ defmodule Hologram.Query.Stage do
   # The type a name is declared on: the row the clauses are about, or for {:outer, levels, name} the
   # row that many quantifiers out, which the scope holds after it.
   defp name_type!(scope, {:outer, levels, _name} = name) do
-    rows_above = length(scope) - 1
-
-    if is_integer(levels) and levels >= 1 and levels <= rows_above do
-      Enum.at(scope, levels)
+    if is_integer(levels) and levels >= 1 and levels < length(scope) do
+      scope
+      |> Enum.at(levels)
+      |> scope_row_type()
     else
+      rows_above = length(written_rows(scope)) - 1
+
       raise MisuseError,
         message:
           "#{inspect(name)} names no row above the condition it stands in, which has #{rows_spelled(rows_above)} above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row"
@@ -1678,7 +1702,8 @@ defmodule Hologram.Query.Stage do
   # condition. It names an attribute, a reference field or a path to an attribute: a relationship
   # names a row, which a condition compares through one of its attributes.
   defp row_field_name!(%RowField{name: name} = row_field, scope) do
-    owner = List.last(scope)
+    rows = written_rows(scope)
+    owner = List.last(rows)
 
     if row_field.owner != owner do
       raise MisuseError,
@@ -1710,7 +1735,7 @@ defmodule Hologram.Query.Stage do
           "#{inspect(row_field)} names the #{inspect(end_name)} relationship of #{inspect(end_type)} - a row field names an attribute: #{spelled}.<attribute>"
     end
 
-    {:outer, length(scope) - 1, name}
+    {:outer, length(rows) - 1, name}
   end
 
   # A row field where a placeholder keys the predicate is converted the same way, so no executor
@@ -1735,11 +1760,17 @@ defmodule Hologram.Query.Stage do
   # so every hint of the name at its place and depth is looked at.
   defp row_hint(%{entries: [], outer_rows: 0}, _position, _name, _row_type, _scope), do: nil
 
-  defp row_hint(%{entries: entries, outer_rows: outer_rows}, position, name, row_type, scope) do
+  defp row_hint(
+         %{entries: entries, outer_rows: outer_rows} = name_hints,
+         position,
+         name,
+         row_type,
+         scope
+       ) do
     local = local_name(name)
 
     if is_atom(local) and local not in filterable_names(row_type) do
-      depth = length(scope) - 1 - outer_rows
+      depth = hint_depth(name_hints, scope)
 
       spelling_lists =
         for {^position, ^depth, ^name, _fix, [_spelling | _spellings] = spellings} <- entries,
@@ -1759,8 +1790,16 @@ defmodule Hologram.Query.Stage do
 
   defp rows_spelled(count), do: "#{count} rows"
 
+  # The type of a row of a scope, an update line's row after the change among them.
+  defp scope_row_type({:new_row, entity_type}), do: entity_type
+
+  defp scope_row_type(entity_type), do: entity_type
+
+  # The rows of a scope a condition is written about, without an update line's row after the change.
+  defp written_rows(scope), do: Enum.reject(scope, &match?({:new_row, _entity_type}, &1))
+
   # The scope is the type of the row the predicates are about, then the type of each row above it,
-  # nearest first - the queried type last.
+  # nearest first - the queried type last, and past it an update line's row after the change.
   defp scoped_triples!(scope, predicates, name_hints) do
     Enum.flat_map(predicates, fn
       {%Placeholder{name: placeholder_name}, value} ->

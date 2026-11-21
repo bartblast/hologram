@@ -29,6 +29,7 @@ defmodule Hologram.PolicyTest do
       related_chains: 2,
       revoke_role_qualifying_roles: 1,
       revoke_role_qualifying_roles: 2,
+      stored_spelling: 1,
       update_fields: 1,
       validate_operation!: 2,
       verdict_key: 2,
@@ -733,6 +734,175 @@ defmodule Hologram.PolicyTest do
       assert field_rules(policy, :topic) == [limited, whole]
       assert field_rules(policy, :name) == [whole]
       assert field_rules(%{}, :name) == []
+    end
+  end
+
+  describe "build/1 for lines reading the row after the change" do
+    test "keeps the clauses under :exact and leaves the others in the predicates" do
+      defmodule NewRowFixture1 do
+        use Hologram.Entity
+
+        attribute :status, :enum, values: [:approved, :pending], default: :pending
+
+        role :manager
+
+        allow :read
+
+        allow :update,
+          as: :approve,
+          to: :manager,
+          only: [:status],
+          when: status == :pending and new(status) == :approved
+      end
+
+      assert build(NewRowFixture1)[:approve] == [
+               %{
+                 exact: %{
+                   predicates: [
+                     {:status, :==, :pending},
+                     {{:outer, 1, :status}, :==, :approved}
+                   ]
+                 },
+                 predicates: [{:status, :==, :pending}],
+                 to: [{:own, [:manager]}],
+                 via: nil
+               }
+             ]
+    end
+
+    test "leaves a rule with no new() without :exact" do
+      defmodule NewRowFixture2 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        allow :read
+        allow :update, when: priority > 1
+      end
+
+      assert build(NewRowFixture2)[:update] == [
+               %{predicates: [{:priority, :>, 1}], to: nil, via: nil}
+             ]
+    end
+
+    test "drops a disjunction with an alternative left with nothing" do
+      defmodule NewRowFixture3 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        allow :read
+        allow :update, when: priority == 1 or new(priority) == 2
+      end
+
+      assert [%{exact: %{predicates: [{:or, _alternatives}]}, predicates: []}] =
+               build(NewRowFixture3)[:update]
+    end
+
+    test "keeps a disjunction whose alternatives each keep a clause" do
+      defmodule NewRowFixture4 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+        attribute :rank, :integer
+
+        allow :read
+        allow :update, when: (rank == 1 and new(priority) == 2) or priority == 3
+      end
+
+      assert [%{predicates: [{:or, [[{:rank, :==, 1}], [{:priority, :==, 3}]]}]}] =
+               build(NewRowFixture4)[:update]
+    end
+
+    defmodule NewRowTag do
+      use Hologram.Entity
+
+      attribute :level, :integer
+
+      allow :read
+    end
+
+    test "drops a quantifier reading the new row inside its condition whole" do
+      defmodule NewRowFixture5 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: none(tag <- tags, tag.level > new(priority) and tag.level > 1)
+      end
+
+      assert [%{exact: %{predicates: [{:none, {[:tags], _clauses}}]}, predicates: []}] =
+               build(NewRowFixture5)[:update]
+    end
+
+    test "drops a quantifier over a source on the new row" do
+      defmodule NewRowFixture6 do
+        use Hologram.Entity
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: any(new(tags))
+      end
+
+      assert [%{exact: %{predicates: [{:any, {{:outer, 1, [:tags]}, []}}]}, predicates: []}] =
+               build(NewRowFixture6)[:update]
+    end
+
+    test "keeps a quantifier reading only the stored row" do
+      defmodule NewRowFixture7 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: any(tag <- tags, tag.level > priority) and new(priority) > 1
+      end
+
+      assert [%{predicates: [{:any, {[:tags], _clauses}}]}] = build(NewRowFixture7)[:update]
+    end
+  end
+
+  describe "stored_spelling/1" do
+    test "spells a name of the new row as the name of the rule's row" do
+      assert stored_spelling([{{:outer, 1, :status}, :==, :approved}]) ==
+               [{:status, :==, :approved}]
+    end
+
+    test "spells a path and an operand of the new row" do
+      assert stored_spelling([
+               {{:outer, 1, [:project, :rank]}, :>, {:attribute, {:outer, 1, :priority}}}
+             ]) == [{[:project, :rank], :>, {:attribute, :priority}}]
+    end
+
+    test "spells a quantifier's source and leaves a name of the rule's row inside it" do
+      clauses = [
+        {:any,
+         {{:outer, 1, [:project, :members]},
+          [
+            {:level, :>=, {:attribute, {:outer, 2, :priority}}},
+            {:rank, :==, {:attribute, {:outer, 1, :rank}}}
+          ]}}
+      ]
+
+      assert stored_spelling(clauses) == [
+               {:any,
+                {[:project, :members],
+                 [
+                   {:level, :>=, {:attribute, {:outer, 1, :priority}}},
+                   {:rank, :==, {:attribute, {:outer, 1, :rank}}}
+                 ]}}
+             ]
+    end
+
+    test "spells the alternatives of a disjunction" do
+      assert stored_spelling([{:or, [[{{:outer, 1, :a}, :==, 1}], [{:b, :==, 2}]]}]) ==
+               [{:or, [[{:a, :==, 1}], [{:b, :==, 2}]]}]
     end
   end
 
