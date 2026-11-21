@@ -1562,6 +1562,42 @@ describe("Batches", () => {
       assert.isTrue(SyncStream.scheduleRender.called);
     });
 
+    describe("whether a fill is pending", () => {
+      const fillPending = () => {
+        const promoting = sinon.stub(Overlay, "promote");
+
+        queued(3, "t1");
+
+        Batches.settle(3, {dropped: {}, kept: {}, status: "confirmed"});
+
+        return promoting.firstCall.args[2].fillPending;
+      };
+
+      afterEach(() => {
+        SyncStream.syncCursor = null;
+      });
+
+      it("is true for a client with no place that isn't complete", () => {
+        SyncStream.syncCursor = null;
+
+        assert.isTrue(fillPending());
+      });
+
+      it("is false for a client coming back with a place", () => {
+        SyncStream.syncCursor = "Nzc4LjA";
+
+        assert.isFalse(fillPending());
+      });
+
+      // A node of an older build can end a fill with no place on its marker.
+      it("is false for a client told it holds everything", () => {
+        SyncStream.syncCursor = null;
+        LocalDatabase.markAllSynced();
+
+        assert.isFalse(fillPending());
+      });
+    });
+
     // A tab that never took the batch up, or has settled it already, has nothing to do - and every
     // tab of the browser is told every answer.
     it("passes over a number it does not hold", () => {

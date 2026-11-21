@@ -556,7 +556,12 @@ export default class Batches {
     Batches.#retryAttempts = 0;
 
     if (answer.status === "confirmed") {
-      Overlay.promote(batch, answer.kept);
+      // No place and not everything marked is a client waiting for a fill or part way through one,
+      // or a tab the server stopped, whose row then just stays unstored.
+      Overlay.promote(batch, answer.kept, {
+        fillPending:
+          SyncStream.syncCursor === null && !LocalDatabase.isAllSynced(),
+      });
     } else {
       Batches.#reject(batch, answer);
     }

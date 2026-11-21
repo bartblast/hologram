@@ -1388,6 +1388,57 @@ describe("SyncStream", () => {
       assert.deepStrictEqual(persisting.firstCall.args, [[], "Nzc4LjA"]);
     });
 
+    // The holder's stored record names the row the sweep took, and a reload would read it back.
+    it("stores a held row whose set the marker's sweep changed, naming no place", () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+      const written = new Set(["MyApp.Task t1"]);
+      const records = [{id: "t1", row: {id: "t1"}, type: "MyApp.Task"}];
+
+      sinon.stub(LocalDatabase, "markTypesSynced").returns(written);
+
+      const reading = sinon.stub(LocalDatabase, "records").returns(records);
+
+      eventSource.listeners.synced({
+        data: JSON.stringify({
+          applied_seq: 3,
+          cursor: null,
+          scope: "types",
+          types: ["MyApp.Task"],
+        }),
+      });
+
+      sinon.assert.calledOnceWithExactly(reading, written);
+      sinon.assert.calledOnceWithExactly(persisting, records, null);
+    });
+
+    it("passes the marker's number on to what it settles", () => {
+      const marking = sinon.spy(LocalDatabase, "markTypesSynced");
+
+      SyncStream.receiveFrame("synced", {
+        applied_seq: 7,
+        cursor: null,
+        scope: "types",
+        types: ["MyApp.Task"],
+      });
+
+      sinon.assert.calledOnceWithExactly(marking, ["MyApp.Task"], 7);
+    });
+
+    it("answers what a types marker's sweep changed", () => {
+      const written = new Set(["MyApp.Task t1"]);
+
+      sinon.stub(LocalDatabase, "markTypesSynced").returns(written);
+
+      const answered = SyncStream.receiveFrame("synced", {
+        applied_seq: 7,
+        cursor: null,
+        scope: "types",
+        types: ["MyApp.Task"],
+      });
+
+      assert.strictEqual(answered, written);
+    });
+
     // A first arrival's types markers are narrower than the claim a place makes, so they name
     // none - and a server built before this frame carried one names nothing at all.
     it("leaves the place alone for a marker naming none", () => {

@@ -49,6 +49,13 @@ export default class LocalDatabase {
   // and a connect, or a row deleted while the browser was away.
   static #carried = new Set();
 
+  // The rows an answer filed while a fill was on its way, each with the number of the batch that
+  // created them. Each is carried until a frame delivers it, so nothing stores it
+  // before then. The type's marker takes away the ones whose batch the fill read and left out (see
+  // #settlePromoted). The rest wait here, out of the marker's sweep, until the marker ending the
+  // fill.
+  static #promotedSeqs = new Map();
+
   // Whether the server has declared everything complete, and the entity types it has declared
   // complete before that - until a type is, the database answers a query over it with part of the
   // truth and its readers must not treat it as the whole.
@@ -95,6 +102,12 @@ export default class LocalDatabase {
       }
     }
 
+    // A row answered before this fill's session began is in everything the fill reads, so every
+    // marker covers it and it needs no number of its own. An answer can overtake a resync frame,
+    // and then the marker may take away a row its session is about to judge. The session hands it
+    // back after the fill when its user may read it.
+    LocalDatabase.#promotedSeqs = new Map();
+
     LocalDatabase.syncCountTypes = {};
     LocalDatabase.syncCounts = {};
     LocalDatabase.#syncedAll = false;
@@ -103,6 +116,65 @@ export default class LocalDatabase {
 
   static deleteFact(type, relationship, sourceId, targetId) {
     LocalDatabase.#facts[type]?.[relationship]?.[sourceId]?.delete(targetId);
+  }
+
+  // Every pair filed under a held row that names one of the given rows of the given type: in a
+  // to-many of that type, and in an inverse of a to-many whose source is of that type. Answers the
+  // key of every row the stream vouched for whose set lost one, which storing keeps.
+  static deleteFactsNaming(type, ids) {
+    const written = [];
+
+    for (const holderType of Object.keys(
+      globalThis.Hologram.sync?.model ?? {},
+    )) {
+      const relationships = Object.entries(
+        Model.relationships(holderType) ?? {},
+      )
+        .filter(
+          ([_name, relationship]) =>
+            relationship.toMany && relationship.type === type,
+        )
+        .map(([name]) => name);
+
+      const inverses = Object.entries(Model.inverses(holderType) ?? {})
+        .filter(
+          ([_name, inverse]) => !inverse.reference && inverse.type === type,
+        )
+        .map(([name]) => name);
+
+      const names = relationships.concat(inverses);
+
+      if (names.length === 0) {
+        continue;
+      }
+
+      for (const holderId of Object.keys(LocalDatabase.baseTable(holderType))) {
+        let changed = false;
+
+        // Read through the set rather than through the dropped ids, which can be many more than
+        // a set holds.
+        for (const name of names) {
+          const named = Array.from(
+            LocalDatabase.baseTargetIds(holderType, name, holderId),
+          ).filter((targetId) => ids.has(targetId));
+
+          for (const targetId of named) {
+            LocalDatabase.deleteFact(holderType, name, holderId, targetId);
+            changed = true;
+          }
+        }
+
+        // A row a page carried is never stored, so one whose set changed isn't written either.
+        if (
+          changed &&
+          !LocalDatabase.#carried.has(`${holderType}${SEPARATOR}${holderId}`)
+        ) {
+          written.push(`${holderType} ${holderId}`);
+        }
+      }
+    }
+
+    return written;
   }
 
   // A row leaving takes its relationship facts with it - the pairs it was the source of say
@@ -184,6 +256,15 @@ export default class LocalDatabase {
     LocalDatabase.#carried.add(`${type}${SEPARATOR}${id}`);
   }
 
+  // A row an answer filed while a fill is on its way, with the number of its batch. Nothing is
+  // known yet of whether its user may read it, so it is carried and not stored. If its type's
+  // marker is still to come and the fill read the batch without sending the row, the marker takes
+  // it away. Otherwise its session judges it.
+  static markPromoted(type, id, seq) {
+    LocalDatabase.#promotedSeqs.set(`${type}${SEPARATOR}${id}`, seq);
+    LocalDatabase.markCarried(type, id);
+  }
+
   static unmarkCarried(type, id) {
     LocalDatabase.#carried.delete(`${type}${SEPARATOR}${id}`);
   }
@@ -203,6 +284,14 @@ export default class LocalDatabase {
 
     LocalDatabase.#syncedAll = true;
 
+    // A row still recorded is one its session will judge, or one of a type sync doesn't send. It
+    // stays as the answer filed it.
+    for (const key of LocalDatabase.#promotedSeqs.keys()) {
+      LocalDatabase.#carried.delete(key);
+    }
+
+    LocalDatabase.#promotedSeqs = new Map();
+
     LocalDatabase.#sweepCarried(() => true);
   }
 
@@ -213,7 +302,12 @@ export default class LocalDatabase {
   // browser was away.
   //
   // Only for a type marked for the first time, for the same reason the whole pot's is swept once.
-  static markTypesSynced(types) {
+  //
+  // `appliedSeq` is how far this client's batches are in what the fill read of the types, which
+  // settles the rows answers filed meanwhile (see #settlePromoted). A row taken away leaves the
+  // sets naming it too. Answers the keys of the rows the stream vouched for whose sets lost one,
+  // which storing keeps.
+  static markTypesSynced(types, appliedSeq = null) {
     const marked = new Set(
       types.filter((type) => !LocalDatabase.#syncedTypes.has(type)),
     );
@@ -222,9 +316,27 @@ export default class LocalDatabase {
       LocalDatabase.#syncedTypes.add(type);
     }
 
-    if (!LocalDatabase.#syncedAll) {
-      LocalDatabase.#sweepCarried((type) => marked.has(type));
+    LocalDatabase.#settlePromoted(marked, appliedSeq);
+
+    const written = new Set();
+
+    if (LocalDatabase.#syncedAll) {
+      return written;
     }
+
+    const swept = LocalDatabase.#sweepCarried(
+      (type, id) =>
+        marked.has(type) &&
+        !LocalDatabase.#promotedSeqs.has(`${type}${SEPARATOR}${id}`),
+    );
+
+    for (const [type, ids] of swept) {
+      for (const key of LocalDatabase.deleteFactsNaming(type, ids)) {
+        written.add(key);
+      }
+    }
+
+    return written;
   }
 
   static putRow(type, row) {
@@ -341,19 +453,49 @@ export default class LocalDatabase {
     LocalDatabase.syncCounts = {};
     LocalDatabase.#carried = new Set();
     LocalDatabase.#facts = {};
+    LocalDatabase.#promotedSeqs = new Map();
     LocalDatabase.#syncedAll = false;
     LocalDatabase.#syncedTypes = new Set();
     LocalDatabase.#tables = {};
   }
 
-  // The carried rows of the types the given test picks, taken away and unmarked.
-  static #sweepCarried(picks) {
-    for (const [type, id] of LocalDatabase.carriedEntries()) {
-      if (picks(type)) {
-        LocalDatabase.deleteRow(type, id);
-        LocalDatabase.unmarkCarried(type, id);
+  // What a marker makes of the rows answers filed while the given types were being filled. One
+  // whose batch is at or below the number was in what the fill read, so unless a frame delivered
+  // it, the row is gone or its user may not read it. It stops being recorded, and the marker's
+  // sweep takes it if it is still carried. One above the number committed after the read, so its
+  // session judges it, and a marker naming no number makes no claim. Those stay recorded.
+  static #settlePromoted(types, appliedSeq) {
+    if (!Number.isInteger(appliedSeq)) {
+      return;
+    }
+
+    for (const [key, seq] of LocalDatabase.#promotedSeqs) {
+      const type = key.slice(0, key.indexOf(SEPARATOR));
+
+      if (types.has(type) && seq <= appliedSeq) {
+        LocalDatabase.#promotedSeqs.delete(key);
       }
     }
+  }
+
+  // The carried rows the given test picks, taken away and unmarked. Answers their ids, per type.
+  static #sweepCarried(picks) {
+    const swept = new Map();
+
+    for (const [type, id] of LocalDatabase.carriedEntries()) {
+      if (picks(type, id)) {
+        LocalDatabase.deleteRow(type, id);
+        LocalDatabase.unmarkCarried(type, id);
+
+        if (!swept.has(type)) {
+          swept.set(type, new Set());
+        }
+
+        swept.get(type).add(id);
+      }
+    }
+
+    return swept;
   }
 
   // The facts a row is filed with: its to-many relationships', and its inverses' of a to-many.
