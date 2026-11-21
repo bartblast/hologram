@@ -2971,6 +2971,45 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects a to-one relationship to the role grant store" do
+      expected_msg =
+        "relationship :grant in Hologram.Entity.ValidatorTest.InlineEntityFixture198 stores a reference to Hologram.Auth.RoleGrant - a grant can't be referenced, since revoking deletes it and a migration renaming its entity type or role gives it a new id - store the user, entity type, entity and role instead, and find the grant by them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture198 do
+          use Hologram.Entity
+
+          relationship :grant, Hologram.Auth.RoleGrant
+        end
+      end
+    end
+
+    test "rejects a to-many relationship to the role grant store" do
+      expected_msg =
+        "relationship :grants in Hologram.Entity.ValidatorTest.InlineEntityFixture199 stores a reference to Hologram.Auth.RoleGrant - a grant can't be referenced, since revoking deletes it and a migration renaming its entity type or role gives it a new id - store the user, entity type, entity and role instead, and find the grant by them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture199 do
+          use Hologram.Entity
+
+          relationship :grants, [Hologram.Auth.RoleGrant]
+        end
+      end
+    end
+
+    # An inverse stores nothing, so it pins no grant row.
+    test "accepts an inverse of a role grant store relationship" do
+      defmodule InlineEntityFixture200 do
+        use Hologram.Entity
+
+        relationship :grants, [Hologram.Auth.RoleGrant], inverse: user
+      end
+
+      assert InlineEntityFixture200.__inverse_relationships__() == [
+               {:grants, [Hologram.Auth.RoleGrant], [inverse: :user]}
+             ]
+    end
+
     test "rejects an inverse naming a relationship with a value that is not an atom" do
       expected_msg =
         "invalid inverse option \"owner\" for relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture117 - the inverse option names the relationship it reverses on the related type"

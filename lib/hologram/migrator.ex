@@ -3,6 +3,7 @@ defmodule Hologram.Migrator do
 
   require Logger
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
@@ -86,7 +87,15 @@ defmodule Hologram.Migrator do
   # correctness bound - the loop exits by winning the lock, never by a deadline.
   @migration_lock_poll_interval_ms 1_000
 
+  # How many grants the re-derivation of their ids after a relabel reads at a time - it runs
+  # in the file's transaction, and a rename of an entity type relabels every grant held on it.
+  @grant_id_page_size 10_000
+
   @managed_by "migrations"
+
+  # The cursor the first page of a grant id re-derivation reads after: no derived id and no
+  # random one is the nil UUID, so every row sorts after it.
+  @nil_uuid "00000000-0000-0000-0000-000000000000"
 
   @doc """
   Returns the versions of the migrations the connected database has applied.
@@ -440,7 +449,9 @@ defmodule Hologram.Migrator do
 
   The context carries the guard facts (:otp_app, :env) and the marker diagnostics
   (:hologram_version, :timestamp), and may carry :system_upgrades, steps in place of
-  Hologram.DB.SchemaReconciler.system_schema_upgrades/0's (see system_schema_version/1).
+  Hologram.DB.SchemaReconciler.system_schema_upgrades/0's (see system_schema_version/1), and
+  :grant_id_page_size, how many grants a re-derivation of their ids reads at a time, both for
+  tests only.
   """
   @spec run(list(%{atom => any}), %{atom => any}, %{atom => any}) :: :ok
   def run(migrations, current_model, context) do
@@ -681,6 +692,15 @@ defmodule Hologram.Migrator do
     |> execute_statements()
   end
 
+  # A grant's id is derived from its labels, so the grants a rename relabeled take the ids their
+  # new labels derive - the id the browser and the server's batches look a grant up by. Grants
+  # repeating one another's four identity columns would derive one id, so they are refused
+  # first, by name.
+  defp apply_op(%{op: :rederive_grant_ids} = op, _later_ops) do
+    Preflight.check_grant_repeats!(op)
+    rederive_grant_ids(op, @nil_uuid)
+  end
+
   defp apply_op(op, _later_ops), do: execute_statements(DDL.statements(op))
 
   # Each op is checked right before it applies, against the database the ops before it
@@ -719,7 +739,11 @@ defmodule Hologram.Migrator do
   # The ops after each one - the rest of the file, its tail, then the later files - are what
   # drop_removed_indexes/3 looks ahead through.
   defp apply_transactional(render, later_ops, version, context) do
-    apply_ops(render.transactional, render.tail ++ later_ops)
+    page_size = Map.get(context, :grant_id_page_size, @grant_id_page_size)
+
+    render.transactional
+    |> Enum.map(&put_grant_id_page_size(&1, page_size))
+    |> apply_ops(render.tail ++ later_ops)
 
     mapping = Mapper.derive_from_model!(render.post_model)
 
@@ -1252,6 +1276,12 @@ defmodule Hologram.Migrator do
     )
   end
 
+  defp put_grant_id_page_size(%{op: :rederive_grant_ids} = op, page_size) do
+    Map.put(op, :page_size, page_size)
+  end
+
+  defp put_grant_id_page_size(op, _page_size), do: op
+
   defp raise_not_managed! do
     raise "the configured database contains Hologram schemas but no managed-database " <>
             "marker - it is not managed by migrations - drop the " <>
@@ -1295,6 +1325,46 @@ defmodule Hologram.Migrator do
     check_unique_keys!(op)
     execute_statements(DDL.statements(%{op: :drop_index, index: op.index, concurrently: true}))
     build_index!(Map.put(op, :concurrently, true))
+  end
+
+  # Paged by id, from just past the last id read. A row not read yet keeps its old id, so it
+  # stays ahead of the cursor until its page comes; a row given a new id lands either behind
+  # the cursor, never read again, or ahead of it, where it is read again and derives the id it
+  # now has. So each row moves once, and the pages end. Within one page a new id never meets
+  # another row's: a row holding it would hold the same four columns, which the store's unique
+  # index refuses (see Hologram.Auth.RoleGrant.identity_columns/0) - and, where that index was
+  # missing or unbuilt, the count before the first page (see the apply_op/2 clause).
+  #
+  # No node writes grants meanwhile: a value renamed in place takes no lock on the store, so a
+  # grant written under the old label during the file could keep the id that label derives. That
+  # holds while a deploy stops the old nodes before the new ones start - old and new nodes
+  # running against one database at once is not supported yet (#1627).
+  defp rederive_grant_ids(op, after_id) do
+    statement = DDL.grant_identity_statement(op.table, op.column)
+
+    {:ok, %{rows: rows}} = Connection.query(statement, [op.value, after_id, op.page_size])
+
+    moved =
+      for [id, user_id, entity_type, entity_id, role] <- rows,
+          derived = RoleGrant.derive_id_from_labels(user_id, entity_type, entity_id, role),
+          derived != id,
+          do: {id, derived}
+
+    if moved != [] do
+      {old_ids, new_ids} = Enum.unzip(moved)
+
+      update_statement = DDL.grant_id_update_statement(op.table)
+
+      {:ok, _result} = Connection.query(update_statement, [old_ids, new_ids])
+    end
+
+    if length(rows) == op.page_size do
+      [last_id | _identity] = List.last(rows)
+
+      rederive_grant_ids(op, last_id)
+    else
+      :ok
+    end
   end
 
   # Whether the ops after a change take the given index away, so the change may go on
