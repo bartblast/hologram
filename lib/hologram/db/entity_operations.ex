@@ -382,9 +382,13 @@ defmodule Hologram.DB.EntityOperations do
 
           changed_values = Enum.map(set_entries, fn {{_column, value}, _form} -> value end)
 
-          stamp = Keyword.get_lazy(opts, :stamp, &Clock.stamp/0)
+          # A caller that judged the row this leaves read the clock for it, so what it ranked by
+          # these timestamps is what lands.
+          clock_stamp = opts[:clock_stamp]
+
+          stamp = Keyword.get_lazy(opts, :stamp, fn -> clock_stamp || Clock.stamp() end)
           updated_at = written_at(stamp)
-          server_updated_at = server_written_at(opts[:stamp], updated_at)
+          server_updated_at = server_written_at(opts[:stamp], updated_at, clock_stamp)
           encoded_updated_at = Codec.encode(updated_at, :datetime)
           encoded_server_updated_at = Codec.encode(server_updated_at, :datetime)
           encoded_id = Codec.encode(id, :uuid)
@@ -435,6 +439,22 @@ defmodule Hologram.DB.EntityOperations do
     end
 
     :ok
+  end
+
+  # The timestamps an update sets, given the stamp it was authored under (nil being this node) and
+  # the node's clock reading - for a caller judging the row the update will leave.
+  @doc false
+  @spec written_timestamps(pos_integer | nil, pos_integer) :: %{
+          server_updated_at: DateTime.t(),
+          updated_at: DateTime.t()
+        }
+  def written_timestamps(stamp, clock_stamp) do
+    updated_at = written_at(stamp || clock_stamp)
+
+    %{
+      server_updated_at: server_written_at(stamp, updated_at, clock_stamp),
+      updated_at: updated_at
+    }
   end
 
   # The names update/4 refuses, refused for a caller that judges the update before making it - so a
@@ -1411,7 +1431,11 @@ defmodule Hologram.DB.EntityOperations do
   # has no other moment, so it takes its own writer's timestamp and the two pairs agree exactly;
   # a stamp authored elsewhere is the writer's alone, and the node's clock answers beside it. The
   # same shape of number either way, milliseconds of a stamp, so the two pairs compare cleanly.
-  defp server_written_at(nil = _given_stamp, own_written_at), do: own_written_at
+  defp server_written_at(given_stamp, own_written_at, clock_stamp \\ nil)
 
-  defp server_written_at(_given_stamp, _own_written_at), do: written_at(Clock.stamp())
+  defp server_written_at(nil = _given_stamp, own_written_at, _clock_stamp), do: own_written_at
+
+  defp server_written_at(_given_stamp, _own_written_at, clock_stamp) do
+    written_at(clock_stamp || Clock.stamp())
+  end
 end

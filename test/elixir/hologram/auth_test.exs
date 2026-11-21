@@ -45,6 +45,8 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module48
   alias Hologram.Test.Fixtures.Policy.Module49
   alias Hologram.Test.Fixtures.Policy.Module5
+  alias Hologram.Test.Fixtures.Policy.Module58, as: ChangedProject
+  alias Hologram.Test.Fixtures.Policy.Module59, as: ChangedTask
   alias Hologram.Test.Fixtures.Policy.Module8
   alias Hologram.Test.Fixtures.Policy.Module9, as: SelfParent
   alias Hologram.Test.Fixtures.Policy.Readers.Module20, as: ReadersModule20
@@ -1785,6 +1787,79 @@ defmodule Hologram.AuthTest do
       row = %Message{position: 3}
 
       assert after_row(row, %{}, %{position: -1}, %{}).position == 2
+    end
+  end
+
+  describe "judged_values/3" do
+    test "keeps values the row can hold" do
+      project = DB.create!(ChangedProject.new())
+      values = %{code: "abc", project_id: project.id}
+
+      assert judged_values(ChangedTask, values, :stored) == {values, [], []}
+    end
+
+    test "names a value failing its declaration" do
+      assert judged_values(ChangedTask, %{code: "too long", note: "x"}, :stored) ==
+               {%{note: "x"}, [:code], []}
+    end
+
+    test "names a reference to a row that doesn't exist" do
+      values = %{note: "x", project_id: Entity.generate_id()}
+
+      assert judged_values(ChangedTask, values, :stored) == {%{note: "x"}, [], [:project_id]}
+    end
+
+    test "names a malformed reference without looking it up" do
+      assert judged_values(ChangedTask, %{project_id: "not-a-uuid"}, :stored) ==
+               {%{}, [:project_id], []}
+    end
+
+    test "keeps a nil reference" do
+      assert judged_values(ChangedTask, %{project_id: nil}, :stored) ==
+               {%{project_id: nil}, [], []}
+    end
+
+    test "holds a reference's target under :held" do
+      project = DB.create!(ChangedProject.new())
+
+      statement =
+        ~s|SELECT xmax <> '0' FROM "hologram_data"."test_fixtures_policy_module58" WHERE id = $1|
+
+      params = [Codec.encode(project.id, :uuid)]
+
+      assert {:ok, %Postgrex.Result{rows: [[false]]}} = Connection.query(statement, params)
+
+      assert judged_values(ChangedTask, %{project_id: project.id}, :held) ==
+               {%{project_id: project.id}, [], []}
+
+      assert {:ok, %Postgrex.Result{rows: [[true]]}} = Connection.query(statement, params)
+    end
+  end
+
+  describe "uncovered_fields/5" do
+    test "judges a rule reading the row after the change on the given row" do
+      task =
+        %{count: 9}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      row = EntityOperations.get(ChangedTask, task.id)
+
+      assert uncovered_fields(nil, row, [:count], :stored, after_row(row, %{count: 10}, %{}, %{})) ==
+               []
+
+      assert uncovered_fields(nil, row, [:count], :stored, after_row(row, %{count: 11}, %{}, %{})) ==
+               [:count]
+    end
+
+    test "asks whether some change could pass when given no row" do
+      task =
+        %{count: 11}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      assert uncovered_fields(nil, EntityOperations.get(ChangedTask, task.id), [:count], :stored) ==
+               []
     end
   end
 

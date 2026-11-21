@@ -155,18 +155,20 @@ defmodule Hologram.Auth do
   # field-limited lines covering it and by every line covering the whole row (see
   # Hologram.Policy.field_rules/2). Each rule is evaluated once however many fields it covers, with
   # the grants taken from the given source as can?/4 takes them. The fields are not validated: the
-  # Writer passes what a write changed, and can? what it validated.
+  # Writer passes what a write changed, and can? what it validated. Given the row the change leaves
+  # (see after_row/4), a rule reading it is judged on it, and otherwise asked whether some change
+  # could pass.
   @doc false
   @spec uncovered_fields(
           struct | Server.identity_id() | nil,
           struct,
           list(atom),
-          list(struct) | :held | :stored
+          list(struct) | :held | :stored,
+          struct | nil
         ) :: list(atom)
-  def uncovered_fields(user_or_id, %entity_type{} = row, fields, source) do
+  def uncovered_fields(user_or_id, %entity_type{} = row, fields, source, new_row \\ nil) do
     policy = Policy.build(entity_type)
-    checker = &check_requirement(&1, &2, &3, source)
-    actor_user_id = acting_user_id(user_or_id)
+    judge = rule_judge(row, new_row, acting_user_id(user_or_id), source)
 
     {uncovered, _held_by_rule} =
       fields
@@ -174,7 +176,7 @@ defmodule Hologram.Auth do
       |> Enum.reduce({[], %{}}, fn field, {uncovered, held_by_rule} ->
         rules = Policy.field_rules(policy, field)
 
-        case covered?(rules, row, actor_user_id, checker, held_by_rule) do
+        case covered?(rules, judge, held_by_rule) do
           {true, held_by_rule} -> {uncovered, held_by_rule}
           {false, held_by_rule} -> {[field | uncovered], held_by_rule}
         end
@@ -513,8 +515,8 @@ defmodule Hologram.Auth do
             {key, operation}, held_by_rule ->
               rules = Policy.operation_rules(policy, operation)
 
-              {holds?, held_by_rule} =
-                covered?(rules, row, canonical_user_id, checker, held_by_rule)
+              judge = &Evaluator.rule_matches?(&1, row, canonical_user_id, checker)
+              {holds?, held_by_rule} = covered?(rules, judge, held_by_rule)
 
               {{key, holds?}, held_by_rule}
           end)
@@ -688,6 +690,40 @@ defmodule Hologram.Auth do
     entity
     |> chain_row(relationship_names, delegation_read_opts(source))
     |> delegates?(actor_user_id, delegated_operation, source)
+  end
+
+  # What a rule can read as the row after a change, from the values it states: a value failing its
+  # declaration or naming a row that doesn't exist can't be on that row, so the column reads as
+  # stored and its name comes back, apart for each reason: whether a row exists isn't something a
+  # refusal may say. A target found under :held stays locked, so it can't go between this read and
+  # a rule's hop to it.
+  @doc false
+  @spec judged_values(module, map, list(struct) | :held | :stored) ::
+          {map, list(atom), list(atom)}
+  def judged_values(entity_type, values, source) do
+    invalid =
+      case Entity.validate(entity_type, values) do
+        :ok -> []
+        {:error, violations} -> Map.keys(violations)
+      end
+
+    valid = Map.drop(values, invalid)
+    missing = missing_references(entity_type, valid, delegation_read_opts(source))
+
+    {Map.drop(valid, missing), invalid, missing}
+  end
+
+  defp missing_references(entity_type, values, read_opts) do
+    entity_type.__relationships__()
+    |> Enum.reject(fn {_name, target, _opts} -> is_list(target) end)
+    |> Enum.flat_map(fn {name, target_type, _opts} ->
+      field = String.to_existing_atom("#{name}_id")
+      target_id = Map.get(values, field)
+
+      if target_id == nil or EntityOperations.get(target_type, target_id, read_opts),
+        do: [],
+        else: [field]
+    end)
   end
 
   # What a rule reads from a row of the database as a change would leave it. Each hop applies the
@@ -951,23 +987,23 @@ defmodule Hologram.Auth do
 
   # Whether one of the given rules holds, reusing the answers already known for rules other fields
   # share - a rule covering several fields reads the grants and rows it rests on once.
-  defp covered?([], _row, _actor_user_id, _checker, held_by_rule), do: {false, held_by_rule}
+  defp covered?([], _judge, held_by_rule), do: {false, held_by_rule}
 
-  defp covered?([rule | later_rules], row, actor_user_id, checker, held_by_rule) do
+  defp covered?([rule | later_rules], judge, held_by_rule) do
     {holds?, held_by_rule} =
       case Map.fetch(held_by_rule, rule) do
         {:ok, holds?} ->
           {holds?, held_by_rule}
 
         :error ->
-          holds? = Evaluator.rule_matches?(rule, row, actor_user_id, checker)
+          holds? = judge.(rule)
 
           {holds?, Map.put(held_by_rule, rule, holds?)}
       end
 
     if holds?,
       do: {true, held_by_rule},
-      else: covered?(later_rules, row, actor_user_id, checker, held_by_rule)
+      else: covered?(later_rules, judge, held_by_rule)
   end
 
   defp delegates?(nil, _actor_user_id, _operation, _source), do: false
@@ -1262,6 +1298,20 @@ defmodule Hologram.Auth do
       end)
 
     target_type
+  end
+
+  # How a rule is judged for an update: on the row the change leaves when given one, and otherwise
+  # on the stored row alone.
+  defp rule_judge(row, nil, actor_user_id, source) do
+    checker = &check_requirement(&1, &2, &3, source)
+
+    &Evaluator.rule_matches?(&1, row, actor_user_id, checker)
+  end
+
+  defp rule_judge(row, new_row, actor_user_id, source) do
+    checker = after_checker(new_row, source)
+
+    &Evaluator.rule_matches?(&1, row, new_row, actor_user_id, checker)
   end
 
   # What a role check reads. A struct asks about its row and the type-wide grant beside it - the

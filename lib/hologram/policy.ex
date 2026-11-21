@@ -469,6 +469,19 @@ defmodule Hologram.Policy do
     |> CryptographicUtils.short_digest(@hash_bytes)
   end
 
+  # Whether a rule covering one of the given fields of an update reads the row after the change.
+  @doc false
+  @spec judges_change?(module, list(atom)) :: boolean
+  def judges_change?(entity_type, fields) do
+    policy = build(entity_type)
+
+    Enum.any?(fields, fn field ->
+      policy
+      |> field_rules(field)
+      |> Enum.any?(&Map.has_key?(&1, :exact))
+    end)
+  end
+
   @doc """
   Returns the chains `related_chains/2` returns for the given operation of the given entity type
   that a client answers from the rows it holds, sorted: those its rules read outside any deciding

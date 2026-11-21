@@ -1617,6 +1617,47 @@ defmodule Hologram.DB.EntityOperationsTest do
   end
 
   describe "update/4" do
+    test "writes under a given clock reading when no stamp is given" do
+      clock_stamp = 4_000_000_000_000_000
+
+      {:ok, created_entity} =
+        %{a: true, c: "before"}
+        |> Module2.new()
+        |> create()
+
+      assert update(Module2, created_entity.id, [c: "after"], clock_stamp: clock_stamp) == :ok
+
+      reloaded_entity = get(Module2, created_entity.id)
+      expected = written_timestamps(nil, clock_stamp)
+
+      assert reloaded_entity.__meta__.revisions.c == clock_stamp
+      assert reloaded_entity.updated_at == expected.updated_at
+      assert reloaded_entity.server_updated_at == expected.server_updated_at
+    end
+
+    test "takes only server_updated_at from a given clock reading beside a stamp" do
+      stamp = 3_900_000_000_000_000
+      clock_stamp = 4_000_000_000_000_000
+
+      {:ok, created_entity} =
+        %{a: true, c: "before"}
+        |> Module2.new()
+        |> create()
+
+      assert update(Module2, created_entity.id, [c: "after"],
+               clock_stamp: clock_stamp,
+               stamp: stamp
+             ) == :ok
+
+      reloaded_entity = get(Module2, created_entity.id)
+      expected = written_timestamps(stamp, clock_stamp)
+
+      assert reloaded_entity.__meta__.revisions.c == stamp
+      assert reloaded_entity.updated_at == expected.updated_at
+      assert reloaded_entity.server_updated_at == expected.server_updated_at
+      assert expected.updated_at != expected.server_updated_at
+    end
+
     test "sets exactly the changed columns and bumps updated_at" do
       {:ok, created_entity} =
         %{a: true, b: 1, c: "before"}
