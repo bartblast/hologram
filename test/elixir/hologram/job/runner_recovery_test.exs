@@ -1,6 +1,7 @@
 defmodule Hologram.Job.RunnerRecoveryTest do
-  # A run cut short ends failed: a sweep fails each running job whose run lock no session holds, and
-  # leaves the ones whose worker still holds it.
+  # A run cut short counts as a failed attempt: a sweep puts each running job whose run lock no
+  # session holds back to wait, or leaves it failed on its last attempt, and leaves the ones whose
+  # worker still holds it.
   #
   # The worker and the sweep have to be separate sessions with committed rows between them, as on
   # two nodes - under the sandboxed case every test is one never-committed transaction on one
@@ -21,6 +22,7 @@ defmodule Hologram.Job.RunnerRecoveryTest do
   alias Hologram.Job
   alias Hologram.Job.RunLock
   alias Hologram.Test.Fixtures.Job.Module1
+  alias Hologram.Test.Fixtures.Job.Module3
 
   # A virgin database claims itself and converges to the whole model, so the job type has a table
   # to be queued in.
@@ -69,6 +71,29 @@ defmodule Hologram.Job.RunnerRecoveryTest do
              "the run was cut short before its outcome was recorded"
   end
 
+  test "puts a job with attempts left back to wait once its worker is gone", context do
+    %{scratch: scratch, worker_lock: worker_lock} = context
+
+    job = route(scratch, fn -> Job.create!(Module3, [outcome: :ok], trust: true) end)
+    read = fn -> route(scratch, fn -> EntityOperations.get(Module3, job.id) end) end
+
+    assert {:claimed, _job} = route(scratch, fn -> claim(Module3, job.id, worker_lock) end)
+
+    :ok = :gen_statem.stop(worker_lock)
+
+    wait_until(fn ->
+      route(scratch, fn -> sweep([Module3], MapSet.new()) end)
+
+      read.().status == :queued
+    end)
+
+    row = read.()
+
+    assert row.attempt == 1
+    assert row.error =~ "the run was cut short before its outcome was recorded"
+    assert DateTime.compare(row.scheduled_at, DateTime.utc_now()) == :gt
+  end
+
   test "fails a job whose outcome could not be recorded", context do
     %{job: job, scratch: scratch, worker_lock: worker_lock} = context
     table = ~s|"hologram_data"."#{Mapper.table_name(Module1)}"|
@@ -107,7 +132,10 @@ defmodule Hologram.Job.RunnerRecoveryTest do
     table = ~s|"hologram_data"."#{Mapper.table_name(Module1)}"|
     test_pid = self()
 
-    :ok = route(scratch, fn -> EntityOperations.update(Module1, job.id, %{status: :running}) end)
+    :ok =
+      route(scratch, fn ->
+        EntityOperations.update(Module1, job.id, %{attempt: 1, status: :running})
+      end)
 
     # The outcome write of a run, held open until the sweep is waiting on its row.
     recorder =

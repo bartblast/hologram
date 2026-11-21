@@ -1,7 +1,7 @@
 defmodule Hologram.Job do
   @moduledoc """
-  The behaviour and construct for a job - work that runs once, after the transaction that
-  enqueued it commits.
+  The behaviour and construct for a job - work that runs after the transaction that enqueued it
+  commits, and runs again if it fails, up to a limit.
 
   A job is data: it declares what it needs the way an entity type does, it has a table, it
   shows up in migrations, and it can be queried like any type - which is what lets an app list
@@ -33,12 +33,29 @@ defmodule Hologram.Job do
       Job.create!(MyApp.Jobs.NotifyMembers, project_id: project.id, reason: :archived)
 
   Refuse the transaction and the job never existed, so nothing runs. Let it commit and the job
-  runs once, as the user who enqueued it.
+  runs, as the user who enqueued it.
 
-  A run cut short before its outcome is recorded - the node stopping, the run crashing or being
-  killed, its lock connection to the database being lost, the outcome write failing - is later
-  failed by a worker sweeping for such runs, with an error saying so: run/1 may have done all,
-  part or none of its work.
+  A job that fails is tried again, up to 10 attempts unless its use line gives another number,
+  written out:
+
+      use Hologram.Job, max_attempts: 3
+
+  A run fails by answering `{:error, reason}`, by raising, throwing or exiting, or by being cut
+  short before its outcome is recorded - the node stopping, the run crashing or being killed, its
+  lock connection to the database being lost, the outcome write failing. A worker sweeping for runs
+  cut short counts them as failed attempts, with an error saying so.
+
+  The wait before the next attempt starts at about 30 seconds and grows fourfold each time, up to
+  about 6 hours, so the default 10 attempts span about a day. Meanwhile the job is `:queued`, with
+  its `attempt` and the last `error` on its row. A job out of attempts ends `:failed`, keeping the
+  error, and stays there to be inspected.
+
+  So a job can run more than once, and a run cut short may have done all, part or none of its
+  work: run/1 has to be safe to repeat. A job that must never run twice sets `max_attempts: 1`.
+
+  The limit is checked when an attempt fails, so a job already waiting for a retry when the limit
+  is lowered still gets that run. To stop those at once, delete the waiting rows
+  (`status == :queued and attempt > 0`) as part of the deploy.
 
   Attributes and relationships are what a job carries, so they are declared and typed rather
   than passed as a payload: a declaration is what a policy can name and what a migration can
@@ -74,19 +91,26 @@ defmodule Hologram.Job do
   # counted per node.
   @default_max_concurrency 10
 
+  # How many times a job runs before it is left failed unless the type sets its own limit. With the
+  # wait between attempts (see Hologram.Job.Runner.retry_delay_ms/1) it spans about a day, so a job
+  # outlasts an outage until someone can fix its cause.
+  @default_max_attempts 10
+
   @doc """
   Runs the job.
 
-  Called once by a worker with the job as it was read from its row, after the row committed,
-  with the acting user set to whoever enqueued it - so reads are filtered and writes are
+  Called by a worker with the job as it was read from its row, after the row committed, once per
+  attempt, with the acting user set to whoever enqueued it - so reads are filtered and writes are
   evaluated as that user's. Returns :ok when the work is done, or {:error, reason} when it
-  failed. Raising fails the job with the exception.
+  failed. Raising fails the attempt with the exception. A failed attempt is tried again until the
+  job is out of attempts, so this has to be safe to run more than once.
   """
   @callback run(job :: Entity.t()) :: :ok | {:error, any}
 
   defmacro __using__(opts) do
     Validator.validate_use_job_opts!(__CALLER__.module, opts)
 
+    max_attempts = Keyword.get(opts, :max_attempts, @default_max_attempts)
     max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
 
     quote do
@@ -119,6 +143,17 @@ defmodule Hologram.Job do
       def __is_hologram_job__, do: true
 
       @doc """
+      Returns how many times a job of this type runs before it is left failed.
+
+      ## Examples
+
+          iex> __job_max_attempts__()
+          10
+      """
+      @spec __job_max_attempts__() :: pos_integer
+      def __job_max_attempts__, do: unquote(max_attempts)
+
+      @doc """
       Returns how many jobs of this type a node runs at once.
 
       ## Examples
@@ -139,7 +174,7 @@ defmodule Hologram.Job do
     if not Module.defines?(env.module, {:run, 1}, :def) do
       raise Hologram.CompileError,
         message:
-          "#{inspect(env.module)} uses Hologram.Job but defines no run/1 - run/1 is the work a job does, run once after its row commits"
+          "#{inspect(env.module)} uses Hologram.Job but defines no run/1 - run/1 is the work a job does, run after its row commits"
     end
   end
 
@@ -149,9 +184,10 @@ defmodule Hologram.Job do
   The job is written as a row of its type, in whatever transaction the caller is already in, with
   its status queued and its actor the acting user - nobody, on the trusted tier, and nobody for a
   trust claim made under a user id no user entity can have, like an app's own serial id. It runs
-  once, after that transaction commits: a worker calls the job type's run/1 with the job, under the
-  acting user's authority, and records the outcome on it - or fails it, when the run is cut short
-  before that. A transaction that rolls back leaves no job, so nothing runs.
+  after that transaction commits: a worker calls the job type's run/1 with the job, under the
+  acting user's authority, and records the outcome on it. A run that fails or is cut short is tried
+  again, up to the job type's max_attempts/1. A transaction that rolls back leaves no job, so
+  nothing runs.
 
   Returns {:ok, job} with the written job, or {:error, violations} naming each attribute or
   reference that broke its declaration - the same answers, and the same checks, as writing any
@@ -197,6 +233,13 @@ defmodule Hologram.Job do
           reason: violations
     end
   end
+
+  @doc """
+  Returns how many times a job of the given job type runs before it is left failed: the
+  `:max_attempts` its use line gives, 10 by default.
+  """
+  @spec max_attempts(module) :: pos_integer
+  def max_attempts(job_type), do: job_type.__job_max_attempts__()
 
   @doc """
   Returns how many jobs of the given job type a node runs at once: the `:max_concurrency` its use

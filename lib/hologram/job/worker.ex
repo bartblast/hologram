@@ -26,7 +26,7 @@ defmodule Hologram.Job.Worker do
 
   # How long a queued job can wait when the announcements stop arriving - a listener whose
   # connection died, or a pooler that drops them - and how long a run cut short on another node
-  # stays running before a sweep here fails it. It bounds nothing else while announcements
+  # stays running before a sweep here records it. It bounds nothing else while announcements
   # arrive, since every write announces itself and is answered at once. Policy rather than a
   # derived figure: it trades a scan per interval against how late a job can run while the
   # announcements are missing, and it is the figure the dispatcher carries for the same reason.
@@ -117,7 +117,7 @@ defmodule Hologram.Job.Worker do
     schedule_poll(state.poll_interval_ms)
 
     # A sweep and a look at once rather than at the first poll: the runs a predecessor left are
-    # failed now, and the jobs queued while no worker ran start now. Quiet about what fails, since
+    # recorded now, and the jobs queued while no worker ran start now. Quiet about what fails, since
     # each is only an earlier go at what the first poll does and logs: a worker can start before
     # the job tables are there - in a test env, whose test helper converges the schema after the
     # app starts - and an error logged then would only be noise.
@@ -150,8 +150,8 @@ defmodule Hologram.Job.Worker do
   #
   # A job left queued - its run lock held by another session, or its claim refused by a hold on the
   # data model - is left out of the looks until the next wake or poll: asked for again at once, it
-  # would be answered the same way, for as long as the lock or the hold lasts. One another worker
-  # took is not, since it is not queued any more and no look answers it again.
+  # would be answered the same way, for as long as the lock or the hold lasts. One answered as taken
+  # is not, since no look answers it again while it is running, over or waiting for a later time.
   def handle_info({ref, result}, state) when is_map_key(state.runs, ref) do
     Process.demonitor(ref, [:flush])
 
@@ -338,7 +338,7 @@ defmodule Hologram.Job.Worker do
 
   # A model hold refuses a claim before it changes anything, so the row stays queued. A hold that
   # refuses the outcome write leaves the row running with the lock given up by process/3, and a
-  # sweep after the hold fails it as cut short.
+  # sweep after the hold records it as cut short.
   defp run(run, job_type, id) do
     run.(job_type, id)
   rescue
@@ -396,7 +396,7 @@ defmodule Hologram.Job.Worker do
 
   # Every wake and poll starts with nothing passed over, so a job left queued is tried again then,
   # and every poll with no claim that went down left out (see the DOWN handler). The poll also
-  # sweeps: the runs cut short on other nodes are failed within one poll interval.
+  # sweeps: the runs cut short on other nodes are recorded within one poll interval.
   # Not on every wake, since a wake comes with every write, claims and outcomes included, and a
   # sweep costs a transaction per running row.
   defp wake_up(state, look_or_sweep) do

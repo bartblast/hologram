@@ -39,10 +39,20 @@ defmodule Hologram.Job.RunnerTest do
     |> DB.create!()
   end
 
-  # A job of the outcome fixture, created as the given user or as nobody. Module3 declares no
-  # allow :create, so a create under an acting user claims the server's authority - what the run
-  # is under is the actor the row carries, which is stamped either way.
+  # A job of the outcome fixture on its last attempt, so that a run failing leaves it failed.
   defp job(outcome, user \\ nil) do
+    job = fresh_job(outcome, user)
+    attempt = Job.max_attempts(Module3) - 1
+
+    :ok = EntityOperations.update(Module3, job.id, %{attempt: attempt})
+
+    %{job | attempt: attempt}
+  end
+
+  # A job of the outcome fixture with all its attempts ahead, created as the given user or as
+  # nobody. Module3 declares no allow :create, so a create under an acting user claims the server's
+  # authority - what the run is under is the actor the row carries, which is stamped either way.
+  defp fresh_job(outcome, user \\ nil) do
     create = fn -> Job.create!(Module3, [outcome: outcome], trust: true) end
 
     if user, do: as_user(user, create), else: create.()
@@ -273,6 +283,109 @@ defmodule Hologram.Job.RunnerTest do
       assert row.error =~ "** (RuntimeError) boom"
     end
 
+    test "puts a failed job with attempts left back to wait, with the error on its row", %{
+      run_lock: run_lock
+    } do
+      job = fresh_job(:raise)
+      before_run = DateTime.utc_now()
+
+      assert process(Module3, job.id, run_lock) == :failed
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.status == :queued
+      assert row.attempt == 1
+      assert row.error =~ "** (RuntimeError) boom"
+      assert DateTime.diff(row.scheduled_at, before_run, :second) in 26..35
+      assert lock_free?(job)
+    end
+
+    test "waits longer after a later attempt", %{run_lock: run_lock} do
+      job = fresh_job(:raise)
+      before_run = DateTime.utc_now()
+
+      :ok = EntityOperations.update(Module3, job.id, %{attempt: 2})
+
+      assert process(Module3, job.id, run_lock) == :failed
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.attempt == 3
+      assert DateTime.diff(row.scheduled_at, before_run, :second) in 431..530
+    end
+
+    test "doesn't run a job again before its wait is over", %{run_lock: run_lock} do
+      job = fresh_job(:raise)
+
+      assert process(Module3, job.id, run_lock) == :failed
+
+      assert queued(Module3, MapSet.new(), 5) == []
+      assert process(Module3, job.id, run_lock) == :taken
+      assert EntityOperations.get(Module3, job.id).attempt == 1
+    end
+
+    test "runs a job waiting for a retry once its wait is over", %{run_lock: run_lock} do
+      job = fresh_job(:raise)
+
+      assert process(Module3, job.id, run_lock) == :failed
+
+      set_scheduled_at(Module3, job.id, DateTime.add(DateTime.utc_now(), -1))
+
+      assert [%{id: id}] = queued(Module3, MapSet.new(), 5)
+      assert id == job.id
+      assert process(Module3, job.id, run_lock) == :failed
+      assert EntityOperations.get(Module3, job.id).attempt == 2
+    end
+
+    test "clears the error of an earlier attempt when the job ends done", %{run_lock: run_lock} do
+      job = fresh_job(:ok)
+
+      :ok = EntityOperations.update(Module3, job.id, %{attempt: 1, error: "earlier"})
+
+      assert process(Module3, job.id, run_lock) == :done
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.status == :done
+      assert row.error == nil
+    end
+
+    # A run that lost its lock can be swept back into the queue and claimed again while it is still
+    # going, so the row reads running under a newer attempt when the old run comes to record.
+    test "leaves the row of a newer attempt alone", %{run_lock: run_lock} do
+      job = fresh_job(:superseded)
+
+      assert process(Module3, job.id, run_lock) == :failed
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.status == :running
+      assert row.attempt == 2
+      assert row.error == nil
+    end
+
+    # Deleted and created again under its id, the row counts its attempts from the start, so the
+    # old run's number can come round again on a row that isn't its own.
+    test "leaves a row created again under the same id alone", %{run_lock: run_lock} do
+      job = fresh_job(:recreated)
+
+      assert process(Module3, job.id, run_lock) == :failed
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.outcome == :ok
+      assert row.status == :running
+      assert row.attempt == 1
+      assert row.error == nil
+    end
+
+    test "records the outcome of a run whose due time was moved meanwhile", %{run_lock: run_lock} do
+      job = fresh_job(:rescheduled)
+
+      assert process(Module3, job.id, run_lock) == :done
+      assert EntityOperations.get(Module3, job.id).status == :done
+    end
+
     test "skips a job another worker has claimed", %{run_lock: run_lock} do
       job = job(:ok)
 
@@ -431,13 +544,55 @@ defmodule Hologram.Job.RunnerTest do
     end
   end
 
+  describe "retry_delay_ms/1" do
+    for {attempt, delay_ms} <- [
+          {1, 30_000},
+          {2, 120_000},
+          {3, 480_000},
+          {4, 1_920_000},
+          {5, 7_680_000},
+          {6, 21_600_000},
+          {9, 21_600_000},
+          {1_000, 21_600_000}
+        ] do
+      test "waits within 10% of #{delay_ms} ms after attempt #{attempt}" do
+        delays = for _try <- 1..200, do: retry_delay_ms(unquote(attempt))
+
+        assert Enum.min(delays) >= unquote(delay_ms) - div(unquote(delay_ms), 10)
+        assert Enum.max(delays) <= unquote(delay_ms) + div(unquote(delay_ms), 10)
+        assert length(Enum.uniq(delays)) > 1
+      end
+    end
+
+    # A row running from before attempts were counted.
+    test "waits as after the first attempt for an attempt count of 0" do
+      assert retry_delay_ms(0) in 27_000..33_000
+    end
+  end
+
   describe "sweep/2" do
-    # Running with no lock held, the way a node that stopped mid-run leaves it.
+    # Running with no lock held, the way a node that stopped mid-run leaves it, on its last attempt.
     defp abandoned_job do
       job = Job.create!(Module1)
-      :ok = EntityOperations.update(Module1, job.id, %{status: :running})
+      :ok = EntityOperations.update(Module1, job.id, %{attempt: 1, status: :running})
 
       job
+    end
+
+    test "puts a job cut short with attempts left back to wait" do
+      job = fresh_job(:ok)
+      before_sweep = DateTime.utc_now()
+
+      :ok = EntityOperations.update(Module3, job.id, %{attempt: 1, status: :running})
+
+      assert sweep([Module3], MapSet.new()) == :ok
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.status == :queued
+      assert row.attempt == 1
+      assert row.error =~ "the run was cut short before its outcome was recorded"
+      assert DateTime.diff(row.scheduled_at, before_sweep, :second) in 26..35
     end
 
     test "fails a running job whose run lock nobody holds" do
@@ -479,7 +634,12 @@ defmodule Hologram.Job.RunnerTest do
     test "sweeps every type it is given" do
       module_1_job = abandoned_job()
       module_3_job = job(:ok)
-      :ok = EntityOperations.update(Module3, module_3_job.id, %{status: :running})
+
+      :ok =
+        EntityOperations.update(Module3, module_3_job.id, %{
+          attempt: Job.max_attempts(Module3),
+          status: :running
+        })
 
       assert sweep([Module1, Module3], MapSet.new()) == :ok
 

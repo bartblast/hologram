@@ -729,6 +729,9 @@ defmodule Hologram.DB.IntrospectionTest do
                  "ok_tuple",
                  "raise",
                  "record_actor",
+                 "recreated",
+                 "rescheduled",
+                 "superseded",
                  "swept",
                  "throw"
                ],

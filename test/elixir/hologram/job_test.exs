@@ -5,6 +5,7 @@ defmodule Hologram.JobTest do
 
   alias Hologram.Test.Fixtures.Job.Module1
   alias Hologram.Test.Fixtures.Job.Module2
+  alias Hologram.Test.Fixtures.Job.Module3
 
   describe "__using__/1" do
     test "marks the module as a job type" do
@@ -55,7 +56,7 @@ defmodule Hologram.JobTest do
 
     test "raises when the module defines no run/1" do
       expected_msg =
-        "Hologram.Test.Fixtures.Job.RunlessJob uses Hologram.Job but defines no run/1 - run/1 is the work a job does, run once after its row commits"
+        "Hologram.Test.Fixtures.Job.RunlessJob uses Hologram.Job but defines no run/1 - run/1 is the work a job does, run after its row commits"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         Code.eval_string("""
@@ -68,7 +69,7 @@ defmodule Hologram.JobTest do
 
     test "raises when an unknown option is given" do
       expected_msg =
-        "unknown option :user for use Hologram.Job in Hologram.Test.Fixtures.Job.UserOptJob - use Hologram.Job takes only :max_concurrency"
+        "unknown option :user for use Hologram.Job in Hologram.Test.Fixtures.Job.UserOptJob - use Hologram.Job takes only :max_attempts and :max_concurrency"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         Code.eval_string("""
@@ -82,23 +83,24 @@ defmodule Hologram.JobTest do
       end
     end
 
-    for {label, value} <- [
+    for option <- [:max_attempts, :max_concurrency],
+        {label, value} <- [
           {"zero", "0"},
           {"a negative integer", "-1"},
           {"a float", "2.0"},
           {"a string", ~s("2")},
           {"a module attribute", "@limit"}
         ] do
-      test "raises when max_concurrency is #{label}" do
+      test "raises when #{option} is #{label}" do
         expected_msg =
-          "invalid max_concurrency #{unquote(value)} for use Hologram.Job in Hologram.Test.Fixtures.Job.BadLimitJob - it must be a positive integer, written as a literal"
+          "invalid #{unquote(option)} #{unquote(value)} for use Hologram.Job in Hologram.Test.Fixtures.Job.BadLimitJob - it must be a positive integer, written as a literal"
 
         assert_error Hologram.CompileError, expected_msg, fn ->
           Code.eval_string("""
           defmodule Hologram.Test.Fixtures.Job.BadLimitJob do
             @limit 2
 
-            use Hologram.Job, max_concurrency: #{unquote(value)}
+            use Hologram.Job, #{unquote(option)}: #{unquote(value)}
 
             @impl Hologram.Job
             def run(_job), do: :ok
@@ -122,6 +124,16 @@ defmodule Hologram.JobTest do
         end
         """)
       end
+    end
+  end
+
+  describe "max_attempts/1" do
+    test "answers 10 for a job type that sets no limit" do
+      assert max_attempts(Module3) == 10
+    end
+
+    test "answers the limit a job type's use line sets" do
+      assert max_attempts(Module1) == 1
     end
   end
 
