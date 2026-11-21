@@ -1283,7 +1283,10 @@ defmodule Mix.Tasks.Compile.Hologram do
       pages_to_list: pages_to_list
     } = context
 
-    listed_reach = Compiler.list_reach_by_page(pages_to_list, call_graph_for_runtime)
+    listed_reach =
+      pages_to_list
+      |> Compiler.list_reach_by_page(call_graph_for_runtime)
+      |> Compiler.put_impl_mfas(call_graph_for_runtime)
 
     # Only the pages listed again: every other page keeps the reach the last derivation listed, and
     # passed this check then.
@@ -1296,6 +1299,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       pages_to_list
       |> Compiler.list_reach_by_page(call_graph)
       |> Compiler.pages_checking_permissions()
+      |> Enum.concat(Compiler.pages_checking_permissions_in_impls(listed_reach, call_graph))
 
     reach_by_page =
       listed_reach
@@ -1651,11 +1655,12 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
-  # The page's kept reach when it still holds: the page has one, and its modules do not meet the
-  # modules reaching the edit.
+  # The page's kept reach when it still holds: the page has one, and neither the modules it names
+  # nor the ones the implementations it can dispatch to reach meet the modules reaching the edit.
   defp keepable_page_reach(kept_data_layer, page_module, reaching_modules) do
     with {:ok, reach} <- Map.fetch(kept_data_layer.pages, page_module),
-         true <- MapSet.disjoint?(reach.modules, reaching_modules) do
+         true <- MapSet.disjoint?(reach.modules, reaching_modules),
+         true <- MapSet.disjoint?(reach.impl_modules, reaching_modules) do
       {:ok, reach}
     else
       _fallback -> :error

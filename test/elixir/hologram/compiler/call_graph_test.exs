@@ -2287,6 +2287,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  test "list_callers/2", %{empty_call_graph: call_graph} do
+    add_edges(call_graph, [{:a, :target_1}, {:b, :target_2}, {:c, :other}])
+
+    assert list_callers(call_graph, [:target_1, :target_2]) == MapSet.new([:a, :b])
+  end
+
   describe "list_chunk_entries/2" do
     test "leaves out an implementation for a built-in type" do
       result = list_chunk_entries([Protocol1], module_info_plt_fixture())
@@ -4260,6 +4266,30 @@ defmodule Hologram.Compiler.CallGraphTest do
                  [NarrowDiff.HeldImpl, NarrowDiff.Held],
                  []
                )
+    end
+  end
+
+  describe "protocol_metadata_mfa?/2" do
+    test "a protocol's dispatch function" do
+      assert protocol_metadata_mfa?({Protocol1, :impl_for!, 1}, module_info_plt_fixture())
+    end
+
+    test "an implementation's __impl__/1" do
+      impl = Module.safe_concat(Protocol1, Struct1)
+
+      assert protocol_metadata_mfa?({impl, :__impl__, 1}, module_info_plt_fixture())
+    end
+
+    test "a protocol's own function" do
+      refute protocol_metadata_mfa?({Protocol1, :my_fun, 1}, module_info_plt_fixture())
+    end
+
+    test "a function of that name in a module that is no protocol" do
+      refute protocol_metadata_mfa?({Module5, :impl_for, 1}, module_info_plt_fixture())
+    end
+
+    test "no vertex" do
+      refute protocol_metadata_mfa?(nil, module_info_plt_fixture())
     end
   end
 
