@@ -117,6 +117,47 @@ defmodule Hologram.Job.RunnerTest do
     test "skips a job that is not there", %{run_lock: run_lock} do
       assert claim(Module1, Entity.generate_id(), run_lock) == :taken
     end
+
+    test "leaves a queued job with no due time", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+
+      :ok = EntityOperations.update(Module1, job.id, %{scheduled_at: nil})
+
+      assert claim(Module1, job.id, run_lock) == :taken
+      assert EntityOperations.get(Module1, job.id).status == :queued
+    end
+
+    test "counts the attempt", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+
+      assert {:claimed, claimed_job} = claim(Module1, job.id, run_lock)
+
+      assert claimed_job.attempt == 1
+      assert EntityOperations.get(Module1, job.id).attempt == 1
+    end
+
+    test "counts on from the attempts the job has had", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+
+      :ok = EntityOperations.update(Module1, job.id, %{attempt: 3})
+
+      assert {:claimed, %{attempt: 4}} = claim(Module1, job.id, run_lock)
+    end
+
+    # The look that named it read it before another node put it back to wait.
+    test "leaves a queued job that isn't due yet", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+
+      set_scheduled_at(Module1, job.id, DateTime.add(DateTime.utc_now(), 1, :hour))
+
+      assert claim(Module1, job.id, run_lock) == :taken
+
+      row = EntityOperations.get(Module1, job.id)
+
+      assert row.status == :queued
+      assert row.attempt == 0
+      assert lock_free?(job)
+    end
   end
 
   describe "invoke/1" do
@@ -315,12 +356,12 @@ defmodule Hologram.Job.RunnerTest do
   end
 
   describe "queued/3" do
-    # Each job is made a second older than the one created before it, an order no insertion order
+    # Each job is made due a second before the one created before it, an order no insertion order
     # could produce by accident.
     defp jobs_oldest_first(count) do
       for index <- 1..count do
         job = job(:ok)
-        set_created_at(Module3, job.id, DateTime.add(~U[2026-01-01 00:00:00.000000Z], -index))
+        set_scheduled_at(Module3, job.id, DateTime.add(~U[2026-01-01 00:00:00.000000Z], -index))
 
         job
       end
@@ -334,10 +375,27 @@ defmodule Hologram.Job.RunnerTest do
       |> Enum.map(& &1.id)
     end
 
-    test "answers the oldest queued jobs of the type, oldest first" do
+    test "answers the longest due queued jobs of the type, longest due first" do
       [first, second, _third] = jobs_oldest_first(3)
 
       assert queued_ids([], 2) == [first, second]
+    end
+
+    # A browser's clock can be set as far back as it likes, and created_at is what it says.
+    test "doesn't let a job with a backdated creation time jump the queue" do
+      [first, second] = jobs_oldest_first(2)
+
+      set_created_at(Module3, second, ~U[2000-01-01 00:00:00.000000Z])
+
+      assert queued_ids([], 2) == [first, second]
+    end
+
+    test "leaves out queued jobs that aren't due yet" do
+      [waiting, due] = jobs_oldest_first(2)
+
+      set_scheduled_at(Module3, waiting, DateTime.add(DateTime.utc_now(), 1, :hour))
+
+      assert queued_ids([], 5) == [due]
     end
 
     test "answers only jobs of the given type" do

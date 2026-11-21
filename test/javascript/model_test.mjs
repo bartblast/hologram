@@ -135,7 +135,7 @@ describe("Model", () => {
           roles: ["editor", "owner"],
           serverOnly: [],
         },
-        // A job type, whose three framework attributes are the worker's to fill and no client's
+        // A job type, whose framework attributes are the worker's to fill and no client's
         // to write.
         [NOTIFY]: {
           attributes: {
@@ -149,7 +149,13 @@ describe("Model", () => {
           constraints: {},
           defaults: {},
           enumValues: {reason: ["created"], status: ["queued", "running"]},
-          frameworkAttributes: ["actor_id", "error", "status"],
+          frameworkAttributes: [
+            "actor_id",
+            "attempt",
+            "error",
+            "scheduled_at",
+            "status",
+          ],
           relationships: {},
           serverOnly: ["error"],
         },

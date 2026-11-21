@@ -1462,7 +1462,26 @@ defmodule Hologram.MutationTest do
 
       assert job.status == :queued
       assert job.actor_id == user.id
+      assert job.attempt == 0
       assert job.error == nil
+      assert DateTime.diff(DateTime.utc_now(), job.scheduled_at, :minute) == 0
+    end
+
+    # The queue is ordered by the due time, and a browser's clock can be set as far back as it likes.
+    test "makes a job due by the server's clock, whatever the writer's stamp says" do
+      user = create_user("job-backdater@example.com")
+      id = Entity.generate_id()
+      backdated = DateTime.to_unix(~U[2000-01-01 00:00:00Z], :millisecond) * 1024
+
+      assert run(
+               envelope([create_write(JobModule1, id, %{}, stamp: backdated)]),
+               server(user.id)
+             ) == {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+
+      job = EntityOperations.get(JobModule1, id)
+
+      assert job.created_at == ~U[2000-01-01 00:00:00.000000Z]
+      assert DateTime.diff(DateTime.utc_now(), job.scheduled_at, :minute) == 0
     end
 
     test "refuses a job with the batch it rode in" do

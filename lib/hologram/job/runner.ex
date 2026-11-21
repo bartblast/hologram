@@ -29,12 +29,12 @@ defmodule Hologram.Job.Runner do
   @doc """
   Claims the job of the given type with the given id for this worker: reads its row locked, takes
   its run lock on the given RunLock connection, and moves it from queued to running in one
-  transaction.
+  transaction, counting the attempt.
 
   Returns `{:claimed, job}` with the row as this worker claimed it, `:taken` when the row is not
-  queued any more - another worker claimed it first, it has already run, or it is gone - or
-  `:locked` when the row is queued but another session holds its run lock, so it stays queued for
-  a later try.
+  queued and due any more - another worker claimed it first, it has already run, it is gone, or it
+  was put back to wait for a later time - or `:locked` when the row is queued but another session
+  holds its run lock, so it stays queued for a later try.
 
   The lock is taken before the claim commits, so whoever reads the row as running finds it held.
   A claim that raises or exits after taking it gives it back, and raises or exits as it was going
@@ -76,8 +76,8 @@ defmodule Hologram.Job.Runner do
   Runs the job of the given type with the given id once: claims it, calls its run/1 as the user who
   created it, and records what happened on its row.
 
-  Returns `:done` or `:failed` for a job this worker ran, `:taken` when the job was not queued any
-  more, or `:locked` when it is queued under a run lock another session holds (see claim/3).
+  Returns `:done` or `:failed` for a job this worker ran, `:taken` when the job was not queued and
+  due any more, or `:locked` when it is queued under a run lock another session holds (see claim/3).
 
   The job's run lock is held on the given RunLock connection from the claim until the outcome is
   recorded, and given up then even when recording it raises - until the outcome commits, the row
@@ -121,8 +121,8 @@ defmodule Hologram.Job.Runner do
   def lock_name(job_type, id), do: inspect(job_type) <> ":" <> id
 
   @doc """
-  Returns the oldest queued jobs of the given job type, at most the given count of them, oldest
-  first, leaving out the ones whose ids are in the given set.
+  Returns the queued jobs of the given job type that are due, at most the given count of them,
+  the longest due first, leaving out the ones whose ids are in the given set.
 
   Reads at most the count plus the set's size, so the read stays bounded however many jobs are
   queued, and the jobs left out never cost one the count would otherwise answer with.
@@ -134,13 +134,17 @@ defmodule Hologram.Job.Runner do
     # filter, and the rows come back as the structs run/1 is handed. The same goes for sweep/2.
     #
     # The queued and the running rows are read apart, two reads where one would do, because only
-    # this one is bounded - the index on status and creation time keeps both cheap (see
+    # this one is bounded - the index on status and due time keeps both cheap (see
     # Hologram.DB.IndexPlan.framework_needs/1).
+    #
+    # Due by this node's clock, since a query has no database clock to ask. A job stamped by a node
+    # whose clock runs ahead is found here once this one catches up, or at the next poll after it.
     limit = count + MapSet.size(skip_ids)
+    now = DateTime.utc_now()
 
     job_type
-    |> filter(status == :queued)
-    |> sort(created_at)
+    |> filter(status == :queued and scheduled_at <= ^now)
+    |> sort(scheduled_at)
     |> take(^limit)
     |> DB.read()
     |> Enum.reject(&MapSet.member?(skip_ids, &1.id))
@@ -189,23 +193,40 @@ defmodule Hologram.Job.Runner do
   # that failed after taking the lock and has not given it back yet. Answered apart from a row that
   # is not queued, since only this one is worth leaving out of the next look: the other is running
   # or over, so a look for queued jobs never answers it again.
+  #
+  # A queued row that isn't due counts as taken too: the look that named it read it before it was
+  # put back to wait, and running it now would skip the wait and spend an attempt. No look answers
+  # it again until it is due.
   defp claim_row(job_type, id, run_lock) do
-    case EntityOperations.get(job_type, id, lock: :no_key_update) do
-      %{status: :queued} = job ->
-        if RunLock.acquire(run_lock, lock_name(job_type, id)) do
-          Process.put(@uncommitted_lock_key, true)
+    job = EntityOperations.get(job_type, id, lock: :no_key_update)
 
-          :ok = EntityOperations.update(job_type, id, %{status: :running})
-
-          {:claimed, %{job | status: :running}}
-        else
-          :locked
-        end
-
-      _not_queued ->
-        :taken
+    if claimable?(job) do
+      claim_queued(job, run_lock)
+    else
+      :taken
     end
   end
+
+  defp claim_queued(%job_type{id: id} = job, run_lock) do
+    if RunLock.acquire(run_lock, lock_name(job_type, id)) do
+      Process.put(@uncommitted_lock_key, true)
+
+      changes = %{attempt: job.attempt + 1, status: :running}
+
+      :ok = EntityOperations.update(job_type, id, changes)
+
+      {:claimed, Map.merge(job, changes)}
+    else
+      :locked
+    end
+  end
+
+  # A row with no due time is one no look lists either, since the look's range leaves it out.
+  defp claimable?(%{status: :queued, scheduled_at: %DateTime{} = scheduled_at}) do
+    DateTime.compare(scheduled_at, DateTime.utc_now()) != :gt
+  end
+
+  defp claimable?(_not_queued), do: false
 
   defp classify(:ok), do: :done
 

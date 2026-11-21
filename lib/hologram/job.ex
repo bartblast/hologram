@@ -44,6 +44,11 @@ defmodule Hologram.Job do
   than passed as a payload: a declaration is what a policy can name and what a migration can
   move forward.
 
+  Every job also carries what the framework records about it, readable like any attribute and the
+  framework's alone to write: `status`, `attempt` (how many runs have started), `scheduled_at`
+  (when it is next due), `error` (server-only) and `actor_id`. The names are taken, so a job type
+  can't declare its own attribute under one of them.
+
   Each node runs up to 10 jobs of a type at once. A job type that should run fewer at once, or
   more, says so in its use line, with the number written out:
 
@@ -91,13 +96,15 @@ defmodule Hologram.Job do
 
       @before_compile Hologram.Job
 
-      # The three attributes every job carries and only the framework sets, declared as ordinary
+      # The attributes every job carries and only the framework sets, declared as ordinary
       # attributes so that storage, the mapping, migrations, revisions, the wire and policies
       # treat them as they treat any attribute - and guarded from being set by anything else:
       # Entity.new/2 refuses them, the wire refuses them from a client, and the enqueue stamps
-      # the actor from the ambient context.
+      # the actor from the ambient context and the due time from the node's clock.
       attribute :actor_id, :uuid, optional: true
+      attribute :attempt, :integer, default: 0
       attribute :error, :string, optional: true, server_only: true
+      attribute :scheduled_at, :datetime, optional: true
       attribute :status, :enum, values: [:queued, :running, :done, :failed], default: :queued
 
       @doc """
@@ -199,10 +206,10 @@ defmodule Hologram.Job do
   def max_concurrency(job_type), do: job_type.__job_max_concurrency__()
 
   @doc """
-  Returns the names of the attributes every job type carries and only the framework sets, sorted: the acting user at the enqueue, the failure record, and the status.
+  Returns the names of the attributes every job type carries and only the framework sets, sorted: the acting user at the enqueue, how many runs have started, the failure record, when the job is next due, and the status.
   """
   @spec framework_attribute_names() :: list(atom)
-  def framework_attribute_names, do: [:actor_id, :error, :status]
+  def framework_attribute_names, do: [:actor_id, :attempt, :error, :scheduled_at, :status]
 
   defp apply_claim(job, :none), do: job
 

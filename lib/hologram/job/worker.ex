@@ -221,7 +221,7 @@ defmodule Hologram.Job.Worker do
     end
   end
 
-  # Fills each given job type's free slots with its oldest queued jobs, the types in module order.
+  # Fills each given job type's free slots with its longest due jobs, the types in module order.
   # Each type has slots of its own, so a type running at its limit holds up no other type.
   #
   # A look that fails for a reason every type shares - a hold on the data model, a pool that can't

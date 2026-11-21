@@ -478,6 +478,27 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Gives the job of the given type with the given id the given due time, and returns :ok.
+
+  Written straight to the row, since the due time is the framework's own to set and a test of the
+  queue's order or of a wait needs a time no clock would give it.
+  """
+  @spec set_scheduled_at(module, String.t(), DateTime.t()) :: :ok
+  def set_scheduled_at(job_type, id, scheduled_at) do
+    statement =
+      ~s|UPDATE "hologram_data"."#{Mapper.table_name(job_type)}" | <>
+        ~s|SET "scheduled_at" = $1 WHERE "id" = $2|
+
+    {:ok, _result} =
+      Connection.query(statement, [
+        Codec.encode(scheduled_at, :datetime),
+        Codec.encode(id, :uuid)
+      ])
+
+    :ok
+  end
+
+  @doc """
   Gives the row of the given type with the given id the given creation time, and returns :ok.
 
   The spelling for a test whose subject is an ORDER: two rows created a moment apart carry the same

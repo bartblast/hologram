@@ -158,7 +158,7 @@ defmodule Hologram.DBTest do
 
       assert module.write().__meta__.attribute_ops == %{c: {:put, "abc"}}
       assert module.executor() == pool_name()
-      assert module.job_fields() == [:actor_id, :error, :status]
+      assert module.job_fields() == [:actor_id, :attempt, :error, :scheduled_at, :status]
     end
   end
 

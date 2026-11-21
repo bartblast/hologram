@@ -4378,7 +4378,10 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      assert String.contains?(js, ~s/"frameworkAttributes":["actor_id","error","status"]/)
+      assert String.contains?(
+               js,
+               ~s/"frameworkAttributes":["actor_id","attempt","error","scheduled_at","status"]/
+             )
     end
 
     test "injects the relationships with their target types, cardinality and optionality", %{
