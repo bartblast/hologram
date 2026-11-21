@@ -335,6 +335,18 @@ describe("Erlang_Re", () => {
       assertCompileErrorTuple(result, "missing closing parenthesis", 3);
     });
 
+    it("returns error position past the end of the pattern as byte offset in unicode mode", () => {
+      const result = compileWithOpts(Type.bitstring("é\\x{9"), [
+        Type.atom("unicode"),
+      ]);
+
+      assertCompileErrorTuple(
+        result,
+        "non-hex character in \\x{} (closing brace missing?)",
+        7,
+      );
+    });
+
     it("returns a UTF-8 error tuple for invalid UTF-8 binary in unicode mode", () => {
       const result = compileWithOpts(Bitstring.fromBytes([255, 97]), [
         Type.atom("unicode"),
@@ -1502,6 +1514,24 @@ describe("Erlang_Re", () => {
       assertMatchResult(result, [[2, 1]]);
     });
 
+    it("returns byte offsets past the first 64 characters with the unicode option", () => {
+      const result = run(
+        Type.bitstring("é".repeat(100) + "b"),
+        Type.bitstring("b"),
+        [Type.atom("unicode")],
+      );
+
+      assertMatchResult(result, [[200, 1]]);
+    });
+
+    it("returns byte offsets after a leading byte order mark with the unicode option", () => {
+      const subject = Bitstring.fromBytes([0xef, 0xbb, 0xbf, 0x61]);
+
+      const result = run(subject, Type.bitstring("a"), [Type.atom("unicode")]);
+
+      assertMatchResult(result, [[3, 1]]);
+    });
+
     it("decodes the subject with a unicode compiled pattern", () => {
       const compiled = compilePattern("é", [Type.atom("unicode")]);
 
@@ -1836,6 +1866,40 @@ describe("Erlang_Re", () => {
       );
 
       assert.deepEqual(result, matchTuple([Bitstring.fromBytes([233])]));
+    });
+
+    it("returns the whole subject with the binary type in byte mode", () => {
+      const subject = Bitstring.fromBytes([233, 0, 255]);
+
+      const result = run(subject, Type.bitstring(".+"), [
+        captureOption(Type.atom("all"), "binary"),
+      ]);
+
+      assert.deepEqual(
+        result,
+        matchTuple([Bitstring.fromBytes([233, 0, 255])]),
+      );
+    });
+
+    it("returns the UTF-8 bytes of a text subject with the binary type in byte mode", () => {
+      const result = run(Type.bitstring("aéb"), Bitstring.fromBytes([0xa9]), [
+        captureOption(Type.atom("all"), "binary"),
+      ]);
+
+      assert.deepEqual(result, matchTuple([Bitstring.fromBytes([0xa9])]));
+    });
+
+    it("returns raw bytes of an iodata subject with the binary type in byte mode", () => {
+      const subject = Type.list([
+        Bitstring.fromBytes([97]),
+        Bitstring.fromBytes([233, 98]),
+      ]);
+
+      const result = run(subject, Type.bitstring("[^a]+"), [
+        captureOption(Type.atom("all"), "binary"),
+      ]);
+
+      assert.deepEqual(result, matchTuple([Bitstring.fromBytes([233, 98])]));
     });
 
     it("returns code points with the list type in unicode mode", () => {
@@ -2178,6 +2242,40 @@ describe("Erlang_Re", () => {
       assertMatchResult(result, [[2, 1]]);
     });
 
+    it("offset counts bytes past the first 64 characters in unicode mode", () => {
+      const result = run(
+        Type.bitstring("é".repeat(100) + "b"),
+        Type.bitstring("b"),
+        [Type.atom("unicode"), offsetOption(200)],
+      );
+
+      assertMatchResult(result, [[200, 1]]);
+    });
+
+    it("offset counts bytes of a char data list subject in unicode mode", () => {
+      const subject = Type.list([Type.bitstring("é"), Type.bitstring("b")]);
+
+      const result = run(subject, Type.bitstring("b"), [
+        Type.atom("unicode"),
+        offsetOption(2),
+      ]);
+
+      assertMatchResult(result, [[2, 1]]);
+    });
+
+    it("matches the same unicode subject at successive offsets", () => {
+      const subject = Type.bitstring("é".repeat(100));
+      const pattern = Type.bitstring("é");
+
+      const results = [100, 4, 198].map((offset) =>
+        run(subject, pattern, [Type.atom("unicode"), offsetOption(offset)]),
+      );
+
+      assertMatchResult(results[0], [[100, 2]]);
+      assertMatchResult(results[1], [[4, 2]]);
+      assertMatchResult(results[2], [[198, 2]]);
+    });
+
     it("anchored pins the match to the offset", () => {
       const result = run(Type.bitstring("abb"), Type.bitstring("b"), [
         Type.atom("anchored"),
@@ -2474,6 +2572,44 @@ describe("Erlang_Re", () => {
       assert.equal(segmentSpy.callCount, 1);
     });
 
+    it("matches the same binary subject in byte mode after unicode mode", () => {
+      const subject = Type.bitstring("é".repeat(40));
+      const capture = captureOption(Type.atom("first"), "binary");
+
+      const unicodeResult = run(subject, Type.bitstring("."), [
+        Type.atom("unicode"),
+        capture,
+      ]);
+
+      const byteResult = run(subject, Type.bitstring("."), [capture]);
+
+      assert.deepEqual(unicodeResult, matchTuple([Type.bitstring("é")]));
+      assert.deepEqual(byteResult, matchTuple([Bitstring.fromBytes([0xc3])]));
+    });
+
+    it("matches the same binary subject in unicode mode after byte mode", () => {
+      const subject = Type.bitstring("é".repeat(40));
+      const capture = captureOption(Type.atom("first"), "binary");
+
+      const byteResult = run(subject, Type.bitstring("."), [capture]);
+
+      const unicodeResult = run(subject, Type.bitstring("."), [
+        Type.atom("unicode"),
+        capture,
+      ]);
+
+      assert.deepEqual(byteResult, matchTuple([Bitstring.fromBytes([0xc3])]));
+      assert.deepEqual(unicodeResult, matchTuple([Type.bitstring("é")]));
+    });
+
+    it("raises on the same invalid UTF-8 binary subject again in unicode mode", () => {
+      const compiled = compilePattern("a", [Type.atom("unicode")]);
+      const subject = Bitstring.fromBytes(new Array(64).fill(255));
+
+      assertPlainRunError(() => run(subject, compiled));
+      assertPlainRunError(() => run(subject, compiled));
+    });
+
     it("compile-time firstline pattern applies when running", () => {
       const compiled = compilePattern("b", [Type.atom("firstline")]);
 
@@ -2613,6 +2749,37 @@ describe("Erlang_Re", () => {
 
       assertGlobalMatchResult(result, expected);
       assert.isAtMost(codePointAtSpy.callCount, 2 * subject.length);
+    });
+
+    it("global converts byte offsets of a group in one pass over a unicode subject", () => {
+      // The spy counts every codePointAt() call of the run, so the pattern
+      // takes the native route and never matches empty: the interpreter and
+      // the empty-match scan advance read code points too
+      const subject = "é ".repeat(100);
+      const codePointAtSpy = sinon.spy(String.prototype, "codePointAt");
+
+      let result;
+
+      try {
+        result = run(Type.bitstring(subject), Type.bitstring("(é) "), [
+          Type.atom("global"),
+          Type.atom("unicode"),
+        ]);
+      } finally {
+        codePointAtSpy.restore();
+      }
+
+      const expected = [];
+
+      for (let k = 0; k < 100; k++) {
+        expected.push([
+          [3 * k, 3],
+          [3 * k, 2],
+        ]);
+      }
+
+      assertGlobalMatchResult(result, expected);
+      assert.isAtMost(codePointAtSpy.callCount, 3 * subject.length);
     });
 
     it("global starts at the offset", () => {
@@ -3299,6 +3466,15 @@ describe("Erlang_Re", () => {
         run(Type.bitstring("éb"), Type.bitstring("b"), [
           Type.atom("unicode"),
           offsetOption(1),
+        ]),
+      );
+    });
+
+    it("raises plain ArgumentError on offset inside a character past the first 64 characters", () => {
+      assertPlainRunError(() =>
+        run(Type.bitstring("é".repeat(100) + "b"), Type.bitstring("b"), [
+          Type.atom("unicode"),
+          offsetOption(199),
         ]),
       );
     });

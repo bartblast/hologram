@@ -8,7 +8,7 @@ alias Hologram.DB.QueryCache
 alias Hologram.LiveReload
 alias Hologram.Reflection
 alias Hologram.Router.PageModuleResolver
-alias Hologram.Sync.PageWindows, as: SyncPageWindows
+alias Hologram.Sync.PageTypes, as: SyncPageTypes
 
 # Create tmp dir if it doesn't exist yet.
 File.mkdir_p!(Reflection.tmp_dir())
@@ -25,7 +25,7 @@ exclude_opts =
     {:win32, _name} -> [:skip_on_windows]
   end
 
-# Make OTP's :cover available (tools app) - the extractor tests exercise
+# Make OTP's :cover available (tools app) - the compiler cover tests exercise
 # cover-compiled modules, and the reference must resolve at test compile time.
 Mix.ensure_application!(:tools)
 
@@ -123,8 +123,8 @@ Application.put_env(:hologram, :page_module_resolver_impl, PageModuleResolverMoc
 Mox.defmock(PageDigestRegistryMock, for: PageDigestRegistry)
 Application.put_env(:hologram, :page_digest_registry_impl, PageDigestRegistryMock)
 
-Mox.defmock(SyncPageWindowsMock, for: SyncPageWindows)
-Application.put_env(:hologram, :sync_page_windows_impl, SyncPageWindowsMock)
+Mox.defmock(SyncPageTypesMock, for: SyncPageTypes)
+Application.put_env(:hologram, :sync_page_types_impl, SyncPageTypesMock)
 
 Mox.defmock(QueryCacheMock, for: QueryCache)
 Application.put_env(:hologram, :query_cache_impl, QueryCacheMock)

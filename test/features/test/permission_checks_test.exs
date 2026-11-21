@@ -17,8 +17,6 @@ defmodule HologramFeatureTests.PermissionChecksTest do
   # grant rows its pot holds. Nothing here reloads: a grant is written from the test process, the
   # stream delivers the row, and the gated UI follows.
   setup do
-    await_evaluator_drain()
-
     truncate_entity_tables([Document, Memo, Note, ProjectMember, RoleGrant, User])
   end
 

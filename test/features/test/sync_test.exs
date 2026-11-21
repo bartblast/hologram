@@ -18,7 +18,6 @@ defmodule HologramFeatureTests.SyncTest do
   # left in ANY synced table by an earlier test file would arrive in this client's initial fill
   # and make "the first deltas frame" mean different things on different runs.
   setup do
-    await_evaluator_drain()
     truncate_every_entity_table()
 
     :ok
@@ -57,8 +56,8 @@ defmodule HologramFeatureTests.SyncTest do
     end
   end
 
-  # The stream is cut when the test ends, taking the server-side session and its evaluators with
-  # it - a connection left open would keep them alive into the next test, serving stale rounds.
+  # The stream is cut when the test ends, taking the server-side session with it - a connection left
+  # open would keep it alive into the next test, telling it that test's writes.
   defp connect(opts \\ []) do
     opts =
       opts
@@ -180,9 +179,9 @@ defmodule HologramFeatureTests.SyncTest do
     assert revisions["title"] == reloaded.__meta__.revisions.title
   end
 
-  # The defect this spec pins: membership must cover the window's whole REACH, so a row no window
-  # roots - the folder is reachable only through the document window's include - still receives
-  # its own patches. Rooted-everywhere fixtures kept the hole green for a whole step.
+  # A row of a type no query is rooted in - the folder is reachable only through the document
+  # query's include - still receives its own patches. Rooted-everywhere fixtures once kept a hole
+  # here green for a whole step.
   feature "patches a row reached only through an include", %{session: _session} do
     folder =
       %{name: "folder_before_patch", public: true}
@@ -199,11 +198,10 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas_carrying(client, ~s["name":"folder_after_patch"])
 
-    # Read out of the frame rather than matched against its text: what else shares the round is
-    # not this test's business. A round reports every member of the window's reach, so the
-    # document that reaches this folder can be grouped beside it - and being grouped FIRST, since
-    # the types are keyed by module name, would break a match that expects to find the folder
-    # right after the op.
+    # Read out of the frame rather than matched against its text: what else shares the frame is
+    # not this test's business. The document that reaches this folder can be grouped beside it -
+    # and being grouped FIRST, since the types are keyed by module name, would break a match that
+    # expects to find the folder right after the op.
     folder_rows =
       data
       |> Jason.decode!()
@@ -353,7 +351,7 @@ defmodule HologramFeatureTests.SyncTest do
   end
 
   # A frame carries a place only once the client holds a whole pot, so the one this client leaves
-  # with cannot come from its fill - mid-fill it holds some windows and not others, and a place
+  # with cannot come from its fill - mid-fill it holds some types and not others, and a place
   # handed over then is a claim it could not honour. Hence the write before it leaves: it is there
   # to produce a frame after the store is complete, which is the first frame carrying a place.
   feature "tells a returning client only what moved while it was away", %{session: _session} do

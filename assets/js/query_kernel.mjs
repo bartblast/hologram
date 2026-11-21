@@ -1,7 +1,6 @@
 "use strict";
 
 import HologramRuntimeError from "./errors/runtime_error.mjs";
-import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Model from "./model.mjs";
 import SortKey from "./sort_key.mjs";
@@ -14,8 +13,8 @@ import StringOrder from "./string_order.mjs";
 // A filter is a list of clauses that all hold. A clause is a triple array - [name, operator,
 // operand] - a disjunction, {or: alternatives}, holding when one of its alternatives does, each
 // alternative a clause list of its own, or a quantifier, {quantifier, source, filter}, holding when
-// any, none or all of the rows of a related set match its filter. An operand is a value, a
-// placeholder ({placeholder: name}) or another attribute ({attribute: name}).
+// any, none or all of the rows of a related set match its filter. An operand is a value or another
+// attribute ({attribute: name}).
 // A name - in a triple or an attribute operand - is an attribute, or a path: an array of the to-one
 // relationships followed from the row and the attribute of the row they lead to, read out of the
 // related type's table and missing when a reference is empty or names a row not held. Inside a
@@ -37,8 +36,7 @@ import StringOrder from "./string_order.mjs";
 // among the declared ones. An integer a float field reads needs no widening here, since a number is
 // one type whole or not.
 //
-// Hologram.Query.Interpreter is the reference it is pinned to, case for case - but for the
-// reference's placeholder bindings, since nothing in the browser binds one - and that one is
+// Hologram.Query.Interpreter is the reference it is pinned to, case for case, and that one is
 // pinned to the database executor in turn. What is written twice is this small frozen surface,
 // and neither writing is trusted on its own.
 //
@@ -711,7 +709,7 @@ export default class QueryKernel {
 
     const value = QueryKernel.#isAttribute(operand)
       ? QueryKernel.#read(row, operand.attribute, entityType, outer, context)
-      : QueryKernel.#resolve(operand);
+      : operand;
 
     const end = QueryKernel.#endOf(row, name, entityType, outer);
     const sortName = Model.sortKeyField(end.name);
@@ -882,23 +880,6 @@ export default class QueryKernel {
     const derived = Model.derivedField(entityType, name);
 
     return derived ? derived.entity : Model.pathTarget(entityType, [name]);
-  }
-
-  // Nothing in the browser binds a placeholder: a registered query is built here from the
-  // component's own values, and a read takes concrete ones - so one reaching here has no value,
-  // refused in the words the reference refuses a missing binding in.
-  static #resolve(operand) {
-    if (Array.isArray(operand)) {
-      return operand.map((element) => QueryKernel.#resolve(element));
-    }
-
-    if (operand === null || typeof operand !== "object") {
-      return operand;
-    }
-
-    Interpreter.raiseMisuseError(
-      `missing value for placeholder :${operand.placeholder}`,
-    );
   }
 
   // The rows of a set - a relationship's, or the ones a derived field holding them holds.

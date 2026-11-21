@@ -571,7 +571,7 @@ defmodule Hologram.DB.OplogTest do
     # A newer peer writing a seventh op is what a rolling deploy produces, and raising here would
     # take the dispatcher down mid-window - it restarts with no cursor and resumes at the log's
     # edge, so everything between would be skipped rather than retried. Downstream is already
-    # indifferent: the diff matches ops against atoms, and the scoper reads only the type.
+    # indifferent: what reads an op matches it against atoms and leaves an unknown one alone.
     test "keeps an op this build does not know as the label it was written with" do
       statement = """
       INSERT INTO "hologram_system"."oplog" ("op", "type", "entity_id", "tx", "model_hash")

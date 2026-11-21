@@ -24,7 +24,7 @@ defmodule Hologram.LiveReloadTest do
   use_module_stub :page_digest_registry
   use_module_stub :page_module_resolver
   use_module_stub :query_cache
-  use_module_stub :sync_page_windows
+  use_module_stub :sync_page_types
 
   @asset_debounce_delay LiveReload.asset_debounce_delay()
   @debounce_delay LiveReload.debounce_delay()
@@ -1004,7 +1004,7 @@ defmodule Hologram.LiveReloadTest do
       setup_page_digest_registry(PageDigestRegistryStub)
       setup_page_module_resolver(PageModuleResolverStub)
       setup_query_cache(QueryCacheStub, false)
-      setup_sync_page_windows(SyncPageWindowsStub)
+      setup_sync_page_types(SyncPageTypesStub)
 
       wait_for_process_cleanup(SubscriptionRegistry)
       start_supervised!(SubscriptionRegistry)

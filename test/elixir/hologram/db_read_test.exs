@@ -232,7 +232,7 @@ defmodule Hologram.DBReadTest do
 
     test "raises on a query term containing placeholders" do
       expected_msg =
-        "cannot read a query term containing placeholders - placeholder :min_b has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
+        "cannot run a query term holding the placeholder :min_b - a placeholder only stands in for a pinned value while the build checks a query, so a query that runs holds its values: build the term from the values themselves"
 
       assert_error MisuseError, expected_msg, fn ->
         Module2
@@ -243,7 +243,7 @@ defmodule Hologram.DBReadTest do
 
     test "raises on a query term ordered by a placeholder" do
       expected_msg =
-        "cannot read a query term containing placeholders - placeholder :sort has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
+        "cannot run a query term holding the placeholder :sort - a placeholder only stands in for a pinned value while the build checks a query, so a query that runs holds its values: build the term from the values themselves"
 
       assert_error MisuseError, expected_msg, fn ->
         Module2

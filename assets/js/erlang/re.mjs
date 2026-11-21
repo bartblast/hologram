@@ -600,21 +600,11 @@ const Erlang_Re = {
 
       if (offsetOption !== null) {
         if (entry.unicode) {
-          startPosition = ERTS.regex.byteOffsetToUtf16Index(
-            subjectText,
-            offsetOption,
-          );
+          const offsetMap = subjectOffsetMap();
+          startPosition = offsetMap.toIndex(offsetOption);
 
-          if (
-            ERTS.regex.utf16IndexToByteOffset(subjectText, startPosition) !==
-            offsetOption
-          ) {
-            const subjectByteLength = ERTS.regex.utf16IndexToByteOffset(
-              subjectText,
-              subjectText.length,
-            );
-
-            if (offsetOption > subjectByteLength) {
+          if (offsetMap.toByteOffset(startPosition) !== offsetOption) {
+            if (offsetOption > offsetMap.byteLength()) {
               offsetBeyondSubject = true;
             } else {
               raiseArgumentError();
@@ -657,11 +647,9 @@ const Erlang_Re = {
           ? [...groupMap.names.keys()].sort(ERTS.regex.compareByUtf8Bytes)
           : null;
 
-      // In byte mode JS string indices are byte offsets already. In unicode
-      // mode one converter serves all captures, so a global run walks the
-      // subject once instead of once per capture.
+      // In byte mode JS string indices are byte offsets already
       const toByteOffset = entry.unicode
-        ? ERTS.regex.utf16IndexToByteOffsetConverter(subjectText)
+        ? (index) => subjectOffsetMap().toByteOffset(index)
         : (index) => index;
 
       const buildValue = (capture) => {
@@ -669,13 +657,20 @@ const Erlang_Re = {
           case "binary": {
             if (capture === null) return Type.bitstring("");
 
-            const slice = subjectText.slice(capture.start, capture.end);
+            if (entry.unicode) {
+              return Type.bitstring(
+                subjectText.slice(capture.start, capture.end),
+              );
+            }
 
-            return entry.unicode
-              ? Type.bitstring(slice)
-              : Bitstring.fromBytes(
-                  [...slice].map((char) => char.charCodeAt(0)),
-                );
+            // In byte mode a capture of a binary subject shares its bytes,
+            // like a sub-binary. The binary built from an iolist subject
+            // lives only for this run, so its captures get their own copy.
+            const bytes = Type.isBinary(subject)
+              ? subjectBinary.bytes.subarray(capture.start, capture.end)
+              : subjectBinary.bytes.slice(capture.start, capture.end);
+
+            return Bitstring.fromBytes(bytes);
           }
 
           case "index": {
@@ -780,6 +775,24 @@ const Erlang_Re = {
         : shapeMatch(matchResults[0]);
 
       return Type.tuple([Type.atom("match"), captured]);
+    };
+
+    // Converts the subject char data to text, a binary subject through the
+    // engine's kept subject texts.
+    const subjectCharDataToText = () =>
+      Type.isBinary(subject)
+        ? ERTS.regex.subjectTextFromBinary(subject, true)
+        : ERTS.regex.charDataToText(subject);
+
+    // The offset map of the subject's unicode mode text, made on first use
+    let offsetMapOfSubject = null;
+
+    const subjectOffsetMap = () => {
+      if (offsetMapOfSubject === null) {
+        offsetMapOfSubject = ERTS.regex.subjectOffsetMap(subject, subjectText);
+      }
+
+      return offsetMapOfSubject;
     };
 
     // --- Options ---
@@ -898,7 +911,7 @@ const Erlang_Re = {
       acc.engineOpts.unicode = true;
 
       // The subject char data converts before the pattern compiles
-      subjectText = ERTS.regex.charDataToText(subject);
+      subjectText = subjectCharDataToText();
 
       if (subjectText === null) raiseCharDataError(subject);
 
@@ -941,10 +954,14 @@ const Erlang_Re = {
 
     if (subjectText === null) {
       if (entry.unicode) {
-        subjectText = ERTS.regex.charDataToText(subject);
+        subjectText = subjectCharDataToText();
 
         if (subjectText === null) raiseCharDataError(subject);
+      } else if (Type.isBinary(subject)) {
+        subjectText = ERTS.regex.subjectTextFromBinary(subject, false);
       } else {
+        // Only a binary subject keeps its text, as an iolist subject usually
+        // builds a new binary each run
         Bitstring.maybeSetBytesFromText(subjectBinary);
         subjectText = ERTS.regex.textFromLatin1Bytes(subjectBinary.bytes);
       }

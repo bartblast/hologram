@@ -4366,6 +4366,536 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
+  describe "build_ast/1, block pairing" do
+    test "raises on an if block left unclosed" do
+      # {%if true}abc
+      tags = [{:block_start, {"if", "{ true}"}}, {:text, "abc"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the {%if} block isn't closed, add {/if}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on an if block left unclosed after its else" do
+      # {%if true}a{%else}b
+      tags = [
+        {:block_start, {"if", "{ true}"}},
+        {:text, "a"},
+        {:block_start, "else"},
+        {:text, "b"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the {%if} block isn't closed, add {/if}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a for block left unclosed" do
+      # {%for x <- @xs}abc
+      tags = [{:block_start, {"for", "{ x <- @xs}"}}, {:text, "abc"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the {%for} block isn't closed, add {/for}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a raw block left unclosed" do
+      # {%raw}abc
+      tags = [{:block_start, "raw"}, {:text, "abc"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the {%raw} block isn't closed, add {/raw}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a block left unclosed before its parent's end tag" do
+      # <div>{%if true}</div>{/if}
+      tags = [
+        {:start_tag, {"div", []}},
+        {:block_start, {"if", "{ true}"}},
+        {:end_tag, "div"},
+        {:block_end, "if"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the {%if} block isn't closed before </div>, add {/if}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on an element left unclosed before its block's end" do
+      # {%if true}<div>{/if}</div>
+      tags = [
+        {:block_start, {"if", "{ true}"}},
+        {:start_tag, {"div", []}},
+        {:block_end, "if"},
+        {:end_tag, "div"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the <div> tag isn't closed before {/if}, add </div>",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a raw block ending inside an element it started outside of" do
+      # {%raw}<div>{/raw}</div>
+      tags = [
+        {:block_start, "raw"},
+        {:start_tag, {"div", []}},
+        {:block_end, "raw"},
+        {:end_tag, "div"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the <div> tag isn't closed before {/raw}, add </div>",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a raw block ending outside an element it started inside of" do
+      # <div>{%raw}</div>{/raw}
+      tags = [
+        {:start_tag, {"div", []}},
+        {:block_start, "raw"},
+        {:end_tag, "div"},
+        {:block_end, "raw"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the {%raw} block isn't closed before </div>, add {/raw}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a stray block end" do
+      # {/if}
+      tags = [{:block_end, "if"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "{/if} has no matching {%if}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a for block end in an if block" do
+      # {%if true}{/for}
+      tags = [{:block_start, {"if", "{ true}"}}, {:block_end, "for"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "{/for} has no matching {%for} inside the {%if} block",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on an if block end in a for block" do
+      # {%for x <- @xs}a{/if}
+      tags = [{:block_start, {"for", "{ x <- @xs}"}}, {:text, "a"}, {:block_end, "if"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "{/if} has no matching {%if} inside the {%for} block",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on an else outside any block" do
+      # {%else}
+      tags = [{:block_start, "else"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "{%else} can only be used in an {%if} block",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on an else in a for block" do
+      # {%for x <- @xs}{%else}{/for}
+      tags = [{:block_start, {"for", "{ x <- @xs}"}}, {:block_start, "else"}, {:block_end, "for"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "{%else} can only be used in an {%if} block",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on an else in a for block inside an if block" do
+      # {%if a}{%for x <- @xs}b{%else}c{/for}{/if}
+      tags = [
+        {:block_start, {"if", "{ a}"}},
+        {:block_start, {"for", "{ x <- @xs}"}},
+        {:text, "b"},
+        {:block_start, "else"},
+        {:text, "c"},
+        {:block_end, "for"},
+        {:block_end, "if"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "{%else} can only be used in an {%if} block",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on an if block with two elses" do
+      # {%if true}a{%else}b{%else}c{/if}
+      tags = [
+        {:block_start, {"if", "{ true}"}},
+        {:text, "a"},
+        {:block_start, "else"},
+        {:text, "b"},
+        {:block_start, "else"},
+        {:text, "c"},
+        {:block_end, "if"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the {%if} block has more than one {%else}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on an else inside an element inside an if block" do
+      # {%if true}<div>{%else}</div>{/if}
+      tags = [
+        {:block_start, {"if", "{ true}"}},
+        {:start_tag, {"div", []}},
+        {:block_start, "else"},
+        {:end_tag, "div"},
+        {:block_end, "if"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the <div> tag isn't closed before {%else}, add </div>",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on an else inside a public comment, for an if block outside it" do
+      # {%if true}<!-- {%else} -->{/if}
+      tags = [
+        {:block_start, {"if", "{ true}"}},
+        :public_comment_start,
+        {:text, " "},
+        {:block_start, "else"},
+        {:text, " "},
+        :public_comment_end,
+        {:block_end, "if"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "{%else} belongs to the {%if} block outside the public comment",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a block end inside a public comment, for a block outside it" do
+      # {%if true}<!-- {/if} -->
+      tags = [
+        {:block_start, {"if", "{ true}"}},
+        :public_comment_start,
+        {:text, " "},
+        {:block_end, "if"},
+        {:text, " "},
+        :public_comment_end
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "{/if} belongs to the {%if} block outside the public comment",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a raw block end inside a public comment, for a raw block outside it" do
+      # {%raw}<!-- {/raw} -->
+      tags = [
+        {:block_start, "raw"},
+        :public_comment_start,
+        {:text, " "},
+        {:block_end, "raw"},
+        {:text, " "},
+        :public_comment_end
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "{/raw} belongs to the {%raw} block outside the public comment",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a block left unclosed inside a public comment" do
+      # <!-- {%raw} -->{/raw}
+      tags = [
+        :public_comment_start,
+        {:block_start, "raw"},
+        {:text, "  "},
+        :public_comment_end,
+        {:block_end, "raw"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the {%raw} block isn't closed before -->, add {/raw}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a stray public comment end" do
+      # -->, which the parser reads as text, so only a hand-built tag list holds it
+      tags = [:public_comment_end]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "--> has no matching <!--",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a stray public comment end inside an element" do
+      # <div>-->, which the parser reads as text, so only a hand-built tag list holds it
+      tags = [{:start_tag, {"div", []}}, :public_comment_end]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "--> has no matching <!-- inside the <div> tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a public comment left unclosed" do
+      # <!-- {%if true}a{/if} -->, which the parser reads with the comment's end as text
+      tags = [
+        :public_comment_start,
+        {:text, " "},
+        {:block_start, {"if", "{ true}"}},
+        {:text, "a"},
+        {:block_end, "if"},
+        {:text, " -->"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the public comment isn't closed, add -->",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a public comment left unclosed before its parent's end tag" do
+      # <div><!-- {%if a}{/if} --></div>, which the parser reads with the comment's end as text
+      tags = [
+        {:start_tag, {"div", []}},
+        :public_comment_start,
+        {:text, " "},
+        {:block_start, {"if", "{ a}"}},
+        {:block_end, "if"},
+        {:text, " -->"},
+        {:end_tag, "div"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the public comment isn't closed before </div>, add -->",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a public comment left unclosed before a stray end tag" do
+      # <!-- {%if a}{/if} --></div>, which the parser reads with the comment's end as text
+      tags = [
+        :public_comment_start,
+        {:text, " "},
+        {:block_start, {"if", "{ a}"}},
+        {:block_end, "if"},
+        {:text, " -->"},
+        {:end_tag, "div"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the public comment isn't closed before </div>, add -->",
+                   fn -> build_ast(tags) end
+    end
+  end
+
+  describe "build_ast/1, tag pairing" do
+    test "element end tag spelled in another case closes the element" do
+      # <div>a</DIV>
+      tags = [{:start_tag, {"div", []}}, {:text, "a"}, {:end_tag, "DIV"}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "div", [key(tags, 0)], [text: "a"]]}
+             ]
+    end
+
+    test "element end tag spelled in lowercase closes an element whose name has case" do
+      # <foreignObject></foreignobject>
+      tags = [{:start_tag, {"foreignObject", []}}, {:end_tag, "foreignobject"}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "foreignObject", [key(tags, 0)], []]}
+             ]
+    end
+
+    test "void element end tag closes a start tag the parser didn't read as void" do
+      # <iNPUT></input>
+      tags = [{:start_tag, {"iNPUT", []}}, {:end_tag, "input"}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "input", [key(tags, 0)], []]}
+             ]
+    end
+
+    test "dynamic tag closed with the same expression spaced differently" do
+      # <{@tag}></{ @tag }>
+      tags = [
+        {:start_tag, {{:expression, "{@tag}"}, []}},
+        {:end_tag, {:expression, "{ @tag }"}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1],
+                   [
+                     {{:., [line: 1], [{:vars, [line: 1], nil}, :tag]},
+                      [no_parens: true, line: 1], []}
+                   ]},
+                  [key(tags, 0)],
+                  []
+                ]}
+             ]
+    end
+
+    test "dynamic tag's expression warns once when compared with its end tag's" do
+      # <{'div'}></{'div'}>
+      tags = [
+        {:start_tag, {{:expression, "{'div'}"}, []}},
+        {:end_tag, {:expression, "{'div'}"}}
+      ]
+
+      {_ast, diagnostics} = Code.with_diagnostics(fn -> build_ast(tags) end)
+
+      assert Enum.map(diagnostics, & &1.severity) == [:warning]
+    end
+
+    test "raises on an element left unclosed at the end" do
+      # <div>abc
+      tags = [{:start_tag, {"div", []}}, {:text, "abc"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the <div> tag isn't closed, add </div>",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on an element left unclosed before its parent's end tag" do
+      # <div><span>abc</div>
+      tags = [
+        {:start_tag, {"div", []}},
+        {:start_tag, {"span", []}},
+        {:text, "abc"},
+        {:end_tag, "div"}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the <span> tag isn't closed before </div>, add </span>",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a stray end tag at the top level" do
+      # <div></div></div>
+      tags = [{:start_tag, {"div", []}}, {:end_tag, "div"}, {:end_tag, "div"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</div> has no matching <div>",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a stray end tag inside an element" do
+      # <div></span></div>
+      tags = [{:start_tag, {"div", []}}, {:end_tag, "span"}, {:end_tag, "div"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</span> has no matching <span> inside the <div> tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on an end tag naming another element" do
+      # <div>abc</span>
+      tags = [{:start_tag, {"div", []}}, {:text, "abc"}, {:end_tag, "span"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</span> has no matching <span> inside the <div> tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on the end tag of a void element" do
+      # <input></input>
+      tags = [{:self_closing_tag, {"input", []}}, {:end_tag, "input"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</input> isn't allowed, since <input> has no end tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on the end tag of a void element spelled in another case" do
+      # <input></iNPUT>
+      tags = [{:self_closing_tag, {"input", []}}, {:end_tag, "iNPUT"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</iNPUT> isn't allowed, since <iNPUT> has no end tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on the end tag of a slot" do
+      # <slot></slot>
+      tags = [{:self_closing_tag, {"slot", []}}, {:end_tag, "slot"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</slot> isn't allowed, since <slot> has no end tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on the end tag of a window tag" do
+      # <window></window>
+      tags = [{:self_closing_tag, {"window", []}}, {:end_tag, "window"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</window> isn't allowed, since <window> has no end tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a component left unclosed" do
+      # <MyComponent>abc
+      tags = [{:start_tag, {"MyComponent", []}}, {:text, "abc"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the <MyComponent> tag isn't closed, add </MyComponent>",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a component end tag spelled in another case" do
+      # <MyComponent></mycomponent>
+      tags = [{:start_tag, {"MyComponent", []}}, {:end_tag, "mycomponent"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</mycomponent> has no matching <mycomponent> inside the <MyComponent> tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a stray component end tag named like a void element" do
+      # <div></Link></div>
+      tags = [{:start_tag, {"div", []}}, {:end_tag, "Link"}, {:end_tag, "div"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</Link> has no matching <Link> inside the <div> tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a dynamic tag left unclosed" do
+      # <{@tag}>abc
+      tags = [{:start_tag, {{:expression, "{@tag}"}, []}}, {:text, "abc"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the <{@tag}> tag isn't closed, add </{@tag}>",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a dynamic tag closed with another expression" do
+      # <{@a}></{@b}>
+      tags = [
+        {:start_tag, {{:expression, "{@a}"}, []}},
+        {:end_tag, {:expression, "{@b}"}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</{@b}> has no matching <{@b}> inside the <{@a}> tag",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a dynamic tag closed with a static end tag" do
+      # <{@a}></div>
+      tags = [{:start_tag, {{:expression, "{@a}"}, []}}, {:end_tag, "div"}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "</div> has no matching <div> inside the <{@a}> tag",
+                   fn -> build_ast(tags) end
+    end
+  end
+
   test "build_ast/1, nested AST" do
     tags = [{:expression, "{(fn x -> [x | @acc] end).(@value)}"}]
 

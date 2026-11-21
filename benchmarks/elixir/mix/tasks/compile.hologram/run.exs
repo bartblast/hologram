@@ -94,8 +94,7 @@ System.put_env("HOLOGRAM_START", "1")
 #
 # A module no page uses edited, same VM: the same loop after a save of a module outside the graph.
 # The module's beam is read again and the operation asks it may spell are judged, and nothing else:
-# no page's reach is listed, no query is extracted, no bundle is rebuilt and the graph is not
-# copied.
+# no page's reach is listed, no bundle is rebuilt and the graph is not copied.
 #
 # Nothing changed, Hologram off: a mix command in dev or test without HOLOGRAM_START, with no module
 # changed. The task never compiles there, reads the record of the manifests the data model was last

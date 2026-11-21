@@ -18,7 +18,6 @@ defmodule HologramFeatureTests.CatchupTest do
   # client's session, so what the browser holds afterwards can only have come through the
   # catch-up.
   setup do
-    await_evaluator_drain()
     truncate_every_entity_table()
 
     :ok

@@ -7,7 +7,6 @@ defmodule HologramSyncTests.Helpers do
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Connection
-  alias Hologram.Test.FeatureHelpers
   alias HologramSyncTests.Consistency.Model
   alias HologramSyncTests.Entities.Board
   alias HologramSyncTests.Entities.Card
@@ -35,13 +34,10 @@ defmodule HologramSyncTests.Helpers do
   it.
 
   The simulated clients sync the whole app, so a row an earlier test left in any of them would
-  arrive in the next test's fill. The truncate reaches no log, so it waits first for every sync
-  evaluator an earlier test left running to end, or one would go on serving the rows from before.
+  arrive in the next test's fill.
   """
   @spec truncate_tables() :: :ok
   def truncate_tables do
-    FeatureHelpers.await_evaluator_drain()
-
     tables =
       Model.types()
       |> Enum.concat([RoleGrant])

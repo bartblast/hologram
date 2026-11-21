@@ -149,7 +149,7 @@ Enum.each(1..100, fn i ->
   |> File.write!(content)
 end)
 
-# The pages whose client code reaches a registered query, so that what the data layer derives
+# The pages whose client code reaches a derived query, so that what the data layer derives
 # from the pages' reach has something to derive: both query components are rendered, and the
 # entity type handed over is one the template names.
 Enum.each(1..10, fn i ->

@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Page.Module18 do
   use Hologram.Page
 
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84
+  alias Hologram.Test.Fixtures.Component.Module40
 
   route "/hologram-test-fixtures-page-module18"
 
@@ -10,7 +10,7 @@ defmodule Hologram.Test.Fixtures.Page.Module18 do
   @impl Page
   def template do
     ~HOLO"""
-    <Module84 />
+    <Module40 />
     """
   end
 end

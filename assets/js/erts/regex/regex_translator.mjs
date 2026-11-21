@@ -2,6 +2,7 @@
 
 import {POSIX_SETS, SHORTHAND_SETS} from "./regex_char_sets.mjs";
 import {applyOptionSetting, startOptionSettings} from "./regex_options.mjs";
+import {unicodePropertyAtoms} from "./regex_unicode_properties.mjs";
 
 // Chars that must be escaped inside a character class.
 const CLASS_METACHARS = new Set([..."\\]^-"]);
@@ -242,6 +243,10 @@ export default class RegexTranslator {
           );
           break;
 
+        case "unicodeProperty":
+          members += $.#translateUnicodePropertyMember(item);
+          break;
+
         default:
           // TODO: shrink as remaining translator rewrites are implemented
           throw new Error(
@@ -385,6 +390,9 @@ export default class RegexTranslator {
       case "startOption":
         return "";
 
+      case "unicodeProperty":
+        return $.#translateUnicodeProperty(node);
+
       default:
         // TODO: shrink as remaining translator rewrites are implemented
         throw new Error(
@@ -419,6 +427,22 @@ export default class RegexTranslator {
     const content = $.#rangesToClassContent(SHORTHAND_SETS[node.letter]);
 
     return node.negated ? `[^${content}]` : `[${content}]`;
+  }
+
+  // Native routing guarantees the u flag and no caseless scope, so the
+  // property atoms need no case handling.
+  static #translateUnicodeProperty(node) {
+    const content = unicodePropertyAtoms(node.name, false).join("");
+
+    return `[${node.negated ? "^" : ""}${content}]`;
+  }
+
+  // Native routing guarantees a negated member is a single escape, which
+  // negates by its letter case.
+  static #translateUnicodePropertyMember(item) {
+    const atoms = unicodePropertyAtoms(item.name, false);
+
+    return item.negated ? atoms[0].replace("\\p", "\\P") : atoms.join("");
   }
 
   // Wraps the source in a caseless modifier group when the i option differs

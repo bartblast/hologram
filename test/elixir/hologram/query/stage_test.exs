@@ -3988,6 +3988,35 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  # The guard both executors pass a term through, for every position a placeholder can sit in.
+  describe "assert_no_placeholders!/1" do
+    test "passes a term holding no placeholder" do
+      query =
+        Module2
+        |> filter(b: {:>=, 1})
+        |> normalize()
+
+      assert assert_no_placeholders!(query) == :ok
+    end
+
+    test "refuses a term holding a placeholder in any position" do
+      for query <- [
+            filter(Module2, b: {:>=, %Placeholder{name: :min_b}}),
+            filter(Module2, [{%Placeholder{name: :min_b}, 5}]),
+            take(Module2, %Placeholder{name: :min_b}),
+            skip(Module2, %Placeholder{name: :min_b}),
+            sort(Module2, [{%Placeholder{name: :min_b}, :asc}]),
+            narrowed_include(Module3, :a, &filter(&1, c: %Placeholder{name: :min_b}))
+          ] do
+        assert_raise Hologram.MisuseError, ~r/holding the placeholder :min_b/, fn ->
+          query
+          |> normalize()
+          |> assert_no_placeholders!()
+        end
+      end
+    end
+  end
+
   describe "placeholder_names/1" do
     test "collects placeholders from every position of a term" do
       query =
