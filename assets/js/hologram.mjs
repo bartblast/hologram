@@ -803,6 +803,7 @@ export default class Hologram {
         pageSnapshot,
         globalThis.Hologram.initialPageDigest,
         $.#runtimeDigest(),
+        $.#dataModelDigest(),
       )
     );
   }
@@ -1405,9 +1406,21 @@ export default class Hologram {
     return `${eventTargetNode.__hologramId__}:${pagePath}`;
   }
 
+  // The digest of the bundle the document's asset manifest names under the given static path, or
+  // null when it names none.
+  static #bundleDigest(staticPath) {
+    const path = globalThis.Hologram.assetManifest?.[staticPath];
+
+    return path?.match(/-([^-]+)\.js$/)?.[1] ?? null;
+  }
+
   // Mirrors Hologram.Router.Helpers.chunk_bundle_path/1
   static #chunkBundlePath(chunkDigest) {
     return `/hologram/chunk-${chunkDigest}.js`;
+  }
+
+  static #dataModelDigest() {
+    return $.#bundleDigest("hologram/data-model.js");
   }
 
   // Defines the functions of the scripts that announced themselves (see ScriptRegistry), and lets
@@ -2363,6 +2376,7 @@ export default class Hologram {
         pageSnapshot,
         currentPageDigest,
         $.#runtimeDigest(),
+        $.#dataModelDigest(),
       ) ||
       LiveReload.holdsOldPageBundle(pageSnapshot.pageModule, currentPageDigest)
     );
@@ -3143,9 +3157,7 @@ export default class Hologram {
   // The digest of the runtime bundle this document runs, read from the path the asset manifest from
   // the boot data block holds for it.
   static #runtimeDigest() {
-    const path = globalThis.Hologram.assetManifest?.["hologram/runtime.js"];
-
-    return path?.match(/-([^-]+)\.js$/)?.[1] ?? null;
+    return $.#bundleDigest("hologram/runtime.js");
   }
 
   static async #savePageSnapshot(forceSync = false) {
@@ -3165,6 +3177,7 @@ export default class Hologram {
         ScriptRegistry.isLoaded([digest]),
       ),
       componentRegistryEntries: ComponentRegistry.entries,
+      dataModelDigest: $.#dataModelDigest(),
       // The identity the page's state was produced for. The snapshot is restored only for it: in
       // this document while the period lasts, in another when the tag matches (see
       // #isSnapshotOfCurrentIdentity and isDocumentSnapshotRestorable).

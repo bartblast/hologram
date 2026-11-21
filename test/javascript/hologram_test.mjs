@@ -3594,6 +3594,7 @@ describe("Hologram", () => {
           .returns(Type.atom("Elixir.Hologram.Test.Fixtures.PageLeft"));
 
         globalThis.Hologram.assetManifest = {
+          "hologram/data-model.js": "/hologram/data-model-def.js",
           "hologram/runtime.js": "/hologram/runtime-abc.js",
         };
 
@@ -3649,9 +3650,10 @@ describe("Hologram", () => {
         // No page is mounted in these tests, so the tab holds no bundle for one.
         assert.isNull(snapshot.pageDigest);
         assert.equal(snapshot.runtimeDigest, "abc");
+        assert.equal(snapshot.dataModelDigest, "def");
       });
 
-      it("is stamped with no runtime digest when the asset manifest names no runtime bundle", async () => {
+      it("is stamped with no runtime or data model digest when the asset manifest names neither", async () => {
         globalThis.Hologram.assetManifest = {};
 
         await Hologram.loadNewPage("/target", payloadFor("new"));
@@ -3659,6 +3661,7 @@ describe("Hologram", () => {
         const snapshot = serializeStub.firstCall.args[0];
 
         assert.isNull(snapshot.runtimeDigest);
+        assert.isNull(snapshot.dataModelDigest);
       });
 
       // The state a snapshot holds can carry values of struct types whose protocol implementations
@@ -6942,6 +6945,36 @@ describe("Hologram", () => {
       globalThis.Hologram.initialPageDigest = "page-2";
 
       assert.isFalse(Hologram.isDocumentSnapshotRestorable(snapshot(), true));
+    });
+
+    // A data model edit leaves the page and runtime bundles as they are.
+    it("passes over a snapshot taken with another data model", () => {
+      const originalAssetManifest = globalThis.Hologram.assetManifest;
+
+      globalThis.Hologram.config.liveReload = true;
+      globalThis.Hologram.initialPageDigest = "page-1";
+
+      globalThis.Hologram.assetManifest = {
+        "hologram/data-model.js": "/hologram/data-model-NEWMODEL.js",
+      };
+
+      try {
+        assert.isFalse(
+          Hologram.isDocumentSnapshotRestorable(
+            snapshot({dataModelDigest: "OLDMODEL"}),
+            true,
+          ),
+        );
+
+        assert.isTrue(
+          Hologram.isDocumentSnapshotRestorable(
+            snapshot({dataModelDigest: "NEWMODEL"}),
+            true,
+          ),
+        );
+      } finally {
+        globalThis.Hologram.assetManifest = originalAssetManifest;
+      }
     });
   });
 
