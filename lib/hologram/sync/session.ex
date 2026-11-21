@@ -100,7 +100,11 @@ defmodule Hologram.Sync.Session do
   the gap, and one committed after reaches the session as a batch - and the read runs in this
   process. Whether a gap can be had at all is decided before the session starts, since it is a
   question about the log rather than about this client - the session's own read finding it can't
-  is the log having moved since, a gap that outgrew a replay or a deploy landing in between.
+  is the log having moved since, a gap that outgrew a replay or a deploy landing in between. A
+  batch that committed wholly below the gap's edge is passed over whenever it reaches the session,
+  as a first arrival passes over one below `:fill_place`: the gap holds it, and its rows can be
+  older than the catch-up's. Any other batch reaching the session during the catch-up is told
+  after it.
 
   `:read_fill` reads what a client arriving with nothing is sent of one entity type, answering what
   `Hologram.Sync.Fill.read/4` answers, which it defaults to. Handed over as a reader for the same
@@ -141,9 +145,12 @@ defmodule Hologram.Sync.Session do
       # `tell_part/3`), one per session, so every frame of the catch-up and the batches after it
       # hash alike, and the client works the hashes of what it holds out once.
       drop_salt: if(resuming, do: Frame.drop_salt()),
-      fill_place: Keyword.get(opts, :fill_place),
       gate_ref: nil,
       grants_kept: nil,
+      # Below it, what the fill or the catch-up told holds every transaction, so a batch wholly below
+      # it is passed over (see `tell_part_unless_held/2`). A returning client's is known once its
+      # catch-up is over, and it tells no batch before then.
+      held_below: if(resuming, do: nil, else: fill_tx(opts)),
       outbox: Outbox.new(client, Keyword.get(opts, :outbox, [])),
       page: Keyword.fetch!(opts, :page),
       page_types: MapSet.new(),
@@ -219,7 +226,7 @@ defmodule Hologram.Sync.Session do
   # telling half of it, and the client comes back through the doors once the model is released.
   def handle_info({:live, part}, state) do
     state
-    |> tell_part_unless_filled(part)
+    |> tell_part_unless_held(part)
     |> noreply_sleeping_when_idle()
   rescue
     Hologram.StaleModelError -> {:stop, {:shutdown, :model_held}, state}
@@ -403,8 +410,13 @@ defmodule Hologram.Sync.Session do
   # by id: the client knows their ids already, and only a frame naming them can claim the batch's
   # number, which lands a create still pending (see `Hologram.Sync.Pot.decide/3`).
   #
-  # The batches that reach the session meanwhile queue behind this callback, and are told after it
-  # (see `trusts_held?/2`).
+  # The batches that reach the session meanwhile queue behind this callback. One whose rows were
+  # read before a transaction below the gap's edge committed holds rows older than the chunks',
+  # which hold that transaction, so told after the catch-up it would put a row back as it stood
+  # before it, under the edge. Its rows miss only transactions at or above the edge the dispatcher
+  # read its batch below, so the batch's own are all below the gap's edge too: the gap holds them,
+  # and the batch is passed over (see `tell_part_unless_held/2`). The rest are told after the
+  # catch-up (see `trusts_held?/2`).
   defp catch_up(state) do
     :ok = Sessions.register(state.actor_user_id)
 
@@ -590,12 +602,15 @@ defmodule Hologram.Sync.Session do
   end
 
   # Once the gap is told, the client holds what every transaction below the edge wrote, so the
-  # marker claims the edge. A batch with a transaction below the edge read now can be in some of what
-  # the catch-up read and not in the rest, so it hands its rows over whole (see `trusts_held?/2`).
+  # marker claims the edge, and a batch wholly below it is passed over. A batch told after with a
+  # transaction below the edge read now - also one starting below the gap's edge and ending at or
+  # above it - can be in some of what the catch-up read and not in the rest, so it hands its rows
+  # over whole (see `trusts_held?/2`).
   defp caught_up(state, edge) do
     announce_all(%{
       state
-      | place: max_place(state.place, {edge, 0}),
+      | held_below: edge,
+        place: max_place(state.place, {edge, 0}),
         read_gap: nil,
         trust_edge: Oplog.current_xmax()
     })
@@ -678,17 +693,23 @@ defmodule Hologram.Sync.Session do
   end
 
   # A batch whose every transaction committed before a first arrival's fill place is one the fill
-  # read, and its rows can be older than the fill's, so it is passed over. A returning client's
-  # catch-up holds only the rows its gap names, so every batch is told it.
-  defp tell_part_unless_filled(
-         %{fill_place: {fill_tx, _seq}, resuming: false} = state,
-         %{tx_range: {_lowest, highest}}
-       )
-       when highest < fill_tx do
+  # read, and one wholly below a returning client's gap edge is one its catch-up read. Either way its
+  # rows can be older than what the client was told, so it is passed over. What it would tell went
+  # out with the fill or the catch-up: the gap holds every effect of a transaction below the edge
+  # since the client's place, and its chunks judge them on rows read after.
+  defp tell_part_unless_held(%{held_below: below} = state, %{tx_range: {_lowest, highest}})
+       when is_integer(below) and highest < below do
     state
   end
 
-  defp tell_part_unless_filled(state, part), do: tell_part(state, part)
+  defp tell_part_unless_held(state, part), do: tell_part(state, part)
+
+  defp fill_tx(opts) do
+    case Keyword.get(opts, :fill_place) do
+      {tx, _seq} -> tx
+      nil -> nil
+    end
+  end
 
   # The entity types the page's own code reads, which the fill sends first (see
   # `Hologram.Sync.PageTypes`).
