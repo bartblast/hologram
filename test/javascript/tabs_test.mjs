@@ -2081,7 +2081,18 @@ describe("Tabs", () => {
 
           assert.isTrue(led.calledOnce);
 
+          const promoting = sinon.spy(Overlay, "promote");
+
           Batches.settle(7, {dropped: {}, kept: {}, status: "confirmed"});
+
+          // The stored rows already say 2, so the count alone would pass with the batch lost.
+          sinon.assert.calledOnce(promoting);
+
+          const [promoted] = promoting.firstCall.args;
+
+          assert.equal(promoted.seq, 7);
+          assert.isTrue(promoted.isLanded(0));
+          assert.deepStrictEqual(Batches.pending, []);
 
           assert.equal(LocalDatabase.baseRow("MyApp.Task", "t1").count, 2);
         } finally {
