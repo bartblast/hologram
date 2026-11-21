@@ -1220,14 +1220,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_page_types_plt(opts) do
-    page_types_plt_dump_path =
-      Path.join(opts[:build_dir], Reflection.page_types_plt_dump_file_name())
-
-    assert File.exists?(page_types_plt_dump_path)
-
-    page_types_plt = PLT.start()
-    PLT.load(page_types_plt, page_types_plt_dump_path)
-    page_types_items = PLT.get_all(page_types_plt)
+    page_types_items =
+      opts[:build_dir]
+      |> Path.join(Reflection.page_types_plt_dump_file_name())
+      |> load_plt_items()
 
     assert map_size(page_types_items) == @num_pages
 
@@ -1315,14 +1311,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     refute Entity10 in queries.synced_types
 
     # A session fills a page's types out of the synced ones, so the two dumps have to agree.
-    page_types_plt = PLT.start()
+    page_types_items =
+      opts[:build_dir]
+      |> Path.join(Reflection.page_types_plt_dump_file_name())
+      |> load_plt_items()
 
-    PLT.load(
-      page_types_plt,
-      Path.join(opts[:build_dir], Reflection.page_types_plt_dump_file_name())
-    )
-
-    for {_page_module, page_types} <- PLT.get_all(page_types_plt) do
+    for {_page_module, page_types} <- page_types_items do
       assert page_types -- queries.synced_types == []
     end
   end
