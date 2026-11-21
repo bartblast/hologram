@@ -482,17 +482,27 @@ defmodule HologramSyncBenchmark.Measure do
   # Nil for a session that has ended since the gate was read.
   defp session_memory(pid) do
     case Process.info(pid, [:binary, :memory, :message_queue_len]) do
-      nil ->
-        nil
-
-      info ->
-        binaries =
-          info[:binary]
-          |> Enum.uniq_by(fn {address, _size, _references} -> address end)
-          |> Enum.sum_by(fn {_address, size, _references} -> size end)
-
-        {info[:memory] + binaries, info[:message_queue_len]}
+      nil -> nil
+      info -> {info[:memory] + binaries_bytes(info[:binary]), info[:message_queue_len]}
     end
+  end
+
+  @doc """
+  Returns the given process's own memory and the bytes of the binaries it refers to, each counted
+  once. Those live outside the process, so its own memory leaves them out. Runs on the node of the
+  process, which has to be alive.
+  """
+  @spec process_bytes(pid) :: {non_neg_integer, non_neg_integer}
+  def process_bytes(pid) do
+    [binary: binaries, memory: memory] = Process.info(pid, [:binary, :memory])
+
+    {memory, binaries_bytes(binaries)}
+  end
+
+  defp binaries_bytes(binaries) do
+    binaries
+    |> Enum.uniq_by(fn {address, _size, _references} -> address end)
+    |> Enum.sum_by(fn {_address, size, _references} -> size end)
   end
 
   @doc """

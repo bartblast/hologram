@@ -12,6 +12,7 @@ defmodule HologramSyncBenchmark.Driver do
   alias HologramSyncBenchmark.Cases.Deploy
   alias HologramSyncBenchmark.Cases.Lock
   alias HologramSyncBenchmark.Cases.Reconnect
+  alias HologramSyncBenchmark.Cases.SessionMemory
   alias HologramSyncBenchmark.Cases.Tenants
   alias HologramSyncBenchmark.Client
   alias HologramSyncBenchmark.Clients
@@ -28,7 +29,7 @@ defmodule HologramSyncBenchmark.Driver do
   @board_page "HologramSyncBenchmark.BoardPage"
 
   @cases ~w(boot seed smoke board board_roles tenants access deploy deploy_tenants reconnect
-            reconnect_tenants lock)
+            reconnect_tenants session_memory lock)
 
   # The options and their defaults: the board's size; the tenants, members per tenant and tasks
   # per tenant of the tenants case; the access case's docs and the seconds a change of access may
@@ -87,6 +88,7 @@ defmodule HologramSyncBenchmark.Driver do
     p99_limit: :integer,
     rate: :integer,
     refill_limit: :integer,
+    rows: :string,
     tasks: :integer,
     tenants: :integer,
     wave_limit: :integer,
@@ -127,7 +129,8 @@ defmodule HologramSyncBenchmark.Driver do
       {opts, [], []} ->
         @defaults
         |> Keyword.merge(opts)
-        |> Keyword.update(:clients, nil, &parse_counts!/1)
+        |> Keyword.update(:clients, nil, &parse_counts!(&1, "--clients"))
+        |> Keyword.update(:rows, nil, &parse_counts!(&1, "--rows"))
         |> validate_options!()
 
       {_opts, args, invalid} ->
@@ -163,14 +166,14 @@ defmodule HologramSyncBenchmark.Driver do
     |> String.to_integer()
   end
 
-  defp parse_counts!(text) do
+  defp parse_counts!(text, option) do
     counts =
       text
       |> String.split(",", trim: true)
       |> Enum.map(&parse_count!/1)
 
     if counts == [] or Enum.any?(counts, &(&1 < 1)) do
-      raise ArgumentError, "--clients takes client counts of at least 1, like 1,10,100"
+      raise ArgumentError, "#{option} takes counts of at least 1, like 1,10,100"
     end
 
     Sweep.sort_counts(counts)
@@ -239,6 +242,8 @@ defmodule HologramSyncBenchmark.Driver do
   defp run_case("reconnect_tenants", opts) do
     run_sweep(opts, Reconnect.sweep_case(opts, :tenants))
   end
+
+  defp run_case("session_memory", opts), do: SessionMemory.run(DB.connect!(), opts)
 
   # Writers rather than clients: --clients gives how many write at once.
   defp run_case("lock", opts), do: Lock.run(DB.connect!(), opts)
