@@ -1262,6 +1262,16 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert oplog_effects() == effects_before
     end
 
+    # A type with to-many edges locks the row before its edges go, and an id no row holds finds
+    # nothing to lock.
+    test "records nothing when no entity of a type with to-many edges has the given id" do
+      effects_before = oplog_effects()
+
+      assert delete(Module3, Entity.generate_id()) == :ok
+
+      assert oplog_effects() == effects_before
+    end
+
     # The write and the record of it share a transaction, so a refusal takes both back.
     test "records nothing when the delete is restricted" do
       {:ok, target_entity} = create(Module1.new())
