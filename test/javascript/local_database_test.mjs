@@ -199,6 +199,183 @@ describe("LocalDatabase", () => {
     });
   });
 
+  describe("carryCounts()", () => {
+    const NOTE = "MyApp.Note";
+    const TASK = "MyApp.Task";
+
+    it("files the counts with their types", () => {
+      LocalDatabase.carryCounts({"a/count/": 3}, {"a/count/": [TASK]});
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {"a/count/": 3});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {
+        "a/count/": [TASK],
+      });
+    });
+
+    it("skips a count the client already counts itself", () => {
+      LocalDatabase.markTypesSynced([TASK]);
+
+      LocalDatabase.carryCounts({"a/count/": 3}, {"a/count/": [TASK]});
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
+    });
+
+    it("drops a held count whose types have since been marked", () => {
+      LocalDatabase.carryCounts(
+        {"a/count/": 3, "b/count/": 4},
+        {"a/count/": [TASK], "b/count/": [NOTE]},
+      );
+
+      LocalDatabase.markTypesSynced([TASK]);
+      LocalDatabase.carryCounts({}, {});
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {"b/count/": 4});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {
+        "b/count/": [NOTE],
+      });
+    });
+
+    it("holds nothing once everything is marked", () => {
+      LocalDatabase.carryCounts({"a/count/": 3}, {});
+      LocalDatabase.markAllSynced();
+
+      LocalDatabase.carryCounts({"b/count/": 4}, {"b/count/": [TASK]});
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
+    });
+
+    it("clears the types held under a key filed again with none", () => {
+      LocalDatabase.carryCounts({"a/count/": 3}, {"a/count/": [TASK]});
+
+      LocalDatabase.carryCounts({"a/count/": 4}, {});
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {"a/count/": 4});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
+    });
+
+    describe("past the limit", () => {
+      const counts = (from, to) =>
+        Object.fromEntries(
+          Array.from({length: to - from}, (_item, index) => [
+            `key/${from + index}/`,
+            from + index,
+          ]),
+        );
+
+      const typesOf = (carried) =>
+        Object.fromEntries(Object.keys(carried).map((key) => [key, [TASK]]));
+
+      it("drops the oldest from both maps and keeps the ones just filed", () => {
+        const earlier = counts(0, 1000);
+        const later = counts(1000, 1002);
+
+        LocalDatabase.carryCounts(earlier, typesOf(earlier));
+        LocalDatabase.carryCounts(later, typesOf(later));
+
+        assert.equal(Object.keys(LocalDatabase.syncCounts).length, 1000);
+        assert.equal(Object.keys(LocalDatabase.syncCountTypes).length, 1000);
+
+        assert.notProperty(LocalDatabase.syncCounts, "key/0/");
+        assert.notProperty(LocalDatabase.syncCounts, "key/1/");
+        assert.notProperty(LocalDatabase.syncCountTypes, "key/0/");
+        assert.notProperty(LocalDatabase.syncCountTypes, "key/1/");
+
+        assert.equal(LocalDatabase.syncCounts["key/2/"], 2);
+        assert.equal(LocalDatabase.syncCounts["key/1001/"], 1001);
+      });
+
+      it("keeps every count just filed, however many there are", () => {
+        const carried = counts(0, 1001);
+
+        LocalDatabase.carryCounts(carried, typesOf(carried));
+
+        assert.equal(Object.keys(LocalDatabase.syncCounts).length, 1001);
+      });
+
+      it("drops the oldest once the keys hold too much text", () => {
+        const longKey = (name) => `${name}/${"x".repeat(1_500_000)}`;
+
+        for (const name of ["a", "b", "c"]) {
+          LocalDatabase.carryCounts(
+            {[longKey(name)]: 1},
+            {[longKey(name)]: [TASK]},
+          );
+        }
+
+        assert.notProperty(LocalDatabase.syncCounts, longKey("a"));
+        assert.notProperty(LocalDatabase.syncCountTypes, longKey("a"));
+        assert.property(LocalDatabase.syncCounts, longKey("b"));
+        assert.property(LocalDatabase.syncCounts, longKey("c"));
+      });
+
+      it("keeps a count just filed whose key alone holds too much text", () => {
+        const key = `a/${"x".repeat(4_000_001)}`;
+
+        LocalDatabase.carryCounts({[key]: 1}, {[key]: [TASK]});
+
+        assert.property(LocalDatabase.syncCounts, key);
+      });
+
+      it("counts a key filed again as the newest", () => {
+        const earlier = counts(0, 1000);
+
+        LocalDatabase.carryCounts(earlier, typesOf(earlier));
+        LocalDatabase.carryCounts(
+          {"key/0/": 0, "key/1000/": 1000},
+          {"key/0/": [TASK], "key/1000/": [TASK]},
+        );
+
+        assert.equal(LocalDatabase.syncCounts["key/0/"], 0);
+        assert.notProperty(LocalDatabase.syncCounts, "key/1/");
+      });
+    });
+  });
+
+  describe("countsLocally()", () => {
+    const NOTE = "MyApp.Note";
+    const TASK = "MyApp.Task";
+
+    it("answers true once every type the count reads is marked", () => {
+      LocalDatabase.syncCountTypes = {"a/count/": [TASK, NOTE]};
+
+      LocalDatabase.markTypesSynced([TASK, NOTE]);
+
+      assert.isTrue(LocalDatabase.countsLocally("a/count/"));
+    });
+
+    it("answers false while one of its types is not marked", () => {
+      LocalDatabase.syncCountTypes = {"a/count/": [TASK, NOTE]};
+
+      LocalDatabase.markTypesSynced([TASK]);
+
+      assert.isFalse(LocalDatabase.countsLocally("a/count/"));
+    });
+
+    it("answers false for a count with no types until everything is marked", () => {
+      LocalDatabase.markTypesSynced([TASK]);
+
+      assert.isFalse(LocalDatabase.countsLocally("a/count/"));
+
+      LocalDatabase.markAllSynced();
+
+      assert.isTrue(LocalDatabase.countsLocally("a/count/"));
+    });
+  });
+
+  describe("dropCounts()", () => {
+    it("empties the counts and their types", () => {
+      LocalDatabase.syncCounts = {"a/count/": 3};
+      LocalDatabase.syncCountTypes = {"a/count/": ["MyApp.Task"]};
+
+      LocalDatabase.dropCounts();
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
+    });
+  });
+
   describe("beginRefill()", () => {
     const PROJECT = "MyApp.Project";
     const TASK = "MyApp.Task";

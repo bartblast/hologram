@@ -7,6 +7,7 @@ import Batches from "../../assets/js/batches.mjs";
 import DataLayer from "../../assets/js/data_layer.mjs";
 import Deltas from "../../assets/js/deltas.mjs";
 import Durability from "../../assets/js/durability.mjs";
+import IdentityTracker from "../../assets/js/identity_tracker.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import ManuallyPortedElixirHologramAuth from "../../assets/js/elixir/hologram/auth.mjs";
 import ManuallyPortedElixirHologramDB from "../../assets/js/elixir/hologram/db.mjs";
@@ -102,6 +103,59 @@ describe("DataLayer", () => {
         ),
         Type.integer(42),
       );
+    });
+
+    // Back or Forward reads no mount data, so a page it returns to has only what earlier visits
+    // left.
+    describe("after another page's mount data", () => {
+      const answerTotal = (term) =>
+        DataLayer.answerDerivedQuery(
+          "MyApp.Tasks",
+          Type.atom("total"),
+          [],
+          term,
+        );
+
+      const visitPages = (term) => {
+        const key = `MyApp.Tasks/total/${QuerySpelling.spell(term)}`;
+
+        sinon.stub(Deltas, "apply");
+
+        DataLayer.ingestMountData({
+          actorUserId: null,
+          syncCountTypes: {[key]: [TASK]},
+          syncCounts: {[key]: 42},
+          syncRows: {},
+        });
+
+        DataLayer.ingestMountData({
+          actorUserId: null,
+          syncCountTypes: {},
+          syncCounts: {},
+          syncRows: {},
+        });
+      };
+
+      it("still answers the carried count while the type is filling", () => {
+        const term = DataLayer.normalizeQuery(
+          ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
+        );
+
+        visitPages(term);
+
+        assert.deepStrictEqual(answerTotal(term), Type.integer(42));
+      });
+
+      it("counts locally once the client holds the whole type", () => {
+        const term = DataLayer.normalizeQuery(
+          ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
+        );
+
+        visitPages(term);
+        LocalDatabase.markTypesSynced([TASK]);
+
+        assert.deepStrictEqual(answerTotal(term), Type.integer(2));
+      });
     });
 
     const count = ManuallyPortedElixirHologramQueryStage["count/1"];
@@ -822,20 +876,29 @@ describe("DataLayer", () => {
   describe("ingestMountData()", () => {
     let applying;
 
+    let originalPeriod;
+
     beforeEach(() => {
       applying = sinon.stub(Deltas, "apply");
 
+      originalPeriod = IdentityTracker.period;
+      IdentityTracker.period = null;
+
       LocalDatabase.actorUserId = null;
       LocalDatabase.actorEntityId = null;
       LocalDatabase.syncCountTypes = {};
       LocalDatabase.syncCounts = {};
+      LocalDatabase.syncCountsPeriod = null;
     });
 
     afterEach(() => {
+      IdentityTracker.period = originalPeriod;
+
       LocalDatabase.actorUserId = null;
       LocalDatabase.actorEntityId = null;
       LocalDatabase.syncCountTypes = {};
       LocalDatabase.syncCounts = {};
+      LocalDatabase.syncCountsPeriod = null;
     });
 
     it("files the rows the page carried, and the counts beside them with their types", () => {
@@ -875,14 +938,151 @@ describe("DataLayer", () => {
       assert.equal(LocalDatabase.actorUserId, 7);
     });
 
-    it("takes counts the page did not carry as none", () => {
-      LocalDatabase.syncCounts = {"MyApp.Stale/count/": 9};
-      LocalDatabase.syncCountTypes = {"MyApp.Stale/count/": ["MyApp.Task"]};
+    it("keeps the counts an earlier page carried", () => {
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
+      LocalDatabase.syncCountTypes = {"MyApp.Earlier/count/": ["MyApp.Task"]};
+
+      DataLayer.ingestMountData({
+        actorUserId: null,
+        syncCountTypes: {"MyApp.Later/count/": ["MyApp.Task"]},
+        syncCounts: {"MyApp.Later/count/": 3},
+        syncRows: {},
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Earlier/count/": 9,
+        "MyApp.Later/count/": 3,
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {
+        "MyApp.Earlier/count/": ["MyApp.Task"],
+        "MyApp.Later/count/": ["MyApp.Task"],
+      });
+    });
+
+    it("keeps the earlier counts for mount data carrying no counts", () => {
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
+      LocalDatabase.syncCountTypes = {"MyApp.Earlier/count/": ["MyApp.Task"]};
+
+      DataLayer.ingestMountData({actorUserId: null, syncRows: {}});
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Earlier/count/": 9,
+      });
+    });
+
+    it("takes a newer number and its types for a count already held", () => {
+      LocalDatabase.syncCounts = {"MyApp.Held/count/": 9};
+      LocalDatabase.syncCountTypes = {"MyApp.Held/count/": ["MyApp.Task"]};
+
+      DataLayer.ingestMountData({
+        actorUserId: null,
+        syncCountTypes: {"MyApp.Held/count/": ["MyApp.Note"]},
+        syncCounts: {"MyApp.Held/count/": 10},
+        syncRows: {},
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Held/count/": 10,
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {
+        "MyApp.Held/count/": ["MyApp.Note"],
+      });
+    });
+
+    it("drops the earlier counts when the page is for another user", () => {
+      LocalDatabase.actorUserId = "u1";
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
+      LocalDatabase.syncCountTypes = {"MyApp.Earlier/count/": ["MyApp.Task"]};
+
+      DataLayer.ingestMountData({
+        actorUserId: "u2",
+        syncCountTypes: {"MyApp.Later/count/": ["MyApp.Task"]},
+        syncCounts: {"MyApp.Later/count/": 3},
+        syncRows: {},
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Later/count/": 3,
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {
+        "MyApp.Later/count/": ["MyApp.Task"],
+      });
+    });
+
+    // Two integer ids past 2^53 reach the browser as one number, so only the period tells them
+    // apart.
+    it("drops the earlier counts when the identity period changed under the same id", () => {
+      LocalDatabase.actorUserId = 9007199254740992;
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
+      LocalDatabase.syncCountTypes = {"MyApp.Earlier/count/": ["MyApp.Task"]};
+
+      IdentityTracker.period = "period-2";
+
+      DataLayer.ingestMountData({
+        actorUserId: 9007199254740992,
+        syncRows: {},
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
+      assert.equal(LocalDatabase.syncCountsPeriod, "period-2");
+    });
+
+    // The identity can change between a page arriving and its mount, so a count the old identity's
+    // page carried must not pass for the new one's.
+    it("files a late page's counts under the period it was rendered in", () => {
+      IdentityTracker.period = "period-2";
+
+      DataLayer.ingestMountData({
+        actorUserId: 9007199254740992,
+        identityPeriod: "period-1",
+        syncCountTypes: {"MyApp.Late/count/": ["MyApp.Task"]},
+        syncCounts: {"MyApp.Late/count/": 42},
+        syncRows: {},
+      });
+
+      assert.equal(LocalDatabase.syncCountsPeriod, "period-1");
+
+      DataLayer.ingestMountData({
+        actorUserId: 9007199254740992,
+        identityPeriod: "period-2",
+        syncRows: {},
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
+    });
+
+    it("keeps the earlier counts while the identity period lasts", () => {
+      IdentityTracker.period = "period-1";
+      LocalDatabase.syncCountsPeriod = "period-1";
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
+
+      DataLayer.ingestMountData({actorUserId: null, syncRows: {}});
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Earlier/count/": 9,
+      });
+    });
+
+    it("drops the earlier counts when a visitor signs in", () => {
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
+
+      DataLayer.ingestMountData({actorUserId: "u1", syncRows: {}});
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+    });
+
+    it("drops the earlier counts when the user signs out", () => {
+      LocalDatabase.actorUserId = "u1";
+      LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
 
       DataLayer.ingestMountData({actorUserId: null, syncRows: {}});
 
       assert.deepStrictEqual(LocalDatabase.syncCounts, {});
-      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
     });
 
     it("leaves the database as it was for mount data carrying no rows", () => {

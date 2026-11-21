@@ -3,6 +3,7 @@
 import Batches from "./batches.mjs";
 import Deltas from "./deltas.mjs";
 import Durability from "./durability.mjs";
+import IdentityTracker from "./identity_tracker.mjs";
 import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
 import ManuallyPortedElixirHologramAuth from "./elixir/hologram/auth.mjs";
@@ -557,15 +558,33 @@ export default class DataLayer {
   // was.
   static ingestMountData(mountData) {
     if (mountData.syncRows) {
+      // A number counted for one identity must never answer for another. The period tells apart
+      // what the ids can't, like two integer ids too large for the browser to hold exactly. The
+      // ids cover a server that tags no responses, where the period never moves.
+      //
+      // The period the page was rendered in rather than the one lasting now: the identity can
+      // change between a page arriving and its mount, and its numbers are still the old identity's.
+      const period = mountData.identityPeriod ?? IdentityTracker.period;
+
+      if (
+        period !== LocalDatabase.syncCountsPeriod ||
+        (mountData.actorUserId ?? null) !== (LocalDatabase.actorUserId ?? null)
+      ) {
+        LocalDatabase.dropCounts();
+      }
+
+      LocalDatabase.syncCountsPeriod = period;
       LocalDatabase.actorUserId = mountData.actorUserId;
       LocalDatabase.actorEntityId = mountData.actorEntityId ?? null;
       Deltas.apply(mountData.syncRows, {insertOnly: true});
 
       // A count has no rows behind it, so the rows cannot carry one - the numbers this render
-      // answered with travel beside them, and each page visit replaces them the way it replaces
-      // what its own props read.
-      LocalDatabase.syncCounts = mountData.syncCounts ?? {};
-      LocalDatabase.syncCountTypes = mountData.syncCountTypes ?? {};
+      // answered with travel beside them. They join the ones earlier visits carried rather than
+      // replace them: Back or Forward reads no mount data, so a page it returns to has only those.
+      LocalDatabase.carryCounts(
+        mountData.syncCounts ?? {},
+        mountData.syncCountTypes ?? {},
+      );
     }
   }
 
@@ -733,8 +752,8 @@ export default class DataLayer {
     Batches.flush();
   }
 
-  // What the render that handed this page over counted, for as long as this client's own database
-  // cannot count for itself.
+  // What a render that handed a page over counted, for as long as this client's own database cannot
+  // count for itself.
   //
   // A count has no rows behind it, so carrying rows cannot answer one: until the fill is complete
   // for the rows it counts, counting locally would count a pot that is still filling and report a
@@ -763,20 +782,11 @@ export default class DataLayer {
 
     const key = `${module}/${name.value}/${QuerySpelling.spell(term)}`;
 
-    if ($.#countsLocally(key)) {
+    if (LocalDatabase.countsLocally(key)) {
       return null;
     }
 
     return LocalDatabase.syncCounts[key] ?? null;
-  }
-
-  static #countsLocally(key) {
-    const types = LocalDatabase.syncCountTypes[key];
-
-    return (
-      types !== undefined &&
-      types.every((type) => LocalDatabase.isTypeSynced(type))
-    );
   }
 }
 

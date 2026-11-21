@@ -1134,6 +1134,7 @@ export default class Hologram {
     Hologram.dataLayer?.ingestMountData({
       actorEntityId: $.#bootData.actorEntityId,
       actorUserId: $.#bootData.actorUserId,
+      identityPeriod: IdentityTracker.documentPeriod,
       syncCountTypes: $.#bootData.syncCountTypes,
       syncCounts: $.#bootData.syncCounts,
       syncRows: $.#bootData.syncRows,
