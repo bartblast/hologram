@@ -597,6 +597,16 @@ describe("Deserializer", () => {
         });
       });
 
+      describe("boolean", () => {
+        it("top-level", () => {
+          testTopLevelDeserialization(false, "client");
+        });
+
+        it("nested", () => {
+          testNestedDeserialization(true, "client");
+        });
+      });
+
       describe("float", () => {
         const term = 1.23;
 

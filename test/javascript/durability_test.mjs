@@ -28,11 +28,14 @@ import {
 
 import Batch from "../../assets/js/batch.mjs";
 import Clock from "../../assets/js/clock.mjs";
+import Deltas from "../../assets/js/deltas.mjs";
 import Durability from "../../assets/js/durability.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
+import Model from "../../assets/js/model.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
+import Type from "../../assets/js/type.mjs";
 
 // registerWebApis puts sessionStorage on the global, which is where Logger writes - and every path
 // through this module that gives up on storage says so through Logger.
@@ -1101,6 +1104,75 @@ describe("Durability", () => {
       assert.equal(Durability.mode, "memory");
       assert.equal(Durability.inFlight, 0);
       assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
+    });
+  });
+
+  describe("big integers", () => {
+    const COUNTED = "MyApp.Counted";
+
+    beforeEach(() => {
+      globalThis.Hologram.sync.model = {
+        [COUNTED]: {
+          attributes: {id: "uuid", n: "integer"},
+          relationships: {},
+          serverOnly: [],
+        },
+      };
+
+      Model.reset();
+    });
+
+    afterEach(() => {
+      Model.reset();
+    });
+
+    it("brings a row's big integer back as the BigInt it was filed as", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      Deltas.apply({
+        put_entity: {[COUNTED]: [{id: "c1", n: "9007199254740993"}]},
+      });
+
+      await Durability.persistFrame(
+        [
+          {
+            facts: {},
+            id: "c1",
+            row: LocalDatabase.baseRow(COUNTED, "c1"),
+            type: COUNTED,
+          },
+        ],
+        "place-1",
+      );
+
+      LocalDatabase.reset();
+
+      await Durability.load();
+      Durability.restore(true);
+
+      assert.strictEqual(
+        LocalDatabase.baseRow(COUNTED, "c1").n,
+        9007199254740993n,
+      );
+    });
+
+    it("brings a queued write's big integer back as a BigInt", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const batch = unfiledBatch();
+
+      batch.writes[0] = {
+        ...batch.writes[0],
+        deltas: {n: Model.unbox(Type.integer(9007199254740993n), "integer")},
+      };
+
+      await Durability.fileBatch(batch);
+
+      const [record] = await Durability.batchesAbove(0);
+
+      assert.strictEqual(record.writes[0].deltas.n, 9007199254740993n);
     });
   });
 

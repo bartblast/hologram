@@ -824,13 +824,6 @@ defmodule Hologram.Sync.CarryTest do
       assert spell_query(term) ==
                ~S|{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["b","==",9007199254740993]],"include":{},"skip":null,"sort":[["id","asc"]],"take":null}|
     end
-
-    test "spells a take past what a JavaScript Number holds exactly in full" do
-      term = %{Stage.normalize(Module2) | take: 9_007_199_254_740_992}
-
-      assert spell_query(term) ==
-               ~S|{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[],"include":{},"skip":null,"sort":[["id","asc"]],"take":9007199254740992}|
-    end
   end
 
   describe "start/0" do

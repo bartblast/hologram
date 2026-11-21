@@ -545,6 +545,19 @@ describe("Serializer", () => {
           });
         });
 
+        describe("boolean, to the client", () => {
+          it("top-level", () => {
+            assert.equal(serialize(true, "client"), "[4,true]");
+          });
+
+          it("nested", () => {
+            assert.equal(
+              serialize({a: [false]}, "client"),
+              '[4,{"a":[false]}]',
+            );
+          });
+        });
+
         describe("float", () => {
           it("top-level", () => {
             const term = 9.87;
@@ -683,7 +696,7 @@ describe("Serializer", () => {
           });
         });
 
-        describe("boolean", () => {
+        describe("boolean, to the server", () => {
           it("top-level", () => {
             assert.throw(
               () => serialize(true),
