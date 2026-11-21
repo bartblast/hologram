@@ -142,6 +142,9 @@ export default class Overlay {
         return;
       }
 
+      // Optional because a batch can be answered by a node that predates the key - a rolling
+      // deploy serves this bundle from one node and answers from another - and an answer that
+      // names nothing kept is one this client simply cannot show early.
       const keptEntry = kept?.[String(index)];
 
       // A resent batch's grant the server no longer stands behind: revoked since, or hidden from
@@ -155,9 +158,6 @@ export default class Overlay {
         write.op === "create" &&
         LocalDatabase.baseRow(write.type, write.id) === null;
 
-      // Optional because a batch can be answered by a node that predates the key - a rolling
-      // deploy serves this bundle from one node and answers from another - and an answer that
-      // names nothing kept is one this client simply cannot show early.
       Overlay.#absorb(write, keptEntry);
 
       // A delete answered with a whole row leaves that row standing: the server dropped it, or a
