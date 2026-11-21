@@ -664,6 +664,26 @@ defmodule Hologram.Job.RunnerTest do
       assert row.error =~ "the run was cut short before its outcome was recorded"
     end
 
+    # The sandbox keeps one transaction open for the whole test, so the first sweep's lock on the
+    # job is still held by this session when the second one looks.
+    test "doesn't take a lock its own session holds for another run's" do
+      job = fresh_job(:ok)
+
+      :ok = EntityOperations.update(Module3, job.id, %{attempt: 1, status: :running})
+
+      assert sweep([Module3], MapSet.new()) == :ok
+      assert EntityOperations.get(Module3, job.id).status == :queued
+
+      :ok =
+        EntityOperations.update(Module3, job.id, %{
+          attempt: Job.max_attempts(Module3),
+          status: :running
+        })
+
+      assert sweep([Module3], MapSet.new()) == :ok
+      assert EntityOperations.get(Module3, job.id).status == :failed
+    end
+
     test "leaves a running job whose run lock another session holds", %{run_lock: run_lock} do
       job = Job.create!(Module1)
 

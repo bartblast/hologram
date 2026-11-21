@@ -16,6 +16,7 @@ defmodule Hologram.Job.RunnerRecoveryTest do
 
   alias Hologram.DB
   alias Hologram.DB.Codec
+  alias Hologram.DB.Config
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Mapper
   alias Hologram.DB.SchemaReconciler
@@ -46,6 +47,48 @@ defmodule Hologram.Job.RunnerRecoveryTest do
 
   defp sweep_over(scratch) do
     route(scratch, fn -> sweep([Module1], MapSet.new()) end)
+  end
+
+  defp running_job(scratch) do
+    route(scratch, fn ->
+      job = Job.create!(Module1)
+      :ok = EntityOperations.update(Module1, job.id, %{attempt: 1, status: :running})
+
+      job
+    end)
+  end
+
+  # Running jobs whose run locks the given session holds, with a key of each sign: a bigint key's
+  # high half is what makes it negative, so both have to come back whole from pg_locks.
+  defp held_jobs_of_both_signs(scratch, holder) do
+    jobs = jobs_until_both_signs(scratch, [])
+
+    RunLock.await_connected(holder)
+
+    for job <- jobs do
+      name = lock_name(Module1, job.id)
+
+      assert RunLock.acquire(holder, name)
+    end
+
+    jobs
+  end
+
+  defp jobs_until_both_signs(scratch, jobs) do
+    jobs = [running_job(scratch) | jobs]
+    negative_count = Enum.count(jobs, &negative_key?/1)
+
+    if negative_count in [0, length(jobs)] do
+      jobs_until_both_signs(scratch, jobs)
+    else
+      jobs
+    end
+  end
+
+  defp negative_key?(job) do
+    name = lock_name(Module1, job.id)
+
+    RunLock.key(name) < 0
   end
 
   test "leaves a running job whose worker holds its lock, and fails it once the worker is gone",
@@ -119,6 +162,113 @@ defmodule Hologram.Job.RunnerRecoveryTest do
     assert row.status == :queued
     assert row.attempt == 1
     assert row.error =~ "the run passed its time limit of 5000 ms and was killed"
+  end
+
+  # Any per-row check would call the stand-in, which raises, so a sweep that gets through asked
+  # about none of them. The free job at the end proves the stand-in is what a per-row check calls.
+  test "judges no job one by one whose lock another session holds", context do
+    %{scratch: scratch, scratch_opts: scratch_opts} = context
+
+    jobs = held_jobs_of_both_signs(scratch, start_run_lock(scratch_opts))
+
+    Postgrex.query!(
+      scratch,
+      "CREATE FUNCTION public.pg_try_advisory_xact_lock(bigint) RETURNS boolean LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'judged one by one'; END $$",
+      []
+    )
+
+    Postgrex.query!(scratch, "SET search_path = public, pg_catalog", [])
+
+    assert sweep_over(scratch) == :ok
+
+    for job <- jobs, do: assert(status(scratch, job.id) == :running)
+
+    running_job(scratch)
+
+    assert_raise Postgrex.Error, ~r/judged one by one/, fn -> sweep_over(scratch) end
+  end
+
+  test "sweeps a job whose lock is free from among ones that are held", context do
+    %{scratch: scratch, scratch_opts: scratch_opts} = context
+
+    held = held_jobs_of_both_signs(scratch, start_run_lock(scratch_opts))
+    free = running_job(scratch)
+
+    assert sweep_over(scratch) == :ok
+
+    assert status(scratch, free.id) == :failed
+
+    for job <- held, do: assert(status(scratch, job.id) == :running)
+  end
+
+  # Advisory locks are per database, and a copy of this one on the same server runs the same ids.
+  test "doesn't take a lock in another database for this job's", context do
+    %{scratch: scratch} = context
+
+    job = running_job(scratch)
+    other_database = start_supervised!(Supervisor.child_spec(RunLock, id: make_ref()))
+
+    RunLock.await_connected(other_database)
+
+    assert RunLock.acquire(other_database, lock_name(Module1, job.id))
+
+    assert sweep_over(scratch) == :ok
+    assert status(scratch, job.id) == :failed
+  end
+
+  # The two-key space is another set of locks, whose keys pg_locks shows in the same columns.
+  test "doesn't take a two-key lock with the same halves for this job's", context do
+    %{scratch: scratch, scratch_opts: scratch_opts} = context
+
+    job = running_job(scratch)
+    name = lock_name(Module1, job.id)
+    key = RunLock.key(name)
+    <<high::signed-32, low::signed-32>> = <<key::signed-64>>
+    session_spec = Supervisor.child_spec({Postgrex, scratch_opts}, id: make_ref())
+    session = start_supervised!(session_spec)
+
+    Postgrex.query!(session, "SELECT pg_advisory_lock($1::int, $2::int)", [high, low])
+
+    assert sweep_over(scratch) == :ok
+    assert status(scratch, job.id) == :failed
+  end
+
+  @tag :requires_superuser
+  test "still sweeps when the role can't read pg_locks", context do
+    %{scratch: scratch, scratch_opts: scratch_opts} = context
+
+    job = running_job(scratch)
+    role = "hologram_no_locks_#{System.pid()}_#{System.unique_integer([:positive])}"
+    quoted_role = Mapper.quote_identifier(role)
+
+    # From the maintenance database, since an overlapping run may already have dropped the scratch
+    # one. A role can't be dropped while a database holds grants to it, so the database goes first.
+    on_exit(fn ->
+      {:ok, session} = Postgrex.start_link(Config.connection_opts([]))
+      quoted_database = Mapper.quote_identifier(scratch_opts[:database])
+
+      Postgrex.query!(session, "DROP DATABASE IF EXISTS #{quoted_database} WITH (FORCE)", [])
+      Postgrex.query!(session, "DROP ROLE IF EXISTS #{quoted_role}", [])
+
+      GenServer.stop(session)
+    end)
+
+    for statement <- [
+          "CREATE ROLE #{quoted_role} NOLOGIN",
+          "GRANT USAGE ON SCHEMA hologram_data, hologram_system TO #{quoted_role}",
+          "GRANT ALL ON ALL TABLES IN SCHEMA hologram_data, hologram_system TO #{quoted_role}",
+          "GRANT ALL ON ALL SEQUENCES IN SCHEMA hologram_data, hologram_system TO #{quoted_role}",
+          "REVOKE SELECT ON pg_catalog.pg_locks FROM PUBLIC",
+          "SET ROLE #{quoted_role}"
+        ] do
+      Postgrex.query!(scratch, statement, [])
+    end
+
+    assert {:error, %Postgrex.Error{postgres: %{code: :insufficient_privilege}}} =
+             Postgrex.query(scratch, "SELECT 1 FROM pg_catalog.pg_locks", [])
+
+    assert sweep_over(scratch) == :ok
+    assert status(scratch, job.id) == :failed
   end
 
   test "fails a job whose outcome could not be recorded", context do

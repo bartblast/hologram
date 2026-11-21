@@ -103,6 +103,31 @@ else
   after
     :ok = DBConnection.Ownership.ownership_checkin(pool_name, [])
   end
+
+  # The suite needs a role that can create databases. A test that revokes a catalog grant needs a
+  # superuser, so it's left out for a role that isn't one - but never on CI, where leaving it out
+  # would mean nothing runs it.
+  {:ok, role_session} = Postgrex.start_link(Hologram.DB.Config.connection_opts([]))
+
+  %{rows: [[superuser?]]} =
+    Postgrex.query!(
+      role_session,
+      "SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user",
+      []
+    )
+
+  GenServer.stop(role_session)
+
+  cond do
+    superuser? ->
+      :ok
+
+    System.get_env("CI") ->
+      raise "the CI database role has to be a superuser, or the :requires_superuser tests don't run"
+
+    true ->
+      ExUnit.configure(exclude: [:requires_superuser | ExUnit.configuration()[:exclude]])
+  end
 end
 
 Mox.defmock(AssetManifestCacheMock, for: AssetManifestCache)

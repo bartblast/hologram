@@ -32,6 +32,23 @@ defmodule Hologram.Job.Runner do
   @retry_max_exponent 5
   @retry_max_ms :timer.hours(6)
 
+  # Which of the given single-key advisory locks other sessions hold in this database. A lock of the
+  # session asking is left out, since pg_try_advisory_xact_lock takes that one again and calls it
+  # free, and sweep_row/2 is what the answer stands in for. PostgreSQL files a bigint key as its
+  # high and low halves.
+  @held_keys_statement """
+  SELECT (classid::bigint << 32) | objid::bigint
+  FROM pg_catalog.pg_locks
+  WHERE locktype = 'advisory'
+    AND objsubid = 1
+    AND granted
+    AND pid <> pg_catalog.pg_backend_pid()
+    AND database = (
+      SELECT oid FROM pg_catalog.pg_database WHERE datname = pg_catalog.current_database()
+    )
+    AND ((classid::bigint << 32) | objid::bigint) = ANY($1::bigint[])
+  """
+
   # Set while the claim's transaction holds a run lock it has not committed yet, so a claim that
   # raises after taking the lock knows to give it back.
   @uncommitted_lock_key {__MODULE__, :uncommitted_lock}
@@ -192,8 +209,10 @@ defmodule Hologram.Job.Runner do
       job_type
       |> filter(status == :running)
       |> DB.read()
-      |> Enum.reject(&MapSet.member?(skip_ids, &1.id))
-      |> Enum.each(&sweep_row(job_type, &1.id))
+      |> Enum.map(& &1.id)
+      |> Enum.reject(&MapSet.member?(skip_ids, &1))
+      |> reject_held(job_type)
+      |> Enum.each(&sweep_row(job_type, &1))
     end)
   end
 
@@ -346,6 +365,34 @@ defmodule Hologram.Job.Runner do
     RunLock.release(run_lock, name)
   catch
     :exit, _reason -> :ok
+  end
+
+  # Almost every running job on another node holds its lock, and judging each one takes a
+  # transaction, so the ones held are left out with one read. Only a filter: sweep_row/2 still
+  # judges the rest, and a lock released after this read is found at the next sweep.
+  defp reject_held([], _job_type), do: []
+
+  defp reject_held(ids, job_type) do
+    keys = Map.new(ids, &{&1, RunLock.key(lock_name(job_type, &1))})
+
+    held_keys =
+      keys
+      |> Map.values()
+      |> held_keys()
+      |> MapSet.new()
+
+    Enum.reject(ids, &MapSet.member?(held_keys, Map.fetch!(keys, &1)))
+  end
+
+  # A role refused the read filters nothing, so the sweep still works, one row at a time. The
+  # server logs the refusal each time, which names the grant to put back. pg_locks is readable by
+  # everyone unless an admin revoked it.
+  defp held_keys(keys) do
+    case Connection.query(@held_keys_statement, [keys]) do
+      {:ok, %Postgrex.Result{rows: rows}} -> Enum.map(rows, fn [key] -> key end)
+      {:error, %Postgrex.Error{postgres: %{code: :insufficient_privilege}}} -> []
+      {:error, error} -> raise error
+    end
   end
 
   # Raises what the query answers with otherwise, the way the other statements a sweep runs do.
