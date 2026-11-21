@@ -304,6 +304,10 @@ defmodule Hologram.Runtime.Deserializer do
   # only in the client runtime, so the struct is rebuilt by compiling its
   # source and options server-side, which also gives it the exact shape the
   # running Elixir version expects.
+  #
+  # The pattern is the client's, so it can be a slow one. That costs something only when the app
+  # runs it, and the regex engine's match limit stops such a match early.
+  # sobelow_skip ["DOS.Regex"]
   defp maybe_recompile_regex(%{__struct__: Regex, source: source, opts: opts}) do
     {:ok, regex} = Regex.compile(source, opts)
     regex
