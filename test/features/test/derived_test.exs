@@ -10,7 +10,7 @@ defmodule HologramFeatureTests.DerivedTest do
   alias HologramFeatureTests.Derived.Page5
   alias HologramFeatureTests.Derived.Page6
   alias HologramFeatureTests.Derived.Page7
-  alias HologramFeatureTests.Derived.Page8
+  alias HologramFeatureTests.Derived.Page9
   alias HologramFeatureTests.Entities.Bottle
   alias HologramFeatureTests.Entities.Crate
   alias HologramFeatureTests.Entities.Ticket
@@ -203,7 +203,7 @@ defmodule HologramFeatureTests.DerivedTest do
 
     following =
       leading
-      |> open_tab(Page8)
+      |> open_tab(Page9)
       |> assert_text(css("#total"), ~r/^3$/)
       |> click(link("Away link"))
       |> assert_page(Page3)
@@ -213,7 +213,7 @@ defmodule HologramFeatureTests.DerivedTest do
       |> assert_page(Page3)
       |> mark_this_page_load()
       |> go_back()
-      |> assert_page(Page8)
+      |> assert_page(Page9)
       |> assert_text(css("#total"), ~r/^3$/)
       |> assert_no_place()
       |> assert_same_page_load()

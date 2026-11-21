@@ -1,4 +1,4 @@
-defmodule HologramFeatureTests.Derived.Page8 do
+defmodule HologramFeatureTests.Derived.Page9 do
   use Hologram.Page
   use Hologram.DB
 
@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.Derived.Page8 do
   alias HologramFeatureTests.Derived.Page3
   alias HologramFeatureTests.Entities.Ticket
 
-  route "/derived/8"
+  route "/derived/9"
 
   layout HologramFeatureTests.Components.DefaultLayout
 
