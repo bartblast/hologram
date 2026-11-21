@@ -1068,6 +1068,17 @@ describe("DataLayer", () => {
         sinon.assert.calledTwice(refusal);
       });
 
+      // A long text a user keeps editing would otherwise keep every version of itself.
+      it("keeps no answer for a query with a very long spelling", () => {
+        const refusal = sinon.spy(QueryCheck, "refusal");
+        const query = term([["title", "==", "x".repeat(5000)]]);
+
+        DataLayer.queryRefusal(query);
+        DataLayer.queryRefusal(query);
+
+        sinon.assert.calledTwice(refusal);
+      });
+
       it("works out anew once the synced types change", () => {
         assert.isNull(DataLayer.queryRefusal(term([])));
 

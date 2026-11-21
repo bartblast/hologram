@@ -28,6 +28,9 @@ const SAVE_WAIT_MS = 3000;
 // types has as many spellings as values, so the cache is bounded rather than grown forever.
 const QUERY_REFUSALS_LIMIT = 5000;
 
+// The longest spelling the cache keeps, so that its limit bounds the memory it holds too.
+const QUERY_REFUSAL_KEY_LIMIT = 4096;
+
 // The client half of the data layer behind one class: each public static is a place where the
 // runtime hands control to the data layer. The data layer's own modules - the batches, the deltas,
 // the durable store, the local database, the model, the query kernel, the replica, the tabs and
@@ -615,8 +618,8 @@ export default class DataLayer {
 
     // A shape the spelling doesn't know is marked with a "!", and two of them can spell alike, so
     // a term holding one is answered afresh rather than from the cache. A value holding a "!" is
-    // too, which only costs the walk.
-    if (key.includes("!")) {
+    // too, which only costs the walk. So is one too long to keep.
+    if (key.length > QUERY_REFUSAL_KEY_LIMIT || key.includes("!")) {
       return QueryCheck.refusal(term) ?? QueryCheck.unsyncedRefusal(term);
     }
 
