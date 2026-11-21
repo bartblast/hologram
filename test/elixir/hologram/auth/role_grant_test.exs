@@ -7,6 +7,7 @@ defmodule Hologram.Auth.RoleGrantTest do
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.Validator
   alias Hologram.MisuseError
+  alias Hologram.Test.Fixtures.Compiler.ImplReach
   alias Hologram.Test.Fixtures.Entity
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -27,6 +28,11 @@ defmodule Hologram.Auth.RoleGrantTest do
                {:entity_type, :enum,
                 [
                   values: [
+                    ImplReach.Entity1,
+                    ImplReach.Entity2,
+                    ImplReach.Entity3,
+                    ImplReach.Entity4,
+                    ImplReach.Entity5,
                     Entity.Module1,
                     Entity.Module10,
                     Entity.Module11,
