@@ -136,14 +136,19 @@ defmodule Hologram.Sync.Frame do
   @doc """
   Builds the SSE event-stream chunk saying how much of what the client will hold has arrived.
 
-  The scope says which queries it may now answer from its own store: `{:types, types}` names entity
-  types whose every row the client may see it now holds, and `:all` says it holds everything, so
-  navigating needs no server. Until a query's types have arrived the client answers it from what
-  the server rendered, because a store filled only part way would answer with part of the truth.
+  The scope says which queries it may now answer from its own store: `{:types, types, applied_seq}`
+  names entity types whose every row the client may see it now holds, and `:all` says it holds
+  everything, so navigating needs no server. Until a query's types have arrived the client answers
+  it from what the server rendered, because a store filled only part way would answer with part of
+  the truth.
 
   Per entity type rather than per page, because a type is what a fill sends whole,
   and whether it is complete is the same claim on every page and in every tab - which a page is
   not. The types are spelled the way a frame spells a row's type.
+
+  `applied_seq` is how far the client's own batches are in the rows read for those types, nil when
+  none of them is or the client has no replica. A row one of those batches created that the fill
+  didn't send is one its user may not read, so the client doesn't keep it.
 
   The place comes with the marker for the same reason the marker exists: this is the moment the
   client holds a whole pot, and a place is a claim only a client holding one can honour. A deltas
@@ -155,8 +160,11 @@ defmodule Hologram.Sync.Frame do
   whole pot only once `:all` has been announced, so its types markers name none - the scope is
   narrower than the claim. And nil for `:all` on a build whose log has no places to speak of.
   """
-  @spec encode_synced_envelope(integer, :all | {:types, list(module)}, String.t() | nil) ::
-          String.t()
+  @spec encode_synced_envelope(
+          integer,
+          :all | {:types, list(module), non_neg_integer | nil},
+          String.t() | nil
+        ) :: String.t()
   def encode_synced_envelope(id, scope, cursor) do
     payload =
       scope
@@ -358,8 +366,12 @@ defmodule Hologram.Sync.Frame do
 
   defp scope_payload(:all), do: %{scope: :all}
 
-  defp scope_payload({:types, types}) do
-    %{scope: :types, types: Enum.map(types, &Codec.encode_enum_value/1)}
+  defp scope_payload({:types, types, applied_seq}) do
+    %{
+      applied_seq: applied_seq,
+      scope: :types,
+      types: Enum.map(types, &Codec.encode_enum_value/1)
+    }
   end
 
   defp payload(op, delta) when op in [:keep_hashed, :put_entity, :unsync_hashed], do: delta.data
