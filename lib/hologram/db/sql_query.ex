@@ -39,6 +39,11 @@ defmodule Hologram.DB.SQLQuery do
 
   @session_lock_pattern ~r/\bpg_(?:try_)?advisory_lock(?:_shared)?\b/i
 
+  # A read can't name a session-level lock, so an unlock could only release one something else took
+  # on that connection, and the read's rollback would not restore it. Like the patterns above, this
+  # sees only a name the text spells out.
+  @unlock_pattern ~r/\bpg_advisory_unlock(?:_shared|_all)?\b/i
+
   # The type numbers PostgreSQL describes a uuid and a uuid array with - fixed in its catalog for
   # every version and every database, unlike the numbers of the types an app creates. The
   # conversion goes by these alone, never by a value's shape, so a text column holding something
@@ -63,10 +68,10 @@ defmodule Hologram.DB.SQLQuery do
   2_147_483_647, the largest PostgreSQL accepts, or :infinity - 15 seconds by default. The server
   enforces it.
 
-  Raises Hologram.MisuseError for a statement that takes a session-level advisory lock or prepares a
-  named statement, one that takes a transaction-level advisory lock outside a transaction, an
-  unknown option, an invalid timeout, a param count that differs from the statement's placeholders,
-  and a param the driver cannot send as its placeholder's type.
+  Raises Hologram.MisuseError for a statement that takes a session-level advisory lock, releases an
+  advisory lock or prepares a named statement, one that takes a transaction-level advisory lock
+  outside a transaction, an unknown option, an invalid timeout, a param count that differs from
+  the statement's placeholders, and a param the driver cannot send as its placeholder's type.
   """
   @spec run(String.t(), list, keyword) :: {:ok, DB.sql_result()} | {:error, SQLError.t()}
   def run(statement, params, opts) do
@@ -278,6 +283,12 @@ defmodule Hologram.DB.SQLQuery do
             "DB.sql/3 cannot take a session-level advisory lock - it would stay with a pooled " <>
               "connection after the read. Take pg_advisory_xact_lock inside DB.transaction/2 " <>
               "instead."
+
+      Regex.match?(@unlock_pattern, statement) ->
+        raise MisuseError,
+          message:
+            "DB.sql/3 cannot release an advisory lock - the read's rollback would not undo the " <>
+              "release, and the lock belongs to whatever took it on that connection."
 
       Regex.match?(@prepare_statement_pattern, statement) ->
         raise MisuseError,

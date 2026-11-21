@@ -29,6 +29,9 @@ defmodule Hologram.DB.SQLQueryTest do
 
   @remove_by_id_in_cte_sql ~s|WITH removed AS (DELETE FROM "hologram_data"."test_fixtures_entity_module1" WHERE "id" = $1 RETURNING "id") SELECT count(*) AS "count" FROM removed|
 
+  @unlock_msg "DB.sql/3 cannot release an advisory lock - the read's rollback would not undo the " <>
+                "release, and the lock belongs to whatever took it on that connection."
+
   defp count_by_id(id) do
     {:ok, %Postgrex.Result{rows: [[count]]}} = Connection.query(@count_by_id_sql, [id])
     count
@@ -635,6 +638,44 @@ defmodule Hologram.DB.SQLQueryTest do
       assert_error MisuseError, expected_msg, fn ->
         run("SELECT PG_TRY_ADVISORY_LOCK_SHARED(1378)", [], [])
       end
+    end
+
+    test "raises on an advisory unlock" do
+      assert_error MisuseError, @unlock_msg, fn ->
+        run("SELECT pg_advisory_unlock(1378)", [], [])
+      end
+    end
+
+    test "raises on a shared advisory unlock, in any case" do
+      assert_error MisuseError, @unlock_msg, fn ->
+        run("SELECT PG_ADVISORY_UNLOCK_SHARED(1378)", [], [])
+      end
+    end
+
+    test "raises on releasing every advisory lock" do
+      assert_error MisuseError, @unlock_msg, fn ->
+        run("SELECT pg_advisory_unlock_all()", [], [])
+      end
+    end
+
+    test "leaves a held session-level lock in place when refusing an unlock" do
+      key = 175_014
+
+      {:ok, free_after_refusal?} =
+        Connection.transaction(fn ->
+          {:ok, _result} = Connection.query("SELECT pg_advisory_lock($1)", [key])
+
+          assert_error MisuseError, @unlock_msg, fn ->
+            run("SELECT pg_advisory_unlock($1)", [key], [])
+          end
+
+          free? = lock_free?(key)
+          {:ok, _result} = Connection.query("SELECT pg_advisory_unlock($1)", [key])
+
+          free?
+        end)
+
+      refute free_after_refusal?
     end
 
     test "raises on a named prepared statement behind a comment" do

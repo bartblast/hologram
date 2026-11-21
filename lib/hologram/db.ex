@@ -438,9 +438,10 @@ defmodule Hologram.DB do
   transaction to retry.
 
   Raises Hologram.MisuseError for a statement that takes a session-level advisory lock or prepares a
-  named statement, either of which would outlive the read on a pooled connection, and for one that
-  takes a transaction-level advisory lock outside a transaction, where the lock would end with the
-  read. Raises it as well for an option other than `timeout:`, an invalid timeout, a number of
+  named statement, either of which would outlive the read on a pooled connection, for one that
+  releases an advisory lock, which the read could not undo, and for one that takes a
+  transaction-level advisory lock outside a transaction, where the lock would end with the read.
+  Raises it as well for an option other than `timeout:`, an invalid timeout, a number of
   params that differs from the statement's placeholders, and a param that does not fit its
   placeholder's type. None of these reaches the server.
   """
