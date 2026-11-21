@@ -300,13 +300,13 @@ defmodule Hologram.Sync.Lens do
     {:sync_deltas, cursor, Enum.flat_map(deltas, &delta(lens, &1)), claim}
   end
 
-  def message(lens, {:sync_synced, {:types, types}, cursor}) do
+  def message(lens, {:sync_synced, {:types, types, applied_seq}, cursor}) do
     old_types =
       types
       |> Enum.map(&old_type(lens, &1))
       |> Enum.reject(&(&1 == @new))
 
-    {:sync_synced, {:types, old_types}, cursor}
+    {:sync_synced, {:types, old_types, applied_seq}, cursor}
   end
 
   def message(_lens, message), do: message

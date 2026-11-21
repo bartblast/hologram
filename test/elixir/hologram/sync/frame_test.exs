@@ -566,6 +566,7 @@ defmodule Hologram.Sync.FrameTest do
   describe "encode_synced_envelope/3" do
     test "wraps the completeness marker in a synced SSE event envelope" do
       payload = %{
+        applied_seq: nil,
         cursor: nil,
         model_hash: Model.hash(),
         protocol_version: 1,
@@ -575,12 +576,13 @@ defmodule Hologram.Sync.FrameTest do
 
       encoded = Jason.encode!(payload)
 
-      assert encode_synced_envelope(42, {:types, [Module2]}, nil) ==
+      assert encode_synced_envelope(42, {:types, [Module2], nil}, nil) ==
                "event: synced\nid: 42\ndata: #{encoded}\n\n"
     end
 
     test "names every entity type it says is complete, the way a frame names a row's type" do
       payload = %{
+        applied_seq: nil,
         cursor: nil,
         model_hash: Model.hash(),
         protocol_version: 1,
@@ -590,7 +592,23 @@ defmodule Hologram.Sync.FrameTest do
 
       encoded = Jason.encode!(payload)
 
-      assert encode_synced_envelope(42, {:types, [Module2, Module3]}, nil) ==
+      assert encode_synced_envelope(42, {:types, [Module2, Module3], nil}, nil) ==
+               "event: synced\nid: 42\ndata: #{encoded}\n\n"
+    end
+
+    test "says how far the client's own batches are in the rows of the types it names" do
+      payload = %{
+        applied_seq: 7,
+        cursor: nil,
+        model_hash: Model.hash(),
+        protocol_version: 1,
+        scope: :types,
+        types: ["Hologram.Test.Fixtures.Entity.Module2"]
+      }
+
+      encoded = Jason.encode!(payload)
+
+      assert encode_synced_envelope(42, {:types, [Module2], 7}, nil) ==
                "event: synced\nid: 42\ndata: #{encoded}\n\n"
     end
 

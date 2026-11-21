@@ -804,8 +804,8 @@ defmodule Hologram.Sync.LensTest do
           %{op: :create_entity, entity: Module30}
         ])
 
-      assert message(lens, {:sync_synced, {:types, [Module30, Module34, Module39]}, "c"}) ==
-               {:sync_synced, {:types, [MyApp.Member, Module39]}, "c"}
+      assert message(lens, {:sync_synced, {:types, [Module30, Module34, Module39], 7}, "c"}) ==
+               {:sync_synced, {:types, [MyApp.Member, Module39], 7}, "c"}
     end
 
     test "any other message passes as it is" do
