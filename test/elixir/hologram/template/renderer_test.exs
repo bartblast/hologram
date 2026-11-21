@@ -3213,6 +3213,7 @@ defmodule Hologram.Template.RendererTest do
                :component_registry,
                :page_module,
                :page_params,
+               :sync_count_types,
                :sync_counts,
                :sync_rows
              ]
@@ -3220,6 +3221,7 @@ defmodule Hologram.Template.RendererTest do
       assert mount_data.actor_user_id == nil
       assert mount_data.page_module == Module48
       assert mount_data.page_params == %{}
+      assert mount_data.sync_count_types == %{}
       assert mount_data.sync_counts == %{}
       assert mount_data.sync_rows == %{}
       assert %{"page" => %{module: Module48}} = mount_data.component_registry

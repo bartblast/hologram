@@ -8,8 +8,7 @@ defmodule HologramSyncBenchmark.BoardPage do
 
   layout HologramSyncBenchmark.Components.DefaultLayout
 
-  # The board case's clients greet with this page. Every card, so the window the compiler derives
-  # is the whole table.
+  # The board case's clients greet with this page, which reads every card.
   derived :cards, [Card], fn -> sort(Card, position) end
 
   def template do

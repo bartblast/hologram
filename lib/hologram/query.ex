@@ -11,7 +11,7 @@ defmodule Hologram.Query do
   # that sets it, with one exception: one/1 and count/1 set cardinality, since a term cannot be
   # both. A term records fields, not the order the stages were called in - filter appends,
   # sort replaces, include adds a key or merges into one - so two pipes reaching the same
-  # fields are one query, which is what Hologram.Query.Registry.id/1 relies on. A term is always
+  # fields are one query, which is what comparing two terms relies on. A term is always
   # about one entity type, so a struct written without one is refused at the literal.
   #
   # A term with a source is a derived field's query: it reads a set reached from a row of the owning
@@ -70,6 +70,8 @@ defmodule Hologram.Query do
   # attribute of the row they lead to.
   @type path :: list(atom)
 
+  # A stand-in for a pinned value, only in the terms the build's chain check replays (see
+  # Hologram.Query.Placeholder) - a term that runs holds none.
   @type placeholder :: {:placeholder, atom}
 
   # The data form a filter is given in: a name or a placeholder paired with a value, an or: entry,
@@ -662,9 +664,9 @@ defmodule Hologram.Query do
   On a query - an entity type module or a query term - it marks the query as read on the
   server's own authority: DB.read/1 reads it raw whether or not a user is acting. The spelling
   for a read that must see past the acting user's policies, such as finding the user an invite
-  names by email when users may read only themselves. A registered query (a component's
-  derived field) cannot carry it - the build refuses one that does - since a component's query is
-  read for the session user on both tiers.
+  names by email when users may read only themselves. A query in browser code, like a
+  component's derived field, cannot carry it - the build refuses one written in one piece, and
+  the run refuses any other - since it is read for the session user on both tiers.
 
   Raises Hologram.MisuseError when the subject is neither an entity struct, an entity type module
   nor a query term, or when a struct already carries a claim.

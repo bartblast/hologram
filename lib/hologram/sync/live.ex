@@ -20,7 +20,6 @@ defmodule Hologram.Sync.Live do
   alias Hologram.DB.QueryCache
   alias Hologram.Policy
   alias Hologram.Policy.Edges
-  alias Hologram.Sync.Fanout
   alias Hologram.Sync.PackedIds
   alias Hologram.Sync.Recheck
   alias Hologram.Sync.Search
@@ -317,17 +316,14 @@ defmodule Hologram.Sync.Live do
   end
 
   @doc """
-  Hands the given transactions, read from the given place, to everything on this node that keeps
-  clients up to date: the windows' evaluators (see `Hologram.Sync.Fanout.route/2`), and every sync
-  session, each sent `{:live, part}` with its user's part of the batch (see `parts/5`).
+  Hands the given transactions, read from the given place, to every sync session on this node, each
+  sent `{:live, part}` with its user's part of the batch (see `parts/5`).
 
   With no session on the node, nothing is read for them. In a build where no client checks
   permissions, the rows carry no verdicts, so the search follows only the read rules' edges.
   """
   @spec route(list({non_neg_integer, list(map)}), {non_neg_integer, non_neg_integer}) :: :ok
   def route(transactions, place) do
-    Fanout.route(transactions, place)
-
     case Sessions.list() do
       [] ->
         :ok
@@ -335,9 +331,9 @@ defmodule Hologram.Sync.Live do
       sessions ->
         effects = Enum.flat_map(transactions, fn {_tx, events} -> events end)
 
-        # Read from the runtime's caches rather than derived per batch, as the fan-out reads them.
-        # A build where no client checks permissions sends its rows without verdicts, so the search
-        # follows only the read rules' edges.
+        # Read from the runtime's caches rather than derived per batch. A build where no client
+        # checks permissions sends its rows without verdicts, so the search follows only the read
+        # rules' edges.
         edges = Edges.index(QueryCache.permission_checking?())
 
         parts = parts(effects, sessions, edges, QueryCache.synced_types(), place)

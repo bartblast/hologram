@@ -8,8 +8,8 @@ defmodule HologramSyncBenchmark.SignInPage do
   layout HologramSyncBenchmark.Components.DefaultLayout
 
   # Where a signed-in client gets its session cookie: the render signs it in as the user the
-  # path names. The client then greets with its case's page, so this page's own windows only
-  # decide which windows fill first, never what the client may read.
+  # path names. The client then greets with its case's page, so this page's own types only
+  # decide which types fill first, never what the client may read.
   def init(params, component, server) do
     {component, put_user_id(server, params.user_id)}
   end

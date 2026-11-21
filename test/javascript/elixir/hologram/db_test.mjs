@@ -51,7 +51,6 @@ describe("Elixir_Hologram_DB", () => {
   const update = Elixir_Hologram_DB["update/1"];
   const updateById = Elixir_Hologram_DB["update/3"];
   const filter = Elixir_Hologram_Query_Stage["filter/2"];
-  const include = Elixir_Hologram_Query_Stage["include/2"];
   const one = Elixir_Hologram_Query_Stage["one/1"];
   const read = Elixir_Hologram_DB["read/1"];
   const readById = Elixir_Hologram_DB["read/2"];
@@ -723,7 +722,11 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("appends one entry carrying only the amounts it moves", () => {
-      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 3, $revisions: {stock: 12}});
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 3,
+        $revisions: {stock: 12},
+      });
 
       const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
 
@@ -743,7 +746,11 @@ describe("Elixir_Hologram_DB", () => {
     // A delta is never merged, so there is nothing for it to be based on - and the entry says so
     // by carrying neither data nor based_on.
     it("says a move was based on nothing", () => {
-      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 3, $revisions: {stock: 12}});
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 3,
+        $revisions: {stock: 12},
+      });
 
       const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
 
@@ -754,7 +761,11 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("answers a refusal judging a move on the value it arrives at", () => {
-      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 0, $revisions: {stock: 12}});
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 0,
+        $revisions: {stock: 12},
+      });
 
       const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
 
@@ -801,7 +812,11 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("shows a moved counter moved, its revision left alone", () => {
-      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 3, $revisions: {stock: 12}});
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 3,
+        $revisions: {stock: 12},
+      });
 
       const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
 
@@ -1448,7 +1463,11 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("raises describing a bound the value broke, quoting the value", () => {
-      LocalDatabase.putRow(ITEM, {id: ID_2, stock: 3, $revisions: {stock: 12}});
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 3,
+        $revisions: {stock: 12},
+      });
 
       const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
 
@@ -1529,6 +1548,33 @@ describe("Elixir_Hologram_DB", () => {
       assert.deepStrictEqual(read(task), Type.list([]));
     });
 
+    // The rows of a type sync never sends are never kept current, so reading them is refused.
+    it("refuses a query reading a type sync doesn't send", () => {
+      globalThis.Hologram.sync.syncedTypes = [];
+
+      assertBoxedError(
+        () => read(task),
+        "Hologram.MisuseError",
+        `DB.read can't answer the query: it reads ${TASK}, which browser code never names, so sync never sends its rows - name the entity type, or the relationship or derived field leading to it, as written in browser code, like include(project) or %Project{}`,
+      );
+    });
+
+    // The browser never holds a server-only value, so a filter on one can't be answered from the
+    // local rows. That refusal is told first, as a derived field's is, though the type doesn't sync
+    // either.
+    it("refuses a query filtering on a server-only attribute", () => {
+      globalThis.Hologram.sync.syncedTypes = [];
+
+      const doc = Type.alias(DOC);
+
+      assertBoxedError(
+        () =>
+          read(filter(doc, predicates([["api_token", Type.bitstring("x")]]))),
+        "Hologram.MisuseError",
+        `DB.read can't answer the query: it filters or sorts on server_only attributes (${DOC} :api_token) - the client never holds those values, so it could not evaluate the reference locally. Drop the reference, or read the rows through the trusted backend API.`,
+      );
+    });
+
     it("answers the rows a filter admits", () => {
       LocalDatabase.putRow(TASK, row(ID_1));
       LocalDatabase.putRow(TASK, row(ID_2, {done: true}));
@@ -1595,55 +1641,19 @@ describe("Elixir_Hologram_DB", () => {
 
       assert.deepStrictEqual(read(task), Type.list([]));
     });
-
-    it("raises for a query term carrying a placeholder", () => {
-      const placeholder = Type.struct("Hologram.Query.Placeholder", [
-        [Type.atom("name"), Type.atom("wanted")],
-      ]);
-
-      assertBoxedError(
-        () => read(filter(task, predicates([["title", placeholder]]))),
-        "Hologram.MisuseError",
-        "cannot read a query term containing placeholders - placeholder :wanted has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries",
-      );
-    });
-
-    it("raises for a query term carrying a placeholder beside an included derived value", () => {
-      const placeholder = Type.struct("Hologram.Query.Placeholder", [
-        [Type.atom("name"), Type.atom("wanted")],
-      ]);
-
-      const term = include(
-        filter(task, predicates([["title", placeholder]])),
-        Type.atom("tag_count"),
-      );
-
-      assertBoxedError(
-        () => read(term),
-        "Hologram.MisuseError",
-        "cannot read a query term containing placeholders - placeholder :wanted has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries",
-      );
-    });
-
-    it("raises for a query term carrying a placeholder inside an alternative", () => {
-      const placeholder = Type.struct("Hologram.Query.Placeholder", [
-        [Type.atom("name"), Type.atom("wanted")],
-      ]);
-
-      const alternatives = Type.list([
-        predicates([["title", placeholder]]),
-        predicates([["done", Type.boolean(true)]]),
-      ]);
-
-      assertBoxedError(
-        () => read(filter(task, predicates([["or", alternatives]]))),
-        "Hologram.MisuseError",
-        "cannot read a query term containing placeholders - placeholder :wanted has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries",
-      );
-    });
   });
 
   describe("read/2", () => {
+    it("refuses a type sync doesn't send, as read/1 does", () => {
+      globalThis.Hologram.sync.syncedTypes = [];
+
+      assertBoxedError(
+        () => readById(task, Type.bitstring(ID_1)),
+        "Hologram.MisuseError",
+        `DB.read can't answer the query: it reads ${TASK}, which browser code never names, so sync never sends its rows - name the entity type, or the relationship or derived field leading to it, as written in browser code, like include(project) or %Project{}`,
+      );
+    });
+
     it("answers the row with the given id", () => {
       LocalDatabase.putRow(TASK, row(ID_1));
 

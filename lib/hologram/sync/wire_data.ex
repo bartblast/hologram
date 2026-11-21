@@ -13,7 +13,7 @@ defmodule Hologram.Sync.WireData do
   # A value the client may not have is spelled by ITS KEY BEING ABSENT, and so is a relationship
   # the query did not ask for. The cases cannot be confused, which is what makes absence safe to
   # read: an attribute is always there (null when it is unset), a server-only attribute never is,
-  # a to-many relationship is there exactly when the window includes it (as the target ids - the
+  # a to-many relationship is there exactly when the row's type syncs (as the target ids - the
   # rows travel once each, as their own deltas), and a to-one never is, because its reference
   # field already carries the id. An inverse of a to-many travels as a to-many does, and an inverse
   # of a to-one, a set or single, never does, because its rows' reference fields carry the ids.

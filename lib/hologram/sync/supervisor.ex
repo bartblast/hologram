@@ -1,14 +1,13 @@
 defmodule Hologram.Sync.Supervisor do
   @moduledoc false
 
-  # Everything a node needs to keep its clients up to date: where results live, where evaluators
-  # are found and started, where the sync sessions on the node are listed, the connection that
-  # hears about writes, and the dispatcher that reads them. The sessions themselves are not here -
-  # each belongs to a connection and is started by it.
+  # Everything a node needs to keep its clients up to date: where the sync sessions on the node are
+  # listed, the connection that hears about writes, and the dispatcher that reads them. The
+  # sessions themselves are not here - each belongs to a connection and is started by it.
   #
   # Started inside the database unit rather than beside it, so that a database restart takes sync
-  # with it: what evaluators hold was read through that connection, and the windows they run come
-  # from the cache that repopulates behind it.
+  # with it: what the sessions read goes through that connection, and the synced types they read
+  # come from the cache that repopulates behind it.
   #
   # A database that is away takes down nothing here. The listener waits for it rather than failing
   # (see Hologram.DB.Listener), and ends once when a session it had is lost, a LISTEN goes
@@ -23,13 +22,10 @@ defmodule Hologram.Sync.Supervisor do
 
   alias Hologram.DB.Listener
   alias Hologram.Sync.Dispatcher
-  alias Hologram.Sync.Evaluator
-  alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Gate
   alias Hologram.Sync.Live
   alias Hologram.Sync.Pool
   alias Hologram.Sync.ReadEdge
-  alias Hologram.Sync.ResultStore
   alias Hologram.Sync.Sessions
 
   @notifications Hologram.Sync.Notifications
@@ -54,9 +50,6 @@ defmodule Hologram.Sync.Supervisor do
     children =
       Enum.reject(
         [
-          {Registry, keys: :unique, name: Evaluator.registry()},
-          ResultStore,
-          Evaluators,
           ReadEdge,
           Pool.child_spec(),
           Gate,
@@ -72,11 +65,9 @@ defmodule Hologram.Sync.Supervisor do
     # been replaced underneath it. The unit holding this one restarts the same way, for the same
     # reason.
     #
-    # What it prevents is quiet rather than loud. A registry replaced on its own leaves every
-    # evaluator alive and unfindable - rounds reach nobody, `Evaluator.round/3` answers `:ok` for
-    # a window it cannot see, and each client sits on the last thing it was told. A notifications
-    # connection replaced on its own leaves the dispatcher listening to a process that is gone,
-    # which nothing reports either: it falls back to its poll and is merely slower forever.
+    # What it prevents is quiet rather than loud. A notifications connection replaced on its own
+    # leaves the dispatcher listening to a process that is gone, which nothing reports: it falls
+    # back to its poll and is merely slower forever.
     #
     # The session list comes after the read edge for the same reason, from the other side: a read
     # edge replaced starts the dispatcher at the log's edge as it stands, past the batches it had
@@ -93,14 +84,14 @@ defmodule Hologram.Sync.Supervisor do
   end
 
   # The dispatcher comes after what it hands work to: it starts reading straight away, and what it
-  # reads goes to the evaluators found through the registry started before it, and to the sessions
-  # listed before it. It comes after the read edge for the same reason - a restart resumes from what
-  # that kept, which it can only read from a read edge that is already up.
+  # reads goes to the sessions listed before it. It comes after the read edge for the same reason -
+  # a restart resumes from what that kept, which it can only read from a read edge that is already
+  # up.
   #
-  # Being last but one is what makes keeping the edge worth it: nothing before the dispatcher is
-  # restarted when the dispatcher dies, so it comes back beside the same evaluators and the same
-  # sessions - which go on advancing from the rounds it sends, and would be carried past the
-  # window it was reading if it resumed anywhere but where it left off.
+  # Being last is what makes keeping the edge worth it: nothing before the dispatcher is
+  # restarted when the dispatcher dies, so it comes back beside the same sessions - which go on
+  # advancing from the batches it sends, and would be carried past the range of the log it was
+  # reading if it resumed anywhere but where it left off.
   defp dispatcher_child do
     {Dispatcher, handler: &Live.route/2, notifications: @notifications, read_edge: ReadEdge}
   end

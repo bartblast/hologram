@@ -11,6 +11,7 @@ import ManuallyPortedElixirHologramEntity from "./elixir/hologram/entity.mjs";
 import ManuallyPortedElixirHologramJob from "./elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQueryStage from "./elixir/hologram/query/stage.mjs";
 import Model from "./model.mjs";
+import QueryCheck from "./query_check.mjs";
 import QueryKernel from "./query_kernel.mjs";
 import QuerySpelling from "./query_spelling.mjs";
 import ReloadNotice from "./reload_notice.mjs";
@@ -23,6 +24,13 @@ import Type from "./type.mjs";
 // takes milliseconds; this is the bound for one that never answers.
 const SAVE_WAIT_MS = 3000;
 
+// How many query refusals are kept before the cache starts over: a query holding values a user
+// types has as many spellings as values, so the cache is bounded rather than grown forever.
+const QUERY_REFUSALS_LIMIT = 5000;
+
+// The longest spelling the cache keeps, so that its limit bounds the memory it holds too.
+const QUERY_REFUSAL_KEY_LIMIT = 4096;
+
 // The client half of the data layer behind one class: each public static is a place where the
 // runtime hands control to the data layer. The data layer's own modules - the batches, the deltas,
 // the durable store, the local database, the model, the query kernel, the replica, the tabs and
@@ -30,6 +38,14 @@ const SAVE_WAIT_MS = 3000;
 //
 // The bodies assume the build carries a data model, so the sync constants are there.
 export default class DataLayer {
+  // The refusals queryRefusal() worked out, with the model generation and the synced types they
+  // were worked out against.
+  static #queryRefusals = {
+    generation: null,
+    refusals: new Map(),
+    syncedTypes: null,
+  };
+
   // Based on run_query!/4
   //
   // Answers the given normalized term a derived field of the given module is defined by, for the
@@ -549,6 +565,7 @@ export default class DataLayer {
       // answered with travel beside them, and each page visit replaces them the way it replaces
       // what its own props read.
       LocalDatabase.syncCounts = mountData.syncCounts ?? {};
+      LocalDatabase.syncCountTypes = mountData.syncCountTypes ?? {};
     }
   }
 
@@ -574,6 +591,46 @@ export default class DataLayer {
   // runs.
   static openBatch(target) {
     Batches.open(target);
+  }
+
+  // Why the given normalized term can't be a derived field's query, or null (see QueryCheck): what it
+  // asks for that the browser may not hold, then a type it reads that sync never sends - in the
+  // order the server refuses them.
+  //
+  // Asked of every derived query on every render, so the answer is kept by the term's spelling,
+  // which names one query whatever object holds it. It depends only on the term, the model and the
+  // synced types, so it starts over when either of the last two changes.
+  static queryRefusal(term) {
+    const syncedTypes = globalThis.Hologram.sync?.syncedTypes;
+    const generation = Model.generation();
+    const cache = DataLayer.#queryRefusals;
+
+    if (
+      cache.syncedTypes !== syncedTypes ||
+      cache.generation !== generation ||
+      cache.refusals.size >= QUERY_REFUSALS_LIMIT
+    ) {
+      DataLayer.#queryRefusals = {generation, refusals: new Map(), syncedTypes};
+    }
+
+    const refusals = DataLayer.#queryRefusals.refusals;
+    const key = QuerySpelling.spell(term);
+
+    // A shape the spelling doesn't know is marked with a "!", and two of them can spell alike, so
+    // a term holding one is answered afresh rather than from the cache. A value holding a "!" is
+    // too, which only costs the walk. So is one too long to keep.
+    if (key.length > QUERY_REFUSAL_KEY_LIMIT || key.includes("!")) {
+      return QueryCheck.refusal(term) ?? QueryCheck.unsyncedRefusal(term);
+    }
+
+    if (!refusals.has(key)) {
+      refusals.set(
+        key,
+        QueryCheck.refusal(term) ?? QueryCheck.unsyncedRefusal(term),
+      );
+    }
+
+    return refusals.get(key);
   }
 
   // Settles once what this tab's actions wrote is in the store, for a page about to be loaded afresh
@@ -683,9 +740,9 @@ export default class DataLayer {
   // for the rows it counts, counting locally would count a pot that is still filling and report a
   // number climbing towards the truth. The markers say when that stops - one per entity type, once
   // the client holds every row of it it may see, and the whole pot's. A count reads the types the
-  // build worked out for its field (`countTypes`), and counts for itself once every one of them is
-  // marked, on whichever page and in whichever tab. A field the build listed no types for waits for
-  // the whole pot.
+  // server worked out for it when it counted (`syncCountTypes`, see Carry.collect_count/4), and the
+  // client counts for itself once every one of them is marked, on whichever page and in whichever
+  // tab. A count carried with no types waits for the whole pot.
   //
   // The key names the component, the derived field and the query it ran, spelled the way the
   // server spells it (see QuerySpelling). The query holds every value it reads, so a row argument
@@ -699,21 +756,22 @@ export default class DataLayer {
       return null;
     }
 
-    if ($.#countsLocally(module, name)) {
+    // Every count is local once the client holds every row, so no key needs spelling.
+    if (LocalDatabase.isAllSynced()) {
       return null;
     }
 
     const key = `${module}/${name.value}/${QuerySpelling.spell(term)}`;
 
+    if ($.#countsLocally(key)) {
+      return null;
+    }
+
     return LocalDatabase.syncCounts[key] ?? null;
   }
 
-  static #countsLocally(module, name) {
-    if (LocalDatabase.isAllSynced()) {
-      return true;
-    }
-
-    const types = globalThis.Hologram.sync?.countTypes?.[module]?.[name.value];
+  static #countsLocally(key) {
+    const types = LocalDatabase.syncCountTypes[key];
 
     return (
       types !== undefined &&

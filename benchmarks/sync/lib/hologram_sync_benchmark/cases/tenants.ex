@@ -2,9 +2,8 @@ defmodule HologramSyncBenchmark.Cases.Tenants do
   @moduledoc false
 
   # A multi-tenant app: tenants with a few members each, and tasks only a tenant's members may
-  # read, so a write reaches the few clients of its tenant. The page filters tasks by a tenant
-  # held in its state, which the compiler can't know, so the window is every tenant's tasks:
-  # under windows, the server judges all of them against each client's user, one at a time.
+  # read, so a write reaches the few clients of its tenant. Sync sends each client the tasks its
+  # user may read, so the server judges each written task against each client's user.
   #
   # Clients sign in as users in tenant order, so the first N clients fill whole tenants, and the
   # writes walk the tasks of the tenants with clients connected, one tenant after another.

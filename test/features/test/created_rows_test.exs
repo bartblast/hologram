@@ -15,8 +15,6 @@ defmodule HologramFeatureTests.CreatedRowsTest do
   # batch's row its user may not read to disk only when a tab taking the lead finds the store out of
   # step with it, so a reload almost always drops the row even before the fix.
   setup do
-    await_evaluator_drain()
-
     {:ok, _result} =
       Connection.query(
         ~s(TRUNCATE "hologram_data"."#{Mapper.table_name(Locker)}", "hologram_data"."#{Mapper.table_name(Slip)}"),
