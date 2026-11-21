@@ -3,6 +3,7 @@ defmodule Hologram.Migration.RendererTest do
 
   import Hologram.Migration.Renderer
 
+  alias Hologram.DB.Codec
   alias Hologram.Entity.Model
   alias Hologram.Migration.Value
   alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
@@ -24,6 +25,63 @@ defmodule Hologram.Migration.RendererTest do
   end
 
   defp op_kinds(ops), do: Enum.map(ops, & &1.op)
+
+  describe "render/2, judging a file's backfills" do
+    setup do
+      [pre_model: model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})]
+    end
+
+    test "refuses a computed one naming a field the model lacks", %{pre_model: pre_model} do
+      op = %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :city,
+        type: :string,
+        opts: [optional: true, backfill: %Value{term: {:name, [:nope]}}],
+        line: 7
+      }
+
+      assert_raise Hologram.CompileError, ~r/reads :nope, which MyApp.Task doesn't have/, fn ->
+        render([op], pre_model)
+      end
+    end
+
+    test "refuses a constant breaking a declared rule", %{pre_model: pre_model} do
+      op = %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :code,
+        type: :string,
+        opts: [max_length: 2, backfill: "long"],
+        line: 7
+      }
+
+      assert_raise Hologram.CompileError, ~r/must be at most 2 characters/, fn ->
+        render([op], pre_model)
+      end
+    end
+  end
+
+  describe "render/2, a constant uuid backfill" do
+    test "encodes it whichever case the file wrote it in" do
+      uuid = "018f0000-0000-7000-8000-000000000000"
+      pre_model = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      op = %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :external_id,
+        type: :uuid,
+        opts: [backfill: String.upcase(uuid)],
+        line: 7
+      }
+
+      encoded = Codec.encode(uuid, :uuid)
+
+      assert %{transactional: [%{op: :add_column, backfill: ^encoded} | _rest]} =
+               render([op], pre_model)
+    end
+  end
 
   describe "render/2, a backfill that can't be applied yet" do
     setup do
@@ -86,7 +144,7 @@ defmodule Hologram.Migration.RendererTest do
         line: 7
       }
 
-      computed_op = put_in(op, [:changes, :backfill], %Value{term: {:name, [:id]}})
+      computed_op = put_in(op, [:changes, :backfill], %Value{term: {:name, [:notes]}})
 
       assert_error Hologram.CompileError,
                    "change_attribute :notes of MyApp.Task on line 7 carries a backfill that " <>

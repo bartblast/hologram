@@ -131,6 +131,14 @@ defmodule Hologram.Migration.Value.ResolverTest do
       refute storable?(%{~U[2026-01-02 10:00:00Z] | std_offset: "0"})
     end
 
+    test "refuses a partial date struct" do
+      refute storable?(%{__struct__: Date})
+    end
+
+    test "refuses a partial datetime struct" do
+      refute storable?(%{__struct__: DateTime, calendar: Calendar.ISO})
+    end
+
     test "takes a time" do
       assert storable?(~T[10:00:00])
     end

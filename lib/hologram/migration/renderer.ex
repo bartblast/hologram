@@ -8,6 +8,7 @@ defmodule Hologram.Migration.Renderer do
   alias Hologram.DB.Schema
   alias Hologram.Entity.Model
   alias Hologram.Migration.Value
+  alias Hologram.Migration.Value.Check
 
   # The ops that take an object away - a widening keeps them until its data has moved.
   @drop_ops [:drop_column, :drop_foreign_key, :drop_index]
@@ -54,6 +55,10 @@ defmodule Hologram.Migration.Renderer do
     # before it, so the chunks skip that check. They keep the others, which hold per chunk.
     _validated_model = Model.fold(pre_model, logical_ops)
 
+    # Judged here rather than in the fold, which every boot runs over the applied history: a rule
+    # that tightens in a later release must not stop a database that already applied the file.
+    Check.validate_ops!(logical_ops, pre_model)
+
     Enum.each(logical_ops, &validate_backfill_applies!/1)
 
     {physical_ops, post_model} =
@@ -77,7 +82,10 @@ defmodule Hologram.Migration.Renderer do
       for %{op: :add_attribute} = op <- logical_ops,
           {:ok, value} <- [Keyword.fetch(op.opts, :backfill)],
           into: %{} do
-        {{Mapper.table_name(op.entity), Atom.to_string(op.name)}, Codec.encode(value, op.type)}
+        normalized = Value.normalize_constant(value, op.type)
+
+        {{Mapper.table_name(op.entity), Atom.to_string(op.name)},
+         Codec.encode(normalized, op.type)}
       end
 
     Enum.map(physical_ops, &put_backfill(&1, backfills))

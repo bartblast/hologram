@@ -66,6 +66,62 @@ defmodule Hologram.Migration.Value do
   @value_forms [:%, :%{}, :&, :@, :__aliases__, :fn, :{}]
 
   @doc """
+  Returns the backfill the given op carries, in its options or changes, or :error when it carries
+  none.
+  """
+  @spec fetch_backfill(%{atom => any}) :: {:ok, any} | :error
+  def fetch_backfill(op) do
+    case op_backfills(op) do
+      [backfill | _rest] -> {:ok, backfill}
+      [] -> :error
+    end
+  end
+
+  @doc """
+  Returns the kind of the member the given op fills, and the member as the given model, the one
+  after the op, holds it.
+  """
+  @spec fill_member(%{atom => any}, %{atom => any}) :: {:attribute | :relationship, tuple}
+  def fill_member(%{entity: entity, name: name, op: op}, next_model) do
+    {kind, list_key} =
+      if op in [:add_attribute, :change_attribute],
+        do: {:attribute, :attributes},
+        else: {:relationship, :relationships}
+
+    {kind, List.keyfind(next_model.entities[entity][list_key], name, 0)}
+  end
+
+  @doc """
+  Returns the target `resolve!/4` takes for the given member of the given kind.
+
+  Raises Hologram.CompileError on a to-many, which holds no value of the row to fill.
+  """
+  @spec fill_target(:attribute | :relationship, tuple, %{atom => any}) :: Resolver.target()
+  def fill_target(:attribute, {name, type, opts}, op) do
+    %{kind: :attribute, line: op.line, name: name, opts: opts, type: type}
+  end
+
+  def fill_target(:relationship, {name, [_target], _opts}, op) do
+    raise Hologram.CompileError,
+      message:
+        "the backfill of #{inspect(name)} on #{inspect(op.entity)} (line #{op.line}) fills a " <>
+          "to-many relationship - a backfill fills a value or a to-one reference"
+  end
+
+  def fill_target(:relationship, {name, type, _opts}, op) do
+    %{kind: :relationship, line: op.line, name: name, type: type}
+  end
+
+  @doc """
+  Returns the given constant backfill of the given type as it's stored: a uuid in lowercase, the
+  only spelling the database codec and the browser compare, whichever case the file wrote it in.
+  """
+  @spec normalize_constant(any, atom) :: any
+  def normalize_constant(value, :uuid) when is_binary(value), do: String.downcase(value)
+
+  def normalize_constant(value, _type), do: value
+
+  @doc """
   Returns what the given ops fill, in op order: one entry per op carrying a backfill, constant or
   computed, a computed one resolved against the model right before its op. An entry fills only the
   rows holding nil when its op turns a member required.
@@ -242,15 +298,6 @@ defmodule Hologram.Migration.Value do
     end
   end
 
-  defp fill_member(%{entity: entity, name: name, op: op}, _model, next_model) do
-    {kind, list_key} =
-      if op in [:add_attribute, :change_attribute],
-        do: {:attribute, :attributes},
-        else: {:relationship, :relationships}
-
-    {kind, List.keyfind(next_model.entities[entity][list_key], name, 0)}
-  end
-
   defp interpolated?(parts) do
     Enum.any?(parts, fn
       {:"::", _meta, [{{:., _dot_meta, [Kernel, :to_string]}, _call_meta, _args}, _type]} -> true
@@ -343,7 +390,7 @@ defmodule Hologram.Migration.Value do
         acc
 
       [backfill | _rest] ->
-        {kind, member} = fill_member(op, model, next_model)
+        {kind, member} = fill_member(op, next_model)
 
         [
           %{
@@ -466,10 +513,16 @@ defmodule Hologram.Migration.Value do
   end
 
   defp resolved_backfill(%__MODULE__{} = value, op, kind, member, model) do
-    {:computed, resolve!(value, model, op.entity, target(kind, member, op))}
+    {:computed, resolve!(value, model, op.entity, fill_target(kind, member, op))}
   end
 
-  defp resolved_backfill(value, _op, _kind, _member, _model), do: {:constant, value}
+  defp resolved_backfill(value, _op, :relationship, _member, _model) do
+    {:constant, normalize_constant(value, :uuid)}
+  end
+
+  defp resolved_backfill(value, _op, :attribute, {_name, type, _opts}, _model) do
+    {:constant, normalize_constant(value, type)}
+  end
 
   defp separator({:^, _meta, [expr]}, _env), do: {:value, expr}
 
@@ -515,21 +568,6 @@ defmodule Hologram.Migration.Value do
           env
         )
     end
-  end
-
-  defp target(:attribute, {name, type, opts}, op) do
-    %{kind: :attribute, line: op.line, name: name, opts: opts, type: type}
-  end
-
-  defp target(:relationship, {name, [_target], _opts}, op) do
-    raise Hologram.CompileError,
-      message:
-        "the backfill of #{inspect(name)} on #{inspect(op.entity)} (line #{op.line}) fills a " <>
-          "to-many relationship - a backfill fills a value or a to-one reference"
-  end
-
-  defp target(:relationship, {name, type, _opts}, op) do
-    %{kind: :relationship, line: op.line, name: name, type: type}
   end
 
   # Whether the given set is a query rather than a relationship of the row: an entity type, or

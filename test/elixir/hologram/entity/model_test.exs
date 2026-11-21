@@ -2039,6 +2039,41 @@ defmodule Hologram.Entity.ModelTest do
     end
   end
 
+  describe "fold/2, backfills" do
+    test "leaves the backfill out of the model" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Task, line: 1},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :code,
+          type: :string,
+          opts: [backfill: "ok"],
+          line: 2
+        }
+      ]
+
+      assert fold(empty(), ops).entities[MyApp.Task].attributes == [{:code, :string, []}]
+    end
+
+    test "doesn't judge a backfill, so an applied file replays whatever the rules are now" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Task, line: 1},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :code,
+          type: :string,
+          opts: [max_length: 2, backfill: "long"],
+          line: 2
+        }
+      ]
+
+      assert fold(empty(), ops).entities[MyApp.Task].attributes ==
+               [{:code, :string, [max_length: 2]}]
+    end
+  end
+
   describe "fold_op/2" do
     test "applies the op" do
       model = fold(empty(), [%{op: :create_entity, entity: MyApp.Task, line: 1}])

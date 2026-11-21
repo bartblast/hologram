@@ -96,6 +96,20 @@ defmodule Hologram.Migration.Value.Resolver do
 
   def storable?(_value), do: true
 
+  @doc """
+  Returns whether the given value is of the given attribute type. Unlike the entity validator, it
+  answers for a malformed date, datetime or time rather than calling a calendar the struct names,
+  which a pinned value can make anything.
+  """
+  @spec fits_type?(any, atom) :: boolean
+  def fits_type?(%{__struct__: struct} = value, type) when struct in [Date, DateTime, Time] do
+    well_formed?(value, type)
+  end
+
+  def fits_type?(_value, :enum), do: false
+
+  def fits_type?(value, type), do: Validator.attribute_value_valid?(value, type)
+
   defp all_literal?({:value, _value}), do: true
 
   defp all_literal?({:coalesce, operands}), do: Enum.all?(operands, &all_literal?/1)
@@ -542,12 +556,19 @@ defmodule Hologram.Migration.Value.Resolver do
 
   # A pinned struct may hold anything. The calendar is read first because the validator calls it,
   # and a datetime's offsets because comparing one does arithmetic on them.
-  defp well_formed?(%DateTime{utc_offset: utc_offset, std_offset: std_offset} = datetime, type) do
-    is_integer(utc_offset) and is_integer(std_offset) and datetime.calendar == Calendar.ISO and
-      Validator.attribute_value_valid?(datetime, type)
+  defp well_formed?(
+         %DateTime{calendar: Calendar.ISO, std_offset: std_offset, utc_offset: utc_offset} = value,
+         type
+       )
+       when is_integer(std_offset) and is_integer(utc_offset) do
+    Validator.attribute_value_valid?(value, type)
   end
 
-  defp well_formed?(%{calendar: calendar} = value, type) do
-    calendar == Calendar.ISO and Validator.attribute_value_valid?(value, type)
+  defp well_formed?(%DateTime{}, _type), do: false
+
+  defp well_formed?(%{calendar: Calendar.ISO} = value, type) do
+    Validator.attribute_value_valid?(value, type)
   end
+
+  defp well_formed?(_value, _type), do: false
 end
