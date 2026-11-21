@@ -177,6 +177,27 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module142 do
     |> Derived.lower()
   end
 
+  def __derived_definition__(:undefined_native) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module141.undefined_native()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:undefined_inside_native) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module141.undefined_inside_native()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:not_a_module_target) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module141.not_a_module_target()
+    |> Derived.lower()
+  end
+
   def __derived_definition__(:windowed) do
     Module36
     |> Derived.field([:channel, :messages])
@@ -209,6 +230,9 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module142 do
       undefined: {"lib/my_app/member.ex", 47},
       wildcard_bound: {"lib/my_app/member.ex", 51},
       wildcard_invalid: {"lib/my_app/member.ex", 53},
+      undefined_native: {"lib/my_app/member.ex", 55},
+      undefined_inside_native: {"lib/my_app/member.ex", 57},
+      not_a_module_target: {"lib/my_app/member.ex", 59},
       windowed: {"lib/my_app/member.ex", 49}
     }
   end

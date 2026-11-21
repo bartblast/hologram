@@ -28,6 +28,14 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     [ir_plt: PLT.start()]
   end
 
+  defp source_line(path, needle) do
+    path
+    |> File.read!()
+    |> String.split("\n")
+    |> Enum.find_index(&String.contains?(&1, needle))
+    |> Kernel.+(1)
+  end
+
   describe "derived_definition/3" do
     test "follows a query builder called as the whole body", %{ir_plt: ir_plt} do
       {definition, read_modules} = derived_definition(Entity36, :unread_count, ir_plt)
@@ -54,6 +62,36 @@ defmodule Hologram.Compiler.QueryExtractorTest do
                   entity: Entity33,
                   source: {Entity36, [:channel, :messages]}
                 }}
+    end
+
+    test "refuses a call of an undefined function on values the build knows", %{ir_plt: ir_plt} do
+      fixture = "test/elixir/support/fixtures/compiler/query_extractor/module_141.ex"
+      line = source_line(fixture, "wrap_term(String).not_a_function(1)")
+
+      expected_msg =
+        normalize_newlines("""
+        #{fixture}:#{line}: derived field :undefined_native in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module142 calls undefined function String.not_a_function/1
+
+            #{@app} #{fixture}:#{line}: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module141.undefined_native/1
+            #{@app} lib/my_app/member.ex:55: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module142.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module142, :undefined_native, ir_plt)
+      end
+    end
+
+    test "refuses a call on a value that is no module", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :not_a_module_target in .+ calls not_a_function\/1 on "x", which is not a module/,
+                   fn -> derived_definition(Module142, :not_a_module_target, ir_plt) end
+    end
+
+    # The function the builder calls exists, so what it raises is its own.
+    test "leaves alone an undefined function a defined function calls", %{ir_plt: ir_plt} do
+      assert_raise UndefinedFunctionError, ~r/String\.not_a_function\/1/, fn ->
+        derived_definition(Module142, :undefined_inside_native, ir_plt)
+      end
     end
 
     # Nothing binds the value, but the code still runs it.

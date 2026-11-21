@@ -505,6 +505,13 @@ defmodule Hologram.Compiler.QueryExtractor do
     {target_module, state_after_module} = evaluate!(module_ir, state, context)
     {arg_values, state_after_args} = evaluate_enum!(args, state_after_module, context)
 
+    if not is_atom(target_module) do
+      compile_error!(
+        "#{context.subject} calls #{function}/#{length(args)} on #{inspect(target_module)}, which is not a module",
+        context
+      )
+    end
+
     cond do
       target_module in [Query, Stage] ->
         {apply_authored_stage!(function, arg_values, context), state_after_args}
@@ -522,7 +529,7 @@ defmodule Hologram.Compiler.QueryExtractor do
       true ->
         record_derived_read(target_module)
 
-        {apply(target_module, function, arg_values), state_after_args}
+        {known_call!(target_module, function, arg_values, context), state_after_args}
     end
   end
 
@@ -798,6 +805,22 @@ defmodule Hologram.Compiler.QueryExtractor do
       {:ok, app} -> app not in @elixir_apps and Reflection.elixir_module?(module)
       :undefined -> false
     end
+  end
+
+  # A call the build runs for real. Only the function it was asked to call is reported as missing:
+  # one that exists and fails on a call of its own raises what it raises.
+  defp known_call!(module, function, args, context) do
+    apply(module, function, args)
+  rescue
+    error in UndefinedFunctionError ->
+      if {error.module, error.function, error.arity} == {module, function, length(args)} do
+        message =
+          undefined_function_message(context.subject, module, function, length(args))
+
+        compile_error!(message, context)
+      else
+        reraise error, __STACKTRACE__
+      end
   end
 
   defp known_values(values), do: Enum.map(values, fn {:known, value} -> value end)

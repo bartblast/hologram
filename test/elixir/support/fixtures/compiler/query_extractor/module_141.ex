@@ -103,6 +103,25 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module141 do
     messages
   end
 
+  def undefined_native(messages) do
+    _missing = wrap_term(String).not_a_function(1)
+
+    messages
+  end
+
+  def undefined_inside_native(messages) do
+    # credo:disable-for-next-line Credo.Check.Refactor.Apply
+    _missing = apply(wrap_term(String), :not_a_function, [1])
+
+    messages
+  end
+
+  def not_a_module_target(messages) do
+    _missing = wrap_term("x").not_a_function(1)
+
+    messages
+  end
+
   def windowed(messages, from, to) when from >= 0 and to > from, do: take(messages, ^to)
 
   def windowed(messages, _from, _to), do: messages
