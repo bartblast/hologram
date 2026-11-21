@@ -18,10 +18,14 @@ defmodule Hologram.Compiler.QueryChainsTest do
     collect(clauses, {module, function, arity})
   end
 
+  # A test that a query passes means nothing when no chain was collected to check, so one is.
   defp validate_all!(module, function, arity) do
-    module
-    |> chains(function, arity)
-    |> Enum.each(&validate!(&1, nil))
+    collected = chains(module, function, arity)
+
+    assert collected != [],
+           "no query chain was collected from #{inspect(module)}.#{function}/#{arity}"
+
+    Enum.each(collected, &validate!(&1, nil))
   end
 
   defp source_line(module, needle) do
