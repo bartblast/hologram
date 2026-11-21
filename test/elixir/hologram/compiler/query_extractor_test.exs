@@ -397,6 +397,20 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       end
     end
 
+    # The row decides which key the map holds, so the build can't tell whether the guard holds.
+    test "refuses a guard reading a map keyed by a field of the row", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :keyed_by_field in .+ branches on a field of the row/,
+                   fn -> derived_definition(Module142, :keyed_by_field, ir_plt) end
+    end
+
+    # The field is nil on some rows, and on those it's the key read.
+    test "refuses a read of a map keyed by a field of the row", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :keyed_read in .+ reads nil off a map keyed by a field of the row/,
+                   fn -> derived_definition(Module142, :keyed_read, ir_plt) end
+    end
+
     test "takes the case clause a known value matches", %{ir_plt: ir_plt} do
       {definition, _read_modules} = derived_definition(Module142, :by_case, ir_plt)
 

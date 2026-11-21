@@ -198,6 +198,24 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module142 do
     |> Derived.lower()
   end
 
+  def __derived_definition__(:keyed_by_field) do
+    key = Derived.field(Module36, [:last_read_at])
+
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module141.keyed(%{key => true})
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:keyed_read) do
+    key = Derived.field(Module36, [:last_read_at])
+
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module141.keyed_read(%{nil => 2, key => 1})
+    |> Derived.lower()
+  end
+
   def __derived_definition__(:windowed) do
     Module36
     |> Derived.field([:channel, :messages])
@@ -233,6 +251,8 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module142 do
       undefined_native: {"lib/my_app/member.ex", 55},
       undefined_inside_native: {"lib/my_app/member.ex", 57},
       not_a_module_target: {"lib/my_app/member.ex", 59},
+      keyed_by_field: {"lib/my_app/member.ex", 61},
+      keyed_read: {"lib/my_app/member.ex", 63},
       windowed: {"lib/my_app/member.ex", 49}
     }
   end

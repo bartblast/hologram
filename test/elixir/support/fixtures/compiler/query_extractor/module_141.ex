@@ -122,6 +122,12 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module141 do
     messages
   end
 
+  def keyed(messages, opts) when is_map_key(opts, nil), do: take(messages, 1)
+
+  def keyed(messages, _opts), do: messages
+
+  def keyed_read(messages, opts), do: take(messages, ^opts.nil)
+
   def windowed(messages, from, to) when from >= 0 and to > from, do: take(messages, ^to)
 
   def windowed(messages, _from, _to), do: messages

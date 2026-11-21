@@ -420,6 +420,14 @@ defmodule Hologram.Compiler.QueryExtractor do
         )
 
       value ->
+        # A key that is a field of the row can be the one read, so the value depends on the row.
+        if row_keyed?(value) do
+          compile_error!(
+            "#{context.subject} reads #{inspect(field)} off a map keyed by a field of the row - which value that is depends on the row",
+            context
+          )
+        end
+
         {concrete_field!(value, field, context), state_after_field}
     end
   end
@@ -912,6 +920,20 @@ defmodule Hologram.Compiler.QueryExtractor do
     if Path.basename(path) == "nofile", do: nil, else: path
   end
 
+  defp row_keyed?(map) when is_map(map) do
+    map
+    |> Map.keys()
+    |> Enum.any?(&row_value?/1)
+  end
+
+  defp row_keyed?(_value), do: false
+
+  defp row_value?(%RowField{}), do: true
+
+  defp row_value?(%RowRef{}), do: true
+
+  defp row_value?(_value), do: false
+
   # A dot on a set reads further through its rows, as a derived field's body reads a chain through a
   # set - only before a stage narrowed it, since the longer path is a set of its own.
   defp sourced_field!(term, owner, chain, field, context) do
@@ -943,7 +965,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp stand_in?(map) when is_map(map) do
     map
-    |> Map.values()
+    |> Map.to_list()
     |> stand_in?()
   end
 
