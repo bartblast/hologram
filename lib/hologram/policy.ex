@@ -75,6 +75,9 @@ defmodule Hologram.Policy do
 
   @model_facts_key {__MODULE__, :model_facts}
 
+  # The clauses asking about the row after an update's change, by a role or an operation.
+  @new_row_checks [:can, :has_role]
+
   @quantifiers [:all, :any, :none]
 
   @verdict_digest_bytes 8
@@ -585,6 +588,18 @@ defmodule Hologram.Policy do
     do: field_rules(policy, field)
 
   def operation_rules(policy, operation), do: Map.get(policy, operation, [])
+
+  # The clauses among the given ones asking about the row after the change by a role or an
+  # operation, those in a disjunction's alternatives included.
+  @doc false
+  @spec new_row_checks(list(tuple)) :: list(tuple)
+  def new_row_checks(clauses) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} -> Enum.flat_map(alternatives, &new_row_checks/1)
+      {check, {_asked, _chain}} = clause when check in @new_row_checks -> [clause]
+      _clause -> []
+    end)
+  end
 
   # The given clauses of an update line as what they read on the stored row: a name of the row after
   # the change spelled as the same name of the rule's own row, which has the same type and the same
@@ -1492,7 +1507,10 @@ defmodule Hologram.Policy do
   # judges one specific change, and its own predicates are what's left for anything asking with no
   # change in hand: whether some change could pass.
   defp line_rule(entity_type, operation, to, via, predicates) do
-    clauses = condition_clauses(entity_type, operation, predicates)
+    clauses =
+      entity_type
+      |> condition_clauses(operation, predicates)
+      |> expanded_role_checks(entity_type)
 
     rule = %{
       predicates: planned_clauses(clauses),
@@ -1503,6 +1521,22 @@ defmodule Hologram.Policy do
     if reads_new_row?(clauses, 0),
       do: Map.put(rule, :exact, %{predicates: clauses}),
       else: rule
+  end
+
+  # A role asked of the row after the change is extends-expanded, as a role reference is.
+  defp expanded_role_checks(clauses, entity_type) do
+    Enum.map(clauses, fn
+      {:has_role, {role_name, chain}} ->
+        target_type = Entity.path_target(entity_type, chain)
+
+        {:has_role, {Entity.expand_role(target_type, role_name), chain}}
+
+      {:or, alternatives} ->
+        {:or, Enum.map(alternatives, &expanded_role_checks(&1, entity_type))}
+
+      clause ->
+        clause
+    end)
   end
 
   # The given clauses without those reading the row after the change, which no row answers until
@@ -1534,6 +1568,9 @@ defmodule Hologram.Policy do
       {:or, alternatives} ->
         Enum.any?(alternatives, &reads_new_row?(&1, depth))
 
+      {check, {_asked, _chain}} when check in @new_row_checks ->
+        true
+
       {quantifier, {source, inner}} when quantifier in @quantifiers ->
         new_row_name?(source, depth) or reads_new_row?(inner, depth + 1)
 
@@ -1549,19 +1586,24 @@ defmodule Hologram.Policy do
 
   defp new_row_name?(_name, _depth), do: false
 
+  # A role or an operation asked of the new row reads no name of a row: what it follows is counted
+  # by new_row_check_chains/3.
   defp stored_spelling(clauses, depth) do
-    Enum.map(clauses, fn
+    Enum.flat_map(clauses, fn
       {:or, alternatives} ->
-        {:or, Enum.map(alternatives, &stored_spelling(&1, depth))}
+        [{:or, Enum.map(alternatives, &stored_spelling(&1, depth))}]
+
+      {check, {_asked, _chain}} when check in @new_row_checks ->
+        []
 
       {quantifier, {source, inner}} when quantifier in @quantifiers ->
-        {quantifier, {stored_name(source, depth), stored_spelling(inner, depth + 1)}}
+        [{quantifier, {stored_name(source, depth), stored_spelling(inner, depth + 1)}}]
 
       {name, operator, {:attribute, other}} ->
-        {stored_name(name, depth), operator, {:attribute, stored_name(other, depth)}}
+        [{stored_name(name, depth), operator, {:attribute, stored_name(other, depth)}}]
 
       {name, operator, value} ->
-        {stored_name(name, depth), operator, value}
+        [{stored_name(name, depth), operator, value}]
     end)
   end
 
@@ -1819,8 +1861,23 @@ defmodule Hologram.Policy do
       end
 
     predicate_chains(entity_type, read_predicates) ++
-      reference_chains(read_references) ++ delegation_chains(entity_type, read_via, reads)
+      reference_chains(read_references) ++
+      delegation_chains(entity_type, read_via, reads) ++
+      new_row_check_chains(entity_type, rule, reads)
   end
+
+  # What a role or an operation asked of the row after the change reads along its chain, as a role
+  # reference or a delegation reads it.
+  defp new_row_check_chains(entity_type, %{exact: %{predicates: predicates}}, reads) do
+    predicates
+    |> new_row_checks()
+    |> Enum.flat_map(fn
+      {:has_role, {role_names, chain}} -> reference_chains([{:rel, chain, role_names}])
+      {:can, via} -> delegation_chains(entity_type, via, reads)
+    end)
+  end
+
+  defp new_row_check_chains(_entity_type, _rule, _reads), do: []
 
   # The set links a rule's condition reads: those of its quantifiers, and those of the derived
   # fields their conditions name - a derived value is read at both polarities, since it can be

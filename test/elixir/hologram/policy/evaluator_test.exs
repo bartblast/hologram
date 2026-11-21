@@ -1090,6 +1090,48 @@ defmodule Hologram.Policy.EvaluatorTest do
       refute rule_matches?(rule, %Module24{}, %Module24{priority: :high}, "user", &deny/3)
     end
 
+    test "asks a role check about the new row" do
+      rule = exact_rule([{:has_role, {[:member], [:channel]}}])
+      stored = %Module28{channel_id: "stored"}
+      new_row = %Module28{channel_id: "new"}
+
+      checker = fn {:rel, [:channel], [:member]}, %Module28{channel_id: id}, "user" ->
+        id == "new"
+      end
+
+      assert rule_matches?(rule, stored, new_row, "user", checker)
+      refute rule_matches?(rule, new_row, stored, "user", checker)
+    end
+
+    test "answers a role check no for a visitor without asking" do
+      rule = exact_rule([{:has_role, {[:member], [:channel]}}])
+
+      refute rule_matches?(rule, %Module28{}, %Module28{}, nil, &grant/3)
+    end
+
+    test "asks an operation check about the new row" do
+      rule = exact_rule([{:can, {:update, [:channel]}}])
+      stored = %Module28{channel_id: "stored"}
+      new_row = %Module28{channel_id: "new"}
+
+      checker = fn {:via, :update, [:channel]}, %Module28{channel_id: id}, "user" ->
+        id == "new"
+      end
+
+      assert rule_matches?(rule, stored, new_row, "user", checker)
+      refute rule_matches?(rule, new_row, stored, "user", checker)
+    end
+
+    test "answers a role check in an alternative of a disjunction" do
+      rule =
+        exact_rule([
+          {:or, [[{:has_role, {[:member], [:channel]}}], [{:body, :==, "open"}]]}
+        ])
+
+      assert rule_matches?(rule, %Module28{body: "open"}, %Module28{}, "user", &deny/3)
+      refute rule_matches?(rule, %Module28{body: "shut"}, %Module28{}, "user", &deny/3)
+    end
+
     test "judges a rule with no exact clauses without the new row" do
       rule = rule(predicates: [{:priority, :==, :low}])
 

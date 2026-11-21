@@ -4142,6 +4142,38 @@ defmodule Hologram.Query.StageTest do
              ]
     end
 
+    test "builds a role and an operation check, alone and in an alternative" do
+      predicates = [
+        {{:has_role, :member}, [:b]},
+        or: [[{{:can, :update}, [:b]}], [c: {:==, "x"}]]
+      ]
+
+      assert new_row_triples!(Module2, predicates, []) == [
+               {:has_role, {:member, [:b]}},
+               {:or, [[{:can, {:update, [:b]}}], [{:c, :==, "x"}]]}
+             ]
+    end
+
+    test "refuses a role check whose chain names no relationships in an alternative" do
+      alternative = [{{:has_role, :member}, [{:a}]}]
+
+      assert_error MisuseError,
+                   "an alternative of a disjunction is a non-empty list of name and value pairs, got: [{{:has_role, :member}, [{:a}]}]",
+                   fn ->
+                     new_row_triples!(Module3, [or: [alternative, [c: {:==, "x"}]]], [])
+                   end
+    end
+
+    test "refuses a role check in an alternative outside an update line" do
+      alternative = [{{:has_role, :member}, [:b]}]
+
+      assert_error MisuseError,
+                   "an alternative of a disjunction is a non-empty list of name and value pairs, got: [{{:has_role, :member}, [:b]}]",
+                   fn ->
+                     predicate_triples!(Module3, or: [alternative, [c: {:==, "x"}]])
+                   end
+    end
+
     test "refuses a row field at the top of the condition" do
       row_field = %RowField{owner: Module2, name: :c}
 

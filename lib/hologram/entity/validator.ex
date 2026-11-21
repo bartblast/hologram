@@ -2387,13 +2387,25 @@ defmodule Hologram.Entity.Validator do
   # more atoms. On an update line either can be wrapped to read the row after the change.
   defp when_value_valid?(condition, operation) when is_list(condition) do
     Enum.all?(condition, fn
-      {{:outer, 1, name}, _value} when operation == :update -> when_name_valid?(name)
-      {name, _value} -> when_name_valid?(name)
-      _entry -> false
+      {{:outer, 1, name}, _value} when operation == :update ->
+        when_name_valid?(name)
+
+      {{check, _asked}, chain} when check in [:can, :has_role] and operation == :update ->
+        when_chain_valid?(chain)
+
+      {name, _value} ->
+        when_name_valid?(name)
+
+      _entry ->
+        false
     end)
   end
 
   defp when_value_valid?(_condition, _operation), do: false
+
+  defp when_chain_valid?(chain) do
+    is_list(chain) and chain != [] and not List.improper?(chain) and Enum.all?(chain, &is_atom/1)
+  end
 
   defp when_name_valid?(name) when is_atom(name), do: true
 

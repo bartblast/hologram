@@ -424,6 +424,7 @@ defmodule Hologram.Policy.Validator do
   defp new_row_names(clauses) do
     Enum.flat_map(clauses, fn
       {:or, alternatives} -> Enum.flat_map(alternatives, &new_row_names/1)
+      {check, {_asked, _chain}} when check in [:can, :has_role] -> []
       {quantifier, {_source, _inner}} when quantifier in [:all, :any, :none] -> []
       {name, _operator, {:attribute, other}} -> new_row_name(name) ++ new_row_name(other)
       {name, _operator, _value} -> new_row_name(name)

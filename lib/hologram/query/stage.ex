@@ -23,6 +23,9 @@ defmodule Hologram.Query.Stage do
   @membership_operators [:in, :not_in]
   @orderable_types [:date, :datetime, :enum, :float, :integer, :string, :time]
   @ordering_operators [:<, :<=, :>, :>=]
+  # The clauses asking about the row after an update's change, by a role or an operation.
+  @new_row_checks [:can, :has_role]
+
   @quantifiers [:all, :any, :none]
   @search_operators [:contains, :contains_exact, :starts_with, :starts_with_exact]
 
@@ -273,6 +276,7 @@ defmodule Hologram.Query.Stage do
   def names_actor?(clauses) do
     Enum.any?(clauses, fn
       {:or, alternatives} -> Enum.any?(alternatives, &names_actor?/1)
+      {check, {_asked, _chain}} when check in @new_row_checks -> false
       {quantifier, {_source, inner}} when quantifier in @quantifiers -> names_actor?(inner)
       {_name, _operator, value} -> value == {:actor}
     end)
@@ -883,7 +887,10 @@ defmodule Hologram.Query.Stage do
     end
 
     Enum.each(alternatives, fn alternative ->
-      if alternative == [] or not filterable_predicates?(alternative) do
+      named =
+        if new_row_top?(scope), do: Enum.reject(alternative, &new_row_check?/1), else: alternative
+
+      if alternative == [] or not filterable_predicates?(named) do
         raise MisuseError,
           message:
             "an alternative of a disjunction is a non-empty list of name and value pairs, got: #{inspect(alternative)}"
@@ -1790,6 +1797,19 @@ defmodule Hologram.Query.Stage do
 
   defp rows_spelled(count), do: "#{count} rows"
 
+  # Whether the scope is the top of an update line's condition, the one place a role or an operation
+  # can be asked of the row after the change.
+  defp new_row_top?(scope), do: match?([_row, {:new_row, _entity_type}], scope)
+
+  # Whether a data-form entry asks a role or an operation of the row after the change, along a chain
+  # of relationship names.
+  defp new_row_check?({{check, _asked}, chain})
+       when check in @new_row_checks and is_list(chain) do
+    chain != [] and not List.improper?(chain) and Enum.all?(chain, &is_atom/1)
+  end
+
+  defp new_row_check?(_entry), do: false
+
   # The type of a row of a scope, an update line's row after the change among them.
   defp scope_row_type({:new_row, entity_type}), do: entity_type
 
@@ -1804,6 +1824,13 @@ defmodule Hologram.Query.Stage do
     Enum.flat_map(predicates, fn
       {%Placeholder{name: placeholder_name}, value} ->
         [placeholder_key_triple(placeholder_name, row_field_operand(value, scope))]
+
+      # A role or an operation asked of the row after the change, which only the top of an update
+      # line's condition has. The whole-model validation judges what it names.
+      {{check, asked}, chain} = entry when check in @new_row_checks ->
+        if new_row_top?(scope) and new_row_check?(entry),
+          do: [{check, {asked, chain}}],
+          else: attribute_triples!(scope, entry, name_hints)
 
       # The shape decides rather than the name, so or is no reserved attribute name: a list of lists
       # is no value any attribute takes - a membership list holds plain values and a list of

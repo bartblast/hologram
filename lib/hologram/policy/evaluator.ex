@@ -169,6 +169,17 @@ defmodule Hologram.Policy.Evaluator do
     Enum.any?(alternatives, &predicates_hold?(&1, rows, actor_user_id, checker, polarity))
   end
 
+  # A role held on, or an operation granted on, the row the change leads to - asked of the new row,
+  # which is the last of the rows, since neither stands inside a quantifier.
+  defp clause_holds?({:has_role, {role_names, chain}}, rows, actor_user_id, checker, _polarity) do
+    actor_user_id != nil and
+      checker.({:rel, chain, role_names}, List.last(rows), actor_user_id)
+  end
+
+  defp clause_holds?({:can, {operation, chain}}, rows, actor_user_id, checker, _polarity) do
+    checker.({:via, operation, chain}, List.last(rows), actor_user_id)
+  end
+
   # A none or an all asking about the actor of an anonymous session asks about nobody as a whole,
   # which grants nothing - its condition alone would come out false and turn it true.
   defp clause_holds?({quantifier, {source, clauses}}, rows, nil, checker, polarity)

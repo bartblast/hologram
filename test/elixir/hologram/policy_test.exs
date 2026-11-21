@@ -1759,6 +1759,90 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "role and operation checks on the row after the change" do
+    defmodule NewCheckProject do
+      use Hologram.Entity
+
+      relationship :team, Hologram.PolicyTest.NewCheckTeam, optional: true
+
+      role :member
+      role :owner, extends: :member
+
+      allow :read
+      allow :update, as: :edit, to: :owner
+    end
+
+    defmodule NewCheckTeam do
+      use Hologram.Entity
+
+      role :lead
+
+      allow :read
+    end
+
+    defmodule NewCheckTask do
+      use Hologram.Entity
+
+      attribute :title, :string
+
+      relationship :project, NewCheckProject, optional: true
+
+      allow :read
+
+      allow :update,
+        only: [:project],
+        when: has_role(:member, new(project)) and can(:edit, new(project))
+
+      allow :update, as: :lead, only: [:title], when: has_role(:lead, new(project.team))
+
+      allow :update,
+        as: :either,
+        only: [:title],
+        when: has_role(:member, new(project)) or title == "open"
+    end
+
+    test "keeps a role check's expanded roles under :exact and out of the predicates" do
+      assert [
+               %{
+                 exact: %{
+                   predicates: [
+                     {:has_role, {roles, [:project]}},
+                     {:can, {:edit, [:project]}}
+                   ]
+                 },
+                 predicates: []
+               }
+             ] = build(NewCheckTask)[{:update, :project}]
+
+      assert Enum.sort(roles) == [:member, :owner]
+    end
+
+    test "builds a role check standing in an alternative of a disjunction" do
+      assert [
+               %{
+                 exact: %{
+                   predicates: [
+                     {:or, [[{:has_role, {_roles, [:project]}}], [{:title, :==, "open"}]]}
+                   ]
+                 },
+                 predicates: []
+               }
+             ] = build(NewCheckTask)[:either]
+    end
+
+    test "counts the rows a role check and an operation check read" do
+      assert related_chains(NewCheckTask) == [[:project]]
+      assert held_chains(NewCheckTask, :lead) == [[:project]]
+    end
+
+    test "spells no role or operation check for what reads a stored row" do
+      assert stored_spelling([
+               {:has_role, {[:member], [:project]}},
+               {:or, [[{:can, {:edit, [:project]}}], [{:a, :==, 1}]]}
+             ]) == [{:or, [[], [{:a, :==, 1}]]}]
+    end
+  end
+
   describe "held_chains/2" do
     defmodule HeldTask do
       use Hologram.Entity
