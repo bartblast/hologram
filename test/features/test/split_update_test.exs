@@ -11,7 +11,6 @@ defmodule HologramFeatureTests.SplitUpdateTest do
   alias HologramFeatureTests.SplitUpdatePage
 
   setup do
-    await_evaluator_drain()
     truncate_every_entity_table()
 
     %{status: "open"}

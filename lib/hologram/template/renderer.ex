@@ -399,6 +399,7 @@ defmodule Hologram.Template.Renderer do
           component_registry: %{"page" => %{module: MyPage, struct: %Component{}}},
           page_module: MyPage,
           page_params: %{param: "value"},
+          sync_count_types: %{},
           sync_counts: %{},
           sync_rows: %{}
         },
@@ -414,6 +415,7 @@ defmodule Hologram.Template.Renderer do
             component_registry: %{String.t() => %{module: module, struct: Component.t()}},
             page_module: module,
             page_params: %{atom => any},
+            sync_count_types: %{String.t() => [String.t()]},
             sync_counts: %{String.t() => integer},
             sync_rows: map
           },
@@ -495,6 +497,7 @@ defmodule Hologram.Template.Renderer do
       component_registry: component_registry_for_client,
       page_module: page_module,
       page_params: params,
+      sync_count_types: Carry.take_count_types(),
       sync_counts: Carry.take_counts(),
       sync_rows: Carry.take(server_struct.user_id)
     }
@@ -985,12 +988,9 @@ defmodule Hologram.Template.Renderer do
     }
   end
 
-  # A derived field the build registered as a query runs it against the database, policies applied.
+  # A derived field returning a query runs it against the database, policies applied.
   defp derived_compute_opts(module) do
-    [
-      registered_query?: &QueryCache.derived_query?(module, &1),
-      run_query: &run_query!(module, &1, &2, &3)
-    ]
+    [run_query: &run_query!(module, &1, &2, &3)]
   end
 
   # WARNING: must match the client renderer's #duplicateRefMessage (renderer.mjs).
@@ -998,6 +998,32 @@ defmodule Hologram.Template.Renderer do
     "two elements are rendered under the ref #{inspect(ref)}#{ref_writers(first_module, second_module)} - " <>
       "a ref names one element, so give each element a ref of its own, " <>
       "like #{ref_example(ref)} for the items of a loop"
+  end
+
+  # The browser answers a derived field's query from the rows sync sends it, so every type the query
+  # reads has to be one sync sends. The build lists those from the names browser code spells (see
+  # Hologram.Compiler.build_sync_constants/2), so a type reached only through a name the code builds
+  # at run time is missing - and without this the browser would show the rows the render carried and
+  # never update them.
+  #
+  # WARNING: must match the client's QueryCheck.unsyncedRefusal (query_check.mjs), messages included.
+  defp validate_synced_types!(module, name, term) do
+    synced_types = QueryCache.synced_types()
+
+    unsynced_types =
+      term
+      |> Window.entity_types()
+      |> Enum.reject(&(&1 in synced_types))
+
+    if unsynced_types != [] do
+      rows = if length(unsynced_types) == 1, do: "its rows", else: "their rows"
+
+      raise Hologram.MisuseError,
+        message:
+          "derived field #{inspect(name)} in #{Reflection.module_name(module)} reads #{Enum.map_join(unsynced_types, ", ", &inspect/1)}, which browser code never names, so sync never sends #{rows} - name the entity type, or the relationship or derived field leading to it, as written in browser code, like include(project) or %Project{}"
+    end
+
+    :ok
   end
 
   # WARNING: must match the client renderer's #valueDomToText: parts evaluate raw and concatenate,
@@ -1937,6 +1963,8 @@ defmodule Hologram.Template.Renderer do
   # Runs the given normalized query term a derived field of the given module is defined by, for the
   # given name. The arguments its function was called with are in the term, as the values it reads.
   defp run_query!(module, name, _args, term) do
+    validate_synced_types!(module, name, term)
+
     # A path reads rows the query does not return, and the client answers the query over what it
     # holds - so the rows along the paths are read with it, the read policy deciding which, and
     # carried beside the rows it returns. A client checking permissions answers each rule over what

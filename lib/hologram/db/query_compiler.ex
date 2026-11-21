@@ -50,14 +50,8 @@ defmodule Hologram.DB.QueryCompiler do
   schema-qualified) and :params (the bind slots in parameter order). Every filter
   value binds as a parameter - literal values are Codec-encoded at compilation into
   `{:value, encoded}` slots (membership lists encode element-wise into one array
-  slot), placeholder leaves become `{:placeholder, name, type}` slots carrying the attribute's
-  logical type for runtime encoding (`{:list, type}` for membership operands). A
-  membership list holding placeholder elements binds one slot per element inside a cast
-  ARRAY constructor instead - each element placeholder is a scalar slot. Equality and
-  membership on a string of the row also compare its sort key, so the key's index serves them:
-  the key binds first, as `{:value, key}` for a literal and a `:sort_key` slot for a placeholder
-  (`{:list, :sort_key}` for a membership operand, an ARRAY of key slots for a list holding
-  placeholders), and the value right after it. Nil
+  slot). Equality and membership on a string of the row also compare its sort key, so the key's
+  index serves them: the key binds first, as `{:value, key}`, and the value right after it. Nil
   equality compiles to `IS NULL` and nil inequality to `IS NOT NULL`, with no bind
   slot. Column selection follows the mapping's physical column order, leaving out the derived
   sort-key and search-key companions, which a reader never reads back.
@@ -120,9 +114,8 @@ defmodule Hologram.DB.QueryCompiler do
   inequality matches missing values (`!=` widens with `OR IS NULL` on optional
   attributes), membership lists may hold nil (compiled into the `IS [NOT] NULL`
   branch alongside the stripped array), and negated membership without nil matches
-  missing values. Ordering comparisons match actual values only. Param slots never
-  bind nil at runtime - a sometimes-nil variable branches into an explicit nil
-  predicate in code.
+  missing values. Ordering comparisons match actual values only. No param slot binds
+  nil - a nil compiles to its `IS [NOT] NULL` form instead.
 
   A comparison between two attributes of the row binds no slot. Equality compiles to
   `IS NOT DISTINCT FROM` and inequality to `IS DISTINCT FROM`, so nil keeps its meaning,
@@ -134,11 +127,9 @@ defmodule Hologram.DB.QueryCompiler do
   A search compiles to a LIKE: an exact one over the column, a loose one over
   `COALESCE("a_$search", "a_$sort")` - the whole folded value, which the search key holds when the
   sort key's prefix can't. The term binds as a pattern, folded for a loose match and with `\\`, `%`
-  and `_` escaped, so they are plain characters - a placeholder term binds a
-  `{:pattern, :prefix | :infix, :exact | :loose}` slot the runner builds the pattern for. A search
-  for another attribute's value can't be a pattern, so it compiles to `strpos`: `= 1` for a
-  prefix, `> 0` for a substring. NULL on either side matches no row, and an empty term or value
-  matches every row with a value.
+  and `_` escaped, so they are plain characters. A search for another attribute's value can't be
+  a pattern, so it compiles to `strpos`: `= 1` for a prefix, `> 0` for a substring. NULL on
+  either side matches no row, and an empty term or value matches every row with a value.
 
   A path - on either side of a comparison - compiles to nested scalar subqueries, one per
   relationship it follows, each aliased `"$p<n>"` and correlated on the row before it, the
@@ -473,15 +464,11 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
-  # Bind slots inside an ARRAY constructor carry no type context of their own -
-  # without the cast Postgres resolves them to text.
-  defp array_type(%{source: :derived, sql_type: sql_type}), do: "#{sql_type}[]"
-
+  # A bound list of labels is cast to the enum column's array type, so it compares with the column
+  # by label.
   defp array_type(%{type: :enum, sql_type: sql_type}) do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(sql_type)}[]"
   end
-
-  defp array_type(%{sql_type: sql_type}), do: "#{sql_type}[]"
 
   # Every enum attribute is a type of its own, and Postgres compares no two of them - so the other
   # column is cast to the compared column's type, by label, and the two compare in the declared
@@ -524,11 +511,6 @@ defmodule Hologram.DB.QueryCompiler do
       reversed_index ->
         {"$#{length(reversed_params) - reversed_index}", reversed_params}
     end
-  end
-
-  defp bind_slot({:placeholder, placeholder_name}, column, reversed_params) do
-    {"$#{length(reversed_params) + 1}",
-     [{:placeholder, placeholder_name, column.type} | reversed_params]}
   end
 
   defp bind_slot(literal, column, reversed_params) do
@@ -714,23 +696,16 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   # A search is a LIKE over the value - or over its whole folded form for a loose match - with the
-  # term escaped into a pattern, so its % and _ are plain characters. A pinned term is escaped
-  # when it binds.
+  # term escaped into a pattern, so its % and _ are plain characters.
   defp condition({name, operator, term}, scope, reversed_params)
        when is_map_key(@search_operators, operator) do
     {shape, mode} = Map.fetch!(@search_operators, operator)
     {subject_sql, params_after_subject} = search_subject_sql(scope, name, mode, reversed_params)
 
     {pattern_slot, new_params} =
-      case term do
-        {:placeholder, placeholder_name} ->
-          bind_placeholder_slot(placeholder_name, {:pattern, shape, mode}, params_after_subject)
-
-        literal ->
-          literal
-          |> search_pattern(shape, mode)
-          |> bind_slot_value(params_after_subject)
-      end
+      term
+      |> search_pattern(shape, mode)
+      |> bind_slot_value(params_after_subject)
 
     {"#{subject_sql} LIKE #{pattern_slot}", new_params}
   end
@@ -822,7 +797,7 @@ defmodule Hologram.DB.QueryCompiler do
     {null_inclusive(condition_sql, subject_sql, column), new_params}
   end
 
-  defp condition({name, :in, values}, scope, reversed_params) when is_list(values) do
+  defp condition({name, :in, values}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
 
     case Enum.reject(values, &is_nil/1) do
@@ -846,13 +821,7 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
-  defp condition({name, :in, operand}, scope, reversed_params) do
-    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
-
-    membership_sql(scope, name, {subject_sql, column}, operand, params_after_subject)
-  end
-
-  defp condition({name, :not_in, values}, scope, reversed_params) when is_list(values) do
+  defp condition({name, :not_in, values}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
 
     case Enum.reject(values, &is_nil/1) do
@@ -873,15 +842,6 @@ defmodule Hologram.DB.QueryCompiler do
 
         {maybe_require_value(condition_sql, subject_sql, column), new_params}
     end
-  end
-
-  defp condition({name, :not_in, operand}, scope, reversed_params) do
-    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
-    {placeholder, new_params} = membership_slot(operand, column, params_after_subject)
-
-    condition_sql = "#{subject_sql} != ALL(#{placeholder})"
-
-    {null_inclusive(condition_sql, subject_sql, column), new_params}
   end
 
   # A string compares by the pair its ordering sorts by - the key carries the order and the value
@@ -1941,39 +1901,9 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp own_sort_key_column(_scope, _name), do: nil
 
-  defp sort_key_membership_slot({:placeholder, placeholder_name}, reversed_params) do
-    bind_placeholder_slot(placeholder_name, {:list, :sort_key}, reversed_params)
-  end
-
   defp sort_key_membership_slot(values, reversed_params) do
-    if Enum.any?(values, &match?({:placeholder, _placeholder_name}, &1)) do
-      {reversed_slots, new_params} =
-        Enum.reduce(values, {[], reversed_params}, fn value, {acc_slots, acc_params} ->
-          {slot, next_params} = sort_key_slot(value, acc_params)
-
-          {[slot | acc_slots], next_params}
-        end)
-
-      slots =
-        reversed_slots
-        |> Enum.reverse()
-        |> Enum.join(", ")
-
-      {"ARRAY[#{slots}]::text[]", new_params}
-    else
-      values
-      |> Enum.map(&literal_sort_key/1)
-      |> bind_slot_value(reversed_params)
-    end
-  end
-
-  defp sort_key_slot({:placeholder, placeholder_name}, reversed_params) do
-    bind_placeholder_slot(placeholder_name, :sort_key, reversed_params)
-  end
-
-  defp sort_key_slot(literal, reversed_params) do
-    literal
-    |> literal_sort_key()
+    values
+    |> Enum.map(&literal_sort_key/1)
     |> bind_slot_value(reversed_params)
   end
 
@@ -1990,15 +1920,6 @@ defmodule Hologram.DB.QueryCompiler do
 
   # The bound binds twice: once folded the way the column's key is, once raw. The key slot is
   # pushed first, so the pair reads left to right in the statement.
-  defp sort_key_slots({:placeholder, placeholder_name}, reversed_params) do
-    {key_slot, params_with_key} =
-      bind_placeholder_slot(placeholder_name, :sort_key, reversed_params)
-
-    {raw_slot, new_params} = bind_placeholder_slot(placeholder_name, :string, params_with_key)
-
-    {key_slot, raw_slot, new_params}
-  end
-
   defp sort_key_slots(literal, reversed_params) do
     {key_slot, params_with_key} = bind_slot_value(literal_sort_key(literal), reversed_params)
     {raw_slot, new_params} = bind_slot_value(Codec.encode(literal, :string), params_with_key)
@@ -2126,11 +2047,6 @@ defmodule Hologram.DB.QueryCompiler do
       end)
 
     all?
-  end
-
-  defp bind_placeholder_slot(placeholder_name, type, reversed_params) do
-    {"$#{length(reversed_params) + 1}",
-     [{:placeholder, placeholder_name, type} | reversed_params]}
   end
 
   # An included derived field holding a value is the value its definition computes for the parent
@@ -2266,33 +2182,10 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
-  defp membership_slot({:placeholder, placeholder_name}, column, reversed_params) do
-    {"$#{length(reversed_params) + 1}",
-     [{:placeholder, placeholder_name, {:list, column.type}} | reversed_params]}
-  end
-
-  # A list holding placeholder elements binds one slot per element inside an ARRAY
-  # constructor - each element placeholder is a scalar slot of the attribute's type.
   defp membership_slot(values, column, reversed_params) do
-    if Enum.any?(values, &match?({:placeholder, _placeholder_name}, &1)) do
-      {reversed_placeholders, new_params} =
-        Enum.reduce(values, {[], reversed_params}, fn value, {acc_placeholders, acc_params} ->
-          {placeholder, next_params} = bind_slot(value, column, acc_params)
+    encoded_values = Enum.map(values, &Codec.encode(&1, column.type))
 
-          {[placeholder | acc_placeholders], next_params}
-        end)
-
-      placeholders =
-        reversed_placeholders
-        |> Enum.reverse()
-        |> Enum.join(", ")
-
-      {"ARRAY[#{placeholders}]::#{array_type(column)}", new_params}
-    else
-      encoded_values = Enum.map(values, &Codec.encode(&1, column.type))
-
-      {"$#{length(reversed_params) + 1}", [{:value, encoded_values} | reversed_params]}
-    end
+    {"$#{length(reversed_params) + 1}", [{:value, encoded_values} | reversed_params]}
   end
 
   # A relationship's include is a set aggregated like a to-many or one row like a to-one, differing

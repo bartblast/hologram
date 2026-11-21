@@ -1,10 +1,6 @@
 "use strict";
 
-import {
-  assert,
-  assertBoxedError,
-  defineRuntimeGlobals,
-} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
 import Batch from "../../assets/js/batch.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
@@ -18,10 +14,10 @@ import derivedModel from "./support/fixtures/derived_model.mjs";
 defineRuntimeGlobals();
 
 // Mirrors the predicate cases of test/elixir/hologram/query/interpreter_test.exs, case for case
-// and in the same order, but for its placeholder bindings, since nothing in the browser binds one.
-// That suite proves the reference answers what the database answers, and this one proves the
-// client answers what the reference does. The rows here hold what the wire
-// spells rather than what Postgres returns: dates and datetimes as canonical strings.
+// and in the same order, but for its refusal of a term holding a placeholder, which no term in the
+// browser holds. That suite proves the reference answers what the database answers, and this one
+// proves the client answers what the reference does. The rows here hold what the wire spells
+// rather than what Postgres returns: dates and datetimes as canonical strings.
 describe("QueryKernel", () => {
   const matches = QueryKernel.matches;
 
@@ -252,26 +248,6 @@ describe("QueryKernel", () => {
     });
   });
 
-  // Nothing in the browser binds a placeholder, so the kernel holds no value for one - refused in
-  // the words the reference refuses a missing binding in.
-  describe("matches() - placeholders", () => {
-    it("refuses a placeholder", () => {
-      assertBoxedError(
-        () => matching([["priority", "==", {placeholder: "priority"}]]),
-        "Hologram.MisuseError",
-        "missing value for placeholder :priority",
-      );
-    });
-
-    it("refuses a placeholder among the values of a list", () => {
-      assertBoxedError(
-        () => matching([["priority", "in", [{placeholder: "priority"}, 1]]]),
-        "Hologram.MisuseError",
-        "missing value for placeholder :priority",
-      );
-    });
-  });
-
   describe("run()", () => {
     const PROJECT = "MyApp.Project";
     const TASK = "MyApp.Task";
@@ -334,23 +310,6 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t1", position: 3, title: "bob"});
         LocalDatabase.putRow(TASK, {id: "t2", position: 2, title: "ada"});
         LocalDatabase.putRow(TASK, {id: "t3", position: 1, title: "cleo"});
-      });
-
-      it("refuses a placeholder", () => {
-        const filter = [
-          {
-            or: [
-              [["position", "==", 9]],
-              [["title", "==", {placeholder: "t"}]],
-            ],
-          },
-        ];
-
-        assertBoxedError(
-          () => QueryKernel.run(term({filter})),
-          "Hologram.MisuseError",
-          "missing value for placeholder :t",
-        );
       });
 
       it("orders by an attribute", () => {

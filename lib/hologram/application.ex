@@ -65,14 +65,14 @@ defmodule Hologram.Application do
         Hologram.Realtime.Handshake,
         Hologram.Realtime.SubscriptionRegistry,
         Hologram.Realtime.Tombstone,
-        Hologram.Sync.PageWindows
+        Hologram.Sync.PageTypes
       ]
   end
 
   # The database is activated by the data model: it starts exactly when the app declares
   # entity types, with no host-app ceremony. The database and the query cache start as a
-  # restart-ordered unit - the cache compiles registered queries against the mapping the
-  # database derives, and must repopulate whenever the database restarts.
+  # restart-ordered unit - what the cache holds describes the model the database serves, so it
+  # must repopulate whenever the database restarts.
   defp database_children do
     if Model.exists?() do
       [Hologram.DB.Supervisor]

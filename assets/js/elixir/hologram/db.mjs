@@ -12,6 +12,7 @@ import {grantEntry, grantId} from "./auth.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
+import QueryCheck from "../../query_check.mjs";
 import QueryKernel from "../../query_kernel.mjs";
 import Type from "../../type.mjs";
 
@@ -91,42 +92,6 @@ function basedOn(held, changes) {
       .filter((name) => name in revisions)
       .map((name) => [name, revisions[name]]),
   );
-}
-
-// Placeholders exist only in the queries the compiler registers on the server, which the browser
-// builds from real values instead. One reaching a directly executed read has no value and never
-// will.
-function assertNoPlaceholders(term) {
-  const [name] = placeholderNames(term);
-
-  if (name !== undefined) {
-    Interpreter.raiseMisuseError(
-      `cannot read a query term containing placeholders - placeholder :${name} has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries`,
-    );
-  }
-}
-
-function placeholderNames(term) {
-  const fromFilter = QueryKernel.triples(term.filter).flatMap(
-    ([name, _operator, value]) => [
-      ...valuePlaceholderNames(name),
-      ...valuePlaceholderNames(value),
-    ],
-  );
-
-  const fromBounds = [term.take, term.skip].flatMap(valuePlaceholderNames);
-
-  const fromOrder = term.sort.flatMap(([key, direction]) => [
-    ...valuePlaceholderNames(key),
-    ...valuePlaceholderNames(direction),
-  ]);
-
-  // A derived field holding a value is included with nothing under it.
-  const fromIncludes = Object.values(term.include)
-    .filter((subTerm) => subTerm !== null)
-    .flatMap(placeholderNames);
-
-  return [...fromFilter, ...fromBounds, ...fromOrder, ...fromIncludes];
 }
 
 // The edges an update records, each its own entry, in one order however the stages were called -
@@ -627,16 +592,6 @@ function validateId(id) {
   }
 }
 
-function valuePlaceholderNames(value) {
-  if (Array.isArray(value)) {
-    return value.flatMap(valuePlaceholderNames);
-  }
-
-  return value !== null && typeof value === "object" && "placeholder" in value
-    ? [value.placeholder]
-    : [];
-}
-
 const Elixir_Hologram_DB = {
   "create!/1": (entity) => {
     const result = Elixir_Hologram_DB["create/1"](entity);
@@ -690,7 +645,18 @@ const Elixir_Hologram_DB = {
   "read/1": (query) => {
     const term = Elixir_Hologram_Query_Stage["normalize/1"](query);
 
-    assertNoPlaceholders(term);
+    // Read from the rows sync keeps current: a server-only attribute is one the browser never
+    // holds, so a filter or sort on it would answer as if every row held nil, and a type sync
+    // never sends would answer from rows that never change. A query written in one piece in browser
+    // code is checked at build time too, and any other, like one the server built, only here.
+    const refusal =
+      QueryCheck.refusal(term) ?? QueryCheck.unsyncedRefusal(term);
+
+    if (refusal !== null) {
+      Interpreter.raiseMisuseError(
+        `DB.read can't answer the query: it ${refusal}`,
+      );
+    }
 
     const result = QueryKernel.run(term);
 

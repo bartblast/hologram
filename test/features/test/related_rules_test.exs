@@ -19,8 +19,6 @@ defmodule HologramFeatureTests.RelatedRulesTest do
   #
   # Other tables reference the user table, so every table truncates with it.
   setup do
-    await_evaluator_drain()
-
     truncate_every_entity_table()
   end
 

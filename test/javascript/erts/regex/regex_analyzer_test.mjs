@@ -149,6 +149,36 @@ describe("RegexAnalyzer", () => {
       assert.equal(route("(*UTF)\\p{L}"), "native");
     });
 
+    it("routes compound property class member in unicode mode to native", () => {
+      assert.equal(route("[\\p{Xan}]", {unicode: true}), "native");
+    });
+
+    it("routes negated compound property class member to the interpreter", () => {
+      assert.equal(route("[\\P{Xan}]", {unicode: true}), "interpreted");
+    });
+
+    it("routes caseless unicode property escape to the interpreter", () => {
+      assert.equal(
+        route("\\p{L}", {caseless: true, unicode: true}),
+        "interpreted",
+      );
+    });
+
+    it("routes caseless unicode property class member to the interpreter", () => {
+      assert.equal(
+        route("[\\p{L}]", {caseless: true, unicode: true}),
+        "interpreted",
+      );
+    });
+
+    it("routes property escape after a caseless option group to the interpreter", () => {
+      assert.equal(route("(?i:a)\\p{L}", {unicode: true}), "interpreted");
+    });
+
+    it("routes inline caseless unicode property escape to the interpreter", () => {
+      assert.equal(route("(?i)a\\p{L}", {unicode: true}), "interpreted");
+    });
+
     it("routes caseless unicode word shorthand to the interpreter", () => {
       assert.equal(
         route("\\w", {caseless: true, unicode: true}),

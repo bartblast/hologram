@@ -19,8 +19,6 @@ defmodule HologramFeatureTests.StoppedTabTest do
   # opened it under, so a reload here finds the held writes and sends them; after a real deploy the
   # new bundle opens another model's database and they stay in the old one.
   setup do
-    await_evaluator_drain()
-
     table = ~s("hologram_data"."#{Mapper.table_name(Todo)}")
 
     {:ok, _result} = Connection.query("TRUNCATE #{table}", [])

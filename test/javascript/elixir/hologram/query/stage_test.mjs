@@ -1406,15 +1406,24 @@ describe("Elixir_Hologram_Query_Stage", () => {
         [Type.atom("step"), Type.integer(step)],
       ]);
 
-    const placeholder = (name) =>
-      Type.map([
-        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
-        [Type.atom("name"), Type.atom(name)],
-      ]);
-
     // Another attribute of the row, as a bare name on the right side of a comparison lowers to.
     const attribute = (name) =>
       Type.tuple([Type.atom("attribute"), Type.atom(name)]);
+
+    // The browser never builds a placeholder - only the build's check of a query does, on the
+    // server - so one handed over is a value like any other, and no attribute holds it.
+    it("refuses a placeholder as a value no attribute holds", () => {
+      const placeholder = Type.map([
+        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
+        [Type.atom("name"), Type.atom("chosen")],
+      ]);
+
+      assertBoxedError(
+        () => filter(task, predicates([["title", placeholder]])),
+        "Hologram.MisuseError",
+        "%{__struct__: Hologram.Query.Placeholder, name: :chosen} is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+      );
+    });
 
     it("reads a bare value as equality", () => {
       const query = filter(
@@ -1569,36 +1578,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
       assert.deepStrictEqual(query.filter, [
         ["owner_id", "==", "018f0000-0000-7000-8000-000000000001"],
-      ]);
-    });
-
-    it("reads a placeholder as the leaf a binding fills", () => {
-      const query = filter(
-        task,
-        predicates([["title", placeholder("chosen")]]),
-      );
-
-      assert.deepStrictEqual(query.filter, [
-        ["title", "==", {placeholder: "chosen"}],
-      ]);
-    });
-
-    it("reads a placeholder under an operator", () => {
-      const value = Type.tuple([Type.atom(">="), placeholder("min")]);
-      const query = filter(task, predicates([["position", value]]));
-
-      assert.deepStrictEqual(query.filter, [
-        ["position", ">=", {placeholder: "min"}],
-      ]);
-    });
-
-    it("reads a placeholder among the values of a membership list", () => {
-      const values = Type.list([placeholder("chosen"), Type.bitstring("b")]);
-      const value = Type.tuple([Type.atom("in"), values]);
-      const query = filter(task, predicates([["title", value]]));
-
-      assert.deepStrictEqual(query.filter, [
-        ["title", "in", [{placeholder: "chosen"}, "b"]],
       ]);
     });
 
@@ -3304,12 +3283,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
   describe("filter/2 - searches", () => {
     const path = (...names) => Type.list(names.map(Type.atom));
 
-    const placeholder = (name) =>
-      Type.map([
-        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
-        [Type.atom("name"), Type.atom(name)],
-      ]);
-
     const attribute = (name) => Type.tuple([Type.atom("attribute"), name]);
 
     const search = (operator, operand) =>
@@ -3396,17 +3369,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
       }
     });
 
-    it("builds a search triple with a placeholder term", () => {
-      const query = filter(
-        task,
-        predicates([["title", search("starts_with", placeholder("query"))]]),
-      );
-
-      assert.deepStrictEqual(query.filter, [
-        ["title", "starts_with", {placeholder: "query"}],
-      ]);
-    });
-
     it("builds a search triple with an empty term", () => {
       const query = filter(
         task,
@@ -3481,16 +3443,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
-    it("raises on a search with a placeholder term on an attribute that is not a string", () => {
-      const value = search("contains", placeholder("query"));
-
-      assertBoxedError(
-        () => filter(task, predicates([["position", value]])),
-        "Hologram.MisuseError",
-        "operator :contains requires a string attribute - attribute :position in MyApp.Task has type :integer",
-      );
-    });
-
     it("raises on a tuple as a search term", () => {
       const tuple = Type.tuple([Type.atom("a"), Type.atom("b")]);
 
@@ -3531,12 +3483,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
         [Type.atom("first"), Type.integer(first)],
         [Type.atom("last"), Type.integer(last)],
         [Type.atom("step"), Type.integer(1)],
-      ]);
-
-    const placeholder = (name) =>
-      Type.map([
-        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
-        [Type.atom("name"), Type.atom(name)],
       ]);
 
     const tuple = (operator, operand) =>
@@ -3765,14 +3711,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
 
       assert.deepStrictEqual(query.filter, [["rating", ">", 0]]);
-    });
-
-    it("accepts a placeholder whatever the attribute's type", () => {
-      const query = filter(task, predicates([["title", placeholder("title")]]));
-
-      assert.deepStrictEqual(query.filter, [
-        ["title", "==", {placeholder: "title"}],
-      ]);
     });
   });
 
@@ -5012,6 +4950,334 @@ describe("Elixir_Hologram_Query_Stage", () => {
   });
 
   describe("normalize/1", () => {
+    // A query the server built, as it reaches the browser in state or context: the struct, boxed,
+    // as the stages left it - unordered by anything it wasn't sorted by, its clauses in the order
+    // they were written.
+    const serverQuery = (entityType, fields = {}) =>
+      Type.map([
+        [Type.atom("__struct__"), Type.alias("Hologram.Query")],
+        [Type.atom("cardinality"), Type.atom(fields.cardinality ?? "set")],
+        [Type.atom("entity"), Type.alias(entityType)],
+        [Type.atom("filter"), Type.list(fields.filter ?? [])],
+        [Type.atom("include"), Type.map(fields.include ?? [])],
+        [Type.atom("skip"), fields.skip ?? Type.nil()],
+        [
+          Type.atom("sort"),
+          Type.list(
+            (fields.sort ?? []).map(([name, direction]) =>
+              Type.tuple([Type.atom(name), Type.atom(direction)]),
+            ),
+          ),
+        ],
+        [Type.atom("source"), fields.source ?? Type.nil()],
+        [Type.atom("take"), fields.take ?? Type.nil()],
+        [Type.atom("trust"), Type.boolean(fields.trust ?? false)],
+      ]);
+
+    const triple = (name, operator, value) =>
+      Type.tuple([
+        typeof name === "string" ? Type.atom(name) : name,
+        Type.atom(operator),
+        value,
+      ]);
+
+    it("builds a query the server built again, as the stages here build it", () => {
+      const date = Type.map([
+        [Type.atom("__struct__"), Type.alias("Date")],
+        [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+        [Type.atom("day"), Type.integer(16)],
+        [Type.atom("month"), Type.integer(8)],
+        [Type.atom("year"), Type.integer(2026)],
+      ]);
+
+      const struct = serverQuery(TASK, {
+        filter: [
+          Type.tuple([
+            Type.atom("or"),
+            Type.list([
+              Type.list([
+                triple("done", "==", Type.boolean(true)),
+                triple("position", ">", Type.integer(3)),
+              ]),
+              Type.list([
+                triple(
+                  "status",
+                  "in",
+                  Type.list([Type.atom("open"), Type.atom("blocked")]),
+                ),
+              ]),
+            ]),
+          ]),
+          triple("due_on", ">=", date),
+        ],
+        skip: Type.integer(2),
+        sort: [
+          ["title", "desc"],
+          ["id", "asc"],
+        ],
+        take: Type.integer(5),
+      });
+
+      const built = take(
+        skip(
+          sort(
+            filter(
+              task,
+              Type.list([
+                Type.tuple([
+                  Type.atom("or"),
+                  Type.list([
+                    predicates([
+                      ["done", Type.boolean(true)],
+                      [
+                        "position",
+                        Type.tuple([Type.atom(">"), Type.integer(3)]),
+                      ],
+                    ]),
+                    predicates([
+                      [
+                        "status",
+                        Type.tuple([
+                          Type.atom("in"),
+                          Type.list([Type.atom("open"), Type.atom("blocked")]),
+                        ]),
+                      ],
+                    ]),
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.atom("due_on"),
+                  Type.tuple([Type.atom(">="), date]),
+                ]),
+              ]),
+            ),
+            Type.list([Type.tuple([Type.atom("title"), Type.atom("desc")])]),
+          ),
+          Type.integer(2),
+        ),
+        Type.integer(5),
+      );
+
+      assert.deepStrictEqual(normalize(struct), normalize(built));
+    });
+
+    it("builds again a quantifier reading the row above and a path", () => {
+      const outerName = Type.tuple([
+        Type.atom("outer"),
+        Type.integer(1),
+        Type.atom("name"),
+      ]);
+
+      const struct = serverQuery(CHANNEL, {
+        filter: [
+          Type.tuple([
+            Type.atom("any"),
+            Type.tuple([
+              Type.list([Type.atom("messages")]),
+              Type.list([
+                triple(
+                  "body",
+                  "==",
+                  Type.tuple([Type.atom("attribute"), outerName]),
+                ),
+              ]),
+            ]),
+          ]),
+          triple(
+            Type.list([Type.atom("owner"), Type.atom("email")]),
+            "==",
+            Type.bitstring("a@b.c"),
+          ),
+        ],
+      });
+
+      const built = filter(
+        Type.alias(CHANNEL),
+        Type.list([
+          Type.tuple([
+            Type.atom("any"),
+            Type.tuple([
+              Type.list([Type.atom("messages")]),
+              predicates([
+                [
+                  "body",
+                  Type.tuple([
+                    Type.atom("=="),
+                    Type.tuple([Type.atom("attribute"), outerName]),
+                  ]),
+                ],
+              ]),
+            ]),
+          ]),
+          Type.tuple([
+            Type.list([Type.atom("owner"), Type.atom("email")]),
+            Type.bitstring("a@b.c"),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(normalize(struct), normalize(built));
+    });
+
+    it("builds again what a query the server built includes, nested", () => {
+      const struct = serverQuery(PROJECT, {
+        include: [
+          [
+            Type.atom("owner"),
+            serverQuery(USER, {
+              include: [[Type.atom("manager"), serverQuery(USER, {sort: []})]],
+              sort: [],
+            }),
+          ],
+          [Type.atom("tasks"), serverQuery(TASK)],
+        ],
+      });
+
+      const built = include(
+        project,
+        Type.list([
+          Type.tuple([Type.atom("owner"), Type.list([Type.atom("manager")])]),
+          Type.atom("tasks"),
+        ]),
+      );
+
+      assert.deepStrictEqual(normalize(struct), normalize(built));
+    });
+
+    it("builds again a count and a query of one row the server built", () => {
+      assert.deepStrictEqual(
+        normalize(serverQuery(TASK, {cardinality: "count", sort: []})),
+        normalize(count(task)),
+      );
+
+      assert.deepStrictEqual(
+        normalize(serverQuery(TASK, {cardinality: "one"})),
+        normalize(one(task)),
+      );
+    });
+
+    it("refuses a query the server built claiming trust, as trust/1 here does", () => {
+      assertBoxedError(
+        () => normalize(serverQuery(TASK, {trust: true})),
+        "Hologram.MisuseError",
+        "trust is the server's authority - a client cannot claim it",
+      );
+    });
+
+    it("checks a query the server built as the stages check any", () => {
+      const struct = serverQuery(TASK, {
+        filter: [triple("done", "==", Type.bitstring("yes"))],
+      });
+
+      assertBoxedError(
+        () => normalize(struct),
+        "Hologram.MisuseError",
+        '"yes" is not a value of attribute :done in MyApp.Task - the attribute has type :boolean, which takes true or false',
+      );
+    });
+
+    it("refuses a struct reading a derived field's source", () => {
+      const struct = serverQuery(TASK, {source: Type.atom("tasks")});
+
+      assert.throws(
+        () => normalize(struct),
+        /reads the rows of a derived field's source/,
+      );
+    });
+
+    it("builds again a quantifier over a source on the row above, keyed by an outer name", () => {
+      const outerKey = Type.tuple([
+        Type.atom("outer"),
+        Type.integer(1),
+        Type.atom("name"),
+      ]);
+
+      const outerSource = Type.tuple([
+        Type.atom("outer"),
+        Type.integer(1),
+        Type.list([Type.atom("messages")]),
+      ]);
+
+      const innerQuantifier = (condition) =>
+        Type.tuple([
+          Type.atom("none"),
+          Type.tuple([outerSource, Type.list(condition)]),
+        ]);
+
+      const struct = serverQuery(CHANNEL, {
+        filter: [
+          Type.tuple([
+            Type.atom("any"),
+            Type.tuple([
+              Type.list([Type.atom("messages")]),
+              Type.list([
+                triple(outerKey, "!=", Type.nil()),
+                innerQuantifier([]),
+              ]),
+            ]),
+          ]),
+        ],
+      });
+
+      const built = filter(
+        Type.alias(CHANNEL),
+        Type.list([
+          Type.tuple([
+            Type.atom("any"),
+            Type.tuple([
+              Type.list([Type.atom("messages")]),
+              Type.list([
+                Type.tuple([
+                  outerKey,
+                  Type.tuple([Type.atom("!="), Type.nil()]),
+                ]),
+                innerQuantifier([]),
+              ]),
+            ]),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(normalize(struct), normalize(built));
+    });
+
+    it("builds again a query as the stages left it, before normalizing", () => {
+      const struct = serverQuery(PROJECT, {
+        cardinality: "count",
+        include: [[Type.atom("tasks"), serverQuery(TASK)]],
+        skip: Type.integer(1),
+        sort: [["name", "desc"]],
+      });
+
+      const built = count(
+        skip(
+          sort(
+            include(project, Type.list([Type.atom("tasks")])),
+            Type.list([Type.tuple([Type.atom("name"), Type.atom("desc")])]),
+          ),
+          Type.integer(1),
+        ),
+      );
+
+      assert.deepStrictEqual(normalize(struct), normalize(built));
+    });
+
+    it("runs a stage on a query the server built", () => {
+      const struct = serverQuery(TASK, {
+        filter: [triple("done", "==", Type.boolean(true))],
+      });
+
+      assert.deepStrictEqual(
+        normalize(sort(struct, Type.atom("title"))),
+        normalize(
+          sort(
+            filter(task, predicates([["done", Type.boolean(true)]])),
+            Type.atom("title"),
+          ),
+        ),
+      );
+    });
+
     it("sorts a nested quantifier's predicates and keys naming a row above", () => {
       const outerKey = (name) =>
         Type.tuple([Type.atom("outer"), Type.integer(1), Type.atom(name)]);

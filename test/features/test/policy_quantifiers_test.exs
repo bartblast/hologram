@@ -18,15 +18,13 @@ defmodule HologramFeatureTests.PolicyQuantifiersTest do
   # A milestone is readable by the members of its project - a rule reading a set, so what a session
   # sees moves with the project's member rows, not with the milestone rows themselves. The member
   # rows are written from the test process: what reaches the screen afterwards came through the
-  # stream re-running the window, or through the resume.
+  # stream telling the session's user what the write moved, or through the resume.
   #
   # The browser checks the rules over sets from the rows it holds: a milestone's update from the
   # member rows it holds, or the server's verdict when none of them matches, since it holds only
   # its user's own, and a project's delete - while none of its milestones exists - from the
   # milestones it holds, or the server's verdict when it holds none.
   setup do
-    await_evaluator_drain()
-
     tables =
       Enum.map_join(
         [Memo, Milestone, Note, Project, ProjectMember, RoleGrant, User],

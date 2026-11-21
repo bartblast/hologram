@@ -22,8 +22,6 @@ defmodule HologramFeatureTests.PermissionCatchupTest do
   # back with names the grant row and nothing else - the documents it covers never moved - so
   # before this issue neither of these could pass.
   setup do
-    await_evaluator_drain()
-
     truncate_entity_tables([Document, Memo, Note, ProjectMember, RoleGrant, User])
   end
 

@@ -1,7 +1,6 @@
 defmodule Hologram.Sync.LiveTest do
   # async: false - the tests of route/2 write the query cache's persistent term, shared by the whole
-  # node, and start the sync result store, the evaluator registry, the evaluators supervisor and the
-  # session registry under their registered names.
+  # node, and start the session registry under its registered name.
   use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.Sync.Live
@@ -16,12 +15,8 @@ defmodule Hologram.Sync.LiveTest do
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Oplog
   alias Hologram.Policy.Edges
-  alias Hologram.Query.Stage
-  alias Hologram.Sync.Evaluator
-  alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Frame
   alias Hologram.Sync.PackedIds
-  alias Hologram.Sync.ResultStore
   alias Hologram.Sync.Sessions
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module30
@@ -39,8 +34,6 @@ defmodule Hologram.Sync.LiveTest do
   setup :set_mox_global
 
   @place {100, 0}
-
-  @project_window "w_project"
 
   # Module17 is readable when public, or by the users holding a membership of it (Module18). A
   # membership is readable when its seat is full. Module19 is a label, which no rule admits.
@@ -162,14 +155,9 @@ defmodule Hologram.Sync.LiveTest do
       )
   end
 
-  # The query cache route/2 reads: the synced types and a window on Module17.
+  # The query cache route/2 reads: whether a client checks permissions, and the synced types.
   defp route_query_cache(permission_checking?) do
-    %{
-      entries: %{},
-      permission_checking?: permission_checking?,
-      synced_types: @synced,
-      windows: %{@project_window => Stage.normalize(PolicyModule17)}
-    }
+    %{derived: %{}, permission_checking?: permission_checking?, synced_types: @synced}
   end
 
   defp readable_ids(part, entity_type) do
@@ -953,15 +941,6 @@ defmodule Hologram.Sync.LiveTest do
 
       :persistent_term.put(QueryCacheStub.persistent_term_key(), route_query_cache(true))
 
-      wait_for_process_cleanup(ResultStore)
-      start_supervised!(ResultStore)
-
-      wait_for_process_cleanup(Evaluator.registry())
-      start_supervised!({Registry, keys: :unique, name: Evaluator.registry()})
-
-      wait_for_process_cleanup(Evaluators)
-      start_supervised!(Evaluators)
-
       wait_for_process_cleanup(Sessions.registry())
       start_supervised!(Sessions)
 
@@ -1033,18 +1012,6 @@ defmodule Hologram.Sync.LiveTest do
 
       assert_received {:live, part}
       refute Map.has_key?(part.readable, PolicyModule17)
-    end
-
-    test "hands the batch to the windows it could have changed too" do
-      project = create!(PolicyModule17, public: true)
-      effect = effect(:patch_entity, PolicyModule17, project.id, %{"name" => "renamed"})
-
-      {:ok, evaluator, _version, _term} = Evaluators.subscribe(@project_window, self())
-      DBConnection.Ownership.ownership_allow(DB.pool_name(), self(), evaluator, [])
-
-      route([{100, [effect]}], @place)
-
-      assert_receive {:round, @project_window, 1, _transactions, _place}
     end
   end
 end

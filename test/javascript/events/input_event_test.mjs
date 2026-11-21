@@ -9,7 +9,7 @@ defineRuntimeGlobals();
 
 describe("InputEvent", () => {
   const event = {
-    target: {tagName: "INPUT", type: "text", value: "abc"},
+    target: {localName: "input", type: "text", value: "abc"},
   };
 
   it("buildEventParam()", () => {

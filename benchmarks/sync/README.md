@@ -29,7 +29,7 @@ mix deps.get
 HOLOGRAM_START=1 mix run --no-start bench.exs --case boot
 ```
 
-1. `HOLOGRAM_START=1` makes the compile run the Hologram compiler, which builds the pages' windows and bundles. Without it the driver refuses to start.
+1. `HOLOGRAM_START=1` makes the compile run the Hologram compiler, which builds the pages' types and bundles. Without it the driver refuses to start.
 2. `--no-start` skips booting the app on the driver, which only the server node needs. The driver never starts Hologram either way, so the server node is the only node syncing.
 3. Postgres 15 or newer, on localhost with the `postgres`/`postgres` user. The driver creates the `hologram_sync_benchmark` database when it's missing.
 4. Every client holds a socket in the driver and one in the server, so raise the open file limit for big client counts, for example `ulimit -n 65536`.

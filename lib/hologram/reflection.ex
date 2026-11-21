@@ -66,7 +66,7 @@ defmodule Hologram.Reflection do
 
   @page_digest_plt_dump_file_name "page_digest.plt"
 
-  @page_windows_plt_dump_file_name "page_windows.plt"
+  @page_types_plt_dump_file_name "page_types.plt"
 
   @index_needs_plt_dump_file_name "index_needs.plt"
 
@@ -378,6 +378,19 @@ defmodule Hologram.Reflection do
   def ecto_schema?(term) do
     elixir_module?(term) && has_function?(term, :__schema__, 1) &&
       has_function?(term, :__changeset__, 0)
+  end
+
+  @doc """
+  Like ecto_schema?/1, but answered from the given module info PLT when it records the module, so
+  that a module not loaded is not read from its BEAM file. A module the PLT does not record is
+  decided the ecto_schema?/1 way.
+  """
+  @spec ecto_schema?(any, PLT.t()) :: boolean
+  def ecto_schema?(term, module_info_plt) do
+    case module_info_flag(module_info_plt, term, :ecto_schema?) do
+      {:ok, ecto_schema?} -> ecto_schema?
+      :error -> ecto_schema?(term)
+    end
   end
 
   @doc """
@@ -1060,11 +1073,11 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Returns the file name of the dump of the page windows PLT.
+  Returns the file name of the dump of the page types PLT.
   """
-  @spec page_windows_plt_dump_file_name() :: String.t()
-  def page_windows_plt_dump_file_name do
-    @page_windows_plt_dump_file_name
+  @spec page_types_plt_dump_file_name() :: String.t()
+  def page_types_plt_dump_file_name do
+    @page_types_plt_dump_file_name
   end
 
   @doc """
@@ -1162,7 +1175,7 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Returns the file name of the dump of the registered queries PLT.
+  Returns the file name of the dump of the queries PLT.
   """
   @spec queries_plt_dump_file_name() :: String.t()
   def queries_plt_dump_file_name do

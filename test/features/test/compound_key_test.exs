@@ -35,8 +35,6 @@ defmodule HologramFeatureTests.CompoundKeyTest do
   # Reaction references nothing, so it truncates alone. Every test starts from the one row whose
   # key the page's writes repeat.
   setup do
-    await_evaluator_drain()
-
     table = ~s("hologram_data"."#{Mapper.table_name(Reaction)}")
 
     {:ok, _result} = Connection.query("TRUNCATE #{table}", [])

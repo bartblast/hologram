@@ -1,13 +1,11 @@
 defmodule Hologram.Sync.SessionTest do
   # async: false - each test writes the query cache's persistent term, shared by the whole node,
-  # and starts the sync result store, the evaluator registry and the evaluators supervisor under
-  # their registered names, which one test on the node can hold at a time.
+  # and starts the gate and the session registry under their registered names, which one test on
+  # the node can hold at a time.
   use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.Test.Stubs
   import Mox
-
-  require Hologram.Query
 
   alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
@@ -22,20 +20,15 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Mutation.Record
   alias Hologram.Policy
   alias Hologram.Policy.Edges
-  alias Hologram.Query
-  alias Hologram.Query.Stage
   alias Hologram.Realtime.SSE
   alias Hologram.Sync.Cursor
-  alias Hologram.Sync.Evaluator
-  alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Fill
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Gate
   alias Hologram.Sync.Live
   alias Hologram.Sync.PackedIds
-  alias Hologram.Sync.PageWindows
+  alias Hologram.Sync.PageTypes
   alias Hologram.Sync.Pool
-  alias Hologram.Sync.ResultStore
   alias Hologram.Sync.Session
   alias Hologram.Sync.Sessions
   alias Hologram.Sync.WireData
@@ -51,45 +44,25 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
 
   use_module_stub :query_cache
-  use_module_stub :sync_page_windows
+  use_module_stub :sync_page_types
 
   setup :set_mox_global
 
-  @board_window "w_board"
   @other_page MyApp.SettingsPage
-  @other_window "w_other"
   @page MyApp.BoardPage
   @policy_hash "0123456789abcdef0123456789abcdef"
-  @project_window "w_project"
-  @public_project_window "w_public_project"
-  @reach_window "w_reach"
   @other_replica "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
   @replica_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @types_hash "00112233445566778899aabbccddeeff"
 
   setup do
     setup_query_cache(QueryCacheStub, false)
-    setup_sync_page_windows(SyncPageWindowsStub, false)
+    setup_sync_page_types(SyncPageTypesStub, false)
 
     :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
-      entries: %{},
       permission_checking?: true,
-      synced_types: [Module2, PolicyModule1, PolicyModule5],
-      windows: %{
-        @board_window => Stage.normalize(Module2),
-        @other_window => Stage.normalize(PolicyModule1),
-        @reach_window => Stage.normalize(PolicyModule5)
-      }
+      synced_types: [Module2, PolicyModule1, PolicyModule5]
     })
-
-    wait_for_process_cleanup(ResultStore)
-    start_supervised!(ResultStore)
-
-    wait_for_process_cleanup(Evaluator.registry())
-    start_supervised!({Registry, keys: :unique, name: Evaluator.registry()})
-
-    wait_for_process_cleanup(Evaluators)
-    start_supervised!(Evaluators)
 
     wait_for_process_cleanup(Gate)
     start_supervised!(Gate)
@@ -275,10 +248,10 @@ defmodule Hologram.Sync.SessionTest do
     end
   end
 
-  # The page windows are a build artifact read from a dump file, so a test says what the build
+  # The page types are a build artifact read from a dump file, so a test says what the build
   # worked out by writing one and letting the registry read it.
-  defp windows(page_windows) do
-    dump_path = SyncPageWindowsStub.dump_path()
+  defp page_types(types_by_page) do
+    dump_path = SyncPageTypesStub.dump_path()
 
     File.rm(dump_path)
 
@@ -286,11 +259,11 @@ defmodule Hologram.Sync.SessionTest do
     |> Path.dirname()
     |> File.mkdir_p!()
 
-    page_windows
-    |> Enum.reduce(PLT.start(), fn {page, window_ids}, plt -> PLT.put(plt, page, window_ids) end)
+    types_by_page
+    |> Enum.reduce(PLT.start(), fn {page, types}, plt -> PLT.put(plt, page, types) end)
     |> PLT.dump(dump_path)
 
-    PageWindows.init(nil)
+    PageTypes.init(nil)
 
     :ok
   end
@@ -302,7 +275,7 @@ defmodule Hologram.Sync.SessionTest do
         |> Module14.new()
         |> DB.create!()
 
-      windows(%{})
+      page_types(%{})
 
       %{user: user}
     end
@@ -592,7 +565,7 @@ defmodule Hologram.Sync.SessionTest do
       put_app_env(:sync, pool_size: 1)
       start_supervised!(Pool.child_spec())
 
-      windows(%{})
+      page_types(%{})
       test_pid = self()
 
       read_fill = fn _entity_type, _actor_user_id, _replica_id, _synced_types ->
@@ -616,7 +589,7 @@ defmodule Hologram.Sync.SessionTest do
       put_app_env(:sync, pool_size: 1)
       start_supervised!(Pool.child_spec())
 
-      windows(%{})
+      page_types(%{})
       test_pid = self()
 
       user =
@@ -662,7 +635,7 @@ defmodule Hologram.Sync.SessionTest do
       put_app_env(:sync, pool_size: 1)
       start_supervised!(Pool.child_spec())
 
-      windows(%{})
+      page_types(%{})
       test_pid = self()
 
       read_ids = fn _entity_type, _actor_user_id ->
@@ -683,7 +656,7 @@ defmodule Hologram.Sync.SessionTest do
 
   describe "start_link/1 - coming back, at the gate" do
     setup do
-      windows(%{})
+      page_types(%{})
 
       stop_supervised!(Gate)
       start_supervised!({Gate, limit: 1})
@@ -750,7 +723,7 @@ defmodule Hologram.Sync.SessionTest do
 
   describe "start_link/1 - coming back to rows lost before the held read" do
     setup do
-      windows(%{})
+      page_types(%{})
 
       parent = DB.create!(PolicyModule1.new())
 
@@ -970,7 +943,7 @@ defmodule Hologram.Sync.SessionTest do
         |> Module14.new()
         |> DB.create!()
 
-      windows(%{})
+      page_types(%{})
 
       readable =
         [public: true]
@@ -1072,10 +1045,8 @@ defmodule Hologram.Sync.SessionTest do
     # guesses - grants go out as the list the client may keep instead.
     test "tells grants the user may not read by a keep list, never by hash", %{user: user} do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
-        entries: %{},
         permission_checking?: false,
-        synced_types: [Module2, PolicyModule1, PolicyModule5, RoleGrant],
-        windows: %{}
+        synced_types: [Module2, PolicyModule1, PolicyModule5, RoleGrant]
       })
 
       other =
@@ -1143,10 +1114,8 @@ defmodule Hologram.Sync.SessionTest do
     test "keeps the grants its user may read when the list is read, and drops one by id once hidden",
          %{user: user} do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
-        entries: %{},
         permission_checking?: false,
-        synced_types: [Module2, PolicyModule1, PolicyModule5, RoleGrant],
-        windows: %{}
+        synced_types: [Module2, PolicyModule1, PolicyModule5, RoleGrant]
       })
 
       other =
@@ -1276,13 +1245,11 @@ defmodule Hologram.Sync.SessionTest do
   describe "start_link/1 - coming back to sets" do
     setup do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
-        entries: %{},
         permission_checking?: false,
-        synced_types: [PolicyModule1, PolicyParent],
-        windows: %{}
+        synced_types: [PolicyModule1, PolicyParent]
       })
 
-      windows(%{})
+      page_types(%{})
 
       parent = DB.create!(PolicyParent.new())
 
@@ -1359,7 +1326,7 @@ defmodule Hologram.Sync.SessionTest do
     # how much the app stores.
     test "splits a type's rows across frames" do
       Enum.each(1..3, &create("row #{&1}"))
-      windows(%{@page => [@board_window]})
+      page_types(%{@page => [Module2]})
 
       put_app_env(:sync, rows_per_frame: 2)
 
@@ -1382,13 +1349,11 @@ defmodule Hologram.Sync.SessionTest do
     # reaches the stream encoded.
     test "fills a stream running under the heap cap" do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
-        entries: %{},
         permission_checking?: true,
-        synced_types: [Module3],
-        windows: %{}
+        synced_types: [Module3]
       })
 
-      windows(%{})
+      page_types(%{})
 
       targets = Enum.map(1..100, fn _index -> Module2.new() end)
 
@@ -1441,7 +1406,7 @@ defmodule Hologram.Sync.SessionTest do
     # The fill's chunks go out only once all but a few of those before them are written - here all
     # but none, with every type sending its marker alone. A type is read before its chunks wait.
     defp start_paced_session!(outbox_opts) do
-      windows(%{})
+      page_types(%{})
       test_pid = self()
 
       read_fill = fn entity_type, _actor_user_id, _replica_id, _synced_types ->
@@ -1498,7 +1463,7 @@ defmodule Hologram.Sync.SessionTest do
     # Over HTTP/2 the stream's process ends with a normal exit, which takes nothing linked to it
     # down.
     test "stops with nothing to report when its client goes" do
-      windows(%{})
+      page_types(%{})
       client = spawn(fn -> receive(do: (:go -> :ok)) end)
       read_fill = fn _entity_type, _actor_user_id, _replica_id, _synced_types -> {[], nil} end
 
@@ -1525,10 +1490,8 @@ defmodule Hologram.Sync.SessionTest do
   end
 
   describe "start_link/1 - completeness" do
-    # A window's first round tells nothing to a client being filled, and the fill reads after every
-    # first round, so one window that never reports holds the whole fill back.
     test "says each synced type is complete, the page's types first, then everything" do
-      windows(%{@page => [@other_window], @other_page => [@board_window]})
+      page_types(%{@page => [PolicyModule1], @other_page => [Module2]})
 
       start_session!([])
 
@@ -1540,8 +1503,23 @@ defmodule Hologram.Sync.SessionTest do
              ]
     end
 
-    test "fills every synced type for a build with no windows" do
-      windows(%{})
+    # The page types are reloaded beside the synced ones, and a session can start between the two:
+    # a page type sync no longer sends is read no more than any other.
+    test "leaves out a page type sync doesn't send" do
+      page_types(%{@page => [Module28, PolicyModule1]})
+
+      start_session!([])
+
+      assert synced_scopes() == [
+               {:types, [PolicyModule1]},
+               {:types, [Module2]},
+               {:types, [PolicyModule5]},
+               :all
+             ]
+    end
+
+    test "fills every synced type for a build with no page types" do
+      page_types(%{})
 
       start_session!([])
 
@@ -1555,7 +1533,7 @@ defmodule Hologram.Sync.SessionTest do
     # pot is whole, and a client that is filled and then left alone receives no further frame at
     # all - so without this it would hold everything it was sent and have nowhere to come back to.
     test "hands over the place the client may come back from" do
-      windows(%{@page => [@board_window]})
+      page_types(%{@page => [Module2]})
 
       start_session!(fill_place: {200, 0})
 
@@ -1566,7 +1544,7 @@ defmodule Hologram.Sync.SessionTest do
     # The claim a place makes is "everything up to here is applied", which a client holding some
     # types of several cannot honour.
     test "names no place on the types markers of a first arrival" do
-      windows(%{@page => [@board_window]})
+      page_types(%{@page => [Module2]})
 
       start_session!(fill_place: {200, 0})
 
@@ -1577,7 +1555,7 @@ defmodule Hologram.Sync.SessionTest do
     # A client that came back kept what it had and is told only what moved, so nothing is filled
     # and nothing is complete type by type - it is told it holds everything, with a place.
     test "tells a client that came back it holds everything, with a place" do
-      windows(%{@page => [@board_window], @other_page => [@other_window]})
+      page_types(%{@page => [Module2], @other_page => [PolicyModule1]})
 
       start_session!(fill_place: {200, 0}, gap: [], edge: 200)
 
@@ -1590,7 +1568,7 @@ defmodule Hologram.Sync.SessionTest do
   describe "start_link/1 - first rows" do
     test "sends the rows of a synced type" do
       task = create("first")
-      windows(%{@page => [@board_window]})
+      page_types(%{@page => [Module2]})
 
       start_session!([])
 
@@ -1607,7 +1585,7 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "sends nothing for a type holding no rows" do
-      windows(%{@page => [@board_window]})
+      page_types(%{@page => [Module2]})
 
       start_session!([])
 
@@ -1615,13 +1593,13 @@ defmodule Hologram.Sync.SessionTest do
       refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
     end
 
-    test "fills a synced type no window reads" do
+    test "fills a synced type no page reads" do
       row =
         %{public: true}
         |> PolicyModule1.new()
         |> DB.create!()
 
-      windows(%{@page => [@board_window]})
+      page_types(%{@page => [Module2]})
 
       start_session!([])
 
@@ -1638,7 +1616,7 @@ defmodule Hologram.Sync.SessionTest do
         Record.complete!(@replica_id, 5, %{"dropped" => %{}, "status" => "confirmed"})
       end)
 
-      windows(%{@page => [@board_window]})
+      page_types(%{@page => [Module2]})
 
       start_session!(applied_seq: 3, replica_id: @replica_id)
 
@@ -1655,7 +1633,7 @@ defmodule Hologram.Sync.SessionTest do
         Record.complete!(@replica_id, 5, %{"dropped" => %{}, "status" => "confirmed"})
       end)
 
-      windows(%{@page => [@board_window]})
+      page_types(%{@page => [Module2]})
 
       start_session!(applied_seq: 7, replica_id: @replica_id)
 
@@ -1675,7 +1653,7 @@ defmodule Hologram.Sync.SessionTest do
 
       DB.create!(PolicyModule1.new())
 
-      windows(%{@page => [@other_window]})
+      page_types(%{@page => [PolicyModule1]})
 
       start_session!(actor_user_id: user.id)
 
@@ -1692,7 +1670,7 @@ defmodule Hologram.Sync.SessionTest do
 
       DB.create!(PolicyModule1.new())
 
-      windows(%{@page => [@other_window]})
+      page_types(%{@page => [PolicyModule1]})
 
       start_session!([])
 
@@ -1709,7 +1687,7 @@ defmodule Hologram.Sync.SessionTest do
         |> PolicyModule1.new()
         |> DB.create!()
 
-      windows(%{@page => [@board_window, @other_window]})
+      page_types(%{@page => [Module2, PolicyModule1]})
 
       start_session!([])
 
@@ -1722,9 +1700,9 @@ defmodule Hologram.Sync.SessionTest do
       assert Enum.sort(put_ids) == Enum.sort([task.id, readable.id])
     end
 
-    test "fills a client on a page reaching no window" do
+    test "fills a client on a page reading no type" do
       task = create("first")
-      windows(%{@page => []})
+      page_types(%{@page => []})
 
       start_session!([])
 
@@ -1771,18 +1749,17 @@ defmodule Hologram.Sync.SessionTest do
       :ok
     end
 
-    test "joins the node's sessions and takes up no window" do
-      windows(%{@page => [@board_window]})
+    test "joins the node's sessions" do
+      page_types(%{@page => [Module2]})
 
       session = start_session!([])
       await_fill()
 
       assert Sessions.list() == [{session, nil}]
-      assert Evaluators.live() == []
     end
 
     test "hands over a row created while the client watches, whole" do
-      windows(%{})
+      page_types(%{})
 
       start_session!([])
       await_fill()
@@ -1795,10 +1772,10 @@ defmodule Hologram.Sync.SessionTest do
       assert data.c == "created"
     end
 
-    # No window reads the type, which is what a type only an action reads looks like.
+    # No page reads the type, which is what a type only an action reads looks like.
     test "patches a row the fill sent with what the batch wrote, as it stands" do
       task = create("before")
-      windows(%{})
+      page_types(%{})
 
       start_session!([])
       await_fill()
@@ -1817,7 +1794,7 @@ defmodule Hologram.Sync.SessionTest do
         |> PolicyModule1.new()
         |> DB.create!()
 
-      windows(%{})
+      page_types(%{})
 
       start_session!([])
       await_fill()
@@ -1830,7 +1807,7 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "tells nothing of a row its user may not read" do
-      windows(%{})
+      page_types(%{})
 
       start_session!([])
       await_fill()
@@ -1847,7 +1824,7 @@ defmodule Hologram.Sync.SessionTest do
 
     # The client files the row once the batch is confirmed, whatever its session was told.
     test "tells the client to drop a row its own batch created that its user may not read" do
-      windows(%{})
+      page_types(%{})
 
       start_session!(replica_id: @replica_id)
       await_fill()
@@ -1872,7 +1849,7 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "tells nothing of a row a batch created that its user may not read when it serves no replica" do
-      windows(%{})
+      page_types(%{})
 
       start_session!([])
       await_fill()
@@ -1896,7 +1873,7 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "tells nothing of a row another replica's batch created that its user may not read" do
-      windows(%{})
+      page_types(%{})
 
       start_session!(replica_id: @replica_id)
       await_fill()
@@ -1923,7 +1900,7 @@ defmodule Hologram.Sync.SessionTest do
 
     test "passes over a batch the fill already holds" do
       task = create("before")
-      windows(%{})
+      page_types(%{})
 
       session = start_session!(fill_place: {200, 0})
       await_fill()
@@ -1937,7 +1914,7 @@ defmodule Hologram.Sync.SessionTest do
 
     test "names the number of this replica's batches the batch holds" do
       task = create("before")
-      windows(%{})
+      page_types(%{})
 
       start_session!(replica_id: @replica_id)
       await_fill()
@@ -1954,7 +1931,7 @@ defmodule Hologram.Sync.SessionTest do
 
     test "claims the place the batch was read from, under the session's rules and types" do
       task = create("before")
-      windows(%{})
+      page_types(%{})
 
       start_session!(fill_place: {200, 0})
       assert_receive {:sync_synced, :all, fill_cursor}
@@ -1979,7 +1956,7 @@ defmodule Hologram.Sync.SessionTest do
         |> PolicyModule1.new()
         |> DB.create!()
 
-      windows(%{})
+      page_types(%{})
 
       start_session!(actor_user_id: user.id)
       await_fill()
@@ -2014,7 +1991,7 @@ defmodule Hologram.Sync.SessionTest do
     # keeps 7, what it was told.
     test "hands a row over whole under a later batch of this replica's the rows hold" do
       task = create("before")
-      windows(%{})
+      page_types(%{})
 
       session = start_session!(replica_id: @replica_id)
       await_fill()
@@ -2042,7 +2019,7 @@ defmodule Hologram.Sync.SessionTest do
 
     test "hands a row over whole under a later batch of this replica's a batch of others' meets" do
       task = create("before")
-      windows(%{})
+      page_types(%{})
 
       start_session!(replica_id: @replica_id)
       await_fill()
@@ -2060,7 +2037,7 @@ defmodule Hologram.Sync.SessionTest do
     # The later batch is one the session already told, so the rows hold nothing it hasn't.
     test "patches under its own number a batch that only an already told batch overtook" do
       task = create("before")
-      windows(%{})
+      page_types(%{})
 
       start_session!(applied_seq: 9, replica_id: @replica_id)
       await_fill()
@@ -2077,7 +2054,7 @@ defmodule Hologram.Sync.SessionTest do
 
     test "passes over another replica's batches, and never lowers the number" do
       task = create("before")
-      windows(%{})
+      page_types(%{})
 
       start_session!(applied_seq: 5, replica_id: @replica_id)
       await_fill()
@@ -2101,7 +2078,7 @@ defmodule Hologram.Sync.SessionTest do
 
     test "tells a batch with a transaction at the fill's place" do
       task = create("before")
-      windows(%{})
+      page_types(%{})
 
       start_session!(fill_place: {200, 0})
       await_fill()
@@ -2119,7 +2096,7 @@ defmodule Hologram.Sync.SessionTest do
         |> PolicyModule1.new()
         |> DB.create!()
 
-      windows(%{})
+      page_types(%{})
       put_app_env(:sync, rows_per_frame: 2)
 
       start_session!([])
@@ -2144,7 +2121,7 @@ defmodule Hologram.Sync.SessionTest do
     # A client keeps each frame's cursor as it lands, so one cut off after the first frame would
     # come back past the second if the first claimed the batch's place.
     test "dates only the last frame of a batch split across frames" do
-      windows(%{})
+      page_types(%{})
       put_app_env(:sync, rows_per_frame: 2)
 
       start_session!([])
@@ -2164,7 +2141,7 @@ defmodule Hologram.Sync.SessionTest do
 
     test "tells a batch queued during the fill once the fill is over, dated" do
       task = create("before")
-      windows(%{})
+      page_types(%{})
       test_pid = self()
 
       # The batch reaches the session while it reads its first type, as one routed then would.
@@ -2208,7 +2185,7 @@ defmodule Hologram.Sync.SessionTest do
         |> PolicyModule1.new()
         |> DB.create!()
 
-      windows(%{})
+      page_types(%{})
 
       start_session!(actor_user_id: user.id)
       await_fill()
@@ -2228,7 +2205,7 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "stops when a part arrives under a data model on hold" do
-      windows(%{})
+      page_types(%{})
 
       read_fill = fn entity_type, actor_user_id, replica_id, synced_types ->
         if Process.get(:filled) do
@@ -2272,7 +2249,7 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "stops when its client ends" do
-      windows(%{})
+      page_types(%{})
 
       client =
         spawn(fn ->
@@ -2294,7 +2271,7 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "stops when the node's session list is replaced" do
-      windows(%{})
+      page_types(%{})
 
       session = start_session!([])
       await_fill()
@@ -2319,10 +2296,8 @@ defmodule Hologram.Sync.SessionTest do
   describe "handle :live - sets" do
     setup do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
-        entries: %{},
         permission_checking?: false,
-        synced_types: [PolicyLabel, PolicyProject],
-        windows: %{}
+        synced_types: [PolicyLabel, PolicyProject]
       })
 
       project =
@@ -2339,7 +2314,7 @@ defmodule Hologram.Sync.SessionTest do
     test "tells the removal of a pair naming a row its set named and the client never got", %{
       project: project
     } do
-      windows(%{})
+      page_types(%{})
       never_sent_id = Ecto.UUID.generate()
 
       read_fill = fn entity_type, actor_user_id, replica_id, synced_types ->
@@ -2372,7 +2347,7 @@ defmodule Hologram.Sync.SessionTest do
     # A batch whose transactions the fill's reads may have seen part of, so a row it made readable
     # can be held while the rows read before it name nothing of it.
     test "hands over whole the rows of a batch below the fill's edge", %{project: project} do
-      windows(%{})
+      page_types(%{})
 
       start_session!([])
       await_fill()
@@ -2406,10 +2381,8 @@ defmodule Hologram.Sync.SessionTest do
   describe "handle :live - overtaken" do
     setup do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
-        entries: %{},
         permission_checking?: false,
-        synced_types: [Module28, Module29],
-        windows: %{}
+        synced_types: [Module28, Module29]
       })
 
       :ok
@@ -2430,7 +2403,7 @@ defmodule Hologram.Sync.SessionTest do
         |> DB.create!()
 
       :ok = EntityOperations.add_relationship(Module28, message.id, :labels, label.id)
-      windows(%{})
+      page_types(%{})
 
       start_session!(replica_id: @replica_id)
       await_fill()
@@ -2464,7 +2437,7 @@ defmodule Hologram.Sync.SessionTest do
         |> Module28.new()
         |> DB.create!()
 
-      windows(%{})
+      page_types(%{})
 
       read_fill = fn entity_type, actor_user_id, replica_id, synced_types ->
         {rows, read_seq} =
@@ -2526,7 +2499,7 @@ defmodule Hologram.Sync.SessionTest do
       locked: locked,
       project: project
     } do
-      windows(%{})
+      page_types(%{})
 
       start_session!([])
       await_fill()
@@ -2544,7 +2517,7 @@ defmodule Hologram.Sync.SessionTest do
          %{project: project} do
       loose = verdict_label("loose")
       :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, loose.id)
-      windows(%{})
+      page_types(%{})
 
       start_session!([])
       await_fill()
@@ -2558,7 +2531,7 @@ defmodule Hologram.Sync.SessionTest do
     # The part says the project can't be archived while the database says it can, so what goes out
     # is the part's - read in the batch's recheck - and nothing the session worked out.
     test "sends a held row the verdicts its part carries", %{project: project} do
-      windows(%{})
+      page_types(%{})
 
       session = start_session!([])
       await_fill()
@@ -2575,7 +2548,7 @@ defmodule Hologram.Sync.SessionTest do
       locked: locked,
       project: project
     } do
-      windows(%{})
+      page_types(%{})
 
       session = start_session!([])
       await_fill()
@@ -2594,7 +2567,7 @@ defmodule Hologram.Sync.SessionTest do
       locked: locked,
       project: project
     } do
-      windows(%{})
+      page_types(%{})
 
       read_fill = fn entity_type, actor_user_id, replica_id, synced_types ->
         {rows, read_seq} =
@@ -2624,7 +2597,7 @@ defmodule Hologram.Sync.SessionTest do
       locked: locked,
       project: project
     } do
-      windows(%{})
+      page_types(%{})
 
       session = start_session!([])
       await_fill()
@@ -2651,7 +2624,7 @@ defmodule Hologram.Sync.SessionTest do
         |> PolicyProject.new()
         |> DB.create!()
 
-      windows(%{})
+      page_types(%{})
 
       session = start_session!([])
       await_fill()
@@ -2678,7 +2651,7 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "tells nothing of a held row's verdicts a whole type read again left as they were" do
-      windows(%{})
+      page_types(%{})
 
       session = start_session!([])
       await_fill()
@@ -2689,7 +2662,7 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "hands a row over with the verdicts its part carries" do
-      windows(%{})
+      page_types(%{})
 
       session = start_session!([])
       await_fill()
@@ -2767,21 +2740,12 @@ defmodule Hologram.Sync.SessionTest do
     |> DB.create!()
   end
 
-  # A public project every client may read, its windows checking permissions, and a locked label it
+  # A public project every client may read, in a build checking permissions, and a locked label it
   # does not hold yet.
   defp verdict_rows(_context) do
     :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
-      entries: %{},
       permission_checking?: true,
-      synced_types: [PolicyModule1, PolicyProject],
-      windows: %{
-        @project_window => Stage.normalize(PolicyProject),
-        @other_window => Stage.normalize(PolicyModule1),
-        @public_project_window =>
-          PolicyProject
-          |> Query.filter(public: true)
-          |> Stage.normalize()
-      }
+      synced_types: [PolicyModule1, PolicyProject]
     })
 
     project =
