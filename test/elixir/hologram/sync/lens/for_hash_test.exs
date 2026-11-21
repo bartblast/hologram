@@ -41,18 +41,23 @@ defmodule Hologram.Sync.Lens.ForHashTest do
     key = {Lens, :history, Model.hash()}
 
     assert Lens.for_hash("h1") == :error
-    assert {:recent, until, {:value, :error}} = :persistent_term.get(key)
+    assert {:recent, _until, {:value, :error}} = :persistent_term.get(key)
 
-    # Asked again within the moment, the shared answer is the one given.
-    assert Lens.for_hash("h1") == :error
-    assert {:recent, ^until, _outcome} = :persistent_term.get(key)
+    # Asked again within the moment, the shared answer is the one given. The moment is set far
+    # ahead, so a pause between the two asks can't end it.
+    far_ahead = System.monotonic_time(:millisecond) + 60_000
+    :persistent_term.put(key, {:recent, far_ahead, {:value, :shared}})
+
+    assert Lens.for_hash("h1") == :shared
+    assert {:recent, ^far_ahead, _outcome} = :persistent_term.get(key)
 
     # Once the moment is over, it is worked out again.
-    :persistent_term.put(key, {:recent, until - 2_000, {:value, :error}})
+    past = System.monotonic_time(:millisecond) - 1_000
+    :persistent_term.put(key, {:recent, past, {:value, :error}})
 
     assert Lens.for_hash("h1") == :error
     assert {:recent, later, {:value, :error}} = :persistent_term.get(key)
-    assert later > until - 2_000
+    assert later > past
   end
 
   # An old tab is answered by its stream's process, whose heap is capped, and reading a history
