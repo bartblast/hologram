@@ -56,9 +56,18 @@ export default class LocalDatabase {
   // The identity period the held counts were carried in (see IdentityTracker).
   static syncCountsPeriod = null;
 
-  // The identity period that was lasting when the stream said somebody else signed in. That can
-  // reach a tab before any response does, so its period and tag go on naming the previous user,
-  // and nothing saved for that user may come back while they do.
+  // The identity period that was lasting when this tab was told somebody else signed in. No saved
+  // count is filed while it lasts, whichever document saved it, though the page's own state is
+  // still restored. The stream's frame and the responses arrive independently, so either can reach
+  // a tab first, and the frame doesn't name the identity it announces, so the two orders can't be
+  // told apart here.
+  //
+  // With the frame first, the tab's period and tag go on naming the previous user, and this is what
+  // keeps that user's counts from coming back. With a response first, as after a login from this
+  // tab, the period is already the new user's, and their own saved counts are refused for the rest
+  // of it. A count still held keeps answering. One no longer held, like one reset() dropped or the
+  // cap trimmed, doesn't come back, and the page counts the rows it has so far, which can be too
+  // few during a fill.
   static identityEndedPeriod = null;
 
   // type -> relationship -> source id -> Set of target ids
