@@ -372,8 +372,10 @@ defmodule Hologram.Compiler.QueryChains do
 
   # A filter's value: a literal, an operator with its operand, a membership list of literals and
   # stand-ins, or a stand-in for one only the run knows.
+  # Any pair starting with an atom is an operator tuple to the stages, which refuse an unknown one,
+  # except an attribute reference.
   defp value(%IR.TupleType{data: [%IR.AtomType{value: operator}, operand]})
-       when operator in @operators do
+       when operator != :attribute do
     {operator, value(operand)}
   end
 

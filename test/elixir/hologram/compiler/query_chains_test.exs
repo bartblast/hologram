@@ -277,6 +277,14 @@ defmodule Hologram.Compiler.QueryChainsTest do
                    end
     end
 
+    test "refuses an unknown operator whose operand only the run knows" do
+      assert_raise Hologram.CompileError,
+                   ~r/builds an invalid query - unknown operator :typo/,
+                   fn ->
+                     validate_all!(Module1, :typo_operator, 1)
+                   end
+    end
+
     # Alternatives are a list of lists, so a list of plain values is a membership in an attribute
     # named or, as the stages read it.
     test "checks a membership filter on an attribute named like alternatives" do
