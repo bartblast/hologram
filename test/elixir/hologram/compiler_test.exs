@@ -2742,6 +2742,7 @@ defmodule Hologram.CompilerTest do
       needs = index_needs([query_shape, query_shape])
 
       assert needs == Enum.uniq(needs)
+      assert needs == index_needs([query_shape])
     end
   end
 
