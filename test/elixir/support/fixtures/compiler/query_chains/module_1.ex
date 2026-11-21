@@ -30,6 +30,12 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryChains.Module1 do
 
   def pinned_predicates(predicates), do: Stage.filter(Entity2, predicates)
 
+  def take_before_pinned(predicates) do
+    Entity2
+    |> take(5)
+    |> Stage.filter(predicates)
+  end
+
   def pinned_alternatives(alternatives), do: filter(Entity2, ^[a: true, or: alternatives])
 
   def pinned_any(condition), do: filter(Entity2, ^[a: true, any: condition])

@@ -298,7 +298,8 @@ defmodule Hologram.Compiler.QueryChainsTest do
     end
 
     test "passes the steps before one only the run knows" do
-      assert validate_all!(Module1, :pinned_predicates, 1) == :ok
+      assert [%{steps: [{:take, [5], _line}]}] = chains(Module1, :take_before_pinned, 1)
+      assert validate_all!(Module1, :take_before_pinned, 1) == :ok
     end
 
     test "refuses a filter on a server-only attribute" do
