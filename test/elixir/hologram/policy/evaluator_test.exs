@@ -878,6 +878,245 @@ defmodule Hologram.Policy.EvaluatorTest do
     end
   end
 
+  describe "rule_matches?/5" do
+    setup do
+      put_derived_definitions([Module42])
+    end
+
+    defp exact_rule(predicates, fields \\ []) do
+      rule([{:exact, %{predicates: predicates}} | fields])
+    end
+
+    test "reads a name of the new row" do
+      rule = exact_rule([{{:outer, 1, :priority}, :==, :high}])
+
+      assert rule_matches?(
+               rule,
+               %Module24{priority: :low},
+               %Module24{priority: :high},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule,
+               %Module24{priority: :high},
+               %Module24{priority: :low},
+               nil,
+               &deny/3
+             )
+    end
+
+    test "reads a bare name on the stored row" do
+      rule = exact_rule([{:priority, :==, :low}, {{:outer, 1, :priority}, :==, :high}])
+      new_row = %Module24{priority: :high}
+
+      assert rule_matches?(rule, %Module24{priority: :low}, new_row, nil, &deny/3)
+      refute rule_matches?(rule, %Module24{priority: :medium}, new_row, nil, &deny/3)
+    end
+
+    test "compares a name of the new row by its declared order" do
+      rule = exact_rule([{{:outer, 1, :priority}, :>, :low}])
+      stored = %Module24{priority: :high}
+
+      assert rule_matches?(rule, stored, %Module24{priority: :medium}, nil, &deny/3)
+      refute rule_matches?(rule, stored, %Module24{priority: :low}, nil, &deny/3)
+    end
+
+    test "compares the stored row with the new row" do
+      rule = exact_rule([{:priority, :<, {:attribute, {:outer, 1, :priority}}}])
+      stored = %Module24{priority: :medium}
+
+      assert rule_matches?(rule, stored, %Module24{priority: :high}, nil, &deny/3)
+      refute rule_matches?(rule, stored, %Module24{priority: :low}, nil, &deny/3)
+    end
+
+    test "follows a path from the new row" do
+      rule = exact_rule([{{:outer, 1, [:channel, :name]}, :==, "open"}])
+      stored = %Module28{channel_id: "stored"}
+      new_row = %Module28{channel_id: "new"}
+
+      checker = fn {:related, [:channel]}, %Module28{channel_id: id}, _actor_user_id ->
+        %Module26{name: if(id == "new", do: "open", else: "closed")}
+      end
+
+      assert rule_matches?(rule, stored, new_row, nil, checker)
+      refute rule_matches?(rule, new_row, stored, nil, checker)
+    end
+
+    test "reads nil for a path from the new row that leads nowhere" do
+      stored = %Module28{channel_id: "stored"}
+      new_row = %Module28{channel_id: nil}
+      checker = fn {:related, [:channel]}, _entity, _actor_user_id -> nil end
+
+      assert rule_matches?(
+               exact_rule([{{:outer, 1, [:channel, :name]}, :!=, "open"}]),
+               stored,
+               new_row,
+               nil,
+               checker
+             )
+
+      refute rule_matches?(
+               exact_rule([{{:outer, 1, [:channel, :name]}, :==, "open"}]),
+               stored,
+               new_row,
+               nil,
+               checker
+             )
+    end
+
+    test "reads a quantifier's set from the new row" do
+      rule = exact_rule([{:any, {{:outer, 1, [:channel, :messages]}, [{:body, :==, "hi"}]}}])
+      stored = %Module28{channel_id: "stored"}
+      new_row = %Module28{channel_id: "new"}
+
+      checker = fn {:set, [:channel, :messages]}, %Module28{channel_id: id}, _actor_user_id ->
+        if id == "new", do: [%Module28{body: "hi"}], else: [%Module28{body: "bye"}]
+      end
+
+      assert rule_matches?(rule, stored, new_row, nil, checker)
+      refute rule_matches?(rule, new_row, stored, nil, checker)
+    end
+
+    test "asks for the whole set of a none over the new row" do
+      rule = exact_rule([{:none, {{:outer, 1, [:messages]}, [{:body, :==, "hi"}]}}])
+
+      checker = fn {:set, [:messages], :whole}, %Module26{id: "new"}, _actor_user_id ->
+        [%Module28{body: "bye"}]
+      end
+
+      assert rule_matches?(rule, %Module26{id: "stored"}, %Module26{id: "new"}, nil, checker)
+    end
+
+    test "tells the new row from the stored one inside a quantifier's condition" do
+      new_rule =
+        exact_rule([{:any, {[:messages], [{:body, :==, {:attribute, {:outer, 2, :name}}}]}}])
+
+      stored_rule =
+        exact_rule([{:any, {[:messages], [{:body, :==, {:attribute, {:outer, 1, :name}}}]}}])
+
+      stored = %Module26{name: "old"}
+      new_row = %Module26{name: "new"}
+
+      checker = fn {:set, [:messages]}, ^stored, _actor_user_id -> [%Module28{body: "new"}] end
+
+      assert rule_matches?(new_rule, stored, new_row, nil, checker)
+      refute rule_matches?(stored_rule, stored, new_row, nil, checker)
+    end
+
+    test "reads a nested set from the row the new row's set returned" do
+      rule =
+        exact_rule([
+          {:any, {{:outer, 1, [:messages]}, [{:any, {[:labels], [{:name, :==, "urgent"}]}}]}}
+        ])
+
+      message = %Module28{id: "message", body: "from the new row"}
+
+      checker = fn
+        {:set, [:messages]}, %Module26{id: "new"}, _actor_user_id -> [message]
+        {:set, [:labels]}, ^message, _actor_user_id -> [%Module29{name: "urgent"}]
+      end
+
+      assert rule_matches?(rule, %Module26{id: "stored"}, %Module26{id: "new"}, nil, checker)
+    end
+
+    test "computes a derived field on the new row" do
+      rule = exact_rule([{{:outer, 1, :shout}, :==, "draft!!"}])
+
+      assert rule_matches?(
+               rule,
+               %Module42{caption: "old"},
+               %Module42{caption: "draft"},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule,
+               %Module42{caption: "draft"},
+               %Module42{caption: "old"},
+               nil,
+               &deny/3
+             )
+    end
+
+    test "answers a disjunction across the stored and the new row" do
+      rule =
+        exact_rule([
+          {:or, [[{:priority, :==, :low}], [{{:outer, 1, :priority}, :==, :high}]]}
+        ])
+
+      assert rule_matches?(rule, %Module24{priority: :low}, %Module24{}, nil, &deny/3)
+
+      assert rule_matches?(
+               rule,
+               %Module24{priority: :medium},
+               %Module24{priority: :high},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule,
+               %Module24{priority: :medium},
+               %Module24{priority: :medium},
+               nil,
+               &deny/3
+             )
+    end
+
+    test "asks a rule's role references and delegation about the stored row" do
+      rule =
+        exact_rule([{{:outer, 1, :priority}, :==, :high}],
+          to: [{:own, [:editor]}],
+          via: {:update, [:project]}
+        )
+
+      stored = %Module24{id: "stored"}
+      new_row = %Module24{id: "new", priority: :high}
+
+      checker = fn
+        {:own, [:editor]}, %Module24{id: "stored"}, "user" -> true
+        {:via, :update, [:project]}, %Module24{id: "stored"}, "user" -> true
+      end
+
+      assert rule_matches?(rule, stored, new_row, "user", checker)
+    end
+
+    test "refuses when the exact clauses hold but the role reference doesn't" do
+      rule = exact_rule([{{:outer, 1, :priority}, :==, :high}], to: [{:own, [:editor]}])
+
+      refute rule_matches?(rule, %Module24{}, %Module24{priority: :high}, "user", &deny/3)
+    end
+
+    test "judges a rule with no exact clauses without the new row" do
+      rule = rule(predicates: [{:priority, :==, :low}])
+
+      assert rule_matches?(
+               rule,
+               %Module24{priority: :low},
+               %Module24{priority: :high},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule,
+               %Module24{priority: :high},
+               %Module24{priority: :low},
+               nil,
+               &deny/3
+             )
+    end
+
+    test "leaves the exact clauses to the form that's given a new row" do
+      rule = exact_rule([{{:outer, 1, :priority}, :==, :high}])
+
+      assert rule_matches?(rule, %Module24{priority: :low}, nil, &deny/3)
+    end
+  end
+
   describe "rule_matches?/4 - quantifiers" do
     setup do
       put_derived_definitions([Module34, Module39])

@@ -102,6 +102,32 @@ defmodule Hologram.Policy.Evaluator do
       via_holds?(rule.via, entity, actor_user_id, checker)
   end
 
+  @doc """
+  Returns true when the given compiled rule grants its operation for one specific change of the
+  given entity struct, which the given new row holds the result of, or false otherwise.
+
+  A rule reading the row after the change is judged by its exact clauses, each read on the stored
+  row with the new row one level above it - so `{:outer, levels, name}` one past the quantifiers
+  around a clause reads the new row, a path, a set or a derived field there as it would on any
+  row. Any other rule says nothing about the change and is judged as `rule_matches?/4` judges it.
+  """
+  @spec rule_matches?(map, struct, struct, String.t() | nil, fun) :: boolean
+  def rule_matches?(
+        %{exact: %{predicates: predicates}} = rule,
+        entity,
+        new_row,
+        actor_user_id,
+        checker
+      ) do
+    predicates_hold?(predicates, [entity, new_row], actor_user_id, checker, :positive) and
+      to_holds?(rule.to, entity, actor_user_id, checker) and
+      via_holds?(rule.via, entity, actor_user_id, checker)
+  end
+
+  def rule_matches?(rule, entity, _new_row, actor_user_id, checker) do
+    rule_matches?(rule, entity, actor_user_id, checker)
+  end
+
   defp bound(rows, term) do
     rows
     |> Enum.drop(term.skip || 0)
