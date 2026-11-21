@@ -6,8 +6,8 @@ defmodule Hologram.Test.SyncClient do
   # the client already understands - this connects the way the browser does (session cookie,
   # handshake redemption, SSE GET with the sync greeting) and hands frames over raw.
   #
-  # Consumed by the feature and cluster test apps, like FeatureHelpers beside it. Built on
-  # :httpc so it adds no dependency to either.
+  # Consumed by the feature, cluster and sync test apps, like FeatureHelpers beside it. Built on
+  # :httpc so it adds no dependency to any of them.
 
   alias Hologram.DB.Codec
   alias Hologram.Entity.Model
@@ -35,9 +35,8 @@ defmodule Hologram.Test.SyncClient do
   @doc """
   Closes the client's stream.
 
-  Worth doing rather than leaving to the test's exit: the server holds a session and its
-  evaluators open for as long as the connection is, and the next test would be served what this
-  one left behind.
+  Worth doing rather than leaving to the test's exit: the server holds a session open for as long
+  as the connection is, and it would go on being told the next test's writes.
   """
   @spec close(t) :: :ok
   def close(client) do

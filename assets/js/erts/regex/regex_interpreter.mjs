@@ -23,6 +23,7 @@ import {
 } from "./regex_newlines.mjs";
 
 import {applyOptionSetting, startOptionSettings} from "./regex_options.mjs";
+import {unicodePropertyAtoms} from "./regex_unicode_properties.mjs";
 
 // The PCRE2 version emulated by the (?(VERSION condition, matching the
 // version Erlang/OTP ships.
@@ -32,8 +33,9 @@ const EMULATED_PCRE2_VERSION = {major: 10, minor: 47};
 // lookbehind branches to 255 chars, each at most 2 UTF-16 units.
 const LOOKBEHIND_MAX_UNITS = 510;
 
-// Cache of Unicode property name → predicate over a code point.
-const propertyMatchers = new Map();
+// Caches of Unicode property name → predicate over a char, one per caseless
+// flag value.
+const propertyMatchers = {caseless: new Map(), caseSensitive: new Map()};
 
 // Signals thrown by backtracking control verbs. They unwind the normal
 // backtracking and are caught at match, subroutine, lookaround or
@@ -260,7 +262,7 @@ export default class RegexInterpreter {
     return codePoint > 0xffff ? 2 : 1;
   }
 
-  static #classItemsMatch(items, codePoint) {
+  static #classItemsMatch(items, codePoint, caseless) {
     for (const item of items) {
       switch (item.type) {
         case "literal":
@@ -290,7 +292,8 @@ export default class RegexInterpreter {
 
         case "unicodeProperty":
           if (
-            $.#unicodePropertyMatches(item.name, codePoint) !== item.negated
+            $.#unicodePropertyMatches(item.name, codePoint, caseless) !==
+            item.negated
           ) {
             return true;
           }
@@ -307,17 +310,19 @@ export default class RegexInterpreter {
   }
 
   static #classMatches(node, codePoint, state) {
-    if ($.#classItemsMatch(node.items, codePoint)) return true;
+    if ($.#classItemsMatch(node.items, codePoint, state.caseless)) return true;
 
     if (state.caseless) {
-      // PCRE2 caseless classes fold literal, range and property members,
-      // while shorthand and POSIX members stay fold-free type checks
+      // PCRE2 caseless classes fold literal and range members, while
+      // shorthand, POSIX and property members stay fold-free type checks
       const foldableItems = node.items.filter(
-        (item) => item.type !== "shorthand" && item.type !== "posixClass",
+        (item) => item.type === "literal" || item.type === "range",
       );
 
       for (const variant of caseVariants(codePoint)) {
-        if ($.#classItemsMatch(foldableItems, variant)) return true;
+        if ($.#classItemsMatch(foldableItems, variant, state.caseless)) {
+          return true;
+        }
       }
     }
 
@@ -907,7 +912,8 @@ export default class RegexInterpreter {
           position,
           continuation,
           (codePoint) =>
-            $.#unicodePropertyMatches(node.name, codePoint) !== node.negated,
+            $.#unicodePropertyMatches(node.name, codePoint, state.caseless) !==
+            node.negated,
         );
 
       default:
@@ -1117,56 +1123,19 @@ export default class RegexInterpreter {
       : state.subject.charCodeAt(position);
   }
 
-  // Returns a cached predicate testing a code point against a PCRE2 Unicode
-  // property name, built on JS property escapes. Bare non-category names are
-  // matched as script extensions, falling back to scripts, following PCRE2.
-  static #unicodePropertyMatcher(name) {
-    switch (name) {
-      case "Any":
-        return () => true;
+  static #unicodePropertyMatches(name, codePoint, caseless) {
+    const matchers = caseless
+      ? propertyMatchers.caseless
+      : propertyMatchers.caseSensitive;
 
-      // Xan matches alphanumeric chars, Xwd additionally the underscore
-      case "Xan":
-        return (char) => /[\p{L}\p{N}]/u.test(char);
+    if (!matchers.has(name)) {
+      const content = unicodePropertyAtoms(name, caseless).join("");
+      const regex = new RegExp(`[${content}]`, "u");
 
-      case "Xwd":
-        return (char) => /[\p{L}\p{N}_]/u.test(char);
-
-      // Xps and Xsp both match white space
-      case "Xps":
-      case "Xsp":
-        return (char) => /\p{White_Space}/u.test(char);
-
-      case "Xuc":
-        // TODO: implement the universally-named character property
-        throw new Error("unsupported Unicode property: Xuc");
-
-      default: {
-        const candidates = name.includes("=")
-          ? [name]
-          : [name, `Script_Extensions=${name}`, `Script=${name}`];
-
-        for (const candidate of candidates) {
-          try {
-            const regex = new RegExp(`\\p{${candidate}}`, "u");
-
-            return (char) => regex.test(char);
-          } catch {
-            // Try the next property name form
-          }
-        }
-
-        throw new Error(`unsupported Unicode property: ${name}`);
-      }
-    }
-  }
-
-  static #unicodePropertyMatches(name, codePoint) {
-    if (!propertyMatchers.has(name)) {
-      propertyMatchers.set(name, $.#unicodePropertyMatcher(name));
+      matchers.set(name, (char) => regex.test(char));
     }
 
-    return propertyMatchers.get(name)(String.fromCodePoint(codePoint));
+    return matchers.get(name)(String.fromCodePoint(codePoint));
   }
 }
 

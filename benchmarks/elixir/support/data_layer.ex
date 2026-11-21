@@ -8,12 +8,10 @@ defmodule Hologram.Benchmarks.DataLayer do
 
   @doc """
   Returns what the data layer folds its outputs from, for every page of the build, derived the way
-  a cold compile derives it: what the data layer keeps of each page's reach, the registered queries
-  of the components the pages reach, and the module info PLT the components are told by.
+  a cold compile derives it: what the data layer keeps of each page's reach, and the module info
+  PLT the entity types are told by.
   """
-  @spec kept_inputs() ::
-          {%{module => Compiler.kept_page_reach()}, %{module => Compiler.component_queries()},
-           PLT.t()}
+  @spec kept_inputs() :: {%{module => Compiler.kept_page_reach()}, PLT.t()}
   def kept_inputs do
     ir_plt = Compiler.build_ir_plt()
     call_graph = Compiler.build_call_graph(ir_plt)
@@ -34,14 +32,8 @@ defmodule Hologram.Benchmarks.DataLayer do
     reach_by_page =
       page_modules
       |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt)
+      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt, ir_plt)
 
-    component_queries =
-      reach_by_page
-      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
-      |> Enum.uniq()
-      |> Compiler.extract_component_queries(Reflection.list_entities(module_info_plt), ir_plt)
-
-    {reach_by_page, component_queries, module_info_plt}
+    {reach_by_page, module_info_plt}
   end
 end

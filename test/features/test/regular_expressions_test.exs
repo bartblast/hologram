@@ -78,4 +78,11 @@ defmodule HologramFeatureTests.RegularExpressionsTest do
     |> click(css("button[id='server-sent regex']"))
     |> assert_text(css("#result"), inspect(["eef"]))
   end
+
+  feature "unicode property escape", %{session: session} do
+    session
+    |> visit(RegularExpressionsPage)
+    |> click(css("button[id='unicode property escape']"))
+    |> assert_text(css("#result"), inspect(["zażółć"]))
+  end
 end

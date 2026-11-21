@@ -12,8 +12,6 @@ defmodule HologramFeatureTests.ActionWritesTest do
 
   # Todo references nothing, so it truncates alone - no other table's foreign keys reach it.
   setup do
-    await_evaluator_drain()
-
     table = ~s("hologram_data"."#{Mapper.table_name(Todo)}")
 
     {:ok, _result} = Connection.query("TRUNCATE #{table}", [])

@@ -164,10 +164,11 @@ defmodule Hologram.DB.Writer do
 
   @doc false
   @spec check_update!(struct, list(atom)) :: :ok
-  # The update verb's own check of the fields a client's write names, for the batch applier to make
-  # before the merge: whether a write is refused must not turn on which of its values lose to
-  # another writer's, and a write whose every value loses still answers with the columns it lost
-  # to. Judged whether or not anyone is signed in, as every client write is.
+  # The update verb's own check of the fields a client's call names - its values, its amounts and
+  # its to-many edges - for the batch applier to make before the merge: whether a write is refused
+  # must not turn on which of its values lose to another writer's, and a write whose every value
+  # loses still answers with the columns it lost to. Judged whether or not anyone is signed in, as
+  # every client write is.
   def check_update!(row, names), do: check_fields!(row, changed_fields(row.__struct__, names, []))
 
   defp apply_relationship_op(:add, entity_type, id, relationship_name, target_id) do

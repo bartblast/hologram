@@ -205,12 +205,14 @@ describe("LocalDatabase", () => {
 
     it("drops the carried counts and the completeness marks", () => {
       LocalDatabase.syncCounts = {"MyApp.Component/todos/": 3};
+      LocalDatabase.syncCountTypes = {"MyApp.Component/todos/": [TASK]};
       LocalDatabase.markTypesSynced([TASK]);
       LocalDatabase.markAllSynced();
 
       LocalDatabase.beginRefill();
 
       assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
       assert.isFalse(LocalDatabase.isAllSynced());
       assert.isFalse(LocalDatabase.isTypeSynced(TASK));
     });

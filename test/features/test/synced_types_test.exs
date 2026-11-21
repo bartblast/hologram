@@ -9,7 +9,6 @@ defmodule HologramFeatureTests.SyncedTypesTest do
   alias HologramFeatureTests.SyncedTypesPage
 
   setup do
-    await_evaluator_drain()
     truncate_entity_tables([Bookmark, Todo])
   end
 
@@ -54,8 +53,8 @@ defmodule HologramFeatureTests.SyncedTypesTest do
     assert [_alpha, _added] = await_server_todos(2)
   end
 
-  # No window reads bookmarks, so before, a change to one never reached a browser that already held
-  # it: what a client is told live goes by what its user may read.
+  # No page's query reads bookmarks, so before, a change to one never reached a browser that
+  # already held it: what a client is told live goes by what its user may read.
   feature "changes live a row of a type only an action reads", %{session: session} do
     bookmark =
       %{label: "draft"}

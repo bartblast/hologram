@@ -7,7 +7,7 @@ defmodule HologramFeatureTests.TemplateSyntax.InterpolationPage do
 
   def template do
     ~HOLO"""
-    <span class="node_1">a{1 + 1}c</div>
+    <span class="node_1">a{1 + 1}c</span>
 
     <span class="node_{1 + 1}">xyz</span>
 

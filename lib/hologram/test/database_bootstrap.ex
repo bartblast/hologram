@@ -2,7 +2,7 @@ defmodule Hologram.Test.DatabaseBootstrap do
   @moduledoc false
 
   # This is not public API yet - it is consumed by the Hologram test suite and by the
-  # feature and cluster test apps.
+  # feature, cluster and sync test apps.
   # TODO: consider promoting to public API (docs, stable surface), so that client apps
   # can bootstrap their own test databases with it.
 

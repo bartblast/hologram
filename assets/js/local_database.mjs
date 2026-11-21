@@ -32,6 +32,10 @@ export default class LocalDatabase {
   // and the queued writes is the id above, which keeps two such users of one browser apart.
   static actorEntityId = null;
 
+  // The entity types each count in syncCounts reads, under the same key - which types this client
+  // has to hold every row of before it counts for itself.
+  static syncCountTypes = {};
+
   // What the render that handed this page over counted, keyed by the field and the query it ran -
   // held until this client's own database is complete enough to count for itself.
   static syncCounts = {};
@@ -91,6 +95,7 @@ export default class LocalDatabase {
       }
     }
 
+    LocalDatabase.syncCountTypes = {};
     LocalDatabase.syncCounts = {};
     LocalDatabase.#syncedAll = false;
     LocalDatabase.#syncedTypes = new Set();
@@ -332,6 +337,7 @@ export default class LocalDatabase {
   // SERVER said - and what this client has written and not yet sent is not the server's to take
   // away. Overlay.reset() exists for the callers that do mean it.
   static reset() {
+    LocalDatabase.syncCountTypes = {};
     LocalDatabase.syncCounts = {};
     LocalDatabase.#carried = new Set();
     LocalDatabase.#facts = {};

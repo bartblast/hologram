@@ -5,11 +5,99 @@ defmodule HologramClusterTests.ClusterTest do
 
   alias HologramClusterTests.HTTPClient
 
+  # Listens on the port free_port/0 would hand out next, and returns it with the socket. A port
+  # something else holds is passed over, since that listener could close before free_port/0
+  # looks: the test's own socket stays open for as long as the test needs it.
+  defp listen_on_next_free_port(opts, attempt \\ 1)
+
+  defp listen_on_next_free_port(_opts, attempt) when attempt > 126 do
+    flunk("something holds the port after each free one of this run's block")
+  end
+
+  defp listen_on_next_free_port(opts, attempt) do
+    port = next_free_port()
+
+    case :gen_tcp.listen(port, opts) do
+      {:ok, socket} -> {:ok, port, socket}
+      {:error, :eaddrinuse} -> listen_on_next_free_port(opts, attempt + 1)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # The picks go up the run's block and start over after its last port.
+  defp next_free_port do
+    first_port = proxy_port() + 1
+    last_port = proxy_port() + 126
+
+    case free_port() do
+      ^last_port -> first_port
+      port -> port + 1
+    end
+  end
+
   describe "await_pubsub_convergence/1" do
     test "returns :ok once every peer's broadcast reaches this node" do
       peers = start_peers(2)
 
       assert await_pubsub_convergence(peers) == :ok
+    end
+  end
+
+  describe "free_port/0" do
+    test "returns a port of the run's block, after the proxy's, that nothing listens on" do
+      port = free_port()
+
+      assert port in (proxy_port() + 1)..(proxy_port() + 126)
+      assert {:ok, socket} = :gen_tcp.listen(port, ip: {127, 0, 0, 1})
+
+      :gen_tcp.close(socket)
+    end
+
+    test "returns another port each time" do
+      ports = Enum.map(1..10, fn _index -> free_port() end)
+
+      assert Enum.uniq(ports) == ports
+    end
+
+    test "skips a port something listens on" do
+      # With reuseaddr, so the test's listener gets the port even right after a connection on
+      # it closed.
+      {:ok, next_port, socket} =
+        listen_on_next_free_port(ip: {127, 0, 0, 1}, reuseaddr: true)
+
+      port = free_port()
+
+      :gen_tcp.close(socket)
+
+      assert port != next_port
+    end
+
+    test "skips a port something listens on over IPv6 alone" do
+      case listen_on_next_free_port([:inet6, ip: {0, 0, 0, 0, 0, 0, 0, 1}, reuseaddr: true]) do
+        {:ok, next_port, socket} ->
+          port = free_port()
+
+          :gen_tcp.close(socket)
+
+          assert port != next_port
+
+        # A machine without IPv6 has no such listeners.
+        {:error, reason} ->
+          assert reason in [:eaddrnotavail, :eafnosupport, :eprotonosupport]
+      end
+    end
+  end
+
+  describe "proxy_port/0" do
+    test "returns the port after the one this run holds as its claim on the block" do
+      claim_port = proxy_port() - 1
+
+      assert rem(claim_port - 20_000, 128) == 0
+      assert :gen_tcp.listen(claim_port, ip: {127, 0, 0, 1}) == {:error, :eaddrinuse}
+    end
+
+    test "returns the same port each time" do
+      assert proxy_port() == proxy_port()
     end
   end
 
@@ -58,13 +146,36 @@ defmodule HologramClusterTests.ClusterTest do
       [peer] = start_peers(1)
       stop_peer(peer)
 
-      assert_raise RuntimeError, ~r/rpc Node.self\/0 to :"peer1@127.0.0.1" failed/, fn ->
+      message = "rpc Node.self/0 to #{inspect(peer.node)} failed"
+
+      assert_raise RuntimeError, ~r/#{Regex.escape(message)}/, fn ->
         rpc(peer, Node, :self, [])
       end
     end
   end
 
   describe "start_peers/1" do
+    test "names each peer after its index and this BEAM's OS pid" do
+      peers = start_peers(2)
+
+      os_pid = System.pid()
+
+      assert Enum.map(peers, &Atom.to_string(&1.node)) == [
+               "peer1_#{os_pid}@127.0.0.1",
+               "peer2_#{os_pid}@127.0.0.1"
+             ]
+    end
+
+    test "gives each peer a port of its own from the run's block" do
+      [peer_1, peer_2] = start_peers(2)
+
+      block_ports = (proxy_port() + 1)..(proxy_port() + 126)
+
+      assert peer_1.port in block_ports
+      assert peer_2.port in block_ports
+      assert peer_1.port != peer_2.port
+    end
+
     test "starts the requested number of connected peers" do
       peers = start_peers(2)
 

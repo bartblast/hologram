@@ -21,8 +21,6 @@ defmodule HologramFeatureTests.MultiTabTest do
   # referenced by other tables, and the sign-in commands find their user by email, so one left by
   # an earlier run is exactly the row they want.
   setup do
-    await_evaluator_drain()
-
     table = ~s("hologram_data"."#{Mapper.table_name(Todo)}")
 
     {:ok, _result} = Connection.query("TRUNCATE #{table}", [])

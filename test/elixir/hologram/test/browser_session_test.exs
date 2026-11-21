@@ -6,7 +6,9 @@ defmodule Hologram.Test.BrowserSessionTest do
   import Hologram.Test.BrowserSession
 
   @base_url "http://localhost:9515/"
+  @beam_command "/usr/local/lib/erlang/erts-16.0/bin/beam.smp -- -root /usr/local/lib/erlang"
   @capabilities %{browserName: "chrome"}
+  @default_chrome_args ["--headless", "--no-sandbox"]
   @warm_up_messages [{:session_started, "warm-up"}, {:session_ended, "warm-up"}]
 
   defmodule StandInChromedriver do
@@ -50,7 +52,8 @@ defmodule Hologram.Test.BrowserSessionTest do
              {:messages,
               [
                 :stopped,
-                {:put_env, :wallaby, :chromedriver, [path: wrapper_path]},
+                {:put_env, :wallaby, :chromedriver,
+                 [path: wrapper_path, capabilities: marked_capabilities()]},
                 {:put_env, :hologram, :__browser_session_log_dir__, log_dir},
                 :started,
                 :stopped,
@@ -106,6 +109,25 @@ defmodule Hologram.Test.BrowserSessionTest do
     fn base_url, session_id -> send(test_pid, {:deleted, base_url, session_id}) end
   end
 
+  # The capabilities start_wallaby/1 gives Wallaby when its config has none: the
+  # stand-in defaults with the run's marker after their Chrome args.
+  defp marked_capabilities do
+    %{chromeOptions: %{args: ["--headless", "--no-sandbox", run_marker(System.pid())]}}
+  end
+
+  # What `ps` prints: a line per process, with the pid right-aligned and then the
+  # command line.
+  defp ps_fn(processes) do
+    listing =
+      Enum.map_join(processes, fn {pid, command} ->
+        String.pad_leading(pid, 5) <> " " <> command <> "\n"
+      end)
+
+    fn -> listing end
+  end
+
+  defp run_marker(run_pid), do: "--hologram-test-run=" <> run_pid
+
   # Partition 1 answers as answer_fn says for the current start, partition 0 is ready.
   defp start_chromedrivers(answer_fn) do
     starts = :counters.new(1, [])
@@ -128,6 +150,11 @@ defmodule Hologram.Test.BrowserSessionTest do
     )
 
     starts
+  end
+
+  # A Chrome that ChromeDriver started for the run of the BEAM with the given pid.
+  defp test_browser_command(run_pid) do
+    "/opt/chrome/chrome --headless --test-type=webdriver --no-sandbox " <> run_marker(run_pid)
   end
 
   defp start_store_supervisor(store) do
@@ -529,7 +556,8 @@ defmodule Hologram.Test.BrowserSessionTest do
       File.chmod!(chromedriver_path, 0o755)
 
       # A quote and a space, so the wrapper has to quote its paths.
-      log_dir = Path.join(tmp_dir, "it's logs")
+      runs_log_dir = Path.join(tmp_dir, "it's logs")
+      log_dir = Path.join(runs_log_dir, System.pid())
 
       # How partition 1 answers on each start, :ready unless a test tags otherwise.
       answers = Map.get(context, :chromedriver_answers, %{})
@@ -542,8 +570,12 @@ defmodule Hologram.Test.BrowserSessionTest do
         chromedriver_path: chromedriver_path,
         chromedrivers: :browser_session_test_chromedrivers,
         create_fn: fn _base_url, _capabilities -> {:ok, %{"sessionId" => "warm-up"}} end,
+        default_capabilities_fn: fn -> %{chromeOptions: %{args: @default_chrome_args}} end,
         end_session_fn: fn session -> send(test_pid, {:session_ended, session}) end,
-        log_dir: log_dir,
+        kill_fn: fn pids -> send(self(), {:killed, pids}) end,
+        log_dir: runs_log_dir,
+        # No ps, unless a test lists processes of its own.
+        ps_fn: fn -> nil end,
         put_env_fn: fn app, key, value -> send(self(), {:put_env, app, key, value}) end,
         ready_timeout: 5_000,
         start_fn: fn ->
@@ -562,10 +594,10 @@ defmodule Hologram.Test.BrowserSessionTest do
         stop_fn: fn -> send(self(), :stopped) end
       ]
 
-      [args_path: args_path, log_dir: log_dir, opts: opts]
+      [args_path: args_path, log_dir: log_dir, opts: opts, runs_log_dir: runs_log_dir]
     end
 
-    test "stops Wallaby, points it at a ChromeDriver wrapper and sets the log dir, starts it, then starts and ends a browser session",
+    test "stops Wallaby, points it at a ChromeDriver wrapper, marks its browsers and sets the run's log dir, starts it, then starts and ends a browser session",
          %{
            log_dir: log_dir,
            opts: opts
@@ -578,7 +610,8 @@ defmodule Hologram.Test.BrowserSessionTest do
                {:messages,
                 [
                   :stopped,
-                  {:put_env, :wallaby, :chromedriver, [path: wrapper_path]},
+                  {:put_env, :wallaby, :chromedriver,
+                   [path: wrapper_path, capabilities: marked_capabilities()]},
                   {:put_env, :hologram, :__browser_session_log_dir__, log_dir},
                   :started
                   | @warm_up_messages
@@ -587,7 +620,7 @@ defmodule Hologram.Test.BrowserSessionTest do
 
     test "keeps the rest of Wallaby's ChromeDriver config", %{log_dir: log_dir, opts: opts} do
       # No other test reads it, and tests within a module run one at a time.
-      Application.put_env(:wallaby, :chromedriver, capabilities: %{browserName: "chrome"})
+      Application.put_env(:wallaby, :chromedriver, binary: "/opt/chrome/chrome")
       on_exit(fn -> Application.delete_env(:wallaby, :chromedriver) end)
 
       start_wallaby(opts)
@@ -595,7 +628,229 @@ defmodule Hologram.Test.BrowserSessionTest do
       wrapper_path = Path.join(log_dir, "chromedriver")
 
       assert_received {:put_env, :wallaby, :chromedriver, chromedriver_env}
-      assert chromedriver_env == [path: wrapper_path, capabilities: %{browserName: "chrome"}]
+
+      assert chromedriver_env == [
+               path: wrapper_path,
+               capabilities: marked_capabilities(),
+               binary: "/opt/chrome/chrome"
+             ]
+    end
+
+    test "adds the run's marker after the configured Chrome args, keeping the other capabilities",
+         %{opts: opts} do
+      capabilities = %{
+        chromeOptions: %{args: ["--headless", "--window-size=1280,800"], binary: "/opt/chrome"},
+        javascriptEnabled: true
+      }
+
+      # No other test reads it, and tests within a module run one at a time.
+      Application.put_env(:wallaby, :chromedriver, capabilities: capabilities)
+      on_exit(fn -> Application.delete_env(:wallaby, :chromedriver) end)
+
+      start_wallaby(opts)
+
+      assert_received {:put_env, :wallaby, :chromedriver, chromedriver_env}
+
+      assert chromedriver_env[:capabilities] == %{
+               chromeOptions: %{
+                 args: ["--headless", "--window-size=1280,800", run_marker(System.pid())],
+                 binary: "/opt/chrome"
+               },
+               javascriptEnabled: true
+             }
+    end
+
+    test "adds the run's marker to configured capabilities that have no Chrome options", %{
+      opts: opts
+    } do
+      # No other test reads it, and tests within a module run one at a time.
+      Application.put_env(:wallaby, :chromedriver, capabilities: %{javascriptEnabled: true})
+      on_exit(fn -> Application.delete_env(:wallaby, :chromedriver) end)
+
+      start_wallaby(opts)
+
+      assert_received {:put_env, :wallaby, :chromedriver, chromedriver_env}
+
+      assert chromedriver_env[:capabilities] == %{
+               chromeOptions: %{args: [run_marker(System.pid())]},
+               javascriptEnabled: true
+             }
+    end
+
+    test "replaces a run's marker already among the configured Chrome args", %{opts: opts} do
+      capabilities = %{chromeOptions: %{args: [run_marker("123"), "--headless"]}}
+
+      # No other test reads it, and tests within a module run one at a time.
+      Application.put_env(:wallaby, :chromedriver, capabilities: capabilities)
+      on_exit(fn -> Application.delete_env(:wallaby, :chromedriver) end)
+
+      start_wallaby(opts)
+
+      assert_received {:put_env, :wallaby, :chromedriver, chromedriver_env}
+
+      assert chromedriver_env[:capabilities] == %{
+               chromeOptions: %{args: ["--headless", run_marker(System.pid())]}
+             }
+    end
+
+    test "kills the test browsers whose run's BEAM is gone, before it starts Wallaby", %{
+      opts: opts
+    } do
+      ps_fn =
+        ps_fn([
+          {"1", "/sbin/launchd"},
+          {"700", test_browser_command("500")},
+          {"701", test_browser_command("500")}
+        ])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      assert {:messages,
+              [:stopped, {:killed, ["700", "701"]}, {:put_env, :wallaby, _key, _value} | _rest]} =
+               Process.info(self(), :messages)
+    end
+
+    test "kills a test browser whose program's path holds spaces", %{opts: opts} do
+      command =
+        "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing " <>
+          "--headless --test-type=webdriver " <> run_marker("500")
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn([{"700", command}])))
+
+      assert_received {:killed, ["700"]}
+    end
+
+    test "leaves alone a test browser whose run's BEAM is still running", %{opts: opts} do
+      ps_fn = ps_fn([{"500", @beam_command}, {"700", test_browser_command("500")}])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      refute_received {:killed, _pids}
+    end
+
+    test "leaves alone the test browsers of BEAMs of other builds, at a path with a space, and with no args",
+         %{opts: opts} do
+      ps_fn =
+        ps_fn([
+          {"500", "/opt/erlang/erts-16.0/bin/beam.debug.smp -- -root /opt/erlang"},
+          {"501", "/opt/erlang/erts-16.0/bin/beam.debug.emu.smp -- -root /opt/erlang"},
+          {"502", "/opt/my erlang/erts-16.0/bin/beam.smp"},
+          {"700", test_browser_command("500")},
+          {"701", test_browser_command("501")},
+          {"702", test_browser_command("502")}
+        ])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      refute_received {:killed, _pids}
+    end
+
+    test "kills a test browser whose run's pid now names a process that isn't a BEAM", %{
+      opts: opts
+    } do
+      # Not a BEAM, though it names one.
+      ps_fn = ps_fn([{"500", "/usr/bin/vim beam.smp.txt"}, {"700", test_browser_command("500")}])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      assert_received {:killed, ["700"]}
+    end
+
+    test "kills a test browser marked with this BEAM's pid, left by an earlier run that had it",
+         %{
+           opts: opts
+         } do
+      ps_fn =
+        ps_fn([{System.pid(), @beam_command}, {"700", test_browser_command(System.pid())}])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      assert_received {:killed, ["700"]}
+    end
+
+    test "kills a test browser whose run's pid is only the start of a running BEAM's pid", %{
+      opts: opts
+    } do
+      ps_fn = ps_fn([{"5000", @beam_command}, {"700", test_browser_command("500")}])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      assert_received {:killed, ["700"]}
+    end
+
+    test "leaves alone a test browser with no run marker, a marked process that isn't a test browser, and every other process",
+         %{opts: opts} do
+      ps_fn =
+        ps_fn([
+          {"1", "/sbin/launchd"},
+          {"700", "/opt/chrome/chrome --headless --test-type=webdriver --no-sandbox"},
+          {"701", "/opt/chrome/chrome --type=renderer --test-type=webdriver"},
+          {"702", "/opt/chrome/chrome --headless " <> run_marker("500")},
+          {"703", @beam_command}
+        ])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      refute_received {:killed, _pids}
+    end
+
+    test "leaves alone a process that isn't Chrome, with a test browser's switches among its args",
+         %{opts: opts} do
+      ps_fn = ps_fn([{"700", "/bin/zsh -c echo " <> test_browser_command("500")}])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      refute_received {:killed, _pids}
+    end
+
+    test "leaves alone a process whose switches only start like a test browser's, hold a marker inside, or name no pid",
+         %{opts: opts} do
+      ps_fn =
+        ps_fn([
+          {"700", "/opt/chrome/chrome --test-type=webdriver2 " <> run_marker("500")},
+          {"701", "/opt/chrome/chrome --test-type=webdriver --x" <> run_marker("500")},
+          {"702", "/opt/chrome/chrome --test-type=webdriver " <> run_marker("abc")}
+        ])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      refute_received {:killed, _pids}
+    end
+
+    test "kills nothing when the processes can't be listed", %{opts: opts} do
+      start_wallaby(Keyword.put(opts, :ps_fn, fn -> nil end))
+
+      refute_received {:killed, _pids}
+    end
+
+    test "kills a test browser whose run's BEAM is gone, found with the real ps", %{
+      opts: opts,
+      tmp_dir: tmp_dir
+    } do
+      # A stand-in that sleeps, named like Chrome, with a test browser's switches
+      # after its own args. No process has the pid it names, since pids stay far
+      # below it.
+      chrome_path = Path.join(tmp_dir, "chrome")
+
+      "perl"
+      |> System.find_executable()
+      |> File.ln_s!(chrome_path)
+
+      port =
+        Port.open({:spawn_executable, chrome_path}, [
+          :exit_status,
+          args: ["-e", "sleep 60", "--", "--test-type=webdriver", run_marker("999999999")]
+        ])
+
+      {:os_pid, os_pid} = Port.info(port, :os_pid)
+      on_exit(fn -> System.cmd("kill", ["-9", to_string(os_pid)], stderr_to_stdout: true) end)
+
+      opts = Keyword.drop(opts, [:kill_fn, :ps_fn])
+
+      assert start_wallaby(opts) == :ok
+
+      # SIGTERM ends it with status 128 + 15.
+      assert_receive {^port, {:exit_status, 143}}, 5_000
     end
 
     test "the wrapper runs ChromeDriver with the log flags after Wallaby's args", %{
@@ -669,16 +924,133 @@ defmodule Hologram.Test.BrowserSessionTest do
       assert_restarted_once(log_dir, @warm_up_messages)
     end
 
-    test "empties a log dir left by an earlier run", %{log_dir: log_dir, opts: opts} do
+    test "deletes the log dir of a run whose BEAM is gone, with its logs", %{
+      opts: opts,
+      runs_log_dir: runs_log_dir
+    } do
+      run_log_dir = Path.join(runs_log_dir, "500")
+      File.mkdir_p!(run_log_dir)
+
+      run_log_dir
+      |> Path.join("chromedriver-123.log")
+      |> File.write!("ended run")
+
+      ps_fn = ps_fn([{System.pid(), @beam_command}])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      assert File.ls!(runs_log_dir) == [System.pid()]
+    end
+
+    test "keeps the log dir of a run whose BEAM is still running, with its logs", %{
+      opts: opts,
+      runs_log_dir: runs_log_dir
+    } do
+      run_log_dir = Path.join(runs_log_dir, "501")
+      File.mkdir_p!(run_log_dir)
+
+      run_log_dir
+      |> Path.join("chromedriver-123.log")
+      |> File.write!("another run")
+
+      ps_fn = ps_fn([{"501", @beam_command}, {System.pid(), @beam_command}])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      run_log_dirs =
+        runs_log_dir
+        |> File.ls!()
+        |> Enum.sort()
+
+      assert run_log_dirs == Enum.sort(["501", System.pid()])
+      assert File.ls!(run_log_dir) == ["chromedriver-123.log"]
+    end
+
+    test "keeps the log dir of a run that starts after the log dirs are read", %{
+      opts: opts,
+      runs_log_dir: runs_log_dir
+    } do
+      # The run is too new to be among the processes, and so is its log dir.
+      ps_fn = fn ->
+        runs_log_dir
+        |> Path.join("600")
+        |> File.mkdir_p!()
+
+        ps_fn([{System.pid(), @beam_command}]).()
+      end
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      run_log_dirs =
+        runs_log_dir
+        |> File.ls!()
+        |> Enum.sort()
+
+      assert run_log_dirs == Enum.sort(["600", System.pid()])
+    end
+
+    test "deletes the log dir of a run whose pid now names a process that isn't a BEAM", %{
+      opts: opts,
+      runs_log_dir: runs_log_dir
+    } do
+      runs_log_dir
+      |> Path.join("500")
+      |> File.mkdir_p!()
+
+      ps_fn = ps_fn([{"500", "/usr/bin/vim notes.txt"}, {System.pid(), @beam_command}])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      assert File.ls!(runs_log_dir) == [System.pid()]
+    end
+
+    test "deletes the files left from when the log dir held one run's logs", %{
+      opts: opts,
+      runs_log_dir: runs_log_dir
+    } do
+      File.mkdir_p!(runs_log_dir)
+
+      for file_name <- ["chromedriver", "chromedriver-123.log", "hangs.txt"] do
+        runs_log_dir
+        |> Path.join(file_name)
+        |> File.write!("earlier run")
+      end
+
+      ps_fn = ps_fn([{System.pid(), @beam_command}])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
+
+      assert File.ls!(runs_log_dir) == [System.pid()]
+    end
+
+    test "empties its own log dir, left by an earlier run whose BEAM had the same pid", %{
+      log_dir: log_dir,
+      opts: opts
+    } do
       File.mkdir_p!(log_dir)
 
       log_dir
-      |> Path.join("chromedriver-123.log")
+      |> Path.join("hangs.txt")
       |> File.write!("earlier run")
 
-      start_wallaby(opts)
+      ps_fn = ps_fn([{System.pid(), @beam_command}])
+
+      start_wallaby(Keyword.put(opts, :ps_fn, ps_fn))
 
       assert File.ls!(log_dir) == ["chromedriver"]
+    end
+
+    test "deletes every other run's log dir when the processes can't be listed", %{
+      opts: opts,
+      runs_log_dir: runs_log_dir
+    } do
+      runs_log_dir
+      |> Path.join("500")
+      |> File.mkdir_p!()
+
+      start_wallaby(Keyword.put(opts, :ps_fn, fn -> nil end))
+
+      assert File.ls!(runs_log_dir) == [System.pid()]
     end
 
     test "raises after the last attempt, also when Wallaby's ChromeDriver tree is gone", %{

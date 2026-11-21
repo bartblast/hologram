@@ -3,6 +3,7 @@ defmodule HologramFeatureTests.Events.ChangeTest do
 
   alias HologramFeatureTests.Events.Change.Page1
   alias HologramFeatureTests.Events.Change.Page2
+  alias HologramFeatureTests.Events.Change.Page3
 
   feature "text input", %{session: session} do
     session
@@ -129,6 +130,19 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     |> assert_text(
       css("#result"),
       ~s'{:form, %{event: %{"checked_checkbox" => true, "empty_email" => "", "empty_text" => "", "empty_textarea" => "", "non_empty_email" => "my_email", "non_empty_text" => "my_text", "non_empty_textarea" => "my_textarea", "radio_group" => "option_2", "single_select" => "option_3"}}}'
+    )
+  end
+
+  feature "form level change event on a form whose fields hide its properties", %{
+    session: session
+  } do
+    session
+    |> visit(Page3)
+    |> fill_in(css("form input[name='localName']"), with: "my_text")
+    |> click(button("Blur"))
+    |> assert_text(
+      css("#result"),
+      ~s'{:form, %{event: %{"elements" => true, "localName" => "my_text"}}}'
     )
   end
 end

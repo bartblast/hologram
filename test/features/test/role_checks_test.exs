@@ -21,8 +21,6 @@ defmodule HologramFeatureTests.RoleChecksTest do
   # The tables truncate in one statement: the memo, note, project member and role grant tables'
   # foreign keys to the user table make Postgres reject truncating the referenced table alone.
   setup do
-    await_evaluator_drain()
-
     truncate_entity_tables([Document, Memo, Note, ProjectMember, RoleGrant, User])
   end
 
@@ -171,7 +169,7 @@ defmodule HologramFeatureTests.RoleChecksTest do
   feature "shows no role to a session with no user at all", %{session: session} do
     create_document("ephemeris")
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/policies/4")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/policies/4")
 
     assert html =~ ~r{<strong id="documents"><code>ephemeris</code></strong>}
     assert html =~ ~r{<strong id="admin"><code>false</code></strong>}

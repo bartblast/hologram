@@ -75,7 +75,7 @@ defmodule HologramSyncBenchmark.Driver do
   @spec main([String.t()]) :: :ok
   def main(argv) do
     # Checked here, though it matters earlier: without it the compile that ran before this script
-    # skipped the Hologram compiler, so the server node would have no bundle and no windows.
+    # skipped the Hologram compiler, so the server node would have no bundle and no page types.
     if System.get_env("HOLOGRAM_START") != "1" do
       raise "run with HOLOGRAM_START=1, see README.md"
     end

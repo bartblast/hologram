@@ -17,6 +17,11 @@ defmodule Hologram.Sync.Pot do
   # | no       | yes  | either  | to drop it, which it no longer holds     |
   # | no       | no   | either  | nothing - not even that the row exists   |
   #
+  # Bar a row the client's own batch created that its user may not read. The client files it once
+  # the batch is confirmed, whatever its session was told, so it is told to drop it, by id, which
+  # tells the client nothing it doesn't know. One its user may read is handed over whole, like any
+  # row the client doesn't hold.
+  #
   # The client files a set as pairs under the row holding it: a to-many under its source, the
   # inverse of a to-many under its target. A row it is handed states its own sets whole, so the pairs
   # left to tell are the ones filed under the rows it already holds: a pair the batch added or
@@ -63,7 +68,8 @@ defmodule Hologram.Sync.Pot do
   The same part decided again with what the first decision returned - the dispatcher reads a batch
   again after a crash - changes nothing the session knows of the client, and tells a client that
   took the first news nothing it doesn't already hold. It doesn't tell the same: a row dropped
-  isn't dropped again, and a row handed over is held by then, so it comes back as a patch or not
+  isn't dropped again, bar a row the client created (see `created:` below), which drops nothing the
+  second time, and a row handed over is held by then, so it comes back as a patch or not
   at all - or, when held isn't trusted, whole again. So a replay is no way to send a frame that
   never arrived.
 
@@ -78,11 +84,20 @@ defmodule Hologram.Sync.Pot do
   session whose held ids were read rather than told, where a row the client holds can be missing
   from them. They stay out of the dropped: a removal of a pair naming one would name it by id.
   Without a salt, `hidden` is empty.
+
+  Given `created:`, the rows the client's own batches in the part created, per entity type, packed
+  (see `Hologram.Sync.Live.parts/5`'s `own_puts`): the client files those itself once their batch
+  is confirmed, so the ones the user may not read and the session doesn't take the client to hold
+  are dropped, by id, like a held row the user may no longer read. Judged against the part's
+  `readable` alone, not its `checked`: a catch-up's chunk has the rows an earlier chunk settled taken
+  out of both, and a settled row the user may read was handed over, so it is held. They stay out of
+  `hidden`, which would drop them again.
   """
   @spec decide(t, map, keyword) :: {news, t}
   def decide(pot, part, opts \\ []) do
     synced = MapSet.new(part.synced_types)
     trust_held? = Keyword.get(opts, :trust_held?, true)
+    created = Keyword.get(opts, :created, %{})
 
     judged = Enum.map(part.checked, &judge_type(&1, pot.held, part, trust_held?))
 
@@ -90,9 +105,12 @@ defmodule Hologram.Sync.Pot do
       Enum.flat_map(judged, fn {_entity_type, appeared, _patched, _unsynced} -> appeared end)
 
     unsynced =
-      Enum.flat_map(judged, fn {entity_type, _appeared, _patched, unsynced} ->
+      judged
+      |> Enum.flat_map(fn {entity_type, _appeared, _patched, unsynced} ->
         Enum.map(unsynced, &{&1, entity_type})
       end)
+      |> Enum.concat(created_unsynced(pot.held, part, created))
+      |> Enum.sort_by(fn {id, entity_type} -> {entity_type, id} end)
 
     told = tell(pot, appeared, unsynced)
     put_keys = MapSet.new(appeared, &{&1.__struct__, &1.id})
@@ -119,7 +137,7 @@ defmodule Hologram.Sync.Pot do
     news = %{
       appeared: Enum.map(appeared, &with_sets(&1, lookup, told.held, synced)),
       edges: edges,
-      hidden: hidden(pot, part, Keyword.get(opts, :hidden_salt)),
+      hidden: hidden(pot, part, Keyword.get(opts, :hidden_salt), created),
       patched: patched,
       unsynced: unsynced
     }
@@ -178,9 +196,10 @@ defmodule Hologram.Sync.Pot do
   `Hologram.Sync.Live.pairs_touching/2`). A handed-over row's sets keep only the rows the client
   holds once told, as `decide/3`'s do.
 
-  What a row it holds now holds is not told: a type read again because a grant moved changed who
-  may read its rows, not the rows - unless given `trust_held?: false`, as `decide/3` is, when every
-  row read is handed over.
+  What a row it holds now holds is not told: a type is read again because a grant moved who may
+  read its rows or what the verdicts sent with them answer, not the rows - unless given
+  `trust_held?: false`, as `decide/3` is, when every row read is handed over. The verdicts the grant
+  moved on the rows it holds are its caller's to tell (see `Hologram.Sync.Verdicts.stale/3`).
   """
   @spec reread(
           t,
@@ -331,18 +350,41 @@ defmodule Hologram.Sync.Pot do
     struct(row, sets)
   end
 
-  # The moved rows of each type the user may not read and the client isn't taken to hold, in id order.
-  defp hidden(_pot, _part, nil), do: []
+  # The rows the client's own batches created that the user may not read and the session doesn't
+  # take the client to hold, each with its type. A row the user may read isn't held either, and is
+  # handed over whole.
+  #
+  # A later batch of the client's still pending that would make such a row readable - an update
+  # giving it the user as its owner - folds onto no row once the drop lands, so the row is off the
+  # screen until that batch's own frame hands it over, which its answer can't: an update over no
+  # row files nothing. Normally one round trip, longer while the queue is stalled behind the batch.
+  # Keeping the row instead would need the drop told again for whatever the later batch does, so
+  # the client shows what the server last said, as it does for any row dropped under a pending write.
+  defp created_unsynced(held, part, created) do
+    Enum.flat_map(created, fn {entity_type, packed_ids} ->
+      {_held, not_held} = Held.split(held, entity_type, packed_ids)
+      readable = Map.get(part.readable, entity_type, %{})
 
-  defp hidden(pot, part, salt) do
+      for id <- PackedIds.unpack(not_held),
+          not Map.has_key?(readable, id),
+          do: {id, entity_type}
+    end)
+  end
+
+  # The moved rows of each type the user may not read and the client isn't taken to hold, in id
+  # order - bar the ones its own batches created, which are dropped by id.
+  defp hidden(_pot, _part, nil, _created), do: []
+
+  defp hidden(pot, part, salt, created) do
     Enum.flat_map(part.moved, fn {entity_type, packed_ids} ->
       {_held, not_held} = Held.split(pot.held, entity_type, packed_ids)
       readable = Map.get(part.readable, entity_type, %{})
+      created_ids = Map.get(created, entity_type, "")
 
       ids =
         not_held
         |> PackedIds.unpack()
-        |> Enum.reject(&Map.has_key?(readable, &1))
+        |> Enum.reject(&(Map.has_key?(readable, &1) or PackedIds.member?(created_ids, &1)))
 
       if ids == [], do: [], else: [{entity_type, salt, Enum.sort(ids)}]
     end)

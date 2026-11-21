@@ -10,6 +10,7 @@ defmodule Hologram.Component.Derived do
   # the client, which the call graph reaches through the capture __derived__/0 holds.
 
   alias Hologram.Compiler.AST
+  alias Hologram.Component.Derived.QueryCheck
   alias Hologram.Component.NotComputed
   alias Hologram.Query
   alias Hologram.Query.Stage
@@ -24,21 +25,24 @@ defmodule Hologram.Component.Derived do
   given, and returns the given computed values with theirs added.
 
   Each function is given its arguments by name: the props (params on a page), then the state, then
-  the values computed so far. The result of a field the build registered as a query, which the
-  `:registered_query?` option answers for a field's name, is normalized, checked against the
-  field's type and handed to the `:run_query` option, a function taking the field's name, its
-  arguments and the term, whose result is the field's value. Any other result is checked against
-  the field's type.
+  the values computed so far. A result that is a query, however it was built - a query term, or an
+  entity type for a field declared to hold its rows, which stands for every row of it - is
+  normalized, checked against the field's type and handed to the `:run_query` option, a function
+  taking the field's name, its arguments and the term, whose result is the field's value. Any other
+  result is checked against the field's type.
 
   With the `:stateless` option a component renders without a cid, so it has no state to read.
 
   Raises Hologram.MisuseError when an argument has no value, when a result doesn't match the field's
-  type, when a field the build didn't register returns a query, and Hologram.StateError when a
-  stateless component's field reads state.
+  type, when a field's query reads a type with no allow lines, filters or sorts on a server-only
+  attribute or claims trust (see `Hologram.Component.Derived.QueryCheck`), and Hologram.StateError
+  when a stateless component's field reads state.
 
   WARNING: must match the client renderer's #computeDerived (renderer.mjs), messages included - but
   for a value each tier spells with its own inspect, which spell structs and the key order of maps
-  differently.
+  differently, for a claim of trust, which the client's trust/1 refuses in its own words where the
+  field's function calls it, and for a query reading a type with no allow lines, which only the
+  server refuses (see `Hologram.Component.Derived.QueryCheck`).
   """
   @spec compute([map], module, map, map, map, keyword) :: map
   def compute(entries, module, props, state, computed, opts) do
@@ -270,27 +274,19 @@ defmodule Hologram.Component.Derived do
   end
 
   defp computed_value!(value, entry, module, args, opts) do
-    registered_query? = Keyword.fetch!(opts, :registered_query?)
+    if query?(value, entry.type) do
+      term = Stage.normalize(value)
 
-    cond do
-      registered_query?.(entry.name) ->
-        term = Stage.normalize(value)
+      validate_query_type!(term, entry, module)
+      validate_query!(term, entry, module)
 
-        validate_query_type!(term, entry, module)
+      opts
+      |> Keyword.fetch!(:run_query)
+      |> apply([entry.name, args, term])
+    else
+      validate_value_type!(value, entry, module)
 
-        opts
-        |> Keyword.fetch!(:run_query)
-        |> apply([entry.name, args, term])
-
-      query?(value) ->
-        raise Hologram.MisuseError,
-          message:
-            "derived field #{inspect(entry.name)} in #{Reflection.module_name(module)} returned a query the build didn't register - a query is built in the derived field's own function or the builders it calls, not passed in as data"
-
-      true ->
-        validate_value_type!(value, entry, module)
-
-        value
+      value
     end
   end
 
@@ -383,7 +379,6 @@ defmodule Hologram.Component.Derived do
     end
   end
 
-  # A query term, or an entity type standing for every row of it.
   # Adds to the given list the placeholders the given value holds, itself or anywhere inside a map,
   # a list or a tuple (an improper list's tail too). Every one is gathered, so that the smallest
   # field can be named whatever order a map is walked in.
@@ -405,9 +400,15 @@ defmodule Hologram.Component.Derived do
 
   defp placeholders_in(_value, acc), do: acc
 
-  defp query?(value) do
-    is_struct(value, Query) or (is_atom(value) and Reflection.entity?(value))
+  # A query term, or an entity type standing for every row of it - which a field holding a module
+  # as a plain value, like one declared :atom, never is.
+  defp query?(%Query{}, _type), do: true
+
+  defp query?(value, type) when is_atom(value) do
+    type in [[value], value] and Reflection.entity?(value)
   end
+
+  defp query?(_value, _type), do: false
 
   defp query_description(%Query{cardinality: :count, entity: entity}),
     do: "a count of #{inspect(entity)} rows"
@@ -727,6 +728,18 @@ defmodule Hologram.Component.Derived do
       raise Hologram.MisuseError,
         message:
           "derived field #{inspect(entry.name)} in #{Reflection.module_name(module)} is declared #{inspect(entry.type)}, but its query is #{query_description(term)}"
+    end
+
+    :ok
+  end
+
+  # Before the query runs: the check on server-only attributes is what keeps a filter on one from
+  # telling the browser which rows hold which hidden value.
+  defp validate_query!(term, entry, module) do
+    if refusal = QueryCheck.refusal(term) do
+      raise Hologram.MisuseError,
+        message:
+          "derived field #{inspect(entry.name)} in #{Reflection.module_name(module)} #{refusal}"
     end
 
     :ok

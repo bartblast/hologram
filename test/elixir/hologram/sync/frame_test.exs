@@ -48,11 +48,7 @@ defmodule Hologram.Sync.FrameTest do
   end
 
   defp delete_key do
-    Policy.verdict_key(
-      VerdictTask,
-      :delete,
-      {:none, {[:board, :cards], [{:author_id, :==, {:actor}}]}}
-    )
+    Policy.verdict_key(VerdictTask, :delete)
   end
 
   # A build with a page checking permissions on the client - the only kind whose rows carry
@@ -403,6 +399,8 @@ defmodule Hologram.Sync.FrameTest do
                      "c_id" => parent.c_id,
                      "created_at" => nil,
                      "id" => parent.id,
+                     "server_created_at" => nil,
+                     "server_updated_at" => nil,
                      "updated_at" => nil
                    }
                  ],
@@ -414,6 +412,8 @@ defmodule Hologram.Sync.FrameTest do
                      "c" => "child",
                      "created_at" => nil,
                      "id" => child.id,
+                     "server_created_at" => nil,
+                     "server_updated_at" => nil,
                      "updated_at" => nil
                    }
                  ]
@@ -648,7 +648,7 @@ defmodule Hologram.Sync.FrameTest do
   end
 
   describe "row_verdicts/2" do
-    test "answers the row's deciding quantifiers for the user when a client checks permissions" do
+    test "answers the row's verdict operations for the user when a client checks permissions" do
       check_permissions()
 
       assert row_verdicts(Entity.generate_id(), VerdictTask.new()) == %{delete_key() => true}
@@ -666,7 +666,7 @@ defmodule Hologram.Sync.FrameTest do
 
     # Nothing to answer, so whether a client checks permissions is never asked - the query cache is
     # not stubbed here.
-    test "answers nothing for a type with no deciding quantifier" do
+    test "answers nothing for a type the server sends no verdict on" do
       assert row_verdicts(nil, Module2.new(a: true)) == %{}
     end
   end

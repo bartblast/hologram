@@ -4,6 +4,7 @@ defmodule Hologram.ReflectionTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
+  alias Hologram.Query.Shape
   alias Hologram.Test.Fixtures.Entity
   alias Hologram.Test.Fixtures.Job
   alias Hologram.Test.Fixtures.Policy
@@ -197,7 +198,8 @@ defmodule Hologram.ReflectionTest do
                route: nil,
                protocol_functions: nil,
                implementation_for: nil,
-               implemented_protocol: nil
+               implemented_protocol: nil,
+               query_shapes: []
              } = beam_info(beam_path)
 
       assert is_integer(digest)
@@ -214,6 +216,20 @@ defmodule Hologram.ReflectionTest do
       module = Hologram.Test.Fixtures.Controller.Module6
 
       assert %{broadcast_caller?: true} = beam_info(:code.which(module))
+    end
+
+    test "module recording query shapes" do
+      module = Hologram.Test.Fixtures.Query.Shape.Module2
+
+      attributes = module.__info__(:attributes)
+
+      shapes =
+        attributes
+        |> Keyword.get_values(Shape.attribute())
+        |> Enum.concat()
+
+      assert length(shapes) == 4
+      assert %{query_shapes: ^shapes} = beam_info(:code.which(module))
     end
 
     test "source path is the one the loaded module reports" do
@@ -528,6 +544,41 @@ defmodule Hologram.ReflectionTest do
 
     test "non-module" do
       refute ecto_schema?(123)
+    end
+  end
+
+  describe "ecto_schema?/2" do
+    setup do
+      [module_info_plt: PLT.start()]
+    end
+
+    test "module the PLT holds is answered from it, without consulting the code path", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Aaa.Bbb, %{ecto_schema?: true})
+
+      assert ecto_schema?(Aaa.Bbb, module_info_plt)
+    end
+
+    test "the PLT wins over the module", %{module_info_plt: module_info_plt} do
+      PLT.put(module_info_plt, Module8, %{ecto_schema?: false})
+
+      refute ecto_schema?(Module8, module_info_plt)
+    end
+
+    test "module the PLT does not hold is decided the ecto_schema?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      assert ecto_schema?(Module8, module_info_plt)
+      refute ecto_schema?(Calendar.ISO, module_info_plt)
+    end
+
+    test "entry without the flag is decided the ecto_schema?/1 way", %{
+      module_info_plt: module_info_plt
+    } do
+      PLT.put(module_info_plt, Module8, %{digest: 1})
+
+      assert ecto_schema?(Module8, module_info_plt)
     end
   end
 
@@ -1880,6 +1931,10 @@ defmodule Hologram.ReflectionTest do
     test "module that does not implement a protocol" do
       refute protocol_implementation?(Calendar.ISO)
     end
+  end
+
+  test "index_needs_plt_dump_file_name/0" do
+    assert index_needs_plt_dump_file_name() == "index_needs.plt"
   end
 
   test "queries_plt_dump_file_name/0" do

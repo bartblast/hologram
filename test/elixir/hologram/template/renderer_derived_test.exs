@@ -4,6 +4,7 @@ defmodule Hologram.Template.RendererDerivedTest do
   use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.DB.EntityOperations, only: [add_relationship: 4, create: 1]
+  import Hologram.Query, only: [filter: 2, sort: 2]
   import Hologram.Template.Renderer
   import Hologram.Test.Stubs
   import Mox
@@ -66,16 +67,14 @@ defmodule Hologram.Template.RendererDerivedTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module163
   alias Hologram.Test.Fixtures.Template.Renderer.Module164
   alias Hologram.Test.Fixtures.Template.Renderer.Module165
-  alias Hologram.Test.Fixtures.Template.Renderer.Module166
   alias Hologram.Test.Fixtures.Template.Renderer.Module167
-  alias Hologram.Test.Fixtures.Template.Renderer.Module168
   alias Hologram.Test.Fixtures.Template.Renderer.Module169
   alias Hologram.Test.Fixtures.Template.Renderer.Module170
   alias Hologram.Test.Fixtures.Template.Renderer.Module171
-  alias Hologram.Test.Fixtures.Template.Renderer.Module172
   alias Hologram.Test.Fixtures.Template.Renderer.Module173
   alias Hologram.Test.Fixtures.Template.Renderer.Module174
   alias Hologram.Test.Fixtures.Template.Renderer.Module175
+  alias Hologram.Test.Fixtures.Template.Renderer.Module177
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -89,17 +88,7 @@ defmodule Hologram.Template.RendererDerivedTest do
     setup_chunk_registry(ChunkRegistryStub)
     setup_query_cache(QueryCacheStub, false)
 
-    dump_query_cache(QueryCacheStub, [
-      Module149,
-      Module150,
-      Module151,
-      Module157,
-      Module158,
-      Module161,
-      Module162,
-      Module170,
-      Module171
-    ])
+    dump_query_cache(QueryCacheStub)
 
     QueryCache.init(nil)
 
@@ -289,6 +278,53 @@ defmodule Hologram.Template.RendererDerivedTest do
       assert carried_names == ["banana", "cherry"]
     end
 
+    test "runs a query a field returns as it was handed in, the policies applied" do
+      create_entities()
+
+      Carry.start()
+
+      query =
+        Entity2
+        |> filter(a == true)
+        |> sort(c)
+
+      node = {:component, Module177, [{"query", [expression: {query}]}], []}
+
+      assert render_dom(node, @env, @server) == {"entities = banana,cherry", %{}, @server}
+
+      carried_names =
+        nil
+        |> Carry.take()
+        |> Map.fetch!(:put_entity)
+        |> Map.fetch!(inspect(Entity2))
+        |> Enum.map(& &1.c)
+        |> Enum.sort()
+
+      assert carried_names == ["banana", "cherry"]
+    end
+
+    # A type browser code never names never syncs, so the browser could only show the rows the
+    # render carried, and never update them.
+    test "raises on a query reading a type sync doesn't send" do
+      dump_query_cache(QueryCacheStub, false, [Module1])
+      QueryCache.init(nil)
+
+      assert_error Hologram.MisuseError,
+                   "derived field :entities in Hologram.Test.Fixtures.Template.Renderer.Module149 reads Hologram.Test.Fixtures.Entity.Module2, which browser code never names, so sync never sends its rows - name the entity type, or the relationship or derived field leading to it, as written in browser code, like include(project) or %Project{}",
+                   fn -> render_dom({:component, Module149, [], []}, @env, @server) end
+    end
+
+    test "raises on a count reading a type sync doesn't send" do
+      dump_query_cache(QueryCacheStub, false, [Module1])
+      QueryCache.init(nil)
+
+      node = {:component, Module174, [{"a", [expression: {true}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~r/^derived field :total in .+Module174 reads Hologram\.Test\.Fixtures\.Entity\.Module2, which browser code never names/,
+                   fn -> render_dom(node, @env, @server) end
+    end
+
     test "computes a field over a value the template passes under its name" do
       create_entities()
 
@@ -432,18 +468,18 @@ defmodule Hologram.Template.RendererDerivedTest do
   end
 
   describe "derived includes" do
-    # The window of an include of derived fields is built from their definitions, which the
-    # compile resolves before the queries are registered.
+    # What an include of derived fields embeds is built from their definitions, which the compile
+    # resolves before anything renders.
     setup do
       put_derived_definitions([Module32, Module37, Module38])
 
-      dump_query_cache(QueryCacheStub, [Module164])
+      dump_query_cache(QueryCacheStub)
       QueryCache.init(nil)
 
       :ok
     end
 
-    # The window reads the rows a derived field is computed from beside the rows the query returns,
+    # The query reads the rows a derived field is computed from beside the rows it returns,
     # and the template is handed the derived values without them.
     test "hands the template the derived fields the query included" do
       {:ok, channel} = create(Module32.new(name: "general"))
@@ -467,7 +503,7 @@ defmodule Hologram.Template.RendererDerivedTest do
 
     # The template is handed a derived set's rows with the author their definition includes - read
     # under the author type's read policy, which lets nobody read one, so nil rather than the
-    # sentinel - and not the messages the window embeds to compute them.
+    # sentinel - and not the messages the query embeds to compute them.
     test "hands the template a derived set's rows with what its definition includes" do
       {:ok, room} = create(Module37.new(name: "general"))
       {:ok, author} = create(Module1.new())
@@ -533,7 +569,7 @@ defmodule Hologram.Template.RendererDerivedTest do
         {Module167, :dummy_module_167_digest}
       ])
 
-      dump_query_cache(QueryCacheStub, [Module162, Module166])
+      dump_query_cache(QueryCacheStub)
       QueryCache.init(nil)
 
       :ok
@@ -619,11 +655,11 @@ defmodule Hologram.Template.RendererDerivedTest do
       refute String.contains?(carried, "token")
     end
 
-    # The server works a carried row's verdicts out over the row as stored, its server-only values
-    # among them - the wire then leaves those out of what the client is told.
-    test "carries a row's verdicts worked out over its server-only values" do
+    # The vault's read rule reads a server-only value, so the row carries the read verdict, true
+    # for the user it was sent to - and the wire leaves the value out of what the client is told.
+    test "carries a row's read verdict and not its server-only values" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module169, :dummy_module_169_digest)
-      dump_query_cache(QueryCacheStub, [Module168], true)
+      dump_query_cache(QueryCacheStub, true)
       QueryCache.init(nil)
 
       vault =
@@ -635,7 +671,7 @@ defmodule Hologram.Template.RendererDerivedTest do
       |> PolicyKey.new()
       |> DB.create!()
 
-      [{verdict_key, _clause}] = Policy.deciding_quantifiers(PolicyVault)
+      verdict_key = Policy.verdict_key(PolicyVault, :read)
 
       assert [carried] =
                Module169
@@ -643,7 +679,7 @@ defmodule Hologram.Template.RendererDerivedTest do
                |> boot_data()
                |> get_in(["syncRows", "put_entity", inspect(PolicyVault)])
 
-      assert carried["$verdicts"] == %{verdict_key => false}
+      assert carried["$verdicts"] == %{verdict_key => true}
       refute Map.has_key?(carried, "code")
     end
 
@@ -765,7 +801,7 @@ defmodule Hologram.Template.RendererDerivedTest do
     setup do
       setup_page_rendering([{Module173, :dummy_module_173_digest}])
 
-      dump_query_cache(QueryCacheStub, [Module172], true)
+      dump_query_cache(QueryCacheStub, true)
       QueryCache.init(nil)
 
       :ok
@@ -849,7 +885,7 @@ defmodule Hologram.Template.RendererDerivedTest do
     end
 
     test "carries no rule's rows when no client checks permissions" do
-      dump_query_cache(QueryCacheStub, [Module172], false)
+      dump_query_cache(QueryCacheStub, false)
       QueryCache.init(nil)
 
       %{user: user} = create_parented_entities()
@@ -869,7 +905,7 @@ defmodule Hologram.Template.RendererDerivedTest do
         {Module175, :dummy_module_175_digest}
       ])
 
-      dump_query_cache(QueryCacheStub, [Module166, Module174])
+      dump_query_cache(QueryCacheStub)
       QueryCache.init(nil)
 
       :ok
@@ -895,10 +931,29 @@ defmodule Hologram.Template.RendererDerivedTest do
              }
     end
 
+    test "carries the entity types each count reads, under the count's key" do
+      create_entities()
+
+      boot_data =
+        Module175
+        |> render_page_html()
+        |> boot_data()
+
+      count_types = Map.fetch!(boot_data, "syncCountTypes")
+      counts = Map.fetch!(boot_data, "syncCounts")
+
+      assert Map.keys(count_types) == Map.keys(counts)
+
+      assert count_types
+             |> Map.values()
+             |> Enum.uniq() == [[inspect(Entity2)]]
+    end
+
     test "carries nothing for a page whose fields count nothing" do
       html = render_page_html(Module167)
 
       assert String.contains?(html, ~s|"syncCounts":{}|)
+      assert String.contains?(html, ~s|"syncCountTypes":{}|)
     end
   end
 
@@ -909,7 +964,7 @@ defmodule Hologram.Template.RendererDerivedTest do
     setup do
       setup_page_rendering([{Module126, :dummy_module_126_digest}])
 
-      dump_query_cache(QueryCacheStub, [])
+      dump_query_cache(QueryCacheStub)
       QueryCache.init(nil)
 
       :ok

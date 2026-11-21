@@ -32,6 +32,7 @@ defmodule Hologram.MigratorTest do
       env: @context.env,
       managed_by: managed_by,
       hologram_version: @context.hologram_version,
+      system_schema_version: SchemaReconciler.system_schema_version(@context),
       last_reconciled_at: @context.timestamp
     })
   end
@@ -46,13 +47,23 @@ defmodule Hologram.MigratorTest do
     |> Enum.with_index(1)
     |> Enum.each(fn {value, index} ->
       statement = """
-      INSERT INTO "hologram_data"."my_app_task" ("id", "#{column}", "created_at", "updated_at", "$revisions")
+      INSERT INTO "hologram_data"."my_app_task" ("id", "#{column}", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-00000000000#{index}', #{value},
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(statement)
     end)
+  end
+
+  defp index_oid(name) do
+    {:ok, %{rows: [[oid]]}} =
+      Connection.query(
+        ~s{SELECT c.oid FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c."relnamespace" WHERE n."nspname" = 'hologram_data' AND c."relname" = $1},
+        [name]
+      )
+
+    oid
   end
 
   defp migration(version, ops) do
@@ -132,6 +143,8 @@ defmodule Hologram.MigratorTest do
                "created_at",
                "id",
                "priority",
+               "server_created_at",
+               "server_updated_at",
                "title",
                "title_$search",
                "title_$sort",
@@ -203,9 +216,9 @@ defmodule Hologram.MigratorTest do
       apply_pending([create], Model.empty(), @context)
 
       insert = """
-      INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "updated_at", "$revisions")
+      INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-000000000001', 'existing',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert)
@@ -248,9 +261,9 @@ defmodule Hologram.MigratorTest do
       model = apply_pending([create], Model.empty(), @context)
 
       insert = """
-      INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "updated_at", "$revisions")
+      INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-000000000003', 'existing',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert)
@@ -296,18 +309,18 @@ defmodule Hologram.MigratorTest do
 
       insert_user = """
       INSERT INTO "hologram_data"."test_fixtures_entity_module14"
-        ("id", "created_at", "updated_at", "$revisions")
-      VALUES ($1, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+        ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+      VALUES ($1, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert_user, [Ecto.UUID.dump!(user_id)])
 
       insert_grants = """
       INSERT INTO "hologram_data"."hologram_role_grant"
-        ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "updated_at", "$revisions")
+        ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES
-        ($1, $3, 'editor', 'MyApp.Task', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}'),
-        ($2, $3, 'editor', 'MyApp.Other', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+        ($1, $3, 'editor', 'MyApp.Task', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}'),
+        ($2, $3, 'editor', 'MyApp.Other', $4, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} =
@@ -385,17 +398,17 @@ defmodule Hologram.MigratorTest do
       user_id = "00000000-0000-0000-0000-0000000000a1"
 
       insert_user = """
-      INSERT INTO "hologram_data"."acme_user" ("id", "created_at", "updated_at", "$revisions")
-      VALUES ($1, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+      INSERT INTO "hologram_data"."acme_user" ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+      VALUES ($1, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert_user, [Ecto.UUID.dump!(user_id)])
 
       insert_grant = """
       INSERT INTO "hologram_data"."hologram_role_grant"
-        ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "updated_at", "$revisions")
+        ("id", "user_id", "role", "entity_type", "entity_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ($1, $2, 'editor', 'MyApp.Other', $3,
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} =
@@ -415,7 +428,15 @@ defmodule Hologram.MigratorTest do
 
       assert table_columns("acme_user") == []
       assert table_columns("hologram_role_grant") == []
-      assert table_columns("my_app_other") == ["$revisions", "created_at", "id", "updated_at"]
+
+      assert table_columns("my_app_other") == [
+               "$revisions",
+               "created_at",
+               "id",
+               "server_created_at",
+               "server_updated_at",
+               "updated_at"
+             ]
     end
 
     test "skips the migrations another applier already recorded" do
@@ -509,9 +530,9 @@ defmodule Hologram.MigratorTest do
       model = apply_pending([create], Model.empty(), @context)
 
       insert = """
-      INSERT INTO "hologram_data"."my_app_task" ("id", "created_at", "updated_at", "$revisions")
+      INSERT INTO "hologram_data"."my_app_task" ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-000000000002',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert)
@@ -558,11 +579,11 @@ defmodule Hologram.MigratorTest do
       model = apply_pending([create], Model.empty(), @context)
 
       insert = """
-      INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "updated_at", "$revisions")
+      INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
       VALUES ('00000000-0000-0000-0000-000000000003', 'taken',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}'),
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}'),
              ('00000000-0000-0000-0000-000000000004', 'taken',
-              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+              '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
       """
 
       {:ok, _result} = Connection.query(insert)
@@ -590,27 +611,54 @@ defmodule Hologram.MigratorTest do
       assert applied_versions() == MapSet.new(["20260813091522"])
     end
 
+    # What another node leaves in the window between a file's commit and its tail: the index the
+    # tail is about to build, already standing and valid. The tail builds nothing over it and drops
+    # nothing - the same index, by its oid, stands after. A unique attribute's, since migrations
+    # build the model's indexes alone, and declared by a later file, so that its table stands and the
+    # build goes to the tail.
     test "leaves a valid index of the same name alone" do
       create =
         migration("20260813091522", [
-          %{op: :create_entity, entity: MyApp.User, line: 3},
-          %{op: :create_entity, entity: MyApp.Task, line: 4},
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
           %{
-            op: :add_relationship,
+            op: :add_attribute,
             entity: MyApp.Task,
-            name: :author,
-            type: MyApp.User,
+            name: :slug,
+            type: :string,
             opts: [optional: true],
-            line: 5
+            line: 4
           }
         ])
 
-      apply_pending([create], Model.empty(), @context)
+      unique =
+        migration("20260813091523", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [unique: true],
+            line: 3
+          }
+        ])
 
-      statement = DDL.invalid_index_check_statement("my_app_task_author_id_$idx")
-      {:ok, %{rows: [[count]]}} = Connection.query(statement)
+      model = apply_pending([create], Model.empty(), @context)
 
-      assert count == 0
+      index = "my_app_task_slug_$uidx"
+
+      {:ok, _result} =
+        Connection.query(
+          ~s{CREATE UNIQUE INDEX "#{index}" ON "hologram_data"."my_app_task" ("slug")}
+        )
+
+      oid = index_oid(index)
+
+      apply_pending([unique], model, @context)
+
+      built_check = DDL.built_index_check_statement(index)
+      {:ok, %{rows: [[built]]}} = Connection.query(built_check)
+
+      assert built == 1
+      assert index_oid(index) == oid
     end
 
     # The file's own add puts the column and its fill in place before the tail is checked,
@@ -872,7 +920,6 @@ defmodule Hologram.MigratorTest do
         normalize_newlines("""
         schema drift detected - the database does not match the model:
           * column "title_$sort" on table "my_app_task" declared by the model is missing
-          * index "my_app_task_title_$sort_$idx" declared by the model is missing
         hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
         """)
 
@@ -912,7 +959,7 @@ defmodule Hologram.MigratorTest do
 
   describe "ensure_managed!/1" do
     test "claims a virgin database for migrations" do
-      assert ensure_managed!(@context) == :claimed
+      assert ensure_managed!(Map.put(@context, :system_upgrades, [])) == :claimed
 
       assert SchemaReconciler.read_marker() == %{
                otp_app: "hologram",
@@ -926,10 +973,49 @@ defmodule Hologram.MigratorTest do
       assert applied_versions() == MapSet.new()
     end
 
+    test "claims a virgin database at the running layout" do
+      ensure_managed!(Map.put(@context, :system_upgrades, [{2, []}, {3, []}]))
+
+      assert SchemaReconciler.read_marker().system_schema_version == 3
+    end
+
     test "returns :managed when the marker matches the context" do
       ensure_managed!(@context)
 
       assert ensure_managed!(@context) == :managed
+    end
+
+    test "raises for system tables at a newer layout than the running one" do
+      claim_as("migrations")
+
+      {:ok, _result} =
+        Connection.query(~s(UPDATE "hologram_system"."database" SET "system_schema_version" = 3))
+
+      expected_msg =
+        "the configured database's system tables are at layout version 3, from a newer " <>
+          "Hologram - this Hologram knows layout versions up to 2 - upgrade Hologram or " <>
+          "point the config at another database"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        ensure_managed!(Map.put(@context, :system_upgrades, [{2, []}]))
+      end
+    end
+
+    test "raises for another app ahead of a newer layout" do
+      claim_as("migrations")
+
+      {:ok, _result} =
+        Connection.query(~s(UPDATE "hologram_system"."database" SET "system_schema_version" = 3))
+
+      expected_msg =
+        "the configured database belongs to app \"hologram\" - " <>
+          "the current app is \"other_app\" - point the config at the right database"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        @context
+        |> Map.merge(%{otp_app: "other_app", system_upgrades: [{2, []}]})
+        |> ensure_managed!()
+      end
     end
 
     test "raises for Hologram schemas without a marker" do
@@ -1030,6 +1116,7 @@ defmodule Hologram.MigratorTest do
       [mapping: Mapper.derive_from_model!(model)]
     end
 
+    # No index plan: these apply files without a boot, and the plan's indexes are its own to build.
     test "passes a database carrying every index the model derives", %{mapping: mapping} do
       assert repair_indexes(mapping) == :ok
     end

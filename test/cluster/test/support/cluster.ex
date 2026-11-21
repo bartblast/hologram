@@ -25,9 +25,18 @@ defmodule HologramClusterTests.Cluster do
   # runner slows shutdown as readily as it slows a merge.
   @node_down_attempts 1_000
 
-  # Orchestrator default is 4003 (never bound - its endpoint runs with server: false)
-  # and the proxy owns 4005, so peers live in their own range above both.
-  @base_port 4010
+  # The run's ports come from one block of this range, which the run claims by listening on
+  # the block's first port for as long as its BEAM lives. Another run finds that port taken and
+  # claims another block, so two runs never pick the same port, however long a picked port
+  # waits for its listener. The OS frees the claim when the BEAM ends, killed or not.
+  #
+  # The range sits below every OS's ephemeral range, which starts at 32768 on Linux and at
+  # 49152 on macOS and Windows, so no outgoing connection takes one of its ports either.
+  @port_block_size 128
+
+  @port_block_agent __MODULE__.PortBlock
+
+  @port_range 20_000..32_767
 
   @doc """
   Blocks until a broadcast published on every node of the cluster (this one and
@@ -71,6 +80,30 @@ defmodule HologramClusterTests.Cluster do
   end
 
   @doc """
+  Returns a port nothing listens on, for a peer or a stub server.
+
+  Runs that overlap on one machine must not share ports, so none is fixed. The
+  port is the next one of the block of ports this run has claimed, after the
+  block's first two, which are the claim itself and the proxy's port. A port
+  something else listens on is skipped. After the block's last port the picks
+  start over, by which time the peers that had the first ones are long gone.
+  """
+  @spec free_port() :: pos_integer
+  def free_port do
+    free_port(1)
+  end
+
+  @doc """
+  Returns the port of the run's proxy: the second port of the block of ports
+  this run has claimed. It stays the same for the whole run, since the browser's
+  base URL names it, while the proxy comes and goes with the tests that use it.
+  """
+  @spec proxy_port() :: pos_integer
+  def proxy_port do
+    Agent.get(port_block(), & &1.first) + 1
+  end
+
+  @doc """
   Stops the given peer and starts a fresh one under the same name, port and
   options. Returns the new peer map.
 
@@ -82,7 +115,7 @@ defmodule HologramClusterTests.Cluster do
   @spec restart_peer(map) :: map
   def restart_peer(peer) do
     stop_peer(peer)
-    start_peer(peer.index, peer.opts)
+    start_peer_on_port(peer.index, peer.port, peer.opts)
   end
 
   @doc """
@@ -105,8 +138,11 @@ defmodule HologramClusterTests.Cluster do
   end
 
   @doc """
-  Starts a single peer node named `peer<index>` on loopback, boots the app on
-  it, and returns a peer map (`:index`, `:node`, `:opts`, `:pid`, `:port`).
+  Starts a single peer node on loopback, boots the app on it, and returns a peer
+  map (`:index`, `:node`, `:opts`, `:pid`, `:port`).
+
+  The node is named `peer<index>_<the BEAM's OS pid>` and gets a port from
+  `free_port/0`, so runs that overlap on one machine share neither.
 
   Options:
 
@@ -136,62 +172,7 @@ defmodule HologramClusterTests.Cluster do
   """
   @spec start_peer(pos_integer, keyword) :: map
   def start_peer(index, opts \\ []) do
-    hologram_env = Keyword.get(opts, :hologram_env, "test")
-
-    # Peer names form a bounded set (one per index a suite ever uses), so runtime atom
-    # creation is safe here.
-    # credo:disable-for-lines:3 Credo.Check.Warning.UnsafeToAtom
-    {:ok, pid, node} =
-      :peer.start_link(%{
-        name: :"peer#{index}",
-        host: ~c"127.0.0.1",
-        args: [~c"-setcookie", Atom.to_charlist(@cookie)],
-        env: [
-          {~c"HOLOGRAM_ENV", String.to_charlist(hologram_env)},
-          {~c"HOLOGRAM_START", ~c"1"},
-          # A production instance resolves its secret key base from the environment and nowhere
-          # else - the dev/test fallback to the Phoenix endpoint's config does not apply - and
-          # every initial page render needs it, to sign the replica identity it hands the page.
-          # A peer booted with hologram_env: "prod" is such an instance, so it carries the var
-          # exactly as a real deployment does.
-          {~c"SECRET_KEY_BASE",
-           ~c"test_secret_key_base_that_is_long_enough_for_testing_purposes_in_hologram"}
-        ]
-      })
-
-    port = @base_port + index
-
-    rpc(node, :code, :add_paths, [code_paths_without_mix()])
-    copy_app_env(node, port)
-
-    for {app, key, value} <- Keyword.get(opts, :app_env, []) do
-      rpc(node, Application, :put_env, [app, key, value])
-    end
-
-    rpc(node, Application, :load, [@app])
-
-    # The options ride along so a restart can reproduce the peer rather than a default one -
-    # they are what makes it a production instance, or one pointed at another database.
-    peer = %{index: index, node: node, opts: opts, pid: pid, port: port}
-
-    # Registered before the app starts, so a peer whose boot fails is still stopped -
-    # its node name and port have to be free for the next test either way.
-    #
-    # Peers die with the test process through the link, but asynchronously - and the next
-    # test claims the same node names and ports. Waiting here is what keeps that handover
-    # from racing. Outside a test there is nothing to register the wait with, and nothing
-    # queued behind this peer either, so a probe run from iex or `mix run` skips it.
-    try do
-      ExUnit.Callbacks.on_exit(fn -> stop_peer(peer) end)
-    rescue
-      ArgumentError -> :ok
-    end
-
-    if Keyword.get(opts, :boot_app, true) do
-      {:ok, _apps} = boot_app(peer)
-    end
-
-    peer
+    start_peer_on_port(index, free_port(), opts)
   end
 
   @doc """
@@ -266,6 +247,50 @@ defmodule HologramClusterTests.Cluster do
     end
   end
 
+  # Probed on every address of both IP versions, so a listener on any of them counts: the
+  # browser reaches the proxy through localhost, which may resolve to the IPv6 loopback first.
+  # The probes set no reuseaddr, which would let them share a port with a loopback listener.
+  # Their sockets are closed again, since the run's claim on the block is what keeps other
+  # runs off the port.
+  defp bindable?(port) do
+    listenable?(port, []) and listenable?(port, [:inet6, ipv6_v6only: true])
+  end
+
+  # The block whose first port takes a listener is this run's. Walks the blocks from one the
+  # BEAM's OS pid picks, so runs mostly start apart. The listener is on loopback, like every
+  # listener of the suite, and is never accepted on. A block is passed over too when something
+  # that isn't a run of this suite listens on its second port, the proxy's: that port is never
+  # probed again, and a listener on the IPv6 loopback there would get the browser's requests.
+  defp claim_port_block do
+    blocks = div(Range.size(@port_range), @port_block_size)
+    start = :erlang.phash2(System.pid(), blocks)
+
+    block =
+      Enum.find_value(0..(blocks - 1), fn offset ->
+        claim_port_block_at(@port_range.first + rem(start + offset, blocks) * @port_block_size)
+      end)
+
+    block || raise "every port block in #{inspect(@port_range)} is claimed"
+  end
+
+  defp claim_port_block_at(first) do
+    case :gen_tcp.listen(first, ip: {127, 0, 0, 1}) do
+      {:ok, socket} ->
+        if bindable?(first + 1) do
+          %{first: first, picks: 0, socket: socket}
+        else
+          :gen_tcp.close(socket)
+          nil
+        end
+
+      {:error, :eaddrinuse} ->
+        nil
+
+      {:error, reason} ->
+        raise "can't claim the port block at #{first}: #{inspect(reason)}"
+    end
+  end
+
   defp code_paths_without_mix do
     Enum.reject(:code.get_path(), fn path ->
       path
@@ -306,6 +331,122 @@ defmodule HologramClusterTests.Cluster do
       message ->
         send(forward_to, {:forwarded, node(), message})
         forward_loop(forward_to)
+    end
+  end
+
+  # The picks come from a count of the run's own, never from the VM's unique integers, which
+  # other code draws from too: in a block this small they would soon skip back onto a port
+  # still waiting for its listener.
+  defp free_port(attempt) when attempt > @port_block_size - 2 do
+    raise "something listens on every port of this run's block"
+  end
+
+  defp free_port(attempt) do
+    port =
+      Agent.get_and_update(port_block(), fn %{first: first, picks: picks} = block ->
+        {first + 2 + rem(picks, @port_block_size - 2), %{block | picks: picks + 1}}
+      end)
+
+    if bindable?(port) do
+      port
+    else
+      free_port(attempt + 1)
+    end
+  end
+
+  # No IPv6 on the machine means nothing listens there.
+  defp listenable?(port, opts) do
+    case :gen_tcp.listen(port, opts) do
+      {:ok, socket} ->
+        :gen_tcp.close(socket)
+        true
+
+      {:error, :eaddrinuse} ->
+        false
+
+      {:error, reason} when reason in [:eaddrnotavail, :eafnosupport, :eprotonosupport] ->
+        true
+
+      {:error, reason} ->
+        raise "can't probe port #{port}: #{inspect(reason)}"
+    end
+  end
+
+  # Claimed on first use, so a peer or a proxy started from iex or `mix run` gets ports too.
+  defp port_block do
+    Process.whereis(@port_block_agent) || start_port_block()
+  end
+
+  # The port is given, so a restarted peer comes back on the one it had.
+  defp start_peer_on_port(index, port, opts) do
+    hologram_env = Keyword.get(opts, :hologram_env, "test")
+
+    # Peer names form a bounded set (one per index a suite ever uses), so runtime atom
+    # creation is safe here.
+    # credo:disable-for-lines:3 Credo.Check.Warning.UnsafeToAtom
+    {:ok, pid, node} =
+      :peer.start_link(%{
+        name: :"peer#{index}_#{System.pid()}",
+        host: ~c"127.0.0.1",
+        args: [~c"-setcookie", Atom.to_charlist(@cookie)],
+        env: [
+          {~c"HOLOGRAM_ENV", String.to_charlist(hologram_env)},
+          {~c"HOLOGRAM_START", ~c"1"},
+          # A production instance resolves its secret key base from the environment and nowhere
+          # else - the dev/test fallback to the Phoenix endpoint's config does not apply - and
+          # every initial page render needs it, to sign the replica identity it hands the page.
+          # A peer booted with hologram_env: "prod" is such an instance, so it carries the var
+          # exactly as a real deployment does.
+          {~c"SECRET_KEY_BASE",
+           ~c"test_secret_key_base_that_is_long_enough_for_testing_purposes_in_hologram"}
+        ]
+      })
+
+    rpc(node, :code, :add_paths, [code_paths_without_mix()])
+    copy_app_env(node, port)
+
+    for {app, key, value} <- Keyword.get(opts, :app_env, []) do
+      rpc(node, Application, :put_env, [app, key, value])
+    end
+
+    rpc(node, Application, :load, [@app])
+
+    # The options ride along so a restart can reproduce the peer rather than a default one -
+    # they are what makes it a production instance, or one pointed at another database.
+    peer = %{index: index, node: node, opts: opts, pid: pid, port: port}
+
+    # Registered before the app starts, so a peer whose boot fails is still stopped -
+    # its node name has to be free for the next test either way.
+    #
+    # Peers die with the test process through the link, but asynchronously - and the next
+    # test claims the same node names. Waiting here is what keeps that handover from
+    # racing. Outside a test there is nothing to register the wait with, and nothing
+    # queued behind this peer either, so a probe run from iex or `mix run` skips it.
+    try do
+      ExUnit.Callbacks.on_exit(fn -> stop_peer(peer) end)
+    rescue
+      ArgumentError -> :ok
+    end
+
+    if Keyword.get(opts, :boot_app, true) do
+      {:ok, _apps} = boot_app(peer)
+    end
+
+    peer
+  end
+
+  # The agent holds the claim's socket, so it's started unlinked, to outlive the test or
+  # the helper that first asked for a port. A claim that fails raises here as it did there.
+  defp start_port_block do
+    case Agent.start(&claim_port_block/0, name: @port_block_agent) do
+      {:ok, pid} ->
+        pid
+
+      {:error, {:already_started, pid}} ->
+        pid
+
+      {:error, {exception, stacktrace}} when is_exception(exception) ->
+        reraise exception, stacktrace
     end
   end
 end

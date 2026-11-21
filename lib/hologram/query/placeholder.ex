@@ -1,17 +1,15 @@
 defmodule Hologram.Query.Placeholder do
   @moduledoc false
 
-  # Stands for what a build cannot know. The symbolic evaluator gives one to every argument of a
-  # derived field's function, and to every value computed from one, so a term can be extracted from
-  # a function nobody has called yet - it becomes a {:placeholder, name} leaf wherever it lands.
+  # Stands for a value the build cannot know. It exists only for the build's chain check
+  # (Hologram.Compiler.QueryChains), which replays the queries browser code writes through
+  # Hologram.Query.Stage with one wherever a value is pinned (`^x`), so the stages can check
+  # everything around it - it becomes a {:placeholder, name} leaf wherever it lands. The name is
+  # the pinned variable's, or :pinned for any other expression.
   #
-  # It is never bound to a value. Both tiers run the REAL function with the component's REAL fields
-  # and normalize THAT, so a placeholder exists only between extraction and the window derivation
-  # that drops it. The name says which argument the value came from, for reading a term.
-  #
-  # Every position a placeholder may occupy is one the window discards or empties - a filter
-  # attribute or value, an ordering key or direction, a view bound. A position that decides the
-  # download instead has a finite candidate set the build forks over.
+  # It is never bound to a value, and a term holding one never runs: both tiers build the query
+  # from its real values, and the database executor and the reference interpreter refuse a term
+  # with a leaf left in it (see Hologram.Query.Stage.assert_no_placeholders!/1).
 
   @enforce_keys [:name]
 

@@ -193,6 +193,22 @@ const TRUSTED_HTML_REFUSED_PARENTS = new Set([
   "xmp",
 ]);
 
+// The attributes, besides the type, that the browser reads when it turns a value written to an
+// input or a textarea into the form it stores: a range clamps to its min and max and snaps to its
+// step (counted from min, or from the value attribute when there's no valid min), an email input
+// with multiple trims each address, and a color input serializes through its alpha and colorspace.
+// The type picks the rule, and each type gets a spare element of its own (see
+// #formInputValueSpares).
+const VALUE_SANITIZATION_ATTRS = [
+  "alpha",
+  "colorspace",
+  "max",
+  "min",
+  "multiple",
+  "step",
+  "value",
+];
+
 export default class Renderer {
   // Capture-phase drag listeners collected during the current render: an element's is a
   // {vnode, eventName, handler}, since its live DOM node exists only after the patch, with the
@@ -251,6 +267,12 @@ export default class Renderer {
   // The elements whose $data_transfer declares what a drag starting in them carries, each with the
   // function that puts it on the drag, rebuilt by resolveDragBindings after each patch.
   static #dragSources = new WeakMap();
+
+  // input type, or "textarea" -> a detached element of that kind, which #normalizeFormInputValue
+  // writes values to, to see what the browser stores for them. One per type, made the first time a
+  // type needs one: switching a spare's type makes the browser redo work on every check, while
+  // changing its other attributes is cheap. Bounded by the number of input types.
+  static #formInputValueSpares = new Map();
 
   // Based on Elixir Renderer.encode_tree/1, which it inverts clause for clause.
   //
@@ -1405,7 +1427,10 @@ export default class Renderer {
   // ones added.
   //
   // WARNING: must match compute/6 on the server, messages included - but for a value each tier
-  // spells with its own inspect, which spell structs and the key order of maps differently.
+  // spells with its own inspect, which spell structs and the key order of maps differently, for a
+  // claim of trust, which the client's trust/1 refuses in its own words where the field's function
+  // calls it, and for a query reading a type with no allow lines, which only the server refuses
+  // (see QueryCheck).
   // Deps: [:maps.put/3]
   static #computeDerived(
     moduleProxy,
@@ -1664,22 +1689,17 @@ export default class Renderer {
   // `?.`: a query reads rows of entity types, which only a build that declares them has, and that
   // build ships the data layer.
   static #derivedValue(value, entry, moduleProxy, module, args) {
-    if (Renderer.#isRegisteredDerivedQuery(module, entry.name)) {
+    if (Renderer.#isDerivedQuery(value, entry.type)) {
       const term = Hologram.dataLayer.normalizeQuery(value);
 
       Renderer.#validateDerivedQueryType(term, entry, module);
+      Renderer.#validateDerivedQuery(term, entry, module);
 
       return Hologram.dataLayer.answerDerivedQuery(
         module,
         entry.name,
         args,
         term,
-      );
-    }
-
-    if (Renderer.#isDerivedQuery(value)) {
-      Interpreter.raiseMisuseError(
-        `derived field ${Interpreter.inspect(entry.name)} in ${module} returned a query the build didn't register - a query is built in the derived field's own function or the builders it calls, not passed in as data`,
       );
     }
 
@@ -2143,6 +2163,29 @@ export default class Renderer {
     );
   }
 
+  // The spare element #normalizeFormInputValue writes to for elements of this kind, made the first
+  // time one is needed. Keyed by the element's type property rather than its type attribute, so
+  // "COLOR" and "color" share a spare, and an unknown type shares the text input's, as the
+  // browser treats it.
+  static #formInputValueSpare(element) {
+    const key =
+      element.localName === "input" ? element.type : element.localName;
+
+    let spare = $.#formInputValueSpares.get(key);
+
+    if (spare === undefined) {
+      spare = element.ownerDocument.createElement(element.localName);
+
+      if (element.localName === "input") {
+        spare.type = key;
+      }
+
+      $.#formInputValueSpares.set(key, spare);
+    }
+
+    return spare;
+  }
+
   // Which props carry a required: or values: option is a property of the module, not of the render,
   // so it is derived once and cached on the module proxy the way __props__ already is. Most
   // components constrain nothing, which leaves the per-render cost at a single length check.
@@ -2352,16 +2395,29 @@ export default class Renderer {
     return inputType !== "checkbox" && inputType !== "radio";
   }
 
-  // Based on Hologram.Component.Derived's query?/1
+  // Based on Hologram.Component.Derived's query?/2
   //
-  // A query term is the plain object the ported query stages build, and an entity type stands for
-  // every row of it.
-  static #isDerivedQuery(value) {
+  // A query term is the plain object the ported query stages build, or the struct a query the
+  // server built arrives as, in state or context (the stages build it again). An entity type stands
+  // for every row of it - for a field declared to hold its rows, since one holding a module as a
+  // plain value, like one declared :atom, never is.
+  static #isDerivedQuery(value, type) {
     if (value !== null && typeof value === "object" && "entity" in value) {
       return true;
     }
 
-    return Renderer.#isEntityTypeAlias(value);
+    if (Type.isStruct(value, "Hologram.Query")) {
+      return true;
+    }
+
+    const rowType =
+      Type.isList(type) && type.data.length === 1 ? type.data[0] : type;
+
+    return (
+      Renderer.#isEntityTypeAlias(value) &&
+      Type.isAlias(rowType) &&
+      Interpreter.isStrictlyEqual(value, rowType)
+    );
   }
 
   // Based on Hologram.Component.Derived's value_of_type?/2
@@ -2470,16 +2526,6 @@ export default class Renderer {
       Type.isTuple(value) &&
       value.data.length === 2 &&
       Interpreter.isStrictlyEqual(value.data[0], Type.atom("safe"))
-    );
-  }
-
-  // Based on QueryCache.derived_query?/2
-  //
-  // Whether the build registered the given derived field as a query, which the bundle's sync
-  // constants list by module.
-  static #isRegisteredDerivedQuery(module, name) {
-    return Boolean(
-      globalThis.Hologram.sync?.derivedQueries?.[module]?.includes(name.value),
     );
   }
 
@@ -2828,6 +2874,39 @@ export default class Renderer {
 
   static #normalizeEventName(eventName) {
     return eventName.replace(/_/g, "");
+  }
+
+  // What the element would hold if the given value were written to it, worked out on a detached
+  // spare element of the same kind, so nothing on the page is touched. The spare gets the
+  // element's attributes that decide the stored form and loses any left from an earlier element.
+  // The patch has already applied this render's attribute changes by the time the hooks run.
+  // Copying every attribute would throw on names setAttribute() refuses but the HTML
+  // parser keeps, like "@click", and on inline handlers under Trusted Types. Spares are made with
+  // createElement() rather than cloneNode(), which would run a customized built-in's constructor
+  // and value setter.
+  //
+  // A select is left as it is: what it holds depends on its options, which a spare doesn't have,
+  // and which on an update the patch changes only after the hook runs.
+  static #normalizeFormInputValue(element, value) {
+    if (element.localName === "select") {
+      return value;
+    }
+
+    const spare = $.#formInputValueSpare(element);
+
+    for (const name of VALUE_SANITIZATION_ATTRS) {
+      const attrValue = element.getAttribute(name);
+
+      if (attrValue === null) {
+        spare.removeAttribute(name);
+      } else if (spare.getAttribute(name) !== attrValue) {
+        spare.setAttribute(name, attrValue);
+      }
+    }
+
+    spare.value = value;
+
+    return spare.value;
   }
 
   // Based on normalize_prop_name/1
@@ -4396,9 +4475,20 @@ export default class Renderer {
     element.checked = newChecked;
   }
 
+  // Writes the controlled value onto the element, unless the write would leave it holding what it
+  // holds now.
+  //
+  // The browser stores some values in another form than the one written: a color input lowercases
+  // its hex, a range clamps to its bounds, a textarea turns CRLF into LF. Compared as plain strings,
+  // state holding "#FF0000" never matches the "#ff0000" read back, so every render would write
+  // again - and a write moves an open color picker, so it fights the pointer while it's dragged.
   static #updateFormInputValue(element, newValue) {
     // Skip redundant DOM writes
     if (newValue === element.value) {
+      return;
+    }
+
+    if ($.#normalizeFormInputValue(element, newValue) === element.value) {
       return;
     }
 
@@ -4425,6 +4515,20 @@ export default class Renderer {
     if (!matches) {
       Interpreter.raiseMisuseError(
         `derived field ${Interpreter.inspect(entry.name)} in ${module} is declared ${Interpreter.inspect(type)}, but its query is ${Renderer.#derivedQueryDescription(term)}`,
+      );
+    }
+  }
+
+  // Based on Hologram.Component.Derived's validate_query!/3
+  //
+  // Read through the data layer's handle, as the query is answered, since only a build declaring
+  // entity types ships the code that checks it.
+  static #validateDerivedQuery(term, entry, module) {
+    const refusal = Hologram.dataLayer.queryRefusal(term);
+
+    if (refusal !== null) {
+      Interpreter.raiseMisuseError(
+        `derived field ${Interpreter.inspect(entry.name)} in ${module} ${refusal}`,
       );
     }
   }

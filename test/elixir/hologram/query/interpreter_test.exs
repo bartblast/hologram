@@ -75,13 +75,12 @@ defmodule Hologram.Query.InterpreterTest do
   # The whole point of this module: the same term over the same rows, run by the database and by
   # the interpreter, agreeing. Every test goes through here and then asserts what came back, so
   # that two empty results never pass for agreement.
-  defp agreed(query, opts \\ []) do
+  defp agreed(query) do
     term = Stage.normalize(query)
-    bindings = Keyword.get(opts, :bindings, %{})
 
-    expected = QueryRunner.run(term, @mapping, bindings)
+    expected = QueryRunner.run(term, @mapping)
 
-    actual = run(term, database(), opts)
+    actual = run(term, database())
 
     assert actual == expected
 
@@ -260,10 +259,10 @@ defmodule Hologram.Query.InterpreterTest do
     room
   end
 
-  defp scores(query, opts \\ []) do
+  defp scores(query) do
     query
     |> sort(score)
-    |> agreed(opts)
+    |> agreed()
     |> Enum.map(& &1.score)
   end
 
@@ -301,7 +300,7 @@ defmodule Hologram.Query.InterpreterTest do
 
   defp titles(rows), do: Enum.map(rows, & &1.c)
 
-  describe "run/3 - equality and membership" do
+  describe "run/2 - equality and membership" do
     setup do
       %{
         first: module_10(count: 1, priority: 1, username: "ada"),
@@ -353,7 +352,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - disjunctions" do
+  describe "run/2 - disjunctions" do
     setup do
       %{
         first: module_10(count: 1, priority: 1, username: "ada"),
@@ -417,7 +416,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - ordering comparisons" do
+  describe "run/2 - ordering comparisons" do
     setup do
       %{
         first:
@@ -487,7 +486,7 @@ defmodule Hologram.Query.InterpreterTest do
   # Every ordering asserted here is settled by the keys the query declares. Two rows that tie on
   # all of them fall to the id, and ids generated within one millisecond are not ordered among
   # themselves - so a test resting on that would pass or fail by the clock.
-  describe "run/3 - ordering" do
+  describe "run/2 - ordering" do
     setup do
       %{
         first: module_10(count: 3, priority: 5, username: "bob"),
@@ -544,7 +543,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - ordering strings by their sort keys" do
+  describe "run/2 - ordering strings by their sort keys" do
     test "orders by the derived key rather than by the bytes" do
       module_10(count: 1, username: "Zoe")
       module_10(count: 2, username: "ada")
@@ -562,7 +561,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - ordering enums" do
+  describe "run/2 - ordering enums" do
     setup do
       %{
         first: module_17(priority: :medium, label: "a"),
@@ -594,7 +593,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - comparing attributes" do
+  describe "run/2 - comparing attributes" do
     setup do
       %{
         first: module_10(count: 1, priority: 3, rating: 1.5, username: "ada"),
@@ -683,15 +682,9 @@ defmodule Hologram.Query.InterpreterTest do
 
       assert matched_names(agreed(query)) == ["ada", "cleo"]
     end
-
-    test "binds a placeholder beside an attribute comparison" do
-      query = filter(Module10, count >= priority and username == ^%Placeholder{name: :name})
-
-      assert matched_names(agreed(query, bindings: %{name: "dan"})) == ["dan"]
-    end
   end
 
-  describe "run/3 - comparing enums" do
+  describe "run/2 - comparing enums" do
     setup do
       %{
         first: module_17(priority: :medium, label: "a"),
@@ -728,37 +721,11 @@ defmodule Hologram.Query.InterpreterTest do
 
       assert matched_module_17_labels(agreed(query)) == ["a", "b", "c"]
     end
-
-    test "compares a declared value bound to a placeholder" do
-      query = filter(Module17, priority >= ^%Placeholder{name: :min})
-
-      assert matched_module_17_labels(agreed(query, bindings: %{min: :medium})) == ["a", "b"]
-    end
-
-    # The database executor refuses the binding before it builds a statement, so an undeclared
-    # label never reaches Postgres there - and the interpreter refuses it in the same words.
-    test "refuses a placeholder bound to a value the enum does not declare, as the database does" do
-      term =
-        Module17
-        |> filter(priority >= ^%Placeholder{name: :min})
-        |> Stage.normalize()
-
-      expected_msg =
-        "invalid value :urgent for placeholder :min - expected one of [:low, :medium, :high]"
-
-      assert_error MisuseError, expected_msg, fn ->
-        QueryRunner.run(term, @mapping, %{min: :urgent})
-      end
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, database(), bindings: %{min: :urgent})
-      end
-    end
   end
 
   # A bound is a position in the list `sort` renders, so what sorts at or after it is what the
   # comparison matches - the key carries the order and the value settles the ties.
-  describe "run/3 - comparing strings" do
+  describe "run/2 - comparing strings" do
     setup do
       Enum.each(["Zürich", "Łódź", "apple", "Mango", "Zebra", "zebra"], &module_2/1)
 
@@ -795,7 +762,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - searches" do
+  describe "run/2 - searches" do
     setup do
       Enum.each(["José", "JOSEPH", "jo_x", "50% off", "Straße"], &module_2/1)
 
@@ -874,13 +841,6 @@ defmodule Hologram.Query.InterpreterTest do
       assert matched_titles(agreed(query)) == [matching]
     end
 
-    test "matches a term bound to a placeholder, escaped like a written one" do
-      query = filter(Module2, starts_with(c, ^%Placeholder{name: :query}))
-
-      assert matched_titles(agreed(query, bindings: %{query: "jose"})) == ["JOSEPH", "José"]
-      assert matched_titles(agreed(query, bindings: %{query: "jo_"})) == ["jo_x"]
-    end
-
     test "matches a search for another attribute's value" do
       general = created(Module26, name: "general")
       message(general, "A General update", 1)
@@ -905,7 +865,7 @@ defmodule Hologram.Query.InterpreterTest do
 
   # Two times compared as plain maps read the microseconds before the minutes, and two precisions of
   # one time as two values.
-  describe "run/3 - times" do
+  describe "run/2 - times" do
     setup do
       %{
         early: created(Module22, opens_at: ~T[10:05:00.900000]),
@@ -938,7 +898,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - quantifiers" do
+  describe "run/2 - quantifiers" do
     setup do
       general = created(Module26, name: "general")
       random = created(Module26, name: "random")
@@ -1076,16 +1036,9 @@ defmodule Hologram.Query.InterpreterTest do
 
       assert channel_names(agreed(query)) == ["general", "quiet"]
     end
-
-    test "binds a placeholder inside a quantifier's condition" do
-      query =
-        filter(Module26, any(message <- messages, message.position > ^%Placeholder{name: :min}))
-
-      assert channel_names(agreed(query, bindings: %{min: 1})) == ["general", "random"]
-    end
   end
 
-  describe "run/3 - quantifiers through sets" do
+  describe "run/2 - quantifiers through sets" do
     # general's two messages both carry urgent, so its sources reach urgent twice - quiet's one
     # message carries later, and empty has no message for a source to go through.
     setup do
@@ -1140,13 +1093,6 @@ defmodule Hologram.Query.InterpreterTest do
       assert orphan_bodies == []
     end
 
-    test "binds a placeholder inside a condition through a set" do
-      query =
-        filter(Module26, any(label <- messages.labels, label.name == ^%Placeholder{name: :name}))
-
-      assert channel_names(agreed(query, bindings: %{name: "later"})) == ["general", "quiet"]
-    end
-
     test "matches a label through the messages it shares with another label" do
       query = filter(Module29, any(other <- messages.labels, other.name == "later"))
 
@@ -1160,7 +1106,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - quantifiers over other kinds of rows" do
+  describe "run/2 - quantifiers over other kinds of rows" do
     test "answers over a self-referencing inverse, comparing a reply with its parent" do
       parent = created(Module30, body: "echo")
       created(Module30, body: "echo", parent_id: parent.id)
@@ -1218,7 +1164,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - quantifiers under a read policy" do
+  describe "run/2 - quantifiers under a read policy" do
     setup do
       general = created(Module26, name: "general")
       quiet = created(Module26, name: "quiet")
@@ -1264,7 +1210,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - view bounds" do
+  describe "run/2 - view bounds" do
     setup do
       %{
         first: module_10(count: 1, username: "ada"),
@@ -1302,7 +1248,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - terminals" do
+  describe "run/2 - terminals" do
     setup do
       %{
         first: module_10(count: 1, priority: 1, username: "ada"),
@@ -1350,7 +1296,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - paths" do
+  describe "run/2 - paths" do
     setup do
       early =
         created(Module4, a: ~D[2026-01-01], b: ~U[2099-01-01 00:00:00.000000Z], c: :x, d: 1.5)
@@ -1436,13 +1382,6 @@ defmodule Hologram.Query.InterpreterTest do
       assert matched_ids(agreed(filter(Module25, e.starts_on < e.ends_on))) == [first.id]
     end
 
-    test "binds a placeholder on a path", %{first: first} do
-      base_term = Stage.normalize(Module25)
-      term = %{base_term | filter: [{[:e, :priority], :==, {:placeholder, :priority}}]}
-
-      assert matched_ids(agreed(term, bindings: %{priority: :high})) == [first.id]
-    end
-
     test "matches a path inside an alternative", %{first: first, second: second} do
       assert matched_ids(agreed(filter(Module25, f.c == :y or e.priority == :high))) ==
                Enum.sort([first.id, second.id])
@@ -1486,7 +1425,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - paths under a read policy" do
+  describe "run/2 - paths under a read policy" do
     setup do
       early =
         created(Module4, a: ~D[2026-01-01], b: ~U[2026-01-01 00:00:00.000000Z], c: :x, d: 1.5)
@@ -1536,92 +1475,45 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - placeholders" do
-    setup do
-      %{
-        first: module_10(count: 1, priority: 1, username: "ada"),
-        second: module_10(count: 2, priority: 3, username: "bob")
-      }
-    end
-
-    test "matches against the value bound to a placeholder" do
-      query = filter(Module10, priority: ^%Placeholder{name: :priority})
-
-      assert matched_names(agreed(query, bindings: %{priority: 3})) == ["bob"]
-    end
-
-    test "matches against a placeholder inside an alternative" do
-      query = filter(Module10, priority == ^%Placeholder{name: :priority} or count == 2)
-
-      assert matched_names(agreed(query, bindings: %{priority: 1})) == ["ada", "bob"]
-    end
-
-    test "matches against a list bound to a placeholder" do
-      query = filter(Module10, priority in ^%Placeholder{name: :priorities})
-
-      assert matched_names(agreed(query, bindings: %{priorities: [1, 3]})) == ["ada", "bob"]
-    end
-
-    # Identity with the database covers what each REFUSES, not only what each answers - so a
-    # binding the caller did not give is a caller error here too, rather than a filter nothing
-    # passes. Each refusal is asserted of BOTH, which is the only way the messages are held
-    # together.
-    test "refuses a placeholder the bindings do not name, as the database does" do
+  describe "run/2 - placeholders" do
+    test "refuses a term holding a placeholder, as the database does" do
       term =
         Module10
         |> filter(priority: ^%Placeholder{name: :priority})
-        |> Stage.normalize()
-
-      expected_msg = "missing value for placeholder :priority"
-
-      assert_error MisuseError, expected_msg, fn ->
-        QueryRunner.run(term, @mapping, %{})
-      end
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, database(), bindings: %{})
-      end
-    end
-
-    test "refuses a nil value bound to a placeholder, as the database does" do
-      term =
-        Module10
-        |> filter(priority: ^%Placeholder{name: :priority})
-        |> Stage.normalize()
-
-      expected_msg = "nil value for placeholder :priority - use an explicit nil predicate instead"
-
-      assert_error MisuseError, expected_msg, fn ->
-        QueryRunner.run(term, @mapping, %{priority: nil})
-      end
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, database(), bindings: %{priority: nil})
-      end
-    end
-
-    # A literal list may name nil - it is part of a term rather than a value handed to one - so
-    # the refusal is of the BINDING, not of the operator it feeds.
-    test "refuses a nil element in a list bound to a placeholder, as the database does" do
-      term =
-        Module10
-        |> filter(priority in ^%Placeholder{name: :priorities})
         |> Stage.normalize()
 
       expected_msg =
-        "nil element in the list for placeholder :priorities - use an explicit nil predicate instead"
+        "cannot run a query term holding the placeholder :priority - a placeholder only stands in for a pinned value while the build checks a query, so a query that runs holds its values: build the term from the values themselves"
 
       assert_error MisuseError, expected_msg, fn ->
-        QueryRunner.run(term, @mapping, %{priorities: [nil, 3]})
+        QueryRunner.run(term, @mapping)
       end
 
       assert_error MisuseError, expected_msg, fn ->
-        run(term, database(), bindings: %{priorities: [nil, 3]})
+        run(term, database())
+      end
+    end
+
+    test "refuses a placeholder in an included sub-term, as the database does" do
+      term =
+        Module3
+        |> narrowed_include(:a, &filter(&1, c: ^%Placeholder{name: :title}))
+        |> Stage.normalize()
+
+      expected_msg =
+        "cannot run a query term holding the placeholder :title - a placeholder only stands in for a pinned value while the build checks a query, so a query that runs holds its values: build the term from the values themselves"
+
+      assert_error MisuseError, expected_msg, fn ->
+        QueryRunner.run(term, @mapping)
+      end
+
+      assert_error MisuseError, expected_msg, fn ->
+        run(term, database())
       end
     end
   end
 
-  describe "run/3 - derived fields" do
+  describe "run/2 - derived fields" do
     setup do
       put_derived_definitions([Module32, Module34, Module39])
 
@@ -1684,24 +1576,6 @@ defmodule Hologram.Query.InterpreterTest do
       assert nicknames(filter(Module34, channel_load != 4)) == ["ann", "bob", "general"]
     end
 
-    test "refuses a placeholder binding a label a derived enum does not declare" do
-      term =
-        Module39
-        |> filter(tier == ^%Placeholder{name: :tier})
-        |> Stage.normalize()
-
-      expected_msg =
-        "invalid value :platinum for placeholder :tier - expected one of [:gold, :silver, :bronze]"
-
-      assert_error MisuseError, expected_msg, fn ->
-        QueryRunner.run(term, @mapping, %{tier: :platinum})
-      end
-
-      assert_error MisuseError, expected_msg, fn ->
-        run(term, database(), bindings: %{tier: :platinum})
-      end
-    end
-
     test "computes a derived field another definition reads" do
       assert scores(filter(Module39, gold == true)) == [12]
     end
@@ -1726,12 +1600,6 @@ defmodule Hologram.Query.InterpreterTest do
       assert nicknames(filter(Module34, badge not in ["top", nil])) == []
     end
 
-    test "binds a placeholder on a derived enum" do
-      query = filter(Module39, tier in [^%Placeholder{name: :tier}, :gold])
-
-      assert scores(query, bindings: %{tier: :silver}) == [7, 12]
-    end
-
     test "compares a derived value with an attribute of the row" do
       assert scores(filter(Module39, ratio > score)) == []
       assert scores(filter(Module39, kind_label <= kind)) == [1, 7, 12]
@@ -1754,7 +1622,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - derived counts and sets" do
+  describe "run/2 - derived counts and sets" do
     setup do
       put_derived_definitions([Module32, Module33, Module34, Module37, Module38, Module40])
     end
@@ -1936,7 +1804,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - derived includes" do
+  describe "run/2 - derived includes" do
     setup do
       put_derived_definitions([
         Module32,
@@ -2081,7 +1949,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - includes" do
+  describe "run/2 - includes" do
     setup do
       {:ok, required} = create(Module1.new())
 
@@ -2243,7 +2111,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - inverse includes" do
+  describe "run/2 - inverse includes" do
     setup do
       general = created(Module26, name: "general")
       random = created(Module26, name: "random")
@@ -2392,7 +2260,7 @@ defmodule Hologram.Query.InterpreterTest do
 
   # An inverse of the type's own relationship reads the type's own rows on both sides - the table
   # it reads from is the one the query is on, and the join table holds the type at both ends.
-  describe "run/3 - self-referencing inverses" do
+  describe "run/2 - self-referencing inverses" do
     test "fills an inverse of a to-one of the type's own with the rows naming the row" do
       parent = created(Module30, body: "parent")
       created(Module30, body: "second reply", parent_id: parent.id)
@@ -2427,7 +2295,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
-  describe "run/3 - the rows it reads" do
+  describe "run/2 - the rows it reads" do
     test "reads the table of its own entity type and no other" do
       module_10(count: 1, username: "ada")
 

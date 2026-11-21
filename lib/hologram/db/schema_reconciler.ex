@@ -5,6 +5,7 @@ defmodule Hologram.DB.SchemaReconciler do
 
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Preflight
@@ -20,34 +21,6 @@ defmodule Hologram.DB.SchemaReconciler do
   # signed int64.
   @advisory_lock_key 4_787_000_136_577_093_832
 
-  # The layout version of the hologram_system tables themselves - bumped when the
-  # bookkeeping DDL below or the marker's columns change, ONCE PER RELEASE rather than once
-  # per change. Stamped into every marker so a database states which layout it was built
-  # with: the alternative is introspecting the tables to find out, which only works while
-  # the differences are visible in the catalog. An integer rather than the package version,
-  # so the check is a monotonic comparison rather than version-string parsing, and a release
-  # that changes nothing here leaves it alone.
-  #
-  # STILL 1 while the data layer is unreleased, deliberately. The oplog table, its two
-  # indexes, the migration table's model_hash column and the mutation table all arrived
-  # after this number was first set, and none of them has shipped: `lib/hologram/db` exists on neither master nor
-  # dev, and the published package has no data layer at all. A version names a layout
-  # someone can be RUNNING, so numbering the intermediate states of an unreleased branch
-  # would invent layouts no database was ever built with.
-  #
-  # Owed at the data layer's first release, and both halves are owed together: bump this
-  # once for the whole arc, and add the upgrade that carries an already-claimed database to
-  # it. `create_system_tables/0` runs only when claiming a virgin database, so a claimed one
-  # never gains a later table or column on its own - the symptom is not subtle, and it has
-  # been seen: a database claimed before the oplog existed makes every dispatcher poll
-  # crash with `relation "hologram_system.oplog" does not exist`, and one claimed before this
-  # branch lacks the oplog's revisions or old column, the mutation table, or that table's
-  # envelope column. Harmless only because no
-  # such database exists outside this branch's local dev and test databases and CI's, which
-  # are virgin per run - and until that upgrade exists a stale one is dropped and recreated
-  # rather than carried forward.
-  @system_schema_version 1
-
   # The ops the schema diff's pairing pass emits - a recognised rename, applied ahead of the
   # rest of the run.
   @rename_ops [:rename_enum_type, :rename_index, :rename_table]
@@ -62,6 +35,26 @@ defmodule Hologram.DB.SchemaReconciler do
     ops
     |> Enum.filter(&match?(%{op: :add_column}, &1))
     |> Enum.each(&backfill_op!(&1, mapping))
+  end
+
+  @doc """
+  Raises when the given marker's hologram_system layout is newer than the running Hologram's - a
+  database a later release claimed or upgraded, booted by an earlier one, whose code would read
+  and write tables it doesn't know. Returns :ok otherwise. The running version follows the
+  context (see system_schema_version/1).
+  """
+  @spec check_system_schema_version!(%{atom => any}, %{atom => any}) :: :ok
+  def check_system_schema_version!(marker, context) do
+    known_version = system_schema_version(context)
+
+    if marker.system_schema_version > known_version do
+      raise "the configured database's system tables are at layout version " <>
+              "#{marker.system_schema_version}, from a newer Hologram - this Hologram knows " <>
+              "layout versions up to #{known_version} - upgrade Hologram or point the config " <>
+              "at another database"
+    end
+
+    :ok
   end
 
   @doc """
@@ -86,7 +79,11 @@ defmodule Hologram.DB.SchemaReconciler do
   whose marker matches the given context (:otp_app, :env, :hologram_version, and
   :timestamp - the latter two used when claiming) returns :managed. Every other state
   raises with a specific message: Hologram schemas without a marker, a marker belonging
-  to another app or env, or a database managed by migrations.
+  to another app or env, a database managed by migrations, or system tables at a newer
+  layout than the running one (see system_schema_version/1, which reads the context's
+  optional :system_upgrades). It never upgrades the system tables of a database it finds
+  managed - that is upgrade_system_tables!/1, which reconcile/1 runs next in the same
+  transaction.
   """
   @spec ensure_managed!(%{atom => any}) :: :claimed | :managed
   def ensure_managed!(context) do
@@ -101,11 +98,39 @@ defmodule Hologram.DB.SchemaReconciler do
   end
 
   @doc """
+  Logs one info line per given system table layout version, the versions
+  upgrade_system_tables!/1 returned - called once its transaction has committed, so a line never
+  names an upgrade that rolled back. Returns :ok.
+  """
+  @spec log_system_upgrades(list(pos_integer)) :: :ok
+  def log_system_upgrades(versions) do
+    Enum.each(versions, fn version ->
+      Logger.info("Hologram: upgraded the system tables to layout version #{version}")
+    end)
+  end
+
+  @doc """
+  Returns the upgrade steps above the layout the connected database's marker records, in order -
+  the ones upgrade_system_tables!/1 would run. The steps follow the context (see
+  system_schema_version/1). The marker has to exist.
+  """
+  @spec pending_system_upgrades(%{atom => any}) :: list({pos_integer, list(String.t())})
+  def pending_system_upgrades(context) do
+    stored_version = read_marker().system_schema_version
+
+    context
+    |> system_upgrades()
+    |> Enum.filter(fn {version, _statements} -> version > stored_version end)
+  end
+
+  @doc """
   Returns the managed-database marker, or nil when none has been written.
 
   The marker is a map with :otp_app, :env, and :managed_by (the guard facts, as
   strings) plus :hologram_version, :system_schema_version (the layout version of the
-  hologram_system tables) and :last_reconciled_at (diagnostics).
+  hologram_system tables) and :last_reconciled_at (diagnostics). Schema reconciliation refreshes
+  :hologram_version and :last_reconciled_at on every run - the migrator never does, so on a
+  database it manages they are the claim's, whatever layout later upgrades brought.
   """
   @spec read_marker() :: %{atom => any} | nil
   def read_marker do
@@ -139,28 +164,35 @@ defmodule Hologram.DB.SchemaReconciler do
   (empty when the schema already matched).
 
   The whole run is one crash-atomic transaction serialized by an advisory lock: guard
-  check (claiming when virgin), introspect the actual schema, project the target from
+  check (claiming when virgin), upgrade the system tables to the running layout (see
+  upgrade_system_tables!/1), introspect the actual schema, project the target from
   the mapping, diff, apply and register the renames the diff recognised (after an alien
   check of their own) and introspect again, alien check (dropping or renaming an object the
   registry does not know fails loudly - hologram_data is model-managed), pre-flight data
   validation (transformations the existing rows cannot follow fail with the ways out
   before any DDL runs), render and apply the DDL, update the managed-object registry from
   the op stream, and refresh the marker (last_reconciled_at, hologram_version). After the
-  transaction commits, each destructive action and each join table rename is logged as
-  one concise line. The context carries :mapping plus the guard facts (:otp_app, :env)
-  and the marker diagnostics (:hologram_version, :timestamp).
+  transaction commits, each system table upgrade, each destructive action and each join
+  table rename is logged as one concise line. The context carries :mapping plus the guard
+  facts (:otp_app, :env) and the marker diagnostics (:hologram_version, :timestamp), and
+  optionally :plan, the indexes the model leaves to `Hologram.DB.IndexPlan` - the target
+  holds them beside the model's own, and they go through the same diff, alien check and
+  registry. Without one, the plan is the framework's own lookups'. It may also carry
+  :system_upgrades, steps in place of system_schema_upgrades/0's (see
+  system_schema_version/1).
   """
   @spec reconcile(%{atom => any}) :: %{atom => any}
   def reconcile(context) do
-    {:ok, result} =
+    {:ok, {result, upgraded}} =
       Connection.transaction(fn ->
         {:ok, _result} =
           Connection.query("SELECT pg_advisory_xact_lock($1)", [@advisory_lock_key])
 
         status = ensure_managed!(context)
+        upgraded = upgrade_system_tables!(context)
 
         actual = Introspection.schema()
-        target = Schema.from_mapping(context.mapping)
+        target = Schema.from_mapping(context.mapping, index_plan(context))
 
         {renames, changes} =
           actual
@@ -187,11 +219,12 @@ defmodule Hologram.DB.SchemaReconciler do
         backfill_companions!(changes, context.mapping)
 
         update_registry(changes)
-        write_marker(marker_from_context(context))
+        refresh_marker(context)
 
-        %{status: status, ops: renames ++ changes}
+        {%{status: status, ops: renames ++ changes}, upgraded}
       end)
 
+    log_system_upgrades(upgraded)
     log_notable_ops(result.ops, context.mapping)
 
     result
@@ -215,6 +248,55 @@ defmodule Hologram.DB.SchemaReconciler do
   end
 
   @doc """
+  Returns the hologram_system layout steps, in order, as {version, statements} - each step's
+  version is the layout its statements produce, and the last one's is the running layout (see
+  system_schema_version/1).
+
+  Empty until a release after the data layer's first one changes a system table. Layout 1 is what
+  the first release ships, and no database before it is carried forward: until then a change goes
+  into the bookkeeping DDL alone, and a database claimed earlier is dropped and claimed again.
+
+  After it, a release that changes the system tables adds one step, numbered one above the last,
+  so the versions run 2, 3 and on. Step N brings layout N - 1 to N, and the same change goes into
+  the bookkeeping DDL, so a claim builds the latest layout directly. The statements run in the
+  boot's transaction (see upgrade_system_tables!/1), so none of them can be CONCURRENTLY, and a
+  step's locks hold until the boot commits. And the marker table, with every column read_marker/0
+  selects, stays readable at every layout in both directions: the marker is read before any step
+  runs, and an earlier release reads it to refuse a newer layout.
+
+  A step needn't keep the previous release's code working: old and new nodes serving one database
+  at once isn't supported yet (#1627), so the previous release's nodes are stopped before this
+  one boots. Once it is, steps have to be additive: new tables, and new columns that are nullable
+  or have a default.
+  """
+  @spec system_schema_upgrades() :: list({pos_integer, list(String.t())})
+  def system_schema_upgrades, do: []
+
+  @doc """
+  Returns the running layout version of the hologram_system tables: the last upgrade step's
+  version, or 1 when there is none. The steps are the context's :system_upgrades when it carries
+  one - a test's, standing in for a later release's - and system_schema_upgrades/0's otherwise.
+
+  Every marker stores the version its database's tables are at, so a database states which layout
+  it has: the alternative is introspecting the tables, which only works while the differences show
+  in the catalog. An integer rather than the package version, so the check is a monotonic
+  comparison, and a release that changes no system table leaves it alone. Derived from the steps
+  rather than held beside them, so the two can't disagree.
+  """
+  @spec system_schema_version(%{atom => any}) :: pos_integer
+  def system_schema_version(context) do
+    last_step =
+      context
+      |> system_upgrades()
+      |> List.last()
+
+    case last_step do
+      nil -> 1
+      {version, _statements} -> version
+    end
+  end
+
+  @doc """
   Applies the given change ops to the managed-object registry, in the caller's
   transaction.
 
@@ -232,12 +314,38 @@ defmodule Hologram.DB.SchemaReconciler do
   end
 
   @doc """
+  Carries the connected database's hologram_system tables to the running layout, in the caller's
+  transaction: runs each pending step's statements in order (see pending_system_upgrades/1) and
+  records the step's version in the marker. Returns the versions applied, for
+  log_system_upgrades/1 once the transaction commits - empty for a database at the running
+  layout. A statement the database refuses raises, naming the step's version, and the caller's
+  transaction rolls the whole upgrade back.
+
+  The caller holds a lock no other boot can hold beside it - reconcile/1's advisory lock, the
+  migrator's migration lock - so a node that saw a pending step before the lock finds it done
+  inside, and no step runs twice.
+  """
+  @spec upgrade_system_tables!(%{atom => any}) :: list(pos_integer)
+  def upgrade_system_tables!(context) do
+    statement = ~s(UPDATE "#{Mapper.system_schema()}"."database" SET "system_schema_version" = $1)
+
+    context
+    |> pending_system_upgrades()
+    |> Enum.map(fn {version, statements} ->
+      Enum.each(statements, &execute_upgrade_statement!(&1, version))
+      {:ok, _result} = Connection.query(statement, [version])
+
+      version
+    end)
+  end
+
+  @doc """
   Writes the given marker as the single row of the managed-database marker table,
   replacing any previous row.
 
-  The system schema layout version is the writer's own, not the caller's - the caller
-  states what it knows about the app, and the layout is a fact about the code doing the
-  writing.
+  The marker's system_schema_version is the layout the database has, so only a claim, which
+  builds the tables at the running layout, writes one here - an upgrade step records its own
+  (see upgrade_system_tables!/1), and a reconciliation refreshes the rest and leaves it alone.
   """
   @spec write_marker(%{atom => any}) :: :ok
   def write_marker(marker) do
@@ -257,7 +365,7 @@ defmodule Hologram.DB.SchemaReconciler do
       marker.env,
       marker.managed_by,
       marker.hologram_version,
-      @system_schema_version,
+      marker.system_schema_version,
       marker.last_reconciled_at
     ]
 
@@ -317,6 +425,10 @@ defmodule Hologram.DB.SchemaReconciler do
       {:ok, encoded_value} ->
         Preflight.check_fill!(mapping, op.table, op.column, encoded_value)
         fill_column(op.table, op.column, encoded_value)
+
+        # The filled rows held no value, so their companions are NULL too - and a string's
+        # equality reads its sort key, so a row left without one would match no `==`.
+        backfill_companions_of!(mapping, op.table, op.column)
     end
 
     execute_statements(DDL.statements(op))
@@ -332,6 +444,13 @@ defmodule Hologram.DB.SchemaReconciler do
   end
 
   defp apply_op(op, _mapping), do: execute_statements(DDL.statements(op))
+
+  # The indexes the model leaves to the plan, which the context carries (see
+  # Hologram.DB.reconciliation_context/0) - or, for a context built without one, as the tests
+  # build theirs, the ones the framework's own lookups need.
+  defp index_plan(%{plan: plan}), do: plan
+
+  defp index_plan(context), do: IndexPlan.framework_plan(context.mapping)
 
   defp apply_ops(ops, mapping) do
     Enum.each(ops, &apply_op(&1, mapping))
@@ -356,6 +475,22 @@ defmodule Hologram.DB.SchemaReconciler do
 
       [id, value] ->
         {:ok, _result} = Connection.query(update_sql, [derive.(value), id])
+    end)
+  end
+
+  defp backfill_companions_of!(mapping, table, source_name) do
+    {_entity_type, entity_mapping} =
+      Enum.find(mapping, fn {_entity_type, table_mapping} -> table_mapping.table == table end)
+
+    entity_mapping.columns
+    |> Enum.filter(&Mapper.derived?/1)
+    |> Enum.each(fn %{source: {_kind, attribute_name}} = companion ->
+      if Enum.any?(
+           entity_mapping.columns,
+           &(&1.name == source_name and &1.source == {:attribute, attribute_name})
+         ) do
+        backfill_op!(%{table: table, column: companion.name}, mapping)
+      end
     end)
   end
 
@@ -458,6 +593,7 @@ defmodule Hologram.DB.SchemaReconciler do
                 "schema reconciliation never touches it"
 
       true ->
+        check_system_schema_version!(marker, context)
         :managed
     end
   end
@@ -473,6 +609,7 @@ defmodule Hologram.DB.SchemaReconciler do
       env: context.env,
       managed_by: "reconciliation",
       hologram_version: context.hologram_version,
+      system_schema_version: system_schema_version(context),
       last_reconciled_at: context.timestamp
     })
 
@@ -494,6 +631,17 @@ defmodule Hologram.DB.SchemaReconciler do
     Enum.each(statements, fn statement ->
       {:ok, _result} = Connection.query(statement)
     end)
+  end
+
+  defp execute_upgrade_statement!(statement, version) do
+    case Connection.query(statement) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, error} ->
+        raise "upgrading the system tables to layout version #{version} failed - " <>
+                Exception.message(error)
+    end
   end
 
   defp fill_column(table, column, encoded_value) do
@@ -557,16 +705,6 @@ defmodule Hologram.DB.SchemaReconciler do
     Enum.each(ops, &log_notable_op(&1, mapping))
   end
 
-  defp marker_from_context(context) do
-    %{
-      otp_app: context.otp_app,
-      env: context.env,
-      managed_by: "reconciliation",
-      hologram_version: context.hologram_version,
-      last_reconciled_at: context.timestamp
-    }
-  end
-
   defp marker_table_exists? do
     statement = """
     SELECT 1
@@ -591,6 +729,20 @@ defmodule Hologram.DB.SchemaReconciler do
             "marker - it is not managed by schema reconciliation - drop the " <>
             ~s("#{Mapper.system_schema()}" and "#{Mapper.data_schema()}" schemas or point the config ) <>
             "at another database"
+  end
+
+  # The guard facts already match - ensure_managed!/1 checked them - and the layout version is
+  # left to the claim and the upgrade steps: a refresh records when the database was last
+  # reconciled and by which Hologram, not the layout the code expects.
+  defp refresh_marker(context) do
+    statement = """
+    UPDATE "#{Mapper.system_schema()}"."database"
+    SET "hologram_version" = $1, "last_reconciled_at" = $2
+    """
+
+    {:ok, _result} = Connection.query(statement, [context.hologram_version, context.timestamp])
+
+    :ok
   end
 
   defp qualified_table(table) do
@@ -734,11 +886,15 @@ defmodule Hologram.DB.SchemaReconciler do
     :ok
   end
 
-  # Control-plane bookkeeping DDL - static and framework-owned, never model-derived.
-  # The database table is the managed-database marker (single row, maintained by
-  # write_marker/1) - the schema_object table is the managed-object registry - the
-  # migration table records the applied migration versions - the oplog table records the
-  # effect each write had, written in the writing transaction and read by the dispatcher -
+  # Control-plane bookkeeping DDL - static and framework-owned, never model-derived. A change to
+  # it takes an upgrade step once the data layer has shipped, and none before - see
+  # system_schema_upgrades/0.
+  #
+  # The database table is the managed-database marker (single row, written by write_marker/1 at
+  # the claim and refreshed by each reconciliation) - the schema_object table is the
+  # managed-object registry - the migration table records the applied migration versions - the
+  # oplog table records the effect each write had, written in the writing transaction and read by
+  # the dispatcher -
   # the mutation table records each batch of client writes the server ANSWERED, by the
   # client that sent it and that client's sequence number, which is what answers a batch
   # arriving twice - and keeps a refused batch as it arrived, since its rows reached no log.
@@ -837,5 +993,9 @@ defmodule Hologram.DB.SchemaReconciler do
       )
       """
     ]
+  end
+
+  defp system_upgrades(context) do
+    Map.get(context, :system_upgrades, system_schema_upgrades())
   end
 end

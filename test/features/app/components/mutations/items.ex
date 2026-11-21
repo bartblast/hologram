@@ -4,8 +4,8 @@ defmodule HologramFeatureTests.Components.Mutations.Items do
 
   alias HologramFeatureTests.Entities.Item
 
-  # The items reach this list through the ordinary read path - a registered query filled by the
-  # sync stream - so a counter moved by a batch POSTed from the page shows its new value here
+  # The items reach this list through the ordinary read path - a derived query over the rows the
+  # sync stream keeps current - so a counter moved by a batch POSTed from the page shows its new value here
   # without the page being fetched again.
   derived :items, [Item], &items_query/0
 

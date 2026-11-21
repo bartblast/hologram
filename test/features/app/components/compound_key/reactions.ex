@@ -4,8 +4,8 @@ defmodule HologramFeatureTests.Components.CompoundKey.Reactions do
 
   alias HologramFeatureTests.Entities.Reaction
 
-  # The reactions reach this list through a registered query the client evaluates against its
-  # own database, so a row an action wrote is on screen before the server has judged it - and
+  # The reactions reach this list through a derived query the client answers over its own
+  # database, so a row an action wrote is on screen before the server has judged it - and
   # gone again once the server refuses its batch.
   derived :reactions, [Reaction], &reactions_query/0
 

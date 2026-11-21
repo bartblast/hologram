@@ -8,7 +8,6 @@ defmodule HologramFeatureTests.SessionUserTest do
   alias HologramFeatureTests.SessionUserPage
 
   setup do
-    await_evaluator_drain()
     truncate_every_entity_table()
 
     :ok

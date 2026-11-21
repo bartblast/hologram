@@ -265,6 +265,37 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "grant_id_update_statement/1" do
+    test "moves each grant from the old id to the new one, both given as text" do
+      assert grant_id_update_statement("hologram_role_grant") ==
+               ~s{UPDATE "hologram_data"."hologram_role_grant" AS "grant" } <>
+                 ~s{SET "id" = "moved"."new"::uuid } <>
+                 ~s{FROM unnest($1::text[], $2::text[]) AS "moved" ("old", "new") } <>
+                 ~s{WHERE "grant"."id" = "moved"."old"::uuid}
+    end
+  end
+
+  describe "grant_identity_statement/2" do
+    test "reads a page of the grants holding the label, by id, as text" do
+      assert grant_identity_statement("hologram_role_grant", "role") ==
+               ~s{SELECT "id"::text, "user_id"::text, "entity_type"::text, } <>
+                 ~s{"entity_id"::text, "role"::text } <>
+                 ~s{FROM "hologram_data"."hologram_role_grant" } <>
+                 ~s{WHERE "role"::text = $1 AND "id" > $2::text::uuid } <>
+                 ~s{ORDER BY "hologram_data"."hologram_role_grant"."id" LIMIT $3}
+    end
+  end
+
+  describe "grant_repeat_check_statement/2" do
+    test "counts the identity key groups that repeat among the grants holding the label" do
+      assert grant_repeat_check_statement("hologram_role_grant", "role") ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."hologram_role_grant" } <>
+                 ~s{WHERE "role"::text = $1 } <>
+                 ~s{GROUP BY "user_id", "entity_type", "entity_id", "role" } <>
+                 ~s{HAVING COUNT(*) > 1) AS repeats}
+    end
+  end
+
   describe "invalid_index_check_statement/1" do
     test "counts the invalid indexes carrying the name" do
       expected =
@@ -287,13 +318,29 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
-  describe "invalid_indexes_statement/0" do
+  describe "invalid_indexes_statement/1" do
     test "lists the invalid indexes of the data schema, by name, with whether they take writes and are live" do
       statement = normalize_newlines(invalid_indexes_statement())
 
       assert statement =~ "SELECT ic.relname, i.indisready, i.indislive"
-      assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid"
+      assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid\n"
       assert statement =~ "ORDER BY ic.relname"
+    end
+
+    test "lists the invalid unique indexes of the data schema" do
+      statement = normalize_newlines(invalid_indexes_statement(true))
+
+      assert statement =~ "SELECT ic.relname, i.indisready, i.indislive"
+
+      assert statement =~
+               "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid AND i.indisunique"
+    end
+
+    test "lists the other invalid indexes of the data schema" do
+      statement = normalize_newlines(invalid_indexes_statement(false))
+
+      assert statement =~
+               "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid AND NOT i.indisunique"
     end
   end
 
@@ -592,6 +639,8 @@ defmodule Hologram.DB.DDLTest do
           "name" => %{type: "text", collation: "C", null: false},
           "done" => %{type: "boolean", collation: nil, null: true},
           "created_at" => %{type: "timestamptz", collation: nil, null: false},
+          "server_created_at" => %{type: "timestamptz", collation: nil, null: false},
+          "server_updated_at" => %{type: "timestamptz", collation: nil, null: false},
           "updated_at" => %{type: "timestamptz", collation: nil, null: false}
         },
         primary_key: %{columns: ["id"], constraint: "task_$pk"}
@@ -604,6 +653,8 @@ defmodule Hologram.DB.DDLTest do
           "done" boolean,
           "name" text COLLATE "C" NOT NULL,
           "created_at" timestamptz NOT NULL,
+          "server_created_at" timestamptz NOT NULL,
+          "server_updated_at" timestamptz NOT NULL,
           "updated_at" timestamptz NOT NULL,
           CONSTRAINT "task_$pk" PRIMARY KEY ("id")
         )\

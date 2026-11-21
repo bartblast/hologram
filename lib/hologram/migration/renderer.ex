@@ -138,15 +138,16 @@ defmodule Hologram.Migration.Renderer do
   # The value ops the grant store and the enum attributes take: a role rename moves a
   # value of the grant store's role type, an entity rename moves one of its entity_type
   # (the value IS the entity type module), and an enum value rename moves one of the
-  # attribute's own type. Rows follow the label in every case - no rewrite.
+  # attribute's own type. Rows follow the label in every case. A grant's id is derived from
+  # its labels, though, so the grants a rename relabels take the ids their new labels derive
+  # right after it (grant_relabel_ops/5).
   defp enum_value_ops(%{op: :rename_entity} = op, pre_mapping, post_mapping) do
-    relabel_ops(
-      pre_mapping,
-      post_mapping,
-      :entity_type,
-      Codec.encode(op.from, :enum),
-      Codec.encode(op.to, :enum)
-    )
+    from = Codec.encode(op.from, :enum)
+    to = Codec.encode(op.to, :enum)
+
+    pre_mapping
+    |> relabel_ops(post_mapping, :entity_type, from, to)
+    |> grant_relabel_ops(post_mapping, :entity_type, from, to)
   end
 
   defp enum_value_ops(%{op: :rename_enum_value} = op, _pre_mapping, post_mapping) do
@@ -168,26 +169,53 @@ defmodule Hologram.Migration.Renderer do
     from = Codec.encode(op.from, :enum)
     to = Codec.encode(op.to, :enum)
 
-    if from in role_values(post_mapping) do
-      scoped_role_rebuild_ops(post_mapping, entity_type, from, to)
-    else
-      relabel_ops(pre_mapping, post_mapping, :role, from, to)
-    end
+    relabel_ops =
+      if from in role_values(post_mapping) do
+        scoped_role_rebuild_ops(post_mapping, entity_type, from, to)
+      else
+        relabel_ops(pre_mapping, post_mapping, :role, from, to)
+      end
+
+    grant_relabel_ops(relabel_ops, post_mapping, :role, from, to)
   end
 
   # A global role's value is its module name, which no entity role can collide with, so
   # renaming one always moves a value nothing else holds.
   defp enum_value_ops(%{op: :rename_role} = op, pre_mapping, post_mapping) do
-    relabel_ops(
-      pre_mapping,
-      post_mapping,
-      :role,
-      Codec.encode(op.from, :enum),
-      Codec.encode(op.to, :enum)
-    )
+    from = Codec.encode(op.from, :enum)
+    to = Codec.encode(op.to, :enum)
+
+    pre_mapping
+    |> relabel_ops(post_mapping, :role, from, to)
+    |> grant_relabel_ops(post_mapping, :role, from, to)
   end
 
   defp enum_value_ops(_op, _pre_mapping, _post_mapping), do: []
+
+  # The relabel, then the re-derivation of the ids of the grants it moved, which the migrator
+  # runs - PostgreSQL has no SHA-1 of its own to derive them in SQL. The rows to look at are the
+  # ones holding the new label, which is every row the relabel moved, scoped or not; a row that
+  # held it already derives the id it has. Right after each relabel rather than once per file:
+  # every row's id matches its labels again before the next rename, so a file swapping two
+  # labels through a third never moves an id onto one another row still holds.
+  # The label the grants held before rides along for a refusal to name them by - the file's
+  # transaction takes the relabel back with it, so it is the label they hold again, unless an
+  # earlier rename in the same file moved them to it.
+  defp grant_relabel_ops([], _post_mapping, _attribute, _from, _to), do: []
+
+  defp grant_relabel_ops(relabel_ops, post_mapping, attribute, from, to) do
+    grant_entry = Map.fetch!(post_mapping, RoleGrant)
+
+    rederive_op = %{
+      op: :rederive_grant_ids,
+      table: grant_entry.table,
+      column: role_grant_column(grant_entry, attribute).name,
+      from: from,
+      value: to
+    }
+
+    Enum.concat(relabel_ops, [rederive_op])
+  end
 
   # Every derived name of the entity, paired before and after the rename - whatever
   # differs is renamed. The table goes first, so the column and constraint renames that
@@ -270,7 +298,6 @@ defmodule Hologram.Migration.Renderer do
   defp column_renames(pre_column, post_column, table) do
     name_op(:rename_column, table, pre_column.name, post_column.name) ++
       name_op(:rename_constraint, table, pre_column.fk_constraint, post_column.fk_constraint) ++
-      name_op(:rename_index, nil, pre_column.index, post_column.index) ++
       enum_type_renames(pre_column, post_column)
   end
 
@@ -296,8 +323,7 @@ defmodule Hologram.Migration.Renderer do
         table,
         pre_join.target_fk_constraint,
         post_join.target_fk_constraint
-      ) ++
-      name_op(:rename_index, nil, pre_join.reverse_index, post_join.reverse_index)
+      )
   end
 
   defp name_op(_kind, _table, same, same), do: []

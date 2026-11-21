@@ -44,11 +44,11 @@ build_ir_plt/0          1.37      728.76 ms     ±1.47%      727.00 ms      754.
 ```
 
 
-### ✅ compiler » build_kept_page_reach_3
+### ✅ compiler » build_kept_page_reach_4
 
 ```
 Name                              ips        average  deviation         median         99th %
-build_kept_page_reach/3        565.97        1.77 ms    ±11.77%        1.72 ms        2.41 ms
+build_kept_page_reach/4        565.97        1.77 ms    ±11.77%        1.72 ms        2.41 ms
 ```
 
 
@@ -94,27 +94,11 @@ build_page_js/5        233.59        4.28 ms    ±12.15%        4.30 ms        5
 ```
 
 
-### ✅ compiler » build_page_windows_3
-
-```
-Name                           ips        average  deviation         median         99th %
-build_page_windows/3        6.64 K      150.53 μs    ±10.67%      147.13 μs      184.17 μs
-```
-
-
-### ✅ compiler » build_queries_3
-
-```
-Name                      ips        average  deviation         median         99th %
-build_queries/3       18.46 K       54.17 μs    ±15.05%       51.46 μs       82.92 μs
-```
-
-
-### ✅ compiler » build_sync_constants_3
+### ✅ compiler » build_sync_constants_2
 
 ```
 Name                             ips        average  deviation         median         99th %
-build_sync_constants/3        2.17 K      460.90 μs     ±8.88%      454.92 μs      549.11 μs
+build_sync_constants/2        2.17 K      460.90 μs     ±8.88%      454.92 μs      549.11 μs
 ```
 
 
@@ -346,14 +330,6 @@ Comparison:
 ```
 
 
-### ✅ compiler » extract_component_queries_3
-
-```
-Name                                  ips        average  deviation         median         99th %
-extract_component_queries/3       11.32 K       88.33 μs     ±9.96%       87.79 μs      108.63 μs
-```
-
-
 ### ✅ compiler » list_reach_by_page_2
 
 ```
@@ -385,23 +361,6 @@ do load        0.22 K        4.54 ms     ±7.61%        4.49 ms        5.25 ms
 Comparison: 
 no load       71.88 K
 do load        0.22 K - 326.65x slower +4.53 ms
-```
-
-
-### ✅ compiler » query_extractor » extract_derived_queries_3
-
-```
-Name                                                       ips        average  deviation         median         99th %
-no derived fields                                    2824.92 K        0.35 μs  ±4334.57%        0.25 μs        0.46 μs
-field naming its entity                                58.26 K       17.17 μs   ±292.71%       14.21 μs       81.50 μs
-field whose entity is an argument, 1 candidate         57.26 K       17.46 μs    ±91.88%       15.83 μs       47.07 μs
-field whose entity is an argument, 21 candidates       13.03 K       76.74 μs   ±231.43%       71.50 μs      159.21 μs
-
-Comparison: 
-no derived fields                                    2824.92 K
-field naming its entity                                58.26 K - 48.49x slower +16.81 μs
-field whose entity is an argument, 1 candidate         57.26 K - 49.33x slower +17.11 μs
-field whose entity is an argument, 21 candidates       13.03 K - 216.80x slower +76.39 μs
 ```
 
 
