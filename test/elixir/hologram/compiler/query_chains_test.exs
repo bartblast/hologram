@@ -184,6 +184,18 @@ defmodule Hologram.Compiler.QueryChainsTest do
       assert validate_all!(Module2, :__derived_counted_branch__, 1) == :ok
     end
 
+    test "refuses the sort of a query a derived field assigns as its result" do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :assigned_secrets in .+ filters or sorts on server_only attributes/,
+                   fn -> validate_all!(Module2, :__derived_assigned_secrets__, 0) end
+    end
+
+    test "refuses the sort of a query assigned as it's handed to the database" do
+      assert_raise Hologram.CompileError, ~r/filters or sorts on server_only attributes/, fn ->
+        validate_all!(Module1, :read_assigned_secret, 0)
+      end
+    end
+
     test "passes a sort in a derived field's case condition, which a later stage can replace" do
       assert validate_all!(Module2, :__derived_sorted_condition__, 0) == :ok
     end

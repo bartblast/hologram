@@ -526,6 +526,11 @@ defmodule Hologram.Compiler.QueryChains do
     Enum.reduce(try_ir.rescue_clauses, catch_acc, &walk_value(&1.body, mfa, &2, read_as_is?))
   end
 
+  # A match's value is its right-hand side's.
+  defp walk_value(%IR.MatchOperator{left: left, right: right}, mfa, acc, read_as_is?) do
+    walk_value(right, mfa, walk(left, mfa, acc), read_as_is?)
+  end
+
   defp walk_value(ir, mfa, acc, read_as_is?), do: walk_query(ir, mfa, acc, read_as_is?)
 
   # The clauses of a case, a with's or a try's else or a try's catch: what each matches against is

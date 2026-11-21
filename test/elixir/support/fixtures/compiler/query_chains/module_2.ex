@@ -105,6 +105,10 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryChains.Module2 do
     |> sort(label)
   end
 
+  derived :assigned_secrets, [Entity15], fn ->
+    _query = sort(Entity15, token)
+  end
+
   # The condition's query is handed on, so a stage after it can still sort it again.
   derived :sorted_condition, [Entity15], fn ->
     case sort(Entity15, token) do
