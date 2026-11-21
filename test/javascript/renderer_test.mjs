@@ -208,6 +208,29 @@ defineClientOnlyModule8Fixture();
 defineClientOnlyModule9Fixture();
 defineClientOnlyModule10Fixture();
 
+// Records every value written to a real form element, still passing each write on to the element.
+// The recorder is the element's own property, so it counts only writes to this element, not the
+// ones to the spare element the renderer checks values on.
+function recordValueWrites(element) {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    Object.getPrototypeOf(element),
+    "value",
+  );
+
+  const writes = [];
+
+  Object.defineProperty(element, "value", {
+    configurable: true,
+    get: () => descriptor.get.call(element),
+    set: (value) => {
+      writes.push(value);
+      descriptor.set.call(element, value);
+    },
+  });
+
+  return writes;
+}
+
 describe("Renderer", () => {
   beforeEach(() => {
     ComponentRegistry.clear();
@@ -3397,13 +3420,10 @@ describe("Renderer", () => {
         });
 
         describe("input value handling during updates", () => {
-          let mockInput;
+          let input;
 
           beforeEach(() => {
-            mockInput = {
-              tagName: "INPUT",
-              value: "",
-            };
+            input = document.createElement("input");
           });
 
           it("sets initial value on create hook", () => {
@@ -3430,11 +3450,11 @@ describe("Renderer", () => {
             );
 
             // Call the create hook with mock vnode
-            const mockVnode = {elm: mockInput};
+            const mockVnode = {elm: input};
             result.data.hook.create(null, mockVnode);
 
             // Should set the value
-            assert.strictEqual(mockInput.value, "initial_value");
+            assert.strictEqual(input.value, "initial_value");
           });
 
           it("always updates value on update hook", () => {
@@ -3461,17 +3481,17 @@ describe("Renderer", () => {
             );
 
             // Simulate that we previously set a value
-            mockInput.value = "old_value";
+            input.value = "old_value";
 
             // Call the update hook
             const mockVnode = {
-              elm: mockInput,
+              elm: input,
               data: {hologramFormInputValue: "new_value"},
             };
             result.data.hook.update(null, mockVnode);
 
             // Should always update the value
-            assert.strictEqual(mockInput.value, "new_value");
+            assert.strictEqual(input.value, "new_value");
           });
 
           it("always overrides user input when value changes", () => {
@@ -3501,17 +3521,17 @@ describe("Renderer", () => {
             );
 
             // Simulate that user has typed something different
-            mockInput.value = "user_typed_text";
+            input.value = "user_typed_text";
 
             // Call the update hook with a new programmatic value
             const mockVnode = {
-              elm: mockInput,
+              elm: input,
               data: {hologramFormInputValue: "new_programmatic_value"},
             };
             result.data.hook.update(null, mockVnode);
 
             // Should always update the value
-            assert.strictEqual(mockInput.value, "new_programmatic_value");
+            assert.strictEqual(input.value, "new_programmatic_value");
           });
 
           it("updates value regardless of current input value", () => {
@@ -3538,17 +3558,17 @@ describe("Renderer", () => {
             );
 
             // Simulate that current value is something else
-            mockInput.value = "current_value";
+            input.value = "current_value";
 
             // Call the update hook
             const mockVnode = {
-              elm: mockInput,
+              elm: input,
               data: {hologramFormInputValue: "new_value"},
             };
             result.data.hook.update(null, mockVnode);
 
             // Should always update the value
-            assert.strictEqual(mockInput.value, "new_value");
+            assert.strictEqual(input.value, "new_value");
           });
 
           it("sets value on any input element", () => {
@@ -3575,17 +3595,17 @@ describe("Renderer", () => {
             );
 
             // Simulate input with any current value
-            mockInput.value = "whatever";
+            input.value = "whatever";
 
             // Call the update hook
             const mockVnode = {
-              elm: mockInput,
+              elm: input,
               data: {hologramFormInputValue: "first_value"},
             };
             result.data.hook.update(null, mockVnode);
 
             // Should always update the value
-            assert.strictEqual(mockInput.value, "first_value");
+            assert.strictEqual(input.value, "first_value");
           });
 
           it("does not update value when it hasn't changed", () => {
@@ -3612,12 +3632,12 @@ describe("Renderer", () => {
             );
 
             // Set input to the same value as what will be set
-            mockInput.value = "same_value";
+            input.value = "same_value";
 
             // Spy on the value setter to verify it's not called
             let setterCallCount = 0;
-            const originalValue = mockInput.value;
-            Object.defineProperty(mockInput, "value", {
+            const originalValue = input.value;
+            Object.defineProperty(input, "value", {
               get: () => originalValue,
               set: () => {
                 setterCallCount++;
@@ -3628,13 +3648,339 @@ describe("Renderer", () => {
             // Call the update hook with same value (to test no change)
             const oldVnode = {data: {hologramFormInputValue: "same_value"}};
             const mockVnode = {
-              elm: mockInput,
+              elm: input,
               data: {hologramFormInputValue: "same_value"},
             };
             result.data.hook.update(oldVnode, mockVnode);
 
             // Should not have called the setter since value didn't change
             assert.strictEqual(setterCallCount, 0);
+          });
+
+          it("does not write a value the browser stores in another form when the input holds that form", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("type"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("color")],
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("#FF0000")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            input.type = "color";
+            input.value = "#FF0000";
+
+            const writes = recordValueWrites(input);
+
+            result.data.hook.update(null, {
+              elm: input,
+              data: {hologramFormInputValue: "#FF0000"},
+            });
+
+            assert.deepStrictEqual(writes, []);
+            assert.strictEqual(input.value, "#ff0000");
+          });
+
+          it("writes a value the browser stores in another form when the input holds something else", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("type"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("color")],
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("#FF0000")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            input.type = "color";
+            input.value = "#00ff00";
+
+            const writes = recordValueWrites(input);
+
+            result.data.hook.update(null, {
+              elm: input,
+              data: {hologramFormInputValue: "#FF0000"},
+            });
+
+            assert.deepStrictEqual(writes, ["#FF0000"]);
+            assert.strictEqual(input.value, "#ff0000");
+          });
+
+          it("does not write a value the input clamps to the bound it already holds", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("type"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("range")],
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("max"),
+                  Type.keywordList([[Type.atom("text"), Type.bitstring("50")]]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([[Type.atom("text"), Type.bitstring("80")]]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            input.type = "range";
+            input.setAttribute("max", "50");
+            input.value = "80";
+
+            const writes = recordValueWrites(input);
+
+            result.data.hook.update(null, {
+              elm: input,
+              data: {hologramFormInputValue: "80"},
+            });
+
+            assert.deepStrictEqual(writes, []);
+            assert.strictEqual(input.value, "50");
+          });
+
+          it("does not write a value the input clamps to the lower bound it already holds", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("type"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("range")],
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("min"),
+                  Type.keywordList([[Type.atom("text"), Type.bitstring("20")]]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([[Type.atom("text"), Type.bitstring("5")]]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            input.type = "range";
+            input.setAttribute("min", "20");
+            input.value = "5";
+
+            const writes = recordValueWrites(input);
+
+            result.data.hook.update(null, {
+              elm: input,
+              data: {hologramFormInputValue: "5"},
+            });
+
+            assert.deepStrictEqual(writes, []);
+            assert.strictEqual(input.value, "20");
+          });
+
+          it("writes a value an earlier range clamped when the range has no max", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("type"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("range")],
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([[Type.atom("text"), Type.bitstring("80")]]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // A range with max="50" checked first, which holds 50 for 80
+            input.type = "range";
+            input.setAttribute("max", "50");
+            input.value = "80";
+
+            result.data.hook.update(null, {
+              elm: input,
+              data: {hologramFormInputValue: "80"},
+            });
+
+            // A range without a max, moved to 50, where 80 fits
+            const otherInput = document.createElement("input");
+            otherInput.type = "range";
+            otherInput.value = "50";
+
+            const writes = recordValueWrites(otherInput);
+
+            result.data.hook.update(null, {
+              elm: otherInput,
+              data: {hologramFormInputValue: "80"},
+            });
+
+            assert.deepStrictEqual(writes, ["80"]);
+            assert.strictEqual(otherInput.value, "80");
+          });
+
+          it("does not write an address list the input trims when it holds the trimmed list", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("type"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("email")],
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("multiple"),
+                  Type.keywordList([[Type.atom("text"), Type.bitstring("")]]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("a@b.c , d@e.f")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            input.type = "email";
+            input.setAttribute("multiple", "");
+            input.value = "a@b.c , d@e.f";
+
+            const writes = recordValueWrites(input);
+
+            result.data.hook.update(null, {
+              elm: input,
+              data: {hologramFormInputValue: "a@b.c , d@e.f"},
+            });
+
+            assert.deepStrictEqual(writes, []);
+            assert.strictEqual(input.value, "a@b.c,d@e.f");
+          });
+
+          it("does not write a value the browser stores in another form when the input has an attribute only the HTML parser accepts", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("type"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("color")],
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("#FF0000")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // The HTML parser keeps attribute names that setAttribute() throws on
+            const container = document.createElement("div");
+            container.innerHTML = '<input type="color" @click="go" />';
+            const parsedInput = container.firstChild;
+
+            parsedInput.value = "#FF0000";
+
+            const writes = recordValueWrites(parsedInput);
+
+            result.data.hook.update(null, {
+              elm: parsedInput,
+              data: {hologramFormInputValue: "#FF0000"},
+            });
+
+            assert.deepStrictEqual(writes, []);
+            assert.strictEqual(parsedInput.value, "#ff0000");
           });
         });
       });
@@ -3807,13 +4153,10 @@ describe("Renderer", () => {
         });
 
         describe("textarea value handling during updates", () => {
-          let mockTextarea;
+          let textarea;
 
           beforeEach(() => {
-            mockTextarea = {
-              tagName: "TEXTAREA",
-              value: "",
-            };
+            textarea = document.createElement("textarea");
           });
 
           it("sets initial value on create hook", () => {
@@ -3840,11 +4183,11 @@ describe("Renderer", () => {
             );
 
             // Call the create hook with mock vnode
-            const mockVnode = {elm: mockTextarea};
+            const mockVnode = {elm: textarea};
             result.data.hook.create(null, mockVnode);
 
             // Should set the value
-            assert.strictEqual(mockTextarea.value, "initial_value");
+            assert.strictEqual(textarea.value, "initial_value");
           });
 
           it("always updates value on update hook", () => {
@@ -3871,17 +4214,17 @@ describe("Renderer", () => {
             );
 
             // Simulate that we previously set a value
-            mockTextarea.value = "old_value";
+            textarea.value = "old_value";
 
             // Call the update hook
             const mockVnode = {
-              elm: mockTextarea,
+              elm: textarea,
               data: {hologramFormInputValue: "new_value"},
             };
             result.data.hook.update(null, mockVnode);
 
             // Should always update the value
-            assert.strictEqual(mockTextarea.value, "new_value");
+            assert.strictEqual(textarea.value, "new_value");
           });
 
           it("always overrides user input when value changes", () => {
@@ -3911,17 +4254,17 @@ describe("Renderer", () => {
             );
 
             // Simulate that user has typed something different
-            mockTextarea.value = "user_typed_text";
+            textarea.value = "user_typed_text";
 
             // Call the update hook with a new programmatic value
             const mockVnode = {
-              elm: mockTextarea,
+              elm: textarea,
               data: {hologramFormInputValue: "new_programmatic_value"},
             };
             result.data.hook.update(null, mockVnode);
 
             // Should always update the value
-            assert.strictEqual(mockTextarea.value, "new_programmatic_value");
+            assert.strictEqual(textarea.value, "new_programmatic_value");
           });
 
           it("updates value regardless of current textarea value", () => {
@@ -3948,17 +4291,17 @@ describe("Renderer", () => {
             );
 
             // Simulate that current value is something else
-            mockTextarea.value = "current_value";
+            textarea.value = "current_value";
 
             // Call the update hook
             const mockVnode = {
-              elm: mockTextarea,
+              elm: textarea,
               data: {hologramFormInputValue: "new_value"},
             };
             result.data.hook.update(null, mockVnode);
 
             // Should always update the value
-            assert.strictEqual(mockTextarea.value, "new_value");
+            assert.strictEqual(textarea.value, "new_value");
           });
 
           it("sets value on any textarea element", () => {
@@ -3985,17 +4328,17 @@ describe("Renderer", () => {
             );
 
             // Simulate textarea with any current value
-            mockTextarea.value = "whatever";
+            textarea.value = "whatever";
 
             // Call the update hook
             const mockVnode = {
-              elm: mockTextarea,
+              elm: textarea,
               data: {hologramFormInputValue: "first_value"},
             };
             result.data.hook.update(null, mockVnode);
 
             // Should always update the value
-            assert.strictEqual(mockTextarea.value, "first_value");
+            assert.strictEqual(textarea.value, "first_value");
           });
 
           it("does not update value when it hasn't changed", () => {
@@ -4022,12 +4365,12 @@ describe("Renderer", () => {
             );
 
             // Set textarea to the same value as what will be set
-            mockTextarea.value = "same_value";
+            textarea.value = "same_value";
 
             // Spy on the value setter to verify it's not called
             let setterCallCount = 0;
-            const originalValue = mockTextarea.value;
-            Object.defineProperty(mockTextarea, "value", {
+            const originalValue = textarea.value;
+            Object.defineProperty(textarea, "value", {
               get: () => originalValue,
               set: () => {
                 setterCallCount++;
@@ -4038,13 +4381,49 @@ describe("Renderer", () => {
             // Call the update hook with same value (to test no change)
             const oldVnode = {data: {hologramFormInputValue: "same_value"}};
             const mockVnode = {
-              elm: mockTextarea,
+              elm: textarea,
               data: {hologramFormInputValue: "same_value"},
             };
             result.data.hook.update(oldVnode, mockVnode);
 
             // Should not have called the setter since value didn't change
             assert.strictEqual(setterCallCount, 0);
+          });
+
+          it("does not write a value the browser stores in another form when the textarea holds that form", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("textarea"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("line 1\r\nline 2")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            textarea.value = "line 1\r\nline 2";
+
+            const writes = recordValueWrites(textarea);
+
+            result.data.hook.update(null, {
+              elm: textarea,
+              data: {hologramFormInputValue: "line 1\r\nline 2"},
+            });
+
+            assert.deepStrictEqual(writes, []);
+            assert.strictEqual(textarea.value, "line 1\nline 2");
           });
         });
       });
@@ -4806,6 +5185,7 @@ describe("Renderer", () => {
 
           beforeEach(() => {
             mockSelect = {
+              localName: "select",
               tagName: "SELECT",
               value: "",
             };
@@ -11040,12 +11420,15 @@ describe("Renderer", () => {
           exprAttr("$focused", Type.boolean(false)),
         ]);
 
+        const input = document.createElement("input");
+        input.value = "old";
+
         const newVnode = patched(
           render([
             textAttr("value", "new"),
             exprAttr("$focused", Type.boolean(true)),
           ]),
-          {value: "old"},
+          input,
         );
 
         newVnode.data.hook.create(null, newVnode);

@@ -1798,6 +1798,7 @@ defmodule Hologram.Compiler do
   @doc """
   Installs JavaScript deps which are specified in package.json located in assets_dir, and records
   the package.json digest in the node_modules dir the install fills (see `maybe_install_js_deps/1`).
+  Creates package-lock.json when there is none, and never rewrites an existing one.
   """
   @spec install_js_deps(T.file_path()) :: :ok
   # sobelow_skip ["CI.System"]
@@ -1814,8 +1815,19 @@ defmodule Hologram.Compiler do
     # into assets_dir via --prefix.
     opts = [into: IO.stream(:stdio, :line)]
 
-    {_result, exit_status} =
-      SystemUtils.cmd_cross_platform("npm", ["install", "--prefix", assets_dir], opts)
+    # npm installs from an existing lockfile without writing it back: for a path dependency the
+    # assets dir is the developer's own checkout, and an npm other than the one that generated the
+    # lockfile would write it differently.
+    package_lock_json_path = Path.join(assets_dir, "package-lock.json")
+
+    npm_args =
+      if File.exists?(package_lock_json_path) do
+        ["install", "--no-save", "--prefix", assets_dir]
+      else
+        ["install", "--prefix", assets_dir]
+      end
+
+    {_result, exit_status} = SystemUtils.cmd_cross_platform("npm", npm_args, opts)
 
     if exit_status != 0 do
       raise RuntimeError, message: "npm install command failed"
