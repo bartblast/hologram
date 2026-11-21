@@ -1009,8 +1009,8 @@ function rangeTriples(name, range, entityType) {
   validateMembershipRange(range, name, entityType);
 
   return [
-    [nameValue(name), ">=", Number(field(range, "first").value)],
-    [nameValue(name), "<=", Number(field(range, "last").value)],
+    [nameValue(name), ">=", Model.unbox(field(range, "first"), "integer")],
+    [nameValue(name), "<=", Model.unbox(field(range, "last"), "integer")],
   ];
 }
 
@@ -1166,7 +1166,7 @@ function setViewBound(query, field, value) {
     );
   }
 
-  return {...term, [field]: Number(value.value)};
+  return {...term, [field]: Model.unbox(value, "integer")};
 }
 
 function sortHint(hints, name) {

@@ -985,6 +985,26 @@ describe("Model", () => {
     });
   });
 
+  describe("addIntegers()", () => {
+    it("adds past what a Number holds exactly, into a BigInt", () => {
+      assert.strictEqual(
+        Model.addIntegers(9007199254740991, 2),
+        9007199254740993n,
+      );
+    });
+
+    it("answers a Number when a Number holds the sum", () => {
+      assert.strictEqual(
+        Model.addIntegers(9007199254740993n, -2),
+        9007199254740991,
+      );
+    });
+
+    it("counts a missing value as zero", () => {
+      assert.strictEqual(Model.addIntegers(null, 2), 2);
+    });
+  });
+
   describe("computeSortKeys()", () => {
     it("computes a null sort key for a server-only string, whose value never arrives", () => {
       const attributes = Model.computeSortKeys(TASK, {
@@ -1068,6 +1088,44 @@ describe("Model", () => {
       assert.isFalse(Model.unbox(Type.boolean(false), "boolean"));
       assert.equal(Model.unbox(Type.integer(7), "integer"), 7);
       assert.equal(Model.unbox(Type.float(1.5), "float"), 1.5);
+    });
+
+    it("unboxes an integer a Number can't hold exactly as a BigInt", () => {
+      assert.strictEqual(
+        Model.unbox(Type.integer(9007199254740992n), "integer"),
+        9007199254740992n,
+      );
+
+      assert.strictEqual(
+        Model.unbox(Type.integer(-9007199254740993n), "integer"),
+        -9007199254740993n,
+      );
+    });
+
+    it("unboxes an integer a Number holds exactly as a Number", () => {
+      assert.strictEqual(
+        Model.unbox(Type.integer(9007199254740991n), "integer"),
+        9007199254740991,
+      );
+
+      assert.strictEqual(
+        Model.unbox(Type.integer(-9007199254740991n), "integer"),
+        -9007199254740991,
+      );
+    });
+
+    // A struct edited in an action holds whatever was put there until it's validated, and a
+    // permission check reads it before that.
+    it("doesn't raise on a term that isn't an integer in an integer field", () => {
+      assert.strictEqual(Model.unbox(Type.float(1.5), "integer"), 1.5);
+      assert.isNaN(Model.unbox(Type.atom("x"), "integer"));
+    });
+
+    it("unboxes an integer a float field takes as a Number", () => {
+      assert.strictEqual(
+        Model.unbox(Type.integer(9007199254740993n), "float"),
+        9007199254740992,
+      );
     });
 
     it("unboxes nil as nothing", () => {

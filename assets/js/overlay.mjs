@@ -496,7 +496,7 @@ export default class Overlay {
     }
 
     for (const [counter, amount] of deltas) {
-      updated[counter] = row[counter] + amount;
+      updated[counter] = Model.addIntegers(row[counter], amount);
     }
 
     return Model.computeSortKeys(type, updated);

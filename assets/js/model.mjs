@@ -170,6 +170,11 @@ export default class Model {
     return Type.list(result.map((node) => Model.#boxNode(term, node)));
   }
 
+  // The sum of two held integers, in the form an integer of that size is held in.
+  static addIntegers(left, right) {
+    return Model.#heldInteger(BigInt(left ?? 0) + BigInt(right));
+  }
+
   // Which attributes need a key is a fact about the TYPE - every string attribute is ordered and
   // compared by its key on both tiers - so it is read from the entry's attribute types rather than
   // listed, and the key itself is derived, so it is computed here rather than sent. A server-only
@@ -503,8 +508,14 @@ export default class Model {
         return Model.#unboxEnum(value);
 
       case "float":
-      case "integer":
         return Number(value.value);
+
+      // Only a boxed integer takes the exact path: a struct edited in an action can hold anything
+      // in an integer field until it's validated, and a permission check reads it before that.
+      case "integer":
+        return typeof value.value === "bigint"
+          ? Model.#heldInteger(value.value)
+          : Number(value.value);
 
       case "time":
         return Model.#unboxTime(value);
@@ -661,6 +672,12 @@ export default class Model {
     return type === "float" &&
       typeof value === "bigint" &&
       Number.isFinite(Number(value))
+      ? Number(value)
+      : value;
+  }
+
+  static #heldInteger(value) {
+    return value >= Number.MIN_SAFE_INTEGER && value <= Number.MAX_SAFE_INTEGER
       ? Number(value)
       : value;
   }

@@ -265,6 +265,22 @@ describe("Overlay", () => {
       assert.equal(row.$revisions.votes, 10);
     });
 
+    it("moves a counter across what a Number holds exactly", () => {
+      pushed(updateWrite({deltas: {votes: 2}}));
+
+      const row = Overlay.foldRow(TODO, "t1", base({votes: 9007199254740991}));
+
+      assert.strictEqual(row.votes, 9007199254740993n);
+    });
+
+    it("moves a big counter back to a Number once a Number holds it", () => {
+      pushed(updateWrite({deltas: {votes: -2}}));
+
+      const row = Overlay.foldRow(TODO, "t1", base({votes: 9007199254740993n}));
+
+      assert.strictEqual(row.votes, 9007199254740991);
+    });
+
     // A move is not a claim about the value, so there is nothing for it to lose and no revision to
     // judge it by. What keeps a move that has already landed from counting twice is the batch's
     // landed set - the server advances a contended counter's revision by one rather than to the
