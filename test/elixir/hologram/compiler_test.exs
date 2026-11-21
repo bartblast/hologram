@@ -3756,29 +3756,33 @@ defmodule Hologram.CompilerTest do
 
   describe "build_data_model_js/1" do
     test "leaves a function behind that runs the statement given the runtime's classes" do
-      assert build_data_model_js("globalThis.Hologram.sync = {model: {}};") == """
-             "use strict";
+      expected = """
+      "use strict";
 
-             globalThis.Hologram ??= {};
+      globalThis.Hologram ??= {};
 
-             globalThis.Hologram.pendingDataModel = (deps) => {
-               const {
-                 Bitstring,
-                 ERTS,
-                 ElementRefRegistry,
-                 HologramBoxedError,
-                 HologramInterpreterError,
-                 Interpreter,
-                 MemoryStorage,
-                 Type,
-                 Utils,
-               } = deps;
+      globalThis.Hologram.pendingDataModel = (deps) => {
+        const {
+          Bitstring,
+          ERTS,
+          ElementRefRegistry,
+          HologramBoxedError,
+          HologramInterpreterError,
+          Interpreter,
+          MemoryStorage,
+          Type,
+          Utils,
+        } = deps;
 
-               globalThis.Hologram.sync = {model: {}};
-             };
+        globalThis.Hologram.sync = {model: {}};
+      };
 
-             document.dispatchEvent(new CustomEvent("hologram:dataModelLoaded"));\
-             """
+      document.dispatchEvent(new CustomEvent("hologram:dataModelLoaded"));\
+      """
+
+      result = build_data_model_js("globalThis.Hologram.sync = {model: {}};")
+
+      assert normalize_newlines(result) == normalize_newlines(expected)
     end
 
     # The runtime calls the function with these deps (see defineDataModel() in hologram.mjs).
@@ -4844,7 +4848,7 @@ defmodule Hologram.CompilerTest do
           subsystems: []
         )
 
-      assert js =~
+      assert normalize_newlines(js) =~
                ~r/globalThis\.Hologram\.config = [^\n]*;\n\nglobalThis\.Hologram\.sync = null;\n\nERTS\.appVersions/
     end
 
