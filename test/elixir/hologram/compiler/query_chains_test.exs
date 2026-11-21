@@ -248,6 +248,11 @@ defmodule Hologram.Compiler.QueryChainsTest do
       end
     end
 
+    # A rollback hands its reason back without reading it.
+    test "passes a sort on a server-only attribute of a query no database call reads" do
+      assert validate_all!(Module1, :rollback_sorted_secret, 0) == :ok
+    end
+
     test "passes a sort on a server-only attribute of a query handed on, which can be sorted again" do
       assert validate_all!(Module1, :sorted_secret_handed_on, 0) == :ok
     end

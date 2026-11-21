@@ -94,9 +94,9 @@ defmodule Hologram.Compiler.QueryChains do
   entity type is a call of some other code, and passes.
 
   Its order is checked only where nothing can sort the query again, or count it, which drops the
-  order: a derived field's own query, or one handed straight to `Hologram.DB`, with no stage after
-  the cut that could. Anywhere else, like a query a variable or a helper hands on, a sort on a
-  server-only attribute isn't refused here.
+  order: a derived field's own query, or one handed straight to `Hologram.DB.read/1`, with no stage
+  after the cut that could. Anywhere else, like a query a variable or a helper hands on, a sort on
+  a server-only attribute isn't refused here.
   """
   @spec validate!(t, PLT.t() | nil) :: :ok
   def validate!(%{root: root} = chain, module_info_plt) do
@@ -428,11 +428,15 @@ defmodule Hologram.Compiler.QueryChains do
   end
 
   defp walk(
-         %IR.RemoteFunctionCall{module: %IR.AtomType{value: Hologram.DB}, args: args},
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: Hologram.DB},
+           function: :read,
+           args: [query]
+         },
          mfa,
          acc
        ) do
-    Enum.reduce(args, acc, &walk_value(&1, mfa, &2, true))
+    walk_value(query, mfa, acc, true)
   end
 
   defp walk(%IR.RemoteFunctionCall{} = call, mfa, acc) do

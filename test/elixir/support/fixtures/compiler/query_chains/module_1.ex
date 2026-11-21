@@ -8,8 +8,9 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryChains.Module1 do
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
-  # string_sort/0 hands sort a spec its spec refuses on purpose, for the build check to refuse.
-  @dialyzer {:nowarn_function, string_sort: 0}
+  # string_sort/0 hands sort a spec its spec refuses on purpose, for the build check to refuse, and
+  # rollback_sorted_secret/0 never returns, as a rollback doesn't.
+  @dialyzer {:nowarn_function, rollback_sorted_secret: 0, string_sort: 0}
 
   def valid(min_b) do
     Entity2
@@ -104,6 +105,12 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryChains.Module1 do
   def read_assigned_secret do
     # credo:disable-for-next-line Credo.Check.Readability.NestedFunctionCalls
     DB.read(_query = sort(Entity15, token))
+  end
+
+  def rollback_sorted_secret do
+    Entity15
+    |> sort(token)
+    |> DB.rollback()
   end
 
   def read_sorted_secret do
