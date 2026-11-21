@@ -4700,13 +4700,35 @@ defmodule Hologram.Compiler do
   # 7, so a client told only the ends would answer differently from the server.
   defp render_constraint_value(:in, value, _encode_term) do
     render_json_object([
-      {"first", Jason.encode!(value.first)},
-      {"last", Jason.encode!(value.last)},
-      {"step", Jason.encode!(value.step)}
+      {"first", render_range_part(value.first)},
+      {"last", render_range_part(value.last)},
+      {"step", render_range_part(value.step)}
     ])
   end
 
   defp render_constraint_value(_key, value, _encode_term), do: Jason.encode!(value)
+
+  defp render_range_part(integer) do
+    integer
+    |> Codec.encode_wire(:integer)
+    |> Jason.encode!()
+  end
+
+  # A value of a compiled rule or derived field. These travel as JSON, in a frame as well as in the
+  # bundle, and nothing beside a literal says it's an integer the way a row's attribute does - so
+  # one a JavaScript number can't hold exactly is marked, and Model reads it back as a BigInt.
+  defp render_wire_value(value, :integer) when is_integer(value) do
+    case Codec.encode_wire(value, :integer) do
+      text when is_binary(text) -> render_json_object([{"$integer", Jason.encode!(text)}])
+      number -> Jason.encode!(number)
+    end
+  end
+
+  defp render_wire_value(value, type) do
+    value
+    |> Codec.encode_json(type)
+    |> Jason.encode!()
+  end
 
   # A set's declared order, spelled the way a term spells one - each entry a name and a direction.
   defp render_declared_order(target, sort) do
@@ -4830,8 +4852,7 @@ defmodule Hologram.Compiler do
     value_js =
       value
       |> Ordering.widened(type)
-      |> Codec.encode_json(type)
-      |> Jason.encode!()
+      |> render_wire_value(type)
 
     render_json_object([{"value", value_js}])
   end
@@ -4898,11 +4919,7 @@ defmodule Hologram.Compiler do
     |> then(&"[#{&1}]")
   end
 
-  defp render_derived_operand(value, type) do
-    value
-    |> Codec.encode_json(type)
-    |> Jason.encode!()
-  end
+  defp render_derived_operand(value, type), do: render_wire_value(value, type)
 
   # A term as stage.mjs builds one, with the owning type and the chain from its row when it is a
   # derived field's query.
@@ -4937,9 +4954,9 @@ defmodule Hologram.Compiler do
       {"entity", render_entity_type_label(term.entity)},
       {"filter", render_derived_clauses(term.filter, types)},
       {"include", render_derived_include(term.include)},
-      {"skip", Jason.encode!(term.skip)},
+      {"skip", render_wire_value(term.skip, :integer)},
       {"sort", Jason.encode!(sort)},
-      {"take", Jason.encode!(term.take)}
+      {"take", render_wire_value(term.take, :integer)}
       | source_members
     ])
   end
@@ -5324,9 +5341,7 @@ defmodule Hologram.Compiler do
   # A value is spelled by the type of the attribute it is compared with, on the row that attribute
   # is read on.
   defp render_policy_value(types, name, value) do
-    value
-    |> Codec.encode_json(name_type(name, types))
-    |> Jason.encode!()
+    render_wire_value(value, name_type(name, types))
   end
 
   # A grant reference names WHERE a role must be held: on the entity itself, on its whole type,

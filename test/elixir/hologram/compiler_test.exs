@@ -2214,6 +2214,66 @@ defmodule Hologram.CompilerTest do
       derived :cap, :float, fn -> 28_097_012_775_158_772_737 end
     end
 
+    defmodule BigIntegerBoard do
+      use Hologram.Entity
+
+      attribute :n, :integer, in: 0..9_007_199_254_740_993
+
+      relationship :cards, [Hologram.CompilerTest.BigIntegerCard], inverse: board
+
+      derived :cap, :integer, fn -> 9_007_199_254_740_993 end
+
+      derived :many_cards, [Hologram.CompilerTest.BigIntegerCard], fn cards ->
+        take(cards, 9_007_199_254_740_993)
+      end
+
+      derived :over, :boolean, fn n -> n > 9_007_199_254_740_993 end
+
+      allow :read, when: n == 9_007_199_254_740_993
+    end
+
+    defmodule BigIntegerCard do
+      use Hologram.Entity
+
+      relationship :board, BigIntegerBoard, optional: true
+
+      allow :read
+    end
+
+    test "marks a big integer literal wherever a rule or a derived field holds one" do
+      put_derived_definitions([BigIntegerBoard])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BigIntegerBoard, BigIntegerCard])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"cap":{"definition":{"value":{"$integer":"9007199254740993"}}/
+             )
+
+      assert String.contains?(js, ~s/["n",">",{"$integer":"9007199254740993"}]/)
+      assert String.contains?(js, ~s/"take":{"$integer":"9007199254740993"}/)
+      assert String.contains?(js, ~s/["n","==",{"$integer":"9007199254740993"}]/)
+    end
+
+    test "spells a big integer bound of an in constraint as text" do
+      put_derived_definitions([BigIntegerBoard])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BigIntegerBoard, BigIntegerCard])
+      }
+
+      assert String.contains?(
+               build_sync_constants_js(sync_constants),
+               ~s/"n":{"in":{"first":0,"last":"9007199254740993","step":1}/
+             )
+    end
+
     # JavaScript and Erlang round this integer to different floats, so the build hands over the
     # float the server compares with rather than the digits.
     test "renders an integer a float derived field holds as the server's float" do

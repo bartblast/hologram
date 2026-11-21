@@ -447,6 +447,25 @@ defmodule Hologram.MutationTest do
       assert EntityOperations.get(MutationModule1, row.id).priority == 5
     end
 
+    test "names a big integer that lost and the one that stands as the browser reads them" do
+      user = create_user("outrun_big@example.com")
+      row = create_authored(user, priority: 9_007_199_254_740_993)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(MutationModule1, row.id, %{"priority" => newer})
+
+      write =
+        update_write(MutationModule1, row.id, %{"priority" => "9007199254740995"},
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: newer - 1
+        )
+
+      assert {:ok, answer} = run(envelope([write]), server(user.id))
+
+      assert answer["dropped"] == %{"0" => %{"priority" => "9007199254740995"}}
+      assert answer["kept"]["0"]["priority"] == "9007199254740993"
+    end
+
     # Nothing changed on the server, so its update time says the row last changed when it did. A
     # value planted months back, so a statement run in the same millisecond as the create could
     # not leave the column looking untouched.

@@ -475,6 +475,35 @@ defmodule Hologram.DB.CodecTest do
     end
   end
 
+  describe "encode_wire/2" do
+    test "spells an integer a JavaScript number holds exactly as a number" do
+      assert encode_wire(9_007_199_254_740_991, :integer) == 9_007_199_254_740_991
+      assert encode_wire(-9_007_199_254_740_991, :integer) == -9_007_199_254_740_991
+    end
+
+    test "spells an integer past what a JavaScript number holds as its decimal text" do
+      assert encode_wire(9_007_199_254_740_992, :integer) == "9007199254740992"
+      assert encode_wire(-9_007_199_254_740_993, :integer) == "-9007199254740993"
+    end
+
+    test "is read back by decode_wire/2" do
+      for value <- [0, 9_007_199_254_740_991, 9_007_199_254_740_993, -9_223_372_036_854_775_808] do
+        encoded = encode_wire(value, :integer)
+
+        assert decode_wire(encoded, :integer) == {:ok, value}
+      end
+    end
+
+    test "passes nil through" do
+      assert encode_wire(nil, :integer) == nil
+    end
+
+    test "spells any other type as encode_json/2 does" do
+      assert encode_wire(~D[2026-01-02], :date) == "2026-01-02"
+      assert encode_wire(9_007_199_254_740_993, :float) == 9_007_199_254_740_993
+    end
+  end
+
   describe "encode_enum_value/1" do
     test "strips the Elixir prefix of a module" do
       assert encode_enum_value(Module1) == "Hologram.Test.Fixtures.Role.Module1"
