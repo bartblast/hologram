@@ -244,7 +244,8 @@ defmodule Hologram.Job.RunnerRecoveryTest do
     # From the maintenance database, since an overlapping run may already have dropped the scratch
     # one. A role can't be dropped while a database holds grants to it, so the database goes first.
     on_exit(fn ->
-      {:ok, session} = Postgrex.start_link(Config.connection_opts([]))
+      connection_opts = Config.connection_opts([])
+      {:ok, session} = Postgrex.start_link(connection_opts)
       quoted_database = Mapper.quote_identifier(scratch_opts[:database])
 
       Postgrex.query!(session, "DROP DATABASE IF EXISTS #{quoted_database} WITH (FORCE)", [])
