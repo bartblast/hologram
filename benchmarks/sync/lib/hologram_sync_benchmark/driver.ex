@@ -80,6 +80,14 @@ defmodule HologramSyncBenchmark.Driver do
       raise "run with HOLOGRAM_START=1, see README.md"
     end
 
+    # Hologram boots with its application, so a run without --no-start has already made this node
+    # a second one syncing against the benchmark's database. On a database with no owner yet, that
+    # boot also claimed it for the driver's env, which the server node's env then refuses.
+    if List.keymember?(Application.started_applications(), :hologram, 0) do
+      raise "run with --no-start, see README.md, and drop the benchmark's database if a run " <>
+              "without it was the first to use it"
+    end
+
     opts = parse_options!(argv)
 
     {:ok, _apps} = Application.ensure_all_started([:inets, :jason, :mint, :postgrex])

@@ -185,7 +185,7 @@ defmodule HologramSyncBenchmark.Sweep do
     [
       named && named.fill.restarts > 0 &&
         "#{named.fill.restarts} #{if named.fill.restarts == 1, do: "fill", else: "fills"} " <>
-          "restarted, #1635",
+          "restarted",
       stopped &&
         "#{stopped.clients} stopped at the #{memory_limit_gb} GB memory limit, the server node " <>
           "holding #{gigabytes(stopped.memory)} GB"
@@ -229,8 +229,7 @@ defmodule HologramSyncBenchmark.Sweep do
       "fill p50 #{Report.cell(Measure.percentile(fill.ms, 50))} ms",
       "p99 #{Report.cell(Measure.percentile(fill.ms, 99))} ms",
       "#{fill.filled}/#{result.clients} filled, #{fill.restarts} restarts, " <>
-        "#{result.heap_kills} heap kills" <>
-        if(result.heap_kills != fill.restarts, do: " (MISMATCH)", else: ""),
+        "#{result.heap_kills} heap kills",
       "single write #{Report.cell(isolated.last_delivery_ms)} ms to the last client, " <>
         "#{isolated.leaked} leaked",
       "steady p99 #{Report.cell(steady.p99_ms)} ms, #{steady.missing} missing, " <>

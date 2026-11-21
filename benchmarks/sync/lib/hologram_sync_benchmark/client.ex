@@ -167,7 +167,7 @@ defmodule HologramSyncBenchmark.Client do
 
   A stream that ends before the whole pot arrived is opened again after the browser's delay, the
   way a browser starts a fill over, and counted in `:restarts`: the server cutting a fill short
-  (#1635) is a cost a user pays, not a failure of the run. A stream that ends after the fill
+  is a cost a user pays, not a failure of the run. A stream that ends after the fill
   fails the client, since a browser would come back with a cursor and catch up, which this
   client can't.
 
