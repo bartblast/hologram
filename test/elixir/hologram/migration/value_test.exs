@@ -32,6 +32,237 @@ defmodule Hologram.Migration.ValueTest do
     term
   end
 
+  describe "fills/2" do
+    setup do
+      pre_model = %{
+        entities: %{
+          MyApp.Trip => %{
+            attributes: [{:destination, :string, []}, {:notes, :string, [optional: true]}],
+            relationships: [{:owner, MyApp.User, [optional: true]}],
+            roles: [],
+            uniques: []
+          },
+          MyApp.User => %{attributes: [], relationships: [], roles: [], uniques: []}
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      [pre_model: pre_model]
+    end
+
+    test "returns one entry per op carrying a backfill, in op order", %{pre_model: pre_model} do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Trip,
+          name: :tier,
+          type: :string,
+          opts: [backfill: "standard"],
+          line: 3
+        },
+        %{op: :delete_attribute, entity: MyApp.Trip, name: :notes, line: 4},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Trip,
+          name: :city,
+          type: :string,
+          opts: [backfill: %Value{term: {:name, [:destination]}}],
+          line: 5
+        }
+      ]
+
+      assert Value.fills(ops, pre_model) == [
+               %{
+                 backfill: {:constant, "standard"},
+                 entity: MyApp.Trip,
+                 kind: :attribute,
+                 line: 3,
+                 member: :tier,
+                 nulls_only: false
+               },
+               %{
+                 backfill: {:computed, %{term: {:name, [:destination], :string}, type: :string}},
+                 entity: MyApp.Trip,
+                 kind: :attribute,
+                 line: 5,
+                 member: :city,
+                 nulls_only: false
+               }
+             ]
+    end
+
+    test "resolves against the model right before the op", %{pre_model: pre_model} do
+      ops = [
+        %{op: :rename_attribute, entity: MyApp.Trip, from: :destination, to: :place, line: 3},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Trip,
+          name: :city,
+          type: :string,
+          opts: [backfill: %Value{term: {:name, [:place]}}],
+          line: 4
+        }
+      ]
+
+      assert [%{backfill: {:computed, %{term: {:name, [:place], :string}}}}] =
+               Value.fills(ops, pre_model)
+    end
+
+    test "refuses a name a later op adds", %{pre_model: pre_model} do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Trip,
+          name: :city,
+          type: :string,
+          opts: [backfill: %Value{term: {:name, [:later]}}],
+          line: 3
+        },
+        %{
+          op: :add_attribute,
+          entity: MyApp.Trip,
+          name: :later,
+          type: :string,
+          opts: [optional: true],
+          line: 4
+        }
+      ]
+
+      assert_raise Hologram.CompileError, ~r/reads :later/, fn ->
+        Value.fills(ops, pre_model)
+      end
+    end
+
+    test "a tightening fills only the rows holding nil", %{pre_model: pre_model} do
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Trip,
+          name: :notes,
+          changes: [optional: false, backfill: %Value{term: {:name, [:destination]}}],
+          line: 3
+        }
+      ]
+
+      assert [%{kind: :attribute, member: :notes, nulls_only: true}] = Value.fills(ops, pre_model)
+    end
+
+    test "reads a relationship's target", %{pre_model: pre_model} do
+      ops = [
+        %{
+          op: :add_relationship,
+          entity: MyApp.Trip,
+          name: :creator,
+          type: MyApp.User,
+          opts: [optional: true, backfill: %Value{term: {:name, [:owner_id]}}],
+          line: 3
+        },
+        %{
+          op: :change_relationship,
+          entity: MyApp.Trip,
+          name: :owner,
+          changes: [optional: false, backfill: "018f0000-0000-7000-8000-000000000000"],
+          line: 4
+        }
+      ]
+
+      assert [
+               %{
+                 backfill: {:computed, %{type: {:reference, MyApp.User}}},
+                 kind: :relationship,
+                 member: :creator,
+                 nulls_only: false
+               },
+               %{
+                 backfill: {:constant, "018f0000-0000-7000-8000-000000000000"},
+                 kind: :relationship,
+                 member: :owner,
+                 nulls_only: true
+               }
+             ] = Value.fills(ops, pre_model)
+    end
+
+    test "reads relationship options given as a map", %{pre_model: pre_model} do
+      ops = [
+        %{
+          op: :add_relationship,
+          entity: MyApp.Trip,
+          name: :creator,
+          type: MyApp.User,
+          opts: %{optional: true, backfill: %Value{term: {:name, [:owner_id]}}},
+          line: 3
+        }
+      ]
+
+      assert [%{member: :creator}] = Value.fills(ops, pre_model)
+    end
+
+    test "refuses a to-many", %{pre_model: pre_model} do
+      ops = [
+        %{
+          op: :add_relationship,
+          entity: MyApp.Trip,
+          name: :users,
+          type: [MyApp.User],
+          opts: [backfill: %Value{term: {:name, [:owner_id]}}],
+          line: 3
+        }
+      ]
+
+      assert_raise Hologram.CompileError, ~r/fills a to-many relationship/, fn ->
+        Value.fills(ops, pre_model)
+      end
+    end
+
+    test "folds across a delete and the cleanup it needs", %{pre_model: pre_model} do
+      ops = [
+        %{op: :delete_entity, entity: MyApp.User, line: 3},
+        %{op: :delete_relationship, entity: MyApp.Trip, name: :owner, line: 4},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Trip,
+          name: :city,
+          type: :string,
+          opts: [backfill: "none"],
+          line: 5
+        }
+      ]
+
+      assert [%{member: :city}] = Value.fills(ops, pre_model)
+    end
+  end
+
+  describe "max_position/0" do
+    test "is the largest position at takes" do
+      assert Value.max_position() == 1_000_000
+    end
+  end
+
+  describe "resolve!/4" do
+    test "delegates to the resolver" do
+      model = %{
+        entities: %{
+          MyApp.Trip => %{
+            attributes: [{:title, :string, []}],
+            relationships: [],
+            roles: [],
+            uniques: []
+          }
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      target = %{kind: :attribute, line: 3, name: :value, opts: [], type: :string}
+
+      assert Value.resolve!(%Value{term: {:name, [:title]}}, model, MyApp.Trip, target) == %{
+               term: {:name, [:title], :string},
+               type: :string
+             }
+    end
+  end
+
   describe "validate_ops!/2" do
     test "passes the terms lowering produces" do
       ops = [

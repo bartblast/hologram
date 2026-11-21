@@ -9,6 +9,8 @@ defmodule Hologram.Migration.Value do
   # model at the op's point in the file's history, which isn't known here. The term reuses the
   # tags of Hologram.Entity.Derived's definitions where they mean the same.
 
+  alias Hologram.Entity.Model
+  alias Hologram.Migration.Value.Resolver
   alias Hologram.Query.Expression
 
   @enforce_keys [:term]
@@ -28,6 +30,15 @@ defmodule Hologram.Migration.Value do
 
   @type t :: %__MODULE__{term: expression}
 
+  @type fill :: %{
+          backfill: {:constant, any} | {:computed, %{term: Resolver.resolved(), type: any}},
+          entity: module,
+          kind: :attribute | :relationship,
+          line: pos_integer,
+          member: atom,
+          nulls_only: boolean
+        }
+
   # The largest position `at` takes: it's rendered into the statement as a literal.
   @max_position 1_000_000
 
@@ -45,11 +56,34 @@ defmodule Hologram.Migration.Value do
 
   @words Map.keys(@word_arguments)
 
+  # The ops a backfill rides, in their options or changes.
+  @backfill_ops [:add_attribute, :add_relationship, :change_attribute, :change_relationship]
+
   # The query stages a query from an entity type is built with.
   @stages [:filter, :include, :one, :paginate, :skip, :sort, :take]
 
   # Forms holding a value of the surrounding code, however they're spelled.
   @value_forms [:%, :%{}, :&, :@, :__aliases__, :fn, :{}]
+
+  @doc """
+  Returns what the given ops fill, in op order: one entry per op carrying a backfill, constant or
+  computed, a computed one resolved against the model right before its op. An entry fills only the
+  rows holding nil when its op turns a member required.
+
+  This is the one reading of a file's backfills, for the fold, the renderer and anything running
+  them on a single row.
+  """
+  @spec fills(list(%{atom => any}), %{atom => any}) :: list(fill)
+  def fills(ops, pre_model) do
+    {fills, _post_model} =
+      Enum.reduce(ops, {[], pre_model}, fn op, {acc, model} ->
+        next_model = Model.fold_op(model, op)
+
+        {prepend_fill(acc, op, model, next_model), next_model}
+      end)
+
+    Enum.reverse(fills)
+  end
 
   @doc """
   Lowers the given `backfill:` value of a migration op to the AST the op carries.
@@ -76,6 +110,20 @@ defmodule Hologram.Migration.Value do
       {:%{}, [], [__struct__: __MODULE__, term: expression(ast, env)]}
     end
   end
+
+  @doc """
+  Returns the largest position `at` takes.
+  """
+  @spec max_position() :: pos_integer
+  def max_position, do: @max_position
+
+  @doc """
+  Resolves the given backfill against the given model for the given member (see
+  `Hologram.Migration.Value.Resolver.resolve!/4`).
+  """
+  @spec resolve!(t, %{atom => any}, module, Resolver.target()) ::
+          %{term: Resolver.resolved(), type: Resolver.type()}
+  defdelegate resolve!(value, model, entity_type, target), to: Resolver
 
   @doc """
   Validates that every computed backfill of the given evaluated ops holds a term lowering can
@@ -194,6 +242,15 @@ defmodule Hologram.Migration.Value do
     end
   end
 
+  defp fill_member(%{entity: entity, name: name, op: op}, _model, next_model) do
+    {kind, list_key} =
+      if op in [:add_attribute, :change_attribute],
+        do: {:attribute, :attributes},
+        else: {:relationship, :relationships}
+
+    {kind, List.keyfind(next_model.entities[entity][list_key], name, 0)}
+  end
+
   defp interpolated?(parts) do
     Enum.any?(parts, fn
       {:"::", _meta, [{{:., _dot_meta, [Kernel, :to_string]}, _call_meta, _args}, _type]} -> true
@@ -201,12 +258,14 @@ defmodule Hologram.Migration.Value do
     end)
   end
 
-  defp op_backfills(op) do
+  defp op_backfills(%{op: kind} = op) when kind in @backfill_ops do
     op
     |> Map.take([:changes, :opts])
     |> Map.values()
     |> Enum.flat_map(&option_backfills/1)
   end
+
+  defp op_backfills(_op), do: []
 
   defp operands({:<>, _meta, [left, right]}, env) do
     operands(left, env) ++ operands(right, env)
@@ -276,6 +335,28 @@ defmodule Hologram.Migration.Value do
       ast,
       env
     )
+  end
+
+  defp prepend_fill(acc, op, model, next_model) do
+    case op_backfills(op) do
+      [] ->
+        acc
+
+      [backfill | _rest] ->
+        {kind, member} = fill_member(op, model, next_model)
+
+        [
+          %{
+            backfill: resolved_backfill(backfill, op, kind, member, model),
+            entity: op.entity,
+            kind: kind,
+            line: op.line,
+            member: op.name,
+            nulls_only: op.op in [:change_attribute, :change_relationship]
+          }
+          | acc
+        ]
+    end
   end
 
   @spec refuse(Macro.t(), Macro.Env.t()) :: no_return
@@ -384,6 +465,12 @@ defmodule Hologram.Migration.Value do
     )
   end
 
+  defp resolved_backfill(%__MODULE__{} = value, op, kind, member, model) do
+    {:computed, resolve!(value, model, op.entity, target(kind, member, op))}
+  end
+
+  defp resolved_backfill(value, _op, _kind, _member, _model), do: {:constant, value}
+
   defp separator({:^, _meta, [expr]}, _env), do: {:value, expr}
 
   defp separator("", env) do
@@ -428,6 +515,21 @@ defmodule Hologram.Migration.Value do
           env
         )
     end
+  end
+
+  defp target(:attribute, {name, type, opts}, op) do
+    %{kind: :attribute, line: op.line, name: name, opts: opts, type: type}
+  end
+
+  defp target(:relationship, {name, [_target], _opts}, op) do
+    raise Hologram.CompileError,
+      message:
+        "the backfill of #{inspect(name)} on #{inspect(op.entity)} (line #{op.line}) fills a " <>
+          "to-many relationship - a backfill fills a value or a to-one reference"
+  end
+
+  defp target(:relationship, {name, type, _opts}, op) do
+    %{kind: :relationship, line: op.line, name: name, type: type}
   end
 
   # Whether the given set is a query rather than a relationship of the row: an entity type, or

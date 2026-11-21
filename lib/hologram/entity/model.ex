@@ -312,6 +312,14 @@ defmodule Hologram.Entity.Model do
     folded
   end
 
+  @doc """
+  Returns the given model with the given op applied, leaving out the checks `fold/3` makes over a
+  whole list of ops, which a single op of a valid file can fail on its own: a delete and the
+  cleanup it needs are two ops.
+  """
+  @spec fold_op(%{atom => any}, %{atom => any}) :: %{atom => any}
+  def fold_op(model, op), do: apply_op(op, model)
+
   defp apply_op(%{op: :add_attribute} = op, model) do
     validate_added_enum_values!(op)
     validate_backfill_value!(op)

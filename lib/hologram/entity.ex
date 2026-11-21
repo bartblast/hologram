@@ -934,6 +934,13 @@ defmodule Hologram.Entity do
 
   def strip_server_only_deep(term), do: term
 
+  @doc """
+  Returns the attributes every entity type has beside the ones it declares, in the shape
+  `__attributes__/0` returns.
+  """
+  @spec system_attributes() :: list({atom, atom, keyword})
+  def system_attributes, do: @system_attributes
+
   # Everything the entity DECLARES, sorted by name. The framework's own __meta__ field is added
   # by the caller rather than here, so that its struct is expanded in the entity's module.
   # An attribute field holds what its declaration declares as the default, so a bare struct
