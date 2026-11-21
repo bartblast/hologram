@@ -499,6 +499,7 @@ export default class Tabs {
       kind: "state",
       replica: Replica.current(),
       rules: SyncStream.rulesForGroup(),
+      servedModelHash: SyncStream.servedModelHash,
       stopReason: SyncStream.stopReason,
       synced: completeness.all ? ["all"] : [],
     });
@@ -616,6 +617,10 @@ export default class Tabs {
     if (message.stopReason) {
       SyncStream.receiveFrame("sync_reload", {reason: message.stopReason});
     }
+
+    // And what model the server runs: the group syncs one, so a tab joining it goes to its next page
+    // afresh whenever the tab that answered would.
+    SyncStream.noteServedModel(message.servedModelHash);
 
     // A type's completeness is a claim about the rows this browser holds, the same in every tab
     // and on every page. A tab of an earlier build tells it only as a list of scopes, whose "all"

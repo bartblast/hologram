@@ -2471,8 +2471,9 @@ defmodule Hologram.Compiler do
   A name the code only builds at run time names nothing here, and a derived query reading such a
   type is refused on its render (see
   `Hologram.Template.Renderer`). The server reads the list (see
-  `Hologram.DB.QueryCache.synced_types/0`), and the client is told it, refusing a query that reads
-  another type the same way (see `build_sync_constants_js/1`).
+  `Hologram.DB.QueryCache.synced_types/0`). The client is told it, refusing a query that reads
+  another type the same way (see `build_sync_constants_js/1`), and names it when it greets, so a
+  server running a newer model can tell which types a tab built with this one reads.
 
   `:page_types` are each page's share of those, sorted by name: the types its own client code
   reaches the same way, with the user type when it reads the session user, and the types its rules
