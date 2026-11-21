@@ -740,6 +740,104 @@ describe("Overlay", () => {
       LocalDatabase.reset();
     });
 
+    describe("while a fill is pending", () => {
+      const sealedCreate = (seq, overrides = {}) => {
+        const batch = pushed(createWrite(overrides));
+
+        batch.seal(seq);
+
+        return batch;
+      };
+
+      it("leaves a filed create for its type's marker to judge", () => {
+        Overlay.promote(sealedCreate(3), {}, {fillPending: true});
+
+        assert.deepEqual(LocalDatabase.carriedEntries(), [[TODO, "t1"]]);
+
+        LocalDatabase.markTypesSynced([TODO], 3);
+
+        assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+      });
+
+      it("records the batch's number with the row", () => {
+        Overlay.promote(sealedCreate(4), {}, {fillPending: true});
+
+        LocalDatabase.markTypesSynced([TODO], 3);
+
+        assert.isNotNull(LocalDatabase.baseRow(TODO, "t1"));
+      });
+
+      // A role grant made twice is answered with the stored row, which the answer files itself.
+      it("leaves a create the answer filed whole for its marker", () => {
+        const kept = {0: base({$revisions: {}, title: "stored"})};
+
+        Overlay.promote(sealedCreate(3), kept, {fillPending: true});
+
+        assert.deepEqual(LocalDatabase.carriedEntries(), [[TODO, "t1"]]);
+      });
+
+      it("doesn't record a create over a row the base holds", () => {
+        LocalDatabase.putRow(TODO, base());
+        LocalDatabase.markCarried(TODO, "t1");
+
+        Overlay.promote(sealedCreate(4), {}, {fillPending: true});
+        LocalDatabase.markTypesSynced([TODO], 3);
+
+        assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+      });
+
+      // Past its marker, a batch the fill read was landed, so this one committed after the read and
+      // its session has yet to judge it. Nothing may store the row until then.
+      it("keeps a create answered after its type's marker carried until the fill ends", () => {
+        LocalDatabase.markTypesSynced([TODO], 3);
+
+        Overlay.promote(sealedCreate(4), {}, {fillPending: true});
+
+        assert.isNotNull(LocalDatabase.baseRow(TODO, "t1"));
+        assert.deepEqual(LocalDatabase.carriedEntries(), [[TODO, "t1"]]);
+
+        LocalDatabase.markAllSynced();
+
+        assert.isNotNull(LocalDatabase.baseRow(TODO, "t1"));
+        assert.deepEqual(LocalDatabase.carriedEntries(), []);
+      });
+
+      it("doesn't record a landed create", () => {
+        const batch = sealedCreate(3);
+
+        batch.land(new Set([`${TODO} t1`]));
+
+        Overlay.promote(batch, {}, {fillPending: true});
+
+        assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+        assert.deepEqual(LocalDatabase.carriedEntries(), []);
+      });
+
+      it("doesn't record a write that isn't a create", () => {
+        LocalDatabase.putRow(TODO, base());
+
+        const batch = pushed(updateWrite({data: {title: "changed"}}));
+
+        batch.seal(3);
+
+        Overlay.promote(batch, {}, {fillPending: true});
+
+        assert.deepEqual(LocalDatabase.carriedEntries(), []);
+      });
+    });
+
+    // A client coming back holds a place, and its session judges the batches it missed.
+    it("doesn't leave a filed create for a marker when no fill is pending", () => {
+      const batch = pushed(createWrite());
+
+      batch.seal(3);
+
+      Overlay.promote(batch, {});
+
+      assert.isNotNull(LocalDatabase.baseRow(TODO, "t1"));
+      assert.deepEqual(LocalDatabase.carriedEntries(), []);
+    });
+
     // The frame carrying this write has already been applied, so the base holds the row as the
     // server left it. Folding the write in again would add the move a second time and write that
     // number down for good - no later frame corrects it, because the server has nothing new to

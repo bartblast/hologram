@@ -1023,6 +1023,22 @@ describe("Tabs", () => {
       });
     });
 
+    // The group's state names what is complete with no number, so it says nothing about whether
+    // the fill read the batch behind a row this tab filed from an answer.
+    it("keeps a row an answer filed when the group's state names its type", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "created here"});
+      LocalDatabase.markPromoted("MyApp.Task", "t1", 3);
+
+      Tabs.receive({
+        completeness: {all: false, types: ["MyApp.Task"]},
+        cursor: null,
+        kind: "state",
+        synced: [],
+      });
+
+      assert.isNotNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
+    });
+
     // Builds of one model and one protocol share a group, and a tab of an earlier build iterates
     // the scopes it is told - so they travel as the list it reads, whose "all" both builds share.
     it("tells a tab of an earlier build the whole pot as the list of scopes it reads", () => {

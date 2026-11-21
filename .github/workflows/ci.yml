@@ -1900,8 +1900,6 @@ jobs:
         with:
           name: sync-consistency-traces-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/sync/tmp/sync_consistency
-          # The randomized run is left out of CI until #1749 is fixed, so a failure has no trace.
-          if-no-files-found: ignore
   umbrella_tests:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on

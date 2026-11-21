@@ -25,6 +25,16 @@ defmodule HologramMinimalTests.RuntimeBundleTest do
     refute String.contains?(bundle, "IndexedDB unavailable")
   end
 
+  # A build without the data layer loads no data model bundle: its runtime sets the client's data
+  # layer constants itself, so it waits for none.
+  test "writes no data model bundle, and sets the data layer constants to null in the runtime" do
+    assert String.contains?(read_runtime_bundle(), "globalThis.Hologram.sync=null;")
+
+    assert Reflection.bundles_dir()
+           |> Path.join("data-model-*")
+           |> Path.wildcard() == []
+  end
+
   # What the test above stands on: the build picks its runtime's subsystems from the app's entity
   # types, and this app has none.
   test "declares no entity types" do

@@ -16,8 +16,8 @@ defmodule Hologram.DB.SQLQuery do
   # every other read of the layer runs under.
   @default_timeout 15_000
 
-  # Both limits are local to the subtransaction, so its rollback takes them with it. One statement
-  # sets both, one round trip.
+  # Both limits are local to the subtransaction, so its rollback takes them with it, and a release
+  # takes the read-only one (see run/3). One statement sets both, one round trip.
   @limits_statement "SELECT set_config('transaction_read_only', 'on', true), " <>
                       "set_config('statement_timeout', $1, true)"
 
@@ -25,15 +25,26 @@ defmodule Hologram.DB.SQLQuery do
   # integer, and a larger value fails the statement that sets it.
   @max_timeout 2_147_483_647
 
-  # The two kinds of session state that outlive the rolled-back read: a session-level advisory lock
-  # and a named prepared statement. The read-only setting refuses neither, and either would stay
-  # with whichever pooled connection ran the read, where the next read, likely on another
-  # connection, cannot reach it. Refused by the statement's text before anything is sent - a
-  # transaction-level lock has other names and passes, params are never scanned, and a function
-  # of the app's own that takes a lock inside is not seen.
+  # The two kinds of session state that outlive the read, found by this pattern and
+  # @session_lock_pattern: a named prepared statement and a session-level advisory lock. The
+  # read-only setting refuses neither, and either would stay with whichever pooled connection ran
+  # the read, where the next read, likely on another connection, cannot reach it. Refused by the
+  # statement's text before anything is sent - a transaction-level lock has other names and is not
+  # refused here, params are never scanned, and a function of the app's own that takes a lock
+  # inside is not seen.
   @prepare_statement_pattern ~r/\A(?:\s|--[^\n]*(?:\n|\z)|\/\*.*?\*\/)*prepare\b/is
 
+  # These two run around a read that keeps a lock, whose savepoint is released (see run/3).
+  @read_timeout_statement "SELECT current_setting('statement_timeout')"
+
+  @restore_timeout_statement "SELECT set_config('statement_timeout', $1, true)"
+
   @session_lock_pattern ~r/\bpg_(?:try_)?advisory_lock(?:_shared)?\b/i
+
+  # A read can't name a session-level lock, so an unlock could only release one something else took
+  # on that connection, and the read's rollback would not restore it. Like the patterns above, this
+  # sees only a name the text spells out.
+  @unlock_pattern ~r/\bpg_advisory_unlock(?:_shared|_all)?\b/i
 
   # The type numbers PostgreSQL describes a uuid and a uuid array with - fixed in its catalog for
   # every version and every database, unlike the numbers of the types an app creates. The
@@ -43,43 +54,59 @@ defmodule Hologram.DB.SQLQuery do
 
   @uuid_oid 2950
 
-  # The function handed to the transaction always ends in a rollback, on purpose (see the comment
-  # inside), which Dialyzer reports as a function with no local return.
-  @dialyzer {:no_return, run: 3}
+  # A statement naming one of these keeps its lock (see run/3). Found by the text, like the patterns
+  # above: a name in a literal or a comment counts, so such a read skips its rollback inside a
+  # transaction and raises outside one, and a function of the app's own that takes the lock inside
+  # is not seen and gives it back.
+  @xact_lock_pattern ~r/\bpg_(?:try_)?advisory_xact_lock(?:_shared)?\b/i
 
   @doc """
   Runs the given statement with the given params inside a read-only subtransaction and returns
   {:ok, result} with the columns and rows, or {:error, error} for a statement the server refused,
-  cancelled or failed.
+  cancelled or failed. A transaction-level advisory lock the statement names stays held until the
+  enclosing transaction ends.
 
   The one option is :timeout, the milliseconds the statement may run as a positive integer up to
   2_147_483_647, the largest PostgreSQL accepts, or :infinity - 15 seconds by default. The server
   enforces it.
 
-  Raises Hologram.MisuseError for a statement that takes a session-level advisory lock or prepares a
-  named statement, an unknown option, an invalid timeout, a param count that differs from the
-  statement's placeholders, and a param the driver cannot send as its placeholder's type.
+  Raises Hologram.MisuseError for a statement that takes a session-level advisory lock, releases an
+  advisory lock or prepares a named statement, one that takes a transaction-level advisory lock
+  outside a transaction, an unknown option, an invalid timeout, a param count that differs from
+  the statement's placeholders, and a param the driver cannot send as its placeholder's type.
   """
   @spec run(String.t(), list, keyword) :: {:ok, DB.sql_result()} | {:error, SQLError.t()}
   def run(statement, params, opts) do
     validate_no_session_state!(statement)
     statement_timeout = statement_timeout!(opts)
+    keeps_lock? = keeps_lock?(statement)
 
-    # The savepoint is rolled back whether the read succeeded or failed. The rollback is what
-    # takes the read-only setting with it: a released savepoint hands its settings to the
-    # enclosing transaction, which could then write nothing, and PostgreSQL refuses to switch a
-    # subtransaction back to read-write. A read leaves nothing to commit. A statement that
-    # failed leaves the transaction in the failed state, where a commit answers {:error,
-    # :rollback} and loses the error, so the outcome travels as the rollback's reason.
+    # The savepoint is rolled back whether the read succeeded or failed, so a read leaves nothing
+    # behind: its statement timeout goes, and so does whatever else read-only allows, like a
+    # setting changed with set_config or a pg_notify. A statement that failed leaves the
+    # transaction in the failed state, where a commit answers {:error, :rollback} and loses the
+    # error, so the outcome travels as the rollback's reason.
+    #
+    # The exception is a statement that took a transaction-level advisory lock and succeeded. A
+    # rollback gives back every lock taken in the savepoint, so this one is released instead, with
+    # the enclosing transaction's statement timeout put back first. PostgreSQL restores the
+    # enclosing transaction's read-only state on a release as well, so it stays writable.
     #
     # A transaction this opens carries no driver deadline: the driver's fires by closing the
     # connection, and the statement timeout set inside is the bound, one that cancels the
     # statement alone. Inside a caller's transaction that transaction's own deadline applies.
-    {:error, {:sql_query, outcome}} =
+    {_status, {:sql_query, outcome}} =
       Connection.transaction(
         fn ->
-          {:ok, _result} = Connection.query(@limits_statement, [statement_timeout])
-          Connection.rollback({:sql_query, prepare_and_execute(statement, params)})
+          with {:ok, outer_timeout} <- read_outer_timeout(keeps_lock?),
+               {:ok, _result} <- Connection.query(@limits_statement, [statement_timeout]) do
+            statement
+            |> prepare_and_execute(params)
+            |> finish_read(outer_timeout)
+          else
+            {:error, exception} ->
+              Connection.rollback({:sql_query, {:error, to_error(exception)}})
+          end
         end,
         timeout: :infinity
       )
@@ -146,6 +173,33 @@ defmodule Hologram.DB.SQLQuery do
               __STACKTRACE__
   end
 
+  # The read's own timeout still applies to the statement putting the outer one back and can cancel
+  # it. The savepoint is then rolled back, so the lock is gone and the read answers the error.
+  defp finish_read({:ok, _result} = outcome, outer_timeout) when is_binary(outer_timeout) do
+    case Connection.query(@restore_timeout_statement, [outer_timeout]) do
+      {:ok, _result} -> {:sql_query, outcome}
+      {:error, exception} -> Connection.rollback({:sql_query, {:error, to_error(exception)}})
+    end
+  end
+
+  defp finish_read(outcome, _outer_timeout) do
+    Connection.rollback({:sql_query, outcome})
+  end
+
+  # Outside a transaction the lock would end with the read, which serializes nothing.
+  defp keeps_lock?(statement) do
+    takes_lock? = Regex.match?(@xact_lock_pattern, statement)
+
+    if takes_lock? and not Connection.in_transaction?() do
+      raise MisuseError,
+        message:
+          "DB.sql/3 cannot hold a transaction-level advisory lock outside a transaction - the " <>
+            "lock would end with the read. Call it inside DB.transaction/2."
+    end
+
+    takes_lock?
+  end
+
   defp prepare_and_execute(statement, params) do
     with {:ok, query} <- Connection.prepare(statement),
          :ok <- validate_param_count!(params, query.param_oids),
@@ -165,6 +219,15 @@ defmodule Hologram.DB.SQLQuery do
     "DB.sql/3 can only read data, and this statement writes it (PostgreSQL: #{server_message}). " <>
       "Use DB.create/1, DB.update/3 or DB.delete/2 to write, so that the change reaches the sync " <>
       "and the clients."
+  end
+
+  # Only a read that keeps a lock has a timeout to put back, so only it pays the round trip.
+  defp read_outer_timeout(false), do: {:ok, nil}
+
+  defp read_outer_timeout(true) do
+    with {:ok, %Postgrex.Result{rows: [[timeout]]}} <- Connection.query(@read_timeout_statement) do
+      {:ok, timeout}
+    end
   end
 
   # A statement with no result set, a SET LOCAL say, describes no columns and answers no rows.
@@ -222,6 +285,12 @@ defmodule Hologram.DB.SQLQuery do
             "DB.sql/3 cannot take a session-level advisory lock - it would stay with a pooled " <>
               "connection after the read. Take pg_advisory_xact_lock inside DB.transaction/2 " <>
               "instead."
+
+      Regex.match?(@unlock_pattern, statement) ->
+        raise MisuseError,
+          message:
+            "DB.sql/3 cannot release an advisory lock - the read's rollback would not undo the " <>
+              "release, and the lock belongs to whatever took it on that connection."
 
       Regex.match?(@prepare_statement_pattern, statement) ->
         raise MisuseError,

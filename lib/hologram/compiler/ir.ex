@@ -634,6 +634,7 @@ defmodule Hologram.Compiler.IR do
     %IR.ListType{data: data}
   end
 
+  # sobelow_skip ["DOS.Regex"]
   def for_term!(%Regex{} = term) do
     # A compiled pattern exists only inside the runtime that compiled it, so
     # the client rebuilds it through the same pathway as regex literals: an

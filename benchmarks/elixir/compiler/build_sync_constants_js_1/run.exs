@@ -2,7 +2,7 @@ alias Hologram.Compiler
 alias Hologram.Compiler.CallGraph
 alias Hologram.Reflection
 
-# What the compile task pays to render the statement the runtime script sets the client's data
+# What the compile task pays to render the statement the data model bundle sets the client's data
 # layer constants with, once per compile that derives the data layer: the model of the entity
 # types the client holds, the prop params and the model hash.
 #
