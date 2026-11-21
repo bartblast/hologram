@@ -16,7 +16,7 @@ defmodule Hologram.LiveReload do
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
-  alias Hologram.Sync.PageWindows
+  alias Hologram.Sync.PageTypes
 
   @doc """
   Reloads the application after a change of the given file (nil when a request for a pending page
@@ -127,7 +127,7 @@ defmodule Hologram.LiveReload do
     # The first batch of a pass is where the registries learn what the compile wrote: the pages and
     # routes of the module info dump, the static files, among them a new runtime bundle and new
     # chunk bundles, the chunks each struct type needs and each page preloads, the page digests,
-    # the page windows and the registered queries. Later batches change the page digests and the
+    # the page types and the query cache. Later batches change the page digests and the
     # chunks their pages preload only.
     state =
       if state.pass.registries_reloaded? do
@@ -139,8 +139,8 @@ defmodule Hologram.LiveReload do
         reload_runtime()
 
         # The runtime now reads all the compile derived from the data model: the policy caches and
-        # the database schema of its data model step, then the derived field definitions, the
-        # registered queries and the page windows. Before the tabs are told to reload, so that they
+        # the database schema of its data model step, then the query cache with the derived field
+        # definitions, and the page types. Before the tabs are told to reload, so that they
         # reload into a released model, unless a save since holds it again.
         maybe_release_model(state)
       end
@@ -563,7 +563,8 @@ defmodule Hologram.LiveReload do
   Hologram compile with the given options, `:next_batch` and `:bundles_built`, through which the
   scheduler orders the pages and reloads the tabs batch by batch (see `handle_call/3`). The compile
   validates the data model and has the database schema reconciled with it (see
-  `reload_database/2`) before it builds anything. The runtime registries are reloaded once more at
+  `reload_database/2`) before it builds anything, and again with the indexes the queries it derived
+  need (see `reload_indexes/0`). The runtime registries are reloaded once more at
   the end, for a compile that built no bundle. Clients only ever reload into a converged database,
   since the schema is reconciled before the first batch is built and its tabs told to reload.
 
@@ -574,11 +575,14 @@ defmodule Hologram.LiveReload do
   """
   @spec reload(String.t() | nil, any, keyword) :: :ok | {:error, [[Diagnostic.segment()]]}
   def reload(_file_path, endpoint, opts) do
-    # The query cache is not reloaded with the database: it reads the registered queries the
-    # Hologram compile dumps, so it reloads with the runtime registries, and a compile that refused
-    # a query builder fails before any registry is reloaded, leaving the previous dump in place.
+    # The query cache is not reloaded with the database: it reads what the Hologram compile dumps,
+    # so it reloads with the runtime registries, and a compile that refused a query fails before
+    # any registry is reloaded, leaving the previous dump in place.
     with :ok <- reload_code(endpoint),
-         :ok <- recompile_hologram([data_model_ready: &reload_database/2] ++ opts) do
+         :ok <-
+           recompile_hologram(
+             [data_model_ready: &reload_database/2, index_needs_ready: &reload_indexes/0] ++ opts
+           ) do
       reload_runtime()
       :ok
     end
@@ -593,6 +597,21 @@ defmodule Hologram.LiveReload do
   @spec reload_database(list(module), list(module)) :: :ok
   def reload_database(entity_types, role_modules) do
     DB.reload(entity_types, role_modules)
+  catch
+    :exit, reason ->
+      message = "database reload failed: " <> Exception.format_exit(reason)
+      reraise Hologram.CompileError, [message: message], __STACKTRACE__
+  end
+
+  @doc """
+  Reconciles the database schema with the index plan the compile's dump now gives, when it differs
+  from the one the database was last converged to (see `Hologram.DB.reload_indexes/0`): a compile
+  changing only queries changes the plan without touching the model. An exit is raised as a
+  `Hologram.CompileError`, like `reload_database/2`'s.
+  """
+  @spec reload_indexes() :: :ok
+  def reload_indexes do
+    DB.reload_indexes()
   catch
     :exit, reason ->
       message = "database reload failed: " <> Exception.format_exit(reason)
@@ -815,7 +834,7 @@ defmodule Hologram.LiveReload do
     ManifestCache.reload()
     ChunkRegistry.reload()
     PageDigestRegistry.reload()
-    PageWindows.reload()
+    PageTypes.reload()
     QueryCache.reload()
   end
 

@@ -145,10 +145,21 @@ defmodule HologramClusterTests.Proxy do
     :ets.insert(@state_table, {:rr_counter, 0})
     put_upstreams(Keyword.fetch!(opts, :upstreams))
 
-    proxy_port = Application.fetch_env!(:hologram_cluster_tests, :proxy_port)
+    # The test helper puts the run's port into the app env. A proxy started without it,
+    # from iex or `mix run`, asks for the same port itself.
+    proxy_port =
+      Application.get_env(:hologram_cluster_tests, :proxy_port) ||
+        HologramClusterTests.Cluster.proxy_port()
 
+    # On loopback alone, like the peers and the run's claim on its ports. A wildcard bind and
+    # a loopback bind of one port can coexist on macOS, so anything else that took the port
+    # would share it silently. Two loopback binds can't: the second fails.
     {:ok, listener_pid} =
-      Bandit.start_link(plug: HologramClusterTests.Proxy.Forwarder, port: proxy_port)
+      Bandit.start_link(
+        ip: {127, 0, 0, 1},
+        plug: HologramClusterTests.Proxy.Forwarder,
+        port: proxy_port
+      )
 
     {:ok, %{listener_pid: listener_pid}}
   end

@@ -32,9 +32,9 @@ defmodule HologramFeatureTests.Queries.Page7 do
     """
   end
 
-  # The read runs in the browser over the stops the component's query synced and the trips its
-  # window downloaded along the path, comparing the trip's name with a value the rendered list
-  # never compares - so the answer can only come from the local rows.
+  # The read runs in the browser over the stops and the trips the browser holds, comparing the
+  # trip's name with a value the rendered list never compares - so the answer can only come from
+  # the local rows.
   def action(:read_alpha_stops_locally, _params, component) do
     trip_name = component.state.trip_name
 

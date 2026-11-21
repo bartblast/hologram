@@ -1,6 +1,7 @@
 defmodule HologramClusterTests.ProxyTest do
   use ExUnit.Case, async: false
 
+  import HologramClusterTests.Cluster, only: [free_port: 0]
   import HologramClusterTests.Proxy
 
   alias HologramClusterTests.HTTPClient
@@ -49,28 +50,30 @@ defmodule HologramClusterTests.ProxyTest do
     end
   end
 
-  @stub_port_1 4021
-  @stub_port_2 4022
-
   setup_all do
-    for port <- [@stub_port_1, @stub_port_2] do
-      start_supervised!({Bandit, plug: {StubUpstream, port}, port: port},
-        id: {:stub_upstream, port}
-      )
-    end
+    stub_ports =
+      for index <- 1..2 do
+        port = free_port()
 
-    start_supervised!({Proxy, upstreams: [@stub_port_1, @stub_port_2]})
+        start_supervised!({Bandit, ip: {127, 0, 0, 1}, plug: {StubUpstream, port}, port: port},
+          id: {:stub_upstream, index}
+        )
 
-    :ok
+        port
+      end
+
+    start_supervised!({Proxy, upstreams: stub_ports})
+
+    [stub_ports: stub_ports]
   end
 
   # What a fresh proxy gave each test, given back without a rebind: an empty log and the
   # full upstream set. Policies and the round-robin counter carry over, and nothing here
   # reads either - a policy is selected by the token its own test minted, and the one
   # alternation test asserts the SET of two upstreams, not which came first.
-  setup do
+  setup %{stub_ports: stub_ports} do
     clear_log()
-    put_upstreams([@stub_port_1, @stub_port_2])
+    put_upstreams(stub_ports)
 
     :ok
   end
@@ -108,27 +111,31 @@ defmodule HologramClusterTests.ProxyTest do
   end
 
   describe "put_upstreams/1" do
-    test "replaces the upstream set for subsequent routing" do
-      put_upstreams([@stub_port_2])
+    test "replaces the upstream set for subsequent routing", %{
+      stub_ports: [_stub_port_1, stub_port_2]
+    } do
+      put_upstreams([stub_port_2])
 
-      assert served_by(get_through_proxy("/")) == @stub_port_2
-      assert served_by(get_through_proxy("/")) == @stub_port_2
+      assert served_by(get_through_proxy("/")) == stub_port_2
+      assert served_by(get_through_proxy("/")) == stub_port_2
     end
   end
 
   describe "register_policy/1" do
-    test "routes requests carrying the token cookie through the registered policy" do
+    test "routes requests carrying the token cookie through the registered policy", %{
+      stub_ports: [_stub_port_1, stub_port_2]
+    } do
       token =
         register_policy(fn _request_facts, %{upstreams: upstreams} -> List.last(upstreams) end)
 
       request_headers = [{"cookie", "#{route_cookie()}=#{token}"}]
 
-      assert served_by(get_through_proxy("/", request_headers)) == @stub_port_2
-      assert served_by(get_through_proxy("/", request_headers)) == @stub_port_2
-      assert served_by(get_through_proxy("/", request_headers)) == @stub_port_2
+      assert served_by(get_through_proxy("/", request_headers)) == stub_port_2
+      assert served_by(get_through_proxy("/", request_headers)) == stub_port_2
+      assert served_by(get_through_proxy("/", request_headers)) == stub_port_2
     end
 
-    test "hands the policy the request facts" do
+    test "hands the policy the request facts", %{stub_ports: [stub_port_1, _stub_port_2]} do
       token =
         register_policy(fn %{method: "GET", path: "/echo-cookie"},
                            %{upstreams: [first | _rest]} ->
@@ -137,16 +144,18 @@ defmodule HologramClusterTests.ProxyTest do
 
       request_headers = [{"cookie", "#{route_cookie()}=#{token}"}]
 
-      assert served_by(get_through_proxy("/echo-cookie", request_headers)) == @stub_port_1
+      assert served_by(get_through_proxy("/echo-cookie", request_headers)) == stub_port_1
     end
   end
 
   describe "request forwarding" do
-    test "alternates upstreams for consecutive requests when no policy cookie is set" do
+    test "alternates upstreams for consecutive requests when no policy cookie is set", %{
+      stub_ports: stub_ports
+    } do
       first_upstream = served_by(get_through_proxy("/"))
       second_upstream = served_by(get_through_proxy("/"))
 
-      assert Enum.sort([first_upstream, second_upstream]) == [@stub_port_1, @stub_port_2]
+      assert Enum.sort([first_upstream, second_upstream]) == Enum.sort(stub_ports)
     end
 
     test "stamps the response with the upstream that served it" do

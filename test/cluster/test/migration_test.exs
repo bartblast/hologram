@@ -9,14 +9,12 @@ defmodule HologramClusterTests.MigrationTest do
   alias Hologram.DB.Mapper
   alias Hologram.DB.SchemaReconciler
   alias Hologram.Migrator
+  alias HologramClusterTests.Cluster
 
-  # Every scenario claims the migrations database for a production instance, and the
-  # bootstrap preparing it before the next run refuses a database another env has
-  # claimed - so a scenario leaves the database virgin, whether it passed or failed.
+  # Every scenario claims the migrations database for a production instance, so each one
+  # starts from a virgin database whatever the scenario before it left behind.
   setup do
     reset_migrations_database!()
-
-    on_exit(fn -> reset_migrations_database!() end)
 
     :ok
   end
@@ -68,6 +66,22 @@ defmodule HologramClusterTests.MigrationTest do
     end)
   end
 
+  defp index_oid(index) do
+    statement = """
+    SELECT ic.oid
+    FROM pg_catalog.pg_class ic
+    JOIN pg_catalog.pg_namespace n ON n.oid = ic."relnamespace"
+    WHERE n."nspname" = 'hologram_data' AND ic."relname" = $1
+    """
+
+    with_migrations_db(fn ->
+      case Connection.query(statement, [index]) do
+        {:ok, %{rows: [[oid]]}} -> oid
+        {:ok, %{rows: []}} -> :absent
+      end
+    end)
+  end
+
   defp index_validity(index) do
     statement = """
     SELECT i."indisvalid"
@@ -84,6 +98,23 @@ defmodule HologramClusterTests.MigrationTest do
         {:ok, %{rows: []}} -> :absent
       end
     end)
+  end
+
+  # The given index's validity once it comes out valid, or after about 30 s: true, false, or :absent
+  # (see index_validity/1). The index builder builds a plain index after the boot, a step at a time,
+  # each under the migration lock (see Hologram.DB.IndexBuilder).
+  defp settled_index_validity(index, attempts \\ 300) do
+    case index_validity(index) do
+      true ->
+        true
+
+      validity when attempts == 1 ->
+        validity
+
+      _validity ->
+        Process.sleep(100)
+        settled_index_validity(index, attempts - 1)
+    end
   end
 
   defp item_count do
@@ -143,16 +174,15 @@ defmodule HologramClusterTests.MigrationTest do
   end
 
   describe "concurrent index build" do
-    test "the tail index is built on a populated table and comes out valid" do
-      # Through f3: the table stands before f4, so f4's index cannot be built inside its
-      # transaction and goes to the tail, which builds it concurrently - over the rows
-      # planted here, as it would in production.
+    test "the index builder builds an index on a populated table and it comes out valid" do
+      # Through f3: the table stands and carries rows when f4 adds the reference whose index the
+      # index builder then builds concurrently - under the name f6's rename gives it.
       plant_applied_prefix!(3)
 
       insert_item = """
       INSERT INTO "hologram_data"."entities_item"
-        ("id", "slug", "title", "created_at", "updated_at", "$revisions")
-      VALUES (gen_random_uuid(), $1, $2, now(), now(), '{}')
+        ("id", "slug", "title", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+      VALUES (gen_random_uuid(), $1, $2, now(), now(), now(), now(), '{}')
       """
 
       with_migrations_db(fn ->
@@ -167,24 +197,26 @@ defmodule HologramClusterTests.MigrationTest do
       assert item_count() == 3
 
       # Valid, not merely present: a concurrent build that fails partway leaves the
-      # index in the catalog serving no query while every write maintains it. Under the
-      # name f6's rename gives it.
-      assert index_validity("entities_item_container_id_$idx") == true
+      # index in the catalog serving no query while every write maintains it.
+      assert settled_index_validity("entities_item_container_id_$idx") == true
 
       assert Enum.map(applied_version_rows(), fn {version, _applied_at} -> version end) ==
                Enum.map(migrations(), & &1.version)
     end
 
-    test "a build interrupted partway is rebuilt by a restart of the same release" do
+    test "a build interrupted partway is rebuilt by the next node's index builder" do
       first_peer = start_migration_peer(1)
-
-      assert serving?(first_peer)
-
       index = "entities_item_container_id_$idx"
 
-      # The index a build that died partway leaves, met by a restart with nothing pending:
-      # it stays in the catalog serving no query and slowing every write. With no files to
-      # apply, the boot goes straight to the index repair, which rebuilds it.
+      # Built by the first node's index builder. Then the node stops, so that only the next one's
+      # builder can repair the index.
+      assert serving?(first_peer)
+      assert settled_index_validity(index) == true
+
+      Cluster.stop_peer(first_peer)
+
+      # What a node killed during its concurrent build leaves behind: the index stays in the
+      # catalog serving no query and slowing every write.
       invalidate_index(index)
 
       assert index_validity(index) == false
@@ -192,56 +224,34 @@ defmodule HologramClusterTests.MigrationTest do
       next_peer = start_migration_peer(2)
 
       assert serving?(next_peer)
-      assert index_validity(index) == true
+      assert settled_index_validity(index) == true
     end
 
-    test "a build interrupted partway is rebuilt after a later file renames its index" do
-      # What a node killed during f4's concurrent build leaves behind: f4 is recorded
-      # applied - it committed before the build began - while the index stays in the
-      # catalog serving no query and slowing every write. The files after f4 are still
-      # pending, and f6 renames that index.
+    test "the index builder renames a standing index after a later file renames its reference" do
+      # What a release before f6 leaves: f1 to f4 applied and the reference's index standing,
+      # valid, under the name f4's reference gives it - built here by hand, as that release's
+      # index builder would have. f6 renames the reference, and with it the column the index is
+      # over.
       plant_applied_prefix!(4)
-      invalidate_index("entities_item_parent_id_$idx")
 
-      assert index_validity("entities_item_parent_id_$idx") == false
+      old_index = "entities_item_parent_id_$idx"
+      new_index = "entities_item_container_id_$idx"
+
+      create_index =
+        ~s{CREATE INDEX "#{old_index}" ON "hologram_data"."entities_item" ("parent_id")}
+
+      with_migrations_db(fn -> {:ok, _result} = Connection.query(create_index) end)
+
+      oid = index_oid(old_index)
 
       peer = start_migration_peer(1)
 
       assert serving?(peer)
-      assert index_validity("entities_item_container_id_$idx") == true
-      assert index_validity("entities_item_parent_id_$idx") == :absent
-    end
 
-    test "a build that never started is done before a later file renames its index" do
-      # f4's index is built after f4 commits, so a node killed in between leaves f4
-      # recorded as applied, the index absent and the files after it pending - planted here
-      # by dropping the index. f6 renames it. The rows make the build the boot does first
-      # run over a table that has some, as it would in production.
-      plant_applied_prefix!(4)
-
-      insert_item = """
-      INSERT INTO "hologram_data"."entities_item"
-        ("id", "slug", "title", "created_at", "updated_at", "$revisions")
-      VALUES (gen_random_uuid(), $1, $2, now(), now(), '{}')
-      """
-
-      drop_index = ~s{DROP INDEX "hologram_data"."entities_item_parent_id_$idx"}
-
-      with_migrations_db(fn ->
-        {:ok, _result} = Connection.query(insert_item, ["one", "First"])
-        {:ok, _result} = Connection.query(insert_item, ["two", "Second"])
-        {:ok, _result} = Connection.query(drop_index)
-      end)
-
-      peer = start_migration_peer(1)
-
-      assert serving?(peer)
-      assert item_count() == 2
-      assert index_validity("entities_item_container_id_$idx") == true
-      assert index_validity("entities_item_parent_id_$idx") == :absent
-
-      assert Enum.map(applied_version_rows(), fn {version, _applied_at} -> version end) ==
-               Enum.map(migrations(), & &1.version)
+      # Renamed, not built again: the same index, by its oid, under the name the plan gives it.
+      assert settled_index_validity(new_index) == true
+      assert index_oid(new_index) == oid
+      assert index_validity(old_index) == :absent
     end
   end
 
@@ -353,8 +363,8 @@ defmodule HologramClusterTests.MigrationTest do
 
       insert_item = """
       INSERT INTO "hologram_data"."entities_item"
-        ("id", "title", "created_at", "updated_at", "$revisions")
-      VALUES (gen_random_uuid(), $1, now(), now(), '{}')
+        ("id", "title", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+      VALUES (gen_random_uuid(), $1, now(), now(), now(), now(), '{}')
       """
 
       with_migrations_db(fn ->

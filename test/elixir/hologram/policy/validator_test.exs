@@ -165,8 +165,8 @@ defmodule Hologram.Policy.ValidatorTest do
       assert validate_model!([InlinePolicyFixture47], []) == :ok
     end
 
-    # A row reaches the browser only once the server's read rules admitted it, so the browser never
-    # decides them - a read rule may read through a type nobody may read.
+    # A read rule may read through a type nobody may read: the browser checks it only on rows as
+    # they were sent, and the server's verdict on each answers what it reads there.
     test "returns :ok for a read rule reading through a type nobody may read" do
       defmodule InlinePolicyFixture66 do
         use Hologram.Entity
@@ -226,7 +226,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :update, when: parent_id != user_id()
       end
 
-      assert validate_model!([InlinePolicyFixture7], []) == :ok
+      assert validate_model!([Module14, InlinePolicyFixture7], []) == :ok
     end
 
     test "returns :ok for a condition comparing two attributes" do
@@ -287,6 +287,133 @@ defmodule Hologram.Policy.ValidatorTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture30], [])
       end
+    end
+
+    test "rejects a condition naming user_id() without a user entity designation" do
+      defmodule InlinePolicyFixture127 do
+        use Hologram.Entity
+
+        attribute :author_id, :uuid
+
+        allow :read, when: author_id == user_id()
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture127 - it names user_id(), but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture127], [])
+      end
+    end
+
+    test "rejects user_id() in an alternative without a user entity designation" do
+      defmodule InlinePolicyFixture128 do
+        use Hologram.Entity
+
+        attribute :author_id, :uuid
+        attribute :shared, :boolean
+
+        allow :update, as: :edit, when: shared == true or author_id == user_id()
+      end
+
+      expected_msg =
+        "invalid predicate for allow :update, as: :edit in Hologram.Policy.ValidatorTest.InlinePolicyFixture128 - it names user_id(), but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture128], [])
+      end
+    end
+
+    test "rejects user_id() in a quantifier nested in another without a user entity designation" do
+      defmodule InlinePolicyFixture129 do
+        use Hologram.Entity
+
+        attribute :author_id, :uuid
+
+        relationship :children, [Hologram.Policy.ValidatorTest.InlinePolicyFixture129],
+          inverse: parent
+
+        relationship :parent, Hologram.Policy.ValidatorTest.InlinePolicyFixture129, optional: true
+
+        allow :delete,
+          when:
+            any(
+              child <- children,
+              none(grandchild <- child.children, grandchild.author_id == user_id())
+            )
+      end
+
+      expected_msg =
+        "invalid predicate for allow :delete in Hologram.Policy.ValidatorTest.InlinePolicyFixture129 - it names user_id(), but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture129], [])
+      end
+    end
+
+    test "rejects user_id() in a quantifier without a user entity designation" do
+      defmodule InlinePolicyFixture131 do
+        use Hologram.Entity
+
+        relationship :children, [Hologram.Policy.ValidatorTest.InlinePolicyFixture131],
+          inverse: parent
+
+        relationship :owner, Hologram.Test.Fixtures.Entity.Module1, optional: true
+
+        relationship :parent, Hologram.Policy.ValidatorTest.InlinePolicyFixture131, optional: true
+
+        allow :read, when: any(child <- children, child.owner_id == user_id())
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture131 - it names user_id(), but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module1, InlinePolicyFixture131], [])
+      end
+    end
+
+    test "rejects a field-limited line naming user_id() without a user entity designation" do
+      defmodule InlinePolicyFixture132 do
+        use Hologram.Entity
+
+        attribute :author_id, :uuid
+        attribute :title, :string
+
+        allow :update, only: [:title], when: author_id == user_id()
+      end
+
+      expected_msg =
+        "invalid predicate for allow :update, only: [:title] in Hologram.Policy.ValidatorTest.InlinePolicyFixture132 - it names user_id(), but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture132], [])
+      end
+    end
+
+    test "accepts a condition naming user_id() with a user entity designation" do
+      defmodule InlinePolicyFixture130 do
+        use Hologram.Entity
+
+        attribute :author_id, :uuid
+
+        allow :read, when: author_id == user_id()
+      end
+
+      assert validate_model!([Module14, InlinePolicyFixture130], []) == :ok
+    end
+
+    test "rejects a global role module without a user entity designation" do
+      expected_msg =
+        "Hologram.Test.Fixtures.Role.Module1 is a global role, but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module2], [Role.Module1])
+      end
+    end
+
+    test "accepts a global role module with a user entity designation" do
+      assert validate_model!([Module14], [Role.Module1]) == :ok
     end
 
     test "rejects an actor leaf on a non-uuid attribute" do
@@ -987,7 +1114,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture68 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture67 through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture67, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture68 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture67 through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture67: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture67, InlinePolicyFixture68], [])
@@ -1014,7 +1141,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :delete in Hologram.Policy.ValidatorTest.InlinePolicyFixture70 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture69 through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture69, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :delete in Hologram.Policy.ValidatorTest.InlinePolicyFixture70 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture69 through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture69: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, InlinePolicyFixture69, InlinePolicyFixture70], [])
@@ -1039,7 +1166,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture105 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture104 through seats, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture104, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture105 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture104 through seats, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture104: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture104, InlinePolicyFixture105], [])
@@ -1121,6 +1248,156 @@ defmodule Hologram.Policy.ValidatorTest do
       assert validate_model!(types, []) == :ok
     end
 
+    # The delegated read rule's path is answered from the server's verdict on the related row, which
+    # a browser holds as it was sent, so no browser reads the row beyond it.
+    test "accepts a delegation to a read rule whose path runs through a type nobody may read" do
+      defmodule InlinePolicyFixture129 do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        allow :create
+      end
+
+      defmodule InlinePolicyFixture130 do
+        use Hologram.Entity
+
+        relationship :project, Hologram.Policy.ValidatorTest.InlinePolicyFixture129
+
+        allow :read, when: project.archived == false
+      end
+
+      defmodule InlinePolicyFixture131 do
+        use Hologram.Entity
+
+        relationship :task, Hologram.Policy.ValidatorTest.InlinePolicyFixture130
+
+        allow :read
+        allow :update, via: {:read, task}
+      end
+
+      types = [InlinePolicyFixture129, InlinePolicyFixture130, InlinePolicyFixture131]
+
+      assert validate_model!(types, []) == :ok
+    end
+
+    # The delegated read rule's role reference is answered from the server's verdict on the related
+    # row, so no browser reads the row it reads the team's id off.
+    test "accepts a delegation to a read rule whose role reference runs through a type nobody may read" do
+      defmodule InlinePolicyFixture132 do
+        use Hologram.Entity
+
+        role :member
+
+        allow :read
+      end
+
+      defmodule InlinePolicyFixture133 do
+        use Hologram.Entity
+
+        relationship :team, Hologram.Policy.ValidatorTest.InlinePolicyFixture132
+
+        allow :create
+      end
+
+      defmodule InlinePolicyFixture134 do
+        use Hologram.Entity
+
+        relationship :project, Hologram.Policy.ValidatorTest.InlinePolicyFixture133
+
+        allow :read, to: {:member, project.team}
+      end
+
+      defmodule InlinePolicyFixture135 do
+        use Hologram.Entity
+
+        relationship :task, Hologram.Policy.ValidatorTest.InlinePolicyFixture134
+
+        allow :read
+        allow :update, via: {:read, task}
+      end
+
+      types = [
+        Module14,
+        InlinePolicyFixture132,
+        InlinePolicyFixture133,
+        InlinePolicyFixture134,
+        InlinePolicyFixture135
+      ]
+
+      assert validate_model!(types, []) == :ok
+    end
+
+    # The validator asks whether the delegated read rule's any is deciding before the build resolves
+    # the card's derived field, so the answer comes from the field's own definition.
+    test "accepts a delegation to a read rule whose any reads a derived value before it resolves" do
+      defmodule InlinePolicyFixture139 do
+        use Hologram.Entity
+
+        attribute :score, :integer
+
+        relationship :board, Hologram.Policy.ValidatorTest.InlinePolicyFixture140, optional: true
+
+        derived :hot, :boolean, fn score -> score > 3 end
+
+        allow :read
+      end
+
+      defmodule InlinePolicyFixture140 do
+        use Hologram.Entity
+
+        relationship :cards, [InlinePolicyFixture139], inverse: board
+
+        allow :read, when: any(card <- cards, card.hot == true)
+      end
+
+      defmodule InlinePolicyFixture141 do
+        use Hologram.Entity
+
+        relationship :board, InlinePolicyFixture140
+
+        allow :read
+        allow :update, via: {:read, board}
+      end
+
+      types = [InlinePolicyFixture139, InlinePolicyFixture140, InlinePolicyFixture141]
+
+      assert validate_model!(types, []) == :ok
+    end
+
+    # The delegated read rule's own delegation is answered from the server's verdict on the related
+    # row, so no browser reads the vault it leads to.
+    test "accepts a delegation to a read rule whose delegation runs through a type nobody may read" do
+      defmodule InlinePolicyFixture136 do
+        use Hologram.Entity
+
+        attribute :open, :boolean, default: false
+
+        allow :update, when: open == true
+      end
+
+      defmodule InlinePolicyFixture137 do
+        use Hologram.Entity
+
+        relationship :vault, Hologram.Policy.ValidatorTest.InlinePolicyFixture136
+
+        allow :read, via: {:update, vault}
+      end
+
+      defmodule InlinePolicyFixture138 do
+        use Hologram.Entity
+
+        relationship :parcel, Hologram.Policy.ValidatorTest.InlinePolicyFixture137
+
+        allow :read
+        allow :update, via: {:read, parcel}
+      end
+
+      types = [InlinePolicyFixture136, InlinePolicyFixture137, InlinePolicyFixture138]
+
+      assert validate_model!(types, []) == :ok
+    end
+
     test "accepts a non-read rule's none through a row of a type nobody may read" do
       defmodule InlinePolicyFixture113 do
         use Hologram.Entity
@@ -1182,7 +1459,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture121 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture120 through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture120, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture121 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture120 through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture120: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!(
@@ -1204,7 +1481,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update, as: :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture71 reads Hologram.Test.Fixtures.Entity.Module1 through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Test.Fixtures.Entity.Module1, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update, as: :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture71 reads Hologram.Test.Fixtures.Entity.Module1 through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Test.Fixtures.Entity.Module1: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture71], [])
@@ -1238,10 +1515,29 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture74 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture72 through project.settings, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture72, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture74 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture72 through project.settings, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture72: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture74], [])
+      end
+    end
+
+    test "rejects a predicate naming a field only the quantifier's row declares, naming how to read it" do
+      defmodule InlinePolicyFixture142 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        relationship :messages, [Module33]
+
+        allow :read, when: any(message <- messages, position > 1)
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture142 - unknown attribute :position in Hologram.Policy.ValidatorTest.InlinePolicyFixture142 - known attributes: :created_at, :id, :server_created_at, :server_updated_at, :updated_at - Hologram.Test.Fixtures.Entity.Module33 declares position, read as message.position"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture142], [])
       end
     end
 
@@ -1255,7 +1551,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - unknown attribute :published in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - known attributes: :created_at, :id, :title, :updated_at"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - unknown attribute :published in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - known attributes: :created_at, :id, :server_created_at, :server_updated_at, :title, :updated_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture3], [])
@@ -2040,7 +2336,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update, as: :zap in Hologram.Policy.ValidatorTest.LateNameChainSource reads Hologram.Policy.ValidatorTest.LateNameChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.LateNameChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update, as: :zap in Hologram.Policy.ValidatorTest.LateNameChainSource reads Hologram.Policy.ValidatorTest.LateNameChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.LateNameChainTarget: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([LateNameChainTarget, LateNameChainSource], [])
@@ -2096,7 +2392,7 @@ defmodule Hologram.Policy.ValidatorTest do
     end
 
     # A browser decides a named read line through can?, so it holds the rows the line reads - which
-    # the type's bare read rules, decided by the server alone, never need.
+    # the type's bare read rules, answered by the server's verdicts, never need.
     test "rejects a named read line reading through a type nobody may read" do
       defmodule NamedReadChainTarget do
         use Hologram.Entity
@@ -2115,7 +2411,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :read, as: :see in Hologram.Policy.ValidatorTest.NamedReadChainSource reads Hologram.Policy.ValidatorTest.NamedReadChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.NamedReadChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :read, as: :see in Hologram.Policy.ValidatorTest.NamedReadChainSource reads Hologram.Policy.ValidatorTest.NamedReadChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.NamedReadChainTarget: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([NamedReadChainTarget, NamedReadChainSource], [])
@@ -2383,7 +2679,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update, except: [:parent] in Hologram.Policy.ValidatorTest.ExceptChainSource reads Hologram.Policy.ValidatorTest.ExceptChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.ExceptChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update, except: [:parent] in Hologram.Policy.ValidatorTest.ExceptChainSource reads Hologram.Policy.ValidatorTest.ExceptChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.ExceptChainTarget: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([ExceptChainTarget, ExceptChainSource], [])
@@ -2411,7 +2707,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update, only: [:topic] in Hologram.Policy.ValidatorTest.LimitedChainSource reads Hologram.Policy.ValidatorTest.LimitedChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.LimitedChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update, only: [:topic] in Hologram.Policy.ValidatorTest.LimitedChainSource reads Hologram.Policy.ValidatorTest.LimitedChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.LimitedChainTarget: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([LimitedChainTarget, LimitedChainSource], [])
@@ -2422,6 +2718,30 @@ defmodule Hologram.Policy.ValidatorTest do
   # Every message below has a local-line twin in the describe above, asserting the same text
   # WITHOUT the tail - so the pair pins that the tail appears exactly when the line was taken.
   describe "validate_model!/2 for a line taken from a policy" do
+    test "rejects a field-limited line naming user_id() without a user entity designation" do
+      defmodule TakenActorLimitedPolicy do
+        use Hologram.Policy
+
+        allow :update, only: [:title], when: author_id == user_id()
+      end
+
+      defmodule TakenActorLimitedEntity do
+        use Hologram.Entity
+
+        attribute :author_id, :uuid
+        attribute :title, :string
+
+        policy TakenActorLimitedPolicy
+      end
+
+      expected_msg =
+        "invalid predicate for allow :update, only: [:title] in Hologram.Policy.ValidatorTest.TakenActorLimitedEntity, taken from Hologram.Policy.ValidatorTest.TakenActorLimitedPolicy - it names user_id(), but no entity type is designated as the user entity - add use Hologram.Entity, user: true to your user module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([TakenActorLimitedEntity], [])
+      end
+    end
+
     test "names the line reading the chain among the limited lines covering a field" do
       defmodule SharedFieldChainTarget do
         use Hologram.Entity
@@ -2444,7 +2764,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "allow :update, except: [:parent] in Hologram.Policy.ValidatorTest.SharedFieldChainSource reads Hologram.Policy.ValidatorTest.SharedFieldChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.SharedFieldChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+        "allow :update, except: [:parent] in Hologram.Policy.ValidatorTest.SharedFieldChainSource reads Hologram.Policy.ValidatorTest.SharedFieldChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.SharedFieldChainTarget: a browser holding the row answers such a check itself"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([SharedFieldChainTarget, SharedFieldChainSource], [])
@@ -2720,7 +3040,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity, taken from Hologram.Policy.ValidatorTest.TakenUnknownPredicatePolicy - unknown attribute :published in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity - known attributes: :created_at, :id, :title, :updated_at"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity, taken from Hologram.Policy.ValidatorTest.TakenUnknownPredicatePolicy - unknown attribute :published in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity - known attributes: :created_at, :id, :server_created_at, :server_updated_at, :title, :updated_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([TakenUnknownPredicateEntity], [])

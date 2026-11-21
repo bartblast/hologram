@@ -2,10 +2,10 @@ defmodule Hologram.Sync.Search do
   @moduledoc false
 
   # The backwards search: from the rows a batch of effects changed to the rows whose read access or
-  # verdicts the change may have moved, without those rows changing themselves. A read rule, and a
-  # deciding clause the server answers for browsers, points forward, from the row it decides about
-  # to the rows it reads, and `Hologram.Policy.Edges` names what it reads. The search follows those
-  # edges the other way.
+  # verdicts the change may have moved, without those rows changing themselves. A read rule, and
+  # the rules of an operation the server answers for browsers, point forward, from the row they
+  # decide about to the rows they read, and `Hologram.Policy.Edges` names what they read. The
+  # search follows those edges the other way.
   #
   # It runs after commit, against the tables as they now stand. Running it inside the write misses
   # rows: one transaction moves a milestone into a project while another adds a member to it, and
@@ -43,11 +43,14 @@ defmodule Hologram.Sync.Search do
   its type, since a search without the values a write left misses rows. An effect of an entity
   type or an op this node does not know is passed over, with or without data.
 
-  Edges are the policy dependency index (see `Hologram.Policy.Edges.index/0`), passed in rather
+  Edges are the policy dependency index (see `Hologram.Policy.Edges.index/1`), passed in rather
   than read here. The read rules' edges are followed, and the verdicts' (`{type, {:verdicts}}`): a
   row whose verdicts may have moved is checked again like one whose access may have, and a check
-  gives its verdicts beside its readers (see `Hologram.Sync.Recheck.run/2`). The other operations'
-  edges aren't followed: a browser answers the rest of their rules from the rows it holds.
+  gives its verdicts beside its readers (see `Hologram.Sync.Recheck.run/2`). A build where no
+  client checks permissions sends no verdicts, so its caller leaves their edges out. The verdicts'
+  edges name every rule of each operation the server sends a verdict on but read, whose edges are
+  followed already, so no other operation's edges are followed: a browser answers an operation
+  with no verdict from the rows it holds.
 
   The rows the effects wrote are not listed - they are rows to check whatever their rules read, and
   the caller has them. So a change to a column no read rule or verdict reads lists nothing. A
@@ -467,8 +470,9 @@ defmodule Hologram.Sync.Search do
   defp trigger_type(_edge), do: nil
 
   # The read and verdict edges, keyed by the entity type whose effects can start a walk along them.
-  # A read rule's deciding clause names its edges under both, and walks are grouped by chain (see
-  # walk_entries/2), so an edge both name walks once.
+  # An edge can be named under both - a verdict operation's rule reading a chain a read rule reads,
+  # or a named read line's rules, which are its name's operation too - and walks are grouped by
+  # chain (see walk_entries/2), so an edge both name walks once.
   defp triggers(edges) do
     edges
     |> Enum.flat_map(fn

@@ -5,6 +5,7 @@ defmodule Hologram.LiveReload.ReloadDatabaseTest do
 
   alias Hologram.DB
   alias Hologram.DB.Connection
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Introspection
   alias Hologram.DB.Schema
   alias Hologram.Reflection
@@ -16,7 +17,8 @@ defmodule Hologram.LiveReload.ReloadDatabaseTest do
 
       assert reload_database(Reflection.list_entities(), Reflection.list_roles()) == :ok
 
-      assert Introspection.schema() == Schema.from_mapping(DB.mapping())
+      assert Introspection.schema() ==
+               Schema.from_mapping(DB.mapping(), IndexPlan.plan(DB.mapping()))
     end
 
     test "raises a failure as it is" do

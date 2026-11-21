@@ -77,6 +77,9 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_entity_module52",
                "test_fixtures_entity_module53",
                "test_fixtures_entity_module54",
+               "test_fixtures_entity_module55",
+               "test_fixtures_entity_module56",
+               "test_fixtures_entity_module57",
                "test_fixtures_entity_module6",
                "test_fixtures_entity_module6_a_$join",
                "test_fixtures_entity_module7",
@@ -91,6 +94,9 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_mutation_module3",
                "test_fixtures_mutation_module4",
                "test_fixtures_mutation_module4_secrets_$join",
+               "test_fixtures_mutation_module5",
+               "test_fixtures_mutation_module6",
+               "test_fixtures_mutation_module6_tags_$join",
                "test_fixtures_policy_module1",
                "test_fixtures_policy_module10",
                "test_fixtures_policy_module11",
@@ -135,7 +141,23 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_policy_module4",
                "test_fixtures_policy_module40",
                "test_fixtures_policy_module41",
+               "test_fixtures_policy_module42",
+               "test_fixtures_policy_module43",
+               "test_fixtures_policy_module44",
+               "test_fixtures_policy_module45",
+               "test_fixtures_policy_module46",
+               "test_fixtures_policy_module47",
+               "test_fixtures_policy_module48",
+               "test_fixtures_policy_module49",
                "test_fixtures_policy_module5",
+               "test_fixtures_policy_module50",
+               "test_fixtures_policy_module51",
+               "test_fixtures_policy_module52",
+               "test_fixtures_policy_module53",
+               "test_fixtures_policy_module54",
+               "test_fixtures_policy_module55",
+               "test_fixtures_policy_module56",
+               "test_fixtures_policy_module57",
                "test_fixtures_policy_module6",
                "test_fixtures_policy_module7",
                "test_fixtures_policy_module8",
@@ -154,7 +176,21 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_policy_readers_module18",
                "test_fixtures_policy_readers_module19",
                "test_fixtures_policy_readers_module2",
+               "test_fixtures_policy_readers_module20",
+               "test_fixtures_policy_readers_module21",
+               "test_fixtures_policy_readers_module22",
+               "test_fixtures_policy_readers_module23",
+               "test_fixtures_policy_readers_module24",
+               "test_fixtures_policy_readers_module25",
+               "test_fixtures_policy_readers_module26",
+               "test_fixtures_policy_readers_module27",
+               "test_fixtures_policy_readers_module28",
+               "test_fixtures_policy_readers_module29",
                "test_fixtures_policy_readers_module3",
+               "test_fixtures_policy_readers_module30",
+               "test_fixtures_policy_readers_module31",
+               "test_fixtures_policy_readers_module32",
+               "test_fixtures_policy_readers_module33",
                "test_fixtures_policy_readers_module4",
                "test_fixtures_policy_readers_module5",
                "test_fixtures_policy_readers_module6",
@@ -176,6 +212,8 @@ defmodule Hologram.DB.IntrospectionTest do
                "c_$sort" => %{type: "text", collation: "C", null: true},
                "c_$search" => %{type: "text", collation: "C", null: true},
                "created_at" => %{type: "timestamptz", collation: nil, null: false},
+               "server_created_at" => %{type: "timestamptz", collation: nil, null: false},
+               "server_updated_at" => %{type: "timestamptz", collation: nil, null: false},
                "updated_at" => %{type: "timestamptz", collation: nil, null: false},
                "$revisions" => %{type: "jsonb", collation: nil, null: false}
              }
@@ -469,8 +507,13 @@ defmodule Hologram.DB.IntrospectionTest do
              }
     end
 
+    # The unique ones alone: the test bootstrap reconciles the index plan too, whose indexes on the
+    # table depend on what the build's queries read.
     test "introspects a unique attribute's index as unique" do
-      indexes = schema().tables["test_fixtures_entity_module19"].indexes
+      indexes =
+        schema().tables["test_fixtures_entity_module19"].indexes
+        |> Enum.filter(fn {_name, index} -> index.unique end)
+        |> Map.new()
 
       assert indexes == %{
                "test_fixtures_entity_module19_code_$uidx" => %{
@@ -482,16 +525,6 @@ defmodule Hologram.DB.IntrospectionTest do
                  columns: ["slug"],
                  nulls_distinct: true,
                  unique: true
-               },
-               "test_fixtures_entity_module19_code_$sort_$idx" => %{
-                 columns: ["code_$sort"],
-                 nulls_distinct: true,
-                 unique: false
-               },
-               "test_fixtures_entity_module19_slug_$sort_$idx" => %{
-                 columns: ["slug_$sort"],
-                 nulls_distinct: true,
-                 unique: false
                }
              }
     end
@@ -549,6 +582,9 @@ defmodule Hologram.DB.IntrospectionTest do
                  "Hologram.Test.Fixtures.Entity.Module52",
                  "Hologram.Test.Fixtures.Entity.Module53",
                  "Hologram.Test.Fixtures.Entity.Module54",
+                 "Hologram.Test.Fixtures.Entity.Module55",
+                 "Hologram.Test.Fixtures.Entity.Module56",
+                 "Hologram.Test.Fixtures.Entity.Module57",
                  "Hologram.Test.Fixtures.Entity.Module6",
                  "Hologram.Test.Fixtures.Entity.Module7",
                  "Hologram.Test.Fixtures.Entity.Module8",
@@ -560,6 +596,8 @@ defmodule Hologram.DB.IntrospectionTest do
                  "Hologram.Test.Fixtures.Mutation.Module2",
                  "Hologram.Test.Fixtures.Mutation.Module3",
                  "Hologram.Test.Fixtures.Mutation.Module4",
+                 "Hologram.Test.Fixtures.Mutation.Module5",
+                 "Hologram.Test.Fixtures.Mutation.Module6",
                  "Hologram.Test.Fixtures.Policy.Module1",
                  "Hologram.Test.Fixtures.Policy.Module10",
                  "Hologram.Test.Fixtures.Policy.Module11",
@@ -596,7 +634,23 @@ defmodule Hologram.DB.IntrospectionTest do
                  "Hologram.Test.Fixtures.Policy.Module4",
                  "Hologram.Test.Fixtures.Policy.Module40",
                  "Hologram.Test.Fixtures.Policy.Module41",
+                 "Hologram.Test.Fixtures.Policy.Module42",
+                 "Hologram.Test.Fixtures.Policy.Module43",
+                 "Hologram.Test.Fixtures.Policy.Module44",
+                 "Hologram.Test.Fixtures.Policy.Module45",
+                 "Hologram.Test.Fixtures.Policy.Module46",
+                 "Hologram.Test.Fixtures.Policy.Module47",
+                 "Hologram.Test.Fixtures.Policy.Module48",
+                 "Hologram.Test.Fixtures.Policy.Module49",
                  "Hologram.Test.Fixtures.Policy.Module5",
+                 "Hologram.Test.Fixtures.Policy.Module50",
+                 "Hologram.Test.Fixtures.Policy.Module51",
+                 "Hologram.Test.Fixtures.Policy.Module52",
+                 "Hologram.Test.Fixtures.Policy.Module53",
+                 "Hologram.Test.Fixtures.Policy.Module54",
+                 "Hologram.Test.Fixtures.Policy.Module55",
+                 "Hologram.Test.Fixtures.Policy.Module56",
+                 "Hologram.Test.Fixtures.Policy.Module57",
                  "Hologram.Test.Fixtures.Policy.Module6",
                  "Hologram.Test.Fixtures.Policy.Module7",
                  "Hologram.Test.Fixtures.Policy.Module8",
@@ -613,7 +667,21 @@ defmodule Hologram.DB.IntrospectionTest do
                  "Hologram.Test.Fixtures.Policy.Readers.Module18",
                  "Hologram.Test.Fixtures.Policy.Readers.Module19",
                  "Hologram.Test.Fixtures.Policy.Readers.Module2",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module20",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module21",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module22",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module23",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module24",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module25",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module26",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module27",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module28",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module29",
                  "Hologram.Test.Fixtures.Policy.Readers.Module3",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module30",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module31",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module32",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module33",
                  "Hologram.Test.Fixtures.Policy.Readers.Module4",
                  "Hologram.Test.Fixtures.Policy.Readers.Module5",
                  "Hologram.Test.Fixtures.Policy.Readers.Module6",
@@ -661,7 +729,6 @@ defmodule Hologram.DB.IntrospectionTest do
                  "ok_tuple",
                  "raise",
                  "record_actor",
-                 "record_order",
                  "swept",
                  "throw"
                ],

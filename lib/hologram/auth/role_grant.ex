@@ -88,6 +88,8 @@ defmodule Hologram.Auth.RoleGrant do
             granted_by_id: nil,
             id: nil,
             role: nil,
+            server_created_at: nil,
+            server_updated_at: nil,
             updated_at: nil,
             user: %NotIncluded{relationship: :user},
             user_id: nil
@@ -101,6 +103,8 @@ defmodule Hologram.Auth.RoleGrant do
           granted_by_id: Entity.id() | nil,
           id: Entity.id() | nil,
           role: atom | module | nil,
+          server_created_at: DateTime.t() | nil,
+          server_updated_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil,
           user: struct | NotIncluded.t() | nil,
           user_id: Entity.id() | nil
@@ -163,6 +167,10 @@ defmodule Hologram.Auth.RoleGrant do
   def __policy_sources__, do: []
 
   @doc false
+  @spec __policy_hints__() :: list(list(Hologram.Query.Stage.name_hint()))
+  def __policy_hints__, do: []
+
+  @doc false
   @spec __relationship_locations__() :: %{atom => {String.t(), pos_integer}}
   def __relationship_locations__, do: %{}
 
@@ -196,7 +204,13 @@ defmodule Hologram.Auth.RoleGrant do
   """
   @spec __system_attributes__() :: list({atom, atom, keyword})
   def __system_attributes__ do
-    [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
+    [
+      {:created_at, :datetime, []},
+      {:id, :uuid, []},
+      {:server_created_at, :datetime, []},
+      {:server_updated_at, :datetime, []},
+      {:updated_at, :datetime, []}
+    ]
   end
 
   @doc """
@@ -221,18 +235,24 @@ defmodule Hologram.Auth.RoleGrant do
   # gives up the insert locality UUIDv7 buys every other table. Recorded in `02a-database.md`
   # beside the id-format lock - it is confined to the least-inserted table in an app, on the one
   # index of its five that the framework only ever point-looks-up.
-  # sobelow_skip ["Crypto.WeakHash"]
   def derive_id(user_id, entity_type, entity_id, role) do
-    name =
-      Enum.join(
-        [
-          user_id,
-          entity_type && Codec.encode_enum_value(entity_type),
-          entity_id,
-          Codec.encode_enum_value(role)
-        ],
-        "\n"
-      )
+    derive_id_from_labels(
+      user_id,
+      entity_type && Codec.encode_enum_value(entity_type),
+      entity_id,
+      Codec.encode_enum_value(role)
+    )
+  end
+
+  @doc false
+  @spec derive_id_from_labels(String.t(), String.t() | nil, String.t() | nil, String.t()) ::
+          String.t()
+  # derive_id/4 over the parts as the store spells them - the entity type's label and the role's,
+  # the way a row read back as text holds them. The migrator reads a relabeled grant that way and
+  # derives the id its new labels give it, so the derivation itself lives here alone.
+  # sobelow_skip ["Crypto.WeakHash"]
+  def derive_id_from_labels(user_id, entity_type, entity_id, role) do
+    name = Enum.join([user_id, entity_type, entity_id, role], "\n")
 
     # A nil part joins as the empty string, and no part can contain a newline - a uuid, an enum
     # label and a module name are all spelled without one - so the four are unambiguous.

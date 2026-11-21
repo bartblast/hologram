@@ -756,7 +756,7 @@ export default class Vdom {
   // The key a link or script element carries by what it loads, or null for anything else. Mirrors
   // what the renderer derives for the same element, so the two sides compare equal.
   static #resourceKey(domNode, attrs) {
-    const tagName = domNode.tagName.toLowerCase();
+    const tagName = domNode.localName;
 
     if (tagName === "link" && typeof attrs.href === "string") {
       return `__hologramLink__:${attrs.href}`;

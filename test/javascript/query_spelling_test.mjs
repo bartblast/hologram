@@ -38,11 +38,6 @@ const outer = (levels, name) =>
 const quantified = (hops, entries) =>
   Type.tuple([Type.list(hops.map((hop) => Type.atom(hop))), pairs(entries)]);
 
-const placeholder = (name) =>
-  Type.struct("Hologram.Query.Placeholder", [
-    [Type.atom("name"), Type.atom(name)],
-  ]);
-
 const date = (year, month, day) =>
   Type.struct("Date", [
     [Type.atom("calendar"), Type.alias("Calendar.ISO")],
@@ -720,15 +715,6 @@ describe("QuerySpelling", () => {
       assert.equal(
         spell(query),
         String.raw`{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["rating","<",float:c004000000000000]],"include":{},"skip":null,"sort":[],"take":null}`,
-      );
-    });
-
-    it("spells a placeholder by its name", () => {
-      const query = filter(module(2), [["c", placeholder("search")]]);
-
-      assert.equal(
-        spell(query),
-        String.raw`{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==",{"placeholder":"search"}]],"include":{},"skip":null,"sort":[["id","asc"]],"take":null}`,
       );
     });
 

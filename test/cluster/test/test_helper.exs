@@ -6,44 +6,44 @@ ExUnit.start()
 
 # Boot the cluster test databases before the app starts: the app declares entities, which
 # activates the Hologram database - the databases themselves must exist before any pool
-# connects, on this node or on a peer. The second database is the one the migration
-# scenarios claim for the production mechanism. Positioned after ExUnit.start - the drop
-# guard recognizes the test env by the running ExUnit server.
-Hologram.Test.DatabaseBootstrap.run!(["hologram_cluster_tests_migrations"])
+# connects, on this node or on a peer. Each run gets databases of its own, so runs that
+# overlap leave each other's tables alone. The second database is the one the migration
+# scenarios claim for the production mechanism, reached by the name this run gave it.
+# Positioned after ExUnit.start - the env guard recognizes the test env by the running
+# ExUnit server.
+databases = Hologram.Test.DatabaseBootstrap.run!(["hologram_cluster_tests_migrations"])
+
+Application.put_env(
+  :hologram_cluster_tests,
+  :migrations_database,
+  databases["hologram_cluster_tests_migrations"]
+)
 
 Hologram.Test.setup()
-
-# Kill leftover headless test-browser processes before the suite starts.
-# chromedriver launches Chrome with the `--test-type=webdriver` flag, so this
-# matches only browsers spawned by Wallaby - never a real browser. A
-# hard-interrupted run (the BEAM killed before sessions are torn down) can
-# orphan such a browser; it then keeps reconnecting its SSE EventSource to every
-# subsequent test server and re-registers in the SubscriptionRegistry. Its
-# subscriptions are then counted by registry-wide test helpers, so a stray
-# browser can satisfy a gate the run's own sessions have not met. Sweeping here
-# is safe because this run's own browsers launch later, per test. `pkill` is
-# Unix-only, so the `find_executable` guard makes this a no-op (rather than a
-# crash) on platforms without it, e.g. Windows.
-case System.find_executable("pkill") do
-  nil -> :ok
-  pkill -> System.cmd(pkill, ["-f", "test-type=webdriver"])
-end
 
 # The peers this suite starts are full distributed-Erlang nodes, so the test runner must
 # be one as well. epmd has to be up before a node can enable distribution - `-daemon` is
 # a no-op when it already is. Longnames against 127.0.0.1 rather than a short name, since
 # short names depend on hostname resolution, which differs between dev machines and CI
-# runners.
+# runners. The name carries this BEAM's OS pid, and so do the peers' names, so runs that
+# overlap on one machine don't claim the same names with epmd.
 System.cmd("epmd", ["-daemon"])
 
-{:ok, _pid} = Node.start(:"cluster_test@127.0.0.1", :longnames)
+# One name per run, so runtime atom creation is safe here.
+# credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+node_name = :"cluster_test_#{System.pid()}@127.0.0.1"
+
+{:ok, _pid} = Node.start(node_name, :longnames)
 Node.set_cookie(:hologram_cluster_tests)
 
-# Starts Wallaby with ChromeDriver's log on, in tmp/chromedriver, restarting it when
-# ChromeDriver doesn't get ready. CI uploads that dir when a run fails or hangs.
+# Kills the test browsers that ended runs left behind, then starts Wallaby with ChromeDriver's
+# log on, in this run's folder of tmp/chromedriver, restarting it when ChromeDriver doesn't get
+# ready. CI uploads tmp/chromedriver when a run fails or hangs.
 Hologram.Test.BrowserSession.start_wallaby()
 
-# The browser talks only to the proxy - never to a peer directly. Which peer serves each
-# request is the routing policy's decision, not the browser's.
-proxy_port = Application.fetch_env!(:hologram_cluster_tests, :proxy_port)
+# The proxy is the one origin the browser ever sees - it never talks to a peer directly. Which
+# peer serves each request is the routing policy's decision, not the browser's. The port is
+# one of the ports this run claims, so runs that overlap on one machine don't share it.
+proxy_port = HologramClusterTests.Cluster.proxy_port()
+Application.put_env(:hologram_cluster_tests, :proxy_port, proxy_port)
 Application.put_env(:wallaby, :base_url, "http://localhost:#{proxy_port}")

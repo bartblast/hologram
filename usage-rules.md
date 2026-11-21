@@ -36,6 +36,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Reading a var the template doesn't have raises `Hologram.MisuseError`, naming the var and the vars the template has. A declared prop with no default is a var only when the usage passes it, so give it a default if the template reads it.
 - Interpolate Elixir expressions with curly braces: `{expression}`. **Not** `<%= expression %>`.
 - Component nodes use module names: `<MyComponent prop="value" />`. **Not** `<.my_component>`.
+- Close every element and component with an end tag, even `</li>`, `</p>`, `</td>` and `</option>`, which HTML lets you leave out. Only void elements like `<input>` and self-closing tags like `<MyComponent />` go without one. A component's end tag spells its name exactly as the start tag does. A missing, extra or misplaced end tag or block marker fails the build with `Hologram.TemplateSyntaxError`.
 - Tag names can be dynamic: `<{@module} cid="my_id" title="Hello" />` renders a component when the expression yields a component module, `<{@tag} class="heading">` renders an HTML element when it yields a string, anything else raises `ArgumentError`.
 - Pair a dynamic tag with a spread when the props are data too: `<{widget.module} ...{widget.props} />`.
 - Close a dynamic tag by repeating the opening expression: `<{@module}>content</{@module}>`.
@@ -221,7 +222,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Attach to a page or component with `middleware SomeModule` or `middleware :some_function`, each with optional keyword opts (`middleware SomeModule, role: :admin`). Declarations run top to bottom.
 - Every middleware receives and returns a `%Server{}` struct - the same one `init/3` and commands use. The `Server` helpers (`put_status`, `put_redirect`, `put_session`, `put_stash`, `get_request_header`, ...) are imported unqualified.
 - Read the incoming request as `Server` struct fields: `method`, `scheme`, `host`, `port`, `path`, `query`, `raw_query`, `ip`. These are **not** authenticated - `host` is client-supplied and spoofable, so validate it against an allowlist before any security decision and never build security-sensitive URLs (password-reset links, emails) from it.
-- Set or clear the authenticated user with `put_user_id(server, user_id)` / `delete_user_id(server)` (persisted to the session) - the canonical login/logout mechanism.
+- Set or clear the authenticated user with `put_user_id(server, user_id)` / `delete_user_id(server)` (persisted to the session) - the canonical login/logout mechanism. A user id is a string, integer, or atom, but not `true` or `false`.
 - Stop the chain by setting a status - `put_status(server, :forbidden)`, `put_status(server, 403)`, or `put_redirect(server, MyApp.LoginPage)`. There is no separate `halt`: a non-nil status is the signal, checked after each middleware returns (it does not abort on the spot).
 - Response headers set with `put_response_header` / `append_response_header` go out with every response the request ends in - the rendered page, a navigation, a command's reply, or a terminal response - not only with terminal ones. A `content-type` describes the body, and a `content-security-policy` is set in config, so each is allowed only on a response that middleware ends with `put_status`. Anywhere else it raises.
 - Pass data downstream with `put_stash(server, :key, value)`, read later with `get_stash` in middleware, `init/3`, or commands.
@@ -235,6 +236,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Write: `put_session(server, :key, value)`.
 - Delete: `delete_session(server, :key)`.
 - Session keys must be atoms or strings (atoms are converted to strings, so `:locale` and `"locale"` address the same value).
+- `put_session` and `delete_session` raise for Hologram's own keys, `:hologram_csrf_token`, `:hologram_session_id` and `:hologram_user_id`.
 - Sessions can store any Elixir data type (maps, lists, tuples, etc.).
 - Record the logged-in user with `put_user_id/2`, not a session key of your own. Hologram knows the user only through it, for the Back/forward check and realtime subscriptions.
 - Session data cannot be read by client-side code. Use cookies if you need client-side access.

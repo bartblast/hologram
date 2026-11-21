@@ -5,7 +5,9 @@ defmodule Hologram.Mutation.Write do
   # entity type module, the id of the row it acts on, and what the op carries - values keyed by
   # field and decoded to the terms the model declares, the amounts to move counters by, the
   # revisions the writer saw, and the stamp its writer authored - or, for an
-  # edge, the relationship and the row at the other end.
+  # edge, the relationship and the row at the other end. An edge also says whether it came from the
+  # same call as the write before it: one update/1 sends its values and each of its edges as writes
+  # of their own.
   #
   # Every field is already checked against THIS build's model by the time one of these exists, so
   # what reads it does not check again.
@@ -22,6 +24,7 @@ defmodule Hologram.Mutation.Write do
             id: nil,
             op: nil,
             relationship: nil,
+            same_call: false,
             stamp: nil,
             target_id: nil
 
@@ -33,9 +36,22 @@ defmodule Hologram.Mutation.Write do
           id: String.t() | nil,
           op: :create | :update | :delete | :add_relationship | :delete_relationship | nil,
           relationship: atom | nil,
+          same_call: boolean,
           stamp: pos_integer | nil,
           target_id: String.t() | nil
         }
+
+  @doc """
+  Returns what the given edge write does, keyed the way a struct's metadata records an edge change.
+  """
+  @spec edge_op(t) :: {{atom, String.t()}, :add | :delete}
+  def edge_op(%__MODULE__{op: :add_relationship} = write) do
+    {{write.relationship, write.target_id}, :add}
+  end
+
+  def edge_op(%__MODULE__{op: :delete_relationship} = write) do
+    {{write.relationship, write.target_id}, :delete}
+  end
 
   @doc """
   Returns the entity struct the write's own verb would have handed the executor.
@@ -65,7 +81,7 @@ defmodule Hologram.Mutation.Write do
     values =
       Map.merge(write.data, %{
         __meta__: %Metadata{stamp: write.stamp},
-        granted_by_id: Context.actor_user_id(),
+        granted_by_id: Context.actor_entity_id(),
         id: write.id
       })
 
@@ -106,10 +122,8 @@ defmodule Hologram.Mutation.Write do
     struct!(write.entity_type, id: write.id, __meta__: metadata)
   end
 
-  def to_entity(%__MODULE__{op: op} = write) do
-    edge_op = if op == :add_relationship, do: :add, else: :delete
-    relationship_ops = %{{write.relationship, write.target_id} => edge_op}
-    metadata = %Metadata{claim: :client, relationship_ops: relationship_ops}
+  def to_entity(write) do
+    metadata = %Metadata{claim: :client, relationship_ops: Map.new([edge_op(write)])}
 
     struct!(write.entity_type, id: write.id, __meta__: metadata)
   end

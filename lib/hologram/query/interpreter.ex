@@ -17,9 +17,9 @@ defmodule Hologram.Query.Interpreter do
   alias Hologram.DB.SortKey
   alias Hologram.Entity
   alias Hologram.Entity.Derived
-  alias Hologram.MisuseError
   alias Hologram.Query
   alias Hologram.Query.Ordering
+  alias Hologram.Query.Stage
 
   @quantifiers [:all, :any, :none]
 
@@ -54,15 +54,14 @@ defmodule Hologram.Query.Interpreter do
   position among the declared ones. An included derived field holds its value, or its rows - a
   list, or one row or nil - each row embedding what its definition and the include ask for.
 
-  `:bindings` in the options gives the values of the term's placeholders, every one of which the
-  term names, and none of which may be nil - neither as a value nor as an element of a list - which
-  is what the database refuses one for.
-
-  Raises Hologram.MisuseError on a missing or nil binding.
+  Raises Hologram.MisuseError when the term holds a placeholder, as the database executor does
+  (see `Hologram.Query.Stage.assert_no_placeholders!/1`).
   """
-  @spec run(Query.t(), %{atom => any}, keyword) :: list(struct) | struct | integer | nil
-  def run(term, database, opts \\ []) do
-    scope = match_scope(term, database, opts)
+  @spec run(Query.t(), %{atom => any}) :: list(struct) | struct | integer | nil
+  def run(term, database) do
+    Stage.assert_no_placeholders!(term)
+
+    scope = match_scope(term, database)
 
     rows =
       database
@@ -82,12 +81,12 @@ defmodule Hologram.Query.Interpreter do
         rows
         |> arrange(term, scope)
         |> List.first()
-        |> embed(term, database, opts)
+        |> embed(term, database)
 
       :set ->
         rows
         |> arrange(term, scope)
-        |> Enum.map(&embed(&1, term, database, opts))
+        |> Enum.map(&embed(&1, term, database))
     end
   end
 
@@ -159,17 +158,17 @@ defmodule Hologram.Query.Interpreter do
   # following the id its row carries, a to-many by reading the pairs. A derived field it asked for is
   # computed from its definition. What the query did not ask for keeps the sentinel saying so, which
   # is a different answer from an empty one.
-  defp embed(nil, _term, _database, _opts), do: nil
+  defp embed(nil, _term, _database), do: nil
 
-  defp embed(row, term, database, opts) do
+  defp embed(row, term, database) do
     Enum.reduce(term.include, row, fn {name, sub_term}, embedded ->
       value =
         if Derived.declared?(term.entity, name) do
-          embedded_derived_value(row, name, sub_term, database, opts)
+          embedded_derived_value(row, name, sub_term, database)
         else
           kind = relationship_kind(term.entity, name)
 
-          embedded_value(row, name, kind, sub_term, database, opts)
+          embedded_value(row, name, kind, sub_term, database)
         end
 
       Map.put(embedded, name, value)
@@ -179,18 +178,18 @@ defmodule Hologram.Query.Interpreter do
   # An included derived field holding a value is the value its definition computes for the row. One
   # holding rows holds its definition's rows - a list, or one row or nil - each row embedding what
   # the definition and the include ask for.
-  defp embedded_derived_value(row, name, nil, database, opts) do
-    derived_value(row, name, embedding_scope(row, database, opts))
+  defp embedded_derived_value(row, name, nil, database) do
+    derived_value(row, name, embedding_scope(row, database))
   end
 
-  defp embedded_derived_value(row, name, sub_term, database, opts) do
+  defp embedded_derived_value(row, name, sub_term, database) do
     entity_type = row.__struct__
     rows_term = Derived.rows_term(entity_type, name, sub_term)
 
     rows =
       row
-      |> derived_rows(name, embedding_scope(row, database, opts))
-      |> Enum.map(&embed(&1, rows_term, database, opts))
+      |> derived_rows(name, embedding_scope(row, database))
+      |> Enum.map(&embed(&1, rows_term, database))
 
     case List.keyfind(entity_type.__derived__(), name, 0) do
       {^name, [_row_type], _opts} -> rows
@@ -198,32 +197,32 @@ defmodule Hologram.Query.Interpreter do
     end
   end
 
-  defp embedded_set(rows, sub_term, database, opts) do
-    scope = match_scope(sub_term, database, opts)
+  defp embedded_set(rows, sub_term, database) do
+    scope = match_scope(sub_term, database)
 
     rows
     |> Enum.filter(&matches?(&1, sub_term.filter, scope))
     |> arrange(sub_term, scope)
-    |> Enum.map(&embed(&1, sub_term, database, opts))
+    |> Enum.map(&embed(&1, sub_term, database))
   end
 
-  defp embedded_value(row, name, :to_one, sub_term, database, opts) do
+  defp embedded_value(row, name, :to_one, sub_term, database) do
     reference = Map.fetch!(row, reference_field(name))
 
     database
     |> table(sub_term.entity)
     |> Enum.find(&(&1.id == reference))
-    |> embed(sub_term, database, opts)
+    |> embed(sub_term, database)
   end
 
   # A to-many is the rows the pairs name, put through the clauses the include carries - a set of
   # its own, filtered, ordered and bounded like any other. A pair naming a row the database does
   # not hold is passed over: a fill arrives in pieces, and a parent can be told about a child
   # that has not landed yet.
-  defp embedded_value(row, name, :to_many, sub_term, database, opts) do
+  defp embedded_value(row, name, :to_many, sub_term, database) do
     row
     |> paired_rows(name, sub_term.entity, database)
-    |> embedded_set(sub_term, database, opts)
+    |> embedded_set(sub_term, database)
   end
 
   # An inverse is read from where the relationship it reverses is stored: the related rows whose
@@ -235,25 +234,24 @@ defmodule Hologram.Query.Interpreter do
          _name,
          {:inverse, %{to_many?: true} = inverse},
          sub_term,
-         database,
-         opts
+         database
        ) do
     row
     |> inverse_rows(inverse, database)
-    |> embedded_set(sub_term, database, opts)
+    |> embedded_set(sub_term, database)
   end
 
-  defp embedded_value(row, _name, {:inverse, inverse}, sub_term, database, opts) do
+  defp embedded_value(row, _name, {:inverse, inverse}, sub_term, database) do
     row
     |> inverse_rows(inverse, database)
     |> Enum.sort_by(& &1.id)
     |> List.first()
-    |> embed(sub_term, database, opts)
+    |> embed(sub_term, database)
   end
 
   # Where a row's derived field is read while it is embedded: on the row, with no row above it.
-  defp embedding_scope(row, database, opts) do
-    %{database: database, opts: opts, outer: [], ranks: %{}, types: [row.__struct__]}
+  defp embedding_scope(row, database) do
+    %{database: database, outer: [], ranks: %{}, types: [row.__struct__]}
   end
 
   defp equal?(%Date{} = left, %Date{} = right), do: Date.compare(left, right) == :eq
@@ -344,15 +342,13 @@ defmodule Hologram.Query.Interpreter do
   end
 
   # What matching a term's filter reads besides the row: the rest of the database, which a path
-  # follows into, the options a predicate resolves its operands by, the ranks its enums compare
-  # by - and inside a quantifier's condition the rows above the related row with their types,
-  # nearest first, for the names that reach them.
-  defp match_scope(term, database, opts) do
+  # follows into, the ranks its enums compare by - and inside a quantifier's condition the rows
+  # above the related row with their types, nearest first, for the names that reach them.
+  defp match_scope(term, database) do
     types = [term.entity]
 
     %{
       database: database,
-      opts: opts,
       outer: [],
       ranks: predicate_ranks(types, term.filter),
       types: types
@@ -407,14 +403,7 @@ defmodule Hologram.Query.Interpreter do
   end
 
   defp matches_predicate?(row, {name, operator, operand}, scope) do
-    ranks_for_key = Map.get(scope.ranks, name)
-
-    satisfies?(
-      operator,
-      read(row, name, scope),
-      resolve(operand, scope.opts, ranks_for_key),
-      ranks_for_key
-    )
+    satisfies?(operator, read(row, name, scope), operand, Map.get(scope.ranks, name))
   end
 
   # The rows a to-many's pairs name, of the given type. A pair naming a row the database does not
@@ -473,26 +462,6 @@ defmodule Hologram.Query.Interpreter do
     end
   end
 
-  defp resolve({:placeholder, name}, opts, ranks_for_key) do
-    bindings = Keyword.get(opts, :bindings, %{})
-
-    case Map.fetch(bindings, name) do
-      :error ->
-        raise MisuseError, message: "missing value for placeholder #{inspect(name)}"
-
-      {:ok, value} ->
-        value
-        |> validate_binding!(name)
-        |> validate_declared_value!(name, ranks_for_key)
-    end
-  end
-
-  defp resolve(operand, opts, ranks_for_key) when is_list(operand) do
-    Enum.map(operand, &resolve(&1, opts, ranks_for_key))
-  end
-
-  defp resolve(operand, _opts, _ranks_for_key), do: operand
-
   # Nil is a value like any other to the equality family - an unset attribute is unequal to a
   # set one, and a list may name it - while an ordering line has no place to put one, so a
   # comparison passes over what is not there.
@@ -509,7 +478,7 @@ defmodule Hologram.Query.Interpreter do
   defp satisfies?(_operator, nil, _operand, _ranks), do: false
 
   # Only an attribute operand can be missing here - a literal nil ordering operand is refused when
-  # the query is built, and a placeholder never binds nil.
+  # the query is built.
   defp satisfies?(_operator, _value, nil, _ranks), do: false
 
   # An exact search compares the bytes, a loose one the folded forms - case, accents and the letters
@@ -644,53 +613,4 @@ defmodule Hologram.Query.Interpreter do
   defp take(rows, nil), do: rows
 
   defp take(rows, count), do: Enum.take(rows, count)
-
-  # The values the rank map holds, back in the order the entity declares them - the cold path of
-  # a refusal, so the sort costs nothing anything else pays for.
-  defp declared_values(ranks_for_key) do
-    ranks_for_key
-    |> Enum.sort_by(fn {_value, index} -> index end)
-    |> Enum.map(fn {value, _index} -> value end)
-  end
-
-  # A binding on an enum attribute is one of the values that attribute declares, refused in the
-  # words the database executor refuses it in - QueryRunner validates every binding against the
-  # attribute before a statement is built, so an undeclared label never reaches Postgres on that
-  # tier either. A list bound as a whole is left to the runner alone.
-  defp validate_declared_value!(value, _name, nil), do: value
-
-  defp validate_declared_value!(values, _name, _ranks_for_key) when is_list(values), do: values
-
-  defp validate_declared_value!(value, name, ranks_for_key) do
-    if Map.has_key?(ranks_for_key, value) do
-      value
-    else
-      raise MisuseError,
-        message:
-          "invalid value #{inspect(value)} for placeholder #{inspect(name)} - expected one of #{inspect(declared_values(ranks_for_key))}"
-    end
-  end
-
-  # A binding carries no nil anywhere, which is what the database refuses it for - and identity
-  # with the database covers what each REFUSES, not only what each answers. A predicate about the
-  # rows that have no value is written as one, in the query, where the operator can be chosen to
-  # suit. A LITERAL list may still name nil: it is part of a term rather than a value handed to
-  # one, so it says what it means on its face.
-  defp validate_binding!(nil, name) do
-    raise MisuseError,
-      message:
-        "nil value for placeholder #{inspect(name)} - use an explicit nil predicate instead"
-  end
-
-  defp validate_binding!(values, name) when is_list(values) do
-    if Enum.any?(values, &is_nil/1) do
-      raise MisuseError,
-        message:
-          "nil element in the list for placeholder #{inspect(name)} - use an explicit nil predicate instead"
-    end
-
-    values
-  end
-
-  defp validate_binding!(value, _name), do: value
 end

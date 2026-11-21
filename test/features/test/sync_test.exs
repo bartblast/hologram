@@ -2,22 +2,22 @@ defmodule HologramFeatureTests.SyncTest do
   # async: false - each test truncates the shared tables.
   use HologramFeatureTests.TestCase, async: false
 
-  import Hologram.DB.EntityOperations, only: [delete: 2, update: 3]
+  import Hologram.DB.EntityOperations, only: [add_relationship: 4, delete: 2, update: 3]
 
   alias Hologram.DB
   alias Hologram.Policy
+  alias Hologram.Sync.Frame
   alias Hologram.Test.SyncClient
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
+  alias HologramFeatureTests.Entities.Label
+  alias HologramFeatureTests.Entities.Message
   alias HologramFeatureTests.SyncPage
-
-  @base_url "http://localhost:4002"
 
   # Every entity table truncates, not only the documents: the client's pot is app-wide, so a row
   # left in ANY synced table by an earlier test file would arrive in this client's initial fill
   # and make "the first deltas frame" mean different things on different runs.
   setup do
-    await_evaluator_drain()
     truncate_every_entity_table()
 
     :ok
@@ -56,19 +56,28 @@ defmodule HologramFeatureTests.SyncTest do
     end
   end
 
-  # The stream is cut when the test ends, taking the server-side session and its evaluators with
-  # it - a connection left open would keep them alive into the next test, serving stale rounds.
+  # The stream is cut when the test ends, taking the server-side session with it - a connection left
+  # open would keep it alive into the next test, telling it that test's writes.
   defp connect(opts \\ []) do
     opts =
       opts
       |> Keyword.put_new(:cookie_path, "/policies")
       |> Keyword.put_new(:page, "HologramFeatureTests.PoliciesPage")
 
-    client = SyncClient.connect(@base_url, opts)
+    client = SyncClient.connect(http_url(), opts)
 
     on_exit(fn -> SyncClient.close(client) end)
 
     client
+  end
+
+  # Every deltas frame the client is sent until none arrives for a second - a catch-up has no
+  # marker of its own end before the one saying the store is whole, which comes after its frames.
+  defp frames_until_quiet(client, acc \\ []) do
+    case SyncClient.next_frame(client, "sync_deltas", 1_000) do
+      {:ok, frame, next_client} -> frames_until_quiet(next_client, [frame["data"] | acc])
+      {:timeout, _client} -> Enum.reverse(acc)
+    end
   end
 
   # The place the frame says the client has reached, which it hands back on reconnect. Read out of
@@ -170,9 +179,9 @@ defmodule HologramFeatureTests.SyncTest do
     assert revisions["title"] == reloaded.__meta__.revisions.title
   end
 
-  # The defect this spec pins: membership must cover the window's whole REACH, so a row no window
-  # roots - the folder is reachable only through the document window's include - still receives
-  # its own patches. Rooted-everywhere fixtures kept the hole green for a whole step.
+  # A row of a type no query is rooted in - the folder is reachable only through the document
+  # query's include - still receives its own patches. Rooted-everywhere fixtures once kept a hole
+  # here green for a whole step.
   feature "patches a row reached only through an include", %{session: _session} do
     folder =
       %{name: "folder_before_patch", public: true}
@@ -189,11 +198,10 @@ defmodule HologramFeatureTests.SyncTest do
 
     {data, _client} = await_deltas_carrying(client, ~s["name":"folder_after_patch"])
 
-    # Read out of the frame rather than matched against its text: what else shares the round is
-    # not this test's business. A round reports every member of the window's reach, so the
-    # document that reaches this folder can be grouped beside it - and being grouped FIRST, since
-    # the types are keyed by module name, would break a match that expects to find the folder
-    # right after the op.
+    # Read out of the frame rather than matched against its text: what else shares the frame is
+    # not this test's business. The document that reaches this folder can be grouped beside it -
+    # and being grouped FIRST, since the types are keyed by module name, would break a match that
+    # expects to find the folder right after the op.
     folder_rows =
       data
       |> Jason.decode!()
@@ -343,7 +351,7 @@ defmodule HologramFeatureTests.SyncTest do
   end
 
   # A frame carries a place only once the client holds a whole pot, so the one this client leaves
-  # with cannot come from its fill - mid-fill it holds some windows and not others, and a place
+  # with cannot come from its fill - mid-fill it holds some types and not others, and a place
   # handed over then is a claim it could not honour. Hence the write before it leaves: it is there
   # to produce a frame after the store is complete, which is the first frame carrying a place.
   feature "tells a returning client only what moved while it was away", %{session: _session} do
@@ -420,16 +428,26 @@ defmodule HologramFeatureTests.SyncTest do
 
     update(Folder, folder.id, %{public: false})
 
-    {gap_data, _returned} = await_deltas_carrying(connect(cursor: cursor), document.id)
+    # Every frame of the catch-up, so no frame of it can name the document by id unnoticed. The
+    # folder is told by hash too, in a frame of its own.
+    gap_frames = frames_until_quiet(connect(cursor: cursor))
 
-    # Fails against the framework before this issue: the gap names the folder alone, so the only
-    # unsync arriving is the folder's own.
-    unsynced_ids =
-      gap_data
-      |> Jason.decode!()
-      |> get_in(["deltas", "unsync_entity", "HologramFeatureTests.Entities.Document"])
+    gap_data =
+      Enum.find(
+        gap_frames,
+        &(&1 =~ ~s["unsync_hashed":{"HologramFeatureTests.Entities.Document"])
+      )
 
-    assert unsynced_ids == [document.id]
+    # The server rebuilds what a returning client holds from what its user may read now, which
+    # the document no longer is - so it can't say the client holds it, and names it by hash: a
+    # client holding it drops it, and one that never had it learns nothing of it.
+    assert [%{"hashes" => hashes, "salt" => salt}] =
+             gap_data
+             |> Jason.decode!()
+             |> get_in(["deltas", "unsync_hashed", "HologramFeatureTests.Entities.Document"])
+
+    assert Frame.drop_hash(salt, document.id) in hashes
+    refute Enum.any?(gap_frames, &(&1 =~ document.id))
   end
 
   feature "hands over what a folder made public now admits", %{session: _session} do
@@ -472,15 +490,55 @@ defmodule HologramFeatureTests.SyncTest do
     {gap_data, _returned} =
       await_deltas_carrying(connect(cursor: cursor), ~s["title":"revealed_by_its_folder"])
 
-    # Fails against the framework before this issue: the gap names the folder alone, so nothing
-    # names the document at all.
+    # The gap holds the batch the client's place was read from and the folder's update, and the
+    # search back from the folder reaches the document. So the frame can hand over the document
+    # the client left on again, beside the one the folder opened up.
     put_documents =
       gap_data
       |> Jason.decode!()
       |> get_in(["deltas", "put_entity", "HologramFeatureTests.Entities.Document"])
 
-    assert [%{"id" => put_id, "title" => "revealed_by_its_folder"}] = put_documents
-    assert put_id == document.id
+    assert %{"title" => "revealed_by_its_folder"} =
+             Enum.find(put_documents, &(&1["id"] == document.id))
+  end
+
+  # A pair moves the set of the row it files under, which a returning client holds as that row's
+  # set - so the row goes out whole again, stating the set as it now stands.
+  feature "states the set a pair added while away changed", %{session: _session} do
+    label =
+      %{name: "pinned_while_away"}
+      |> Label.new()
+      |> DB.create!()
+
+    message =
+      %{body: "labelled_while_away", position: 0}
+      |> Message.new()
+      |> DB.create!()
+
+    filled_client = drain_initial_sync(connect())
+
+    %{public: true, title: "dated_the_store_before_labelling"}
+    |> Document.new()
+    |> DB.create!()
+
+    {dating_data, departing_client} =
+      await_deltas_carrying(filled_client, ~s["title":"dated_the_store_before_labelling"])
+
+    cursor = cursor_of(dating_data)
+    :ok = SyncClient.close(departing_client)
+
+    :ok = add_relationship(Message, message.id, :labels, label.id)
+
+    {gap_data, _returned} =
+      await_deltas_carrying(connect(cursor: cursor), ~s["body":"labelled_while_away"])
+
+    put_messages =
+      gap_data
+      |> Jason.decode!()
+      |> get_in(["deltas", "put_entity", "HologramFeatureTests.Entities.Message"])
+
+    assert %{"labels" => [label_id]} = Enum.find(put_messages, &(&1["id"] == message.id))
+    assert label_id == label.id
   end
 
   feature "tells a client whose place cannot be read to start over", %{session: _session} do

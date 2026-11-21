@@ -7,6 +7,7 @@ defmodule Hologram.DB.QueryCompiler do
   alias Hologram.DB.SortKey
   alias Hologram.Entity
   alias Hologram.Entity.Derived
+  alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Policy.Readers
   alias Hologram.Query
@@ -29,6 +30,19 @@ defmodule Hologram.DB.QueryCompiler do
   }
 
   @doc """
+  Returns the read rules a statement compiled with the given policy applies: all of them for a
+  signed-in session, and for an anonymous one (`anonymous?: true`) what remains once everything
+  naming the acting user or a role is folded away - a rule asking only that is dropped, and one
+  holding it in a disjunction keeps the alternatives that ask nothing of the user. An anonymous
+  statement keeps what nobody can satisfy out of the statement rather than binding a nil
+  placeholder - at every nesting level, delegated policies included.
+  """
+  @spec applicable_rules(list(%{atom => any}), %{atom => any}) :: list(%{atom => any})
+  def applicable_rules(rules, %{anonymous?: true}), do: Enum.flat_map(rules, &anonymous_rule/1)
+
+  def applicable_rules(rules, _policy), do: rules
+
+  @doc """
   Compiles the given normalized query term into a SQL statement using the given
   physical name mapping.
 
@@ -36,10 +50,8 @@ defmodule Hologram.DB.QueryCompiler do
   schema-qualified) and :params (the bind slots in parameter order). Every filter
   value binds as a parameter - literal values are Codec-encoded at compilation into
   `{:value, encoded}` slots (membership lists encode element-wise into one array
-  slot), placeholder leaves become `{:placeholder, name, type}` slots carrying the attribute's
-  logical type for runtime encoding (`{:list, type}` for membership operands). A
-  membership list holding placeholder elements binds one slot per element inside a cast
-  ARRAY constructor instead - each element placeholder is a scalar slot. Nil
+  slot). Equality and membership on a string of the row also compare its sort key, so the key's
+  index serves them: the key binds first, as `{:value, key}`, and the value right after it. Nil
   equality compiles to `IS NULL` and nil inequality to `IS NOT NULL`, with no bind
   slot. Column selection follows the mapping's physical column order, leaving out the derived
   sort-key and search-key companions, which a reader never reads back.
@@ -102,9 +114,8 @@ defmodule Hologram.DB.QueryCompiler do
   inequality matches missing values (`!=` widens with `OR IS NULL` on optional
   attributes), membership lists may hold nil (compiled into the `IS [NOT] NULL`
   branch alongside the stripped array), and negated membership without nil matches
-  missing values. Ordering comparisons match actual values only. Param slots never
-  bind nil at runtime - a sometimes-nil variable branches into an explicit nil
-  predicate in code.
+  missing values. Ordering comparisons match actual values only. No param slot binds
+  nil - a nil compiles to its `IS [NOT] NULL` form instead.
 
   A comparison between two attributes of the row binds no slot. Equality compiles to
   `IS NOT DISTINCT FROM` and inequality to `IS DISTINCT FROM`, so nil keeps its meaning,
@@ -116,11 +127,9 @@ defmodule Hologram.DB.QueryCompiler do
   A search compiles to a LIKE: an exact one over the column, a loose one over
   `COALESCE("a_$search", "a_$sort")` - the whole folded value, which the search key holds when the
   sort key's prefix can't. The term binds as a pattern, folded for a loose match and with `\\`, `%`
-  and `_` escaped, so they are plain characters - a placeholder term binds a
-  `{:pattern, :prefix | :infix, :exact | :loose}` slot the runner builds the pattern for. A search
-  for another attribute's value can't be a pattern, so it compiles to `strpos`: `= 1` for a
-  prefix, `> 0` for a substring. NULL on either side matches no row, and an empty term or value
-  matches every row with a value.
+  and `_` escaped, so they are plain characters. A search for another attribute's value can't be
+  a pattern, so it compiles to `strpos`: `= 1` for a prefix, `> 0` for a substring. NULL on
+  either side matches no row, and an empty term or value matches every row with a value.
 
   A path - on either side of a comparison - compiles to nested scalar subqueries, one per
   relationship it follows, each aliased `"$p<n>"` and correlated on the row before it, the
@@ -197,16 +206,63 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   @doc """
+  Returns the column of the given entity mapping a name of its row reads - a declared attribute, a
+  to-one's reference field (`<relationship>_id`) or a system column - or nil when it reads none,
+  as a derived field's name does.
+  """
+  @spec name_column(%{atom => any}, atom) :: %{atom => any} | nil
+  def name_column(%{columns: columns}, name) do
+    column_name = Atom.to_string(name)
+
+    Enum.find(columns, fn column ->
+      case column.source do
+        {:attribute, attribute_name} -> attribute_name == name
+        {:relationship, relationship_name} -> "#{relationship_name}_id" == column_name
+        :system -> column.name == column_name
+        _other_source -> false
+      end
+    end)
+  end
+
+  @doc """
+  Returns whether the given read rule of the given entity type can never hold for a statement
+  read with the given policy's anonymity, so the statement leaves it out of its rules: a
+  delegation whose related type grants nothing - no rule for the delegated operation, none left
+  once folded for nobody, or only rules that never hold themselves. A rule delegating to a related
+  type whose rules ask nothing still holds wherever its chain leads to a row.
+  """
+  @spec never_rule?(module, %{atom => any}, %{atom => any}) :: boolean
+  def never_rule?(entity_type, %{via: {operation, relationship_names}} = rule, policy) do
+    target_rules =
+      entity_type
+      |> Entity.path_target(relationship_names)
+      |> Policy.build()
+      |> Map.get(operation, [])
+
+    never_rule?(entity_type, %{rule | via: {operation, relationship_names, target_rules}}, policy)
+  end
+
+  def never_rule?(entity_type, %{via: {_operation, relationship_names, target_rules}}, policy) do
+    target_type = Entity.path_target(entity_type, relationship_names)
+
+    target_rules
+    |> applicable_rules(policy)
+    |> Enum.all?(&never_rule?(target_type, &1, policy))
+  end
+
+  def never_rule?(_entity_type, _rule, _policy), do: false
+
+  @doc """
   Compiles the statement deciding, for the rows of the given entity type with the given ids, which
   of the given users may read each one, and returning each readable row's current values - and,
-  when the given verdicts flag asks for them, the server's verdicts on the type's deciding clauses
-  for the users who may read it (see `Hologram.Auth.verdicts/2`).
+  when the given verdicts flag asks for them, the server's verdicts on the operations of the type it
+  sends one on, for the users who may read it (see `Hologram.Auth.verdicts/2`).
 
   Returns a map with :sql and :params as `compile/3` does. Params begin with two markers for the
   caller to bind: `:ids` (`$1`), the row ids as a uuid array, and `:users` (`$2`), the ids of the
   signed-in users as a uuid array holding no NULL - a rule naming the acting user only to deny,
   like `owner_id != user_id()`, would admit a NULL one. `:users` is left out when no read rule
-  and no verdict depends on the user, since the statement then reads no users. The rules' own
+  and no verdict's rule depends on the user, since the statement then reads no users. The rules' own
   slots follow, as `{:value, _}`.
 
   Each result row holds the row's columns in `compile/3`'s order, then three more:
@@ -232,19 +288,21 @@ defmodule Hologram.DB.QueryCompiler do
   those of the rules a delegation asks, on the row it leads to - and only those of `:users` among
   them are tested. Otherwise every user of `:users` is tested on every row.
 
-  With verdicts asked for and a type with deciding clauses (see
-  `Hologram.Policy.Readers.classify_verdicts/1`), the map also holds `:verdict_clauses`, each
-  clause's `{keys, class}` in the order its answers come in - the clauses answering the same for
-  every user first - and each result row four more, every answer a boolean that is never NULL:
+  With verdicts asked for, the map also holds `:verdicts`, the verdict keys of the type's
+  operations the server sends a verdict on (see `Hologram.Policy.verdict_operations/1`): `:read`,
+  the read operation's, whose verdict is true for every reader and takes nothing from the
+  statement, and `:operations`, the others', in the order their answers come in. With any of the
+  others, each result row holds two more columns and one per operation, every answer never NULL:
 
-    * `$everyone_verdicts` - the answers of the clauses answering the same for every user, decided
-      once per row.
-    * `$anonymous_verdicts` - the answers of the others for an anonymous user, each folded for
-      nobody as the rules are, when the anonymous flag asks for them, and an empty array otherwise.
-    * `$verdict_users` and `$user_verdicts` - the users tested on the others, and each one's
-      answers on them, in the same order: the readers - every user of `:users` when `$everyone`
-      is true - and, when each of those clauses is listed, only those of them its anchor names.
-      A reader left out answers each clause's default.
+    * `$verdict_everyone` - for each operation, whether the rules answering it the same for every
+      user admit the row (see `Hologram.Policy.Readers.classify/2`), decided once per row.
+    * `$verdict_anonymous` - for each operation, whether its other rules admit an anonymous user,
+      folded for nobody as the read rules are, when the anonymous flag asks for it, and FALSE
+      otherwise.
+    * `$verdict_users_<n>` - the readers the other rules of the n-th operation admit, when its
+      `$verdict_everyone` answer is false, and an empty array otherwise. The readers are tested -
+      every user of `:users` on a row everyone may read - and when each of those rules is listed,
+      only those of them its anchor names.
   """
   @spec recheck(module, %{module => %{atom => any}}, boolean, boolean) :: %{atom => any}
   def recheck(entity_type, mapping, anonymous?, verdicts? \\ false) do
@@ -255,13 +313,13 @@ defmodule Hologram.DB.QueryCompiler do
     independent_rules = for {:independent, rule} <- classes, do: rule
     dependent_classes = Enum.reject(classes, &match?({:independent, _rule}, &1))
 
-    verdict_classes = if verdicts?, do: Readers.classify_verdicts(entity_type), else: []
-
-    {independent_verdicts, dependent_verdicts} =
-      Enum.split_with(verdict_classes, &match?({_clause, _keys, :independent}, &1))
+    verdict_operations = if verdicts?, do: recheck_verdict_operations(entity_type), else: []
 
     initial_params =
-      if dependent_classes == [] and dependent_verdicts == [], do: [:ids], else: [:users, :ids]
+      if dependent_classes == [] and
+           Enum.all?(verdict_operations, &match?({_key, _rules, []}, &1)),
+         do: [:ids],
+         else: [:users, :ids]
 
     {everyone_sql, params_after_everyone} =
       recheck_flag_sql(entity_type, mapping, %{rules: independent_rules}, initial_params)
@@ -284,7 +342,7 @@ defmodule Hologram.DB.QueryCompiler do
       recheck_readers_sql(entity_type, mapping, dependent_classes, params_after_anonymous)
 
     {row_sql, all_reversed_params} =
-      if verdict_classes == [] do
+      if verdict_operations == [] do
         # OFFSET 0 keeps Postgres from folding the subqueries into the statement around them, which
         # would copy each flag and the readers into every place that reads them, and decide them
         # again there.
@@ -300,11 +358,10 @@ defmodule Hologram.DB.QueryCompiler do
           %{
             anonymous?: anonymous?,
             anonymous_sql: anonymous_sql,
-            dependent_verdicts: dependent_verdicts,
             entity_mapping: entity_mapping,
             everyone_sql: everyone_sql,
-            independent_verdicts: independent_verdicts,
-            readers_sql: readers_sql
+            readers_sql: readers_sql,
+            verdict_operations: verdict_operations
           },
           params_after_readers
         )
@@ -318,15 +375,13 @@ defmodule Hologram.DB.QueryCompiler do
 
     compiled = %{params: Enum.reverse(all_reversed_params), sql: sql}
 
-    if verdict_classes == [] do
-      compiled
-    else
-      verdict_clauses =
-        Enum.map(independent_verdicts ++ dependent_verdicts, fn {_clause, keys, class} ->
-          {keys, class}
-        end)
+    if verdicts? do
+      read_keys = for {key, :read} <- Policy.verdict_operations(entity_type), do: key
+      operation_keys = Enum.map(verdict_operations, &elem(&1, 0))
 
-      Map.put(compiled, :verdict_clauses, verdict_clauses)
+      Map.put(compiled, :verdicts, %{operations: operation_keys, read: read_keys})
+    else
+      compiled
     end
   end
 
@@ -409,21 +464,11 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
-  # An anonymous statement keeps what nobody can satisfy out of the statement rather than binding
-  # a nil placeholder - at every nesting level, delegated policies included.
-  defp applicable_rules(rules, %{anonymous?: true}), do: Enum.flat_map(rules, &anonymous_rule/1)
-
-  defp applicable_rules(rules, _context), do: rules
-
-  # Bind slots inside an ARRAY constructor carry no type context of their own -
-  # without the cast Postgres resolves them to text.
-  defp array_type(%{source: :derived, sql_type: sql_type}), do: "#{sql_type}[]"
-
+  # A bound list of labels is cast to the enum column's array type, so it compares with the column
+  # by label.
   defp array_type(%{type: :enum, sql_type: sql_type}) do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(sql_type)}[]"
   end
-
-  defp array_type(%{sql_type: sql_type}), do: "#{sql_type}[]"
 
   # Every enum attribute is a type of its own, and Postgres compares no two of them - so the other
   # column is cast to the compared column's type, by label, and the two compare in the declared
@@ -466,11 +511,6 @@ defmodule Hologram.DB.QueryCompiler do
       reversed_index ->
         {"$#{length(reversed_params) - reversed_index}", reversed_params}
     end
-  end
-
-  defp bind_slot({:placeholder, placeholder_name}, column, reversed_params) do
-    {"$#{length(reversed_params) + 1}",
-     [{:placeholder, placeholder_name, column.type} | reversed_params]}
   end
 
   defp bind_slot(literal, column, reversed_params) do
@@ -656,23 +696,16 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   # A search is a LIKE over the value - or over its whole folded form for a loose match - with the
-  # term escaped into a pattern, so its % and _ are plain characters. A pinned term is escaped
-  # when it binds.
+  # term escaped into a pattern, so its % and _ are plain characters.
   defp condition({name, operator, term}, scope, reversed_params)
        when is_map_key(@search_operators, operator) do
     {shape, mode} = Map.fetch!(@search_operators, operator)
     {subject_sql, params_after_subject} = search_subject_sql(scope, name, mode, reversed_params)
 
     {pattern_slot, new_params} =
-      case term do
-        {:placeholder, placeholder_name} ->
-          bind_placeholder_slot(placeholder_name, {:pattern, shape, mode}, params_after_subject)
-
-        literal ->
-          literal
-          |> search_pattern(shape, mode)
-          |> bind_slot_value(params_after_subject)
-      end
+      term
+      |> search_pattern(shape, mode)
+      |> bind_slot_value(params_after_subject)
 
     {"#{subject_sql} LIKE #{pattern_slot}", new_params}
   end
@@ -727,11 +760,26 @@ defmodule Hologram.DB.QueryCompiler do
     {"#{subject_sql} IS NULL", new_params}
   end
 
+  # A string of the row compares its sort key beside its value, so the key's index serves the
+  # equality - the raw column is unbounded and has none. The value still decides it, since two
+  # values can share a key.
   defp condition({name, :==, value}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
-    {placeholder, new_params} = value_slot(value, scope, column, params_after_subject)
 
-    {"#{subject_sql} = #{placeholder}", new_params}
+    case own_sort_key_column(scope, name) do
+      nil ->
+        {placeholder, new_params} = value_slot(value, scope, column, params_after_subject)
+
+        {"#{subject_sql} = #{placeholder}", new_params}
+
+      key_column ->
+        {key_slot, raw_slot, new_params} = sort_key_slots(value, params_after_subject)
+
+        condition_sql =
+          "(#{column_sql(scope, key_column)} = #{key_slot} AND #{subject_sql} = #{raw_slot})"
+
+        {condition_sql, new_params}
+    end
   end
 
   defp condition({name, :!=, nil}, scope, reversed_params) do
@@ -749,7 +797,7 @@ defmodule Hologram.DB.QueryCompiler do
     {null_inclusive(condition_sql, subject_sql, column), new_params}
   end
 
-  defp condition({name, :in, values}, scope, reversed_params) when is_list(values) do
+  defp condition({name, :in, values}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
 
     case Enum.reject(values, &is_nil/1) do
@@ -757,27 +805,23 @@ defmodule Hologram.DB.QueryCompiler do
         {"#{subject_sql} IS NULL", params_after_subject}
 
       ^values ->
-        {placeholder, new_params} = membership_slot(values, column, params_after_subject)
-
-        {"#{subject_sql} = ANY(#{placeholder})", new_params}
+        membership_sql(scope, name, {subject_sql, column}, values, params_after_subject)
 
       stripped_values ->
-        {placeholder, new_params} = membership_slot(stripped_values, column, params_after_subject)
-
-        condition_sql = "#{subject_sql} = ANY(#{placeholder})"
+        {condition_sql, new_params} =
+          membership_sql(
+            scope,
+            name,
+            {subject_sql, column},
+            stripped_values,
+            params_after_subject
+          )
 
         {null_inclusive(condition_sql, subject_sql, column), new_params}
     end
   end
 
-  defp condition({name, :in, operand}, scope, reversed_params) do
-    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
-    {placeholder, new_params} = membership_slot(operand, column, params_after_subject)
-
-    {"#{subject_sql} = ANY(#{placeholder})", new_params}
-  end
-
-  defp condition({name, :not_in, values}, scope, reversed_params) when is_list(values) do
+  defp condition({name, :not_in, values}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
 
     case Enum.reject(values, &is_nil/1) do
@@ -798,15 +842,6 @@ defmodule Hologram.DB.QueryCompiler do
 
         {maybe_require_value(condition_sql, subject_sql, column), new_params}
     end
-  end
-
-  defp condition({name, :not_in, operand}, scope, reversed_params) do
-    {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
-    {placeholder, new_params} = membership_slot(operand, column, params_after_subject)
-
-    condition_sql = "#{subject_sql} != ALL(#{placeholder})"
-
-    {null_inclusive(condition_sql, subject_sql, column), new_params}
   end
 
   # A string compares by the pair its ordering sorts by - the key carries the order and the value
@@ -1334,11 +1369,34 @@ defmodule Hologram.DB.QueryCompiler do
   # own row of the candidates - every user of the users array. The names the recheck gives begin
   # with a $ like the compiler's aliases, and no mapped column takes any of them, so a rule's bare
   # column never resolves to them.
-  defp recheck_readers_sql(_entity_type, _mapping, [], reversed_params) do
+  defp recheck_readers_sql(entity_type, mapping, classes, reversed_params) do
+    # Wrapped, the membership stays a subplan Postgres hashes once per statement. Bare, it is
+    # pulled up into a join, which with one candidate per row scans every user for each row, and
+    # an array membership is hashed only while the plan sees the array as a constant.
+    pool = %{
+      member_sql: ~s|("$c"."$reader" IN (#{@recheck_users_sql})) IS TRUE|,
+      users_sql: @recheck_users_sql
+    }
+
+    recheck_admitted_sql(
+      entity_type,
+      mapping,
+      classes,
+      ~s|"$e"."$everyone"|,
+      pool,
+      reversed_params
+    )
+  end
+
+  # The users of the given pool the given classes' rules admit, each tested as the acting user, read
+  # off its own row of the candidates: the users the anchors name among the pool's when every class
+  # is listed, and every user of the pool otherwise. None when the given flag holds - the rules
+  # answering the same for everyone admit everyone then - or no class is given.
+  defp recheck_admitted_sql(_entity_type, _mapping, [], _everyone_sql, _pool, reversed_params) do
     {"'{}'::uuid[]", reversed_params}
   end
 
-  defp recheck_readers_sql(entity_type, mapping, classes, reversed_params) do
+  defp recheck_admitted_sql(entity_type, mapping, classes, everyone_sql, pool, reversed_params) do
     rules = Enum.map(classes, &elem(&1, 1))
     policy = %{actor_sql: ~s|"$c"."$reader"|, rules: rules}
 
@@ -1354,130 +1412,99 @@ defmodule Hologram.DB.QueryCompiler do
           |> Enum.map(fn {:listed, _rule, anchor} -> anchor end)
           |> anchors_candidates_sql(context, params_after_condition)
 
-        # Wrapped, the membership stays a subplan Postgres hashes once per statement. Bare, it is
-        # pulled up into a join, which with one candidate per row scans every user for each row, and
-        # an array membership is hashed only while the plan sees the array as a constant.
-        {union_sql(branches), ~s|("$c"."$reader" IN (#{@recheck_users_sql})) IS TRUE AND |,
-         params_after_candidates}
+        {union_sql(branches), "#{pool.member_sql} AND ", params_after_candidates}
       else
-        {@recheck_users_sql, "", params_after_condition}
+        {pool.users_sql, "", params_after_condition}
       end
 
-    readers_sql =
-      ~s|CASE WHEN "$e"."$everyone" THEN '{}'::uuid[] | <>
+    admitted_sql =
+      ~s|CASE WHEN #{everyone_sql} THEN '{}'::uuid[] | <>
         ~s|ELSE ARRAY(SELECT DISTINCT "$c"."$reader" | <>
         ~s|FROM (#{candidates_sql}) AS "$c"("$reader") WHERE #{filter_sql}#{condition_sql}) END|
 
-    {readers_sql, new_params}
+    {admitted_sql, new_params}
   end
 
-  # The recheck's row with its verdicts: the readers move into a lateral of their own, so the users
-  # tested on the clauses depending on the user can be read off them. OFFSET 0 keeps every lateral
-  # from being folded into the statement, as without verdicts.
+  # The recheck's row with the verdicts on each operation of the given ones: the flags of the rules
+  # answering the same for everyone join the row's own in its first lateral, the readers move into a
+  # lateral of their own, and the users each operation's other rules admit among them are read in a
+  # third. OFFSET 0 keeps every lateral from being folded into the statement, as without verdicts.
   defp recheck_verdict_row_sql(entity_type, mapping, parts, reversed_params) do
-    {everyone_verdicts_sql, params_after_everyone} =
-      verdict_flags_sql(entity_type, mapping, %{}, parts.independent_verdicts, reversed_params)
+    {everyone_flags, params_after_everyone} =
+      Enum.map_reduce(parts.verdict_operations, reversed_params, fn {_key, rules, _classes},
+                                                                    acc ->
+        recheck_flag_sql(entity_type, mapping, %{rules: rules}, acc)
+      end)
 
-    {anonymous_verdicts_sql, params_after_anonymous} =
-      if parts.anonymous? do
-        verdict_flags_sql(
-          entity_type,
-          mapping,
-          %{anonymous?: true},
-          parts.dependent_verdicts,
-          params_after_everyone
-        )
-      else
-        {"'{}'::boolean[]", params_after_everyone}
-      end
+    {anonymous_flags, params_after_anonymous} =
+      Enum.map_reduce(parts.verdict_operations, params_after_everyone, fn
+        {_key, _rules, classes}, acc when parts.anonymous? ->
+          policy = %{anonymous?: true, rules: Enum.map(classes, &elem(&1, 1))}
 
-    {tested_sql, new_params} =
-      recheck_tested_verdicts_sql(
-        entity_type,
-        mapping,
-        parts.dependent_verdicts,
-        params_after_anonymous
-      )
+          recheck_flag_sql(entity_type, mapping, policy, acc)
+
+        _operation, acc ->
+          {"FALSE", acc}
+      end)
+
+    # The users tested are the row's readers - every user of the users array on a row everyone may
+    # read - since no other user is sent the row.
+    pool = %{
+      member_sql:
+        ~s|CASE WHEN "$e"."$everyone" | <>
+          ~s|THEN ("$c"."$reader" IN (#{@recheck_users_sql})) IS TRUE | <>
+          ~s|ELSE "$c"."$reader" = ANY("$r"."$readers") END|,
+      users_sql:
+        ~s|SELECT "$u"."$user" | <>
+          ~s|FROM unnest(CASE WHEN "$e"."$everyone" THEN $2::uuid[] ELSE "$r"."$readers" END) | <>
+          ~s|AS "$u"("$user")|
+    }
+
+    {users_columns, new_params} =
+      parts.verdict_operations
+      |> Enum.with_index(1)
+      |> Enum.map_reduce(params_after_anonymous, fn {{_key, _rules, classes}, index}, acc ->
+        everyone_sql = ~s|"$e"."$verdict_everyone"[#{index}]|
+
+        {users_sql, new_acc} =
+          recheck_admitted_sql(entity_type, mapping, classes, everyone_sql, pool, acc)
+
+        {~s|#{users_sql} AS "$verdict_users_#{index}"|, new_acc}
+      end)
+
+    users_names =
+      Enum.map_join(1..length(parts.verdict_operations), ", ", &~s|"$v"."$verdict_users_#{&1}"|)
 
     row_sql =
       ~s|SELECT #{column_list(parts.entity_mapping)}, "$e"."$everyone", | <>
-        ~s|#{parts.anonymous_sql} AS "$anonymous", "$r"."$readers", "$e"."$everyone_verdicts", | <>
-        ~s|#{anonymous_verdicts_sql} AS "$anonymous_verdicts", | <>
-        ~s|"$v"."$verdict_users", "$v"."$user_verdicts" | <>
+        ~s|#{parts.anonymous_sql} AS "$anonymous", "$r"."$readers", "$e"."$verdict_everyone", | <>
+        ~s|ARRAY[#{Enum.join(anonymous_flags, ", ")}] AS "$verdict_anonymous", #{users_names} | <>
         ~s|FROM #{qualified_table(parts.entity_mapping.table)} | <>
         ~s|CROSS JOIN LATERAL (SELECT #{parts.everyone_sql} AS "$everyone", | <>
-        ~s|#{everyone_verdicts_sql} AS "$everyone_verdicts" OFFSET 0) AS "$e" | <>
+        ~s|ARRAY[#{Enum.join(everyone_flags, ", ")}] AS "$verdict_everyone" OFFSET 0) AS "$e" | <>
         ~s|CROSS JOIN LATERAL (SELECT #{parts.readers_sql} AS "$readers" OFFSET 0) AS "$r" | <>
-        ~s|CROSS JOIN LATERAL (#{tested_sql} OFFSET 0) AS "$v"|
+        ~s|CROSS JOIN LATERAL (SELECT #{Enum.join(users_columns, ", ")} OFFSET 0) AS "$v"|
 
     {row_sql, new_params}
   end
 
-  # The users tested on the clauses depending on the user, and each one's answers on them. The
-  # readers are tested - every user of the users array on a row everyone may read - and when each
-  # clause is listed, only those of them its anchor names: a reader the anchors can't name answers
-  # every clause's default, so testing them would tell nothing. The candidates repeat, so they are
-  # made distinct, and wrapped the way the readers' are, so the users array is hashed once.
-  defp recheck_tested_verdicts_sql(_entity_type, _mapping, [], reversed_params) do
-    {~s|SELECT '{}'::uuid[] AS "$verdict_users", '{}'::boolean[] AS "$user_verdicts"|,
-     reversed_params}
-  end
+  # Each operation the server sends a verdict on but read, whose verdict is true for every reader,
+  # with the rules answering it the same for everyone and the classes of the others, in key order -
+  # one per key, since fields covered by the same lines share one (see Policy.verdict_key/2).
+  defp recheck_verdict_operations(entity_type) do
+    pairs =
+      entity_type
+      |> Policy.verdict_operations()
+      |> Enum.uniq_by(fn {key, _operation} -> key end)
 
-  defp recheck_tested_verdicts_sql(entity_type, mapping, verdict_classes, reversed_params) do
-    {flags_sql, params_after_flags} =
-      verdict_flags_sql(
-        entity_type,
-        mapping,
-        %{actor_sql: ~s|"$t"."$user"|},
-        verdict_classes,
-        reversed_params
-      )
+    for {key, operation} <- pairs, operation != :read do
+      {independent, dependent} =
+        entity_type
+        |> Readers.classify(operation)
+        |> Enum.split_with(&match?({:independent, _rule}, &1))
 
-    {tested_sql, new_params} =
-      if Enum.all?(verdict_classes, &match?({_clause, _keys, {:listed, _anchor, _default}}, &1)) do
-        context = policy_context(entity_type, mapping, %{actor_sql: ~s|"$k"."$user"|})
-
-        {branches, params_after_candidates} =
-          verdict_classes
-          |> Enum.map(fn {_clause, _keys, {:listed, anchor, _default}} -> anchor end)
-          |> anchors_candidates_sql(context, params_after_flags)
-
-        candidates_sql =
-          ~s|(SELECT DISTINCT "$k"."$user" FROM (#{union_sql(branches)}) AS "$k"("$user") | <>
-            ~s|WHERE CASE WHEN "$e"."$everyone" | <>
-            ~s|THEN ("$k"."$user" IN (#{@recheck_users_sql})) IS TRUE | <>
-            ~s|ELSE "$k"."$user" = ANY("$r"."$readers") END)|
-
-        {candidates_sql, params_after_candidates}
-      else
-        {~s|unnest(CASE WHEN "$e"."$everyone" THEN $2::uuid[] ELSE "$r"."$readers" END)|,
-         params_after_flags}
-      end
-
-    sql =
-      ~s|SELECT coalesce(array_agg("$t"."$user"), '{}'::uuid[]) AS "$verdict_users", | <>
-        ~s|coalesce(array_agg(#{flags_sql}), '{}'::boolean[]) AS "$user_verdicts" | <>
-        ~s|FROM #{tested_sql} AS "$t"("$user")|
-
-    {sql, new_params}
-  end
-
-  # Each deciding clause's answer, as a flag in an array, in the given order. A clause renders as a
-  # rule of its own requiring it alone, so it is folded for nobody and reads its rows as a rule's
-  # conditions do.
-  defp verdict_flags_sql(_entity_type, _mapping, _policy, [], reversed_params) do
-    {"'{}'::boolean[]", reversed_params}
-  end
-
-  defp verdict_flags_sql(entity_type, mapping, policy, verdict_classes, reversed_params) do
-    {flags, new_params} =
-      Enum.map_reduce(verdict_classes, reversed_params, fn {clause, _keys, _class}, acc ->
-        rule = %{predicates: [clause], to: nil, via: nil}
-
-        recheck_flag_sql(entity_type, mapping, Map.put(policy, :rules, [rule]), acc)
-      end)
-
-    {"ARRAY[#{Enum.join(flags, ", ")}]", new_params}
+      {key, Enum.map(independent, &elem(&1, 1)), dependent}
+    end
   end
 
   # The candidates of the given rules' anchors on the row the context is about, each anchor once -
@@ -1861,24 +1888,41 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
-  # The bound binds twice: once folded the way the column's key is, once raw. The key slot is
-  # pushed first, so the pair reads left to right in the statement.
-  defp sort_key_slots({:placeholder, placeholder_name}, reversed_params) do
-    {key_slot, params_with_key} =
-      bind_placeholder_slot(placeholder_name, :sort_key, reversed_params)
-
-    {raw_slot, new_params} = bind_placeholder_slot(placeholder_name, :string, params_with_key)
-
-    {key_slot, raw_slot, new_params}
+  # The sort key of the string a condition names on its own row - nil for a value of another type,
+  # a derived value, a path or a name of a row above, none of which an index on the row's key
+  # could serve.
+  defp own_sort_key_column(scope, name) when is_atom(name) do
+    if Derived.declared?(scope.entity_type, name) do
+      nil
+    else
+      companion_column(scope.entity_mapping, name)
+    end
   end
 
+  defp own_sort_key_column(_scope, _name), do: nil
+
+  defp sort_key_membership_slot(values, reversed_params) do
+    values
+    |> Enum.map(&literal_sort_key/1)
+    |> bind_slot_value(reversed_params)
+  end
+
+  defp literal_sort_key(literal) when is_binary(literal) do
+    literal
+    |> Codec.encode(:string)
+    |> SortKey.compute()
+  end
+
+  defp literal_sort_key(literal) do
+    raise MisuseError,
+      message: "a string attribute compares with a string, got: #{inspect(literal)}"
+  end
+
+  # The bound binds twice: once folded the way the column's key is, once raw. The key slot is
+  # pushed first, so the pair reads left to right in the statement.
   defp sort_key_slots(literal, reversed_params) do
-    encoded_value = Codec.encode(literal, :string)
-
-    {key_slot, params_with_key} =
-      bind_slot_value(SortKey.compute(encoded_value), reversed_params)
-
-    {raw_slot, new_params} = bind_slot_value(encoded_value, params_with_key)
+    {key_slot, params_with_key} = bind_slot_value(literal_sort_key(literal), reversed_params)
+    {raw_slot, new_params} = bind_slot_value(Codec.encode(literal, :string), params_with_key)
 
     {key_slot, raw_slot, new_params}
   end
@@ -2005,11 +2049,6 @@ defmodule Hologram.DB.QueryCompiler do
     all?
   end
 
-  defp bind_placeholder_slot(placeholder_name, type, reversed_params) do
-    {"$#{length(reversed_params) + 1}",
-     [{:placeholder, placeholder_name, type} | reversed_params]}
-  end
-
   # An included derived field holding a value is the value its definition computes for the parent
   # row. One holding rows embeds its definition's rows, each read with what the definition and the
   # include ask it to embed.
@@ -2120,46 +2159,33 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp fold_term(term, :loose), do: SortKey.fold(term)
 
-  defp fetch_column!(%{columns: columns}, name) do
-    column_name = Atom.to_string(name)
+  defp fetch_column!(entity_mapping, name), do: name_column(entity_mapping, name)
 
-    Enum.find(columns, fn column ->
-      case column.source do
-        {:attribute, attribute_name} -> attribute_name == name
-        {:relationship, relationship_name} -> "#{relationship_name}_id" == column_name
-        :system -> column.name == column_name
-        _other_source -> false
-      end
-    end)
-  end
+  # Membership of a string of the row asks its sort key too, the way equality does - each value's
+  # key in a list of its own, bound before the values.
+  defp membership_sql(scope, name, {subject_sql, column}, operand, reversed_params) do
+    case own_sort_key_column(scope, name) do
+      nil ->
+        {placeholder, new_params} = membership_slot(operand, column, reversed_params)
 
-  defp membership_slot({:placeholder, placeholder_name}, column, reversed_params) do
-    {"$#{length(reversed_params) + 1}",
-     [{:placeholder, placeholder_name, {:list, column.type}} | reversed_params]}
-  end
+        {"#{subject_sql} = ANY(#{placeholder})", new_params}
 
-  # A list holding placeholder elements binds one slot per element inside an ARRAY
-  # constructor - each element placeholder is a scalar slot of the attribute's type.
-  defp membership_slot(values, column, reversed_params) do
-    if Enum.any?(values, &match?({:placeholder, _placeholder_name}, &1)) do
-      {reversed_placeholders, new_params} =
-        Enum.reduce(values, {[], reversed_params}, fn value, {acc_placeholders, acc_params} ->
-          {placeholder, next_params} = bind_slot(value, column, acc_params)
+      key_column ->
+        {key_placeholder, params_after_keys} = sort_key_membership_slot(operand, reversed_params)
+        {placeholder, new_params} = membership_slot(operand, column, params_after_keys)
 
-          {[placeholder | acc_placeholders], next_params}
-        end)
+        condition_sql =
+          "(#{column_sql(scope, key_column)} = ANY(#{key_placeholder}) AND " <>
+            "#{subject_sql} = ANY(#{placeholder}))"
 
-      placeholders =
-        reversed_placeholders
-        |> Enum.reverse()
-        |> Enum.join(", ")
-
-      {"ARRAY[#{placeholders}]::#{array_type(column)}", new_params}
-    else
-      encoded_values = Enum.map(values, &Codec.encode(&1, column.type))
-
-      {"$#{length(reversed_params) + 1}", [{:value, encoded_values} | reversed_params]}
+        {condition_sql, new_params}
     end
+  end
+
+  defp membership_slot(values, column, reversed_params) do
+    encoded_values = Enum.map(values, &Codec.encode(&1, column.type))
+
+    {"$#{length(reversed_params) + 1}", [{:value, encoded_values} | reversed_params]}
   end
 
   # A relationship's include is a set aggregated like a to-many or one row like a to-one, differing

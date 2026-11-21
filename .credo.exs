@@ -16,6 +16,7 @@
           "test/ecosystem/",
           "test/features/",
           "test/minimal/",
+          "test/sync/",
           "test/elixir/support/fixtures/compiler/normalizer/module_7.ex",
           "test/elixir/support/fixtures/compiler/normalizer/module_8.ex",
           "test/elixir/support/fixtures/umbrella/",

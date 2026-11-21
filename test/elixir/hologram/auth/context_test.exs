@@ -7,7 +7,59 @@ defmodule Hologram.Auth.ContextTest do
     assert actor_user_id() == nil
   end
 
+  describe "actor_entity_id/0" do
+    test "returns nil when no actor is set" do
+      assert actor_entity_id() == nil
+    end
+
+    test "returns the actor's id when it is a user entity's id" do
+      user_id = "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
+
+      assert with_actor(user_id, fn -> actor_entity_id() end) == user_id
+    end
+
+    test "returns nil for an id in any other spelling" do
+      for user_id <- ["0190C4E2-7C1F-7B3A-9D4E-1A2B3C4D5E6F", 7, "abc", :admin] do
+        assert with_actor(user_id, fn -> actor_entity_id() end) == nil
+      end
+    end
+  end
+
+  describe "put_actor/1" do
+    test "sets the actor" do
+      put_actor("user_id_9")
+
+      assert actor_user_id() == "user_id_9"
+    end
+
+    test "raises Hologram.MisuseError for a boolean, leaving the actor as it was" do
+      put_actor("user_id_10")
+
+      assert_error Hologram.MisuseError,
+                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   fn ->
+                     put_actor(false)
+                   end
+
+      assert actor_user_id() == "user_id_10"
+    end
+  end
+
   describe "with_actor/2" do
+    test "raises Hologram.MisuseError for a boolean before the function runs, leaving the actor as it was" do
+      with_actor("user_id_11", fn ->
+        assert_error Hologram.MisuseError,
+                     "User ID must be a string, integer, or atom other than true and false, but received true",
+                     fn ->
+                       with_actor(true, fn -> send(self(), :ran) end)
+                     end
+
+        refute_received :ran
+
+        assert actor_user_id() == "user_id_11"
+      end)
+    end
+
     test "sets the actor for the duration of the function" do
       assert with_actor("user_id_1", fn -> actor_user_id() end) == "user_id_1"
     end

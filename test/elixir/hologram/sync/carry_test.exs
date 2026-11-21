@@ -9,7 +9,6 @@ defmodule Hologram.Sync.CarryTest do
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
   alias Hologram.Policy
-  alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -59,11 +58,7 @@ defmodule Hologram.Sync.CarryTest do
   end
 
   defp delete_key do
-    Policy.verdict_key(
-      VerdictTask,
-      :delete,
-      {:none, {[:board, :cards], [{:author_id, :==, {:actor}}]}}
-    )
+    Policy.verdict_key(VerdictTask, :delete)
   end
 
   # A build with a page checking permissions on the client - the only kind whose rows carry
@@ -342,6 +337,20 @@ defmodule Hologram.Sync.CarryTest do
       assert take_counts() == %{
                count_key(:open_total, total_term()) => 7,
                count_key(:done_total, total_term()) => 3
+             }
+    end
+
+    test "records the entity types the count reads under the count's key" do
+      term =
+        Module3
+        |> Stage.filter([{[:c, :id], {:!=, nil}}])
+        |> Stage.count()
+        |> Stage.normalize()
+
+      collect_count(Module2, :total, term, 7)
+
+      assert take_count_types() == %{
+               count_key(:total, term) => [inspect(Module1), inspect(Module3)]
              }
     end
 
@@ -777,13 +786,6 @@ defmodule Hologram.Sync.CarryTest do
                ~S|{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module10","filter":[["rating","<",float:c004000000000000]],"include":{},"skip":null,"sort":[],"take":null}|
     end
 
-    test "spells a placeholder by its name" do
-      query = Stage.filter(Module2, c: %Placeholder{name: :search})
-
-      assert spell(query) ==
-               ~S|{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==",{"placeholder":"search"}]],"include":{},"skip":null,"sort":[["id","asc"]],"take":null}|
-    end
-
     # What the client spells never starts with a question mark, so a shape this doesn't know can't
     # match a key the client builds.
     test "spells a value of a shape it doesn't know so that no client spelling matches it" do
@@ -825,12 +827,13 @@ defmodule Hologram.Sync.CarryTest do
   end
 
   describe "start/0" do
-    test "clears the counts a previous render gathered" do
+    test "clears the counts a previous render gathered, and their types" do
       collect_count(Module2, :total, total_term(), 7)
 
       start()
 
       assert take_counts() == %{}
+      assert take_count_types() == %{}
     end
 
     test "arms the grant-scope recorder" do
@@ -894,6 +897,20 @@ defmodule Hologram.Sync.CarryTest do
       take_grant_scopes()
 
       assert take_grant_scopes() == MapSet.new()
+    end
+  end
+
+  describe "take_count_types/0" do
+    test "returns nothing when no count was collected" do
+      assert take_count_types() == %{}
+    end
+
+    test "leaves nothing behind for the next render" do
+      collect_count(Module2, :total, total_term(), 7)
+
+      take_count_types()
+
+      assert take_count_types() == %{}
     end
   end
 

@@ -127,17 +127,21 @@ defmodule Hologram.Sync.CursorTest do
     end
   end
 
-  describe "types_hash/1" do
+  describe "types_hash/2" do
     test "hashes the types as lowercase hex" do
-      assert types_hash([Module2]) =~ ~r/\A[0-9a-f]+\z/
+      assert types_hash([Module2], false) =~ ~r/\A[0-9a-f]+\z/
     end
 
     test "hashes different types differently" do
-      refute types_hash([Module2]) == types_hash([Module2, Module3])
+      refute types_hash([Module2], false) == types_hash([Module2, Module3], false)
     end
 
     test "hashes the same types the same whatever their order" do
-      assert types_hash([Module2, Module3]) == types_hash([Module3, Module2])
+      assert types_hash([Module2, Module3], false) == types_hash([Module3, Module2], false)
+    end
+
+    test "hashes the same types differently when the browser checks permissions" do
+      refute types_hash([Module2], true) == types_hash([Module2], false)
     end
   end
 end

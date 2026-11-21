@@ -1,7 +1,6 @@
 defmodule Hologram.Compiler do
   @moduledoc false
 
-  alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.FileUtils
@@ -16,8 +15,10 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.Compiler.QueryChains
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.DB.Codec
+  alias Hologram.DB.IndexPlan
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
@@ -25,12 +26,12 @@ defmodule Hologram.Compiler do
   alias Hologram.Job
   alias Hologram.Policy
   alias Hologram.Policy.Edges
-  alias Hologram.Query
-  alias Hologram.Query.Registry
+  alias Hologram.Query.Shape
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Runtime.Serializer
+  alias Hologram.Sync.Fill
   alias Hologram.Sync.Frame
 
   # The declaration options a write is judged against, which is why they are the ones baked into
@@ -53,8 +54,8 @@ defmodule Hologram.Compiler do
   # that reads grant rows in the browser. The grant verbs join can?/3 because each asks the gate
   # locally before it writes, and the role checks because they read the grant rows themselves.
   #
-  # What being a checker buys a page: the grants window in the page's own list (first-render
-  # completeness) and, build-wide, that policy rules and roles are baked at all.
+  # What being a checker buys a page: the grant type and the types its rules read among the page's
+  # own types, filled first (first-render completeness), and, build-wide, that they sync at all.
   @permission_mfas [
     {Hologram.Auth, :can?, 3},
     {Hologram.Auth, :grant_role, 3},
@@ -129,27 +130,17 @@ defmodule Hologram.Compiler do
         }
 
   @typedoc """
-  The registered queries of one component or page: the normalized terms its derived fields build
-  (see `Hologram.Compiler.QueryExtractor.extract_derived_queries/3`), the names of the derived
-  fields that build one, and the entity types each derived field building a count reads, sorted
-  (see `extract_component_queries/3`).
-  """
-  @type component_queries :: %{
-          count_types: %{atom => [module]},
-          derived_queries: [atom],
-          terms: [Query.t()]
-        }
-
-  @typedoc """
   What the data layer keeps of a page's reach between compiles: whether the page's client code
-  reaches a permission check (see `pages_checking_permissions/1`), the components among the modules
-  it reaches, sorted, those modules, the struct types it names included, and whether one of those
-  components reads the session user from the context.
+  reaches a permission check (see `pages_checking_permissions/1`), the atoms its client code spells
+  (see `build_kept_page_reach/4`), the modules it reaches, the struct types it names included,
+  whether one of the components among them reads the session user from the context, and the
+  queries its client code writes in one piece (see `Hologram.Compiler.QueryChains`).
   """
   @type kept_page_reach :: %{
+          atoms: MapSet.t(atom),
           checks_permissions?: boolean,
-          components: [module],
           modules: MapSet.t(module),
+          query_chains: [QueryChains.t()],
           reads_session_user?: boolean
         }
 
@@ -160,13 +151,12 @@ defmodule Hologram.Compiler do
   @type page_reach :: %{mfas: [mfa], types: [module]}
 
   @typedoc """
-  What the client's data layer is compiled with (see `build_sync_constants/3`).
+  What the client's data layer is compiled with (see `build_sync_constants/2`).
   """
   @type sync_constants :: %{
-          derived_count_types: %{module => %{atom => [module]}},
-          derived_queries: %{module => [atom]},
           entity_types: MapSet.t(module),
           model_hash: String.t() | nil,
+          page_types: %{module => list(module)},
           policy_hash: String.t() | nil,
           role_modules: list(module),
           synced_types: list(module),
@@ -349,95 +339,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns the ids of the windows each page downloads, keyed by page module and sorted, from what
-  the data layer keeps of each page's reach (see `build_kept_page_reach/3`) and the registered
-  queries of the components the pages reach (see `extract_component_queries/3`). Nothing is
-  extracted or walked here.
-
-  A page's windows are those of every component it can reach, not only the ones a given render
-  mounts. A panel that opens on a click is reachable without being rendered, and its rows have to
-  be on the client before the click rather than after it - which is the whole point of holding
-  the rows a page may need rather than the ones it is showing.
-
-  A page reaching no query at all has no windows, and answers with an empty list rather than
-  being left out.
-
-  A page that checks permissions on the client also downloads the grants window: what a client
-  evaluates permissions against is grant rows, so a page that checks them needs them held like any
-  other rows it reads. Only when the given module info PLT records a user entity type: a data model
-  without one has no grant store, so no page checks permissions against anything.
-
-  A page reading the session user from the context downloads the user window (see
-  `Hologram.Auth.user_window/2`): the client answers the context from its database on every render,
-  so the session user's row has to be held there. The user type is synced for such a page (see
-  `build_sync_constants/3`), which keeps the row current; the window puts it first in a fill and
-  catches a returning client up on it. Only when the given module info PLT records a user entity
-  type, for the same reason.
-
-  The window ids are derived with whether the build checks permissions on the client (see
-  `permission_checking?/2`), since a checking build's windows download the related rows the rules
-  read, and a page has to name the windows the registered queries hold.
-
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_windows_3/README.md
-  """
-  @spec build_page_windows(%{module => kept_page_reach}, %{module => component_queries}, PLT.t()) ::
-          %{module => list(String.t())}
-  def build_page_windows(reach_by_page, component_queries, module_info_plt) do
-    user_entity = Reflection.user_entity(module_info_plt)
-    grant_store? = user_entity != nil
-    permission_checking? = permission_checking?(reach_by_page, module_info_plt)
-
-    # Each component's window ids are derived once, however many pages reach it.
-    window_ids_by_component =
-      reach_by_page
-      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
-      |> Enum.uniq()
-      |> Map.new(fn component_module ->
-        window_ids =
-          component_queries
-          |> Map.fetch!(component_module)
-          |> Map.fetch!(:terms)
-          |> Enum.map(&window_id(&1, permission_checking?))
-
-        {component_module, window_ids}
-      end)
-
-    Map.new(reach_by_page, fn {page_module, reach} ->
-      window_ids = Enum.flat_map(reach.components, &Map.fetch!(window_ids_by_component, &1))
-
-      # Deduplicated because the grants window is derivable by an ordinary query: the grant entity
-      # is an entity type like any other, so a page listing grants and checking permissions reaches
-      # one window by two routes - and a list naming it twice is subscribed to twice, monitored
-      # twice, and rounded twice for one set of rows.
-      # TODO: whether a checking page carries the grants window in its OWN list - complete
-      # before its :page marker, rather than arriving with the background set - is one of the
-      # two things the modularization work revisits. The other is the policy-baking gate.
-      page_window_ids =
-        if grant_store? and reach.checks_permissions? do
-          [grants_window_id() | window_ids]
-        else
-          window_ids
-        end
-
-      # Deduplicated for the same reason: a page querying the user entity whole reaches the user
-      # window by two routes.
-      page_window_ids =
-        if grant_store? and reach.reads_session_user? do
-          [user_window_id(user_entity, permission_checking?) | page_window_ids]
-        else
-          page_window_ids
-        end
-
-      sorted_window_ids =
-        page_window_ids
-        |> Enum.uniq()
-        |> Enum.sort()
-
-      {page_module, sorted_window_ids}
-    end)
-  end
-
-  @doc """
   Returns every place the build spells an entity operation at, sorted by the calling function:
   each call of `Hologram.Auth.can?/3` found in the IR of the functions the call graph names as
   its callers, with the line of the call and the operation it names - a literal atom, a literal
@@ -494,19 +395,20 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the pages that can check permissions on the CLIENT - the ones whose bundled code
-  reaches one of `permission_mfas/0`: a permission check or a role check, each of which reads grant
+  reaches one of `permission_mfas/0`: a permission check, which reads the rules and the server's
+  verdicts, and the grant rows when the model has a grant store, a role check, which reads grant
   rows, or a grant verb, which asks the same gate locally before it writes - from what each page's
   client code reaches, as `list_reach_by_page/2` lists it.
 
   Takes the pages' reach on the call graph BEFORE manually ported MFAs are removed: every one of
   those MFAs is ported, so the graph the bundles are derived from no longer holds the vertex to ask
-  about. Reachability is read through the same page walk the bundles use, so what registers the
-  grants window is what actually ships - a `can?` reached only from command handlers, which run
-  on the server, does not.
+  about. Reachability is read through the same page walk the bundles use, so what syncs the grant
+  rows is what actually ships - a `can?` reached only from command handlers, which run on the
+  server, does not.
 
   Whether the app has a grant store at all is not asked here: a data model with no user entity
-  type has none - the framework's grant entity joins the data model only with one - and what
-  registers the grants window checks that where it reads this list (see `build_page_windows/3`).
+  type has none - the framework's grant entity joins the data model only with one - and what syncs
+  the grant rows checks that where it reads this list (see `build_sync_constants/2`).
   """
   @spec pages_checking_permissions([{module, page_reach}]) :: list(module)
   def pages_checking_permissions(reach_by_page) do
@@ -517,20 +419,23 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns true when some page checks permissions on the client and the data model has a grant
-  store to check them against, or false otherwise - from what the data layer keeps of each page's
-  reach (see `build_kept_page_reach/3`) and the given module info PLT.
+  Returns true when some page checks permissions on the client, or false otherwise - from what the
+  data layer keeps of each page's reach (see `build_kept_page_reach/4`).
 
-  What it gates is build-wide: the related rows a checking client's windows download beside the
-  rows its queries return, and the server's verdicts its rows carry. The rules and roles ship
-  with every build that has a data model (see `build_sync_constants/3`).
+  What it gates is build-wide: the related rows a checking query embeds beside the rows it returns
+  (see `Hologram.Query.Window.embed/2`), the types sync sends for the rules to read, and the
+  server's verdicts its rows carry. The rules and roles ship with every build that has a data model (see
+  `build_sync_constants/2`).
+
+  Whether the data model has a grant store is not asked: one with no user entity type has none,
+  but its pages still check rules that name no role - an app with no logins calls `can?/3` for
+  the anonymous session, and the browser answers it from the server's verdicts like any other. What
+  needs the grant store, the grant type's rows, checks for it on its own (see
+  `build_sync_constants/2`).
   """
-  @spec permission_checking?(%{module => kept_page_reach}, PLT.t()) :: boolean
-  def permission_checking?(reach_by_page, module_info_plt) do
-    # A data model with no user entity type has no grant store, so no page checks permissions
-    # against anything then.
-    Reflection.user_entity(module_info_plt) != nil and
-      Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.checks_permissions? end)
+  @spec permission_checking?(%{module => kept_page_reach}) :: boolean
+  def permission_checking?(reach_by_page) do
+    Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.checks_permissions? end)
   end
 
   @doc false
@@ -715,6 +620,59 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the access needs of the statements the server runs that the build knows of (see
+  `Hologram.DB.IndexPlan.needs/3`), given the shapes of the queries the code writes (see
+  `list_query_shapes/1`):
+
+    * each synced type's fill, policied,
+    * each entity type bare, as `DB.read/1` reads it, raw and policied,
+    * each query chain the code writes, raw - recorded wherever it is written, a derived field's
+      body included, so a chain only the browser reads can add an index no statement uses, which
+      costs writes where missing one would cost a scan. A shape the stages refuse when replayed,
+      or one on a type the mapping doesn't hold, gives nothing.
+
+  Policied is under the read rules of a signed-in session and of an anonymous one. The read rules
+  give the needs a policied read of any shape shares, so a query the code writes - raw, policied
+  as `DB.read/1` reads it, or as a derived field's render reads it - needs no more than its raw
+  needs and its type's bare ones. A query built at run time, which records no shape, has its
+  type's bare needs.
+  """
+  @spec build_index_needs(list(module), list(Shape.t()), %{module => %{atom => any}}) ::
+          list(IndexPlan.need())
+  def build_index_needs(synced_types, query_shapes, mapping) do
+    fill_terms = Enum.map(synced_types, &Fill.term(&1, synced_types))
+
+    bare_terms =
+      mapping
+      |> Map.keys()
+      |> Enum.sort()
+      |> Enum.map(&Stage.normalize/1)
+
+    server_terms =
+      for shape <- query_shapes,
+          {:ok, term} <- [Shape.replay(shape)],
+          Map.has_key?(mapping, term.entity),
+          do: term
+
+    raw_needs = Enum.flat_map(bare_terms ++ server_terms, &IndexPlan.needs(&1, mapping))
+    policied_needs = Enum.flat_map(fill_terms ++ bare_terms, &policied_needs(&1, mapping))
+
+    Enum.uniq(raw_needs ++ policied_needs)
+  end
+
+  @doc """
+  Builds the index needs PLT, whose one item is the access needs the build derived (see
+  `build_index_needs/3`), and returns it with the path to dump it at.
+  """
+  @spec build_index_needs_plt(list(IndexPlan.need()), T.opts()) :: {PLT.t(), T.file_path()}
+  def build_index_needs_plt(index_needs, opts) do
+    plt = PLT.start(items: [needs: index_needs], supervisor: opts[:supervisor])
+    dump_path = Path.join([opts[:build_dir], Reflection.index_needs_plt_dump_file_name()])
+
+    {plt, dump_path}
+  end
+
+  @doc """
   Builds IR persistent lookup table (PLT) of all modules in the project.
   Pass `modules:` to build IR for exactly those modules instead of listing them; the compile task passes the
   module info PLT's keys.
@@ -761,20 +719,30 @@ defmodule Hologram.Compiler do
 
   @doc """
   Folds what each page's client code reaches, as `list_reach_by_page/2` lists it, into what the data
-  layer keeps of it (see `kept_page_reach`), keyed by page module. The components among the reached
-  modules are told by the given module info PLT, and the page is one of them: a page declares derived
-  fields as a component does, and their queries are its own. A page reads the session user when one
-  of its components declares a prop taking it from the context (`from_context: {Hologram, :user}`).
+  layer keeps of it (see `kept_page_reach`), keyed by page module. A page reads the session user when
+  one of the components among the reached modules, told by the given module info PLT, or the page
+  itself declares a prop taking it from the context (`from_context: {Hologram, :user}`).
   The pages checking permissions are given as `pages_checking_permissions/1` lists them, from the
   pages' reach on the call graph BEFORE manually ported MFAs are removed.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_kept_page_reach_3/README.md
+  The atoms are every atom literal in the IR of the functions a page's client code reaches, read
+  from the given IR PLT, which the modules it lacks are built into first. They name what the page's
+  code reads of the data model without a walk of it: a relationship it includes or a path goes
+  through, a derived field it reads, a field a template reads off a row (see
+  `build_sync_constants/2`). Every function is read but Elixir's and Hologram's, which never name
+  the app's model, and the generated functions of entity types and Ecto schemas
+  (`__relationships__/0`, `__schema__/1` and the like), which name every relationship and field
+  their module declares. Kept whole, not narrowed to the names the model declares now: a model
+  change derives again without listing the pages again. A function many pages reach is read once.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_kept_page_reach_4/README.md
   """
-  @spec build_kept_page_reach([{module, page_reach}], [module], PLT.t()) :: %{
+  @spec build_kept_page_reach([{module, page_reach}], [module], PLT.t(), PLT.t()) :: %{
           module => kept_page_reach
         }
-  def build_kept_page_reach(reach_by_page, permission_checking_pages, module_info_plt) do
+  def build_kept_page_reach(reach_by_page, permission_checking_pages, module_info_plt, ir_plt) do
     checking_pages = MapSet.new(permission_checking_pages)
+    read_by_mfa = read_by_mfa(reach_by_page, module_info_plt, ir_plt)
 
     Map.new(reach_by_page, fn {page_module, reach} ->
       modules = list_reached_modules(reach)
@@ -783,18 +751,42 @@ defmodule Hologram.Compiler do
         modules
         |> reached_components(module_info_plt)
         |> Enum.concat([page_module])
+
+      reads = Enum.map(reach.mfas, &Map.get(read_by_mfa, &1, %{atoms: MapSet.new(), chains: []}))
+
+      atoms = Enum.reduce(reads, MapSet.new(), &MapSet.union(&2, &1.atoms))
+
+      query_chains =
+        reads
+        |> Enum.flat_map(& &1.chains)
         |> Enum.uniq()
-        |> Enum.sort()
 
       kept_reach = %{
+        atoms: atoms,
         checks_permissions?: MapSet.member?(checking_pages, page_module),
-        components: components,
         modules: MapSet.new(modules),
+        query_chains: query_chains,
         reads_session_user?: Enum.any?(components, &reads_session_user?/1)
       }
 
       {page_module, kept_reach}
     end)
+  end
+
+  @doc """
+  Raises Hologram.CompileError when a query a page's client code writes in one piece is one no
+  browser may run (see `Hologram.Compiler.QueryChains.validate!/2`), from what the data layer keeps
+  of each page's reach (see `build_kept_page_reach/4`). Every page's queries are checked, kept ones
+  included, since what a query may ask for moves with the data model; a query many pages reach is
+  checked once.
+  """
+  @spec validate_query_chains!(%{module => kept_page_reach}, PLT.t() | nil) :: :ok
+  def validate_query_chains!(reach_by_page, module_info_plt) do
+    reach_by_page
+    |> Enum.flat_map(fn {_page_module, reach} -> reach.query_chains end)
+    |> Enum.uniq()
+    |> Enum.sort_by(fn chain -> chain.mfa end)
+    |> Enum.each(&QueryChains.validate!(&1, module_info_plt))
   end
 
   @doc """
@@ -886,80 +878,22 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Builds the page windows PLT, where the keys are page modules and the values are the ids of the
-  windows each page downloads, and returns it with the path to dump it at.
+  Builds the page types PLT, where the keys are page modules and the values are the synced types a
+  session on each page fills first (see the `:page_types` of `build_sync_constants/2`), and returns
+  it with the path to dump it at.
   """
-  @spec build_page_windows_plt(%{module => list(String.t())}, T.opts()) ::
-          {PLT.t(), T.file_path()}
-  def build_page_windows_plt(page_windows, opts) do
-    plt = PLT.start(items: Map.to_list(page_windows), supervisor: opts[:supervisor])
-    dump_path = Path.join([opts[:build_dir], Reflection.page_windows_plt_dump_file_name()])
+  @spec build_page_types_plt(%{module => list(module)}, T.opts()) :: {PLT.t(), T.file_path()}
+  def build_page_types_plt(page_types, opts) do
+    plt = PLT.start(items: Map.to_list(page_types), supervisor: opts[:supervisor])
+    dump_path = Path.join([opts[:build_dir], Reflection.page_types_plt_dump_file_name()])
 
     {plt, dump_path}
   end
 
   @doc """
-  Derives what a running Hologram app holds for the given registered queries of components, as
-  `extract_component_queries/3` extracts them: the registry entries keyed by query content id, the
-  derived fields that build a query as `{module, field name}` pairs, the term behind each window
-  keyed by window id, and whether the build has a page checking permissions on the client.
-
-  The components are every component of the build rather than the ones pages reach, because what
-  reads the result is the renderer and the sync layer, which answer for any component that renders.
-
-  Raises Hologram.CompileError when a registered query reads an entity type declaring no allow
-  lines - default deny makes it statically dead, returning no rows when it is the query's root and
-  no embedded row when it is an include target - when a registered query filters or sorts on
-  a server-only attribute, which the client never holds and so could never evaluate locally, and
-  when a registered query claims the server's own authority with trust/1, which a component's
-  query has no authority to claim on either tier.
-
-  The grants window is among the windows when the given entity types hold the role grant store,
-  which a data model does exactly when it designates a user entity type. So is the user window (see
-  `Hologram.Auth.user_window/2`). Whether the build has a page checking permissions on the client is
-  given (see `permission_checking?/2`): such a client's windows also download the related rows its
-  types' rules read, the user window's among them.
-
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_3/README.md
-  """
-  @spec build_queries(%{module => component_queries}, list(module), boolean) :: %{
-          derived_queries: MapSet.t({module, atom}),
-          entries: %{String.t() => %{atom => any}},
-          permission_checking?: boolean,
-          windows: %{String.t() => Query.t()}
-        }
-  def build_queries(component_queries, entity_types, permission_checking?) do
-    # In module order, so that the registry and the first refusal do not depend on the map's order.
-    module_queries =
-      component_queries
-      |> Enum.map(fn {module, queries} -> {module, queries.terms} end)
-      |> Enum.sort()
-
-    Enum.each(module_queries, &validate_readable_queries!/1)
-    Enum.each(module_queries, &validate_client_evaluable_queries!/1)
-    Enum.each(module_queries, &validate_untrusted_queries!/1)
-
-    terms = Enum.flat_map(module_queries, fn {_module, module_terms} -> module_terms end)
-    entries = Registry.build(terms, permission_checking?)
-
-    windows =
-      entries
-      |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
-      |> put_grants_window(entity_types)
-      |> put_user_window(entity_types, permission_checking?)
-
-    %{
-      derived_queries: derived_queries_index(component_queries),
-      entries: entries,
-      permission_checking?: permission_checking?,
-      windows: windows
-    }
-  end
-
-  @doc """
-  Builds the registered queries PLT, whose items are what a running app reads of them - the
-  entries, prop params and windows, and the derived definitions and synced types the compile task
-  puts beside them - and returns it with the path to dump it at.
+  Builds the queries PLT, whose items are what a running app reads of the data layer - the derived
+  fields' definitions, the entity types sync sends rows of, and whether a page checks permissions
+  on the client - and returns it with the path to dump it at.
   """
   @spec build_queries_plt(%{atom => any}, T.opts()) :: {PLT.t(), T.file_path()}
   def build_queries_plt(queries, opts) do
@@ -1673,48 +1607,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Extracts the registered queries of the given component modules, each once, keyed by module (see
-  `component_queries`). The entity types are the ones of the build, over which a query whose entity
-  type is an argument is replayed.
-
-  A derived field building a count gets the entity types its count terms read (see
-  `Hologram.Query.Registry.entity_types/1`), the union over its branches: the client answers the
-  count from the server's number until it holds every row of those types, then counts its own. The
-  types a branch building rows reads are not among them - rows are answered from what the client
-  holds from the start.
-
-  The IR the derived fields' functions are walked over is read from the given IR PLT, the
-  compile's, and the components it lacks are built into it first, in one go.
-
-  Raises what `Hologram.Compiler.QueryExtractor.extract_derived_queries/3` raises.
-
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/extract_component_queries_3/README.md
-  """
-  @spec extract_component_queries([module], [module], PLT.t()) :: %{module => component_queries}
-  def extract_component_queries(component_modules, entity_types, ir_plt) do
-    # The IR the derived fields' functions are walked over, built in one go for the batch: a
-    # derived field's function is hoisted into its component, so the components declaring one. A
-    # helper a walk reaches is built at its first use.
-    component_modules
-    |> Enum.filter(&declares_derived_fields?/1)
-    |> then(&build_missing_ir!(ir_plt, &1))
-
-    Map.new(component_modules, fn module ->
-      derived_queries = QueryExtractor.extract_derived_queries(module, entity_types, ir_plt)
-
-      terms = Enum.flat_map(derived_queries, fn {_name, derived_terms} -> derived_terms end)
-
-      queries = %{
-        count_types: count_types(derived_queries),
-        derived_queries: Enum.map(derived_queries, fn {name, _terms} -> name end),
-        terms: terms
-      }
-
-      {module, queries}
-    end)
-  end
-
-  @doc """
   Returns the fingerprint of each given file, keyed by its path: `{:digest, digest}` of the content
   for a file outside any `node_modules` dir (the app's own JavaScript, which the dev saves,
   sometimes within the second of a compile), `{:stat, mtime, size}` for a file under one (packages
@@ -1906,6 +1798,7 @@ defmodule Hologram.Compiler do
   @doc """
   Installs JavaScript deps which are specified in package.json located in assets_dir, and records
   the package.json digest in the node_modules dir the install fills (see `maybe_install_js_deps/1`).
+  Creates package-lock.json when there is none, and never rewrites an existing one.
   """
   @spec install_js_deps(T.file_path()) :: :ok
   # sobelow_skip ["CI.System"]
@@ -1922,8 +1815,19 @@ defmodule Hologram.Compiler do
     # into assets_dir via --prefix.
     opts = [into: IO.stream(:stdio, :line)]
 
-    {_result, exit_status} =
-      SystemUtils.cmd_cross_platform("npm", ["install", "--prefix", assets_dir], opts)
+    # npm installs from an existing lockfile without writing it back: for a path dependency the
+    # assets dir is the developer's own checkout, and an npm other than the one that generated the
+    # lockfile would write it differently.
+    package_lock_json_path = Path.join(assets_dir, "package-lock.json")
+
+    npm_args =
+      if File.exists?(package_lock_json_path) do
+        ["install", "--no-save", "--prefix", assets_dir]
+      else
+        ["install", "--prefix", assets_dir]
+      end
+
+    {_result, exit_status} = SystemUtils.cmd_cross_platform("npm", npm_args, opts)
 
     if exit_status != 0 do
       raise RuntimeError, message: "npm install command failed"
@@ -2071,7 +1975,7 @@ defmodule Hologram.Compiler do
   server callback analyses they compute, for this call. With no page, the graph is not read.
 
   What the data layer derives per page reads it: what the data layer keeps of the page's reach (see
-  `build_kept_page_reach/3`) and whether the page checks permissions (see
+  `build_kept_page_reach/4`) and whether the page checks permissions (see
   `pages_checking_permissions/1`).
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/list_reach_by_page_2/README.md
@@ -2152,6 +2056,34 @@ defmodule Hologram.Compiler do
   @spec list_pages(PLT.t()) :: list(module)
   def list_pages(module_info_plt) do
     list_modules_where(module_info_plt, :page?)
+  end
+
+  @doc """
+  Returns the shapes of the queries the modules recorded in the given module info PLT write on an
+  entity type (see `Hologram.Query.Shape`), by module. A module recording none is left out.
+  """
+  @spec list_query_shapes(PLT.t()) :: %{module => list(Shape.t())}
+  def list_query_shapes(module_info_plt) do
+    for {module, info} <- PLT.get_all(module_info_plt),
+        shapes = Map.get(info, :query_shapes, []),
+        shapes != [],
+        into: %{},
+        do: {module, shapes}
+  end
+
+  @doc """
+  Returns the shapes of the queries the given modules write on an entity type, by module, read
+  from the given module info PLT (see `list_query_shapes/1`). A module recording none, or one the
+  PLT doesn't hold, is left out.
+  """
+  @spec list_query_shapes(PLT.t(), list(module)) :: %{module => list(Shape.t())}
+  def list_query_shapes(module_info_plt, modules) do
+    for module <- modules,
+        {:ok, info} <- [PLT.get(module_info_plt, module)],
+        shapes = Map.get(info, :query_shapes, []),
+        shapes != [],
+        into: %{},
+        do: {module, shapes}
   end
 
   @doc """
@@ -2339,31 +2271,21 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns what the client's data layer is compiled with, derived from what the data layer keeps of
-  each page's reach (see `build_kept_page_reach/3`) and the registered queries of the components
-  the pages reach (see `extract_component_queries/3`). Nothing is extracted or walked here, beyond
-  the rules every entity type declares, which the policy hash is taken over.
+  each page's reach (see `build_kept_page_reach/4`). Nothing is walked here, beyond the rules every
+  entity type declares, which the policy hash is taken over.
 
-  `:entity_types` are the types a client can ever hold or mention - every window's own type and
-  everything it includes, plus every entity type the pages' client code mentions, and the user
-  entity type when a page reads the session user from the context, which the client answers from
-  its database. A client
+  `:entity_types` are the types a client can ever hold or mention - every entity type the pages'
+  client code mentions, the ones it reaches from them by the names it spells (see `:synced_types`),
+  and the user entity type when a page reads the session user from the context, which the client
+  answers from its database. A client
   constructs and validates entities as well as reading them, and a type it constructs is one it
-  has to be told the declarations of. A type neither queried nor mentioned is left out, which is
-  what keeps an app's other tables out of a file every page load serves.
-
-  `:derived_queries` are the derived fields of those components whose function builds a query,
-  keyed by component - the fields the client answers from its database rather than computing a
-  value of.
-
-  `:derived_count_types` are the entity types each of those fields building a count reads, keyed
-  by component and then by field (see `extract_component_queries/3`) - what the client waits to
-  hold every row of before it counts for itself rather than showing the server's number. A
-  component with no such field is left out.
+  has to be told the declarations of. A type neither named nor mentioned is left out, which is what
+  keeps an app's other tables out of a file every page load serves.
 
   When the given module info PLT records a user entity type, the grant type joins the entity
   types: a client holds grant rows, and a row of a type the model does not name cannot be read back
-  at all. No query names that type - the grants window is registered rather than extracted - so it
-  is added here rather than derived.
+  at all. No browser code names that type - `can?/3` reads it inside the framework - so it is
+  added here rather than derived.
 
   Every entity type declaring a policy or a role joins them too, with every type those types' rules
   read through relationships and every type the derived fields holding rows and the inverses of all
@@ -2394,36 +2316,34 @@ defmodule Hologram.Compiler do
   nil with the model hash. A client greets with it, and a server running other rules sends it the
   ones it enforces.
 
-  `:synced_types` are the entity types sync sends rows of, sorted by name: the types the queries
-  read and the pages' client code mentions, and the user type when a page reads the session user,
-  as for `:entity_types` - kept syncing whichever of its rows the read rules let the user hold -
-  and, when the build checks
-  permissions on the client (see `permission_checking?/2`), the types every rule of those types
-  reads through relationships, with the grant type. A browser never decides a read rule - a row
-  reaches it only once the server's read rules admitted it - so the rules count only where the
-  browser answers them. They are followed one step: client code checks only rows of types it
-  queries or mentions, and a rule's chains already follow its delegations. That is at least what
-  the windows download, which follow the rules of a query's own type and its includes only - bar
-  a type the model leaves out, which declares no rule, so no read rule admits its rows. A
-  type only server code names, like an audit log, is left out, rules or not, and never reaches a
-  browser. The server reads the list (see `Hologram.DB.QueryCache.synced_types/0`), the client
-  does not.
+  `:synced_types` are the entity types sync sends rows of, sorted by name: the types the pages'
+  client code mentions, those it reaches from them by the names it spells (a relationship it
+  includes or a path goes through, a derived field it reads), and the user type when a page reads
+  the session user, as
+  for `:entity_types` - kept syncing whichever of its rows the read rules let the user hold - and,
+  when the build checks permissions on the client (see `permission_checking?/1`), the types every
+  rule of those types reads through relationships, with the grant type when the model has one. Read
+  rules count too, since the browser decides them in `can?`. They are followed one step: client code
+  checks only rows of types it queries or mentions, and a rule's chains already follow its
+  delegations. A chain's types stop before its first type no session may read (see
+  `Hologram.Policy.readable_prefix/2`), since no client gets a row of it, nor any row reached
+  through it. A type only server code names, like an audit log, is left out, rules or not, and
+  never reaches a browser. A name the code only builds at run time names nothing here, and a
+  derived query reading such a type is refused on its render (see
+  `Hologram.Template.Renderer`). The server reads the list (see
+  `Hologram.DB.QueryCache.synced_types/0`), and the client is told it, refusing a query that reads
+  another type the same way (see `build_sync_constants_js/1`).
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
+  `:page_types` are each page's share of those, sorted by name: the types its own client code
+  reaches the same way, with the user type when it reads the session user, and the types its rules
+  read and the grant type when it checks permissions on the client. A session fills them first, so
+  the page the client opened is answered before the rest of the app's rows arrive (see
+  `Hologram.Sync.PageTypes`).
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_2/README.md
   """
-  @spec build_sync_constants(
-          %{module => kept_page_reach},
-          %{module => component_queries},
-          PLT.t()
-        ) ::
-          sync_constants
-  def build_sync_constants(reach_by_page, component_queries, module_info_plt) do
-    component_modules =
-      reach_by_page
-      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
-      |> Enum.uniq()
-      |> Enum.sort()
-
+  @spec build_sync_constants(%{module => kept_page_reach}, PLT.t()) :: sync_constants
+  def build_sync_constants(reach_by_page, module_info_plt) do
     # One listing, from the module info PLT, for the mentions, the checked set and the model hash.
     all_entity_types = Reflection.list_entities(module_info_plt)
     role_modules = Reflection.list_roles(module_info_plt)
@@ -2437,30 +2357,40 @@ defmodule Hologram.Compiler do
     # struct functions out, which ship in the type's chunks), and telling a mention apart from a
     # call would answer nothing this does not. Each page's modules are asked about the entity types
     # rather than joined into one set: a page reaches far more modules than there are entity types.
-    mentioned_entity_types =
-      Enum.reduce(reach_by_page, MapSet.new(), fn {_page_module, reach}, types ->
-        all_entity_types
-        |> Enum.filter(&MapSet.member?(reach.modules, &1))
-        |> MapSet.new()
-        |> MapSet.union(types)
-      end)
-
-    terms = Enum.flat_map(component_modules, &Map.fetch!(component_queries, &1).terms)
-
-    queried_entity_types =
-      Enum.reduce(terms, MapSet.new(), fn term, types ->
-        MapSet.union(types, Registry.entity_types(term))
-      end)
-
+    #
+    # From the types a page mentions, the ones its code reaches through them by name: what a type
+    # leads to by a relationship or a derived field whose name the page's code spells as an atom
+    # (see build_kept_page_reach/4) - an include, a path, a quantifier's set, a derived field it
+    # reads, a field a template reads off a row - again from those, until nothing new is named. Per
+    # page, since a name means something only on the types that page reaches.
+    #
+    # A page reading the session user from the context reads its row though nothing names the
+    # type, so the names are followed from it too.
     user_entity = Reflection.user_entity(module_info_plt)
+
+    {reached_by_page, _named_by} =
+      Enum.map_reduce(reach_by_page, %{}, fn {page_module, reach}, named_by ->
+        start_types =
+          all_entity_types
+          |> Enum.filter(&MapSet.member?(reach.modules, &1))
+          |> MapSet.new()
+          |> put_page_user_type(user_entity, reach)
+
+        {page_types, named_by} =
+          named_entity_types(start_types, start_types, reach.atoms, named_by)
+
+        {{page_module, page_types}, named_by}
+      end)
+
+    named_entity_types =
+      Enum.reduce(reached_by_page, MapSet.new(), fn {_page_module, page_types}, types ->
+        MapSet.union(types, page_types)
+      end)
 
     # A page reading the session user from the context answers it from the browser's database on
     # every render, so the user type is reached like a type a query reads - kept syncing whichever
     # of its rows the read rules let the user hold - though nothing names it.
-    reached_entity_types =
-      queried_entity_types
-      |> MapSet.union(mentioned_entity_types)
-      |> put_session_user_type(user_entity, reach_by_page)
+    reached_entity_types = put_session_user_type(named_entity_types, user_entity, reach_by_page)
 
     # Rules and roles are baked for every type declaring a rule or a role, reached or not, and for
     # the types those lead to - the set a server hands a client built with other rules (see
@@ -2474,26 +2404,42 @@ defmodule Hologram.Compiler do
       |> put_grant_type(all_entity_types)
       |> rules_entity_types()
 
+    # What each type's rules read, worked out once for the build and every checking page.
+    rule_types =
+      if permission_checking?(reach_by_page),
+        do: Map.new(reached_entity_types, &{&1, rule_entity_types(&1)}),
+        else: %{}
+
+    page_types =
+      Map.new(reached_by_page, fn {page_module, types} ->
+        checks_permissions? = reach_by_page[page_module].checks_permissions?
+        {page_module, synced_types(types, entity_types, checks_permissions?, rule_types)}
+      end)
+
     %{
-      derived_count_types: derived_count_types(component_modules, component_queries),
-      derived_queries: derived_queries(component_modules, component_queries),
       entity_types: entity_types,
       model_hash: model_hash(all_entity_types, role_modules),
+      page_types: page_types,
       policy_hash: policy_hash(all_entity_types),
       role_modules: role_modules,
       synced_types:
-        synced_types(reached_entity_types, entity_types, reach_by_page, module_info_plt),
+        synced_types(
+          reached_entity_types,
+          entity_types,
+          permission_checking?(reach_by_page),
+          rule_types
+        ),
       user_entity: if(MapSet.member?(entity_types, user_entity), do: user_entity)
     }
   end
 
   @doc """
   Builds the JavaScript statement that sets the client's data layer constants,
-  `globalThis.Hologram.sync`, from the given sync constants (see `build_sync_constants/3`): the
-  entity types each derived field building a count reads, the derived fields whose function builds
-  a query, the global roles with the role modules carrying each, the model of the entity types the
-  client holds, the hash of the project's data model, the hash of the rules it was rendered with,
-  the sync protocol version, and the user entity type.
+  `globalThis.Hologram.sync`, from the given sync constants (see `build_sync_constants/2`): the
+  global roles with the role modules carrying each, the model of the entity types the client holds,
+  the hash of the project's data model, the hash of the rules it was rendered with, the sync
+  protocol version, the entity types sync sends rows of - which a query the browser answers may
+  only read - and the user entity type.
 
   What the runtime bundle was built against, said by the bundle itself. It has to be baked in
   rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
@@ -2501,7 +2447,7 @@ defmodule Hologram.Compiler do
   server.
 
   `null` when the APPLICATION declares no entity type - the sync constants carry no model hash
-  then (see `build_sync_constants/3`) - which is the fact `application.ex` gates the database
+  then (see `build_sync_constants/2`) - which is the fact `application.ex` gates the database
   children on and `Handshake.check/1` refuses sync by. The three answer alike on purpose: the
   bundle claims a data layer exactly when the server has one. Null rather than nothing, so a client reads one unambiguous value instead of
   probing for a missing global - and rather than `{}`, which is truthy, so every "does this
@@ -2510,7 +2456,7 @@ defmodule Hologram.Compiler do
   This is NOT the same as the build's own `:entity_types` being empty, which says only that no
   page reaches a query, no type declares a rule or a role, and the model has no user entity type. Such an app HAS a database
   and will answer a greeting, so its bundle keeps saying so: the client greets, its session
-  opens with no windows, and its model is empty because nothing syncs yet - not because nothing
+  syncs no type, and its model is empty because nothing syncs yet - not because nothing
   can.
 
   The model is rendered from what the entity types declare when this is called, which is why the
@@ -2527,14 +2473,18 @@ defmodule Hologram.Compiler do
     else
       model = render_entity_model(sync_constants.entity_types)
 
-      count_types = render_derived_count_types(sync_constants.derived_count_types)
-      derived_queries = render_derived_queries(sync_constants.derived_queries)
       expanded_roles = render_global_expanded_roles(sync_constants.role_modules)
 
       policy_hash = Jason.encode!(sync_constants.policy_hash)
+
+      synced_types =
+        sync_constants.synced_types
+        |> Enum.map(&Codec.encode_enum_value/1)
+        |> Jason.encode!()
+
       user_entity = render_user_entity(sync_constants.user_entity)
 
-      ~s/globalThis.Hologram.sync = {countTypes: #{count_types}, derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}, userEntity: #{user_entity}};/
+      ~s/globalThis.Hologram.sync = {expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}, syncedTypes: #{synced_types}, userEntity: #{user_entity}};/
     end
   end
 
@@ -3007,6 +2957,88 @@ defmodule Hologram.Compiler do
 
   defp collect_operation_asks(_ir, _mfa, acc), do: acc
 
+  # What each MFA the given pages reach writes, keyed by MFA: the atom literals it spells and the
+  # query chains it writes (see Hologram.Compiler.QueryChains) - for every function but Elixir's and
+  # Hologram's (see build_kept_page_reach/4), each read once however many pages reach it. The IR of
+  # their modules is built into the PLT first, in one go. Module aliases are left out of the atoms:
+  # they name modules, which the pages' reach already lists, and no relationship or derived field.
+  defp read_by_mfa(reach_by_page, module_info_plt, ir_plt) do
+    elixir_lib_dir = elixir_lib_dir()
+
+    mfas_by_module =
+      reach_by_page
+      |> Enum.flat_map(fn {_page_module, reach} -> reach.mfas end)
+      |> Enum.uniq()
+      |> Enum.group_by(fn {module, _function, _arity} -> module end)
+      |> Enum.filter(fn {module, _mfas} ->
+        PLT.member?(module_info_plt, module) and app_module?(module, elixir_lib_dir)
+      end)
+
+    build_missing_ir!(ir_plt, Enum.map(mfas_by_module, fn {module, _mfas} -> module end))
+
+    mfas_by_module
+    |> Enum.flat_map(fn {module, module_mfas} ->
+      funs = module_funs(ir_plt, module)
+
+      # An entity type's and an Ecto schema's generated functions name every relationship, field
+      # and derived field they declare. A component's or a page's hold what the app wrote, its prop
+      # and state defaults among them, so they are read like the rest of its code.
+      declares_model? =
+        Reflection.entity?(module, module_info_plt) or
+          Reflection.ecto_schema?(module, module_info_plt)
+
+      module_mfas
+      |> Enum.reject(fn {_module, function, _arity} ->
+        declares_model? and generated?(function)
+      end)
+      |> Enum.map(fn {_module, function, arity} = mfa ->
+        {_visibility, clauses} = Map.get(funs, {function, arity}, {:public, []})
+
+        atoms =
+          clauses
+          |> collect_atoms(MapSet.new())
+          |> MapSet.reject(&Reflection.alias?/1)
+
+        {mfa, %{atoms: atoms, chains: QueryChains.collect(clauses, mfa)}}
+      end)
+    end)
+    |> Map.new()
+  end
+
+  # The functions of the given module the IR PLT holds, by name and arity, or none for a module it
+  # doesn't hold.
+  defp module_funs(ir_plt, module) do
+    case PLT.get(ir_plt, module) do
+      {:ok, ir} ->
+        ir
+        |> IR.aggregate_module_funs()
+        |> Map.new()
+
+      :error ->
+        %{}
+    end
+  end
+
+  # Every atom literal in the given IR - lists, maps (structs included) and tuples walked, as
+  # collect_operation_asks walks them.
+  defp collect_atoms(%IR.AtomType{value: value}, acc), do: MapSet.put(acc, value)
+
+  defp collect_atoms(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect_atoms/2)
+
+  defp collect_atoms(map, acc) when is_map(map) do
+    map
+    |> Map.values()
+    |> collect_atoms(acc)
+  end
+
+  defp collect_atoms(tuple, acc) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> collect_atoms(acc)
+  end
+
+  defp collect_atoms(_ir, acc), do: acc
+
   # The IR of the callers the module info PLT holds, built into the IR PLT when it lacks it. A graph
   # without a module info PLT (a test's) has nothing to build from, and the IR PLT is read as it is.
   defp build_caller_ir!(_callers, nil, _ir_plt), do: :ok
@@ -3050,28 +3082,24 @@ defmodule Hologram.Compiler do
   defp quantified_type(hops, [entity_type | _types_above]),
     do: Derived.path_target(entity_type, hops)
 
-  # The verdict key and the read types of a deciding clause standing in a rule's predicates, as
-  # members of its object - none for any other clause.
-  defp render_verdict_members(clause, {entity_type, operation}) do
-    if Policy.deciding_quantifier?(entity_type, clause) do
-      reads_js =
-        entity_type
-        |> Policy.verdict_reads(clause)
-        |> Enum.map_join(",", &render_entity_type_label/1)
-        |> then(&"[#{&1}]")
-
-      verdict_js =
-        entity_type
-        |> Policy.verdict_key(operation, clause)
-        |> Jason.encode!()
-
-      [{"reads", reads_js}, {"verdict", verdict_js}]
-    else
-      []
-    end
+  # Whether the given role reference, as {:to, reference}, or delegation, as {:via, via}, of a rule
+  # is one the client can't decide, which it answers as unknown, leaving the rule to the server's
+  # verdict on the operation.
+  defp deciding_item?(item, {entity_type, operation}) do
+    Policy.deciding_quantifier?(entity_type, operation, item)
   end
 
-  defp render_verdict_members(_clause, nil), do: []
+  # The needs of the given term under the read rules of a signed-in session and of an anonymous one.
+  defp policied_needs(term, mapping) do
+    rules =
+      term.entity
+      |> Policy.build()
+      |> Map.get(:read, [])
+
+    Enum.flat_map([false, true], fn anonymous? ->
+      IndexPlan.needs(term, mapping, %{anonymous?: anonymous?, rules: rules})
+    end)
+  end
 
   defp resolve_derived_definition(entity_type, name, ir_plt) do
     if name in entity_type.__derived_builder_calls__() do
@@ -4034,63 +4062,6 @@ defmodule Hologram.Compiler do
     end)
   end
 
-  defp declares_derived_fields?(module) do
-    Reflection.has_function?(module, :__derived__, 0) and module.__derived__() != []
-  end
-
-  # The entity types each derived field building a count reads, over every branch building one. A
-  # field with no count branch is left out.
-  defp count_types(derived_queries) do
-    derived_queries
-    |> Enum.map(fn {name, terms} ->
-      types =
-        terms
-        |> Enum.filter(&(&1.cardinality == :count))
-        |> Enum.reduce(MapSet.new(), &MapSet.union(&2, Registry.entity_types(&1)))
-        |> Enum.sort()
-
-      {name, types}
-    end)
-    |> Enum.reject(fn {_name, types} -> types == [] end)
-    |> Map.new()
-  end
-
-  # The count types of each component, keyed by component. A component with none is left out, which
-  # the client reads as none - and a count it finds no types for waits for the whole pot.
-  defp derived_count_types(component_modules, component_queries) do
-    component_modules
-    |> Enum.map(&{&1, Map.fetch!(component_queries, &1).count_types})
-    |> Enum.reject(fn {_module, count_types} -> count_types == %{} end)
-    |> Map.new()
-  end
-
-  # The derived fields of each component whose function builds a query, which the renderers run
-  # as one. A component with none is left out, which the client reads as none.
-  defp derived_queries(component_modules, component_queries) do
-    component_modules
-    |> Enum.map(fn module ->
-      names =
-        component_queries
-        |> Map.fetch!(module)
-        |> Map.get(:derived_queries, [])
-
-      {module, names}
-    end)
-    |> Enum.reject(fn {_module, names} -> names == [] end)
-    |> Map.new()
-  end
-
-  # The same names `derived_queries/2` collects for the bundle, as the pairs a renderer asks about.
-  defp derived_queries_index(component_queries) do
-    component_queries
-    |> Enum.flat_map(fn {module, queries} ->
-      queries
-      |> Map.get(:derived_queries, [])
-      |> Enum.map(&{module, &1})
-    end)
-    |> MapSet.new()
-  end
-
   # Any literal is resolved, composites included, as long as every part of it is one too - a single
   # expression anywhere inside makes the whole value unknowable until it runs. Pids, ports and
   # references can't be written in a template at all (they only come from calls, which aren't
@@ -4410,20 +4381,19 @@ defmodule Hologram.Compiler do
 
   defp static_prop_value(_value_dom), do: :unknown
 
-  # The entity types sync sends rows of (see build_sync_constants/3): the reached ones, and in a
-  # build checking permissions on the client, the types their rules read rows of through
-  # relationships and the grant type. Kept to the types of the client's model: a row of a type the
-  # model does not name cannot be read back. What that drops is a type declaring no rule, like
-  # one a read rule delegates to, whose rows no one may read anyway.
-  defp synced_types(reached_entity_types, model_entity_types, reach_by_page, module_info_plt) do
+  # The entity types sync sends rows of (see build_sync_constants/2), for the build or one page: the
+  # reached ones, and where permissions are checked on the client, the types their rules read rows of through
+  # relationships and the grant type. A chain's types stop before its first type no session may
+  # read (see `Hologram.Policy.readable_prefix/2`): no client gets such a row, nor any row reached
+  # through it. Kept to the types of the client's model: a row of a type the model does not name
+  # cannot be read back. What that drops is a type declaring no rule, like one a read rule
+  # delegates to, whose rows no one may read anyway, and the grant type when the model designates
+  # no user entity type, which has no grant store.
+  defp synced_types(reached_entity_types, model_entity_types, checks_permissions?, rule_types) do
     types =
-      if permission_checking?(reach_by_page, module_info_plt) do
+      if checks_permissions? do
         reached_entity_types
-        |> Enum.flat_map(fn entity_type ->
-          entity_type
-          |> Policy.related_chains()
-          |> Enum.flat_map(&chain_types(entity_type, &1))
-        end)
+        |> Enum.flat_map(&Map.fetch!(rule_types, &1))
         |> MapSet.new()
         |> MapSet.union(reached_entity_types)
         |> MapSet.put(RoleGrant)
@@ -4434,6 +4404,14 @@ defmodule Hologram.Compiler do
     types
     |> MapSet.intersection(model_entity_types)
     |> Enum.sort()
+  end
+
+  # The types the given type's rules read through relationships, each chain up to its first type no
+  # session may read.
+  defp rule_entity_types(entity_type) do
+    entity_type
+    |> Policy.related_chains()
+    |> Enum.flat_map(&chain_types(entity_type, Policy.readable_prefix(entity_type, &1)))
   end
 
   # The types a permission check can ask about: those declaring a rule, and those
@@ -5021,7 +4999,8 @@ defmodule Hologram.Compiler do
       {"policy", render_policy(entity_type)},
       {"relationships", render_relationships(entity_type)},
       {"roles", render_roles(entity_type)},
-      {"serverOnly", server_only}
+      {"serverOnly", server_only},
+      {"verdicts", render_verdicts(entity_type)}
     ]
   end
 
@@ -5208,6 +5187,27 @@ defmodule Hologram.Compiler do
     |> render_json_object()
   end
 
+  # The server's verdicts a client answers an operation by when the rows it holds leave the answer
+  # open, by operation key as the policy is: each one's verdict key, which the row's $verdicts holds
+  # it under, and the types its rules read, whose unanswered writes by the client make it stale
+  # (see Policy.verdict_operations/1 and Policy.operation_reads/2).
+  defp render_verdicts(entity_type) do
+    entity_type
+    |> Policy.verdict_operations()
+    |> Enum.map(fn {key, operation} ->
+      reads_js =
+        entity_type
+        |> Policy.operation_reads(operation)
+        |> Enum.map_join(",", &render_entity_type_label/1)
+        |> then(&"[#{&1}]")
+
+      entry_js = render_json_object([{"reads", reads_js}, {"verdict", Jason.encode!(key)}])
+
+      {Policy.operation_key(operation), entry_js}
+    end)
+    |> render_json_object()
+  end
+
   defp render_policy_rules(entity_type, operation, rules) do
     rules
     |> Enum.map_join(",", &render_policy_rule(entity_type, operation, &1))
@@ -5219,8 +5219,8 @@ defmodule Hologram.Compiler do
 
     render_json_object([
       {"predicates", render_policy_predicates([entity_type], rule.predicates, verdict_context)},
-      {"to", render_policy_references(entity_type, rule.to)},
-      {"via", render_policy_delegation(rule.via)}
+      {"to", render_policy_references(entity_type, rule.to, verdict_context)},
+      {"via", render_policy_delegation(rule.via, verdict_context)}
     ])
   end
 
@@ -5247,10 +5247,10 @@ defmodule Hologram.Compiler do
 
   # A quantifier is an object too, in the shape the kernel's filters take it: the set its source
   # leads to, read on the row it is about or on one above it, and the condition each of the set's
-  # rows is matched with, read on that row with the rows above it. A deciding one standing in a
-  # rule's predicates carries the key the server's verdict on it is sent under and the types it
-  # reads, whose unanswered writes by the client make the verdict stale.
-  defp render_policy_clause(types, {quantifier, {source, clauses}} = clause, verdict_context)
+  # rows is matched with, read on that row with the rows above it. A deciding one renders the same:
+  # the rows the client holds of its set decide what one row can and leave the rest unknown, and
+  # over a derived set they decide nothing.
+  defp render_policy_clause(types, {quantifier, {source, clauses}}, _verdict_context)
        when quantifier in [:all, :any, :none] do
     related_type = quantified_type(source, types)
 
@@ -5265,17 +5265,26 @@ defmodule Hologram.Compiler do
       {"source", render_derived_name(source)}
     ]
 
-    render_json_object(members ++ render_verdict_members(clause, verdict_context))
+    render_json_object(members)
   end
 
-  # A deciding predicate standing in a rule's predicates - one reading a server-only attribute,
-  # whose value no client holds - is the key the server's verdict on it is sent under and the types it
-  # reads alone, since the client answers it from the verdict and nothing else.
-  defp render_policy_clause(types, {_name, _operator, _value} = clause, verdict_context) do
-    case render_verdict_members(clause, verdict_context) do
-      [] -> render_policy_triple(types, clause)
-      members -> render_json_object(members)
+  # A predicate standing in a rule's predicates that reads a server-only attribute, whose value no
+  # client holds, is a marker the client answers as unknown - its compared value stays off the
+  # bundle. Every other predicate is its triple: one reading a row of a type no client holds reads
+  # it as unknown unless an empty reference on its path reads no row.
+  #
+  # A clause reading a server-only attribute is deciding for that alone, so only whether it stands
+  # in a rule's predicates is left to ask - inside a quantifier, with no context, it stays a triple.
+  defp render_policy_clause(types, {_name, _operator, _value} = clause, {entity_type, _operation}) do
+    if Policy.reads_server_only?(entity_type, clause) do
+      render_json_object([{"server", "true"}])
+    else
+      render_policy_triple(types, clause)
     end
+  end
+
+  defp render_policy_clause(types, {_name, _operator, _value} = clause, nil) do
+    render_policy_triple(types, clause)
   end
 
   defp render_policy_triple(types, {name, operator, value}) do
@@ -5317,35 +5326,47 @@ defmodule Hologram.Compiler do
   end
 
   # A grant reference names WHERE a role must be held: on the entity itself, on its whole type,
-  # on a related entity, on the entity a grant row names, or nowhere at all (a global role).
-  defp render_policy_references(_entity_type, nil), do: "null"
+  # on a related entity, on the entity a grant row names, or nowhere at all (a global role). The
+  # verdict context is the rule's type and operation.
+  defp render_policy_references(_entity_type, nil, _verdict_context), do: "null"
 
-  defp render_policy_references(entity_type, references) do
+  defp render_policy_references(entity_type, references, verdict_context) do
     references
-    |> Enum.map_join(",", &render_policy_reference(entity_type, &1))
+    |> Enum.map_join(",", &render_policy_reference(entity_type, &1, verdict_context))
     |> then(&"[#{&1}]")
   end
 
-  defp render_policy_reference(_entity_type, {:own, role_names}) do
+  defp render_policy_reference(_entity_type, {:own, role_names}, _verdict_context) do
     render_policy_reference_entry("own", [render_policy_roles(role_names)])
   end
 
-  defp render_policy_reference(_entity_type, {:global, role_modules}) do
+  defp render_policy_reference(_entity_type, {:global, role_modules}, _verdict_context) do
     render_policy_reference_entry("global", [render_policy_roles(role_modules)])
   end
 
-  # The chain a role is held through, spelled the way a delegation spells its chain.
-  defp render_policy_reference(entity_type, {:rel, relationship_names, role_names}) do
+  # The chain a role is held through, spelled the way a delegation spells its chain. A deciding one
+  # - in a read rule, one reading a row of a type no client holds - carries a fifth element, true,
+  # and the client answers it as unknown.
+  defp render_policy_reference(
+         entity_type,
+         {:rel, relationship_names, role_names} = reference,
+         verdict_context
+       ) do
     target_type = Entity.path_target(entity_type, relationship_names)
 
-    render_policy_reference_entry("rel", [
-      render_policy_name(relationship_names),
-      render_entity_type_label(target_type),
-      render_policy_roles(role_names)
-    ])
+    verdict_entries = if deciding_item?({:to, reference}, verdict_context), do: ["true"], else: []
+
+    render_policy_reference_entry(
+      "rel",
+      [
+        render_policy_name(relationship_names),
+        render_entity_type_label(target_type),
+        render_policy_roles(role_names)
+      ] ++ verdict_entries
+    )
   end
 
-  defp render_policy_reference(_entity_type, {kind, target_type, role_names}) do
+  defp render_policy_reference(_entity_type, {kind, target_type, role_names}, _verdict_context) do
     render_policy_reference_entry(Atom.to_string(kind), [
       render_entity_type_label(target_type),
       render_policy_roles(role_names)
@@ -5368,16 +5389,20 @@ defmodule Hologram.Compiler do
     |> then(&"[#{&1}]")
   end
 
-  # Operation first, as the server's tuple holds it - the array shape grant references bake as.
-  defp render_policy_delegation(nil), do: "null"
+  # Operation first, as the server's tuple holds it - the array shape grant references bake as. A
+  # deciding one - in a read rule, one whose chain passes a row of a type no client holds - carries
+  # a third element, true, and the client answers it as unknown.
+  defp render_policy_delegation(nil, _verdict_context), do: "null"
 
-  defp render_policy_delegation({operation, relationship_names}) do
+  defp render_policy_delegation({operation, relationship_names} = via, verdict_context) do
     operation_js =
       operation
       |> Policy.operation_key()
       |> Jason.encode!()
 
-    "[#{operation_js},#{render_policy_name(relationship_names)}]"
+    verdict_js = if deciding_item?({:via, via}, verdict_context), do: ",true", else: ""
+
+    "[#{operation_js},#{render_policy_name(relationship_names)}#{verdict_js}]"
   end
 
   # An attribute as its name, and a path or the chain of a delegation or a grant reference as the
@@ -5423,6 +5448,94 @@ defmodule Hologram.Compiler do
     |> Jason.encode!()
   end
 
+  # The given entity types and every one they lead to by a name among the given atoms, to a
+  # fixpoint (see build_sync_constants/2), with what each name was found to lead to so far. Each
+  # round follows the names of the types the round before added only.
+  defp named_entity_types(entity_types, added_types, atoms, named_by) do
+    {named, named_by} =
+      Enum.reduce(added_types, {MapSet.new(), named_by}, fn entity_type, {acc, named_by} ->
+        {types, named_by} = named_by(entity_type, atoms, named_by)
+
+        {MapSet.union(acc, types), named_by}
+      end)
+
+    new_types = MapSet.difference(named, entity_types)
+
+    if MapSet.size(new_types) == 0 do
+      {entity_types, named_by}
+    else
+      named_entity_types(MapSet.union(entity_types, new_types), new_types, atoms, named_by)
+    end
+  end
+
+  # The types the given entity type leads to by a relationship, an inverse or a derived field whose
+  # name is among the given atoms: what including the name reads, as a query reads it (see
+  # Hologram.Query.Window.entity_types/1) - a relationship's rows, a derived field's and the ones its
+  # definition is computed from. What a name leads to is worked out once and kept by type and name.
+  defp named_by(entity_type, atoms, named_by) do
+    derived_names = Enum.map(entity_type.__derived__(), fn {name, _type, _opts} -> name end)
+
+    entity_type
+    |> Entity.includable_names()
+    |> Enum.concat(derived_names)
+    |> Enum.uniq()
+    |> Enum.filter(&MapSet.member?(atoms, &1))
+    |> Enum.reduce({MapSet.new(), named_by}, fn name, {acc, named_by} ->
+      named_by =
+        Map.put_new_lazy(named_by, {entity_type, name}, fn ->
+          entity_type
+          |> Stage.include(name)
+          |> Stage.normalize()
+          |> Window.entity_types()
+        end)
+
+      {MapSet.union(acc, MapSet.new(Map.fetch!(named_by, {entity_type, name}))), named_by}
+    end)
+  end
+
+  # Whether the given module's code is read - neither Elixir's, whose applications live under the
+  # given directory, nor Hologram's, whose test fixtures stand in for an app's modules. Told by the
+  # module's name and where its code is rather than by the application holding it, which need not
+  # be loaded while the app compiles. Asked only of a module the module info PLT records, which is
+  # an Elixir module: nothing here reads its BEAM file.
+  defp app_module?(module, elixir_lib_dir) do
+    name = Atom.to_string(module)
+
+    cond do
+      String.starts_with?(name, "Elixir.Hologram.Test.") -> true
+      String.starts_with?(name, "Elixir.Hologram.") -> false
+      true -> not loaded_from?(module, elixir_lib_dir)
+    end
+  end
+
+  # The directory Elixir's own applications are installed under, elixir, eex, ex_unit, iex, logger
+  # and mix side by side.
+  defp elixir_lib_dir do
+    :elixir
+    |> :code.lib_dir()
+    |> to_string()
+    |> Path.dirname()
+  end
+
+  # A function the compiler generates into a module, named like __relationships__ or __schema__.
+  defp generated?(function) do
+    name = Atom.to_string(function)
+
+    String.starts_with?(name, "__") and String.ends_with?(name, "__")
+  end
+
+  defp loaded_from?(module, dir) do
+    case :code.which(module) do
+      path when is_list(path) ->
+        path
+        |> to_string()
+        |> String.starts_with?(dir)
+
+      _cover_compiled_or_missing ->
+        false
+    end
+  end
+
   # The type of what a clause's name reads, for spelling the values it is compared with: an
   # attribute's, a derived field's declared one, or an entity id for a reference field - the
   # fallback the query stages make. An outer name is read on the row that many levels out, a path on
@@ -5458,46 +5571,13 @@ defmodule Hologram.Compiler do
     end)
   end
 
-  defp render_derived_count_types(derived_count_types) do
-    derived_count_types
-    |> Enum.map(fn {module, count_types} ->
-      spelled_fields =
-        count_types
-        |> Enum.map(fn {name, types} ->
-          spelled_types =
-            types
-            |> Enum.map(&Codec.encode_enum_value/1)
-            |> Jason.encode!()
-
-          {Atom.to_string(name), spelled_types}
-        end)
-        |> render_json_object()
-
-      {Codec.encode_enum_value(module), spelled_fields}
-    end)
-    |> render_json_object()
-  end
-
   # A page module defines no props, so it never reads anything from the context through one. What
-  # this decides also puts the user type among the synced types (see `build_sync_constants/3`).
+  # this decides also puts the user type among the synced types (see `build_sync_constants/2`).
   defp reads_session_user?(module) do
     Reflection.has_function?(module, :__props__, 0) and
       Enum.any?(module.__props__(), fn {_name, _type, opts} ->
         opts[:from_context] == {Hologram, :user}
       end)
-  end
-
-  defp render_derived_queries(derived_queries) do
-    derived_queries
-    |> Enum.map(fn {module, names} ->
-      spelled_names =
-        names
-        |> Enum.map(&Atom.to_string/1)
-        |> Jason.encode!()
-
-      {Codec.encode_enum_value(module), spelled_names}
-    end)
-    |> render_json_object()
   end
 
   # Functions are listed by module, then function name, then arity. The module order is the
@@ -5855,93 +5935,12 @@ defmodule Hologram.Compiler do
     "declared roles are: #{Enum.map_join(role_names, ", ", &inspect/1)}"
   end
 
-  defp dead_include_message(module, dead_entity_types) do
-    "the registered query in #{inspect(module)} includes #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny leaves the embed empty in every row. Add allow lines, or drop the include."
+  defp put_page_user_type(entity_types, user_entity, %{reads_session_user?: true})
+       when user_entity != nil do
+    MapSet.put(entity_types, user_entity)
   end
 
-  defp dead_path_message(module, dead_entity_types) do
-    "the registered query in #{inspect(module)} filters through #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny reads every such row as missing. Add allow lines, or drop the path."
-  end
-
-  defp dead_root_message(module, dead_entity_types) do
-    "the registered query in #{inspect(module)} reads #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny returns no rows to any session. Add allow lines, or drop the query."
-  end
-
-  defp declare_verb([_single_entity_type]), do: "declares"
-
-  defp declare_verb(_entity_types), do: "declare"
-
-  # A derived field holding a value includes no rows, so it names no type.
-  defp included_entity_types(term) do
-    term.include
-    |> Map.values()
-    |> Enum.reject(&is_nil/1)
-    |> Enum.flat_map(&queried_entity_types/1)
-    |> Enum.uniq()
-  end
-
-  defp listing(entity_types) do
-    Enum.map_join(entity_types, ", ", &inspect/1)
-  end
-
-  # The types a term's paths and quantifiers lead through, its includes' included: every type a hop
-  # or a quantifier's set reaches - a derived set's rows among them - which a policied read applies
-  # the read policy of.
-  defp path_entity_types(term) do
-    hop_types =
-      term.filter
-      |> Stage.relationship_chains()
-      |> Enum.flat_map(fn relationship_names ->
-        Enum.scan(relationship_names, term.entity, &Derived.related_type(&2, &1))
-      end)
-
-    term.include
-    |> Map.values()
-    |> Enum.reject(&is_nil/1)
-    |> Enum.flat_map(&path_entity_types/1)
-    |> Enum.concat(hop_types)
-    |> Enum.uniq()
-  end
-
-  # Registered whenever the app HAS a grant store, because this is a lookup table: what decides
-  # whether any client subscribes is the BUILD, which knows whether a page can check permissions
-  # locally. An entry nothing asks for costs one map key, where a missing entry would answer
-  # :no_window to a client the build did tell to ask.
-  #
-  # An app designating no user entity type has no grant store - the grant entity joins the data
-  # model only with one, so it is among the entity types exactly then - and there is no table to
-  # evaluate the window against and nothing to register.
-  defp put_grants_window(windows, entity_types) do
-    if RoleGrant in entity_types do
-      window = Auth.grants_window()
-
-      Map.put_new(windows, Registry.id(window), window)
-    else
-      windows
-    end
-  end
-
-  # Registered whenever the data model designates a user entity type, for the reason the grants
-  # window is: the build decides whether any client subscribes, and an entry nothing asks for costs
-  # one map key.
-  defp put_user_window(windows, entity_types, permission_checking?) do
-    # The first by name, as Reflection.user_entity/1 picks it for the page windows.
-    user_entity =
-      entity_types
-      |> Enum.filter(&Reflection.user_entity?/1)
-      |> Enum.sort()
-      |> List.first()
-
-    case user_entity do
-      nil ->
-        windows
-
-      user_entity ->
-        window = Auth.user_window(user_entity, permission_checking?)
-
-        Map.put_new(windows, Registry.id(window), window)
-    end
-  end
+  defp put_page_user_type(entity_types, _user_entity, _reach), do: entity_types
 
   defp put_session_user_type(entity_types, nil, _reach_by_page), do: entity_types
 
@@ -5951,22 +5950,6 @@ defmodule Hologram.Compiler do
     else
       entity_types
     end
-  end
-
-  defp queried_entity_types(term) do
-    nested_types =
-      term.include
-      |> Map.values()
-      |> Enum.reject(&is_nil/1)
-      |> Enum.flat_map(&queried_entity_types/1)
-
-    Enum.uniq([term.entity | nested_types])
-  end
-
-  defp server_only_listing(references) do
-    Enum.map_join(references, ", ", fn {entity_type, names} ->
-      "#{inspect(entity_type)} #{Enum.map_join(names, ", ", &inspect/1)}"
-    end)
   end
 
   defp server_only_mfa_message(page_module, {module, function, arity}) do
@@ -5982,118 +5965,6 @@ defmodule Hologram.Compiler do
     {init, [last]} = Enum.split(names, -1)
 
     "#{Enum.map_join(init, ", ", &inspect/1)} and #{inspect(last)}"
-  end
-
-  defp server_only_query_message(module, references) do
-    "the registered query in #{inspect(module)} filters or sorts on server_only attributes (#{server_only_listing(references)}) - the client never holds those values, so it could not evaluate the reference locally. Drop the reference, or read the rows through the trusted backend API."
-  end
-
-  # Pairs each entity type with the server-only attributes a term's filter and sort name on it -
-  # the term's own type first, then the types its paths lead to - walking include sub-terms, whose
-  # sets carry the order their relationship declares. A derived field's own reads are checked where
-  # its definition is resolved.
-  defp server_only_references(term) do
-    filter_references =
-      term.filter
-      |> Stage.predicate_references()
-      |> Enum.map(fn {relationship_names, name} ->
-        {Derived.path_target(term.entity, relationship_names), name}
-      end)
-
-    sort_references =
-      Enum.map(term.sort, fn {name, _direction} -> {term.entity, name} end)
-
-    references_by_type =
-      (filter_references ++ sort_references)
-      |> Enum.filter(fn {entity_type, name} ->
-        name in Entity.server_only_attribute_names(entity_type)
-      end)
-      |> Enum.group_by(fn {entity_type, _name} -> entity_type end, fn {_type, name} -> name end)
-
-    {own_references, path_references} = Map.split(references_by_type, [term.entity])
-
-    nested_references =
-      term.include
-      |> Map.values()
-      |> Enum.reject(&is_nil/1)
-      |> Enum.flat_map(&server_only_references/1)
-
-    sorted_path_references =
-      Enum.sort_by(path_references, fn {entity_type, _names} -> inspect(entity_type) end)
-
-    own_references
-    |> Enum.concat(sorted_path_references)
-    |> Enum.map(fn {entity_type, names} -> {entity_type, sorted_unique(names)} end)
-    |> Enum.concat(nested_references)
-  end
-
-  defp sorted_unique(names) do
-    names
-    |> Enum.uniq()
-    |> Enum.sort()
-  end
-
-  defp trusted_query_message(module) do
-    "the registered query in #{inspect(module)} claims the server's authority with trust() - a component's query is read for the session user on both tiers, so it cannot claim another. Drop trust(), or read through the backend API in a command."
-  end
-
-  # A registered query is provisioned to the client, which evaluates it locally over rows that
-  # never carry a server-only value - so it must not reference one.
-  defp validate_client_evaluable_queries!({module, module_terms}) do
-    Enum.each(module_terms, fn term ->
-      case server_only_references(term) do
-        [] ->
-          :ok
-
-        references ->
-          raise Hologram.CompileError, message: server_only_query_message(module, references)
-      end
-    end)
-  end
-
-  defp validate_readable_includes!(module, term) do
-    dead_entity_types =
-      term
-      |> included_entity_types()
-      |> Policy.dead_entity_types()
-
-    if dead_entity_types != [] do
-      raise Hologram.CompileError, message: dead_include_message(module, dead_entity_types)
-    end
-
-    :ok
-  end
-
-  # A path through a type with no allow lines reads nothing on it: the policied read applies the
-  # hop type's read policy, so every such hop is missing for every session.
-  defp validate_readable_paths!(module, term) do
-    dead_entity_types =
-      term
-      |> path_entity_types()
-      |> Policy.dead_entity_types()
-
-    if dead_entity_types != [] do
-      raise Hologram.CompileError, message: dead_path_message(module, dead_entity_types)
-    end
-
-    :ok
-  end
-
-  # A registered query naming an entity type with no allow lines is statically dead: the policied
-  # read path composes default deny into every statement it reaches. The root, an include target and
-  # a type a path goes through fail differently, so they are checked and reported apart - and a dead
-  # root is reported alone, because a query returning no rows produces no embeds to be empty either.
-  defp validate_readable_queries!({module, module_terms}) do
-    Enum.each(module_terms, fn term ->
-      case Policy.dead_entity_types([term.entity]) do
-        [] ->
-          validate_readable_includes!(module, term)
-          validate_readable_paths!(module, term)
-
-        dead_entity_types ->
-          raise Hologram.CompileError, message: dead_root_message(module, dead_entity_types)
-      end
-    end)
   end
 
   defp validate_operation_ask!(%{operation: {:dynamic}}, _declared), do: :ok
@@ -6155,33 +6026,6 @@ defmodule Hologram.Compiler do
     raise Hologram.CompileError,
       message:
         "unknown operation #{inspect(operation)} in #{ask_location(ask)} - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
-  end
-
-  # A registered query is read for the session user on the server and replayed on the client from
-  # its own database - there is no server authority to claim on the client, and a claim the server
-  # honored would hand the client rows it may not hold.
-  defp validate_untrusted_queries!({module, module_terms}) do
-    Enum.each(module_terms, fn term ->
-      if term.trust do
-        raise Hologram.CompileError, message: trusted_query_message(module)
-      end
-    end)
-  end
-
-  defp grants_window_id do
-    Registry.id(Auth.grants_window())
-  end
-
-  defp user_window_id(user_entity, permission_checking?) do
-    user_entity
-    |> Auth.user_window(permission_checking?)
-    |> Registry.id()
-  end
-
-  defp window_id(term, permission_checking?) do
-    term
-    |> Window.derive(permission_checking?)
-    |> Registry.id()
   end
 
   defp template_ref_components({:component, module}), do: [module]

@@ -23,11 +23,12 @@ defmodule Hologram.Job.RunnerTest do
   end
 
   # Whether some other session - another worker, or a sweep - could take the job's run lock.
-  defp lock_free?(id) do
+  defp lock_free?(job) do
     other = start_supervised!(Supervisor.child_spec(RunLock, id: make_ref()))
-    free? = RunLock.acquire(other, id)
+    name = lock_name(job.__struct__, job.id)
+    free? = RunLock.acquire(other, name)
 
-    if free?, do: RunLock.release(other, id)
+    if free?, do: RunLock.release(other, name)
 
     free?
   end
@@ -45,13 +46,6 @@ defmodule Hologram.Job.RunnerTest do
     create = fn -> Job.create!(Module3, [outcome: outcome], trust: true) end
 
     if user, do: as_user(user, create), else: create.()
-  end
-
-  # The jobs record themselves as they run, newest first, so the order they ran in reads forwards.
-  defp ran_order do
-    :ran_order
-    |> Process.get([])
-    |> Enum.reverse()
   end
 
   describe "claim/3" do
@@ -77,7 +71,17 @@ defmodule Hologram.Job.RunnerTest do
 
       assert {:claimed, _job} = claim(Module1, job.id, run_lock)
 
-      refute lock_free?(job.id)
+      refute lock_free?(job)
+    end
+
+    # A browser picks the id of a row it creates, so a job of another type can hold one id too.
+    test "claims a job while one of another type with the same id runs", %{run_lock: run_lock} do
+      first = Job.create!(Module1)
+      second = Job.create!(Module3, [id: first.id, outcome: :ok], trust: true)
+      other = start_supervised!(Supervisor.child_spec(RunLock, id: make_ref()))
+
+      assert {:claimed, _job} = claim(Module1, first.id, other)
+      assert {:claimed, _job} = claim(Module3, second.id, run_lock)
     end
 
     test "takes no run lock for a job that is not queued", %{run_lock: run_lock} do
@@ -86,17 +90,18 @@ defmodule Hologram.Job.RunnerTest do
       :ok = EntityOperations.update(Module1, job.id, %{status: :done})
 
       assert claim(Module1, job.id, run_lock) == :taken
-      assert lock_free?(job.id)
+      assert lock_free?(job)
     end
 
-    # Only a key two jobs share gets here, and the job is left queued for a later pass.
+    # Only a key two jobs share gets here, or a claim on another node that failed and has not given
+    # the lock back yet - and the job is left queued for a later try.
     test "leaves a queued job whose run lock another session holds", %{run_lock: run_lock} do
       job = Job.create!(Module1)
       other = start_supervised!(Supervisor.child_spec(RunLock, id: make_ref()))
 
-      assert RunLock.acquire(other, job.id)
+      assert RunLock.acquire(other, lock_name(Module1, job.id))
 
-      assert claim(Module1, job.id, run_lock) == :taken
+      assert claim(Module1, job.id, run_lock) == :locked
       assert EntityOperations.get(Module1, job.id).status == :queued
     end
 
@@ -181,92 +186,30 @@ defmodule Hologram.Job.RunnerTest do
     end
   end
 
-  describe "pass/2" do
-    test "runs every queued job of a type, oldest first", %{run_lock: run_lock} do
-      first = job(:record_order)
-      second = job(:record_order)
-
-      # The order the pass reads in is created_at's, and two rows created a moment apart share it
-      # wherever the system clock ticks coarsely - so the times are set rather than raced for, and
-      # the SECOND job is made the older one, which no insertion order could produce by accident.
-      set_created_at(Module3, first.id, ~U[2026-01-01 00:00:01.000000Z])
-      set_created_at(Module3, second.id, ~U[2026-01-01 00:00:00.000000Z])
-
-      assert pass([Module3], run_lock) == 2
-
-      assert ran_order() == [second.id, first.id]
-      assert EntityOperations.get(Module3, first.id).status == :done
-      assert EntityOperations.get(Module3, second.id).status == :done
-    end
-
-    test "runs the types in the order it was given", %{run_lock: run_lock} do
-      module_1_job = Job.create!(Module1)
-      module_3_job = job(:record_order)
-
-      assert pass([Module3, Module1], run_lock) == 2
-
-      assert ran_order() == [module_3_job.id, module_1_job.id]
-    end
-
-    test "runs nothing when nothing is queued", %{run_lock: run_lock} do
-      assert pass([Module1, Module3], run_lock) == 0
-    end
-
-    # A lock request that timed out may still be granted, and only the worker's restart gives that
-    # lock up - so nothing on the way may swallow the exit.
-    test "lets a lock request that exits end the pass" do
-      job(:ok)
+  describe "process/3" do
+    # A lock request exits only when its connection is gone, taking the lock with it if it was
+    # granted - and the run must go down with it rather than carry on with no lock held, so nothing
+    # on the way may swallow the exit.
+    test "lets a lock request that exits end the run" do
+      job = job(:ok)
 
       dead = spawn(fn -> :ok end)
       monitor_ref = Process.monitor(dead)
       assert_receive {:DOWN, ^monitor_ref, :process, ^dead, _reason}
 
-      assert catch_exit(pass([Module3], dead))
+      assert catch_exit(process(Module3, job.id, dead))
     end
 
-    test "fails a running job whose run lock nobody holds, and does not count it", %{
-      run_lock: run_lock
-    } do
-      job = Job.create!(Module1)
+    test "leaves a queued job whose run lock another session holds", %{run_lock: run_lock} do
+      job = job(:ok)
+      other = start_supervised!(Supervisor.child_spec(RunLock, id: make_ref()))
 
-      # Running with no lock held, the way a node that stopped mid-run leaves it.
-      :ok = EntityOperations.update(Module1, job.id, %{status: :running})
+      assert RunLock.acquire(other, lock_name(Module3, job.id))
 
-      assert pass([Module1], run_lock) == 0
-
-      row = EntityOperations.get(Module1, job.id)
-
-      assert row.status == :failed
-
-      assert row.error ==
-               "the run was cut short before its outcome was recorded - the node stopped, the worker crashed or lost its connection to the database, or the outcome write failed - so run/1 may have done all, part or none of its work"
+      assert process(Module3, job.id, run_lock) == :locked
+      assert EntityOperations.get(Module3, job.id).status == :queued
     end
 
-    test "runs the queued jobs of a type it has swept", %{run_lock: run_lock} do
-      abandoned = Job.create!(Module1)
-      queued = Job.create!(Module1)
-
-      :ok = EntityOperations.update(Module1, abandoned.id, %{status: :running})
-
-      assert pass([Module1], run_lock) == 1
-
-      assert EntityOperations.get(Module1, abandoned.id).status == :failed
-      assert EntityOperations.get(Module1, queued.id).status == :done
-    end
-
-    test "leaves a job another worker has claimed, and does not count it", %{run_lock: run_lock} do
-      claimed = job(:ok)
-      queued = job(:ok)
-
-      assert {:claimed, _job} = claim(Module3, claimed.id, run_lock)
-      assert pass([Module3], run_lock) == 1
-
-      assert EntityOperations.get(Module3, claimed.id).status == :running
-      assert EntityOperations.get(Module3, queued.id).status == :done
-    end
-  end
-
-  describe "process/3" do
     test "runs a queued job to done", %{run_lock: run_lock} do
       job = job(:ok)
 
@@ -301,14 +244,14 @@ defmodule Hologram.Job.RunnerTest do
       job = job(:ok)
 
       assert process(Module3, job.id, run_lock) == :done
-      assert lock_free?(job.id)
+      assert lock_free?(job)
     end
 
     test "gives up the run lock once the job has failed", %{run_lock: run_lock} do
       job = job(:raise)
 
       assert process(Module3, job.id, run_lock) == :failed
-      assert lock_free?(job.id)
+      assert lock_free?(job)
     end
 
     # The lock is the claim's, which process did not make - giving it up would leave a run in
@@ -319,7 +262,7 @@ defmodule Hologram.Job.RunnerTest do
       assert {:claimed, _job} = claim(Module3, job.id, run_lock)
       assert process(Module3, job.id, run_lock) == :taken
 
-      refute lock_free?(job.id)
+      refute lock_free?(job)
     end
 
     # Another node's sweep failed the row while run/1 ran - its lock was lost mid-run, so the run
@@ -333,7 +276,7 @@ defmodule Hologram.Job.RunnerTest do
 
       assert row.status == :failed
       assert row.error == "swept"
-      assert lock_free?(job.id)
+      assert lock_free?(job)
     end
 
     test "records nothing for a job whose row is gone", %{run_lock: run_lock} do
@@ -342,7 +285,7 @@ defmodule Hologram.Job.RunnerTest do
       assert process(Module3, job.id, run_lock) == :done
 
       assert EntityOperations.get(Module3, job.id) == nil
-      assert lock_free?(job.id)
+      assert lock_free?(job)
     end
 
     test "records the outcome outside the creating user's authority", %{run_lock: run_lock} do
@@ -353,6 +296,137 @@ defmodule Hologram.Job.RunnerTest do
       # denied - which is what makes this an assertion about whose write it is.
       assert as_user(user, fn -> process(Module3, job.id, run_lock) end) == :done
       assert EntityOperations.get(Module3, job.id).status == :done
+    end
+  end
+
+  describe "lock_name/2" do
+    # A browser picks the id of a row it creates, so two job types can hold one id - and two runs
+    # sharing a lock would stack on one session, where the release for one frees the other's.
+    test "names the run locks of two job types' jobs with one id apart" do
+      id = Entity.generate_id()
+
+      assert lock_name(Module1, id) != lock_name(Module3, id)
+    end
+
+    test "names a job's run lock the same way every time" do
+      assert lock_name(Module1, "01a1f90b-3867-7fb8-b6ec-32bdc35da5d7") ==
+               "Hologram.Test.Fixtures.Job.Module1:01a1f90b-3867-7fb8-b6ec-32bdc35da5d7"
+    end
+  end
+
+  describe "queued/3" do
+    # Each job is made a second older than the one created before it, an order no insertion order
+    # could produce by accident.
+    defp jobs_oldest_first(count) do
+      for index <- 1..count do
+        job = job(:ok)
+        set_created_at(Module3, job.id, DateTime.add(~U[2026-01-01 00:00:00.000000Z], -index))
+
+        job
+      end
+      |> Enum.reverse()
+      |> Enum.map(& &1.id)
+    end
+
+    defp queued_ids(skip_ids, count) do
+      Module3
+      |> queued(MapSet.new(skip_ids), count)
+      |> Enum.map(& &1.id)
+    end
+
+    test "answers the oldest queued jobs of the type, oldest first" do
+      [first, second, _third] = jobs_oldest_first(3)
+
+      assert queued_ids([], 2) == [first, second]
+    end
+
+    test "answers only jobs of the given type" do
+      Job.create!(Module1)
+      [job_id] = jobs_oldest_first(1)
+
+      assert queued_ids([], 5) == [job_id]
+    end
+
+    test "leaves out jobs that are not queued" do
+      [running, done, queued] = jobs_oldest_first(3)
+
+      :ok = EntityOperations.update(Module3, running, %{status: :running})
+      :ok = EntityOperations.update(Module3, done, %{status: :done})
+
+      assert queued_ids([], 5) == [queued]
+    end
+
+    test "leaves out the given ids, and still answers the count" do
+      [first, second, third, fourth] = jobs_oldest_first(4)
+
+      assert queued_ids([first, third], 2) == [second, fourth]
+    end
+
+    test "answers nothing when nothing is queued" do
+      assert queued(Module3, MapSet.new(), 5) == []
+    end
+
+    test "answers nothing for a count of 0" do
+      jobs_oldest_first(1)
+
+      assert queued(Module3, MapSet.new(), 0) == []
+    end
+  end
+
+  describe "sweep/2" do
+    # Running with no lock held, the way a node that stopped mid-run leaves it.
+    defp abandoned_job do
+      job = Job.create!(Module1)
+      :ok = EntityOperations.update(Module1, job.id, %{status: :running})
+
+      job
+    end
+
+    test "fails a running job whose run lock nobody holds" do
+      job = abandoned_job()
+
+      assert sweep([Module1], MapSet.new()) == :ok
+
+      row = EntityOperations.get(Module1, job.id)
+
+      assert row.status == :failed
+      assert row.error =~ "the run was cut short before its outcome was recorded"
+    end
+
+    test "leaves a running job whose run lock another session holds", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+
+      assert {:claimed, _job} = claim(Module1, job.id, run_lock)
+      assert sweep([Module1], MapSet.new()) == :ok
+
+      assert EntityOperations.get(Module1, job.id).status == :running
+    end
+
+    test "leaves a running job whose id it is given" do
+      job = abandoned_job()
+
+      assert sweep([Module1], MapSet.new([job.id])) == :ok
+
+      assert EntityOperations.get(Module1, job.id).status == :running
+    end
+
+    test "leaves queued jobs" do
+      job = Job.create!(Module1)
+
+      assert sweep([Module1], MapSet.new()) == :ok
+
+      assert EntityOperations.get(Module1, job.id).status == :queued
+    end
+
+    test "sweeps every type it is given" do
+      module_1_job = abandoned_job()
+      module_3_job = job(:ok)
+      :ok = EntityOperations.update(Module3, module_3_job.id, %{status: :running})
+
+      assert sweep([Module1, Module3], MapSet.new()) == :ok
+
+      assert EntityOperations.get(Module1, module_1_job.id).status == :failed
+      assert EntityOperations.get(Module3, module_3_job.id).status == :failed
     end
   end
 end

@@ -126,6 +126,101 @@ defmodule Hologram.QueryTest do
       assert_error Hologram.MisuseError, expected_msg, fn -> filter(Module3, c_id == ^actor) end
     end
 
+    test "names the pin a variable's name forgot when the query is built" do
+      search = "x"
+
+      expected_msg =
+        "unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :server_created_at, :server_updated_at, :updated_at - a value from the surrounding code is pinned: ^search"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module2, c == search and c != ^search)
+      end
+    end
+
+    test "names the pin a variable's name forgot inside a quantifier when the query is built" do
+      since = 3
+
+      expected_msg =
+        "unknown attribute :since in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :server_created_at, :server_updated_at, :updated_at - a value from the surrounding code is pinned: ^since"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(
+          Module32,
+          any(message <- messages, message.position > since and message.position != ^since)
+        )
+      end
+    end
+
+    test "names the left side's forgotten pin beside an attribute a variable is named like" do
+      limit = 1
+      b = 2
+
+      expected_msg =
+        "unknown attribute :limit in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :server_created_at, :server_updated_at, :updated_at - a value from the surrounding code is pinned, on the right side: b > ^limit"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module2, limit < b and b != ^limit and b != ^b)
+      end
+    end
+
+    test "names the right side's forgotten pin when both sides are variables' names" do
+      since = 1
+      until = 2
+
+      expected_msg =
+        "unknown attribute :until in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :server_created_at, :server_updated_at, :updated_at - a value from the surrounding code is pinned: ^until"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module2, since < until and b != ^since and b != ^until)
+      end
+    end
+
+    test "names how to read a field only the bound row declares when the query is built" do
+      expected_msg =
+        "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :server_created_at, :server_updated_at, :updated_at - Hologram.Test.Fixtures.Entity.Module33 declares position, read as message.position"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module32, any(message <- messages, position > 1))
+      end
+    end
+
+    test "names how to read a field only the queried row declares when the query is built" do
+      expected_msg =
+        "unknown attribute :name in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :server_created_at, :server_updated_at, :tier, :updated_at - Hologram.Test.Fixtures.Entity.Module32 declares name, read as name"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module32, any(message <- messages, message.name == "general"))
+      end
+    end
+
+    # Inside the quantifier a bare name reads the row it binds under that name.
+    test "names no bare spelling for a field only the queried row declares where a quantifier binds its name" do
+      expected_msg =
+        "unknown attribute :name in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :server_created_at, :server_updated_at, :tier, :updated_at"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module32, any(name <- messages, name.name == "general"))
+      end
+    end
+
+    test "names how to read a membership's field only the bound row declares when the query is built" do
+      expected_msg =
+        "unknown attribute :position in Hologram.Test.Fixtures.Entity.Module32 - known attributes: :created_at, :id, :message_count, :name, :server_created_at, :server_updated_at, :updated_at - Hologram.Test.Fixtures.Entity.Module33 declares position, read as message.position"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module32, any(message <- messages, position in [1, 2]))
+      end
+    end
+
+    test "names how to read a search's field only the queried row declares when the query is built" do
+      expected_msg =
+        "unknown attribute :name in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :server_created_at, :server_updated_at, :tier, :updated_at - Hologram.Test.Fixtures.Entity.Module32 declares name, read as name"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        filter(Module32, any(message <- messages, contains(message.name, "gen")))
+      end
+    end
+
     test "compares a derived value" do
       assert filter(Module32, message_count > 3).filter == [{:message_count, :>, 3}]
     end
@@ -140,6 +235,17 @@ defmodule Hologram.QueryTest do
   describe "include/2" do
     test "lowers a bare name" do
       assert include(Module3, a).include == %{a: %Query{entity: Module2}}
+    end
+
+    test "names the pin a variable's name forgot when the query is built" do
+      relationship = :a
+
+      expected_msg =
+        "unknown relationship :relationship in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c - a value from the surrounding code is pinned: ^relationship"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        include(Module3, [relationship, ^relationship])
+      end
     end
 
     test "lowers a list of paths" do
@@ -356,6 +462,17 @@ defmodule Hologram.QueryTest do
 
     test "lowers a list of bare names" do
       assert sort(Module2, [a, c]).sort == [a: :asc, c: :asc]
+    end
+
+    test "names the pin a variable's name forgot when the query is built" do
+      sort_field = :c
+
+      expected_msg =
+        "unknown attribute :sort_field in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :server_created_at, :server_updated_at, :updated_at - a value from the surrounding code is pinned: ^sort_field"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        sort(Module2, [sort_field, {^sort_field, :desc}])
+      end
     end
 
     test "takes a pinned spec" do

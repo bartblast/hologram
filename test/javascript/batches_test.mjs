@@ -71,6 +71,7 @@ describe("Batches", () => {
     // resync replaces what the server said and does not change who is signed in. So a test that
     // sets one has to put it back, or it reaches every suite that runs after this file.
     LocalDatabase.actorUserId = null;
+    LocalDatabase.actorEntityId = null;
 
     Replica.reset();
     sinon.restore();

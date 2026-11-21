@@ -51,11 +51,14 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const decrement = Elixir_Hologram_Query_Stage["decrement/3"];
   const increment = Elixir_Hologram_Query_Stage["increment/3"];
   const filter = Elixir_Hologram_Query_Stage["filter/2"];
+  const filterHinted = Elixir_Hologram_Query_Stage["filter/3"];
   const include = Elixir_Hologram_Query_Stage["include/2"];
+  const includeHinted = Elixir_Hologram_Query_Stage["include/3"];
   const normalize = Elixir_Hologram_Query_Stage["normalize/1"];
   const one = Elixir_Hologram_Query_Stage["one/1"];
   const skip = Elixir_Hologram_Query_Stage["skip/2"];
   const sort = Elixir_Hologram_Query_Stage["sort/2"];
+  const sortHinted = Elixir_Hologram_Query_Stage["sort/3"];
   const take = Elixir_Hologram_Query_Stage["take/2"];
   const trust = Elixir_Hologram_Query_Stage["trust/1"];
   const putAttribute = Elixir_Hologram_Query_Stage["put_attribute/2"];
@@ -72,6 +75,21 @@ describe("Elixir_Hologram_Query_Stage", () => {
   });
 
   const freshTerm = baseTerm(TASK);
+
+  // A list of the hints the query macros leave for the stages, each given as the fields of its
+  // tuple: the position, the depth, the name as the data form holds it and the fix, or null.
+  const hints = (...entries) =>
+    Type.list(
+      entries.map(([position, depth, name, fix]) =>
+        Type.tuple([
+          Type.atom(position),
+          Type.integer(depth),
+          name,
+          fix === null ? Type.nil() : Type.bitstring(fix),
+          Type.list(),
+        ]),
+      ),
+    );
 
   // An or: entry's value - a list of predicate lists, each given as the pairs predicates/1 takes.
   const disjunction = (...alternatives) =>
@@ -1388,15 +1406,24 @@ describe("Elixir_Hologram_Query_Stage", () => {
         [Type.atom("step"), Type.integer(step)],
       ]);
 
-    const placeholder = (name) =>
-      Type.map([
-        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
-        [Type.atom("name"), Type.atom(name)],
-      ]);
-
     // Another attribute of the row, as a bare name on the right side of a comparison lowers to.
     const attribute = (name) =>
       Type.tuple([Type.atom("attribute"), Type.atom(name)]);
+
+    // The browser never builds a placeholder - only the build's check of a query does, on the
+    // server - so one handed over is a value like any other, and no attribute holds it.
+    it("refuses a placeholder as a value no attribute holds", () => {
+      const placeholder = Type.map([
+        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
+        [Type.atom("name"), Type.atom("chosen")],
+      ]);
+
+      assertBoxedError(
+        () => filter(task, predicates([["title", placeholder]])),
+        "Hologram.MisuseError",
+        "%{__struct__: Hologram.Query.Placeholder, name: :chosen} is not a value of attribute :title in MyApp.Task - the attribute has type :string, which takes a UTF-8 string",
+      );
+    });
 
     it("reads a bare value as equality", () => {
       const query = filter(
@@ -1551,36 +1578,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
       assert.deepStrictEqual(query.filter, [
         ["owner_id", "==", "018f0000-0000-7000-8000-000000000001"],
-      ]);
-    });
-
-    it("reads a placeholder as the leaf a binding fills", () => {
-      const query = filter(
-        task,
-        predicates([["title", placeholder("chosen")]]),
-      );
-
-      assert.deepStrictEqual(query.filter, [
-        ["title", "==", {placeholder: "chosen"}],
-      ]);
-    });
-
-    it("reads a placeholder under an operator", () => {
-      const value = Type.tuple([Type.atom(">="), placeholder("min")]);
-      const query = filter(task, predicates([["position", value]]));
-
-      assert.deepStrictEqual(query.filter, [
-        ["position", ">=", {placeholder: "min"}],
-      ]);
-    });
-
-    it("reads a placeholder among the values of a membership list", () => {
-      const values = Type.list([placeholder("chosen"), Type.bitstring("b")]);
-      const value = Type.tuple([Type.atom("in"), values]);
-      const query = filter(task, predicates([["title", value]]));
-
-      assert.deepStrictEqual(query.filter, [
-        ["title", "in", [{placeholder: "chosen"}, "b"]],
       ]);
     });
 
@@ -3286,12 +3283,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
   describe("filter/2 - searches", () => {
     const path = (...names) => Type.list(names.map(Type.atom));
 
-    const placeholder = (name) =>
-      Type.map([
-        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
-        [Type.atom("name"), Type.atom(name)],
-      ]);
-
     const attribute = (name) => Type.tuple([Type.atom("attribute"), name]);
 
     const search = (operator, operand) =>
@@ -3378,17 +3369,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
       }
     });
 
-    it("builds a search triple with a placeholder term", () => {
-      const query = filter(
-        task,
-        predicates([["title", search("starts_with", placeholder("query"))]]),
-      );
-
-      assert.deepStrictEqual(query.filter, [
-        ["title", "starts_with", {placeholder: "query"}],
-      ]);
-    });
-
     it("builds a search triple with an empty term", () => {
       const query = filter(
         task,
@@ -3463,16 +3443,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
-    it("raises on a search with a placeholder term on an attribute that is not a string", () => {
-      const value = search("contains", placeholder("query"));
-
-      assertBoxedError(
-        () => filter(task, predicates([["position", value]])),
-        "Hologram.MisuseError",
-        "operator :contains requires a string attribute - attribute :position in MyApp.Task has type :integer",
-      );
-    });
-
     it("raises on a tuple as a search term", () => {
       const tuple = Type.tuple([Type.atom("a"), Type.atom("b")]);
 
@@ -3513,12 +3483,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
         [Type.atom("first"), Type.integer(first)],
         [Type.atom("last"), Type.integer(last)],
         [Type.atom("step"), Type.integer(1)],
-      ]);
-
-    const placeholder = (name) =>
-      Type.map([
-        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
-        [Type.atom("name"), Type.atom(name)],
       ]);
 
     const tuple = (operator, operand) =>
@@ -3748,13 +3712,785 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
       assert.deepStrictEqual(query.filter, [["rating", ">", 0]]);
     });
+  });
 
-    it("accepts a placeholder whatever the attribute's type", () => {
-      const query = filter(task, predicates([["title", placeholder("title")]]));
+  describe("filter/3", () => {
+    const fix = "a value from the surrounding code is pinned: ^search";
 
-      assert.deepStrictEqual(query.filter, [
-        ["title", "==", {placeholder: "title"}],
+    const attribute = (name) => Type.tuple([Type.atom("attribute"), name]);
+
+    const op = (operator, value) => Type.tuple([Type.atom(operator), value]);
+
+    const outer = (levels, name) =>
+      Type.tuple([Type.atom("outer"), Type.integer(levels), Type.atom(name)]);
+
+    const path = (...names) => Type.list(names.map(Type.atom));
+
+    const quantified = (source, name, value) =>
+      Type.list([
+        Type.tuple([
+          Type.atom("any"),
+          Type.tuple([path(source), predicates([[name, value]])]),
+        ]),
       ]);
+
+    const search = Type.atom("search");
+
+    it("builds the term filter/2 builds", () => {
+      const filterPredicates = predicates([
+        ["guests", op(">", Type.integer(1))],
+      ]);
+
+      assert.deepStrictEqual(
+        filterHinted(
+          booking,
+          filterPredicates,
+          hints(["key", 0, Type.atom("guests"), fix]),
+        ),
+        filter(booking, filterPredicates),
+      );
+    });
+
+    it("names the fix a hint gives when it refuses an unknown attribute on the right side", () => {
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["guests", op("==", attribute(search))]]),
+            hints(["operand", 0, search, fix]),
+          ),
+        "Hologram.MisuseError",
+        `unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - ${fix}`,
+      );
+    });
+
+    it("names the fix a hint gives when it refuses an unknown attribute on the left side", () => {
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["search", op("==", attribute(Type.atom("name")))]]),
+            hints(["key", 0, search, fix]),
+          ),
+        "Hologram.MisuseError",
+        `unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - ${fix}`,
+      );
+    });
+
+    it("names the fix a hint gives when it refuses a relationship", () => {
+      const owner = Type.atom("owner");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["assignee_id", op("==", attribute(owner))]]),
+            hints(["operand", 0, owner, fix]),
+          ),
+        "Hologram.MisuseError",
+        `:owner is a relationship in MyApp.Booking - only attributes can be filtered - filter its reference via :owner_id - ${fix}`,
+      );
+    });
+
+    it("names the fix a hint gives when it refuses a path's first relationship", () => {
+      const bossId = path("boss", "id");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["assignee_id", op("==", attribute(bossId))]]),
+            hints(["operand", 0, bossId, fix]),
+          ),
+        "Hologram.MisuseError",
+        `unknown relationship :boss in MyApp.Booking - known relationships: :assignee, :owner - ${fix}`,
+      );
+    });
+
+    it("names the fix a hint gives inside a quantifier, at the hint's depth", () => {
+      const outerSearch = outer(1, "search");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified("messages", "body", op("==", attribute(outerSearch))),
+            hints(["operand", 1, outerSearch, fix]),
+          ),
+        "Hologram.MisuseError",
+        `unknown attribute :search in MyApp.Channel - known attributes: :id, :name, :owner_id - ${fix}`,
+      );
+    });
+
+    it("names the fix a hint gives when it refuses an unknown attribute in a disjunction", () => {
+      const alternatives = Type.list([
+        predicates([["guests", op("==", attribute(search))]]),
+        predicates([["guests", Type.integer(1)]]),
+      ]);
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["or", alternatives]]),
+            hints(["operand", 0, search, fix]),
+          ),
+        "Hologram.MisuseError",
+        `unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - ${fix}`,
+      );
+    });
+
+    it("names the fix a hint gives when it refuses a to-many relationship", () => {
+      const tasks = Type.atom("tasks");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            project,
+            predicates([["name", op("==", attribute(tasks))]]),
+            hints(["operand", 0, tasks, fix]),
+          ),
+        "Hologram.MisuseError",
+        `:tasks is a relationship in MyApp.Project - only attributes can be filtered - ${fix}`,
+      );
+    });
+
+    it("names the fix a hint gives when it refuses the first relationship of a path on the left side", () => {
+      const bossId = path("boss", "id");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            Type.list([
+              Type.tuple([bossId, op("==", attribute(Type.atom("owner_id")))]),
+            ]),
+            hints(["key", 0, bossId, fix]),
+          ),
+        "Hologram.MisuseError",
+        `unknown relationship :boss in MyApp.Booking - known relationships: :assignee, :owner - ${fix}`,
+      );
+    });
+
+    it("names the fix a hint gives on the left side inside a quantifier", () => {
+      const outerSearch = outer(1, "search");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            Type.list([
+              Type.tuple([
+                Type.atom("any"),
+                Type.tuple([
+                  path("messages"),
+                  Type.list([
+                    Type.tuple([
+                      outerSearch,
+                      op("==", attribute(Type.atom("body"))),
+                    ]),
+                  ]),
+                ]),
+              ]),
+            ]),
+            hints(["key", 1, outerSearch, fix]),
+          ),
+        "Hologram.MisuseError",
+        `unknown attribute :search in MyApp.Channel - known attributes: :id, :name, :owner_id - ${fix}`,
+      );
+    });
+
+    it("skips an entry that is no hint", () => {
+      const filterHints = Type.list([
+        Type.atom("operand"),
+        Type.tuple([
+          Type.atom("operand"),
+          Type.integer(0),
+          search,
+          Type.bitstring(fix),
+        ]),
+        ...hints(["operand", 0, search, fix]).data,
+      ]);
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["guests", op("==", attribute(search))]]),
+            filterHints,
+          ),
+        "Hologram.MisuseError",
+        `unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - ${fix}`,
+      );
+    });
+
+    // An unknown right side reading a variable stays unknown whichever way the two are swapped, so
+    // its fix comes ahead of the left side's.
+    it("names the fix a right side's hint gives ahead of refusing the left side", () => {
+      const term = Type.atom("term");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["search", op("==", attribute(term))]]),
+            hints(
+              [
+                "operand",
+                0,
+                term,
+                "a value from the surrounding code is pinned: ^term",
+              ],
+              [
+                "key",
+                0,
+                search,
+                "a value from the surrounding code is pinned, on the right side: term == ^search",
+              ],
+            ),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :term in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - a value from the surrounding code is pinned: ^term",
+      );
+    });
+
+    // The fix is about the name the right side starts at, which a relationship of the row can be too.
+    it("refuses the left side ahead of a right side's later hop", () => {
+      const fix =
+        "a value from the surrounding code is pinned: ^owner.missing.id";
+      const operand = path("owner", "missing", "id");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["search", op("==", attribute(operand))]]),
+            hints(["operand", 0, operand, fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
+      );
+    });
+
+    it("names the fix a right side's hint gives where its first hop is an attribute", () => {
+      const fix = "a value from the surrounding code is pinned: ^name.length";
+      const operand = path("name", "length");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["note", op("==", attribute(operand))]]),
+            hints(["operand", 0, operand, fix]),
+          ),
+        "Hologram.MisuseError",
+        `:name is an attribute in MyApp.Booking - a path goes through relationships, and only its last name is an attribute - ${fix}`,
+      );
+    });
+
+    it("names the fix a right side's hint gives where its first hop is a to-many relationship", () => {
+      const fix =
+        "a value from the surrounding code is pinned: ^projects.count";
+      const operand = path("projects", "count");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            user,
+            predicates([["email", op("==", attribute(operand))]]),
+            hints(["operand", 0, operand, fix]),
+          ),
+        "Hologram.MisuseError",
+        `:projects is a to-many relationship in MyApp.User - a path in a condition goes through to-one relationships only - ${fix}`,
+      );
+    });
+
+    it("names the fix a right side's hint gives where its first hop is an inverse relationship", () => {
+      const fix =
+        "a value from the surrounding code is pinned: ^messages.count";
+      const operand = path("messages", "count");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            predicates([["name", op("==", attribute(operand))]]),
+            hints(["operand", 0, operand, fix]),
+          ),
+        "Hologram.MisuseError",
+        `:messages is an inverse relationship in MyApp.Channel - a path in a condition goes through to-one relationships that hold their reference - ${fix}`,
+      );
+    });
+
+    it("names the fix a right side's hint gives where its first hop is a derived field", () => {
+      const fix =
+        "a value from the surrounding code is pinned: ^first_message.body";
+      const operand = path("first_message", "body");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            room,
+            predicates([["name", op("==", attribute(operand))]]),
+            hints(["operand", 0, operand, fix]),
+          ),
+        "Hologram.MisuseError",
+        `:first_message is a derived field in MyApp.Room - a path in a condition goes through to-one relationships that hold their reference - ${fix}`,
+      );
+    });
+
+    it("names the fix a left side's hint gives where its first hop is an attribute", () => {
+      const fix =
+        "a value from the surrounding code is pinned, on the right side: note == ^name.length";
+      const key = path("name", "length");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            Type.list([
+              Type.tuple([key, op("==", attribute(Type.atom("note")))]),
+            ]),
+            hints(["key", 0, key, fix]),
+          ),
+        "Hologram.MisuseError",
+        `:name is an attribute in MyApp.Booking - a path goes through relationships, and only its last name is an attribute - ${fix}`,
+      );
+    });
+
+    it("refuses a right side's later hop where the triple checks it", () => {
+      const fix =
+        "a value from the surrounding code is pinned: ^owner.missing.id";
+      const operand = path("owner", "missing", "id");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["note", op("==", attribute(operand))]]),
+            hints(["operand", 0, operand, fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown relationship :missing in MyApp.User - known relationships: :manager, :projects",
+      );
+    });
+
+    it("names the fix a left side's hint gives beside a right side that is an attribute", () => {
+      const guests = Type.atom("guests");
+      const limit = Type.atom("limit");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["limit", op("<", attribute(guests))]]),
+            hints(
+              [
+                "operand",
+                0,
+                guests,
+                "a value from the surrounding code is pinned: ^guests",
+              ],
+              [
+                "key",
+                0,
+                limit,
+                "a value from the surrounding code is pinned, on the right side: guests > ^limit",
+              ],
+            ),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :limit in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at - a value from the surrounding code is pinned, on the right side: guests > ^limit",
+      );
+    });
+
+    // A hint as the query macros leave one inside a quantifier: no fix, and the spelling that reads
+    // the name on each row in scope, nearest first.
+    const spelled = (position, depth, name, spellings) =>
+      Type.list([
+        Type.tuple([
+          Type.atom(position),
+          Type.integer(depth),
+          name,
+          Type.nil(),
+          Type.list(spellings.map(Type.bitstring)),
+        ]),
+      ]);
+
+    it("names the spelling that reads a field only the bound row declares", () => {
+      const outerPosition = outer(1, "position");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            Type.list([
+              Type.tuple([
+                Type.atom("any"),
+                Type.tuple([
+                  path("messages"),
+                  Type.list([
+                    Type.tuple([outerPosition, op(">", Type.integer(1))]),
+                  ]),
+                ]),
+              ]),
+            ]),
+            spelled("key", 1, outerPosition, ["message.position", "position"]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :position in MyApp.Channel - known attributes: :id, :name, :owner_id - MyApp.Message declares position, read as message.position",
+      );
+    });
+
+    it("names the spelling that reads a field only the queried row declares", () => {
+      const name = Type.atom("name");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified("messages", "name", Type.bitstring("x")),
+            spelled("key", 1, name, ["message.name", "name"]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :name in MyApp.Message - known attributes: :body, :channel_id, :id, :position - MyApp.Channel declares name, read as name",
+      );
+    });
+
+    // Where a quantifier binds the name itself, the macros leave no spelling for the queried row.
+    it("names no spelling for a row the macros left none for", () => {
+      const name = Type.atom("name");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified("messages", "name", Type.bitstring("x")),
+            spelled("key", 1, name, ["name.name"]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :name in MyApp.Message - known attributes: :body, :channel_id, :id, :position",
+      );
+    });
+
+    it("names the spelling that reads an operand only the bound row declares", () => {
+      const outerPosition = outer(1, "position");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified(
+              "messages",
+              "position",
+              op(">", attribute(outerPosition)),
+            ),
+            spelled("operand", 1, outerPosition, [
+              "message.position",
+              "position",
+            ]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :position in MyApp.Channel - known attributes: :id, :name, :owner_id - MyApp.Message declares position, read as message.position",
+      );
+    });
+
+    it("names the nearest row declaring a field inside nested quantifiers", () => {
+      const outerName = outer(2, "name");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            user,
+            Type.list([
+              Type.tuple([
+                Type.atom("any"),
+                Type.tuple([
+                  path("projects"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("any"),
+                      Type.tuple([
+                        path("tasks"),
+                        Type.list([
+                          Type.tuple([outerName, Type.bitstring("x")]),
+                        ]),
+                      ]),
+                    ]),
+                  ]),
+                ]),
+              ]),
+            ]),
+            spelled("key", 2, outerName, ["task.name", "project.name", "name"]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :name in MyApp.User - known attributes: :active, :email, :ends_on, :id, :level, :logins, :manager_id, :starts_on - MyApp.Project declares name, read as project.name",
+      );
+    });
+
+    describe("sibling quantifiers' hints under one place, depth and name", () => {
+      const outerName = outer(2, "name");
+
+      const filters = Type.list([
+        Type.tuple([
+          Type.atom("any"),
+          Type.tuple([
+            path("projects"),
+            Type.list([
+              Type.tuple([
+                Type.atom("any"),
+                Type.tuple([
+                  path("tasks"),
+                  Type.list([Type.tuple([outerName, Type.bitstring("x")])]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]),
+      ]);
+
+      const hinted = (...spellingLists) =>
+        filterHinted(
+          user,
+          filters,
+          Type.list(
+            spellingLists.flatMap(
+              (spellings) => spelled("key", 2, outerName, spellings).data,
+            ),
+          ),
+        );
+
+      it("names the spelling they agree on", () => {
+        assertBoxedError(
+          () =>
+            hinted(
+              ["tag.name", "project.name", "name"],
+              ["task.name", "project.name", "name"],
+            ),
+          "Hologram.MisuseError",
+          "unknown attribute :name in MyApp.User - known attributes: :active, :email, :ends_on, :id, :level, :logins, :manager_id, :starts_on - MyApp.Project declares name, read as project.name",
+        );
+      });
+
+      it("names no spelling for a row they spell differently", () => {
+        assertBoxedError(
+          () =>
+            hinted(
+              ["tag.name", "board.name", "name"],
+              ["task.name", "project.name", "name"],
+            ),
+          "Hologram.MisuseError",
+          "unknown attribute :name in MyApp.User - known attributes: :active, :email, :ends_on, :id, :level, :logins, :manager_id, :starts_on",
+        );
+      });
+
+      // A quantifier binding the name itself leaves the queried row unspelled.
+      it("names no spelling for a row one of them leaves unspelled", () => {
+        const name = Type.atom("name");
+
+        assertBoxedError(
+          () =>
+            filterHinted(
+              Type.alias(CHANNEL),
+              quantified("messages", "name", Type.bitstring("x")),
+              Type.list([
+                ...spelled("key", 1, name, ["message.name", "name"]).data,
+                ...spelled("key", 1, name, ["name.name"]).data,
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "unknown attribute :name in MyApp.Message - known attributes: :body, :channel_id, :id, :position",
+        );
+      });
+    });
+
+    it("names the fix ahead of the spelling a row gives", () => {
+      const outerPosition = outer(1, "position");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified("messages", "body", op("==", attribute(outerPosition))),
+            Type.list([
+              Type.tuple([
+                Type.atom("operand"),
+                Type.integer(1),
+                outerPosition,
+                Type.bitstring(fix),
+                Type.list([
+                  Type.bitstring("message.position"),
+                  Type.bitstring("position"),
+                ]),
+              ]),
+            ]),
+          ),
+        "Hologram.MisuseError",
+        `unknown attribute :position in MyApp.Channel - known attributes: :id, :name, :owner_id - ${fix}`,
+      );
+    });
+
+    it("leaves out a spelling when no row in scope declares the field", () => {
+      const outerNope = outer(1, "nope");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            Type.list([
+              Type.tuple([
+                Type.atom("any"),
+                Type.tuple([
+                  path("messages"),
+                  Type.list([
+                    Type.tuple([outerNope, op(">", Type.integer(1))]),
+                  ]),
+                ]),
+              ]),
+            ]),
+            spelled("key", 1, outerNope, ["message.nope", "nope"]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :nope in MyApp.Channel - known attributes: :id, :name, :owner_id",
+      );
+    });
+
+    it("refuses an unknown left side ahead of an operand another row declares", () => {
+      const outerPosition = outer(1, "position");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified("messages", "nope", op("==", attribute(outerPosition))),
+            spelled("operand", 1, outerPosition, [
+              "message.position",
+              "position",
+            ]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :nope in MyApp.Message - known attributes: :body, :channel_id, :id, :position",
+      );
+    });
+
+    it("refuses a left side that can't be ordered ahead of an operand another row declares", () => {
+      const outerPosition = outer(1, "position");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified(
+              "messages",
+              "channel_id",
+              op(">", attribute(outerPosition)),
+            ),
+            spelled("operand", 1, outerPosition, [
+              "message.position",
+              "position",
+            ]),
+          ),
+        "Hologram.MisuseError",
+        "operator :> requires an orderable attribute - attribute :channel_id in MyApp.Message has type :uuid, and boolean and uuid attributes have no order to compare by",
+      );
+    });
+
+    // An operand read on a row out of the scope's reach is refused where the triple is built, after
+    // the predicate's own name.
+    it("refuses an unknown left side ahead of an operand on a row out of reach", () => {
+      assertBoxedError(
+        () =>
+          filter(
+            Type.alias(CHANNEL),
+            predicates([["nope", op("==", attribute(outer(1, "name")))]]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :nope in MyApp.Channel - known attributes: :id, :name, :owner_id",
+      );
+    });
+
+    it("leaves out a hint of another depth", () => {
+      const outerSearch = outer(1, "search");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            Type.alias(CHANNEL),
+            quantified("messages", "body", op("==", attribute(outerSearch))),
+            hints(["operand", 0, outerSearch, fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :search in MyApp.Channel - known attributes: :id, :name, :owner_id",
+      );
+    });
+
+    it("leaves out a hint of another position", () => {
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["guests", op("==", attribute(search))]]),
+            hints(["key", 0, search, fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
+      );
+    });
+
+    it("leaves out a hint with no fix", () => {
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["guests", op("==", attribute(search))]]),
+            hints(["operand", 0, search, null]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
+      );
+    });
+
+    it("leaves out a hint about a path's first relationship when it refuses a later one", () => {
+      const ownerBossId = path("owner", "boss", "id");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["assignee_id", op("==", attribute(ownerBossId))]]),
+            hints(["operand", 0, ownerBossId, fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown relationship :boss in MyApp.User - known relationships: :manager, :projects",
+      );
+    });
+
+    it("leaves a left side's hint out of a membership of the same name", () => {
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["search", op("in", Type.list([Type.integer(1)]))]]),
+            hints(["key", 0, search, fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :search in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
+      );
+    });
+
+    it("leaves out a hint when it refuses an attribute for another reason", () => {
+      const name = Type.atom("name");
+
+      assertBoxedError(
+        () =>
+          filterHinted(
+            booking,
+            predicates([["guests", op("==", attribute(name))]]),
+            hints(["operand", 0, name, fix]),
+          ),
+        "Hologram.MisuseError",
+        "operator :== compares attribute :guests with attribute :name in MyApp.Booking, which have different types (:integer and :string) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)",
+      );
     });
   });
 
@@ -4123,7 +4859,425 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
+  describe("include/3", () => {
+    const fix = "a value from the surrounding code is pinned: ^rel";
+
+    const rel = Type.atom("rel");
+
+    it("builds the term include/2 builds", () => {
+      const spec = Type.list([Type.atom("owner")]);
+
+      assert.deepStrictEqual(
+        includeHinted(
+          project,
+          spec,
+          hints(["include", 0, Type.atom("owner"), fix]),
+        ),
+        include(project, spec),
+      );
+    });
+
+    it("names the fix a hint gives when it refuses an unknown relationship", () => {
+      assertBoxedError(
+        () => includeHinted(project, rel, hints(["include", 0, rel, fix])),
+        "Hologram.MisuseError",
+        `unknown relationship :rel in MyApp.Project - known relationships and derived fields: :owner, :tasks - ${fix}`,
+      );
+    });
+
+    it("names the fix a hint gives when it refuses an unknown relationship in a list", () => {
+      assertBoxedError(
+        () =>
+          includeHinted(
+            project,
+            Type.list([Type.atom("owner"), rel]),
+            hints(["include", 0, rel, fix]),
+          ),
+        "Hologram.MisuseError",
+        `unknown relationship :rel in MyApp.Project - known relationships and derived fields: :owner, :tasks - ${fix}`,
+      );
+    });
+
+    it("leaves out a hint for a name paired with a nested spec", () => {
+      assertBoxedError(
+        () =>
+          includeHinted(
+            project,
+            Type.list([Type.tuple([rel, Type.list([Type.atom("x")])])]),
+            hints(["include", 0, rel, fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown relationship :rel in MyApp.Project - known relationships and derived fields: :owner, :tasks",
+      );
+    });
+
+    it("names the fix a hint gives when it refuses an attribute", () => {
+      const name = Type.atom("name");
+
+      assertBoxedError(
+        () => includeHinted(project, name, hints(["include", 0, name, fix])),
+        "Hologram.MisuseError",
+        `:name is an attribute in MyApp.Project - only relationships and derived fields can be included - ${fix}`,
+      );
+    });
+
+    // A nested spec is pinned whole or built from paths, neither of which the macros leave hints for.
+    it("leaves out a hint for a name inside a nested spec", () => {
+      assertBoxedError(
+        () =>
+          includeHinted(
+            project,
+            Type.list([Type.tuple([Type.atom("tasks"), Type.list([rel])])]),
+            hints(["include", 0, rel, fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown relationship :rel in MyApp.Task - known relationships and derived fields: ",
+      );
+    });
+
+    it("leaves out a hint for another name", () => {
+      assertBoxedError(
+        () =>
+          includeHinted(
+            project,
+            rel,
+            hints(["include", 0, Type.atom("other"), fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown relationship :rel in MyApp.Project - known relationships and derived fields: :owner, :tasks",
+      );
+    });
+  });
+
   describe("normalize/1", () => {
+    // A query the server built, as it reaches the browser in state or context: the struct, boxed,
+    // as the stages left it - unordered by anything it wasn't sorted by, its clauses in the order
+    // they were written.
+    const serverQuery = (entityType, fields = {}) =>
+      Type.map([
+        [Type.atom("__struct__"), Type.alias("Hologram.Query")],
+        [Type.atom("cardinality"), Type.atom(fields.cardinality ?? "set")],
+        [Type.atom("entity"), Type.alias(entityType)],
+        [Type.atom("filter"), Type.list(fields.filter ?? [])],
+        [Type.atom("include"), Type.map(fields.include ?? [])],
+        [Type.atom("skip"), fields.skip ?? Type.nil()],
+        [
+          Type.atom("sort"),
+          Type.list(
+            (fields.sort ?? []).map(([name, direction]) =>
+              Type.tuple([Type.atom(name), Type.atom(direction)]),
+            ),
+          ),
+        ],
+        [Type.atom("source"), fields.source ?? Type.nil()],
+        [Type.atom("take"), fields.take ?? Type.nil()],
+        [Type.atom("trust"), Type.boolean(fields.trust ?? false)],
+      ]);
+
+    const triple = (name, operator, value) =>
+      Type.tuple([
+        typeof name === "string" ? Type.atom(name) : name,
+        Type.atom(operator),
+        value,
+      ]);
+
+    it("builds a query the server built again, as the stages here build it", () => {
+      const date = Type.map([
+        [Type.atom("__struct__"), Type.alias("Date")],
+        [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+        [Type.atom("day"), Type.integer(16)],
+        [Type.atom("month"), Type.integer(8)],
+        [Type.atom("year"), Type.integer(2026)],
+      ]);
+
+      const struct = serverQuery(TASK, {
+        filter: [
+          Type.tuple([
+            Type.atom("or"),
+            Type.list([
+              Type.list([
+                triple("done", "==", Type.boolean(true)),
+                triple("position", ">", Type.integer(3)),
+              ]),
+              Type.list([
+                triple(
+                  "status",
+                  "in",
+                  Type.list([Type.atom("open"), Type.atom("blocked")]),
+                ),
+              ]),
+            ]),
+          ]),
+          triple("due_on", ">=", date),
+        ],
+        skip: Type.integer(2),
+        sort: [
+          ["title", "desc"],
+          ["id", "asc"],
+        ],
+        take: Type.integer(5),
+      });
+
+      const built = take(
+        skip(
+          sort(
+            filter(
+              task,
+              Type.list([
+                Type.tuple([
+                  Type.atom("or"),
+                  Type.list([
+                    predicates([
+                      ["done", Type.boolean(true)],
+                      [
+                        "position",
+                        Type.tuple([Type.atom(">"), Type.integer(3)]),
+                      ],
+                    ]),
+                    predicates([
+                      [
+                        "status",
+                        Type.tuple([
+                          Type.atom("in"),
+                          Type.list([Type.atom("open"), Type.atom("blocked")]),
+                        ]),
+                      ],
+                    ]),
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.atom("due_on"),
+                  Type.tuple([Type.atom(">="), date]),
+                ]),
+              ]),
+            ),
+            Type.list([Type.tuple([Type.atom("title"), Type.atom("desc")])]),
+          ),
+          Type.integer(2),
+        ),
+        Type.integer(5),
+      );
+
+      assert.deepStrictEqual(normalize(struct), normalize(built));
+    });
+
+    it("builds again a quantifier reading the row above and a path", () => {
+      const outerName = Type.tuple([
+        Type.atom("outer"),
+        Type.integer(1),
+        Type.atom("name"),
+      ]);
+
+      const struct = serverQuery(CHANNEL, {
+        filter: [
+          Type.tuple([
+            Type.atom("any"),
+            Type.tuple([
+              Type.list([Type.atom("messages")]),
+              Type.list([
+                triple(
+                  "body",
+                  "==",
+                  Type.tuple([Type.atom("attribute"), outerName]),
+                ),
+              ]),
+            ]),
+          ]),
+          triple(
+            Type.list([Type.atom("owner"), Type.atom("email")]),
+            "==",
+            Type.bitstring("a@b.c"),
+          ),
+        ],
+      });
+
+      const built = filter(
+        Type.alias(CHANNEL),
+        Type.list([
+          Type.tuple([
+            Type.atom("any"),
+            Type.tuple([
+              Type.list([Type.atom("messages")]),
+              predicates([
+                [
+                  "body",
+                  Type.tuple([
+                    Type.atom("=="),
+                    Type.tuple([Type.atom("attribute"), outerName]),
+                  ]),
+                ],
+              ]),
+            ]),
+          ]),
+          Type.tuple([
+            Type.list([Type.atom("owner"), Type.atom("email")]),
+            Type.bitstring("a@b.c"),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(normalize(struct), normalize(built));
+    });
+
+    it("builds again what a query the server built includes, nested", () => {
+      const struct = serverQuery(PROJECT, {
+        include: [
+          [
+            Type.atom("owner"),
+            serverQuery(USER, {
+              include: [[Type.atom("manager"), serverQuery(USER, {sort: []})]],
+              sort: [],
+            }),
+          ],
+          [Type.atom("tasks"), serverQuery(TASK)],
+        ],
+      });
+
+      const built = include(
+        project,
+        Type.list([
+          Type.tuple([Type.atom("owner"), Type.list([Type.atom("manager")])]),
+          Type.atom("tasks"),
+        ]),
+      );
+
+      assert.deepStrictEqual(normalize(struct), normalize(built));
+    });
+
+    it("builds again a count and a query of one row the server built", () => {
+      assert.deepStrictEqual(
+        normalize(serverQuery(TASK, {cardinality: "count", sort: []})),
+        normalize(count(task)),
+      );
+
+      assert.deepStrictEqual(
+        normalize(serverQuery(TASK, {cardinality: "one"})),
+        normalize(one(task)),
+      );
+    });
+
+    it("refuses a query the server built claiming trust, as trust/1 here does", () => {
+      assertBoxedError(
+        () => normalize(serverQuery(TASK, {trust: true})),
+        "Hologram.MisuseError",
+        "trust is the server's authority - a client cannot claim it",
+      );
+    });
+
+    it("checks a query the server built as the stages check any", () => {
+      const struct = serverQuery(TASK, {
+        filter: [triple("done", "==", Type.bitstring("yes"))],
+      });
+
+      assertBoxedError(
+        () => normalize(struct),
+        "Hologram.MisuseError",
+        '"yes" is not a value of attribute :done in MyApp.Task - the attribute has type :boolean, which takes true or false',
+      );
+    });
+
+    it("refuses a struct reading a derived field's source", () => {
+      const struct = serverQuery(TASK, {source: Type.atom("tasks")});
+
+      assert.throws(
+        () => normalize(struct),
+        /reads the rows of a derived field's source/,
+      );
+    });
+
+    it("builds again a quantifier over a source on the row above, keyed by an outer name", () => {
+      const outerKey = Type.tuple([
+        Type.atom("outer"),
+        Type.integer(1),
+        Type.atom("name"),
+      ]);
+
+      const outerSource = Type.tuple([
+        Type.atom("outer"),
+        Type.integer(1),
+        Type.list([Type.atom("messages")]),
+      ]);
+
+      const innerQuantifier = (condition) =>
+        Type.tuple([
+          Type.atom("none"),
+          Type.tuple([outerSource, Type.list(condition)]),
+        ]);
+
+      const struct = serverQuery(CHANNEL, {
+        filter: [
+          Type.tuple([
+            Type.atom("any"),
+            Type.tuple([
+              Type.list([Type.atom("messages")]),
+              Type.list([
+                triple(outerKey, "!=", Type.nil()),
+                innerQuantifier([]),
+              ]),
+            ]),
+          ]),
+        ],
+      });
+
+      const built = filter(
+        Type.alias(CHANNEL),
+        Type.list([
+          Type.tuple([
+            Type.atom("any"),
+            Type.tuple([
+              Type.list([Type.atom("messages")]),
+              Type.list([
+                Type.tuple([
+                  outerKey,
+                  Type.tuple([Type.atom("!="), Type.nil()]),
+                ]),
+                innerQuantifier([]),
+              ]),
+            ]),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(normalize(struct), normalize(built));
+    });
+
+    it("builds again a query as the stages left it, before normalizing", () => {
+      const struct = serverQuery(PROJECT, {
+        cardinality: "count",
+        include: [[Type.atom("tasks"), serverQuery(TASK)]],
+        skip: Type.integer(1),
+        sort: [["name", "desc"]],
+      });
+
+      const built = count(
+        skip(
+          sort(
+            include(project, Type.list([Type.atom("tasks")])),
+            Type.list([Type.tuple([Type.atom("name"), Type.atom("desc")])]),
+          ),
+          Type.integer(1),
+        ),
+      );
+
+      assert.deepStrictEqual(normalize(struct), normalize(built));
+    });
+
+    it("runs a stage on a query the server built", () => {
+      const struct = serverQuery(TASK, {
+        filter: [triple("done", "==", Type.boolean(true))],
+      });
+
+      assert.deepStrictEqual(
+        normalize(sort(struct, Type.atom("title"))),
+        normalize(
+          sort(
+            filter(task, predicates([["done", Type.boolean(true)]])),
+            Type.atom("title"),
+          ),
+        ),
+      );
+    });
+
     it("sorts a nested quantifier's predicates and keys naming a row above", () => {
       const outerKey = (name) =>
         Type.tuple([Type.atom("outer"), Type.integer(1), Type.atom(name)]);
@@ -4633,6 +5787,77 @@ describe("Elixir_Hologram_Query_Stage", () => {
         () => sort(post, Type.atom("nope")),
         "Hologram.MisuseError",
         "unknown attribute :nope in MyApp.Post - known attributes: :body, :created_at, :id, :later_count, :position, :tier, :updated_at",
+      );
+    });
+  });
+
+  describe("sort/3", () => {
+    const fix = "a value from the surrounding code is pinned: ^sort_field";
+
+    const sortField = Type.atom("sort_field");
+
+    it("builds the term sort/2 builds", () => {
+      const spec = Type.list([
+        Type.tuple([Type.atom("title"), Type.atom("desc")]),
+      ]);
+
+      assert.deepStrictEqual(
+        sortHinted(task, spec, hints(["sort", 0, Type.atom("title"), fix])),
+        sort(task, spec),
+      );
+    });
+
+    it("names the fix a hint gives when it refuses an unknown attribute", () => {
+      assertBoxedError(
+        () => sortHinted(task, sortField, hints(["sort", 0, sortField, fix])),
+        "Hologram.MisuseError",
+        `unknown attribute :sort_field in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title - ${fix}`,
+      );
+    });
+
+    it("names the fix a hint gives when it refuses an unknown attribute paired with a direction", () => {
+      const spec = Type.list([Type.tuple([sortField, Type.atom("desc")])]);
+
+      assertBoxedError(
+        () => sortHinted(task, spec, hints(["sort", 0, sortField, fix])),
+        "Hologram.MisuseError",
+        `unknown attribute :sort_field in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title - ${fix}`,
+      );
+    });
+
+    it("names the fix a hint gives when it refuses a relationship", () => {
+      const tasks = Type.atom("tasks");
+
+      assertBoxedError(
+        () =>
+          sortHinted(
+            Type.alias(PROJECT),
+            tasks,
+            hints(["sort", 0, tasks, fix]),
+          ),
+        "Hologram.MisuseError",
+        `:tasks is a relationship in MyApp.Project - only attributes can be ordered - ${fix}`,
+      );
+    });
+
+    it("leaves out a hint with no fix", () => {
+      assertBoxedError(
+        () => sortHinted(task, sortField, hints(["sort", 0, sortField, null])),
+        "Hologram.MisuseError",
+        "unknown attribute :sort_field in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
+      );
+    });
+
+    it("leaves out a hint for another name", () => {
+      assertBoxedError(
+        () =>
+          sortHinted(
+            task,
+            sortField,
+            hints(["sort", 0, Type.atom("other"), fix]),
+          ),
+        "Hologram.MisuseError",
+        "unknown attribute :sort_field in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
       );
     });
   });

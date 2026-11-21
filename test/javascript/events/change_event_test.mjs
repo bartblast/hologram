@@ -10,7 +10,7 @@ defineRuntimeGlobals();
 describe("ChangeEvent", () => {
   describe("buildEventParam()", () => {
     it("handles checkbox inputs", () => {
-      const target = {tagName: "INPUT", type: "checkbox", checked: true};
+      const target = {localName: "input", type: "checkbox", checked: true};
 
       const event = {
         target: target,
@@ -60,7 +60,7 @@ describe("ChangeEvent", () => {
     });
 
     it("handles single select elements", () => {
-      const target = {tagName: "SELECT", value: "option_2"};
+      const target = {localName: "select", value: "option_2"};
 
       const event = {
         target: target,
@@ -79,7 +79,7 @@ describe("ChangeEvent", () => {
       const selectedOptions = [{value: "option_1"}, {value: "option_3"}];
 
       const target = {
-        tagName: "SELECT",
+        localName: "select",
         multiple: true,
         selectedOptions: selectedOptions,
       };
@@ -103,7 +103,7 @@ describe("ChangeEvent", () => {
     });
 
     it("handles textarea elements", () => {
-      const target = {tagName: "TEXTAREA", value: "Some text content"};
+      const target = {localName: "textarea", value: "Some text content"};
 
       const event = {
         target: target,
@@ -120,7 +120,7 @@ describe("ChangeEvent", () => {
 
     it("handles other input types as text", () => {
       const target = {
-        tagName: "INPUT",
+        localName: "input",
         type: "email",
         value: "test@example.com",
       };
@@ -168,6 +168,37 @@ describe("ChangeEvent", () => {
           [Type.bitstring("username"), Type.bitstring("john_doe")],
           [Type.bitstring("email"), Type.bitstring("john@example.com")],
         ]),
+      );
+    });
+
+    it("treats change events on a form element inside svg as field-level", () => {
+      const dom = new JSDOM(`
+        <html>
+          <body>
+            <svg>
+              <form id="svg_form">
+                <foreignObject>
+                  <input name="username" value="john_doe">
+                </foreignObject>
+              </form>
+            </svg>
+          </body>
+        </html>
+      `);
+
+      const form = dom.window.document.getElementById("svg_form");
+      const input = form.querySelector('input[name="username"]');
+
+      const event = {
+        target: input,
+        currentTarget: form,
+      };
+
+      const result = ChangeEvent.buildOperationParam(event);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.atom("value"), Type.bitstring("john_doe")]]),
       );
     });
   });

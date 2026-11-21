@@ -6,8 +6,7 @@ defmodule Hologram.Policy.Readers do
   alias Hologram.Query.Stage
 
   @typedoc """
-  What bounds the users a rule holds for, or a deciding clause answers differently for - each a
-  superset of them:
+  What bounds the users a rule holds for - a superset of them:
 
     * `{:actor_equal, name}` - the value of the name, compared equal to the acting user.
     * `{:any, source, anchor}` - the anchor's users over every row of the set the source reaches.
@@ -25,15 +24,11 @@ defmodule Hologram.Policy.Readers do
 
   @type class :: {:independent, map} | {:listed, map, anchor} | {:unlisted, map}
 
-  @typedoc """
-  How the users a deciding clause answers differently for can be found from a row (see
-  `classify_verdicts/1`).
-  """
-  @type verdict_class :: :independent | {:listed, anchor, boolean} | :unlisted
-
   @doc """
   Returns the rules granting the given operation on the given entity type, split and classified by
-  how the users they hold for can be found from a row.
+  how the users they hold for can be found from a row. A field of an update is granted by the
+  limited lines covering it and the ones covering the whole row (see
+  `Hologram.Policy.operation_rules/2`).
 
   Rules are split first, without changing what the policy grants:
 
@@ -63,50 +58,14 @@ defmodule Hologram.Policy.Readers do
   def classify(entity_type, operation \\ :read) do
     entity_type
     |> Policy.build()
-    |> Map.get(operation, [])
+    |> Policy.operation_rules(operation)
     |> Enum.flat_map(&split_disjunctions/1)
     |> Enum.flat_map(&split_delegation(&1, entity_type))
     |> Enum.map(&classify_rule/1)
   end
 
-  @doc """
-  Returns the deciding clauses of the given entity type
-  (see `Hologram.Policy.deciding_quantifiers/1`), each once with every verdict key it answers, in
-  the order of their first keys, and classified by how the users it answers differently for can be
-  found from a row:
-
-    * `:independent` - it names no acting user, so it answers the same for every user, anonymous
-      ones included.
-    * `{:listed, anchor, default}` - it answers the default for every signed-in user the anchor
-      can't name (see `t:anchor/0`): false for an equality on the acting user and for an `any`
-      bounded by a condition it requires, and true for a `none` whose condition is bounded so,
-      since it holds exactly when that `any` doesn't, and for an `all` whose condition is one `!=`
-      on the acting user, the `none` of the equality.
-    * `:unlisted` - nothing bounds them, like a `!=` on the acting user or any other `all`.
-
-  A clause carries no grant reference and no delegation - those are a rule's own - so nothing
-  but its conditions decide it. An anonymous user is no user an anchor names, but a `none` or an
-  `all` naming the acting user answers no for one (see `Hologram.Policy.Evaluator`), so a default
-  is only ever a signed-in user's answer.
-  """
-  @spec classify_verdicts(module) :: list({tuple, list(String.t()), verdict_class})
-  def classify_verdicts(entity_type) do
-    pairs = Policy.deciding_quantifiers(entity_type)
-
-    pairs
-    |> Enum.map(fn {_key, clause} -> clause end)
-    |> Enum.uniq()
-    |> Enum.map(fn clause ->
-      keys = for {key, ^clause} <- pairs, do: key
-
-      {clause, keys, verdict_class(clause)}
-    end)
-  end
-
   # An any holds when one row of its set matches, so the users its condition is bounded by on that
-  # row bound it. A none or an all can hold with no row matching, so it bounds nothing it holds for
-  # - the users a none, or an all of one inequality, fails for are another matter (see
-  # none_anchor/1).
+  # row bound it. A none or an all can hold with no row matching, so it bounds nothing it holds for.
   defp clause_anchor({name, :==, {:actor}}), do: {:actor_equal, name}
 
   defp clause_anchor({:any, {source, clauses}}) do
@@ -169,17 +128,6 @@ defmodule Hologram.Policy.Readers do
     end)
   end
 
-  # A none holds exactly when the any over the same set and condition doesn't, so whatever bounds
-  # the users that any holds for bounds the users the none fails for. An all whose condition is
-  # one inequality on the acting user is the none of the equality - a row with no value passes the
-  # inequality and doesn't match the equality, so it counts against neither.
-  defp none_anchor({:none, set}), do: clause_anchor({:any, set})
-
-  defp none_anchor({:all, {source, [{name, :!=, {:actor}}]}}),
-    do: clause_anchor({:any, {source, [{name, :==, {:actor}}]}})
-
-  defp none_anchor(_clause), do: nil
-
   defp predicates_anchor(clauses), do: Enum.find_value(clauses, &clause_anchor/1)
 
   defp rule_anchor(rule, via_class) do
@@ -223,15 +171,6 @@ defmodule Hologram.Policy.Readers do
     rule.predicates
     |> conjunctions()
     |> Enum.map(&%{rule | predicates: &1})
-  end
-
-  defp verdict_class(clause) do
-    cond do
-      not Stage.names_actor?([clause]) -> :independent
-      anchor = clause_anchor(clause) -> {:listed, anchor, false}
-      anchor = none_anchor(clause) -> {:listed, anchor, true}
-      true -> :unlisted
-    end
   end
 
   defp via_class(:listed, group) do

@@ -17,9 +17,14 @@ defmodule Hologram.Policy.EdgesTest do
   alias Hologram.Test.Fixtures.Entity.Module41
   alias Hologram.Test.Fixtures.Entity.Module42
   alias Hologram.Test.Fixtures.Policy
+  alias Hologram.Test.Fixtures.Policy.Readers.Module21, as: ReadersModule21
+  alias Hologram.Test.Fixtures.Policy.Readers.Module24, as: ReadersModule24
+  alias Hologram.Test.Fixtures.Policy.Readers.Module28, as: ReadersModule28
   alias Hologram.Test.Fixtures.Role
 
   @index_key {Hologram.Policy.Edges, :index}
+
+  @index_without_verdicts_key {Hologram.Policy.Edges, :index_without_verdicts}
 
   @stale_model_msg "the code changed since the last compile that validated the data model - fix the compile error, if there is one, and save again"
 
@@ -65,6 +70,11 @@ defmodule Hologram.Policy.EdgesTest do
                {Policy.Module1, {:update, :author}} => [{:attributes, [:author_id]}],
                {Policy.Module1, {:update, :parent}} => [
                  {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module2, [:public]}
+               ],
+               {Policy.Module1, {:verdicts}} => [
+                 {:attributes, [:parent_id, :priority]},
+                 {:own_grants, [:editor, :owner]},
                  {:relationship_attributes, [:parent], Policy.Module2, [:public]}
                ]
              }
@@ -247,6 +257,16 @@ defmodule Hologram.Policy.EdgesTest do
                  {:relationship_attributes, [:parent, :parent], Policy.Module1, [:parent_id]},
                  {:relationship_attributes, [:parent, :parent, :parent], Policy.Module2,
                   [:public]}
+               ],
+               {Policy.Module12, {:verdicts}} => [
+                 {:attributes, [:level, :link_id, :parent_id]},
+                 {:relationship_attributes, [:link], Module17, [:priority]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1,
+                  [:created_at, :parent_id, :priority]},
+                 {:relationship_attributes, [:parent, :parent, :parent], Policy.Module2,
+                  [:public]},
+                 {:relationship_grants, [:parent, :parent], Policy.Module1, [:viewer]}
                ]
              }
     end
@@ -436,13 +456,12 @@ defmodule Hologram.Policy.EdgesTest do
              ]
     end
 
-    # Both rules' anys over a derived set are answered by the server's verdict, which reads what the
-    # two sets read.
-    test "derives the verdict edges of anys over derived sets" do
-      assert derive([EdgeBoard])[{EdgeBoard, {:verdicts}}] == [
-               {:set_attributes, [:cards], EdgeCard, [:board_id, :id, :rank]},
-               {:set_edges, [:cards, :tags], EdgeCard, [:tags]}
-             ]
+    # Both rules' anys over a derived set are deciding, but only the update verdict reads what its
+    # rule reads: the read verdict is true for every row a client is sent.
+    test "derives the verdict edges of an any over a derived set" do
+      edges = derive([EdgeBoard])
+
+      assert edges[{EdgeBoard, {:verdicts}}] == edges[{EdgeBoard, :update}]
     end
 
     # The verdict edges are keyed by a tuple, so a line named :verdicts keeps its own edges beside
@@ -544,17 +563,86 @@ defmodule Hologram.Policy.EdgesTest do
     end
 
     # The delete rule's none is answered from the server's verdict, sent with every project, so what
-    # it reads is named apart from the operations - beside the operation's own edges.
-    test "names what the deciding quantifiers read under {:verdicts}" do
+    # it reads is named apart from the operations - beside the operation's own edges. So is the
+    # archive line's any over labels, a set a reader may not hold, and the field's verdict answers
+    # the whole-row update rule's any over the members too.
+    test "names what a deciding operation's rules read under {:verdicts}" do
       assert derive([EdgeProject])[{EdgeProject, {:verdicts}}] == [
                {:set_attributes, [:labels], EdgeLabel, [:name]},
+               {:set_attributes, [:members], EdgeMember, [:project_id]},
                {:set_edges, [:labels], EdgeProject, [:labels]}
              ]
     end
 
-    # No client holds a server-only value, so the read rule's predicate on one is a verdict too.
-    test "names what a predicate on a server-only attribute reads under {:verdicts}" do
-      assert derive([EdgeReport])[{EdgeReport, {:verdicts}}] == [{:attributes, [:reviewed]}]
+    # Only a workshop's owner and members read it and its benches, so a tool's update and delete
+    # rules reading them are answered from the server's verdicts, and what they read is named
+    # under {:verdicts}: the workshop's archived and the bench's workshop reference among it.
+    test "names what the rules reading related rows a reader may not hold read under {:verdicts}" do
+      edges = derive([Policy.Module49])[{Policy.Module49, {:verdicts}}]
+
+      assert {:relationship_attributes, [:workshop], Policy.Module46, [:archived]} in edges
+      assert {:relationship_attributes, [:bench], Policy.Module47, [:workshop_id]} in edges
+    end
+
+    # The delete rule's equality is answered from the row a client holds, but the verdict answers
+    # the whole rule, and the field's verdict answers the whole-row update rule beside its own. The
+    # read verdict reads nothing, though its rule is deciding.
+    test "names what the rules of every operation a verdict answers read under {:verdicts}" do
+      defmodule VerdictMixedProject do
+        use Hologram.Entity
+
+        attribute :owner_id, :uuid, optional: true
+        attribute :reviewed, :boolean, server_only: true
+        attribute :title, :string
+
+        relationship :badge, Hologram.Policy.EdgesTest.EdgeLabel, optional: true
+        relationship :labels, [Hologram.Policy.EdgesTest.EdgeLabel]
+
+        allow :read, when: reviewed == true
+        allow :delete, when: owner_id == user_id() and none(labels)
+        allow :update, only: [:title], when: none(label <- labels, label.name == "x")
+        allow :update, when: badge.name == "open"
+      end
+
+      assert derive([VerdictMixedProject])[{VerdictMixedProject, {:verdicts}}] == [
+               {:attributes, [:badge_id, :owner_id]},
+               {:relationship_attributes, [:badge], EdgeLabel, [:name]},
+               {:set_attributes, [:labels], EdgeLabel, [:name]},
+               {:set_edges, [:labels], VerdictMixedProject, [:labels]}
+             ]
+    end
+
+    # A role a delete rule names moves the delete verdict as surely as a label does, and one
+    # granted on the whole type is followed only through this pair: the read rule names no role.
+    test "names the grants of a role a verdict operation's rule names under {:verdicts}" do
+      defmodule VerdictRoleProject do
+        use Hologram.Entity
+
+        relationship :labels, [Hologram.Policy.EdgesTest.EdgeLabel]
+
+        role :admin
+
+        allow :read
+        allow :delete, to: :admin
+        allow :delete, when: none(label <- labels, label.name == "locked")
+      end
+
+      assert derive([VerdictRoleProject])[{VerdictRoleProject, {:verdicts}}] == [
+               {:own_grants, [:admin]},
+               {:set_attributes, [:labels], EdgeLabel, [:name]},
+               {:set_edges, [:labels], VerdictRoleProject, [:labels]}
+             ]
+    end
+
+    # The read verdict is true for every row a client is sent, and the read edges follow a user's
+    # access to the row moving: a server-only value, a path or a role reference through a type
+    # nobody may read, and delegations past one.
+    test "names no {:verdicts} edges for a type whose read rules alone hold deciding items" do
+      for entity_type <- [EdgeReport, ReadersModule21, ReadersModule24, ReadersModule28] do
+        refute [entity_type]
+               |> derive()
+               |> Map.has_key?({entity_type, {:verdicts}})
+      end
     end
 
     test "names no {:verdicts} edges for a type with no deciding quantifier" do
@@ -574,7 +662,7 @@ defmodule Hologram.Policy.EdgesTest do
 
   # The cache is one term for the whole node, so these leave it empty, for the next read to derive
   # the project's real index.
-  describe "index/0" do
+  describe "index/1" do
     setup do
       on_exit(&reset_caches/0)
 
@@ -599,13 +687,37 @@ defmodule Hologram.Policy.EdgesTest do
       assert :persistent_term.get(@index_key, nil) == derived
     end
 
+    test "leaves out every verdicts' pair and keeps the operations' as they are when asked without the verdicts" do
+      derived = derive(Reflection.list_entities())
+      verdict_keys = for {_entity_type, {:verdicts}} = key <- Map.keys(derived), do: key
+
+      assert length(verdict_keys) > 1
+      assert index(false) == Map.drop(derived, verdict_keys)
+    end
+
+    test "keeps the index without the verdicts for the calls after it" do
+      assert :persistent_term.get(@index_without_verdicts_key, nil) == nil
+
+      derived = index(false)
+
+      assert :persistent_term.get(@index_without_verdicts_key, nil) == derived
+    end
+
+    test "answers the index without the verdicts from the cache" do
+      :persistent_term.put(@index_without_verdicts_key, :cached)
+
+      assert index(false) == :cached
+    end
+
     test "raises when the model is under a hold, even when cached" do
       on_exit(&Model.release/0)
 
       index()
+      index(false)
       Model.hold()
 
       assert_error Hologram.StaleModelError, @stale_model_msg, fn -> index() end
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn -> index(false) end
     end
 
     # A dev VM whose compile refused a via cycle has the cycle's modules loaded and named by the
@@ -660,6 +772,13 @@ defmodule Hologram.Policy.EdgesTest do
 
       assert reset_index_cache() == :ok
       assert :persistent_term.get(@index_key, nil) == nil
+    end
+
+    test "drops the cached index without the verdicts" do
+      index(false)
+
+      assert reset_index_cache() == :ok
+      assert :persistent_term.get(@index_without_verdicts_key, nil) == nil
     end
   end
 

@@ -198,7 +198,7 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
-  describe "duplicate_check_statement/3" do
+  describe "duplicate_check_statement/4" do
     test "counts the duplicate key groups, nulls compared as values" do
       statement = duplicate_check_statement("task", ["project_id", "slug"], false)
 
@@ -213,6 +213,15 @@ defmodule Hologram.DB.DDLTest do
       assert statement ==
                ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
                  ~s{WHERE "slug" IS NOT NULL GROUP BY "slug" HAVING COUNT(*) > 1) AS duplicates}
+    end
+
+    test "counts only the groups holding a NULL in the written column" do
+      statement = duplicate_check_statement("task", ["slug"], true, "amount")
+
+      assert statement ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
+                 ~s{WHERE "slug" IS NOT NULL GROUP BY "slug" HAVING COUNT(*) > 1 } <>
+                 ~s{AND COUNT(*) FILTER (WHERE "amount" IS NULL) > 0) AS duplicates}
     end
   end
 
@@ -256,6 +265,37 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "grant_id_update_statement/1" do
+    test "moves each grant from the old id to the new one, both given as text" do
+      assert grant_id_update_statement("hologram_role_grant") ==
+               ~s{UPDATE "hologram_data"."hologram_role_grant" AS "grant" } <>
+                 ~s{SET "id" = "moved"."new"::uuid } <>
+                 ~s{FROM unnest($1::text[], $2::text[]) AS "moved" ("old", "new") } <>
+                 ~s{WHERE "grant"."id" = "moved"."old"::uuid}
+    end
+  end
+
+  describe "grant_identity_statement/2" do
+    test "reads a page of the grants holding the label, by id, as text" do
+      assert grant_identity_statement("hologram_role_grant", "role") ==
+               ~s{SELECT "id"::text, "user_id"::text, "entity_type"::text, } <>
+                 ~s{"entity_id"::text, "role"::text } <>
+                 ~s{FROM "hologram_data"."hologram_role_grant" } <>
+                 ~s{WHERE "role"::text = $1 AND "id" > $2::text::uuid } <>
+                 ~s{ORDER BY "hologram_data"."hologram_role_grant"."id" LIMIT $3}
+    end
+  end
+
+  describe "grant_repeat_check_statement/2" do
+    test "counts the identity key groups that repeat among the grants holding the label" do
+      assert grant_repeat_check_statement("hologram_role_grant", "role") ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."hologram_role_grant" } <>
+                 ~s{WHERE "role"::text = $1 } <>
+                 ~s{GROUP BY "user_id", "entity_type", "entity_id", "role" } <>
+                 ~s{HAVING COUNT(*) > 1) AS repeats}
+    end
+  end
+
   describe "invalid_index_check_statement/1" do
     test "counts the invalid indexes carrying the name" do
       expected =
@@ -278,12 +318,29 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
-  describe "invalid_indexes_statement/0" do
-    test "lists the invalid indexes of the data schema" do
+  describe "invalid_indexes_statement/1" do
+    test "lists the invalid indexes of the data schema, by name, with whether they take writes and are live" do
       statement = normalize_newlines(invalid_indexes_statement())
 
-      assert statement =~ "SELECT ic.relname"
-      assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid"
+      assert statement =~ "SELECT ic.relname, i.indisready, i.indislive"
+      assert statement =~ "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid\n"
+      assert statement =~ "ORDER BY ic.relname"
+    end
+
+    test "lists the invalid unique indexes of the data schema" do
+      statement = normalize_newlines(invalid_indexes_statement(true))
+
+      assert statement =~ "SELECT ic.relname, i.indisready, i.indislive"
+
+      assert statement =~
+               "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid AND i.indisunique"
+    end
+
+    test "lists the other invalid indexes of the data schema" do
+      statement = normalize_newlines(invalid_indexes_statement(false))
+
+      assert statement =~
+               "WHERE n.nspname = 'hologram_data' AND NOT i.indisvalid AND NOT i.indisunique"
     end
   end
 
@@ -291,13 +348,6 @@ defmodule Hologram.DB.DDLTest do
     test "counts rows with a NULL in the column" do
       assert null_check_statement("task", "subtitle") ==
                ~s{SELECT COUNT(*) FROM "hologram_data"."task" WHERE "subtitle" IS NULL}
-    end
-  end
-
-  describe "reindex_statement/1" do
-    test "rebuilds the index in place, concurrently" do
-      assert reindex_statement("task_project_id_$idx") ==
-               ~s{REINDEX INDEX CONCURRENTLY "hologram_data"."task_project_id_$idx"}
     end
   end
 
@@ -589,6 +639,8 @@ defmodule Hologram.DB.DDLTest do
           "name" => %{type: "text", collation: "C", null: false},
           "done" => %{type: "boolean", collation: nil, null: true},
           "created_at" => %{type: "timestamptz", collation: nil, null: false},
+          "server_created_at" => %{type: "timestamptz", collation: nil, null: false},
+          "server_updated_at" => %{type: "timestamptz", collation: nil, null: false},
           "updated_at" => %{type: "timestamptz", collation: nil, null: false}
         },
         primary_key: %{columns: ["id"], constraint: "task_$pk"}
@@ -601,6 +653,8 @@ defmodule Hologram.DB.DDLTest do
           "done" boolean,
           "name" text COLLATE "C" NOT NULL,
           "created_at" timestamptz NOT NULL,
+          "server_created_at" timestamptz NOT NULL,
+          "server_updated_at" timestamptz NOT NULL,
           "updated_at" timestamptz NOT NULL,
           CONSTRAINT "task_$pk" PRIMARY KEY ("id")
         )\
@@ -695,6 +749,35 @@ defmodule Hologram.DB.DDLTest do
       op = %{op: :drop_index, index: "task_project_id_$idx"}
 
       assert statements(op) == [~s(DROP INDEX "hologram_data"."task_project_id_$idx")]
+    end
+
+    test "renders a concurrent drop" do
+      op = %{op: :drop_index, index: "task_project_id_$idx", concurrently: true}
+
+      assert statements(op) == [
+               ~s(DROP INDEX CONCURRENTLY "hologram_data"."task_project_id_$idx")
+             ]
+    end
+
+    test "renders a drop that skips a missing index" do
+      op = %{op: :drop_index, index: "task_project_id_$idx", if_exists: true}
+
+      assert statements(op) == [
+               ~s(DROP INDEX IF EXISTS "hologram_data"."task_project_id_$idx")
+             ]
+    end
+
+    test "renders a concurrent drop that skips a missing index" do
+      op = %{
+        op: :drop_index,
+        index: "task_project_id_$idx",
+        concurrently: true,
+        if_exists: true
+      }
+
+      assert statements(op) == [
+               ~s(DROP INDEX CONCURRENTLY IF EXISTS "hologram_data"."task_project_id_$idx")
+             ]
     end
   end
 
@@ -897,6 +980,20 @@ defmodule Hologram.DB.DDLTest do
 
       assert statements(op) == [
                ~s(ALTER INDEX "hologram_data"."draft_author_id_$idx" ) <>
+                 ~s(RENAME TO "sketch_author_id_$idx")
+             ]
+    end
+
+    test "renders a rename that skips a missing index" do
+      op = %{
+        op: :rename_index,
+        from: "draft_author_id_$idx",
+        to: "sketch_author_id_$idx",
+        if_exists: true
+      }
+
+      assert statements(op) == [
+               ~s(ALTER INDEX IF EXISTS "hologram_data"."draft_author_id_$idx" ) <>
                  ~s(RENAME TO "sketch_author_id_$idx")
              ]
     end

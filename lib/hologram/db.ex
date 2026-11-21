@@ -11,6 +11,7 @@ defmodule Hologram.DB do
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Mapper
   alias Hologram.DB.Protocol
   alias Hologram.DB.QueryRunner
@@ -30,6 +31,9 @@ defmodule Hologram.DB do
   alias Hologram.WriteError
 
   @mapping_key {__MODULE__, :mapping}
+
+  # The index plan the last reconciliation this node ran converged the database to.
+  @plan_key {__MODULE__, :plan}
 
   # How long the boot waits between two tries while the database cannot be reached. Each try also
   # waits for the pool to give up on a checkout, about 4 seconds with DBConnection's defaults, then
@@ -85,7 +89,8 @@ defmodule Hologram.DB do
 
   @doc """
   Inserts the given entity as a full row - every column is named and bound explicitly -
-  stamping created_at and updated_at with the same current UTC timestamp.
+  stamping created_at, updated_at, server_created_at and server_updated_at with the same
+  current UTC timestamp.
 
   Returns {:ok, entity} with the stamped entity, or {:error, violations} - the map
   Entity.validate/1 returns, naming each field that broke its declaration: the declared
@@ -108,8 +113,10 @@ defmodule Hologram.DB do
   a moment later it would pass. Every related row a rule reads - a `via:` target, or a row along a
   path - is held the same way, so a change to it lands after the write. An entity claiming the
   server's own authority through trust/1 is written without evaluation, and without an acting user
-  the write is raw - the trusted tier. The returned entity carries no claim and no recorded
-  changes.
+  the write is raw - the trusted tier. A session user id no user entity can have - an app's own
+  serial id - is still an acting user: its writes are evaluated as an anonymous session's, never
+  raw, so server code writing past the rules claims trust/1. The returned entity carries no claim
+  and no recorded changes.
 
   A write PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -290,10 +297,8 @@ defmodule Hologram.DB do
   integer for counting queries.
 
   The query is an entity type module (the whole entity set) or a query term built with
-  Hologram.Query stages. Directly executed query terms embed concrete runtime values - the query
-  registry is never involved. A term containing placeholder leaves raises Hologram.MisuseError:
-  placeholders exist only in compiler-registered queries. So does a derived field's query, which is
-  read through its field.
+  Hologram.Query stages, holding the values it compares with. A derived field's query raises
+  Hologram.MisuseError, since it is read through its field.
 
   A :string ordering reads the attribute's sort-key companion column, which every
   :string attribute derives.
@@ -301,8 +306,9 @@ defmodule Hologram.DB do
   With an acting user set, the query is read through that user's :read policies - the rows the
   policies grant, each included relationship filtered by its own type's :read rules, a
   single-result query answering nil and a counting query counting only what the user may read -
-  exactly as a template's registered query is. Without an acting user the query is read raw:
-  the trusted tier, for seeds, tasks and jobs.
+  exactly as a template's derived query is. A session user id no user entity can have - an
+  app's own serial id - reads as an anonymous session would. Without an acting user the query is
+  read raw: the trusted tier, for seeds, tasks and jobs.
 
   A query marked with trust/1 is read raw whether or not a user is acting - the server's own
   authority, the spelling for a read that must see past the acting user's policies.
@@ -312,7 +318,6 @@ defmodule Hologram.DB do
     term = Stage.normalize(query)
 
     assert_not_sourced!(term)
-    assert_no_placeholders!(term)
 
     actor_user_id = Context.actor_user_id()
 
@@ -377,9 +382,9 @@ defmodule Hologram.DB do
   come from this module at run time, quoted in the SQL - a join table's name carries `$`, and an
   attribute may be named by a reserved word (`"user"` unquoted is the database role). An
   attribute's column has the attribute's name, a to-one relationship's column is `<name>_id`,
-  every table has `id`, `created_at` and `updated_at`, and a join table has `source_id` and
-  `target_id`. Columns whose names contain `$` are the framework's own, and what they hold can
-  change between versions. Select attributes by name.
+  every table has `id`, `created_at`, `updated_at`, `server_created_at` and `server_updated_at`,
+  and a join table has `source_id` and `target_id`. Columns whose names contain `$` are the
+  framework's own, and what they hold can change between versions. Select attributes by name.
 
   Policies do not apply: the read sees every row. A read on behalf of a user keeps to what that
   user may see in the SQL itself.
@@ -481,11 +486,11 @@ defmodule Hologram.DB do
 
   @doc """
   Updates the entity of the given type with the given id, setting exactly the changed
-  columns plus updated_at - there is no full-row variant. Changes (a map or keyword list)
-  are keyed by declared attribute names and to-one reference fields (`<relationship name>_id`) -
-  a to-one reference is set, reassigned, or cleared (nil) through its reference field. Changing
-  any other name, system attributes included, raises Hologram.MisuseError - as do empty changes
-  and an id that names no entity.
+  columns plus updated_at and server_updated_at - there is no full-row variant. Changes (a map
+  or keyword list) are keyed by declared attribute names and to-one reference fields
+  (`<relationship name>_id`) - a to-one reference is set, reassigned, or cleared (nil) through
+  its reference field. Changing any other name, system attributes included, raises
+  Hologram.MisuseError - as do empty changes and an id that names no entity.
 
   Returns :ok, or {:error, violations} - the map Entity.validate/2 returns, naming each
   field the changes leave breaking a declaration: the declared constraints a changed value
@@ -768,20 +773,23 @@ defmodule Hologram.DB do
   @spec reconcile_at_boot() :: :ignore
   def reconcile_at_boot do
     await_database()
-    SchemaReconciler.reconcile(reconciliation_context())
+    reconcile_with_plan(reconciliation_context())
 
     :ignore
   end
 
   @doc """
-  Returns the context for a schema reconciliation run: the cached mapping, the guard
-  facts (otp_app and env as strings), and the marker diagnostics (the Hologram version
-  and the current UTC timestamp).
+  Returns the context for a schema reconciliation run: the cached mapping, the index plan
+  over it (see `Hologram.DB.IndexPlan.plan/2`), the guard facts (otp_app and env as strings),
+  and the marker diagnostics (the Hologram version and the current UTC timestamp).
   """
   @spec reconciliation_context() :: %{atom => any}
   def reconciliation_context do
+    mapping = mapping()
+
     %{
-      mapping: mapping(),
+      mapping: mapping,
+      plan: IndexPlan.plan(mapping),
       otp_app: Atom.to_string(Reflection.otp_app()),
       env: Atom.to_string(Hologram.env()),
       hologram_version: to_string(Application.spec(:hologram, :vsn)),
@@ -831,7 +839,26 @@ defmodule Hologram.DB do
       mapping = Mapper.derive!(entity_types, role_modules)
       :persistent_term.put(@mapping_key, mapping)
 
-      SchemaReconciler.reconcile(reconciliation_context())
+      reconcile_with_plan(reconciliation_context())
+    end
+
+    :ok
+  end
+
+  @doc """
+  Reconciles the schema again when the index plan the build's dump gives now differs from the one
+  this node last converged the database to - the live-reload path once a compile has derived or
+  kept the data layer, since a change to a query alone changes the plan without touching the model. A no-op
+  when the database is not running. Returns :ok.
+  """
+  @spec reload_indexes() :: :ok
+  def reload_indexes do
+    if Process.whereis(__MODULE__) do
+      context = reconciliation_context()
+
+      if context.plan != :persistent_term.get(@plan_key, nil) do
+        reconcile_with_plan(context)
+      end
     end
 
     :ok
@@ -913,18 +940,6 @@ defmodule Hologram.DB do
 
   defp assert_not_sourced!(_term), do: :ok
 
-  defp assert_no_placeholders!(term) do
-    case Stage.placeholder_names(term) do
-      [] ->
-        :ok
-
-      [name | _rest] ->
-        raise MisuseError,
-          message:
-            "cannot read a query term containing placeholders - placeholder #{inspect(name)} has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
-    end
-  end
-
   # A to-one relationship or an inverse is a name a caller can reasonably expect a join table for and
   # not get, so it is told where that relationship's fact lives instead.
   defp join_table_refusal(entity_type, relationship) do
@@ -963,6 +978,11 @@ defmodule Hologram.DB do
   # received value.
   defp put_values(attribute_ops) do
     for {name, {:put, value}} <- attribute_ops, into: %{}, do: {name, value}
+  end
+
+  defp reconcile_with_plan(context) do
+    SchemaReconciler.reconcile(context)
+    :persistent_term.put(@plan_key, context.plan)
   end
 
   # The value the write gave the field, ahead of which it is spelled - or nothing, for a field

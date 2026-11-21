@@ -35,13 +35,22 @@ defmodule Hologram.Job do
   Refuse the transaction and the job never existed, so nothing runs. Let it commit and the job
   runs once, as the user who enqueued it.
 
-  A run cut short before its outcome is recorded - the node stopping, the worker crashing or
-  losing its connection to the database, the outcome write failing - is later failed by a worker
-  looking for jobs, with an error saying so: run/1 may have done all, part or none of its work.
+  A run cut short before its outcome is recorded - the node stopping, the run crashing or being
+  killed, its lock connection to the database being lost, the outcome write failing - is later
+  failed by a worker sweeping for such runs, with an error saying so: run/1 may have done all,
+  part or none of its work.
 
   Attributes and relationships are what a job carries, so they are declared and typed rather
   than passed as a payload: a declaration is what a policy can name and what a migration can
   move forward.
+
+  Each node runs up to 10 jobs of a type at once. A job type that should run fewer at once, or
+  more, says so in its use line, with the number written out:
+
+      use Hologram.Job, max_concurrency: 2
+
+  The limit is per node and per job type, so a type running at its limit doesn't stop other types
+  from starting theirs.
   """
 
   alias Hologram.Auth.Context
@@ -55,6 +64,11 @@ defmodule Hologram.Job do
   alias Hologram.Reflection
   alias Hologram.WriteError
 
+  # How many jobs of a type a node runs at once unless the type sets its own limit. A fixed number
+  # rather than one worked out from the node, so the database connections the runs take can be
+  # counted per node.
+  @default_max_concurrency 10
+
   @doc """
   Runs the job.
 
@@ -67,6 +81,8 @@ defmodule Hologram.Job do
 
   defmacro __using__(opts) do
     Validator.validate_use_job_opts!(__CALLER__.module, opts)
+
+    max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
 
     quote do
       use Hologram.Entity
@@ -94,6 +110,17 @@ defmodule Hologram.Job do
       """
       @spec __is_hologram_job__() :: boolean
       def __is_hologram_job__, do: true
+
+      @doc """
+      Returns how many jobs of this type a node runs at once.
+
+      ## Examples
+
+          iex> __job_max_concurrency__()
+          10
+      """
+      @spec __job_max_concurrency__() :: pos_integer
+      def __job_max_concurrency__, do: unquote(max_concurrency)
     end
   end
 
@@ -113,8 +140,9 @@ defmodule Hologram.Job do
   Creates a job of the given job type from the given values (a map or a keyword list), enqueuing it.
 
   The job is written as a row of its type, in whatever transaction the caller is already in, with
-  its status queued and its actor the acting user - nobody, on the trusted tier. It runs once,
-  after that transaction commits: a worker calls the job type's run/1 with the job, under the
+  its status queued and its actor the acting user - nobody, on the trusted tier, and nobody for a
+  trust claim made under a user id no user entity can have, like an app's own serial id. It runs
+  once, after that transaction commits: a worker calls the job type's run/1 with the job, under the
   acting user's authority, and records the outcome on it - or fails it, when the run is cut short
   before that. A transaction that rolls back leaves no job, so nothing runs.
 
@@ -128,7 +156,9 @@ defmodule Hologram.Job do
 
   Raises Hologram.MisuseError for a module that is not a job type, for an unknown option, and for a
   value of an attribute the framework sets. Raises Hologram.AccessDeniedError when a user is acting
-  and the job type declares no allow lines, since no rule can then grant the write.
+  and the job type declares no allow lines, since no rule can then grant the write, and when the
+  acting user id is one no user entity can have, unless the call claims trust: true - such a job
+  would run with no user, skipping every rule.
   """
   @spec create(module, %{optional(atom) => any} | keyword, keyword) ::
           {:ok, Entity.t()} | {:error, %{atom => list(atom | {atom, any})}}
@@ -160,6 +190,13 @@ defmodule Hologram.Job do
           reason: violations
     end
   end
+
+  @doc """
+  Returns how many jobs of the given job type a node runs at once: the `:max_concurrency` its use
+  line gives, 10 by default.
+  """
+  @spec max_concurrency(module) :: pos_integer
+  def max_concurrency(job_type), do: job_type.__job_max_concurrency__()
 
   @doc """
   Returns the names of the attributes every job type carries and only the framework sets, sorted: the acting user at the enqueue, the failure record, and the status.

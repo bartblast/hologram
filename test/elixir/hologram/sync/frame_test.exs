@@ -48,11 +48,7 @@ defmodule Hologram.Sync.FrameTest do
   end
 
   defp delete_key do
-    Policy.verdict_key(
-      VerdictTask,
-      :delete,
-      {:none, {[:board, :cards], [{:author_id, :==, {:actor}}]}}
-    )
+    Policy.verdict_key(VerdictTask, :delete)
   end
 
   # A build with a page checking permissions on the client - the only kind whose rows carry
@@ -83,6 +79,14 @@ defmodule Hologram.Sync.FrameTest do
                "$verdicts": %{"delete:abc" => false},
                c: "after"
              }
+    end
+
+    test "names the rows a client may hold that no longer reach it by their hashes" do
+      id = Entity.generate_id()
+
+      assert deltas(news(%{hidden: [{Module2, "q3Vx", [id]}]}), nil) == [
+               unsync_hashed(Module2, "q3Vx", [id])
+             ]
     end
 
     test "sends a patch naming no value for a row whose verdicts alone moved" do
@@ -269,6 +273,44 @@ defmodule Hologram.Sync.FrameTest do
     end
   end
 
+  # The same vectors test/javascript/drop_hash_test.mjs checks the browser's hash against.
+  describe "drop_hash/2" do
+    test "hashes a salt and an id the way the browser does" do
+      assert drop_hash("salt", "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f") == "112df949ed165eb9"
+    end
+
+    test "hashes nothing at all as SHA-256 does" do
+      assert drop_hash("", "") == "e3b0c44298fc1c14"
+    end
+
+    test "hashes a short message as SHA-256 does" do
+      assert drop_hash("a", "b") == "fb8e20fc2e4c3f24"
+    end
+
+    test "hashes a message longer than one block" do
+      assert drop_hash(String.duplicate("x", 40), String.duplicate("y", 40)) == "5f23e845240fffa4"
+    end
+
+    test "hashes the same id differently under another salt" do
+      id = Entity.generate_id()
+
+      refute drop_hash("salt", id) == drop_hash("other", id)
+    end
+  end
+
+  describe "drop_salt/0" do
+    test "answers 16 random bytes in url-safe base64" do
+      salt = drop_salt()
+
+      assert {:ok, bytes} = Base.url_decode64(salt, padding: false)
+      assert byte_size(bytes) == 16
+    end
+
+    test "answers a fresh salt each time" do
+      refute drop_salt() == drop_salt()
+    end
+  end
+
   describe "encode_deltas_envelope/4" do
     test "spells a put's verdicts as a $verdicts object beside the row's values" do
       row = Module2.new(a: true, c: "first")
@@ -288,6 +330,34 @@ defmodule Hologram.Sync.FrameTest do
       "event: sync_deltas\nid: 42\ndata: " <> json = String.trim_trailing(envelope, "\n")
 
       Jason.decode!(json)["deltas"]
+    end
+
+    test "carries a hashed drop as its salt and hashes, under its type" do
+      id = Entity.generate_id()
+
+      envelope = encode_deltas_envelope(42, @cursor, [unsync_hashed(Module2, "q3Vx", [id])], nil)
+
+      assert decoded_deltas(envelope) == %{
+               "unsync_hashed" => %{
+                 "Hologram.Test.Fixtures.Entity.Module2" => [
+                   %{"hashes" => [drop_hash("q3Vx", id)], "salt" => "q3Vx"}
+                 ]
+               }
+             }
+    end
+
+    test "carries a keep list as its salt and hashes, under its type" do
+      id = Entity.generate_id()
+
+      envelope = encode_deltas_envelope(42, @cursor, [keep_hashed(Module2, "q3Vx", [id])], nil)
+
+      assert decoded_deltas(envelope) == %{
+               "keep_hashed" => %{
+                 "Hologram.Test.Fixtures.Entity.Module2" => [
+                   %{"hashes" => [drop_hash("q3Vx", id)], "salt" => "q3Vx"}
+                 ]
+               }
+             }
     end
 
     test "wraps the deltas in a sync_deltas SSE event envelope" do
@@ -329,6 +399,8 @@ defmodule Hologram.Sync.FrameTest do
                      "c_id" => parent.c_id,
                      "created_at" => nil,
                      "id" => parent.id,
+                     "server_created_at" => nil,
+                     "server_updated_at" => nil,
                      "updated_at" => nil
                    }
                  ],
@@ -340,6 +412,8 @@ defmodule Hologram.Sync.FrameTest do
                      "c" => "child",
                      "created_at" => nil,
                      "id" => child.id,
+                     "server_created_at" => nil,
+                     "server_updated_at" => nil,
                      "updated_at" => nil
                    }
                  ]
@@ -572,7 +646,7 @@ defmodule Hologram.Sync.FrameTest do
   end
 
   describe "row_verdicts/2" do
-    test "answers the row's deciding quantifiers for the user when a client checks permissions" do
+    test "answers the row's verdict operations for the user when a client checks permissions" do
       check_permissions()
 
       assert row_verdicts(Entity.generate_id(), VerdictTask.new()) == %{delete_key() => true}
@@ -590,7 +664,7 @@ defmodule Hologram.Sync.FrameTest do
 
     # Nothing to answer, so whether a client checks permissions is never asked - the query cache is
     # not stubbed here.
-    test "answers nothing for a type with no deciding quantifier" do
+    test "answers nothing for a type the server sends no verdict on" do
       assert row_verdicts(nil, Module2.new(a: true)) == %{}
     end
   end
@@ -602,6 +676,33 @@ defmodule Hologram.Sync.FrameTest do
       assert unsync_entity(id, Module2) == %{
                id: id,
                op: :unsync_entity,
+               type: "Hologram.Test.Fixtures.Entity.Module2"
+             }
+    end
+  end
+
+  describe "keep_hashed/3" do
+    test "names the given rows of the given type to keep by their hashes under the given salt" do
+      id = Entity.generate_id()
+
+      assert keep_hashed(Module2, "q3Vx", [id]) == %{
+               data: %{hashes: [drop_hash("q3Vx", id)], salt: "q3Vx"},
+               op: :keep_hashed,
+               type: "Hologram.Test.Fixtures.Entity.Module2"
+             }
+    end
+  end
+
+  describe "unsync_hashed/3" do
+    test "names the given rows of the given type by their hashes under the given salt" do
+      [first, second] = [Entity.generate_id(), Entity.generate_id()]
+
+      assert unsync_hashed(Module2, "q3Vx", [first, second]) == %{
+               data: %{
+                 hashes: [drop_hash("q3Vx", first), drop_hash("q3Vx", second)],
+                 salt: "q3Vx"
+               },
+               op: :unsync_hashed,
                type: "Hologram.Test.Fixtures.Entity.Module2"
              }
     end

@@ -140,6 +140,30 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "__policy_hints__/0" do
+    test "returns empty list for entity type with no policy declarations" do
+      assert Module1.__policy_hints__() == []
+    end
+
+    test "lines up with __policies__/0, a line with nothing to hint holding none" do
+      defmodule PolicyHintsEntityFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        relationship :messages, [Module33]
+
+        allow :read, to: :viewer
+        allow :update, to: :viewer, when: any(message <- messages, message.position > 1)
+      end
+
+      assert PolicyHintsEntityFixture.__policy_hints__() == [
+               [],
+               [{:key, 1, :position, nil, ["message.position", "position"]}]
+             ]
+    end
+  end
+
   describe "__policy_sources__/0" do
     test "returns empty list for entity type with no policy declarations" do
       assert Module1.__policy_sources__() == []
@@ -245,7 +269,14 @@ defmodule Hologram.EntityTest do
         |> Map.keys()
         |> Enum.sort()
 
-      assert field_names == [:__meta__, :created_at, :id, :updated_at]
+      assert field_names == [
+               :__meta__,
+               :created_at,
+               :id,
+               :server_created_at,
+               :server_updated_at,
+               :updated_at
+             ]
     end
 
     test "derives one field per inverse relationship and no reference field" do
@@ -255,7 +286,17 @@ defmodule Hologram.EntityTest do
         |> Map.keys()
         |> Enum.sort()
 
-      assert field_names == [:__meta__, :created_at, :id, :messages, :name, :topic, :updated_at]
+      assert field_names == [
+               :__meta__,
+               :created_at,
+               :id,
+               :messages,
+               :name,
+               :server_created_at,
+               :server_updated_at,
+               :topic,
+               :updated_at
+             ]
 
       assert %Module26{}.messages == %NotIncluded{relationship: :messages}
       assert %Module26{}.topic == %NotIncluded{relationship: :topic}
@@ -278,6 +319,8 @@ defmodule Hologram.EntityTest do
                :messages,
                :name,
                :recent_messages,
+               :server_created_at,
+               :server_updated_at,
                :updated_at
              ]
 
@@ -292,7 +335,17 @@ defmodule Hologram.EntityTest do
         |> Map.keys()
         |> Enum.sort()
 
-      assert field_names == [:__meta__, :a, :b, :c, :created_at, :id, :updated_at]
+      assert field_names == [
+               :__meta__,
+               :a,
+               :b,
+               :c,
+               :created_at,
+               :id,
+               :server_created_at,
+               :server_updated_at,
+               :updated_at
+             ]
     end
 
     test "carries the declared attribute defaults" do
@@ -327,7 +380,19 @@ defmodule Hologram.EntityTest do
         |> Map.keys()
         |> Enum.sort()
 
-      assert field_names == [:__meta__, :a, :b, :b_id, :c, :c_id, :created_at, :id, :updated_at]
+      assert field_names == [
+               :__meta__,
+               :a,
+               :b,
+               :b_id,
+               :c,
+               :c_id,
+               :created_at,
+               :id,
+               :server_created_at,
+               :server_updated_at,
+               :updated_at
+             ]
     end
   end
 
@@ -336,6 +401,8 @@ defmodule Hologram.EntityTest do
       expected = [
         {:created_at, :datetime, []},
         {:id, :uuid, []},
+        {:server_created_at, :datetime, []},
+        {:server_updated_at, :datetime, []},
         {:updated_at, :datetime, []}
       ]
 
@@ -1267,6 +1334,8 @@ defmodule Hologram.EntityTest do
                b: "DateTime.t() | nil",
                c: ":x | :y | nil",
                created_at: "DateTime.t() | nil",
+               server_created_at: "DateTime.t() | nil",
+               server_updated_at: "DateTime.t() | nil",
                d: "float() | nil",
                id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
@@ -1284,6 +1353,8 @@ defmodule Hologram.EntityTest do
                b: "t() | Hologram.Entity.NotIncluded.t() | nil",
                b_id: "Hologram.Entity.id() | nil",
                created_at: "DateTime.t() | nil",
+               server_created_at: "DateTime.t() | nil",
+               server_updated_at: "DateTime.t() | nil",
                id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }
@@ -1293,6 +1364,8 @@ defmodule Hologram.EntityTest do
       assert struct_field_types(Module26) == %{
                __meta__: "Hologram.Entity.Metadata.t()",
                created_at: "DateTime.t() | nil",
+               server_created_at: "DateTime.t() | nil",
+               server_updated_at: "DateTime.t() | nil",
                id: "Hologram.Entity.id() | nil",
                messages:
                  "[Hologram.Test.Fixtures.Entity.Module28.t()] | Hologram.Entity.NotIncluded.t()",
@@ -1312,6 +1385,8 @@ defmodule Hologram.EntityTest do
                channel_id: "Hologram.Entity.id() | nil",
                channel_name: "String.t() | Hologram.Entity.NotIncluded.t() | nil",
                created_at: "DateTime.t() | nil",
+               server_created_at: "DateTime.t() | nil",
+               server_updated_at: "DateTime.t() | nil",
                id: "Hologram.Entity.id() | nil",
                later_count: "integer() | Hologram.Entity.NotIncluded.t() | nil",
                position: "integer() | nil",
@@ -1338,6 +1413,8 @@ defmodule Hologram.EntityTest do
       assert struct_field_types(Module15) == %{
                __meta__: "Hologram.Entity.Metadata.t()",
                created_at: "DateTime.t() | nil",
+               server_created_at: "DateTime.t() | nil",
+               server_updated_at: "DateTime.t() | nil",
                id: "Hologram.Entity.id() | nil",
                label: "String.t() | nil",
                secret_note: "String.t() | Hologram.Entity.ServerOnly.t() | nil",
@@ -1353,6 +1430,8 @@ defmodule Hologram.EntityTest do
                b: "integer() | nil",
                c: "String.t() | nil",
                created_at: "DateTime.t() | nil",
+               server_created_at: "DateTime.t() | nil",
+               server_updated_at: "DateTime.t() | nil",
                id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }
@@ -1369,6 +1448,8 @@ defmodule Hologram.EntityTest do
                  "Hologram.Test.Fixtures.Entity.Module1.t() | Hologram.Entity.NotIncluded.t() | nil",
                c_id: "Hologram.Entity.id() | nil",
                created_at: "DateTime.t() | nil",
+               server_created_at: "DateTime.t() | nil",
+               server_updated_at: "DateTime.t() | nil",
                id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }
@@ -1393,6 +1474,8 @@ defmodule Hologram.EntityTest do
       assert struct_field_types(Module1) == %{
                __meta__: "Hologram.Entity.Metadata.t()",
                created_at: "DateTime.t() | nil",
+               server_created_at: "DateTime.t() | nil",
+               server_updated_at: "DateTime.t() | nil",
                id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }

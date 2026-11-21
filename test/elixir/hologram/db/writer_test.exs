@@ -24,6 +24,7 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.DB.EntityOperations
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
+  alias Hologram.Job
   alias Hologram.MisuseError
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -38,6 +39,7 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
   alias Hologram.Test.Fixtures.Policy.Module39, as: ChannelMessage
   alias Hologram.Test.Fixtures.Policy.Module40
+  alias Hologram.Test.Fixtures.Policy.Module9
 
   defp create_user(email) do
     %{email: email}
@@ -71,6 +73,15 @@ defmodule Hologram.DB.WriterTest do
       ])
 
     Enum.map(rows, fn [role] -> role end)
+  end
+
+  defp oplog_actor_ids(entity_id) do
+    statement = ~s|SELECT "actor_id" FROM "hologram_system"."oplog" WHERE "entity_id" = $1|
+
+    {:ok, %Postgrex.Result{rows: rows}} =
+      Connection.query(statement, [Codec.encode(entity_id, :uuid)])
+
+    Enum.map(rows, fn [actor_id] -> actor_id end)
   end
 
   defp last_old_references do
@@ -192,6 +203,77 @@ defmodule Hologram.DB.WriterTest do
       assert EntityOperations.get(Module2, created_entity.id).__meta__.revisions == %{
                public: stamp
              }
+    end
+
+    for user_id <- [7, "abc", :admin] do
+      test "writes a row a visitor may create under the user id #{inspect(user_id)}, recording no actor" do
+        entity = Module9.new()
+
+        assert {:ok, %Module9{}} = as_user(unquote(user_id), fn -> create(entity) end)
+        assert DB.read(Module9, entity.id) != nil
+        assert oplog_actor_ids(entity.id) == [nil]
+      end
+    end
+
+    test "evaluates :create as a visitor's under a user id no user entity can have" do
+      entity = Module2.new(public: true)
+
+      expected_msg =
+        ~s(not allowed to create Hologram.Test.Fixtures.Policy.Module2 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(7, fn -> create(entity) end)
+      end
+
+      assert DB.read(Module2, entity.id) == nil
+    end
+
+    test "grants no creator role under a user id no user entity can have" do
+      entity = trust(Module1.new())
+
+      assert {:ok, %Module1{}} = as_user(7, fn -> create(entity) end)
+
+      {:ok, %Postgrex.Result{rows: [[count]]}} =
+        Connection.query(
+          ~s|SELECT count(*) FROM "hologram_data"."hologram_role_grant" WHERE "entity_id" = $1|,
+          [Codec.encode(entity.id, :uuid)]
+        )
+
+      assert count == 0
+    end
+
+    test "refuses a job under a user id no user entity can have" do
+      job = JobModule1.new()
+
+      expected_msg =
+        "cannot create Hologram.Test.Fixtures.Job.Module1 as user 7 - the user id isn't a user entity's, so the job would run with no user and skip every rule. Create it with trust: true to run it as the server."
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(7, fn -> create(job) end)
+      end
+
+      assert DB.read(JobModule1, job.id) == nil
+    end
+
+    test "creates a job claiming trust under a user id no user entity can have, with no actor" do
+      job = trust(JobModule1.new())
+
+      assert {:ok, %JobModule1{actor_id: nil}} = as_user(7, fn -> create(job) end)
+      assert DB.read(JobModule1, job.id).actor_id == nil
+    end
+
+    test "refuses Job.create/3 under a user id no user entity can have" do
+      expected_msg =
+        "cannot create Hologram.Test.Fixtures.Job.Module1 as user 7 - the user id isn't a user entity's, so the job would run with no user and skip every rule. Create it with trust: true to run it as the server."
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(7, fn -> Job.create(JobModule1) end)
+      end
+    end
+
+    test "creates a job through Job.create/3 claiming trust under a user id no user entity can have" do
+      assert {:ok, %JobModule1{actor_id: nil}} =
+               as_user(7, fn -> Job.create(JobModule1, %{}, trust: true) end)
     end
 
     test "skips evaluation for a trust claim and still grants creator roles" do

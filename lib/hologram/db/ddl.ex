@@ -1,6 +1,7 @@
 defmodule Hologram.DB.DDL do
   @moduledoc false
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Mapper
 
   # Types the mapper emits by name - anything else is a derived enum type, which lives
@@ -228,6 +229,51 @@ defmodule Hologram.DB.DDL do
   end
 
   @doc """
+  Returns the parameterized statement writing new ids into the given role grant table: the
+  first parameter holds the ids the rows have, the second the ids they take, both as text and
+  in the same order.
+  """
+  @spec grant_id_update_statement(String.t()) :: String.t()
+  def grant_id_update_statement(table) do
+    ~s{UPDATE #{qualified(table)} AS "grant" SET "id" = "moved"."new"::uuid } <>
+      ~s{FROM unnest($1::text[], $2::text[]) AS "moved" ("old", "new") } <>
+      ~s{WHERE "grant"."id" = "moved"."old"::uuid}
+  end
+
+  @doc """
+  Returns the parameterized statement counting the key groups of the four identity columns that
+  more than one of the given role grant table's grants holding the first parameter in the given
+  column share. NULLs group together, as the store's unique index compares them.
+  """
+  @spec grant_repeat_check_statement(String.t(), String.t()) :: String.t()
+  def grant_repeat_check_statement(table, column) do
+    identity_columns =
+      Enum.map_join(RoleGrant.identity_columns(), ", ", &Mapper.quote_identifier/1)
+
+    ~s{SELECT COUNT(*) FROM (SELECT 1 FROM #{qualified(table)} } <>
+      ~s{WHERE #{Mapper.quote_identifier(column)}::text = $1 } <>
+      ~s{GROUP BY #{identity_columns} HAVING COUNT(*) > 1) AS repeats}
+  end
+
+  @doc """
+  Returns the parameterized statement reading one page of the role grants holding the first
+  parameter in the given column, after the id in the second, in id order and at most the third
+  parameter of them. Each row holds the id and the four identity columns, all as text - the
+  spelling the grant id derives from - in the order of `Hologram.Auth.RoleGrant.identity_columns/0`.
+  """
+  @spec grant_identity_statement(String.t(), String.t()) :: String.t()
+  def grant_identity_statement(table, column) do
+    identity_columns = Enum.map_join(RoleGrant.identity_columns(), ", ", &~s{"#{&1}"::text})
+
+    # Ordered by the stored uuid, named through its table: a bare "id" in ORDER BY would name the
+    # text id the SELECT returns, which sorts all the matching grants after the cursor on each page
+    # instead of reading the primary key index up to the limit.
+    ~s{SELECT "id"::text, #{identity_columns} FROM #{qualified(table)} } <>
+      ~s{WHERE #{Mapper.quote_identifier(column)}::text = $1 AND "id" > $2::text::uuid } <>
+      ~s{ORDER BY #{qualified(table)}."id" LIMIT $3}
+  end
+
+  @doc """
   Returns the pre-flight check statement counting the rows with a NULL in the given
   column - the rows that block making the column required without a fill.
   """
@@ -240,10 +286,13 @@ defmodule Hologram.DB.DDL do
   Returns the pre-flight check statement counting the key groups of the given table's
   columns that hold more than one row - the duplicates that block a unique index build.
 
-  Nulls compare as values when nulls_distinct is false, matching the index being built.
+  Nulls compare as values when nulls_distinct is false, matching the index being built. Given
+  a written column, only the groups holding a row with a NULL there count - the rows a fill
+  of that column writes.
   """
-  @spec duplicate_check_statement(String.t(), list(String.t()), boolean) :: String.t()
-  def duplicate_check_statement(table, columns, nulls_distinct) do
+  @spec duplicate_check_statement(String.t(), list(String.t()), boolean, String.t() | nil) ::
+          String.t()
+  def duplicate_check_statement(table, columns, nulls_distinct, written_column \\ nil) do
     quoted_columns = Enum.map(columns, &Mapper.quote_identifier/1)
     grouped = Enum.join(quoted_columns, ", ")
 
@@ -254,8 +303,15 @@ defmodule Hologram.DB.DDL do
         ""
       end
 
+    written_part =
+      if written_column do
+        " AND COUNT(*) FILTER (WHERE #{Mapper.quote_identifier(written_column)} IS NULL) > 0"
+      else
+        ""
+      end
+
     "SELECT COUNT(*) FROM (SELECT 1 FROM #{qualified(table)}#{not_null_part} " <>
-      "GROUP BY #{grouped} HAVING COUNT(*) > 1) AS duplicates"
+      "GROUP BY #{grouped} HAVING COUNT(*) > 1#{written_part}) AS duplicates"
   end
 
   @doc """
@@ -314,8 +370,8 @@ defmodule Hologram.DB.DDL do
   leftovers of a concurrent build that failed partway.
 
   A concurrent build spans several internal transactions, so PostgreSQL cannot roll one
-  back: the failed index stays in the catalog flagged invalid, unused by queries and
-  maintained by every write, holding its derived name.
+  back: the failed index stays in the catalog flagged invalid, unused by queries, holding
+  its derived name.
   """
   @spec invalid_index_check_statement(String.t()) :: String.t()
   def invalid_index_check_statement(index) do
@@ -329,37 +385,38 @@ defmodule Hologram.DB.DDL do
   end
 
   @doc """
-  Returns the statement listing the names of the invalid indexes of the data schema.
+  Returns the statement listing the invalid indexes of the data schema - each one's name,
+  whether writes go through it, and whether it is live - all of them, or the unique ones or the
+  others as the given filter says.
 
   A concurrent build that failed partway leaves its index in the catalog flagged
-  invalid: it holds the derived name, serves no query, and every write maintains it.
+  invalid: it holds the derived name and serves no query. Writes go through it when the
+  build failed in its last phase, checking the rows - a unique one then refuses a write
+  repeating its key - and not when it failed in its first, building the index. A concurrent
+  drop that stopped partway can leave its index dead: writes skip it, and so does a table
+  rewrite, unless the rewrite changes the type of a column it covers. The migrator repairs the
+  unique ones, which the model derives, and `Hologram.DB.IndexBuilder` the others, which the index
+  plan derives - apart, since a build in flight reads as invalid too, and each builds its own under
+  the migration lock.
   """
-  @spec invalid_indexes_statement() :: String.t()
-  def invalid_indexes_statement do
+  @spec invalid_indexes_statement(:any | boolean) :: String.t()
+  def invalid_indexes_statement(unique \\ :any) do
+    unique_sql =
+      case unique do
+        :any -> ""
+        true -> " AND i.indisunique"
+        false -> " AND NOT i.indisunique"
+      end
+
     """
-    SELECT ic.relname
+    SELECT ic.relname, i.indisready, i.indislive
     FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
     JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = '#{Mapper.data_schema()}' AND NOT i.indisvalid\
+    WHERE n.nspname = '#{Mapper.data_schema()}' AND NOT i.indisvalid#{unique_sql}
+    ORDER BY ic.relname\
     """
-  end
-
-  @doc """
-  Returns the statement rebuilding the given index in place, concurrently.
-
-  Rebuilding is what clears an invalid index: it replaces the failed build without
-  taking the table's writes offline, and without the index ever being absent - which a
-  drop-and-recreate pair could not promise if the node died between the two.
-
-  Runs on a connection with no open transaction, as every concurrent operation must -
-  PostgreSQL rejects one inside a transaction with 25001. The repair holds a
-  session-scoped lock rather than a transactional one for exactly this reason.
-  """
-  @spec reindex_statement(String.t()) :: String.t()
-  def reindex_statement(index) do
-    ~s(REINDEX INDEX CONCURRENTLY "#{Mapper.data_schema()}".#{Mapper.quote_identifier(index)})
   end
 
   @doc """
@@ -375,8 +432,9 @@ defmodule Hologram.DB.DDL do
   Returns the DDL statements that execute the given change op, in execution order.
 
   :create_table renders one statement with all columns and the named primary key
-  constraint - columns are laid out in canonical order (id first, created_at and
-  updated_at last, everything else alphabetical). :add_column, :drop_column, and
+  constraint - columns are laid out in canonical order (id first, the timestamps -
+  created_at, server_created_at, server_updated_at and updated_at - last, everything
+  else alphabetical). :add_column, :drop_column, and
   :drop_table render one statement each. :alter_column renders one ALTER TABLE
   statement combining a type action (with COLLATE and a USING cast) and a nullability
   action, as needed.
@@ -384,7 +442,10 @@ defmodule Hologram.DB.DDL do
   :add_foreign_key renders a named ADD CONSTRAINT referencing the target table's id
   column with the delete action - :drop_foreign_key and :rename_constraint render
   their ALTER TABLE forms. :create_index renders a named index over its columns -
-  :drop_index renders the schema-qualified drop (indexes are schema-level objects).
+  :drop_index renders the schema-qualified drop (indexes are schema-level objects). Both
+  render their CONCURRENTLY form for an op carrying `concurrently: true`. :drop_index and
+  :rename_index render their IF EXISTS form for an op carrying `if_exists: true`, which
+  skips an index that is not there instead of failing on it.
 
   The rename ops - :rename_table, :rename_column, :rename_index, :rename_enum_type -
   render their one-statement forms, and :widen_to_many moves the reference values of a
@@ -395,7 +456,10 @@ defmodule Hologram.DB.DDL do
   :delete_role_grants empties the role grant store, the second op that touches rows
   rather than the schema. It too comes from the applier only, and for a stronger reason:
   the migration file has to SAY it deletes the grants, so the destruction is reviewed
-  rather than inferred from a designation change.
+  rather than inferred from a designation change. A third such op, :rederive_grant_ids,
+  never reaches this function: the ids it writes are SHA-1 digests, which PostgreSQL can't
+  compute, so the migrator derives them between grant_identity_statement/2 and
+  grant_id_update_statement/1.
 
   :create_enum_type, :drop_enum_type, :add_enum_value (with its BEFORE anchor when
   positioned), and :rename_enum_value render one statement each. :rebuild_enum_type
@@ -467,9 +531,10 @@ defmodule Hologram.DB.DDL do
   end
 
   # A `concurrently: true` op must reach the database on a connection with no open
-  # transaction - PostgreSQL rejects a concurrent build inside one with 25001. That is why
-  # such ops are split into the applier's tail and run after their file commits, rather
-  # than being a property of the statement itself.
+  # transaction - PostgreSQL rejects a concurrent build inside one with 25001, and a
+  # concurrent drop the same way. That is why the renderer splits such builds into the
+  # applier's tail, run after their file commits, and the migrator's index repair runs its
+  # own on the migration lock's session, rather than this being a property of the statement.
   def statements(%{op: :create_index} = op) do
     columns = Enum.map_join(op.columns, ", ", &Mapper.quote_identifier/1)
     unique_sql = if op.unique, do: "UNIQUE ", else: ""
@@ -519,8 +584,13 @@ defmodule Hologram.DB.DDL do
     ]
   end
 
+  # Concurrent only from the migrator's index repair and tail, outside any transaction - see
+  # the :create_index clause. IF EXISTS, here and on the rename, only for an op of a migration
+  # file: the boot may have dropped the index the op names before the op applies.
   def statements(%{op: :drop_index} = op) do
-    ["DROP INDEX #{qualified(op.index)}"]
+    concurrently_sql = if op[:concurrently], do: "CONCURRENTLY ", else: ""
+
+    ["DROP INDEX #{concurrently_sql}#{if_exists_sql(op)}#{qualified(op.index)}"]
   end
 
   def statements(%{op: :drop_table} = op) do
@@ -581,7 +651,10 @@ defmodule Hologram.DB.DDL do
   end
 
   def statements(%{op: :rename_index} = op) do
-    ["ALTER INDEX #{qualified(op.from)} RENAME TO #{Mapper.quote_identifier(op.to)}"]
+    [
+      "ALTER INDEX #{if_exists_sql(op)}#{qualified(op.from)} " <>
+        "RENAME TO #{Mapper.quote_identifier(op.to)}"
+    ]
   end
 
   def statements(%{op: :rename_table} = op) do
@@ -608,6 +681,10 @@ defmodule Hologram.DB.DDL do
 
   defp column_order_key("created_at"), do: {2, "created_at"}
 
+  defp column_order_key("server_created_at"), do: {2, "server_created_at"}
+
+  defp column_order_key("server_updated_at"), do: {2, "server_updated_at"}
+
   defp column_order_key("updated_at"), do: {2, "updated_at"}
 
   # After the timestamps rather than second, which is where a leading $ would otherwise sort it.
@@ -633,6 +710,10 @@ defmodule Hologram.DB.DDL do
   defp delete_action(:no_action), do: "NO ACTION"
 
   defp delete_action(:restrict), do: "RESTRICT"
+
+  defp if_exists_sql(op) do
+    if op[:if_exists], do: "IF EXISTS ", else: ""
+  end
 
   defp literal(value) do
     "'#{String.replace(value, "'", "''")}'"
