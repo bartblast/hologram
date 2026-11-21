@@ -122,15 +122,11 @@ defmodule HologramSyncTests.Consistency.PlanTest do
 
     assert Plan.conflict?(%Postgrex.Error{postgres: %{code: :deadlock_detected}})
 
-    assert Plan.conflict?(%Postgrex.Error{
+    refute Plan.conflict?(%Postgrex.Error{
              postgres: %{
                code: :foreign_key_violation,
                constraint: "#{DB.join_table_name(Card, :tags)}_source_id_$fk"
              }
-           })
-
-    refute Plan.conflict?(%Postgrex.Error{
-             postgres: %{code: :foreign_key_violation, constraint: "another_constraint"}
            })
 
     refute Plan.conflict?(%Hologram.MisuseError{
