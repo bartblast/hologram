@@ -207,6 +207,16 @@ defmodule Hologram.Compiler.QueryChainsTest do
                    end
     end
 
+    # A quantifier's condition is a list, so an operator tuple is a comparison of an attribute named
+    # any, as the stages read it.
+    test "checks a comparison through an operator of an attribute named like a quantifier" do
+      assert_raise Hologram.CompileError,
+                   ~r/builds an invalid query - unknown attribute :any/,
+                   fn ->
+                     validate_all!(Module1, :operator_any, 0)
+                   end
+    end
+
     test "passes the steps before one only the run knows" do
       assert validate_all!(Module1, :pinned_predicates, 1) == :ok
     end

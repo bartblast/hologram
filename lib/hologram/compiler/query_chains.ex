@@ -171,10 +171,20 @@ defmodule Hologram.Compiler.QueryChains do
     {:or, Enum.map(alternatives, &predicates!/1)}
   end
 
+  # A quantifier is told by its shape, as the stages tell it (see quantifier_value?/1 in
+  # Hologram.Query.Stage): a source - a list of relationships, or one read on a row above - and a
+  # list of predicates. Any other value is a comparison of an attribute of the same name.
   defp entry(%IR.TupleType{
-         data: [%IR.AtomType{value: quantifier}, %IR.TupleType{data: [source, predicates]}]
+         data: [
+           %IR.AtomType{value: quantifier},
+           %IR.TupleType{data: [source, %IR.ListType{} = predicates]}
+         ]
        })
-       when quantifier in @quantifiers do
+       when quantifier in @quantifiers and
+              (is_struct(source, IR.ListType) or
+                 (is_struct(source, IR.TupleType) and length(source.data) == 3 and
+                    is_struct(hd(source.data), IR.AtomType) and
+                    hd(source.data).value == :outer)) do
     {quantifier, {literal!(source), predicates!(predicates)}}
   end
 
