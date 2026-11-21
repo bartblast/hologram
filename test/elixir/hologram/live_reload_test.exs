@@ -1465,6 +1465,18 @@ defmodule Hologram.LiveReloadTest do
       assert_receive {:reload, :all}
     end
 
+    test "reloads every tab when the data model bundle was rewritten alone", %{pid: pid} do
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        bundles_built = Keyword.fetch!(opts, :bundles_built)
+        bundles_built.([:data_model])
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:reload, :all}
+    end
+
     test "reloads the chunk registry with every batch", %{pid: pid} do
       test_pid = self()
       ets_table_name = ChunkRegistryStub.ets_table_name()

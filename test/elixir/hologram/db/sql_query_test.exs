@@ -1,6 +1,7 @@
 defmodule Hologram.DB.SQLQueryTest do
   use Hologram.Test.BasicCase, async: true
 
+  import ExUnit.CaptureLog
   import Hologram.DB.SQLQuery
 
   alias Hologram.DB.Codec
@@ -29,6 +30,9 @@ defmodule Hologram.DB.SQLQueryTest do
 
   @remove_by_id_in_cte_sql ~s|WITH removed AS (DELETE FROM "hologram_data"."test_fixtures_entity_module1" WHERE "id" = $1 RETURNING "id") SELECT count(*) AS "count" FROM removed|
 
+  @unlock_msg "DB.sql/3 cannot release an advisory lock - the read's rollback would not undo the " <>
+                "release, and the lock belongs to whatever took it on that connection."
+
   defp count_by_id(id) do
     {:ok, %Postgrex.Result{rows: [[count]]}} = Connection.query(@count_by_id_sql, [id])
     count
@@ -44,10 +48,72 @@ defmodule Hologram.DB.SQLQueryTest do
     id
   end
 
+  # Asked from another process, so on another connection: a session never waits on its own lock. A
+  # lock this takes ends with the statement.
+  defp lock_free?(key) do
+    fn ->
+      {:ok, %Postgrex.Result{rows: [[free?]]}} =
+        Connection.query("SELECT pg_try_advisory_xact_lock($1)", [key])
+
+      free?
+    end
+    |> Task.async()
+    |> Task.await()
+  end
+
   defp read_only_message(server_message) do
     "DB.sql/3 can only read data, and this statement writes it (PostgreSQL: #{server_message}). " <>
       "Use DB.create/1, DB.update/3 or DB.delete/2 to write, so that the change reaches the sync " <>
       "and the clients."
+  end
+
+  # One side of a crossed pair: takes its own lock, waits for the other side to take its own, then
+  # asks for the other side's. Answers what that read returned and whether its own lock was free
+  # afterwards.
+  defp cross_locks(own_key, other_key, test_pid) do
+    Task.async(fn ->
+      {:ok, outcome} =
+        Connection.transaction(fn ->
+          {:ok, _result} = run("SELECT pg_advisory_xact_lock($1)", [own_key], [])
+          send(test_pid, {:locked, self()})
+
+          receive do
+            :cross -> :ok
+          end
+
+          answer = run("SELECT pg_advisory_xact_lock($1)", [other_key], [])
+
+          {answer, lock_free?(own_key)}
+        end)
+
+      outcome
+    end)
+  end
+
+  # Runs the function while another connection holds the lock.
+  defp with_lock_held(key, fun) do
+    test_pid = self()
+
+    holder =
+      Task.async(fn ->
+        Connection.transaction(fn ->
+          {:ok, _result} = Connection.query("SELECT pg_advisory_xact_lock($1)", [key])
+          send(test_pid, :locked)
+
+          receive do
+            :finish -> :ok
+          end
+        end)
+      end)
+
+    assert_receive :locked, 5_000
+
+    try do
+      fun.()
+    after
+      send(holder.pid, :finish)
+      Task.await(holder)
+    end
   end
 
   describe "run/3" do
@@ -272,10 +338,272 @@ defmodule Hologram.DB.SQLQueryTest do
       delete_by_id(id)
     end
 
-    # A transaction-level lock ends with the transaction the read runs in, so it outlives nothing.
-    test "allows a transaction-level advisory lock" do
-      assert run("SELECT pg_advisory_xact_lock(1378)", [], []) ==
-               {:ok, %{columns: ["pg_advisory_xact_lock"], rows: [[:void]]}}
+    test "holds a transaction-level advisory lock until the enclosing transaction ends" do
+      key = 175_001
+
+      {:ok, free_inside?} =
+        Connection.transaction(fn ->
+          assert run("SELECT pg_advisory_xact_lock($1)", [key], []) ==
+                   {:ok, %{columns: ["pg_advisory_xact_lock"], rows: [[:void]]}}
+
+          lock_free?(key)
+        end)
+
+      refute free_inside?
+      assert lock_free?(key)
+    end
+
+    test "holds a shared transaction-level advisory lock" do
+      key = 175_002
+
+      {:ok, free_inside?} =
+        Connection.transaction(fn ->
+          {:ok, _result} = run("SELECT pg_advisory_xact_lock_shared($1)", [key], [])
+          lock_free?(key)
+        end)
+
+      refute free_inside?
+      assert lock_free?(key)
+    end
+
+    test "holds a transaction-level advisory lock taken with try" do
+      key = 175_003
+
+      {:ok, free_inside?} =
+        Connection.transaction(fn ->
+          assert run(~s|SELECT pg_try_advisory_xact_lock($1) AS "taken"|, [key], []) ==
+                   {:ok, %{columns: ["taken"], rows: [[true]]}}
+
+          lock_free?(key)
+        end)
+
+      refute free_inside?
+      assert lock_free?(key)
+    end
+
+    test "holds a shared transaction-level advisory lock taken with try" do
+      key = 175_004
+
+      {:ok, free_inside?} =
+        Connection.transaction(fn ->
+          {:ok, _result} = run("SELECT pg_try_advisory_xact_lock_shared($1)", [key], [])
+          lock_free?(key)
+        end)
+
+      refute free_inside?
+      assert lock_free?(key)
+    end
+
+    test "holds a transaction-level advisory lock named schema-qualified, in any case" do
+      key = 175_005
+
+      {:ok, free_inside?} =
+        Connection.transaction(fn ->
+          {:ok, _result} = run("SELECT PG_CATALOG.PG_ADVISORY_XACT_LOCK($1)", [key], [])
+          lock_free?(key)
+        end)
+
+      refute free_inside?
+      assert lock_free?(key)
+    end
+
+    test "keeps the lock and leaves the enclosing transaction writable" do
+      key = 175_006
+
+      {:ok, {id, free_inside?}} =
+        Connection.transaction(fn ->
+          {:ok, _result} = run("SELECT pg_advisory_xact_lock($1)", [key], [])
+          id = insert_row()
+
+          {id, lock_free?(key)}
+        end)
+
+      refute free_inside?
+      assert count_by_id(id) == 1
+
+      delete_by_id(id)
+    end
+
+    test "keeps the lock and leaves the enclosing transaction's statement timeout as it was" do
+      key = 175_007
+
+      result =
+        Connection.transaction(fn ->
+          statement = "SELECT current_setting('statement_timeout')"
+
+          {:ok, _result} = Connection.query("SET LOCAL statement_timeout = '7s'")
+          {:ok, _result} = run("SELECT pg_advisory_xact_lock($1)", [key], timeout: 60_000)
+          {:ok, %Postgrex.Result{rows: [[timeout]]}} = Connection.query(statement)
+
+          Connection.rollback({timeout, lock_free?(key)})
+        end)
+
+      assert result == {:error, {"7s", false}}
+    end
+
+    test "keeps an earlier lock and gives back the lock of a statement that fails" do
+      earlier_key = 175_008
+      failed_key = 175_017
+
+      {:ok, {earlier_free?, failed_free?}} =
+        Connection.transaction(fn ->
+          {:ok, _result} = run("SELECT pg_advisory_xact_lock($1)", [earlier_key], [])
+
+          assert {:error, %SQLError{code: :division_by_zero}} =
+                   run(
+                     "SELECT pg_advisory_xact_lock($1), 1 / (random() * 0)::int",
+                     [failed_key],
+                     []
+                   )
+
+          {lock_free?(earlier_key), lock_free?(failed_key)}
+        end)
+
+      refute earlier_free?
+      assert failed_free?
+    end
+
+    test "keeps an earlier lock when a write beside a later lock is refused" do
+      earlier_key = 175_009
+
+      statement =
+        "WITH added AS (#{@insert_returning_id_sql}) " <>
+          "SELECT pg_advisory_xact_lock($1), (SELECT count(*) FROM added)"
+
+      {:ok, earlier_free?} =
+        Connection.transaction(fn ->
+          {:ok, _result} = run("SELECT pg_advisory_xact_lock($1)", [earlier_key], [])
+
+          assert {:error, %SQLError{code: :read_only_sql_transaction}} =
+                   run(statement, [175_018], [])
+
+          lock_free?(earlier_key)
+        end)
+
+      refute earlier_free?
+    end
+
+    test "gives the lock back when the nested transaction it was taken in rolls back" do
+      key = 175_010
+
+      {:ok, free_after_nested?} =
+        Connection.transaction(fn ->
+          {:error, :undone} =
+            Connection.transaction(fn ->
+              {:ok, _result} = run("SELECT pg_advisory_xact_lock($1)", [key], [])
+              refute lock_free?(key)
+
+              Connection.rollback(:undone)
+            end)
+
+          lock_free?(key)
+        end)
+
+      assert free_after_nested?
+    end
+
+    test "answers a wait past the timeout as a cancelled read and keeps an earlier lock" do
+      earlier_key = 175_021
+      held_key = 175_011
+
+      {:ok, {id, earlier_free?}} =
+        with_lock_held(held_key, fn ->
+          Connection.transaction(fn ->
+            {:ok, _result} = run("SELECT pg_advisory_xact_lock($1)", [earlier_key], [])
+
+            assert {:error, %SQLError{code: :query_canceled}} =
+                     run("SELECT pg_advisory_xact_lock($1)", [held_key], timeout: 50)
+
+            id = insert_row()
+
+            {id, lock_free?(earlier_key)}
+          end)
+        end)
+
+      refute earlier_free?
+      assert count_by_id(id) == 1
+
+      delete_by_id(id)
+    end
+
+    test "answers false for a try on a taken lock and keeps an earlier lock" do
+      earlier_key = 175_022
+      held_key = 175_023
+
+      {:ok, earlier_free?} =
+        with_lock_held(held_key, fn ->
+          Connection.transaction(fn ->
+            {:ok, _result} = run("SELECT pg_advisory_xact_lock($1)", [earlier_key], [])
+
+            assert run(~s|SELECT pg_try_advisory_xact_lock($1) AS "taken"|, [held_key], []) ==
+                     {:ok, %{columns: ["taken"], rows: [[false]]}}
+
+            lock_free?(earlier_key)
+          end)
+        end)
+
+      refute earlier_free?
+    end
+
+    # PostgreSQL picks the victim by whose deadlock check first sees the whole cycle, which timing
+    # decides, so either side may be the one answered with the error.
+    test "answers one side of a deadlock over a lock with an error, keeping its earlier lock" do
+      first_key = 175_015
+      second_key = 175_016
+
+      first = cross_locks(first_key, second_key, self())
+      second = cross_locks(second_key, first_key, self())
+
+      assert_receive {:locked, first_pid}, 5_000
+      assert_receive {:locked, second_pid}, 5_000
+
+      send(first_pid, :cross)
+      send(second_pid, :cross)
+
+      outcomes = Task.await_many([first, second], 10_000)
+
+      assert Enum.count(outcomes, fn {answer, _own_free?} ->
+               match?({:error, %SQLError{code: :deadlock_detected}}, answer)
+             end) == 1
+
+      assert Enum.count(outcomes, fn {answer, _own_free?} -> match?({:ok, _result}, answer) end) ==
+               1
+
+      assert Enum.all?(outcomes, fn {_answer, own_free?} -> own_free? == false end)
+    end
+
+    test "raises when a wait for a lock passes the enclosing transaction's deadline" do
+      earlier_key = 175_019
+      held_key = 175_020
+
+      with_lock_held(held_key, fn ->
+        capture_log(fn ->
+          assert_raise DBConnection.ConnectionError, fn ->
+            Connection.transaction(
+              fn ->
+                {:ok, _result} = run("SELECT pg_advisory_xact_lock($1)", [earlier_key], [])
+                refute lock_free?(earlier_key)
+                send(self(), :reached_the_wait)
+
+                run("SELECT pg_advisory_xact_lock($1)", [held_key], [])
+              end,
+              timeout: 2_000
+            )
+          end
+        end)
+
+        assert_received :reached_the_wait
+      end)
+    end
+
+    test "raises on a transaction-level advisory lock outside a transaction" do
+      expected_msg =
+        "DB.sql/3 cannot hold a transaction-level advisory lock outside a transaction - the " <>
+          "lock would end with the read. Call it inside DB.transaction/2."
+
+      assert_error MisuseError, expected_msg, fn ->
+        run("SELECT pg_advisory_xact_lock(1378)", [], [])
+      end
     end
 
     test "allows a lock function name inside a param" do
@@ -434,6 +762,44 @@ defmodule Hologram.DB.SQLQueryTest do
       assert_error MisuseError, expected_msg, fn ->
         run("SELECT PG_TRY_ADVISORY_LOCK_SHARED(1378)", [], [])
       end
+    end
+
+    test "raises on an advisory unlock" do
+      assert_error MisuseError, @unlock_msg, fn ->
+        run("SELECT pg_advisory_unlock(1378)", [], [])
+      end
+    end
+
+    test "raises on a shared advisory unlock, in any case" do
+      assert_error MisuseError, @unlock_msg, fn ->
+        run("SELECT PG_ADVISORY_UNLOCK_SHARED(1378)", [], [])
+      end
+    end
+
+    test "raises on releasing every advisory lock" do
+      assert_error MisuseError, @unlock_msg, fn ->
+        run("SELECT pg_advisory_unlock_all()", [], [])
+      end
+    end
+
+    test "leaves a held session-level lock in place when refusing an unlock" do
+      key = 175_014
+
+      {:ok, free_after_refusal?} =
+        Connection.transaction(fn ->
+          {:ok, _result} = Connection.query("SELECT pg_advisory_lock($1)", [key])
+
+          assert_error MisuseError, @unlock_msg, fn ->
+            run("SELECT pg_advisory_unlock($1)", [key], [])
+          end
+
+          free? = lock_free?(key)
+          {:ok, _result} = Connection.query("SELECT pg_advisory_unlock($1)", [key])
+
+          free?
+        end)
+
+      refute free_after_refusal?
     end
 
     test "raises on a named prepared statement behind a comment" do
