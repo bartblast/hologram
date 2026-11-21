@@ -478,6 +478,14 @@ defmodule Hologram.Compiler.QueryExtractor do
     {value, %{new_state | env: Map.put(new_state.env, {name, version}, value)}}
   end
 
+  defp evaluate!(
+         %IR.MatchOperator{left: %IR.MatchPlaceholder{}, right: right, line: line},
+         state,
+         context
+       ) do
+    evaluate!(right, state, with_line(context, line))
+  end
+
   defp evaluate!(%IR.MatchOperator{line: line}, _state, context) do
     context = with_line(context, line)
 

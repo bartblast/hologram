@@ -89,6 +89,20 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module141 do
 
   def undefined(messages), do: wrap_term(Module55).missing_helper(messages)
 
+  def wildcard_bound(messages) do
+    # credo:disable-for-next-line Credo.Check.Consistency.UnusedVariableNames
+    _ = take(messages, 1)
+
+    count(messages)
+  end
+
+  def wildcard_invalid(messages) do
+    # credo:disable-for-next-line Credo.Check.Consistency.UnusedVariableNames
+    _ = filter(messages, nonexistent == 1)
+
+    messages
+  end
+
   def windowed(messages, from, to) when from >= 0 and to > from, do: take(messages, ^to)
 
   def windowed(messages, _from, _to), do: messages

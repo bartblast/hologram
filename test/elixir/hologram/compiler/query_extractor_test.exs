@@ -44,6 +44,25 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert read_modules == [Module53]
     end
 
+    test "follows a query builder assigning a stage to the wildcard", %{ir_plt: ir_plt} do
+      {definition, _read_modules} = derived_definition(Module142, :wildcard_bound, ir_plt)
+
+      assert definition ==
+               {:query,
+                %Query{
+                  cardinality: :count,
+                  entity: Entity33,
+                  source: {Entity36, [:channel, :messages]}
+                }}
+    end
+
+    # Nothing binds the value, but the code still runs it.
+    test "refuses an invalid stage assigned to the wildcard", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :wildcard_invalid in .+ builds an invalid query - unknown attribute :nonexistent/,
+                   fn -> derived_definition(Module142, :wildcard_invalid, ir_plt) end
+    end
+
     test "follows a query builder piped into a stage", %{ir_plt: ir_plt} do
       {definition, read_modules} = derived_definition(Entity36, :recent_unread, ir_plt)
 

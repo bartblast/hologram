@@ -163,6 +163,20 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module142 do
     |> Derived.lower()
   end
 
+  def __derived_definition__(:wildcard_bound) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module141.wildcard_bound()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:wildcard_invalid) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module141.wildcard_invalid()
+    |> Derived.lower()
+  end
+
   def __derived_definition__(:windowed) do
     Module36
     |> Derived.field([:channel, :messages])
@@ -193,6 +207,8 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module142 do
       outside: {"lib/my_app/member.ex", 43},
       same: {"lib/my_app/member.ex", 45},
       undefined: {"lib/my_app/member.ex", 47},
+      wildcard_bound: {"lib/my_app/member.ex", 51},
+      wildcard_invalid: {"lib/my_app/member.ex", 53},
       windowed: {"lib/my_app/member.ex", 49}
     }
   end
