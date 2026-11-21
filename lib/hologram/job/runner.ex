@@ -197,6 +197,23 @@ defmodule Hologram.Job.Runner do
     end)
   end
 
+  @doc """
+  Records a failed attempt for the job of the given type with the given id, whose run was killed
+  for passing the given time limit in milliseconds, and returns :ok.
+
+  Called once the run is dead and its lock given up, and judged like a sweep's row: a run that
+  recorded its outcome before the kill landed keeps it, and so does a row already swept, or one
+  another worker has claimed again, whose lock it holds.
+  """
+  @spec time_out(module, String.t(), pos_integer) :: :ok
+  def time_out(job_type, id, timeout) do
+    fail_abandoned(
+      job_type,
+      id,
+      "the run passed its time limit of #{timeout} ms and was killed, so run/1 may have done all, part or none of its work"
+    )
+  end
+
   # Whatever run/1 does, the run goes on to record it: a job that raises is a failed job rather than
   # a crashed run, and the exception is what the row records.
   defp attempt(job) do
@@ -346,13 +363,15 @@ defmodule Hologram.Job.Runner do
   #
   # The row is read again under the row lock: a run that recorded its outcome and gave its lock up
   # after the list was read is not running any more.
-  defp sweep_row(job_type, id) do
+  defp sweep_row(job_type, id), do: fail_abandoned(job_type, id, @cut_short_error)
+
+  defp fail_abandoned(job_type, id, text) do
     {:ok, :ok} =
       Connection.transaction(fn ->
         with true <- run_lock_free?(lock_name(job_type, id)),
              %{status: :running, attempt: attempt} <-
                EntityOperations.get(job_type, id, lock: :no_key_update) do
-          changes = attempt_failed_changes(job_type, attempt, @cut_short_error)
+          changes = attempt_failed_changes(job_type, attempt, text)
 
           :ok = EntityOperations.update(job_type, id, changes)
         else

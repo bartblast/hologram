@@ -69,7 +69,7 @@ defmodule Hologram.JobTest do
 
     test "raises when an unknown option is given" do
       expected_msg =
-        "unknown option :user for use Hologram.Job in Hologram.Test.Fixtures.Job.UserOptJob - use Hologram.Job takes only :max_attempts and :max_concurrency"
+        "unknown option :user for use Hologram.Job in Hologram.Test.Fixtures.Job.UserOptJob - use Hologram.Job takes only :max_attempts, :max_concurrency and :timeout"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         Code.eval_string("""
@@ -110,6 +110,47 @@ defmodule Hologram.JobTest do
       end
     end
 
+    for {label, value} <- [
+          {"zero", "0"},
+          {"a negative integer", "-1"},
+          {"a float", "2.0"},
+          {"a string", ~s("2")},
+          {"a module attribute", "@limit"},
+          {"past the longest limit", "4_294_967_296"}
+        ] do
+      test "raises when timeout is #{label}" do
+        expected_msg =
+          "invalid timeout #{unquote(value)} for use Hologram.Job in Hologram.Test.Fixtures.Job.BadTimeoutJob - it must be a positive integer of milliseconds, at most 4294967295, written as a literal"
+
+        assert_error Hologram.CompileError, expected_msg, fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Job.BadTimeoutJob do
+            @limit 2
+
+            use Hologram.Job, timeout: #{unquote(value)}
+
+            @impl Hologram.Job
+            def run(_job), do: :ok
+          end
+          """)
+        end
+      end
+    end
+
+    test "takes the longest limit" do
+      [{module, _binary}] =
+        Code.compile_string("""
+        defmodule Hologram.Test.Fixtures.Job.LongestTimeoutJob do
+          use Hologram.Job, timeout: 4_294_967_295
+
+          @impl Hologram.Job
+          def run(_job), do: :ok
+        end
+        """)
+
+      assert timeout(module) == 4_294_967_295
+    end
+
     test "raises when the options are not a keyword list" do
       expected_msg =
         "invalid options :abc for use Hologram.Job in Hologram.Test.Fixtures.Job.NonKeywordOptsJob - options must be a keyword list"
@@ -145,6 +186,16 @@ defmodule Hologram.JobTest do
     # The lowest limit there is, which tells a limit refused below 1 apart from one refused below 2.
     test "answers the limit a job type's use line sets" do
       assert max_concurrency(Module2) == 1
+    end
+  end
+
+  describe "timeout/1" do
+    test "answers an hour for a job type that sets no limit" do
+      assert timeout(Module1) == 3_600_000
+    end
+
+    test "answers the limit a job type's use line sets" do
+      assert timeout(Module2) == 5_000
     end
   end
 

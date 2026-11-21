@@ -22,6 +22,10 @@ defmodule Hologram.Entity.Validator do
   # refused where it is written, as no condition.
   @policy_option_names [:as, :except, :only, :to, :via]
 
+  # The longest time limit a job type can set, about 49 days. A chosen bound, well inside what an
+  # Erlang timer can hold, since a limit past that would crash the worker when the first run starts.
+  @max_job_timeout_ms 4_294_967_295
+
   @reserved_names [:created_at, :id, :server_created_at, :server_updated_at, :updated_at]
 
   # The two operations that may name the role they cover
@@ -565,7 +569,8 @@ defmodule Hologram.Entity.Validator do
   Validates the options given to the use Hologram.Job directive at compile time.
 
   Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys,
-  a :max_attempts or :max_concurrency that is not a positive integer literal).
+  a :max_attempts or :max_concurrency that is not a positive integer literal, a :timeout that is
+  not a positive integer literal within the longest limit).
   """
   @spec validate_use_job_opts!(module, T.opts()) :: :ok
   def validate_use_job_opts!(module, opts) do
@@ -587,10 +592,18 @@ defmodule Hologram.Entity.Validator do
           message:
             "invalid #{key} #{Macro.to_string(value)} for use Hologram.Job in #{inspect(module)} - it must be a positive integer, written as a literal"
 
+      {:timeout, value} when is_integer(value) and value > 0 and value <= @max_job_timeout_ms ->
+        :ok
+
+      {:timeout, value} ->
+        raise Hologram.CompileError,
+          message:
+            "invalid timeout #{Macro.to_string(value)} for use Hologram.Job in #{inspect(module)} - it must be a positive integer of milliseconds, at most #{@max_job_timeout_ms}, written as a literal"
+
       {key, _value} ->
         raise Hologram.CompileError,
           message:
-            "unknown option #{inspect(key)} for use Hologram.Job in #{inspect(module)} - use Hologram.Job takes only :max_attempts and :max_concurrency"
+            "unknown option #{inspect(key)} for use Hologram.Job in #{inspect(module)} - use Hologram.Job takes only :max_attempts, :max_concurrency and :timeout"
     end)
 
     :ok

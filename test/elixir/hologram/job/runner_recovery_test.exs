@@ -94,6 +94,33 @@ defmodule Hologram.Job.RunnerRecoveryTest do
     assert DateTime.compare(row.scheduled_at, DateTime.utc_now()) == :gt
   end
 
+  # The way the worker ends a run past its limit: killed mid-run, its lock given up for it, and the
+  # attempt recorded.
+  test "records a run killed for passing its time limit", context do
+    %{scratch: scratch, worker_lock: worker_lock} = context
+
+    job = route(scratch, fn -> Job.create!(Module3, [outcome: :hang], trust: true) end)
+    read = fn -> route(scratch, fn -> EntityOperations.get(Module3, job.id) end) end
+
+    run = spawn(fn -> route(scratch, fn -> process(Module3, job.id, worker_lock) end) end)
+
+    wait_until(fn -> read.().status == :running end)
+
+    monitor_ref = Process.monitor(run)
+    Process.exit(run, :kill)
+    assert_receive {:DOWN, ^monitor_ref, :process, ^run, :killed}, 5_000
+
+    RunLock.release(worker_lock, lock_name(Module3, job.id))
+
+    assert route(scratch, fn -> time_out(Module3, job.id, 5_000) end) == :ok
+
+    row = read.()
+
+    assert row.status == :queued
+    assert row.attempt == 1
+    assert row.error =~ "the run passed its time limit of 5000 ms and was killed"
+  end
+
   test "fails a job whose outcome could not be recorded", context do
     %{job: job, scratch: scratch, worker_lock: worker_lock} = context
     table = ~s|"hologram_data"."#{Mapper.table_name(Module1)}"|

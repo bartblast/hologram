@@ -725,6 +725,7 @@ defmodule Hologram.DB.IntrospectionTest do
                  "error",
                  "exit",
                  "garbage",
+                 "hang",
                  "ok",
                  "ok_tuple",
                  "raise",

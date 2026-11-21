@@ -49,12 +49,13 @@ defmodule Hologram.Job.Worker do
   every run still under it as it starts, before giving the locks up: a run its predecessor left
   would otherwise go on with its lock gone.
 
-  `:queued`, `:sweep`, `:run`, `:release` and `:max_concurrency` are what the worker looks for
-  jobs, fails runs cut short, runs a job, gives up a run's lock and reads a job type's limit with.
-  They default to `Hologram.Job.Runner.queued/3`, `Hologram.Job.Runner.sweep/2`,
-  `Hologram.Job.Runner.process/3`, `Hologram.Job.RunLock.release/2` of the run's lock name (see
-  `Hologram.Job.Runner.lock_name/2`) and `Hologram.Job.max_concurrency/1`, the run and the release
-  on the `:run_lock` connection, so `:run_lock` is required unless both `:run` and `:release` are
+  `:queued`, `:sweep`, `:run`, `:release`, `:max_concurrency`, `:timeout` and `:time_out` are what
+  the worker looks for jobs, records runs cut short, runs a job, gives up a run's lock, reads a job
+  type's limit and time limit, and records a run killed for passing it with. They default to
+  `Hologram.Job.Runner.queued/3`, `Hologram.Job.Runner.sweep/2`, `Hologram.Job.Runner.process/3`,
+  `Hologram.Job.RunLock.release/2` of the run's lock name (see `Hologram.Job.Runner.lock_name/2`),
+  `Hologram.Job.max_concurrency/1`, `Hologram.Job.timeout/1` and `Hologram.Job.Runner.time_out/3`,
+  the run and the release on the `:run_lock` connection, so `:run_lock` is required unless both `:run` and `:release` are
   given. Only tests give them: the seams are what let this process be exercised without a
   database, the way the dispatcher takes the handler it routes through.
   """
@@ -94,7 +95,11 @@ defmodule Hologram.Job.Worker do
       run_lock: run_lock,
       runs: %{},
       runs_supervisor: Keyword.fetch!(opts, :runs),
-      sweep: Keyword.get(opts, :sweep, &Runner.sweep/2)
+      sweep: Keyword.get(opts, :sweep, &Runner.sweep/2),
+      time_out: Keyword.get(opts, :time_out, &Runner.time_out/3),
+      timed_out: MapSet.new(),
+      timeout: Keyword.get(opts, :timeout, &Job.timeout/1),
+      timers: %{}
     }
 
     {:ok, state, {:continue, :start_listening}}
@@ -144,6 +149,24 @@ defmodule Hologram.Job.Worker do
     {:noreply, wake_up(state, :sweep)}
   end
 
+  # A run past its time limit is killed outright, since run/1 may trap exits, and what comes of it
+  # is the DOWN handler's: the DOWN says the run's process is gone, so its lock can be given up and
+  # the attempt judged. Sent rather than asked of the runs' supervisor, which waits for the run to
+  # die: a run in a regular native call can't take the kill until the call returns, and the worker
+  # must not wait on it. One in a dirty native call, like file I/O, goes down at once while the call
+  # carries on without it, which nothing here can stop or hear the end of (see Hologram.Job). A run
+  # that ended just before finds nothing to kill, and its reply or its DOWN clears the mark.
+  def handle_info({:run_timeout, ref}, state) when is_map_key(state.timers, ref) do
+    {_timer, pid, _timeout} = Map.fetch!(state.timers, ref)
+
+    Process.exit(pid, :kill)
+
+    {:noreply, %{state | timed_out: MapSet.put(state.timed_out, ref)}}
+  end
+
+  # The timer of a run that has ended, which fired before it could be cancelled.
+  def handle_info({:run_timeout, _ref}, state), do: {:noreply, state}
+
   # A run that answered. Its slot is free, so the look that follows fills it - its own type's
   # alone, since only that type's slot freed. A type a failed look left unasked waits for the next
   # wake or poll, which every write brings.
@@ -156,7 +179,7 @@ defmodule Hologram.Job.Worker do
     Process.demonitor(ref, [:flush])
 
     {{job_type, id}, runs} = Map.pop!(state.runs, ref)
-    ended_state = %{state | runs: runs}
+    ended_state = cancel_time_limit(%{state | runs: runs}, ref)
 
     if result in [:held, :locked] do
       passed_state = pass_over(ended_state, job_type, id)
@@ -184,25 +207,45 @@ defmodule Hologram.Job.Worker do
   # otherwise wait a poll interval for a wait that is most likely over. A run that went down
   # after its claim leaves its row running with no lock held, so its type is swept now rather than
   # at the next poll.
+  #
+  # A run killed for passing its time limit is recorded as that before the sweep, which would
+  # otherwise record it as cut short. If that write fails the row stays running with no lock held,
+  # and the sweep records it after all. One that crashed on its own as the limit passed went down
+  # with another reason, and is the sweep's.
   def handle_info({:DOWN, ref, :process, _pid, reason}, state)
       when is_map_key(state.runs, ref) do
     {{job_type, id}, runs} = Map.pop!(state.runs, ref)
+    {_timer, _pid, timeout} = Map.fetch!(state.timers, ref)
+    timed_out? = MapSet.member?(state.timed_out, ref) and reason == :killed
 
     :ok = state.release.(job_type, id)
+
+    ended_state = cancel_time_limit(%{state | runs: runs}, ref)
 
     state =
       case reason do
         {%DBConnection.ConnectionError{}, _stacktrace} ->
-          pass_over(%{state | runs: runs}, job_type, id)
+          pass_over(ended_state, job_type, id)
 
         _other ->
-          %{state | gone_down: MapSet.put(state.gone_down, {job_type, id}), runs: runs}
+          %{ended_state | gone_down: MapSet.put(ended_state.gone_down, {job_type, id})}
       end
+
+    if timed_out?, do: guard(fn -> state.time_out.(job_type, id, timeout) end)
 
     case guard(fn -> state.sweep.([job_type], running_ids(state.runs, job_type)) end) do
       {:ok, :ok} -> {:noreply, fill(state, [job_type])}
       _stop_or_skip -> {:noreply, state}
     end
+  end
+
+  # A timer that has already fired leaves its message, which the catch-all clause drops.
+  defp cancel_time_limit(state, ref) do
+    {{timer, _pid, _timeout}, timers} = Map.pop!(state.timers, ref)
+
+    Process.cancel_timer(timer)
+
+    %{state | timed_out: MapSet.delete(state.timed_out, ref), timers: timers}
   end
 
   defp default_release(run_lock), do: &RunLock.release(run_lock, Runner.lock_name(&1, &2))
@@ -238,9 +281,9 @@ defmodule Hologram.Job.Worker do
   # creates, so a job of another type can hold the same id: skipping it would hold up a job that
   # never failed.
   #
-  # The limit is read inside the guard, like the look: a job type whose module is gone - deleted in
-  # dev while one of its runs was in flight - raises reading it, and crashing on that would kill
-  # every other run on the node.
+  # The limits are read inside the guard, like the look: a job type whose module is gone - deleted
+  # in dev while one of its runs was in flight - raises reading them, and crashing on that would
+  # kill every other run on the node.
   defp fill_type(state, job_type, logging) do
     left_out =
       for {^job_type, id} <- MapSet.union(state.passed_over, state.gone_down),
@@ -255,13 +298,22 @@ defmodule Hologram.Job.Worker do
     look = fn ->
       free = state.max_concurrency.(job_type) - running_count(state, job_type)
 
-      if free > 0, do: state.queued.(job_type, skip_ids, free), else: []
+      if free > 0 do
+        {state.queued.(job_type, skip_ids, free), state.timeout.(job_type)}
+      else
+        {[], nil}
+      end
     end
 
     case guard(look, logging) do
-      {:ok, jobs} -> {:cont, Enum.reduce(jobs, state, &start_run(&2, job_type, &1.id))}
-      :skip -> {:cont, state}
-      :stop -> {:halt, state}
+      {:ok, {jobs, timeout}} ->
+        {:cont, Enum.reduce(jobs, state, &start_run(&2, job_type, &1.id, timeout))}
+
+      :skip ->
+        {:cont, state}
+
+      :stop ->
+        {:halt, state}
     end
   end
 
@@ -361,7 +413,7 @@ defmodule Hologram.Job.Worker do
 
   # Killed outright when the worker kills the runs as it starts, or when the unit stops, so a run/1
   # trapping exits can't hold either up.
-  defp start_run(state, job_type, id) do
+  defp start_run(state, job_type, id, timeout) do
     run = state.run
 
     task =
@@ -369,7 +421,13 @@ defmodule Hologram.Job.Worker do
         shutdown: :brutal_kill
       )
 
-    %{state | runs: Map.put(state.runs, task.ref, {job_type, id})}
+    timer = Process.send_after(self(), {:run_timeout, task.ref}, timeout)
+
+    %{
+      state
+      | runs: Map.put(state.runs, task.ref, {job_type, id}),
+        timers: Map.put(state.timers, task.ref, {timer, task.pid, timeout})
+    }
   end
 
   defp sweep_if(state, job_types, :sweep), do: sweep_types(state, job_types, :logged)

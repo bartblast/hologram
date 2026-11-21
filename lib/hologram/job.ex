@@ -53,9 +53,26 @@ defmodule Hologram.Job do
   So a job can run more than once, and a run cut short may have done all, part or none of its
   work: run/1 has to be safe to repeat. A job that must never run twice sets `max_attempts: 1`.
 
-  The limit is checked when an attempt fails, so a job already waiting for a retry when the limit
-  is lowered still gets that run. To stop those at once, delete the waiting rows
+  The attempt limit is checked when an attempt fails, so a job already waiting for a retry when
+  the limit is lowered still gets that run. To stop those at once, delete the waiting rows
   (`status == :queued and attempt > 0`) as part of the deploy.
+
+  A run that doesn't end within its time limit is killed and counts as a failed attempt, so a run
+  that never returns can't keep its row running or hold on to its slot. The limit is 1 hour unless
+  the use line gives another, in milliseconds, written out:
+
+      use Hologram.Job, timeout: 60_000
+
+  It covers the whole run, including claiming the job and recording its outcome. A run killed
+  before its claim committed hasn't started, so it isn't counted and the job is tried again, which
+  means a limit shorter than the claim never runs the job. The limit can't be turned off: a job
+  that needs longer sets a bigger number.
+
+  A kill can't interrupt native code. A run stuck in a regular NIF keeps its row, slot and lock
+  until the call returns. One stuck in a dirty NIF, like file I/O on a dead network mount, is let
+  go at once while the call carries on, so it can overlap the job's next attempt, and each such
+  call holds a VM thread until it returns. Give file I/O and native calls in run/1 timeouts of
+  their own.
 
   Attributes and relationships are what a job carries, so they are declared and typed rather
   than passed as a payload: a declaration is what a policy can name and what a migration can
@@ -96,6 +113,10 @@ defmodule Hologram.Job do
   # outlasts an outage until someone can fix its cause.
   @default_max_attempts 10
 
+  # How long a run may take unless the type sets its own limit. Generous, because killing a run that
+  # was still working is worse than a stuck one holding a slot for a while: the run is repeated.
+  @default_timeout :timer.hours(1)
+
   @doc """
   Runs the job.
 
@@ -112,6 +133,7 @@ defmodule Hologram.Job do
 
     max_attempts = Keyword.get(opts, :max_attempts, @default_max_attempts)
     max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
+    timeout = Keyword.get(opts, :timeout, @default_timeout)
 
     quote do
       use Hologram.Entity
@@ -163,6 +185,17 @@ defmodule Hologram.Job do
       """
       @spec __job_max_concurrency__() :: pos_integer
       def __job_max_concurrency__, do: unquote(max_concurrency)
+
+      @doc """
+      Returns how long a run of a job of this type may take, in milliseconds.
+
+      ## Examples
+
+          iex> __job_timeout__()
+          3600000
+      """
+      @spec __job_timeout__() :: pos_integer
+      def __job_timeout__, do: unquote(timeout)
     end
   end
 
@@ -247,6 +280,13 @@ defmodule Hologram.Job do
   """
   @spec max_concurrency(module) :: pos_integer
   def max_concurrency(job_type), do: job_type.__job_max_concurrency__()
+
+  @doc """
+  Returns how long a run of a job of the given job type may take, in milliseconds, before it is
+  killed and counted as a failed attempt: the `:timeout` its use line gives, 1 hour by default.
+  """
+  @spec timeout(module) :: pos_integer
+  def timeout(job_type), do: job_type.__job_timeout__()
 
   @doc """
   Returns the names of the attributes every job type carries and only the framework sets, sorted: the acting user at the enqueue, how many runs have started, the failure record, when the job is next due, and the status.

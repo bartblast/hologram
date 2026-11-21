@@ -570,6 +570,64 @@ defmodule Hologram.Job.RunnerTest do
     end
   end
 
+  describe "time_out/3" do
+    test "fails a job on its last attempt, saying it passed its limit" do
+      job = abandoned_job()
+
+      assert time_out(Module1, job.id, 5_000) == :ok
+
+      row = EntityOperations.get(Module1, job.id)
+
+      assert row.status == :failed
+      assert row.error =~ "the run passed its time limit of 5000 ms and was killed"
+    end
+
+    test "puts a job with attempts left back to wait" do
+      job = fresh_job(:ok)
+
+      :ok = EntityOperations.update(Module3, job.id, %{attempt: 1, status: :running})
+
+      assert time_out(Module3, job.id, 5_000) == :ok
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.status == :queued
+      assert row.attempt == 1
+      assert row.error =~ "the run passed its time limit of 5000 ms and was killed"
+      assert DateTime.compare(row.scheduled_at, DateTime.utc_now()) == :gt
+    end
+
+    test "leaves a job whose outcome was recorded before the kill landed" do
+      job = abandoned_job()
+
+      :ok = EntityOperations.update(Module1, job.id, %{status: :done})
+
+      assert time_out(Module1, job.id, 5_000) == :ok
+
+      row = EntityOperations.get(Module1, job.id)
+
+      assert row.status == :done
+      assert row.error == nil
+    end
+
+    # Swept and claimed again on another node, between the kill and this write.
+    test "leaves a job another worker's run holds the lock of", %{run_lock: run_lock} do
+      job = Job.create!(Module1)
+
+      assert {:claimed, _job} = claim(Module1, job.id, run_lock)
+      assert time_out(Module1, job.id, 5_000) == :ok
+
+      row = EntityOperations.get(Module1, job.id)
+
+      assert row.status == :running
+      assert row.error == nil
+    end
+
+    test "leaves a job that is gone" do
+      assert time_out(Module1, Entity.generate_id(), 5_000) == :ok
+    end
+  end
+
   describe "sweep/2" do
     # Running with no lock held, the way a node that stopped mid-run leaves it, on its last attempt.
     defp abandoned_job do

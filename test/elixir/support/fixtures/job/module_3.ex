@@ -22,6 +22,7 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
       :error,
       :exit,
       :garbage,
+      :hang,
       :ok,
       :ok_tuple,
       :raise,
@@ -62,6 +63,8 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
   def run(%{outcome: :exit}), do: exit(:boom)
 
   def run(%{outcome: :garbage}), do: nil
+
+  def run(%{outcome: :hang}), do: Process.sleep(:infinity)
 
   def run(%{outcome: :ok}), do: :ok
 
