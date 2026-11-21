@@ -1329,8 +1329,17 @@ defmodule Hologram.CompilerTest do
       sync_constants =
         derive_sync_constants([PageModule21], call_graph, module_info_plt, [PageModule21])
 
-      assert sync_constants.page_types[PageModule21] == sync_constants.synced_types
-      assert length(sync_constants.synced_types) > 2
+      # The page's query reads the two-hop type, whose rules delegate through the other two, and
+      # the grant type holds the roles they ask about.
+      expected_types = [
+        RoleGrant,
+        PolicyEntity,
+        DelegationPolicyEntity,
+        TwoHopDelegationPolicyEntity
+      ]
+
+      assert sync_constants.page_types[PageModule21] == expected_types
+      assert sync_constants.synced_types == expected_types
     end
 
     test "gives a page that checks nothing only the types its own code reads", %{
