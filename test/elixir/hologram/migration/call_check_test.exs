@@ -12,6 +12,65 @@ defmodule Hologram.Migration.CallCheckTest do
                        "compile time - if that is the case here, write the module in the op " <>
                        "itself."
 
+  describe "validate!/2, a computed backfill" do
+    test "passes the data form" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :city, :string, backfill: coalesce(title, ^String.upcase("none"))
+      end
+      """
+
+      assert compile_migration("20260813091522", body)
+    end
+
+    test "refuses a refused call inside a pin" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :city, :string, backfill: coalesce(title, ^System.get_env("CITY"))
+      end
+      """
+
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          compile_migration("20260813091522", body)
+        end
+
+      assert error.message =~ "System.get_env/1"
+    end
+
+    test "refuses a refused call pinned as a separator" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :city, :string,
+          backfill: title |> split(^System.get_env("SEPARATOR")) |> at(0)
+      end
+      """
+
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          compile_migration("20260813091522", body)
+        end
+
+      assert error.message =~ "System.get_env/1"
+    end
+
+    test "refuses a refused call pinned as a position" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :city, :string,
+          backfill: title |> split(",") |> at(^System.schedulers())
+      end
+      """
+
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          compile_migration("20260813091522", body)
+        end
+
+      assert error.message =~ "System.schedulers/0"
+    end
+  end
+
   describe "validate!/2" do
     test "passes a migration using Elixir's and Erlang's standard libraries and its own functions" do
       body = """

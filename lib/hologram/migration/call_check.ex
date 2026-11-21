@@ -2,6 +2,7 @@ defmodule Hologram.Migration.CallCheck do
   @moduledoc false
 
   alias Hologram.Migration.FieldAccess.Definitions
+  alias Hologram.Migration.Value
 
   # What a migration does to a row must never change after it is applied, so its code
   # may call only what gives the same result for the same arguments, whatever the app, the
@@ -755,6 +756,10 @@ defmodule Hologram.Migration.CallCheck do
   end
 
   defp allowed?({:struct, migration, _line}, migration), do: true
+
+  # The data form of a computed backfill, which `backfill:` writes into the op. It has no
+  # functions the migration calls, and the pinned code in its fields is walked like any other.
+  defp allowed?({:struct, Value, _line}, _migration), do: true
 
   defp allowed?({:struct, module, _line}, _migration) do
     module not in @refused_structs and

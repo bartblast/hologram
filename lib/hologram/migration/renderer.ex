@@ -7,6 +7,7 @@ defmodule Hologram.Migration.Renderer do
   alias Hologram.DB.Preflight
   alias Hologram.DB.Schema
   alias Hologram.Entity.Model
+  alias Hologram.Migration.Value
 
   # The ops that take an object away - a widening keeps them until its data has moved.
   @drop_ops [:drop_column, :drop_foreign_key, :drop_index]
@@ -52,6 +53,8 @@ defmodule Hologram.Migration.Renderer do
     # created before it reads the whole file, and a chunk folded below cannot see the ones
     # before it, so the chunks skip that check. They keep the others, which hold per chunk.
     _validated_model = Model.fold(pre_model, logical_ops)
+
+    Enum.each(logical_ops, &validate_backfill_applies!/1)
 
     {physical_ops, post_model} =
       logical_ops
@@ -744,5 +747,36 @@ defmodule Hologram.Migration.Renderer do
     model
     |> Mapper.derive_from_model!()
     |> Schema.from_mapping()
+  end
+
+  # The model takes some ops' options unchecked, so they may be a map as well as a keyword list.
+  defp carries_backfill?(options) do
+    options
+    |> Map.new()
+    |> Map.has_key?(:backfill)
+  end
+
+  # A backfill the ops below can't apply is refused rather than dropped without a word.
+  defp validate_backfill_applies!(%{op: :add_attribute, opts: opts} = op) do
+    if match?(%Value{}, opts[:backfill]), do: raise_unapplied_backfill!(op)
+  end
+
+  defp validate_backfill_applies!(%{op: :add_relationship, opts: opts} = op) do
+    if carries_backfill?(opts), do: raise_unapplied_backfill!(op)
+  end
+
+  defp validate_backfill_applies!(%{op: kind, changes: changes} = op)
+       when kind in [:change_attribute, :change_relationship] do
+    if carries_backfill?(changes), do: raise_unapplied_backfill!(op)
+  end
+
+  defp validate_backfill_applies!(_op), do: :ok
+
+  @spec raise_unapplied_backfill!(%{atom => any}) :: no_return
+  defp raise_unapplied_backfill!(op) do
+    raise Hologram.CompileError,
+      message:
+        "#{op.op} #{inspect(op.name)} of #{inspect(op.entity)} on line #{op.line} carries a " <>
+          "backfill that can't be applied yet - only a constant on add_attribute can for now"
   end
 end

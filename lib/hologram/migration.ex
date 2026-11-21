@@ -29,7 +29,8 @@ defmodule Hologram.Migration do
   line, and an op inside an `if`, a comprehension or other module-body code is recorded
   regardless of it, and cannot read the module body's variables. Op arguments may call the
   module's own functions and read its attributes, an attribute read giving the value it holds
-  at the op's line.
+  at the op's line. In `backfill:` such a call or read is pinned, like `^my_fun()` or `^@x`,
+  since a bare name there is a field of the row.
 
   A migration's functions and ops may call only its own functions and the standard
   library's functions that compute on the values they are given - most of Kernel, String,
@@ -54,11 +55,44 @@ defmodule Hologram.Migration do
   designation elsewhere. Requiring the line rather than deleting the grants silently keeps
   the destruction in the file, where a reviewer sees it.
 
-  An op's options are the ones its declaration takes, with one addition: `add_attribute`
-  accepts `backfill:`, the value the rows that predate the column receive. It is a
-  one-time transition value rather than a declaration, so it never enters the model and
+  An op's options are the ones its declaration takes, with one addition: `backfill:`, what
+  the rows that predate the change receive. `add_attribute` and `add_relationship` (to-one)
+  take it, and so do `change_attribute` and `change_relationship` (to-one) turning an
+  optional member required with no type change, which fill only the rows holding nil. It is
+  a one-time transition value rather than a declaration, so it never enters the model and
   never needs repeating in a later file - once applied, the column reads as though it had
   always been declared that way.
+
+  A backfill is a constant, or an expression computed from each row:
+
+      add_attribute :tier, :string, backfill: "standard"
+      add_attribute :tier, :string, backfill: ^@default_tier
+      add_attribute :city, :string, backfill: destination |> split(", ") |> at(0)
+      add_attribute :title, :string, backfill: "Trip to " <> destination
+      add_attribute :name, :string, backfill: coalesce(nickname, first_name <> " " <> last_name)
+      add_attribute :tag_count, :integer, backfill: count(tags)
+      add_attribute :main_tag, :string, backfill: tags |> most_common(name)
+      add_attribute :currency, :string, backfill: trip.currency
+
+  A bare name is a field of the row, and a dot chain reads through to-one relationships,
+  giving nil when a reference is nil. Anything from the surrounding Elixir code is pinned
+  with `^`, an attribute or a sigil included. The words are:
+
+    * `a <> b` joins strings, giving nil when any of them is nil
+    * `split(text, separator)` splits as `String.split/2`, giving nil for nil, and is read
+      through `at`, since a list can't be stored
+    * `at(split(...), n)` picks a part as `Enum.at/2`, counting from 0, giving nil past the end
+    * `coalesce(a, b, ...)` gives the first value that isn't nil
+    * `count(set)` counts the rows of a to-many relationship, giving 0 for none
+    * `most_common(set, attribute)` gives the attribute's most frequent value among the
+      set's rows, skipping nil, a tie going to the smallest in `sort` order, and nil when no
+      row holds a value
+
+  Every backfill reads the rows as the ops above it left them, so deleting a field it reads
+  goes below it. Types are strict: the expression's type must be the member's. A required
+  member an expression leaves nil refuses with the count of rows, the filled values are
+  checked against the member's declared rules, and a `default:` never fills what a backfill
+  left nil. A fill leaves `updated_at`, `server_updated_at` and the rows' revisions alone.
 
   A backfill must carry a value. `backfill: nil` is refused, because nil is the absence a
   backfill exists to fill. Adding a required attribute to a table that already holds rows
@@ -74,6 +108,7 @@ defmodule Hologram.Migration do
   alias Hologram.Migration.CallCheck
   alias Hologram.Migration.FieldAccess
   alias Hologram.Migration.Loader
+  alias Hologram.Migration.Value
 
   # A migration module's file name is its version - 14 UTC timestamp digits, nothing else.
   @file_name_regex ~r/^\d{14}\.ex$/
@@ -227,6 +262,7 @@ defmodule Hologram.Migration do
 
     migration = env.module.__hologram_migration__()
 
+    Value.validate_ops!(migration.ops, migration.path)
     Loader.verify_rename_order!(migration.ops, migration.path)
     Loader.validate_resolved!([migration], build_env())
   end
@@ -474,10 +510,29 @@ defmodule Hologram.Migration do
     function_env = %{caller | function: {:__hologram_migration__, 0}}
 
     Macro.prewalk(quoted, fn
-      {:__aliases__, _meta, _segments} = alias_ast -> Macro.expand(alias_ast, function_env)
-      node -> node
+      # One headed by an attribute is left to the compiler: the head reads a snapshot that
+      # isn't set while the op expands.
+      {:__aliases__, _meta, [{:@, _attribute_meta, _args} | _rest]} = alias_ast ->
+        alias_ast
+
+      {:__aliases__, _meta, _segments} = alias_ast ->
+        Macro.expand(alias_ast, function_env)
+
+      node ->
+        node
     end)
   end
+
+  # Options written as a list in place. Ones from a variable or a call are evaluated with the
+  # op, and validate_ops!/2 checks a computed value they hold.
+  defp lower_backfill(opts, caller) when is_list(opts) do
+    Enum.map(opts, fn
+      {:backfill, value} -> {:backfill, Value.lower(value, caller)}
+      other -> other
+    end)
+  end
+
+  defp lower_backfill(opts, _caller), do: opts
 
   # Role ops with module args are global - pattern-specific, so it must precede the
   # generic role clauses below (a module arg would otherwise build an entity-role op).
@@ -506,7 +561,7 @@ defmodule Hologram.Migration do
         entity: unquote(entity_type),
         name: unquote(name),
         type: unquote(type),
-        opts: unquote(opts),
+        opts: unquote(lower_backfill(opts, %{caller | line: line})),
         line: unquote(line)
       }
     end
@@ -544,7 +599,7 @@ defmodule Hologram.Migration do
         entity: unquote(entity_type),
         name: unquote(name),
         type: unquote(type),
-        opts: unquote(opts),
+        opts: unquote(lower_backfill(opts, %{caller | line: line})),
         line: unquote(line)
       }
     end
@@ -589,7 +644,7 @@ defmodule Hologram.Migration do
         op: :change_attribute,
         entity: unquote(entity_type),
         name: unquote(name),
-        changes: unquote(changes),
+        changes: unquote(lower_backfill(changes, %{caller | line: line})),
         line: unquote(line)
       }
     end
@@ -603,7 +658,7 @@ defmodule Hologram.Migration do
         op: :change_relationship,
         entity: unquote(entity_type),
         name: unquote(name),
-        changes: unquote(changes),
+        changes: unquote(lower_backfill(changes, %{caller | line: line})),
         line: unquote(line)
       }
     end

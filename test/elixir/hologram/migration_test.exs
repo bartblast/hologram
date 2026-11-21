@@ -17,6 +17,7 @@ defmodule Hologram.MigrationTest do
 
   import Hologram.Migration
 
+  alias Hologram.Migration.Value
   alias Hologram.MigrationTest.AliasReferenceTracer
 
   defp ops(body) do
@@ -562,6 +563,125 @@ defmodule Hologram.MigrationTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         compile_migration("20260813091522", body)
       end
+    end
+  end
+
+  describe "change_entity/2, backfill" do
+    test "an add_attribute op carries a computed backfill as data" do
+      assert [op] =
+               ops("""
+               change_entity MyApp.Task do
+                 add_attribute :city, :string, backfill: destination |> split(", ") |> at(0)
+               end
+               """)
+
+      assert op.opts == [
+               backfill: %Value{
+                 term: {:at, {:split, {:name, [:destination]}, {:value, ", "}}, {:value, 0}}
+               }
+             ]
+    end
+
+    test "an add_relationship op carries a computed backfill as data" do
+      assert [op] =
+               ops("""
+               change_entity MyApp.Task do
+                 add_relationship :owner, MyApp.User, backfill: creator_id
+               end
+               """)
+
+      assert op.opts == [backfill: %Value{term: {:name, [:creator_id]}}]
+    end
+
+    test "a change_attribute op carries a computed backfill as data" do
+      assert [op] =
+               ops("""
+               change_entity MyApp.Task do
+                 change_attribute :notes, optional: false, backfill: coalesce(description, "")
+               end
+               """)
+
+      assert op.changes == [
+               optional: false,
+               backfill: %Value{
+                 term: {:coalesce, [{:name, [:description]}, {:value, ""}]}
+               }
+             ]
+    end
+
+    test "a change_relationship op carries a computed backfill as data" do
+      assert [op] =
+               ops("""
+               change_entity MyApp.Task do
+                 change_relationship :owner, optional: false, backfill: trip.owner_id
+               end
+               """)
+
+      assert op.changes == [
+               optional: false,
+               backfill: %Value{term: {:name, [:trip, :owner_id]}}
+             ]
+    end
+
+    test "a pinned attribute inside an expression reads its value at the op's line" do
+      assert [first, second] =
+               ops("""
+               @fallback "first"
+
+               change_entity MyApp.Task do
+                 add_attribute :a, :string, backfill: coalesce(title, ^@fallback)
+               end
+
+               @fallback "second"
+
+               change_entity MyApp.Task do
+                 add_attribute :b, :string, backfill: coalesce(title, ^@fallback)
+               end
+               """)
+
+      assert first.opts[:backfill].term == {:coalesce, [{:name, [:title]}, {:value, "first"}]}
+      assert second.opts[:backfill].term == {:coalesce, [{:name, [:title]}, {:value, "second"}]}
+    end
+
+    test "a pinned call to the migration's own function reads its result" do
+      assert [op] =
+               ops("""
+               change_entity MyApp.Task do
+                 add_attribute :tier, :string, backfill: ^default_tier()
+               end
+
+               def default_tier, do: "standard"
+               """)
+
+      assert op.opts == [backfill: "standard"]
+    end
+
+    test "options from a call pass through unlowered" do
+      assert [op] =
+               ops("""
+               change_entity MyApp.Task do
+                 add_attribute :tier, :string, tier_opts()
+               end
+
+               def tier_opts, do: [backfill: "standard"]
+               """)
+
+      assert op.opts == [backfill: "standard"]
+    end
+
+    test "refuses at the line of the op" do
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          ops("""
+          change_entity MyApp.Task do
+            add_attribute :a, :string
+
+            add_attribute :b, :string, backfill: at(split(title, ""), 0)
+          end
+          """)
+        end
+
+      assert error.line == 7
     end
   end
 
