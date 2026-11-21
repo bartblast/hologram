@@ -11,6 +11,7 @@ defmodule HologramSyncBenchmark.Driver do
   alias HologramSyncBenchmark.Cases.Board
   alias HologramSyncBenchmark.Cases.Deploy
   alias HologramSyncBenchmark.Cases.Lock
+  alias HologramSyncBenchmark.Cases.Reconnect
   alias HologramSyncBenchmark.Cases.Tenants
   alias HologramSyncBenchmark.Client
   alias HologramSyncBenchmark.Clients
@@ -26,22 +27,26 @@ defmodule HologramSyncBenchmark.Driver do
 
   @board_page "HologramSyncBenchmark.BoardPage"
 
-  @cases ~w(boot seed smoke board board_roles tenants access deploy deploy_tenants lock)
+  @cases ~w(boot seed smoke board board_roles tenants access deploy deploy_tenants reconnect
+            reconnect_tenants lock)
 
   # The options and their defaults: the board's size; the tenants, members per tenant and tasks
   # per tenant of the tenants case; the access case's docs and the seconds a change of access may
   # take to reach every client; the client counts a sweep steps through; the steady writes' rate
   # per second and length in seconds; the slowest p99 delivery in milliseconds a step passes
   # with; how long in seconds a client may take to fill; how long in seconds the deploy cases'
-  # clients may take to all hold their pots again; how long in seconds the lock case runs each
-  # number of writers; and the server node's memory in GB past which a step is stopped, fixed
-  # rather than a share of the machine's, so a figure means the same on any machine.
+  # clients may take to all hold their pots again; how many writes the reconnect cases make while
+  # their clients are away, how long in seconds those clients take to come back and how long they
+  # may take to be caught up; how long in seconds the lock case runs each number of writers; and
+  # the server node's memory in GB past which a step is stopped, fixed rather than a share of the
+  # machine's, so a figure means the same on any machine.
   @defaults [
     access_limit: 10,
     cards: 2_000,
     docs: 5_000,
     duration: 30,
     fill_timeout: 300,
+    gap_writes: 100,
     lock_duration: 10,
     members: 5,
     memory_limit: 4,
@@ -49,7 +54,9 @@ defmodule HologramSyncBenchmark.Driver do
     rate: 2,
     refill_limit: 60,
     tasks: 100,
-    tenants: 20
+    tenants: 20,
+    wave_limit: 120,
+    wave_spread: 5
   ]
 
   # How long in milliseconds the boot check runs the probe.
@@ -71,6 +78,7 @@ defmodule HologramSyncBenchmark.Driver do
     clients: :string,
     duration: :integer,
     fill_timeout: :integer,
+    gap_writes: :integer,
     lock_duration: :integer,
     members: :integer,
     memory_limit: :integer,
@@ -78,7 +86,9 @@ defmodule HologramSyncBenchmark.Driver do
     rate: :integer,
     refill_limit: :integer,
     tasks: :integer,
-    tenants: :integer
+    tenants: :integer,
+    wave_limit: :integer,
+    wave_spread: :integer
   ]
 
   @doc """
@@ -217,6 +227,12 @@ defmodule HologramSyncBenchmark.Driver do
 
   defp run_case("deploy_tenants", opts), do: run_sweep(opts, Deploy.sweep_case(opts, :tenants))
 
+  defp run_case("reconnect", opts), do: run_sweep(opts, Reconnect.sweep_case(opts, :board))
+
+  defp run_case("reconnect_tenants", opts) do
+    run_sweep(opts, Reconnect.sweep_case(opts, :tenants))
+  end
+
   # Writers rather than clients: --clients gives how many write at once.
   defp run_case("lock", opts), do: Lock.run(DB.connect!(), opts)
 
@@ -258,7 +274,8 @@ defmodule HologramSyncBenchmark.Driver do
         &step.(conn, &1, &2, &3, &4 || context),
         Map.get(sweep_case, :passed?, &passed?(&1, opts)),
         Map.get(sweep_case, :summary, &Sweep.summary/1),
-        memory_limit
+        memory_limit,
+        sweep_hooks(sweep_case, conn, context)
       )
 
     why = Map.get(sweep_case, :why, &why_failed(&1, opts))
@@ -284,6 +301,15 @@ defmodule HologramSyncBenchmark.Driver do
         Map.get(sweep_case, :tables, &step_tables/1).(results)
       )
   end
+
+  defp sweep_hooks(%{before_step: before_step, after_step: after_step}, conn, context) do
+    [
+      after_step: after_step,
+      before_step: &before_step.(conn, &1, &2, &3, context)
+    ]
+  end
+
+  defp sweep_hooks(_sweep_case, _conn, _context), do: []
 
   defp write_options(opts) do
     [
