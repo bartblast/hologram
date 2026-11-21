@@ -1266,6 +1266,269 @@ describe("Batches", () => {
     });
   });
 
+  describe("landUnsent()", () => {
+    const STAMP = 1_798_246_400_125_952;
+
+    const create = (id, type = TODO) => ({
+      data: {title: "created here"},
+      id,
+      op: "create",
+      stamp: STAMP,
+      type,
+    });
+
+    const edge = (id, targetId) => ({
+      id,
+      op: "add_relationship",
+      relationship: "tags",
+      stamp: STAMP,
+      target_id: targetId,
+      type: TODO,
+    });
+
+    const queued = (seq, ...writes) => {
+      Batches.adopt([{actorUserId: null, landed: [], seq, writes}]);
+
+      return Batches.pending.find((batch) => batch.seq === seq);
+    };
+
+    const confirmed = {dropped: {}, kept: {}, status: "confirmed"};
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          ...TODO_MODEL,
+          [TAG]: {
+            attributes: {
+              created_at: "datetime",
+              id: "uuid",
+              title: "string",
+              updated_at: "datetime",
+            },
+            constraints: {},
+            defaults: {},
+            enumValues: {},
+            frameworkAttributes: [],
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      LocalDatabase.reset();
+      Model.reset();
+
+      sinon.stub(SyncStream, "scheduleRender");
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+    });
+
+    it("takes a create the fill did not send off the screen", () => {
+      queued(3, create("t1"));
+
+      assert.isNotNull(LocalDatabase.getRow(TODO, "t1"));
+
+      Batches.landUnsent([TODO], 3);
+
+      assert.isNull(LocalDatabase.getRow(TODO, "t1"));
+    });
+
+    it("keeps the answer from filing a create the fill did not send", () => {
+      queued(3, create("t1"));
+
+      Batches.landUnsent([TODO], 3);
+      Batches.settle(3, confirmed);
+
+      assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+    });
+
+    // A grant the browser made is answered with the row the server stored, which the answer would
+    // otherwise file whole.
+    it("keeps an answer carrying the whole row from filing it", () => {
+      queued(3, create("t1"));
+
+      Batches.landUnsent([TODO], 3);
+
+      Batches.settle(3, {
+        dropped: {},
+        kept: {0: {id: "t1", title: "stored", $revisions: {}}},
+        status: "confirmed",
+      });
+
+      assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+    });
+
+    it("passes over the batch's other writes naming the row", () => {
+      const batch = queued(3, create("t1"), edge("t1", "g1"));
+
+      Batches.landUnsent([TODO], 3);
+
+      assert.isTrue(batch.isLanded(0));
+      assert.isTrue(batch.isLanded(1));
+    });
+
+    it("passes over a later batch's writes naming the row, up to the number", () => {
+      queued(3, create("t1"));
+
+      const later = queued(4, edge("t1", "g1"));
+      const above = queued(5, edge("t1", "g2"));
+
+      Batches.landUnsent([TODO], 4);
+
+      assert.isTrue(later.isLanded(0));
+      assert.isFalse(above.isLanded(0));
+    });
+
+    // Filed, the edge would leave a held row's set naming a row this client doesn't hold.
+    it("passes over an edge pointing at the row", () => {
+      const batch = queued(3, create("g1", TAG), edge("t1", "g1"));
+
+      Batches.landUnsent([TAG], 3);
+      Batches.settle(3, confirmed);
+
+      assert.isTrue(batch.isLanded(1));
+      assert.deepStrictEqual(
+        Array.from(LocalDatabase.baseTargetIds(TODO, "tags", "t1")),
+        [],
+      );
+    });
+
+    it("leaves an edge pointing at another row", () => {
+      const batch = queued(3, create("g1", TAG), edge("t1", "g2"));
+
+      Batches.landUnsent([TAG], 3);
+
+      assert.isFalse(batch.isLanded(1));
+    });
+
+    it("leaves an edge whose target shares its id with a row of another type", () => {
+      const batch = queued(3, create("g1"), edge("t1", "g1"));
+
+      Batches.landUnsent([TODO], 3);
+
+      assert.isTrue(batch.isLanded(0));
+      assert.isFalse(batch.isLanded(1));
+    });
+
+    // A frame delivered the row and it has left since, so the create is landed and the row is gone,
+    // and the edge the answer is about to file would name it.
+    it("passes over an edge pointing at a row a frame landed that has left since", () => {
+      const batch = queued(3, create("g1", TAG), edge("t1", "g1"));
+
+      batch.land(new Set([`${TAG} g1`]));
+
+      Batches.landUnsent([TAG], 3);
+
+      assert.isTrue(batch.isLanded(1));
+    });
+
+    // Committed after the type was read, so its session judges it.
+    it("leaves a batch above the number", () => {
+      const batch = queued(4, create("t1"));
+
+      Batches.landUnsent([TODO], 3);
+      Batches.settle(4, confirmed);
+
+      assert.isFalse(batch.isLanded(0));
+      assert.isNotNull(LocalDatabase.baseRow(TODO, "t1"));
+    });
+
+    it("makes no claim when the marker names no number", () => {
+      const batch = queued(3, create("t1"));
+
+      Batches.landUnsent([TODO], null);
+
+      assert.isFalse(batch.isLanded(0));
+    });
+
+    // What a bundle talking to a server that predates the field reads off a marker.
+    it("makes no claim when the marker names no number at all", () => {
+      const batch = queued(3, create("t1"));
+
+      Batches.landUnsent([TODO], undefined);
+
+      assert.isFalse(batch.isLanded(0));
+    });
+
+    // Each type is read at its own moment, so its number says nothing about another type's rows.
+    it("leaves a create of a type the marker doesn't name", () => {
+      const batch = queued(3, create("t1"), create("g1", TAG));
+
+      Batches.landUnsent([TAG], 3);
+
+      assert.isFalse(batch.isLanded(0));
+      assert.isTrue(batch.isLanded(1));
+    });
+
+    it("passes over a batch that has no number yet", () => {
+      const writing = sinon.stub(Durability, "persistLanded");
+
+      Durability.mode = "indexeddb";
+
+      sinon.stub(Durability, "fileBatch").returns(new Promise(() => {}));
+
+      Batches.open("todos");
+      Batches.current().append(create("t1"));
+
+      const batch = Batches.close();
+
+      Batches.landUnsent([TODO], 5);
+
+      assert.isNull(batch.seq);
+      assert.isFalse(batch.isLanded(0));
+      assert.isFalse(writing.called);
+    });
+
+    it("leaves a create whose row the fill delivered", () => {
+      const batch = queued(3, create("t1"));
+
+      LocalDatabase.putRow(TODO, {id: "t1", title: "from the fill"});
+
+      Batches.landUnsent([TODO], 3);
+
+      assert.isFalse(batch.isLanded(0));
+    });
+
+    // The marker is said once, so a page load sending the batch again has only the marks to go by.
+    it("keeps a resent batch from filing the row after a reload", () => {
+      const batch = queued(3, create("t1"));
+
+      Batches.landUnsent([TODO], 3);
+
+      const record = batch.record();
+
+      Batches.reset();
+      Batches.adopt([record]);
+      Batches.settle(3, confirmed);
+
+      assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+    });
+
+    it("writes down only the batches whose marks moved", () => {
+      const writing = sinon.stub(Durability, "persistLanded");
+      const batch = queued(3, create("t1"));
+
+      queued(4, create("g1", TAG));
+
+      Batches.landUnsent([TODO], 4);
+
+      assert.isTrue(writing.calledOnceWithExactly(batch));
+    });
+
+    it("writes nothing down when told again", () => {
+      const writing = sinon.stub(Durability, "persistLanded");
+
+      queued(3, create("t1"));
+
+      Batches.landUnsent([TODO], 3);
+      Batches.landUnsent([TODO], 3);
+
+      assert.isTrue(writing.calledOnce);
+    });
+  });
+
   describe("the queue reads", () => {
     const write = (id) => ({id, op: "delete", stamp: 1, type: TODO});
 
@@ -1390,6 +1653,42 @@ describe("Batches", () => {
       Batches.settle(3, {dropped: {}, kept: {}, status: "confirmed"});
 
       assert.isTrue(SyncStream.scheduleRender.called);
+    });
+
+    describe("whether a fill is pending", () => {
+      const fillPending = () => {
+        const promoting = sinon.stub(Overlay, "promote");
+
+        queued(3, "t1");
+
+        Batches.settle(3, {dropped: {}, kept: {}, status: "confirmed"});
+
+        return promoting.firstCall.args[2].fillPending;
+      };
+
+      afterEach(() => {
+        SyncStream.syncCursor = null;
+      });
+
+      it("is true for a client with no place that isn't complete", () => {
+        SyncStream.syncCursor = null;
+
+        assert.isTrue(fillPending());
+      });
+
+      it("is false for a client coming back with a place", () => {
+        SyncStream.syncCursor = "Nzc4LjA";
+
+        assert.isFalse(fillPending());
+      });
+
+      // A node of an older build can end a fill with no place on its marker.
+      it("is false for a client told it holds everything", () => {
+        SyncStream.syncCursor = null;
+        LocalDatabase.markAllSynced();
+
+        assert.isFalse(fillPending());
+      });
     });
 
     // A tab that never took the batch up, or has settled it already, has nothing to do - and every

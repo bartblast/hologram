@@ -57,7 +57,7 @@ defmodule Hologram.UI.RuntimeTest do
     assert String.contains?(markup, @runtime_path)
     assert String.contains?(markup, @page_bundle_path)
 
-    assert fill_names(context) == ["boot_data", "chunk_script_tags"]
+    assert fill_names(context) == ["boot_data", "data_model_script_tag", "chunk_script_tags"]
   end
 
   test "not initial page, page mounted", %{context: initial_context} do

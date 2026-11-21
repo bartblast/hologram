@@ -219,7 +219,7 @@ defmodule Hologram.Sync.SessionTest do
     receive do
       {:sync_deltas, _cursor, deltas, _applied_seq} -> await_fill(acc ++ deltas)
       {:sync_synced, :all, _cursor} -> acc
-      {:sync_synced, {:types, _types}, _cursor} -> await_fill(acc)
+      {:sync_synced, {:types, _types, _applied_seq}, _cursor} -> await_fill(acc)
     after
       1_000 -> flunk("the client was never told it holds everything")
     end
@@ -521,9 +521,10 @@ defmodule Hologram.Sync.SessionTest do
       refute_received {:sync_synced, :all, _cursor}
     end
 
-    # The batch is read while the gap is told, so it reaches the session before the catch-up is
-    # over - and below the edge read after it, so it may be in some of what the catch-up read and
-    # not in the rest.
+    # The batch reaches the session before the catch-up is over, dated at the gap's edge, so it is
+    # told - and below the edge read once the catch-up is over, so it may be in some of what the
+    # catch-up read and not in the rest. Routed during the held read, a real batch would be wholly
+    # below the edge and passed over: the date makes it one not finished when the edge was read.
     test "tells a batch routed during the catch-up after the marker, its rows whole" do
       task = create("before")
       test_pid = self()
@@ -555,6 +556,67 @@ defmodule Hologram.Sync.SessionTest do
 
       assert id == task.id
       assert data.c == "after"
+    end
+
+    # The batch's rows are read before the gap's edge, and a transaction committing in between
+    # writes the row again - which the gap holds, and the chunk's rows hold too. Told after the
+    # marker, the batch would put the row back as it stood before that transaction, under the edge.
+    test "passes over a batch routed during the catch-up that committed wholly below the edge" do
+      row = create("before")
+
+      batch = [logged(:patch_entity, Module2, row.id, %{"c" => "before"}, {100, 1})]
+      part = Live.part_now(batch, nil, Edges.index(), QueryCache.synced_types(), {100, 0}, 100)
+
+      DB.update!(Module2, row.id, c: "after")
+
+      gap = [logged(:patch_entity, Module2, row.id, %{"c" => "after"}, {150, 1})]
+
+      session =
+        start_session!(
+          read_gap: fn ->
+            send(self(), {:live, part})
+
+            {:ok, gap, 200}
+          end
+        )
+
+      assert_receive {:sync_deltas, cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert id == row.id
+      assert data.c == "after"
+      assert cursor == Cursor.encode(150, 1, @policy_hash, @types_hash)
+
+      assert_receive {:sync_synced, :all, all_cursor}
+      assert all_cursor == Cursor.encode(200, 0, @policy_hash, @types_hash)
+
+      await_live(session)
+      refute_received {:sync_deltas, _cursor, _deltas, _seq}
+    end
+
+    # Its last transaction can have been open when the gap's edge was read, and commit after the gap
+    # was read, so the gap need not hold it.
+    test "tells a batch routed during the catch-up that reaches the edge" do
+      row = create("after")
+
+      batch = [
+        logged(:patch_entity, Module2, row.id, %{"c" => "before"}, {190, 1}),
+        logged(:patch_entity, Module2, row.id, %{"c" => "after"}, {200, 1})
+      ]
+
+      part = Live.part_now(batch, nil, Edges.index(), QueryCache.synced_types(), {190, 0}, 200)
+
+      start_session!(
+        read_gap: fn ->
+          send(self(), {:live, part})
+
+          {:ok, [], 200}
+        end
+      )
+
+      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_deltas, cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert id == row.id
+      assert data.c == "after"
+      assert cursor == Cursor.encode(200, 0, @policy_hash, @types_hash)
     end
   end
 
@@ -791,8 +853,9 @@ defmodule Hologram.Sync.SessionTest do
              end)
     end
 
-    # The batch is read after the gap, which holds nothing of it, and below the edge read once the
-    # catch-up is over.
+    # The batch is dated at the gap's edge, so it is told - and below the edge read once the
+    # catch-up is over. Routed during the held read, a real batch would be wholly below the edge
+    # and passed over: the date makes it one not finished when the edge was read.
     test "drops by hash a row a batch routed during the catch-up hid", %{
       child: child,
       parent: parent
@@ -823,8 +886,9 @@ defmodule Hologram.Sync.SessionTest do
 
       assert_receive {:sync_synced, :all, _cursor}
 
-      # The held ids of both types are read after the parent went private, so neither row is held:
-      # the batch tells both by hash, each type in a frame of its own.
+      # The held ids of both types are read after the parent went private, so neither row is held,
+      # and the batch is below the trust edge: it tells both by hash, each type in a frame of its
+      # own.
       assert_receive {:sync_deltas, _cursor, first, nil}
       assert_receive {:sync_deltas, _cursor, second, nil}
 
@@ -841,7 +905,8 @@ defmodule Hologram.Sync.SessionTest do
 
     # The chunk's search walks the tables as they stand once the child moved, so it no longer
     # reaches the child from the parent - and the move's own batch, routed meanwhile, finds the
-    # child hidden and not held.
+    # child hidden and not held. The move commits after the gap was read, so its transaction is at
+    # or above the gap's edge, and its batch is told.
     test "drops by hash a row its parent's going private hid that then moved", %{
       child: child,
       parent: parent
@@ -872,7 +937,7 @@ defmodule Hologram.Sync.SessionTest do
         | old: %{"parent_id" => parent.id}
       }
 
-      route([moved], {1, 0})
+      route([moved], {301, 0})
       send(session, :moved)
 
       chunk_frames = await_frames()
@@ -1496,9 +1561,9 @@ defmodule Hologram.Sync.SessionTest do
       start_session!([])
 
       assert synced_scopes() == [
-               {:types, [PolicyModule1]},
-               {:types, [Module2]},
-               {:types, [PolicyModule5]},
+               {:types, [PolicyModule1], nil},
+               {:types, [Module2], nil},
+               {:types, [PolicyModule5], nil},
                :all
              ]
     end
@@ -1511,9 +1576,9 @@ defmodule Hologram.Sync.SessionTest do
       start_session!([])
 
       assert synced_scopes() == [
-               {:types, [PolicyModule1]},
-               {:types, [Module2]},
-               {:types, [PolicyModule5]},
+               {:types, [PolicyModule1], nil},
+               {:types, [Module2], nil},
+               {:types, [PolicyModule5], nil},
                :all
              ]
     end
@@ -1523,10 +1588,51 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, {:types, [Module2]}, nil}
-      assert_receive {:sync_synced, {:types, [PolicyModule1]}, nil}
-      assert_receive {:sync_synced, {:types, [PolicyModule5]}, nil}
+      assert_receive {:sync_synced, {:types, [Module2], nil}, nil}
+      assert_receive {:sync_synced, {:types, [PolicyModule1], nil}, nil}
+      assert_receive {:sync_synced, {:types, [PolicyModule5], nil}, nil}
       assert_receive {:sync_synced, :all, _cursor}
+    end
+
+    # Each type is read at its own moment, so each marker speaks for its own read. A type with no
+    # rows has no frame to carry the number, and its marker is the only thing that can.
+    test "names on each type's marker the number read with that type's rows" do
+      page_types(%{@page => [PolicyModule1], @other_page => [Module2]})
+
+      read_fill = fn
+        PolicyModule1, _actor_user_id, _replica_id, _synced_types -> {[], 4}
+        Module2, _actor_user_id, _replica_id, _synced_types -> {[], 6}
+        PolicyModule5, _actor_user_id, _replica_id, _synced_types -> {[], 9}
+      end
+
+      start_session!(read_fill: read_fill, replica_id: @replica_id)
+
+      assert synced_scopes() == [
+               {:types, [PolicyModule1], 4},
+               {:types, [Module2], 6},
+               {:types, [PolicyModule5], 9},
+               :all
+             ]
+    end
+
+    # Every batch the session's own number counts committed before the read, so a marker can say
+    # they are in the type's rows even when the read found no higher one.
+    test "never names a number below the one the session was given on a type's marker" do
+      page_types(%{@page => [Module2]})
+
+      read_fill = fn _entity_type, _actor_user_id, _replica_id, _synced_types -> {[], 5} end
+
+      start_session!(applied_seq: 7, read_fill: read_fill, replica_id: @replica_id)
+
+      assert_receive {:sync_synced, {:types, [Module2], 7}, nil}
+    end
+
+    test "names no number on a type's marker for a replica with no confirmed batch" do
+      page_types(%{@page => [Module2]})
+
+      start_session!(replica_id: @replica_id)
+
+      assert_receive {:sync_synced, {:types, [Module2], nil}, nil}
     end
 
     # The marker is what a filled client resumes from: a deltas frame carries no place until the
@@ -1548,7 +1654,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(fill_place: {200, 0})
 
-      assert_receive {:sync_synced, {:types, [Module2]}, cursor}
+      assert_receive {:sync_synced, {:types, [Module2], _applied_seq}, cursor}
       assert cursor == nil
     end
 
@@ -1561,7 +1667,7 @@ defmodule Hologram.Sync.SessionTest do
 
       assert_receive {:sync_synced, :all, cursor}
       assert cursor == Cursor.encode(200, 0, @policy_hash, @types_hash)
-      refute_received {:sync_synced, {:types, _types}, _cursor}
+      refute_received {:sync_synced, {:types, _types, _applied_seq}, _cursor}
     end
   end
 

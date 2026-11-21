@@ -938,6 +938,32 @@ defmodule Hologram.DBTest do
       assert {:ok, %Module1{}} = create(Module1.new())
     end
 
+    test "holds a transaction-level advisory lock inside a transaction in the sandbox" do
+      key = 175_012
+
+      count_statement =
+        ~s|SELECT count(*) AS "count" FROM pg_locks WHERE locktype = 'advisory' | <>
+          "AND pid = pg_backend_pid() AND objid::int8 = $1"
+
+      {:ok, result} =
+        transaction(fn ->
+          {:ok, _result} = sql("SELECT pg_advisory_xact_lock($1)", [key])
+          sql!(count_statement, [key])
+        end)
+
+      assert result == %{columns: ["count"], rows: [[1]]}
+    end
+
+    test "raises on a transaction-level advisory lock outside a transaction in the sandbox" do
+      expected_msg =
+        "DB.sql/3 cannot hold a transaction-level advisory lock outside a transaction - the " <>
+          "lock would end with the read. Call it inside DB.transaction/2."
+
+      assert_error MisuseError, expected_msg, fn ->
+        sql("SELECT pg_advisory_xact_lock($1)", [175_013])
+      end
+    end
+
     test "reads an entity id as the string the entity carries" do
       {:ok, entity} = create(Module1.new())
 

@@ -90,14 +90,27 @@ export default class LiveReload {
       .forEach((iframe) => iframe.remove());
   }
 
-  // Whether a page snapshot can be restored into the code given by the page digest and the
-  // runtime digest: the snapshot holds component state shaped by the code it was taken
-  // with, and component code lives in the page bundle and, for components the runtime
-  // carries, in the runtime bundle. A snapshot with no stamp, taken before stamping existed
-  // or before any bundle was recorded, is taken on trust, as every snapshot used to be.
-  static snapshotFits(snapshot, pageDigest, runtimeDigest) {
+  // Whether a page snapshot can be restored into the code given by the page digest, the
+  // runtime digest and the data model digest: the snapshot holds component state shaped by
+  // the code it was taken with, and component code lives in the page bundle and, for
+  // components the runtime carries, in the runtime bundle. Entity rows in that state are
+  // shaped by the data model, which has a bundle of its own. A snapshot with no page stamp,
+  // taken before stamping existed or before any bundle was recorded, is taken on trust for its
+  // code, as every snapshot used to be, but not for its data model: one that recorded none
+  // reads as having none, so it fits a build without one and is passed over in a build with
+  // one.
+  static snapshotFits(
+    snapshot,
+    pageDigest,
+    runtimeDigest,
+    dataModelDigest = null,
+  ) {
     if (!globalThis.Hologram.config.liveReload) {
       return true;
+    }
+
+    if ((snapshot.dataModelDigest ?? null) !== dataModelDigest) {
+      return false;
     }
 
     if (snapshot.pageDigest === undefined || snapshot.pageDigest === null) {

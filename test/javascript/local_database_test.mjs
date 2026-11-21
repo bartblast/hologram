@@ -590,6 +590,229 @@ describe("LocalDatabase", () => {
     });
   });
 
+  describe("a row an answer filed during a fill", () => {
+    const TAG = "MyApp.Tag";
+    const TASK = "MyApp.Task";
+
+    const promoted = (seq, type = TASK, id = "t1") => {
+      LocalDatabase.putRow(type, {id, title: "created here"});
+      LocalDatabase.markPromoted(type, id, seq);
+    };
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TAG]: {
+            attributes: {id: "uuid", name: "string"},
+            enumValues: {},
+            inverses: {
+              tasks: {
+                forward: "tags",
+                reference: false,
+                sort: [],
+                toMany: true,
+                type: TASK,
+              },
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+          [TASK]: {
+            attributes: {id: "uuid", title: "string"},
+            enumValues: {},
+            inverses: {},
+            relationships: {
+              tags: {optional: true, toMany: true, type: TAG},
+            },
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+
+      Model.reset();
+    });
+
+    it("carries the row until its type's marker", () => {
+      promoted(3);
+
+      assert.deepEqual(LocalDatabase.carriedEntries(), [[TASK, "t1"]]);
+      assert.isFalse(LocalDatabase.vouchedRowKeys().has(`${TASK} t1`));
+    });
+
+    // The fill read the batch and left the row out, so its user may not read it.
+    it("takes the row away at a marker at or above its batch", () => {
+      promoted(3);
+
+      LocalDatabase.markTypesSynced([TASK], 3);
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1"));
+      assert.deepEqual(LocalDatabase.carriedEntries(), []);
+    });
+
+    it("keeps a row the fill delivered", () => {
+      promoted(3);
+
+      LocalDatabase.unmarkCarried(TASK, "t1");
+      LocalDatabase.markTypesSynced([TASK], 3);
+
+      assert.isNotNull(LocalDatabase.baseRow(TASK, "t1"));
+    });
+
+    // Committed after the type was read, so its session judges it.
+    it("keeps the row at a marker below its batch, and at the marker for everything", () => {
+      promoted(4);
+
+      LocalDatabase.markTypesSynced([TASK], 3);
+
+      assert.isNotNull(LocalDatabase.baseRow(TASK, "t1"));
+      assert.isFalse(LocalDatabase.vouchedRowKeys().has(`${TASK} t1`));
+
+      LocalDatabase.markAllSynced();
+
+      assert.isNotNull(LocalDatabase.baseRow(TASK, "t1"));
+      assert.isTrue(LocalDatabase.vouchedRowKeys().has(`${TASK} t1`));
+    });
+
+    it("keeps the row at a marker naming no number", () => {
+      promoted(3);
+
+      LocalDatabase.markTypesSynced([TASK], null);
+
+      assert.isNotNull(LocalDatabase.baseRow(TASK, "t1"));
+
+      LocalDatabase.markAllSynced();
+
+      assert.isNotNull(LocalDatabase.baseRow(TASK, "t1"));
+      assert.deepEqual(LocalDatabase.carriedEntries(), []);
+    });
+
+    it("keeps the row at a marker of an older node, which names no number at all", () => {
+      promoted(3);
+
+      LocalDatabase.markTypesSynced([TASK], undefined);
+
+      assert.isNotNull(LocalDatabase.baseRow(TASK, "t1"));
+    });
+
+    it("leaves the row carried at another type's marker", () => {
+      promoted(3);
+
+      LocalDatabase.markTypesSynced([TAG], 3);
+
+      assert.isNotNull(LocalDatabase.baseRow(TASK, "t1"));
+      assert.deepEqual(LocalDatabase.carriedEntries(), [[TASK, "t1"]]);
+    });
+
+    // Neither a fill nor a session speaks for a type sync doesn't send.
+    it("keeps a row of a type no marker named at the marker for everything", () => {
+      promoted(3);
+
+      LocalDatabase.markAllSynced();
+
+      assert.isNotNull(LocalDatabase.baseRow(TASK, "t1"));
+      assert.deepEqual(LocalDatabase.carriedEntries(), []);
+    });
+
+    it("takes the row out of the sets naming it, and answers the holders", () => {
+      promoted(3, TAG, "g1");
+
+      LocalDatabase.putRow(TASK, {id: "t1", title: "held"});
+      LocalDatabase.replaceFacts(TASK, "tags", "t1", ["g1", "g2"]);
+
+      const written = LocalDatabase.markTypesSynced([TAG], 3);
+
+      assert.deepEqual(
+        Array.from(LocalDatabase.baseTargetIds(TASK, "tags", "t1")),
+        ["g2"],
+      );
+
+      assert.deepEqual(Array.from(written), [`${TASK} t1`]);
+    });
+
+    // A row a page carried is never stored, so its set has nothing to be written down.
+    it("doesn't answer a holder a page carried", () => {
+      promoted(3, TAG, "g1");
+
+      LocalDatabase.putRow(TASK, {id: "t1", title: "carried"});
+      LocalDatabase.markCarried(TASK, "t1");
+      LocalDatabase.replaceFacts(TASK, "tags", "t1", ["g1"]);
+
+      const written = LocalDatabase.markTypesSynced([TAG], 3);
+
+      assert.equal(LocalDatabase.baseTargetIds(TASK, "tags", "t1").size, 0);
+      assert.equal(written.size, 0);
+    });
+
+    // The holder is kept for its session to judge, so no stream has vouched for it yet.
+    it("doesn't answer a holder still waiting for its session", () => {
+      promoted(4, TASK, "h1");
+      promoted(3, TAG, "g1");
+
+      LocalDatabase.replaceFacts(TASK, "tags", "h1", ["g1"]);
+      LocalDatabase.markTypesSynced([TASK], 2);
+
+      const written = LocalDatabase.markTypesSynced([TAG], 4);
+
+      assert.isNull(LocalDatabase.baseRow(TAG, "g1"));
+      assert.equal(LocalDatabase.baseTargetIds(TASK, "tags", "h1").size, 0);
+      assert.equal(written.size, 0);
+    });
+
+    // A create over a row a page carried is never recorded, and the sweep still takes the row.
+    it("takes a swept page-carried row out of the sets naming it", () => {
+      LocalDatabase.putRow(TAG, {id: "g1", name: "carried"});
+      LocalDatabase.markCarried(TAG, "g1");
+      LocalDatabase.putRow(TASK, {id: "t1", title: "held"});
+      LocalDatabase.replaceFacts(TASK, "tags", "t1", ["g1"]);
+
+      const written = LocalDatabase.markTypesSynced([TAG], 3);
+
+      assert.equal(LocalDatabase.baseTargetIds(TASK, "tags", "t1").size, 0);
+      assert.deepEqual(Array.from(written), [`${TASK} t1`]);
+    });
+
+    it("leaves the sets naming a row it keeps", () => {
+      promoted(4, TAG, "g1");
+
+      LocalDatabase.putRow(TASK, {id: "t1", title: "held"});
+      LocalDatabase.replaceFacts(TASK, "tags", "t1", ["g1"]);
+
+      const written = LocalDatabase.markTypesSynced([TAG], 3);
+
+      assert.isTrue(LocalDatabase.baseTargetIds(TASK, "tags", "t1").has("g1"));
+      assert.equal(written.size, 0);
+    });
+
+    // An answer landing before a greeting committed before that fill, so every marker covers it,
+    // whatever number it was recorded with.
+    it("forgets the number at a refill, and the marker takes the row", () => {
+      promoted(5);
+
+      LocalDatabase.beginRefill();
+      LocalDatabase.markTypesSynced([TASK], 3);
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1"));
+    });
+
+    it("forgets the number at a reset", () => {
+      promoted(5);
+
+      LocalDatabase.reset();
+
+      LocalDatabase.putRow(TASK, {id: "t1", title: "carried"});
+      LocalDatabase.markCarried(TASK, "t1");
+      LocalDatabase.markTypesSynced([TASK], 3);
+
+      assert.isNull(LocalDatabase.baseRow(TASK, "t1"));
+    });
+  });
+
   describe("putRow()", () => {
     it("files the row under its id", () => {
       const row = {id: "t1", title: "Draft copy"};
