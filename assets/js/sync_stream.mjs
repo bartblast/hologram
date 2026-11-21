@@ -46,9 +46,9 @@ export default class SyncStream {
 
   // What the client tells the server so it can be kept up to date: the wire format this bundle
   // speaks, the model it was built against, the page it is on, and the rules it answers permission
-  // checks by. All but the page are baked into the bundle rather than read from the page, because
-  // what they answer is whether THIS JavaScript is stale - a value the current server put in the
-  // page would always agree with it.
+  // checks by. All but the page are baked into the data model bundle the document loaded with this
+  // runtime rather than read from the page, because what they answer is whether THIS JavaScript is
+  // stale - a value the current server put in the page would always agree with it.
   //
   // A greeting asking for everything also marks what this client holds as awaiting the fill.
   static buildGreeting(pageModule) {

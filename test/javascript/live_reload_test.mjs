@@ -218,8 +218,76 @@ describe("LiveReload", () => {
       assert.isFalse(LiveReload.snapshotFits(snapshot, "page-1", "runtime-2"));
     });
 
+    it("another data model bundle", () => {
+      const stamped = {...snapshot, dataModelDigest: "model-1"};
+
+      assert.isTrue(
+        LiveReload.snapshotFits(stamped, "page-1", "runtime-1", "model-1"),
+      );
+
+      assert.isFalse(
+        LiveReload.snapshotFits(stamped, "page-1", "runtime-1", "model-2"),
+      );
+    });
+
+    it("a data model bundle the snapshot was taken without", () => {
+      const stamped = {...snapshot, dataModelDigest: null};
+
+      assert.isFalse(
+        LiveReload.snapshotFits(stamped, "page-1", "runtime-1", "model-1"),
+      );
+    });
+
+    it("a snapshot from before snapshots recorded the data model, in a build with one", () => {
+      assert.isFalse(
+        LiveReload.snapshotFits(snapshot, "page-1", "runtime-1", "model-1"),
+      );
+    });
+
+    it("a snapshot from before snapshots recorded the data model, in a build without one", () => {
+      assert.isTrue(
+        LiveReload.snapshotFits(snapshot, "page-1", "runtime-1", null),
+      );
+    });
+
     it("a snapshot with no stamp", () => {
       assert.isTrue(LiveReload.snapshotFits({}, "page-2", "runtime-2"));
+    });
+
+    it("a snapshot with no stamp, in a build with a data model", () => {
+      assert.isFalse(
+        LiveReload.snapshotFits({}, "page-2", "runtime-2", "model-1"),
+      );
+    });
+
+    it("a snapshot stamped with no page bundle and another data model", () => {
+      assert.isFalse(
+        LiveReload.snapshotFits(
+          {
+            dataModelDigest: "model-1",
+            pageDigest: null,
+            runtimeDigest: "runtime-1",
+          },
+          "page-2",
+          "runtime-2",
+          "model-2",
+        ),
+      );
+    });
+
+    it("a snapshot stamped with no page bundle and the same data model", () => {
+      assert.isTrue(
+        LiveReload.snapshotFits(
+          {
+            dataModelDigest: "model-1",
+            pageDigest: null,
+            runtimeDigest: "runtime-1",
+          },
+          "page-2",
+          "runtime-2",
+          "model-1",
+        ),
+      );
     });
 
     it("a snapshot stamped with no page bundle", () => {
