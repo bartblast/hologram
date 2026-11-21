@@ -38,7 +38,6 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
-                 index: nil,
                  source: :system
                },
                %{
@@ -51,7 +50,30 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
-                 index: nil,
+                 source: :system
+               },
+               %{
+                 name: "server_created_at",
+                 type: :datetime,
+                 sql_type: "timestamptz",
+                 collation: nil,
+                 enum_values: nil,
+                 default: nil,
+                 null: false,
+                 references: nil,
+                 fk_constraint: nil,
+                 source: :system
+               },
+               %{
+                 name: "server_updated_at",
+                 type: :datetime,
+                 sql_type: "timestamptz",
+                 collation: nil,
+                 enum_values: nil,
+                 default: nil,
+                 null: false,
+                 references: nil,
+                 fk_constraint: nil,
                  source: :system
                },
                %{
@@ -64,7 +86,6 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
-                 index: nil,
                  source: :system
                },
                %{
@@ -77,7 +98,6 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
-                 index: nil,
                  source: :revisions
                }
              ]
@@ -100,7 +120,6 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
-                 index: nil,
                  source: :revisions
                }
              ]
@@ -123,7 +142,6 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
-                 index: nil,
                  source: {:attribute, :a}
                },
                %{
@@ -136,7 +154,6 @@ defmodule Hologram.DB.MapperTest do
                  null: true,
                  references: nil,
                  fk_constraint: nil,
-                 index: nil,
                  source: {:attribute, :b}
                },
                %{
@@ -149,7 +166,6 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
-                 index: nil,
                  source: {:attribute, :c}
                }
              ]
@@ -211,7 +227,6 @@ defmodule Hologram.DB.MapperTest do
                null: true,
                references: nil,
                fk_constraint: nil,
-               index: nil,
                source: {:attribute, :external_id}
              }
     end
@@ -256,7 +271,6 @@ defmodule Hologram.DB.MapperTest do
                null: true,
                references: nil,
                fk_constraint: nil,
-               index: "test_fixtures_entity_module2_c_$sort_$idx",
                source: {:sort_key, :c}
              }
     end
@@ -277,7 +291,6 @@ defmodule Hologram.DB.MapperTest do
                null: true,
                references: nil,
                fk_constraint: nil,
-               index: nil,
                source: {:search_key, :c}
              }
     end
@@ -316,7 +329,6 @@ defmodule Hologram.DB.MapperTest do
                  null: true,
                  references: "test_fixtures_entity_module2",
                  fk_constraint: "test_fixtures_entity_module3_b_id_$fk",
-                 index: "test_fixtures_entity_module3_b_id_$idx",
                  source: {:relationship, :b}
                },
                %{
@@ -329,7 +341,6 @@ defmodule Hologram.DB.MapperTest do
                  null: false,
                  references: "test_fixtures_entity_module1",
                  fk_constraint: "test_fixtures_entity_module3_c_id_$fk",
-                 index: "test_fixtures_entity_module3_c_id_$idx",
                  source: {:relationship, :c}
                }
              ]
@@ -344,17 +355,6 @@ defmodule Hologram.DB.MapperTest do
 
       assert column(InlineEntityFixture17, "quite_long_relationship_name_id").fk_constraint ==
                "quite_long_relationship_name_id_bbbac617_$fk"
-    end
-
-    test "shortens foreign key index names over the PostgreSQL identifier limit, keeping the kind" do
-      defmodule InlineEntityFixture18 do
-        use Hologram.Entity
-
-        relationship :quite_long_relationship_name, Module1
-      end
-
-      assert column(InlineEntityFixture18, "quite_long_relationship_name_id").index ==
-               "quite_long_relationship_name_id_f8dbb8ba_$idx"
     end
 
     test "rejects declarations deriving the same column name" do
@@ -412,7 +412,7 @@ defmodule Hologram.DB.MapperTest do
   end
 
   describe "derive!/2" do
-    test "derives the role grant store's unique index comparing nulls as values, and its entity index" do
+    test "derives the role grant store's unique index comparing nulls as values" do
       mapping =
         derive!(
           [
@@ -428,11 +428,6 @@ defmodule Hologram.DB.MapperTest do
                  columns: ["user_id", "entity_type", "entity_id", "role"],
                  nulls_distinct: false,
                  unique: true
-               },
-               "hologram_role_grant_entity_type_entity_id_role_$idx" => %{
-                 columns: ["entity_type", "entity_id", "role"],
-                 nulls_distinct: true,
-                 unique: false
                }
              }
     end
@@ -460,7 +455,7 @@ defmodule Hologram.DB.MapperTest do
       assert mapping[Module2].indexes == %{}
     end
 
-    test "derives a unique index over a unique to-one's reference column in place of its plain one" do
+    test "derives a unique index over a unique to-one's reference column" do
       mapping = derive!([Module26, Module27], [])
 
       assert mapping[Module27].indexes == %{
@@ -475,17 +470,12 @@ defmodule Hologram.DB.MapperTest do
                  unique: true
                }
              }
-
-      assert Enum.find(mapping[Module27].columns, &(&1.name == "channel_id")).index == nil
     end
 
-    test "derives a plain index and no unique one for a to-one that is not unique" do
+    test "derives no unique index for a to-one that is not unique" do
       mapping = derive!([Module1, Module2, Module3], [])
 
       assert mapping[Module3].indexes == %{}
-
-      assert Enum.find(mapping[Module3].columns, &(&1.name == "c_id")).index ==
-               "test_fixtures_entity_module3_c_id_$idx"
     end
 
     test "derives no column and no join table for an inverse relationship" do
@@ -494,6 +484,8 @@ defmodule Hologram.DB.MapperTest do
       assert Enum.map(mapping[Module26].columns, & &1.source) == [
                :system,
                {:attribute, :name},
+               :system,
+               :system,
                :system,
                :system,
                :revisions,
@@ -617,30 +609,6 @@ defmodule Hologram.DB.MapperTest do
       end
     end
 
-    test "rejects entities deriving the same name for a sort key index" do
-      defmodule InlineEntityFixture24 do
-        use Hologram.Entity
-
-        attribute :b_c, :string
-      end
-
-      defmodule InlineEntityFixture24B do
-        use Hologram.Entity
-
-        attribute :c, :string
-      end
-
-      expected_msg =
-        normalize_newlines("""
-        colliding derived names - rename the declarations so that every derived name is unique:
-          * index "db_mapper_test_inline_entity_fixture24_b_c_$sort_$idx" is derived from attribute :b_c in Hologram.DB.MapperTest.InlineEntityFixture24, attribute :c in Hologram.DB.MapperTest.InlineEntityFixture24B\
-        """)
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        derive!([InlineEntityFixture24, InlineEntityFixture24B], [])
-      end
-    end
-
     test "rejects entities deriving the same name for a unique attribute index" do
       defmodule InlineEntityFixture25 do
         use Hologram.Entity
@@ -662,30 +630,6 @@ defmodule Hologram.DB.MapperTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         derive!([InlineEntityFixture25, InlineEntityFixture25B], [])
-      end
-    end
-
-    test "rejects entities deriving the same name for a reference index" do
-      defmodule InlineEntityFixture26 do
-        use Hologram.Entity
-
-        relationship :b_c, Module1
-      end
-
-      defmodule InlineEntityFixture26B do
-        use Hologram.Entity
-
-        relationship :c, Module1
-      end
-
-      expected_msg =
-        normalize_newlines("""
-        colliding derived names - rename the declarations so that every derived name is unique:
-          * index "db_mapper_test_inline_entity_fixture26_b_c_id_$idx" is derived from relationship :b_c in Hologram.DB.MapperTest.InlineEntityFixture26, relationship :c in Hologram.DB.MapperTest.InlineEntityFixture26B\
-        """)
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        derive!([InlineEntityFixture26, InlineEntityFixture26B], [])
       end
     end
 
@@ -762,9 +706,8 @@ defmodule Hologram.DB.MapperTest do
   end
 
   describe "derive_from_model!/1" do
-    # Four join tables in two colliding pairs, and one reverse index name all four derive - which
-    # neither pair's line reports, so it gets a line of its own.
-    test "reports an index two colliding join table pairs share" do
+    # Four join tables in two colliding pairs, one line each.
+    test "reports two colliding join table pairs" do
       r = String.duplicate("r", 37)
 
       relationships = [
@@ -792,7 +735,6 @@ defmodule Hologram.DB.MapperTest do
       expected_msg =
         normalize_newlines("""
         colliding derived names - rename the declarations so that every derived name is unique:
-          * index "target_id_d1fd575c_$idx" is derived from relationship :#{r} in Pppppppppppppp.XxYyZz, relationship :xx_yy_zz_#{r} in Pppppppppppppp, relationship :yy_zz_#{r} in PpppppppppppppXx, relationship :zz_#{r} in PpppppppppppppXx.Yy
           * join table "xx_yy_zz_#{r}_7523ea5b_$join" is derived from relationship :#{r} in Pppppppppppppp.XxYyZz, relationship :xx_yy_zz_#{r} in Pppppppppppppp
           * join table "yy_zz_#{r}_7523ea5b_$join" is derived from relationship :yy_zz_#{r} in PpppppppppppppXx, relationship :zz_#{r} in PpppppppppppppXx.Yy\
         """)
@@ -917,26 +859,6 @@ defmodule Hologram.DB.MapperTest do
       assert String.ends_with?(name, "_$uidx")
     end
 
-    test "keeps the plain index of a to-one a key names" do
-      model = %{
-        entities: %{
-          Nonexistent.Ghost => %{
-            attributes: [{:name, :string, []}],
-            relationships: [{:owner, Nonexistent.Ghost, [optional: true]}],
-            roles: [],
-            uniques: [[:name, :owner]]
-          }
-        },
-        roles: %{},
-        user_entity: nil
-      }
-
-      mapping = derive_from_model!(model)
-      owner_column = Enum.find(mapping[Nonexistent.Ghost].columns, &(&1.name == "owner_id"))
-
-      assert owner_column.index == "nonexistent_ghost_owner_id_$idx"
-    end
-
     test "reports a key's index another entity type's unique attribute derives too" do
       model = %{
         entities: %{
@@ -989,9 +911,6 @@ defmodule Hologram.DB.MapperTest do
                  unique: true
                }
              }
-
-      assert Enum.find(mapping[Nonexistent.Ghost].columns, &(&1.name == "owner_id")).index ==
-               nil
     end
 
     test "derives without consulting any module" do
@@ -1226,7 +1145,6 @@ defmodule Hologram.DB.MapperTest do
                  relationship: :a,
                  source_table: "test_fixtures_entity_module3",
                  target_table: "test_fixtures_entity_module2",
-                 reverse_index: "test_fixtures_entity_module3_a_$join_target_id_source_id_$idx",
                  pk_constraint: "test_fixtures_entity_module3_a_$join_$pk",
                  source_fk_constraint: "test_fixtures_entity_module3_a_$join_source_id_$fk",
                  target_fk_constraint: "test_fixtures_entity_module3_a_$join_target_id_$fk"
@@ -1255,9 +1173,6 @@ defmodule Hologram.DB.MapperTest do
       assert [join_table] = join_tables(InlineEntityFixture23)
 
       assert join_table.name == "recurring_invoice_adjustments_f97af6f0_$join"
-
-      assert join_table.reverse_index ==
-               "recurring_invoice_adjustments_$join_target_id_e06e7e1d_$idx"
 
       assert join_table.pk_constraint == "recurring_invoice_adjustments_$join_23c0665c_$pk"
 

@@ -12,7 +12,6 @@ defmodule Hologram.Test.FeatureHelpers do
             [Wallaby.Browser, Wallaby.ExpectationNotMetError, Wallaby.Feature.Utils]}
 
   alias Hologram.Router
-  alias Hologram.Sync.Evaluators
   alias Hologram.Test.BrowserSession
   alias Wallaby.Browser
   alias Wallaby.Feature.Utils
@@ -36,30 +35,6 @@ defmodule Hologram.Test.FeatureHelpers do
     |> wait_for_page_mounting(page_module, opts)
     |> wait_for_ws_connection()
     |> wait_for_sse_connection()
-  end
-
-  @doc """
-  Blocks until no sync evaluator from an earlier test is still alive.
-
-  A test that empties the tables with TRUNCATE bypasses the write funnel, so no effect reaches
-  the log and nothing tells a running evaluator its rows are gone - it would keep serving its
-  pre-truncate round to whatever connects next. Waiting for the drain is what makes a test's
-  first frame mean that test's rows.
-  """
-  @spec await_evaluator_drain(non_neg_integer) :: :ok
-  def await_evaluator_drain(attempts_left \\ 2_000)
-
-  def await_evaluator_drain(0) do
-    raise "evaluators from an earlier test never drained"
-  end
-
-  def await_evaluator_drain(attempts_left) do
-    if Evaluators.live() == [] do
-      :ok
-    else
-      Process.sleep(1)
-      await_evaluator_drain(attempts_left - 1)
-    end
   end
 
   @doc """

@@ -18,8 +18,14 @@ import Type from "../../type.mjs";
 // Hologram.Policy.Evaluator is the reference this mirrors, and Hologram.Auth is where its
 // checker lives on that side. The split is kept: rules are evaluated over plain values, and
 // what a rule REFERENCES - a role held somewhere - is answered by reading grant rows. The
-// server reads them with SELECT EXISTS, this reads them from the pot - bar a read rule's reference
-// or delegation through a row of a type nobody may read, which the server's verdict answers.
+// server reads them with SELECT EXISTS, this reads them from the pot - bar a reference or
+// delegation through a related row this client does not hold, one its user may not read or of a
+// type nobody may read, which this answers as unknown.
+//
+// What the rows this client holds leave unknown, the server's verdict on the operation answers: its
+// can? answer for the session's user over the row as stored, sent with the row (see verdictHolds/4).
+// It answers the operation whole, never one part of a rule, so it tells the user nothing can?
+// doesn't.
 //
 // Both halves of what it needs are compile-time facts the bundle carries: the rules in each
 // type's model entry, and the name the grant store spells that type by. The rows are ordinary
@@ -32,12 +38,13 @@ const GRANT_TYPE = "Hologram.Auth.RoleGrant";
 const CANONICAL_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-// What a condition holds as when this client cannot tell: a related row it would read is one it
-// does not hold - the server reads the row as stored, so taking it for a missing one could grant
-// what the server refuses (`project.status != :archived` over a project nobody synced) - or the
-// value it would read is a server-only attribute's, which no client ever holds. A rule grants only
-// on a definite yes, and `and` and `or` keep what they can still decide: false and unknown are
-// false, true or unknown is true.
+// What a condition, a role reference or a delegation holds as when this client cannot tell: a
+// related row it would read is one it does not hold - one its user may not read, which the server
+// reads as stored, so taking it for a missing one could grant what the server refuses
+// (`project.status != :archived` over a project the user may not read) - or the value it would read
+// is a server-only attribute's, which no client ever holds. A rule grants only on a definite yes,
+// and `and` and `or` keep what they can still decide: false and unknown are false, true or unknown
+// is true.
 const UNKNOWN = Symbol("unknown");
 
 // The sixteen bytes Hologram.Auth.RoleGrant derives every grant id under - drawn once, on
@@ -247,11 +254,9 @@ function alternativesHold(
   return result;
 }
 
-// A clause is a triple, a disjunction, a quantifier, or a predicate the build sends as its verdict
-// key and the types it reads. One reading a server-only attribute comes alone, and only the
-// server's verdict answers it, since no client holds the value it compares. One that in a read rule
-// reads a row of a type nobody may read comes with its triple: this client answers it when the rows
-// it holds decide it - an empty reference on its path reads no row - and the verdict otherwise.
+// A clause is a triple, a disjunction, a quantifier, or the marker the build sends for a predicate
+// reading a server-only attribute, which is UNKNOWN: no client holds the value it compares, and the
+// server's verdict on the operation answers the rule (see operationHolds/6).
 function clauseHolds(entityType, entity, clause, actorUserId, outer) {
   if (Array.isArray(clause)) {
     return predicateHolds(entityType, entity, clause, actorUserId, outer);
@@ -265,21 +270,7 @@ function clauseHolds(entityType, entity, clause, actorUserId, outer) {
     return quantifierHolds(entityType, entity, clause, actorUserId, outer);
   }
 
-  if (Object.hasOwn(clause, "predicate")) {
-    const held = predicateHolds(
-      entityType,
-      entity,
-      clause.predicate,
-      actorUserId,
-      outer,
-    );
-
-    if (held !== UNKNOWN) {
-      return held;
-    }
-  }
-
-  return verdictHolds(entityType, entity, clause, actorUserId);
+  return UNKNOWN;
 }
 
 // The row a chain of to-one relationships leads to, with its type, null at the first reference
@@ -305,7 +296,8 @@ function chainRowFrom(entityType, row, relationshipNames) {
 }
 
 // The id the last reference of a chain holds, read off the row the relationships before it lead
-// to, or null when they lead nowhere.
+// to, null when they lead nowhere, or UNKNOWN when they lead to a row this client does not hold -
+// one its user may not read, whose reference the server reads as stored.
 function chainTargetId(entityType, entity, relationshipNames) {
   const referenceField = `${relationshipNames.at(-1)}_id`;
 
@@ -315,9 +307,11 @@ function chainTargetId(entityType, entity, relationshipNames) {
 
   const end = chainRow(entityType, entity, relationshipNames.slice(0, -1));
 
-  return end === null || end === UNKNOWN
-    ? null
-    : (end.row[referenceField] ?? null);
+  if (end === null || end === UNKNOWN) {
+    return end;
+  }
+
+  return end.row[referenceField] ?? null;
 }
 
 // The type a name is declared with - an attribute's, or a derived field's holding a value - or
@@ -371,7 +365,7 @@ function enumRanks(entityType, name) {
 // strings joined, nil when one of them is and UNKNOWN when one may be; whether a condition holds;
 // the branch an if's condition decides, UNKNOWN when it cannot decide; a name read as a rule reads
 // it. A count reads a related set whole, which a client never holds for certain, so it is UNKNOWN -
-// the server's verdict answers a quantifier whose condition reads one.
+// the server's verdict on the operation answers a rule whose quantifier's condition reads one.
 function evaluatedDefinition(entityType, entity, definition) {
   if ("concat" in definition) {
     const values = definition.concat.map((operand) =>
@@ -546,11 +540,10 @@ function operandValue(entityType, entity, value, actorUserId, outer) {
 }
 
 // A clause is a triple array, a disjunction object holding alternatives that are clause lists
-// themselves, a quantifier object, or a predicate sent as its verdict alone (see clauseHolds/5) -
-// every clause has to hold, a disjunction holds when one of
-// its alternatives does. False when a clause does not hold, UNKNOWN when none fails but one may,
-// true when all hold. The outer rows are the rows above the entity inside a quantifier, nearest
-// first, each with its type - none at the top of a rule.
+// themselves, a quantifier object, or a server-only marker (see clauseHolds/5) - every clause has
+// to hold, a disjunction holds when one of its alternatives does. False when a clause does not
+// hold, UNKNOWN when none fails but one may, true when all hold. The outer rows are the rows above
+// the entity inside a quantifier, nearest first, each with its type - none at the top of a rule.
 function predicatesHold(entityType, entity, clauses, actorUserId, outer = []) {
   let result = true;
 
@@ -573,9 +566,8 @@ function predicatesHold(entityType, entity, clauses, actorUserId, outer = []) {
 // the row it is about or on the row above it the source names - a subset of the set the server
 // reads, so a held row decides only what one row can: any is true once a held row matches, none
 // false once one matches, all false once one fails. Anything else is UNKNOWN, since a row this
-// client does not hold may decide it - unless the quantifier is one the server sends its verdict
-// on, which then answers. Over a derived set the held rows decide nothing. A none or an all asking
-// about a visitor asks about nobody, which grants nothing.
+// client does not hold may decide it. Over a derived set the held rows decide nothing. A none or
+// an all asking about a visitor asks about nobody, which grants nothing.
 function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
   if (
     actorUserId === null &&
@@ -592,9 +584,7 @@ function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
   // A bounded or filtered set computed over the rows this client holds can hold rows the server's
   // doesn't, so not even a held row decides a quantifier over one.
   if (throughDerivedSet(start.entityType, start.hops)) {
-    return Object.hasOwn(clause, "verdict")
-      ? verdictHolds(entityType, entity, clause, actorUserId)
-      : UNKNOWN;
+    return UNKNOWN;
   }
 
   const relatedType = Model.pathTarget(start.entityType, start.hops);
@@ -616,11 +606,7 @@ function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
     ),
   );
 
-  const held = heldAnswer(clause.quantifier, answers);
-
-  return held === UNKNOWN && Object.hasOwn(clause, "verdict")
-    ? verdictHolds(entityType, entity, clause, actorUserId)
-    : held;
+  return heldAnswer(clause.quantifier, answers);
 }
 
 // The boxed entity's id and reference fields as a held row spells them - what a set's rows are
@@ -660,20 +646,23 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
     }
 
     // A role held on the row a chain of relationships leads to, named by the id its last
-    // reference holds. In a read rule, one reading a row of a type nobody may read comes with a
-    // fifth element, its verdict key and the types it reads: no client holds the row the id is
-    // read off, so the server's verdict answers it.
+    // reference holds - UNKNOWN when this client does not hold a row the id is read through, for
+    // the server's verdict on the operation to answer. In a read rule, one reading a row of a type
+    // nobody may read comes with a fifth element, true: no client holds the row the id is read
+    // off, so it is UNKNOWN.
     case "rel": {
-      const [_kind, relationshipNames, targetType, roles, verdictEntry] =
+      const [_kind, relationshipNames, targetType, roles, undecided] =
         reference;
 
-      if (verdictEntry !== undefined) {
-        return (
-          verdictHolds(entityType, entity, verdictEntry, actorUserId) === true
-        );
+      if (undecided !== undefined) {
+        return UNKNOWN;
       }
 
       const targetId = chainTargetId(entityType, entity, relationshipNames);
+
+      if (targetId === UNKNOWN) {
+        return UNKNOWN;
+      }
 
       return (
         targetId !== null &&
@@ -700,28 +689,72 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
   }
 }
 
+// Whether a rule holds: true when its conditions, one of its role references and its delegation
+// all hold, false when one of them can't, and UNKNOWN when none fails but one may - for the
+// server's verdict on the operation to answer (see operationHolds/6).
+//
 // A visitor's rules are evaluated rather than skipped, so a disjunction can still answer through
 // an alternative that names nobody. A role is held by somebody, so a visitor holds none, and the
 // grant rows are not read. A delegating rule is evaluated as any other, because the type it
 // delegates to answers its own actor-referencing rules the same way.
-function ruleMatches(rule, entityType, entity, actorUserId) {
-  if (
-    predicatesHold(entityType, entity, rule.predicates, actorUserId) !== true
-  ) {
+function ruleHolds(rule, entityType, entity, actorUserId) {
+  let result = predicatesHold(entityType, entity, rule.predicates, actorUserId);
+
+  if (result === false) {
     return false;
   }
 
-  if (
-    rule.to !== null &&
-    (actorUserId === null ||
-      !rule.to.some((reference) =>
-        referenceHolds(reference, entityType, entity, actorUserId),
-      ))
-  ) {
-    return false;
+  if (rule.to !== null) {
+    if (actorUserId === null) {
+      return false;
+    }
+
+    const held = someHolds(rule.to, (reference) =>
+      referenceHolds(reference, entityType, entity, actorUserId),
+    );
+
+    if (held === false) {
+      return false;
+    }
+
+    if (held === UNKNOWN) {
+      result = UNKNOWN;
+    }
   }
 
-  return rule.via === null || viaHolds(rule, entityType, entity, actorUserId);
+  if (rule.via !== null) {
+    const held = viaHolds(rule, entityType, entity, actorUserId);
+
+    if (held === false) {
+      return false;
+    }
+
+    if (held === UNKNOWN) {
+      result = UNKNOWN;
+    }
+  }
+
+  return result;
+}
+
+// Whether the given answer holds for one of the given items: true when it holds for one, UNKNOWN
+// when it holds for none but may for one, false when it can for none.
+function someHolds(items, answer) {
+  let result = false;
+
+  for (const item of items) {
+    const held = answer(item);
+
+    if (held === true) {
+      return true;
+    }
+
+    if (held === UNKNOWN) {
+      result = UNKNOWN;
+    }
+  }
+
+  return result;
 }
 
 // The row a name is read on and the name itself: the entity's own for a name of its row, and that
@@ -798,24 +831,30 @@ function canonicalId(value) {
   return typeof value === "string" && CANONICAL_ID.test(value) ? value : null;
 }
 
-// The server's verdict on a clause, a role reference or a delegation this client can't decide - a
-// quantifier the held rows leave open, a predicate reading a server-only attribute, or a read
-// rule's clause, role reference or delegation reading a row of a type nobody may read - as the
-// row's last frame carried it. The entry is the item's verdict key and the types it reads. The
-// server works verdicts out for the session's user over the row as stored, so any other question
-// is UNKNOWN: one about another user or a visitor, one about a struct whose stored fields differ
-// from the row's - changed in an action and not written yet - and one asked while a write of this
-// client's that the server has not answered names a type the item reads, since that write may
-// have moved the answer. So is one about a row that came with no verdict.
+// The server's verdict on an operation whose rules the rows this client holds leave open - a
+// quantifier they can't decide, a predicate reading a server-only attribute, a condition, role
+// reference or delegation reading a related row this client does not hold, which its user may not
+// read, or a read rule's clause, role reference or delegation reading a row of a type nobody may
+// read - as the row's last frame carried it. The entry is the operation's verdict key and the types
+// its rules read. The server works verdicts out for the session's user over the row as stored, so
+// any other question is UNKNOWN: one about another user or a visitor, one about a struct whose
+// stored fields differ from the row's - changed in an action and not written yet - and one asked
+// while a write of this client's that the server has not answered names a type the operation's
+// rules read, since that write may have moved the answer. So is one about a row that came with no
+// verdict.
 //
 // An answer can settle a batch before the frame carrying its round arrives, and between the two
-// the verdict predates the write again. The window closes itself: a write moving a verdict re-runs
-// the windows over the row, whose frame brings the new one, and a write that moves none sends
-// none, since the verdict held stands. Held rows still refute it in between.
+// the verdict predates the write again: the answer files the write's values into the base row,
+// which keeps the verdicts the server worked out before it. A verdict answers its operation whole,
+// so in that gap it can grant over values it was never worked out for - those of the row itself
+// or of a row its rules read - and an action can write what the server then refuses and rolls
+// back. The gap closes itself: a write moving a verdict brings the new one with its frame, and
+// a write that moves none sends none, since the verdict held stands. A rule the held rows decide
+// never reads it in between.
 function verdictHolds(entityType, entity, entry, actorUserId) {
   // The server works a session's verdicts out for its user as rules read it, a visitor for an id
   // naming no user entity.
-  if (actorUserId !== canonicalId(LocalDatabase.actorUserId)) {
+  if (actorUserId !== LocalDatabase.actorEntityId) {
     return UNKNOWN;
   }
 
@@ -836,25 +875,30 @@ function verdictHolds(entityType, entity, entry, actorUserId) {
 }
 
 // Delegation asks the RELATED entity's policy for the operation the rule names, of the row its
-// chain of relationships leads to, so it needs that row and its rules. A client holds neither for
-// a type its build never syncs, and cannot ask the server mid-render - so the answer is no, the
-// way it is for any rule the rows do not satisfy. In a read rule, a delegation whose chain passes
-// a row of a type nobody may read comes with a third element, its verdict key and the types it
-// reads, and the server's verdict answers it.
+// chain of relationships leads to, so it needs that row and its rules. An empty reference leads
+// nowhere, which holds nothing on the server either. A row this client does not hold, one its user
+// may not read, is UNKNOWN, for the server's verdict on the operation to answer: a client cannot
+// ask the server mid-render. In a read rule, a delegation whose chain passes a row of a type
+// nobody may read comes with a third element, true, and is UNKNOWN. A held row answers as its own
+// operation does, its verdict included (see grants/4).
 function viaHolds(rule, entityType, entity, actorUserId) {
-  const [operation, relationshipNames, verdictEntry] = rule.via;
+  const [operation, relationshipNames, undecided] = rule.via;
 
-  if (verdictEntry !== undefined) {
-    return verdictHolds(entityType, entity, verdictEntry, actorUserId) === true;
+  if (undecided !== undefined) {
+    return UNKNOWN;
   }
 
   const end = chainRow(entityType, entity, relationshipNames);
 
-  return (
-    end !== null &&
-    end !== UNKNOWN &&
-    grants(end.type, end.row, operation, actorUserId)
-  );
+  if (end === null) {
+    return false;
+  }
+
+  if (end === UNKNOWN) {
+    return UNKNOWN;
+  }
+
+  return grants(end.type, end.row, operation, actorUserId);
 }
 
 // The rules the build baked under the given key, or none. Only the policy's own keys count: it is
@@ -863,6 +907,35 @@ function policyRules(entry, key) {
   return Object.hasOwn(entry.policy, key) ? entry.policy[key] : [];
 }
 
+// The verdict entry the build baked under the given key, or undefined - a hand-built entry may
+// carry none. Only the entry's own keys count, as for the rules.
+function verdictEntry(entry, key) {
+  const verdicts = entry.verdicts ?? {};
+
+  return Object.hasOwn(verdicts, key) ? verdicts[key] : undefined;
+}
+
+// Whether one of the given rules of an operation holds: true or false when the rows this client
+// holds decide it, and otherwise the server's verdict on the operation when the build baked one
+// under the key, which is UNKNOWN in turn for a struct, a user or a write it can't speak for.
+function operationHolds(entry, entityType, entity, key, rules, actorUserId) {
+  const held = someHolds(rules, (rule) =>
+    ruleHolds(rule, entityType, entity, actorUserId),
+  );
+
+  if (held !== UNKNOWN) {
+    return held;
+  }
+
+  const verdict = verdictEntry(entry, key);
+
+  return verdict === undefined
+    ? UNKNOWN
+    : verdictHolds(entityType, entity, verdict, actorUserId);
+}
+
+// Whether the given operation, as its key, holds for a plain row of the given type - what a
+// delegation asks of the row its chain leads to.
 function grants(entityType, row, operation, actorUserId) {
   const entry = globalThis.Hologram.sync?.model?.[entityType];
 
@@ -873,8 +946,13 @@ function grants(entityType, row, operation, actorUserId) {
   const rules = policyRules(entry, operation);
   const boxed = Model.box(entityType, row);
 
-  return rules.some((related) =>
-    ruleMatches(related, entityType, boxed, actorUserId),
+  return operationHolds(
+    entry,
+    entityType,
+    boxed,
+    operation,
+    rules,
+    actorUserId,
   );
 }
 
@@ -905,12 +983,20 @@ function askedFields(operation) {
 // field's key is the one Policy.operation_key/1 gives {:update, field} - a hand-ported pair, so a
 // change there is a change here. A rule covering the whole row is matched once however many
 // fields ask it.
+//
+// A field the held rows leave open is answered by the server's verdict under its key, which answers
+// its lines and the whole row's together. A field whose own lines hold no item only the server
+// decides and read no related row a reader may not hold has none, and the whole row's verdict
+// answers it: when the whole-row rules hold the field is covered. When they don't, the answer is
+// no, which can deny where a line of the field's own would grant on the server - one delegating to
+// a create the held row's rules leave open, or to a held row whose rules leave it open and whose
+// own verdict can't speak, like one the browser created - never grant wrongly.
 function coversFields(entry, entityType, entity, fields, actorUserId) {
   const matched = new Map();
 
   const holds = (rule) => {
     if (!matched.has(rule)) {
-      matched.set(rule, ruleMatches(rule, entityType, entity, actorUserId));
+      matched.set(rule, ruleHolds(rule, entityType, entity, actorUserId));
     }
 
     return matched.get(rule);
@@ -918,11 +1004,22 @@ function coversFields(entry, entityType, entity, fields, actorUserId) {
 
   const wholeRowRules = policyRules(entry, "update");
 
-  return fields.every((field) =>
-    policyRules(entry, `update:${field.value}`)
-      .concat(wholeRowRules)
-      .some(holds),
-  );
+  return fields.every((field) => {
+    const key = `update:${field.value}`;
+    const rules = policyRules(entry, key).concat(wholeRowRules);
+    const held = someHolds(rules, holds);
+
+    if (held !== UNKNOWN) {
+      return held;
+    }
+
+    const verdict = verdictEntry(entry, key) ?? verdictEntry(entry, "update");
+
+    return (
+      verdict !== undefined &&
+      verdictHolds(entityType, entity, verdict, actorUserId) === true
+    );
+  });
 }
 
 // The key an entity operation is baked under: an atom as its name, a per-role grant lifecycle
@@ -979,7 +1076,7 @@ const Elixir_Hologram_Auth = {
     const userId = validateUserId(userOrId);
     const {entityType, entityId} = entityReference(entity, "granted");
     const roleName = validateDeclaredRole(entityType, role);
-    const actorUserId = LocalDatabase.actorUserId;
+    const actorUserId = LocalDatabase.actorEntityId;
 
     if (actorUserId === null) {
       raiseAccessDenied(signedInWriteMessage("granted"));
@@ -1073,7 +1170,7 @@ const Elixir_Hologram_Auth = {
     const userId = validateUserId(userOrId);
     const {entityType, entityId} = entityReference(entity, "revoked");
     const roleName = validateDeclaredRole(entityType, role);
-    const actorUserId = LocalDatabase.actorUserId;
+    const actorUserId = LocalDatabase.actorEntityId;
 
     if (actorUserId === null) {
       raiseAccessDenied(signedInWriteMessage("revoked"));
@@ -1174,9 +1271,17 @@ const Elixir_Hologram_Auth = {
 
     const rules = policyRules(entry, operationName);
 
-    // An operation with no rules grants nothing, which is what makes the default deny.
+    // An operation with no rules grants nothing, which is what makes the default deny. A rule grants
+    // only on a definite yes.
     return Type.boolean(
-      rules.some((rule) => ruleMatches(rule, entityType, entity, actorUserId)),
+      operationHolds(
+        entry,
+        entityType,
+        entity,
+        operationName,
+        rules,
+        actorUserId,
+      ) === true,
     );
   },
 };

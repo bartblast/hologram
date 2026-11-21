@@ -56,13 +56,13 @@ defmodule Hologram.Migration.IndexRecoveryTest do
 
   @global_grant_statement """
   INSERT INTO "hologram_data"."hologram_role_grant"
-    ("id", "user_id", "role", "created_at", "updated_at", "$revisions")
-  VALUES (gen_random_uuid(), $1, 'editor', now(), now(), '{}')
+    ("id", "user_id", "role", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+  VALUES (gen_random_uuid(), $1, 'editor', now(), now(), now(), now(), '{}')
   """
 
   @task_statement """
-  INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "updated_at", "$revisions")
-  VALUES (gen_random_uuid(), $1, now(), now(), '{}')
+  INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+  VALUES (gen_random_uuid(), $1, now(), now(), now(), now(), '{}')
   """
 
   defp build_index_concurrently(op \\ @index_op) do
@@ -154,8 +154,8 @@ defmodule Hologram.Migration.IndexRecoveryTest do
 
   defp insert_user(user_id) do
     statement = """
-    INSERT INTO "hologram_data"."my_app_user" ("id", "created_at", "updated_at", "$revisions")
-    VALUES ($1, now(), now(), '{}')
+    INSERT INTO "hologram_data"."my_app_user" ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+    VALUES ($1, now(), now(), now(), now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(user_id)])
@@ -630,6 +630,22 @@ defmodule Hologram.Migration.IndexRecoveryTest do
       end)
 
       [chain: slug_chain, model: slug_model]
+    end
+
+    # The repair runs before the drift check, so a boot that finds a model index missing builds it
+    # rather than refusing over it.
+    test "builds an index dropped by hand rather than refusing", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        drop_index()
+
+        assert run(chain, model, @context) == :ok
+
+        assert index_validity() == true
+      end)
     end
 
     # Nothing pending: the repair after the files meets the index the deploy never built, over

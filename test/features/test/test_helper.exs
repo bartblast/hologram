@@ -50,24 +50,23 @@ Hologram.Test.DatabaseBootstrap.run!()
 
 Hologram.Test.setup()
 
-# Kill leftover headless test-browser processes before the suite starts.
-# chromedriver launches Chrome with the `--test-type=webdriver` flag, so this
-# matches only browsers spawned by Wallaby - never a real browser. A
-# hard-interrupted run (the BEAM killed before sessions are torn down) can
-# orphan such a browser; it then keeps reconnecting its SSE EventSource to every
-# subsequent test server and re-registers in the SubscriptionRegistry. Its
-# subscriptions are then counted by `wait_for_subscription/5`, which tallies
-# across every registered connection, so a stray browser can satisfy a gate the
-# run's own sessions have not met. Sweeping here is safe because this run's own
-# browsers launch later, per test. `pkill` is Unix-only, so the
-# `find_executable` guard makes this a no-op (rather than a crash) on platforms
-# without it, e.g. Windows.
-case System.find_executable("pkill") do
-  nil -> :ok
-  pkill -> System.cmd(pkill, ["-f", "test-type=webdriver"])
-end
+# The endpoint listens on port 0, so the OS gave it a free port, and runs that overlap on one
+# machine never share one. Its URL still says port 0, so the port the listener got is put into
+# it: the URL is how Wallaby and the tests reach the app.
+endpoint = HologramFeatureTestsWeb.Endpoint
+scheme = if endpoint.config(:https), do: :https, else: :http
+{:ok, {_ip, port}} = endpoint.server_info(scheme)
 
-# Starts Wallaby with ChromeDriver's log on, in tmp/chromedriver, restarting it when
-# ChromeDriver doesn't get ready. CI uploads that dir when a run fails or hangs.
+endpoint_config =
+  :hologram_feature_tests
+  |> Application.fetch_env!(endpoint)
+  |> Keyword.update!(:url, &Keyword.put(&1, :port, port))
+
+Application.put_env(:hologram_feature_tests, endpoint, endpoint_config)
+endpoint.config_change([{endpoint, endpoint_config}], [])
+
+# Kills the test browsers that ended runs left behind, then starts Wallaby with ChromeDriver's
+# log on, in this run's folder of tmp/chromedriver, restarting it when ChromeDriver doesn't get
+# ready. CI uploads tmp/chromedriver when a run fails or hangs.
 Hologram.Test.BrowserSession.start_wallaby()
-Application.put_env(:wallaby, :base_url, HologramFeatureTestsWeb.Endpoint.url())
+Application.put_env(:wallaby, :base_url, endpoint.url())

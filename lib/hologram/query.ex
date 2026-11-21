@@ -4,18 +4,22 @@ defmodule Hologram.Query do
   alias Hologram.Entity
   alias Hologram.Query.Expression
   alias Hologram.Query.Placeholder
+  alias Hologram.Query.Shape
   alias Hologram.Query.Stage
 
   # A query term - what the stages build and the executors run. Each field is named for the stage
   # that sets it, with one exception: one/1 and count/1 set cardinality, since a term cannot be
   # both. A term records fields, not the order the stages were called in - filter appends,
   # sort replaces, include adds a key or merges into one - so two pipes reaching the same
-  # fields are one query, which is what Hologram.Query.Registry.id/1 relies on. A term is always
+  # fields are one query, which is what comparing two terms relies on. A term is always
   # about one entity type, so a struct written without one is refused at the literal.
   #
   # A term with a source is a derived field's query: it reads a set reached from a row of the owning
   # entity type through the relationships its chain names, rather than a table, and its conditions
   # may read that row as the row one level out. It exists only inside a derived field's definition.
+  #
+  # Each stage macro also records the shape of the chain it ends into the module it is written in,
+  # so the build knows the queries server code reads (see Hologram.Query.Shape).
   @enforce_keys [:entity]
 
   defstruct cardinality: :set,
@@ -66,6 +70,8 @@ defmodule Hologram.Query do
   # attribute of the row they lead to.
   @type path :: list(atom)
 
+  # A stand-in for a pinned value, only in the terms the build's chain check replays (see
+  # Hologram.Query.Placeholder) - a term that runs holds none.
   @type placeholder :: {:placeholder, atom}
 
   # The data form a filter is given in: a name or a placeholder paired with a value, an or: entry,
@@ -131,8 +137,13 @@ defmodule Hologram.Query do
   Raises Hologram.MisuseError when the query is neither an entity type module nor a query
   term, or when a cardinality is already marked.
   """
-  @spec count(module | t) :: t
-  defdelegate count(query), to: Stage
+  defmacro count(query) do
+    Shape.record(:count, [query], __CALLER__)
+
+    quote do
+      Stage.count(unquote(query))
+    end
+  end
 
   @doc """
   Records on the given entity struct that the given integer attribute is to move DOWN by the
@@ -210,7 +221,7 @@ defmodule Hologram.Query do
       `any:`, `none:` or `all:` entry pairing a list of relationships with a predicate list about
       one related row is a quantifier (`[any: {[:messages], [author_id: id]}]`), inside which
       `{:outer, levels, name}` names an attribute or a path of the row that many quantifiers out
-      (`[any: {[:messages], [created_at: {:>, {:attribute, {:outer, 1, :last_read_at}}}]}]`)
+      (`[any: {[:messages], [server_created_at: {:>, {:attribute, {:outer, 1, :last_seen_at}}}]}]`)
 
   Each predicate becomes one or more `{attribute, operator, value}` triples, a disjunction one
   `{:or, alternatives}` clause and a quantifier one `{quantifier, {source, clauses}}` clause,
@@ -242,16 +253,17 @@ defmodule Hologram.Query do
   through other relationships when it is written as a path (`channel.messages`). Through a set, the
   related rows are the ones every path reaches, each once - `any(message <- channels.messages, ...)`
   asks about every message of every channel. Inside the condition the bound name is one related row
-  and a bare name is still the queried row's - `message.created_at > last_read_at` compares the
-  message with the row being filtered - and a value from the surrounding code is pinned. A bound
-  name hides a relationship or attribute of the queried row of the same name inside the condition.
+  and a bare name is still the queried row's - `message.server_created_at > last_seen_at` compares
+  the message with the row being filtered - and a value from the surrounding code is pinned. A
+  bound name hides a relationship or attribute of the queried row of the same name inside the
+  condition.
 
       Channel |> filter(any(messages))
       Channel |> filter(none(message <- messages, message.author_id == ^user_id))
       Project |> filter(all(task <- tasks, task.status == :done))
 
       ChannelUserState
-      |> filter(any(message <- channel.messages, message.created_at > last_read_at))
+      |> filter(any(message <- channel.messages, message.server_created_at > last_seen_at))
 
   A quantifier is a condition like any other: joined with `and`, one side of `or`, or inside
   another quantifier's condition, where the names bound around it read their rows -
@@ -351,6 +363,7 @@ defmodule Hologram.Query do
   """
   defmacro filter(query, predicates) do
     lowered = Expression.predicates(predicates, __CALLER__)
+    Shape.record(:filter, [query, predicates], __CALLER__)
 
     case Expression.predicate_hints(predicates, __CALLER__) do
       [] ->
@@ -409,6 +422,7 @@ defmodule Hologram.Query do
   """
   defmacro include(query, spec) do
     lowered = Expression.inclusion(spec, __CALLER__)
+    Shape.record(:include, [query, spec], __CALLER__)
 
     case Expression.inclusion_hints(spec, __CALLER__) do
       [] ->
@@ -466,8 +480,13 @@ defmodule Hologram.Query do
   Raises Hologram.MisuseError when the query is neither an entity type module nor a query
   term, or when a cardinality is already marked.
   """
-  @spec one(module | t) :: t
-  defdelegate one(query), to: Stage
+  defmacro one(query) do
+    Shape.record(:one, [query], __CALLER__)
+
+    quote do
+      Stage.one(unquote(query))
+    end
+  end
 
   @doc """
   Sets the given query's view bounds to the requested page and returns the resulting
@@ -489,6 +508,7 @@ defmodule Hologram.Query do
   """
   defmacro paginate(query, opts) do
     lowered = Expression.pagination(opts, __CALLER__)
+    Shape.record(:paginate, [query, opts], __CALLER__)
 
     quote do
       Stage.paginate(unquote(query), unquote(lowered))
@@ -544,6 +564,7 @@ defmodule Hologram.Query do
   """
   defmacro skip(query, value) do
     lowered = Expression.bound(value, :skip, __CALLER__)
+    Shape.record(:skip, [query, value], __CALLER__)
 
     quote do
       Stage.skip(unquote(query), unquote(lowered))
@@ -589,6 +610,7 @@ defmodule Hologram.Query do
   """
   defmacro sort(query, spec) do
     lowered = Expression.ordering(spec, __CALLER__)
+    Shape.record(:sort, [query, spec], __CALLER__)
 
     case Expression.ordering_hints(spec, __CALLER__) do
       [] ->
@@ -621,6 +643,7 @@ defmodule Hologram.Query do
   """
   defmacro take(query, value) do
     lowered = Expression.bound(value, :take, __CALLER__)
+    Shape.record(:take, [query, value], __CALLER__)
 
     quote do
       Stage.take(unquote(query), unquote(lowered))
@@ -641,9 +664,9 @@ defmodule Hologram.Query do
   On a query - an entity type module or a query term - it marks the query as read on the
   server's own authority: DB.read/1 reads it raw whether or not a user is acting. The spelling
   for a read that must see past the acting user's policies, such as finding the user an invite
-  names by email when users may read only themselves. A registered query (a component's
-  derived field) cannot carry it - the build refuses one that does - since a component's query is
-  read for the session user on both tiers.
+  names by email when users may read only themselves. A query in browser code, like a
+  component's derived field, cannot carry it - the build refuses one written in one piece, and
+  the run refuses any other - since it is read for the session user on both tiers.
 
   Raises Hologram.MisuseError when the subject is neither an entity struct, an entity type module
   nor a query term, or when a struct already carries a claim.

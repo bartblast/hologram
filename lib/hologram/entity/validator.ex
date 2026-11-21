@@ -22,7 +22,7 @@ defmodule Hologram.Entity.Validator do
   # refused where it is written, as no condition.
   @policy_option_names [:as, :except, :only, :to, :via]
 
-  @reserved_names [:created_at, :id, :updated_at]
+  @reserved_names [:created_at, :id, :server_created_at, :server_updated_at, :updated_at]
 
   # The two operations that may name the role they cover
   @role_operations [:grant_role, :revoke_role]
@@ -453,7 +453,7 @@ defmodule Hologram.Entity.Validator do
   Validates the given data model as a whole, taking the list of all compiled entity type modules.
 
   Returns :ok, or raises Hologram.CompileError listing every relationship whose target is not an entity type module, and every inverse that does not reverse a stored relationship of its related type pointing back - one naming a relationship the related type does not declare, one naming an inverse the related type declares, one naming a relationship pointing at another type, a single inverse of a to-many, a single inverse of a to-one that is not unique - and every to-many, stored or inverse, whose order names what the related type cannot be sorted by. Each line starts with the file and line the relationship is declared on, for every entity type declared with the entity macro.
-  This check is possible only after all entity type modules are compiled - relationship declarations verify the type shape alone, because the target module may not be compiled yet while the declaring module's body is executing.
+  This check is possible only after all entity type modules are compiled - relationship declarations verify the type shape alone, and refuse the role grant store as a stored target by name, because the target module may not be compiled yet while the declaring module's body is executing.
   """
   @spec validate_model!(list(module)) :: :ok
   def validate_model!(entity_types) do
@@ -479,15 +479,17 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the given relationship declaration at compile time.
 
-  Returns :ok, or raises Hologram.CompileError on the first violated rule (name, type shape, options).
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (name, type shape, options, target).
   The type is checked for shape only (an entity type module or a one-element list wrapping one) - whether it names an actual entity type module is not verified here, because the target module may not be compiled yet while the declaring module's body is executing.
   For the same reason an inverse's inverse option and a to-many's sort option are checked for shape only.
+  One target is refused by name: a stored relationship, to-one or to-many, can't target the role grant store. An inverse of one of its relationships can.
   """
   @spec validate_relationship!(module, atom, any, T.opts()) :: :ok
   def validate_relationship!(module, name, type, opts) do
     validate_relationship_name!(module, name)
     validate_relationship_type!(module, name, type)
     validate_relationship_opts!(module, name, opts)
+    validate_relationship_target!(module, name, type, opts)
     validate_inverse_opts!(module, name, opts)
     validate_sort_opt!(module, name, type, opts)
     validate_unique_relationship!(module, name, type, opts)
@@ -562,7 +564,8 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the options given to the use Hologram.Job directive at compile time.
 
-  Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys).
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys,
+  a :max_concurrency that is not a positive integer literal).
   """
   @spec validate_use_job_opts!(module, T.opts()) :: :ok
   def validate_use_job_opts!(module, opts) do
@@ -572,10 +575,21 @@ defmodule Hologram.Entity.Validator do
           "invalid options #{inspect(opts)} for use Hologram.Job in #{inspect(module)} - options must be a keyword list"
     end
 
-    Enum.each(opts, fn {key, _value} ->
-      raise Hologram.CompileError,
-        message:
-          "unknown option #{inspect(key)} for use Hologram.Job in #{inspect(module)} - use Hologram.Job takes no options"
+    # The options are the use line's code, unevaluated: an integer literal is an integer here, and a
+    # negative one is a call to -, so the guard refuses it with every other non-integer.
+    Enum.each(opts, fn
+      {:max_concurrency, value} when is_integer(value) and value > 0 ->
+        :ok
+
+      {:max_concurrency, value} ->
+        raise Hologram.CompileError,
+          message:
+            "invalid max_concurrency #{Macro.to_string(value)} for use Hologram.Job in #{inspect(module)} - it must be a positive integer, written as a literal"
+
+      {key, _value} ->
+        raise Hologram.CompileError,
+          message:
+            "unknown option #{inspect(key)} for use Hologram.Job in #{inspect(module)} - use Hologram.Job takes only :max_concurrency"
     end)
 
     :ok
@@ -860,7 +874,7 @@ defmodule Hologram.Entity.Validator do
       |> declared_fields()
       |> Enum.map(fn {field_name, _declaration} -> field_name end)
 
-    ["created_at", "id", "updated_at"] ++ declared_names
+    ["created_at", "id", "server_created_at", "server_updated_at", "updated_at"] ++ declared_names
   end
 
   # The first target that appears earlier in the list, nil when every target appears once.
@@ -2069,6 +2083,22 @@ defmodule Hologram.Entity.Validator do
     validate_known_opts!(module, "relationship", name, opts, @valid_relationship_opts)
     validate_optional_opt!(module, "relationship", name, opts)
     validate_unique_opt!(module, "relationship", name, opts)
+  end
+
+  # A stored reference to a grant puts a foreign key on its id, and nothing about a grant's id
+  # holds still: revoking deletes the row, which the key would then block, and a migration that
+  # renames the grant's entity type or role derives it a new id (see RoleGrant.derive_id/4),
+  # which the key would refuse too. The grant's own columns find it instead - its id is a
+  # function of them. An inverse stores nothing, so it reads the store without pinning a row.
+  defp validate_relationship_target!(module, name, type, opts) do
+    if relationship_target(type) == Hologram.Auth.RoleGrant and
+         not Keyword.has_key?(opts, :inverse) do
+      raise Hologram.CompileError,
+        message:
+          "relationship #{inspect(name)} in #{inspect(module)} stores a reference to Hologram.Auth.RoleGrant - a grant can't be referenced, since revoking deletes it and a migration renaming its entity type or role gives it a new id - store the user, entity type, entity and role instead, and find the grant by them"
+    end
+
+    :ok
   end
 
   defp validate_relationship_type!(module, name, type) do

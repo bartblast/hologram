@@ -32,14 +32,10 @@ defmodule HologramFeatureTests.QueriesTest do
   alias HologramFeatureTests.Queries.Page8
   alias HologramFeatureTests.Queries.Page9
 
-  # The client's local database is filled by evaluators that outlive a test, and a TRUNCATE never
-  # reaches the operations log they read, so they drain before the tables empty. The tables
-  # truncate in one statement: the foreign keys between them - a review's to its product, a
+  # The tables truncate in one statement: the foreign keys between them - a review's to its product, a
   # message's to its channel and the message labels' join table's to both its sides, among others -
   # make Postgres reject truncating a referenced table alone.
   setup do
-    await_evaluator_drain()
-
     entity_tables =
       Enum.map(
         [
@@ -160,7 +156,7 @@ defmodule HologramFeatureTests.QueriesTest do
 
   # Medium or higher except delta, by title. The read runs in the browser, over the rows the page's
   # queries synced, from conditions passed as data. zz is among them although component 11
-  # excludes it: component 12's window has no filter, so every ticket is local once the fill lands,
+  # excludes it: the browser holds every ticket the user may read once the fill lands,
   # which is what the click waits for - before it, the client holds only the rows the render
   # carried.
   feature "runs a filter built at runtime over local data", %{session: session} do
@@ -204,7 +200,7 @@ defmodule HologramFeatureTests.QueriesTest do
     |> visit(Page6)
     |> assert_text(css("#reversed_bookings"), ~r/^bravo,delta$/)
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/6")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/queries/6")
 
     assert html =~ ~r{<strong id="reversed_bookings"><code>bravo,delta</code></strong>}
   end
@@ -235,7 +231,7 @@ defmodule HologramFeatureTests.QueriesTest do
     |> assert_text(css("#active_stops"), ~r/^a1,a2,b1$/)
     |> assert_same_page_load()
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/7")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/queries/7")
 
     assert html =~ ~r{<strong id="active_stops"><code>a1,a2,b1</code></strong>}
   end
@@ -285,7 +281,7 @@ defmodule HologramFeatureTests.QueriesTest do
     |> assert_text(css("#label_messages"), ~r/^urgent: hi, there$/)
     |> assert_same_page_load()
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/8")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/queries/8")
 
     assert html =~
              ~r{<strong id="channel_messages"><code>general: hi, there \| topic: welcome</code></strong>}
@@ -307,7 +303,7 @@ defmodule HologramFeatureTests.QueriesTest do
     # The page the server sent carries neither row, rendered or handed over beside the render - a
     # handed-over value is a JSON string, so it is looked for quoted, which no token on the page is,
     # and a message the render read is there in that form.
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/8")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/queries/8")
 
     assert html =~ ~s("there")
     refute html =~ ~s("bye")
@@ -439,7 +435,7 @@ defmodule HologramFeatureTests.QueriesTest do
     |> assert_text(css("#early_labels"), ~r/^later$/)
     |> assert_same_page_load()
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/9")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/queries/9")
 
     assert html =~ ~r{<strong id="chatty_channels"><code>general</code></strong>}
     assert html =~ ~r{<strong id="quiet_channels"><code>empty</code></strong>}
@@ -488,7 +484,7 @@ defmodule HologramFeatureTests.QueriesTest do
   } do
     %{general: general} = seed_memberships()
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/10")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/queries/10")
 
     assert html =~ ~r{<strong id="unread_count"><code>1</code></strong>}
 
@@ -540,7 +536,7 @@ defmodule HologramFeatureTests.QueriesTest do
     |> await_local_fill()
     |> assert_text(css("#loose_search"), ~r/^José,Joseph,JOSEPHINE$/)
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/11")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/queries/11")
 
     assert html =~ ~r{<strong id="loose_search"><code>José,Joseph,JOSEPHINE</code></strong>}
   end
@@ -554,7 +550,7 @@ defmodule HologramFeatureTests.QueriesTest do
     |> await_local_fill()
     |> assert_text(css("#exact_search"), ~r/^JOSEPHINE$/)
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/11")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/queries/11")
 
     assert html =~ ~r{<strong id="exact_search"><code>JOSEPHINE</code></strong>}
   end
@@ -581,7 +577,7 @@ defmodule HologramFeatureTests.QueriesTest do
     |> await_local_fill()
     |> assert_text(css("#exact_search"), ~r/^50% off$/)
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/12")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/queries/12")
 
     assert html =~ ~r{<strong id="exact_search"><code>50% off</code></strong>}
   end
@@ -609,7 +605,7 @@ defmodule HologramFeatureTests.QueriesTest do
     )
     |> assert_same_page_load()
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/13")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/queries/13")
 
     assert html =~ ~r{<strong id="busy_channels"><code>random:1,general:4</code></strong>}
 

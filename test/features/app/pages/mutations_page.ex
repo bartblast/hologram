@@ -53,9 +53,13 @@ defmodule HologramFeatureTests.MutationsPage do
     component
   end
 
-  # Inside the quantifier a bare name is the channel's, and only the message has a position.
+  # Inside the quantifier a bare name is the channel's, and only the message has a position. The
+  # query starts from a variable, which the build's check of queries doesn't follow, so the mistake
+  # reaches the browser's stage.
   def action(:read_bound_row_field, _params, component) do
-    Channel
+    entity_type = Channel
+
+    entity_type
     |> filter(any(message <- messages, position > 1))
     |> DB.read()
 
@@ -63,11 +67,13 @@ defmodule HologramFeatureTests.MutationsPage do
   end
 
   # The bare search reads an attribute the note doesn't declare - the variable missing its pin. The
-  # pinned read beside it keeps the variable used.
+  # pinned read beside it keeps the variable used. The query starts from a variable, which the
+  # build's check of queries doesn't follow, so the mistake reaches the browser's stage.
   def action(:read_forgotten_pin, _params, component) do
     search = "hi"
+    entity_type = Note
 
-    Note
+    entity_type
     |> filter(body == search and body != ^search)
     |> DB.read()
 

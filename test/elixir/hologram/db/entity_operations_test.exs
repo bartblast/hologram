@@ -262,13 +262,15 @@ defmodule Hologram.DB.EntityOperationsTest do
   end
 
   describe "create/1" do
-    test "inserts a full row and stamps both timestamps with the same value" do
+    test "inserts a full row and stamps every timestamp with the same value" do
       entity = Module2.new(a: true, c: "some text")
 
       {:ok, created_entity} = create(entity)
 
       assert %DateTime{} = created_entity.created_at
       assert created_entity.updated_at == created_entity.created_at
+      assert created_entity.server_created_at == created_entity.created_at
+      assert created_entity.server_updated_at == created_entity.created_at
 
       select_sql =
         ~s|SELECT "a", "b", "c" FROM "hologram_data"."test_fixtures_entity_module2" WHERE "id" = $1|
@@ -328,6 +330,8 @@ defmodule Hologram.DB.EntityOperationsTest do
                "c" => "some text",
                "created_at" => DateTime.to_iso8601(created_entity.created_at),
                "id" => created_entity.id,
+               "server_created_at" => DateTime.to_iso8601(created_entity.server_created_at),
+               "server_updated_at" => DateTime.to_iso8601(created_entity.server_updated_at),
                "updated_at" => DateTime.to_iso8601(created_entity.updated_at)
              }
     end
@@ -419,6 +423,31 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert created_entity.created_at == written_at
       assert created_entity.updated_at == written_at
       assert get(Module2, created_entity.id).created_at == written_at
+    end
+
+    # The row reached this node now, whenever its writer made it - so the server's pair is read
+    # off this node's clock, bracketed by two stamps for the reason the test below gives.
+    test "stamps the server's pair from this node's clock when its writer authored the stamp" do
+      written_at = ~U[2026-01-15 10:30:00.000000Z]
+      stamp = DateTime.to_unix(written_at, :millisecond) * 1024
+
+      before_ms = Clock.wall_clock_ms(Clock.stamp())
+
+      {:ok, created_entity} =
+        %{a: true, c: "abc"}
+        |> Module2.new()
+        |> Map.put(:__meta__, %Metadata{stamp: stamp})
+        |> create()
+
+      after_ms = Clock.wall_clock_ms(Clock.stamp())
+
+      reloaded_entity = get(Module2, created_entity.id)
+
+      assert DateTime.to_unix(created_entity.server_created_at, :millisecond) in before_ms..after_ms
+      assert created_entity.server_updated_at == created_entity.server_created_at
+      assert reloaded_entity.server_created_at == created_entity.server_created_at
+      assert reloaded_entity.server_updated_at == created_entity.server_created_at
+      assert reloaded_entity.created_at == written_at
     end
 
     # Bracketed against the CLOCK THE WRITE ITSELF READS, not against DateTime.utc_now/0. Two
@@ -1219,6 +1248,8 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert effect.data == %{
                "created_at" => DateTime.to_iso8601(created_entity.created_at),
                "id" => created_entity.id,
+               "server_created_at" => DateTime.to_iso8601(created_entity.server_created_at),
+               "server_updated_at" => DateTime.to_iso8601(created_entity.server_updated_at),
                "updated_at" => DateTime.to_iso8601(created_entity.updated_at)
              }
     end
@@ -1227,6 +1258,16 @@ defmodule Hologram.DB.EntityOperationsTest do
       effects_before = oplog_effects()
 
       assert delete(Module1, Entity.generate_id()) == :ok
+
+      assert oplog_effects() == effects_before
+    end
+
+    # A type with to-many edges locks the row before its edges go, and an id no row holds finds
+    # nothing to lock.
+    test "records nothing when no entity of a type with to-many edges has the given id" do
+      effects_before = oplog_effects()
+
+      assert delete(Module3, Entity.generate_id()) == :ok
 
       assert oplog_effects() == effects_before
     end
@@ -1603,6 +1644,8 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert reloaded_entity.b == created_entity.b
       assert reloaded_entity.created_at == created_entity.created_at
       assert DateTime.compare(reloaded_entity.updated_at, created_entity.updated_at) == :gt
+      assert reloaded_entity.server_created_at == created_entity.server_created_at
+      assert reloaded_entity.server_updated_at == reloaded_entity.updated_at
     end
 
     test "stamps updated_at from the moment its writer made the change" do
@@ -1622,6 +1665,32 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert get(Module2, created_entity.id).updated_at == written_at
     end
 
+    # The change reached this node now: server_updated_at is read off this node's clock beside the
+    # writer's updated_at, and server_created_at stays where the create put it.
+    test "stamps server_updated_at from this node's clock when its writer authored the stamp" do
+      written_at = ~U[2026-01-15 10:30:00.000000Z]
+      stamp = DateTime.to_unix(written_at, :millisecond) * 1024
+
+      {:ok, created_entity} =
+        %{a: true, c: "before"}
+        |> Module2.new()
+        |> create()
+
+      before_ms = Clock.wall_clock_ms(Clock.stamp())
+
+      assert update(Module2, created_entity.id, [c: "after"], stamp: stamp) == :ok
+
+      after_ms = Clock.wall_clock_ms(Clock.stamp())
+
+      reloaded_entity = get(Module2, created_entity.id)
+
+      assert reloaded_entity.updated_at == written_at
+
+      assert DateTime.to_unix(reloaded_entity.server_updated_at, :millisecond) in before_ms..after_ms
+
+      assert reloaded_entity.server_created_at == created_entity.server_created_at
+    end
+
     test "records the changed attributes and the stamp they moved" do
       {:ok, created_entity} =
         %{a: true, b: 1, c: "before"}
@@ -1639,6 +1708,7 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert effect.data == %{
                "c" => "after",
+               "server_updated_at" => DateTime.to_iso8601(reloaded_entity.server_updated_at),
                "updated_at" => DateTime.to_iso8601(reloaded_entity.updated_at)
              }
     end
@@ -1656,7 +1726,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       update(Module14, created_entity.id, %{password_hash: "hashed_secret_v2"})
 
       assert effect = List.last(oplog_effects())
-      assert Map.keys(effect.data) == ["password_hash", "updated_at"]
+      assert Map.keys(effect.data) == ["password_hash", "server_updated_at", "updated_at"]
       assert effect.data["password_hash"] == "hashed_secret_v2"
     end
 

@@ -11,6 +11,7 @@ defmodule Hologram.DBTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
+  alias Hologram.DB.IndexPlan
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Schema
@@ -297,6 +298,7 @@ defmodule Hologram.DBTest do
       context = reconciliation_context()
 
       assert context.mapping == mapping()
+      assert context.plan == IndexPlan.plan(mapping())
       assert context.otp_app == "hologram"
       assert context.env == "test"
       assert context.hologram_version == Mix.Project.config()[:version]
@@ -862,7 +864,7 @@ defmodule Hologram.DBTest do
 
       assert reload(Reflection.list_entities(), Reflection.list_roles()) == :ok
 
-      assert Introspection.schema() == Schema.from_mapping(mapping())
+      assert Introspection.schema() == Schema.from_mapping(mapping(), IndexPlan.plan(mapping()))
     end
 
     test "derives the mapping from the given modules" do
@@ -875,6 +877,42 @@ defmodule Hologram.DBTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         reload([Hologram.Blog.Post, Hologram.BlogPost], [])
       end
+    end
+  end
+
+  describe "reload_indexes/0" do
+    @plan_key {Hologram.DB, :plan}
+
+    setup do
+      original_plan = :persistent_term.get(@plan_key, nil)
+
+      on_exit(fn ->
+        if original_plan,
+          do: :persistent_term.put(@plan_key, original_plan),
+          else: :persistent_term.erase(@plan_key)
+      end)
+    end
+
+    test "reconciles the schema when the index plan differs from the last one converged to" do
+      :persistent_term.put(@plan_key, :none)
+
+      {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_system" CASCADE))
+      {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
+
+      assert reload_indexes() == :ok
+
+      assert Introspection.schema() == Schema.from_mapping(mapping(), IndexPlan.plan(mapping()))
+      assert :persistent_term.get(@plan_key) == IndexPlan.plan(mapping())
+    end
+
+    test "leaves the schema alone when the index plan is the last one converged to" do
+      :persistent_term.put(@plan_key, IndexPlan.plan(mapping()))
+
+      {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
+
+      assert reload_indexes() == :ok
+
+      refute Map.has_key?(Introspection.schema().tables, Mapper.table_name(Module1))
     end
   end
 

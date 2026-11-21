@@ -160,6 +160,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
                {:error, {~c"missing closing parenthesis", 3}}
     end
 
+    test "returns error position past the end of the pattern as byte offset in unicode mode" do
+      assert :re.compile("é\\x{9", [:unicode]) ==
+               {:error, {~c"non-hex character in \\x{} (closing brace missing?)", 7}}
+    end
+
     test "returns a UTF-8 error tuple for invalid UTF-8 binary in unicode mode" do
       assert :re.compile(<<255, ?a>>, [:unicode]) ==
                {:error, {~c"UTF-8 error: illegal byte (0xfe or 0xff)", 0}}
@@ -748,6 +753,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert :re.run("éb", "b", [:unicode]) == {:match, [{2, 1}]}
     end
 
+    test "returns byte offsets past the first 64 characters with the unicode option" do
+      subject = String.duplicate("é", 100) <> "b"
+
+      assert :re.run(subject, "b", [:unicode]) == {:match, [{200, 1}]}
+    end
+
+    test "returns byte offsets after a leading byte order mark with the unicode option" do
+      assert :re.run(<<0xEF, 0xBB, 0xBF, ?a>>, "a", [:unicode]) == {:match, [{3, 1}]}
+    end
+
     test "decodes the subject with a unicode compiled pattern" do
       {:ok, compiled} = :re.compile("é", [:unicode])
 
@@ -895,6 +910,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
 
     test "returns raw bytes with the binary type in byte mode" do
       assert :re.run(<<97, 233>>, <<233>>, [{:capture, :all, :binary}]) == {:match, [<<233>>]}
+    end
+
+    test "returns the whole subject with the binary type in byte mode" do
+      assert :re.run(<<233, 0, 255>>, ".+", [{:capture, :all, :binary}]) ==
+               {:match, [<<233, 0, 255>>]}
+    end
+
+    test "returns the UTF-8 bytes of a text subject with the binary type in byte mode" do
+      assert :re.run("aéb", <<0xA9>>, [{:capture, :all, :binary}]) == {:match, [<<0xA9>>]}
+    end
+
+    test "returns raw bytes of an iodata subject with the binary type in byte mode" do
+      assert :re.run([<<97>>, <<233, 98>>], "[^a]+", [{:capture, :all, :binary}]) ==
+               {:match, [<<233, 98>>]}
     end
 
     test "returns code points with the list type in unicode mode" do
@@ -1056,6 +1085,24 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert :re.run("éb", "b", [:unicode, {:offset, 2}]) == {:match, [{2, 1}]}
     end
 
+    test "offset counts bytes past the first 64 characters in unicode mode" do
+      subject = String.duplicate("é", 100) <> "b"
+
+      assert :re.run(subject, "b", [:unicode, {:offset, 200}]) == {:match, [{200, 1}]}
+    end
+
+    test "offset counts bytes of a char data list subject in unicode mode" do
+      assert :re.run(["é", "b"], "b", [:unicode, {:offset, 2}]) == {:match, [{2, 1}]}
+    end
+
+    test "matches the same unicode subject at successive offsets" do
+      subject = String.duplicate("é", 100)
+
+      assert :re.run(subject, "é", [:unicode, {:offset, 100}]) == {:match, [{100, 2}]}
+      assert :re.run(subject, "é", [:unicode, {:offset, 4}]) == {:match, [{4, 2}]}
+      assert :re.run(subject, "é", [:unicode, {:offset, 198}]) == {:match, [{198, 2}]}
+    end
+
     test "anchored pins the match to the offset" do
       assert :re.run("abb", "b", [:anchored, {:offset, 1}]) == {:match, [{1, 1}]}
     end
@@ -1183,6 +1230,33 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert :re.run(subject, "(?=\\X)", [:global, :unicode]) == {:match, expected}
     end
 
+    test "matches the same binary subject in byte mode after unicode mode" do
+      subject = String.duplicate("é", 40)
+
+      assert :re.run(subject, ".", [:unicode, {:capture, :first, :binary}]) == {:match, ["é"]}
+      assert :re.run(subject, ".", [{:capture, :first, :binary}]) == {:match, [<<0xC3>>]}
+    end
+
+    test "matches the same binary subject in unicode mode after byte mode" do
+      subject = String.duplicate("é", 40)
+
+      assert :re.run(subject, ".", [{:capture, :first, :binary}]) == {:match, [<<0xC3>>]}
+      assert :re.run(subject, ".", [:unicode, {:capture, :first, :binary}]) == {:match, ["é"]}
+    end
+
+    test "raises on the same invalid UTF-8 binary subject again in unicode mode" do
+      {:ok, compiled} = :re.compile("a", [:unicode])
+      subject = :binary.copy(<<255>>, 64)
+
+      assert_error ArgumentError, "argument error", fn ->
+        :re.run(subject, compiled, [])
+      end
+
+      assert_error ArgumentError, "argument error", fn ->
+        :re.run(subject, compiled, [])
+      end
+    end
+
     test "compile-time firstline pattern applies when running" do
       {:ok, compiled} = :re.compile("b", [:firstline])
 
@@ -1236,6 +1310,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       expected = for k <- 0..99, do: [{3 * k, 2}]
 
       assert :re.run(subject, "é", [:global, :unicode]) == {:match, expected}
+    end
+
+    test "global converts byte offsets of a group in one pass over a unicode subject" do
+      subject = String.duplicate("é ", 100)
+      expected = for k <- 0..99, do: [{3 * k, 3}, {3 * k, 2}]
+
+      assert :re.run(subject, "(é) ", [:global, :unicode]) == {:match, expected}
     end
 
     test "global starts at the offset" do
@@ -1721,6 +1802,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
     test "raises plain ArgumentError on offset inside a character" do
       assert_error ArgumentError, "argument error", fn ->
         :re.run("éb", "b", [:unicode, {:offset, 1}])
+      end
+    end
+
+    test "raises plain ArgumentError on offset inside a character past the first 64 characters" do
+      subject = String.duplicate("é", 100) <> "b"
+
+      assert_error ArgumentError, "argument error", fn ->
+        :re.run(subject, "b", [:unicode, {:offset, 199}])
       end
     end
 

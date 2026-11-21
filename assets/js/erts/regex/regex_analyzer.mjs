@@ -1,6 +1,7 @@
 "use strict";
 
 import {startOptions} from "./regex_options.mjs";
+import {isCompoundUnicodeProperty} from "./regex_unicode_properties.mjs";
 
 // POSIX classes whose ASCII set contains a simple-fold target of U+017F or
 // U+212A (s or k), so JS /iu canonicalization would fold those chars into
@@ -110,6 +111,16 @@ export default class RegexAnalyzer {
       unicode &&
       $.#hasCaselessScope(ast, opts) &&
       $.#hasFoldSensitiveWordSet(ast)
+    ) {
+      return "interpreted";
+    }
+
+    // JS /iu folds property escapes by case, while PCRE2 never folds them and
+    // widens only Lu, Ll and Lt to all cased letters
+    if (
+      unicode &&
+      $.#hasCaselessScope(ast, opts) &&
+      $.#hasUnicodeProperty(ast)
     ) {
       return "interpreted";
     }
@@ -277,6 +288,24 @@ export default class RegexAnalyzer {
     return found;
   }
 
+  // Returns true when the pattern contains a property escape, standalone or
+  // as a class member.
+  static #hasUnicodeProperty(ast) {
+    let found = false;
+
+    walkAst(ast, (node) => {
+      if (node.type === "unicodeProperty") {
+        found = true;
+      } else if (node.type === "class") {
+        if (node.items.some((item) => item.type === "unicodeProperty")) {
+          found = true;
+        }
+      }
+    });
+
+    return found;
+  }
+
   static #hasUnsafeBackreference(ast, groupMap) {
     const state = {unsafe: false};
 
@@ -337,9 +366,14 @@ export default class RegexAnalyzer {
 
       case "class":
         // Property escapes need the JS u flag, unavailable on the byte-mode
-        // native path
-        return (
-          !unicode && node.items.some((item) => item.type === "unicodeProperty")
+        // native path, and a negated compound property member is the
+        // intersection of negated escapes, which a JS u-mode class can't
+        // express
+        return node.items.some(
+          (item) =>
+            item.type === "unicodeProperty" &&
+            (!unicode ||
+              (item.negated && isCompoundUnicodeProperty(item.name))),
         );
 
       case "concatenation":

@@ -4,7 +4,6 @@ defmodule Hologram.CompilerTest do
 
   import Hologram.Compiler
 
-  alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.FileUtils
@@ -15,37 +14,17 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.DB.Mapper
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Placeholder
-  alias Hologram.Query.Registry
-  alias Hologram.Query.Stage
-  alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Runtime.Serializer
   alias Hologram.Sync.Frame
 
-  alias Hologram.Test.Fixtures.Component.Module1, as: ComponentModule1
   alias Hologram.Test.Fixtures.Component.Module37, as: OtherContextComponent
-  alias Hologram.Test.Fixtures.Component.Module39, as: ComponentModule39
-  alias Hologram.Test.Fixtures.Component.Module40, as: ComponentModule40
-  alias Hologram.Test.Fixtures.Component.Module41, as: ComponentModule41
-  alias Hologram.Test.Fixtures.Component.Module42, as: ComponentModule42
-  alias Hologram.Test.Fixtures.Component.Module43, as: ComponentModule43
-  alias Hologram.Test.Fixtures.Component.Module44, as: ComponentModule44
-  alias Hologram.Test.Fixtures.Component.Module45, as: ComponentModule45
-  alias Hologram.Test.Fixtures.Component.Module46, as: ComponentModule46
-  alias Hologram.Test.Fixtures.Component.Module47, as: ComponentModule47
-  alias Hologram.Test.Fixtures.Component.Module48, as: ComponentModule48
-  alias Hologram.Test.Fixtures.Component.Module49, as: ComponentModule49
-  alias Hologram.Test.Fixtures.Component.Module50, as: ComponentModule50
-  alias Hologram.Test.Fixtures.Component.Module51, as: ComponentModule51
-  alias Hologram.Test.Fixtures.Component.Module52, as: ComponentModule52
-  alias Hologram.Test.Fixtures.Component.Module53, as: ComponentModule53
-  alias Hologram.Test.Fixtures.Component.Module54, as: ComponentModule54
-  alias Hologram.Test.Fixtures.Component.Module55, as: ComponentModule55
   alias Hologram.Test.Fixtures.Entity.Derived.Module2, as: DerivedModule2
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
@@ -53,6 +32,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
   alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
+  alias Hologram.Test.Fixtures.Entity.Module16, as: Entity16
   alias Hologram.Test.Fixtures.Entity.Module17, as: Entity17
   alias Hologram.Test.Fixtures.Entity.Module19, as: Entity19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
@@ -68,6 +48,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module39, as: Entity39
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Entity.Module40, as: Entity40
+  alias Hologram.Test.Fixtures.Entity.Module41, as: Entity41
   alias Hologram.Test.Fixtures.Entity.Module42, as: Entity42
   alias Hologram.Test.Fixtures.Entity.Module43, as: Entity43
   alias Hologram.Test.Fixtures.Entity.Module44, as: Entity44
@@ -85,9 +66,9 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module13, as: PageModule13
   alias Hologram.Test.Fixtures.Page.Module18, as: PageModule18
   alias Hologram.Test.Fixtures.Page.Module19, as: PageModule19
-  alias Hologram.Test.Fixtures.Page.Module20, as: PageModule20
   alias Hologram.Test.Fixtures.Page.Module21, as: PageModule21
-  alias Hologram.Test.Fixtures.Page.Module22, as: PageModule22
+  alias Hologram.Test.Fixtures.Page.Module24, as: PageModule24
+  alias Hologram.Test.Fixtures.Page.Module25, as: PageModule25
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module12, as: PathPolicyEntity
@@ -157,12 +138,11 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module45
   alias Hologram.Test.Fixtures.Compiler.Module46
   alias Hologram.Test.Fixtures.Compiler.Module47
+  alias Hologram.Test.Fixtures.Compiler.Module48
+  alias Hologram.Test.Fixtures.Compiler.Module49
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module133, as: QueryExtractorModule133
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84, as: QueryExtractorModule84
 
-  @app "(hologram #{Application.spec(:hologram, :vsn)})"
   @root_dir Reflection.root_dir()
   @assets_dir Path.join(@root_dir, "assets")
   @js_dir Path.join(@assets_dir, "js")
@@ -180,6 +160,7 @@ defmodule Hologram.CompilerTest do
     "clock.mjs",
     "data_layer.mjs",
     "deltas.mjs",
+    "drop_hash.mjs",
     "durability.mjs",
     "elixir/hologram/auth.mjs",
     "elixir/hologram/db.mjs",
@@ -190,7 +171,10 @@ defmodule Hologram.CompilerTest do
     "model.mjs",
     "mutations.mjs",
     "overlay.mjs",
+    "query_check.mjs",
     "query_kernel.mjs",
+    "query_spelling.mjs",
+    "reload_notice.mjs",
     "replica.mjs",
     "sha1.mjs",
     "sort_key.mjs",
@@ -199,10 +183,9 @@ defmodule Hologram.CompilerTest do
   ]
 
   @empty_sync_constants %{
-    derived_count_types: %{},
-    derived_queries: %{},
     entity_types: MapSet.new(),
     model_hash: "my_model_hash",
+    page_types: %{},
     policy_hash: nil,
     role_modules: [],
     synced_types: [],
@@ -211,7 +194,7 @@ defmodule Hologram.CompilerTest do
 
   # A statement setting the client's data layer constants, as the runtime script takes it rendered
   # (see build_sync_constants_js/1), for the tests of what the script carries besides.
-  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "", policyHash: null, protocolVersion: 1, userEntity: null};/
+  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "", policyHash: null, protocolVersion: 1, syncedTypes: [], userEntity: null};/
 
   @tmp_dir Reflection.tmp_dir()
 
@@ -281,56 +264,32 @@ defmodule Hologram.CompilerTest do
   end
 
   # What the data layer folds its outputs from, for the given pages, derived the way the compile task
-  # derives it: each page's reach on the given graph folded into what the data layer keeps, and the
-  # queries of the components the pages reach.
+  # derives it: each page's reach on the given graph folded into what the data layer keeps.
   defp derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages) do
-    reach_by_page =
-      pages
-      |> list_reach_by_page(call_graph)
-      |> build_kept_page_reach(permission_checking_pages, module_info_plt)
-
-    entity_types = Reflection.list_entities(module_info_plt)
-
-    component_queries =
-      reach_by_page
-      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
-      |> Enum.uniq()
-      |> extract_component_queries(entity_types, PLT.start())
-
-    {reach_by_page, component_queries}
-  end
-
-  defp derive_page_windows(pages, call_graph, module_info_plt, permission_checking_pages) do
-    {reach_by_page, component_queries} =
-      derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages)
-
-    build_page_windows(reach_by_page, component_queries, module_info_plt)
+    pages
+    |> list_reach_by_page(call_graph)
+    |> build_kept_page_reach(permission_checking_pages, module_info_plt, PLT.start())
   end
 
   defp derive_sync_constants(pages, call_graph, module_info_plt, permission_checking_pages) do
-    {reach_by_page, component_queries} =
+    reach_by_page =
       derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages)
 
-    build_sync_constants(reach_by_page, component_queries, module_info_plt)
+    build_sync_constants(reach_by_page, module_info_plt)
   end
 
   # What the data layer keeps of one page whose client code names only the given modules and
   # reaches no component, checking permissions on the client or not.
-  defp mentioning_reach(modules, checks_permissions?, reads_session_user? \\ false) do
+  defp mentioning_reach(modules, checks_permissions?, reads_session_user? \\ false, atoms \\ []) do
     %{
       PageModule18 => %{
+        atoms: MapSet.new(atoms),
         checks_permissions?: checks_permissions?,
-        components: [],
         modules: MapSet.new(modules),
+        query_chains: [],
         reads_session_user?: reads_session_user?
       }
     }
-  end
-
-  defp user_window_id(permission_checking?) do
-    UserEntity
-    |> Auth.user_window(permission_checking?)
-    |> Registry.id()
   end
 
   # A copy of the given module info PLT in which no entity type is the user entity type: a data model
@@ -1286,42 +1245,36 @@ defmodule Hologram.CompilerTest do
     assert CallGraph.has_vertex?(call_graph, {Compiler, :build_call_graph, 1})
   end
 
-  describe "build_page_windows/3" do
-    setup %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      page_windows = derive_page_windows(Reflection.list_pages(), call_graph, module_info_plt, [])
+  describe "build_sync_constants/2 page types" do
+    # A checking page's types hold the types its rules read, which read the derived fields'
+    # definitions - put where the compile puts them before it derives the constants.
+    setup %{call_graph: call_graph, ir_plt: ir_plt, module_info_plt: module_info_plt} do
+      Reflection.list_entities()
+      |> resolve_derived_definitions(ir_plt)
+      |> Map.fetch!(:definitions)
+      |> Derived.put_definitions()
 
-      [page_windows: page_windows]
+      page_types =
+        derive_sync_constants(Reflection.list_pages(), call_graph, module_info_plt, []).page_types
+
+      [page_types: page_types]
     end
 
-    test "gives a page the window of a component's derived query", %{page_windows: page_windows} do
-      window_id =
-        Entity2
-        |> filter(a == true)
-        |> Stage.normalize()
-        |> Window.derive(false)
-        |> Registry.id()
-
-      assert page_windows[PageModule18] == [window_id]
+    test "gives a page the type a component's derived query reads", %{page_types: page_types} do
+      assert Entity2 in page_types[PageModule18]
     end
 
-    test "gives a page the window of its own derived query", %{page_windows: page_windows} do
-      window_id =
-        Entity2
-        |> filter(a == false)
-        |> Stage.normalize()
-        |> Window.derive(false)
-        |> Registry.id()
-
-      assert page_windows[PageModule19] == [window_id]
+    test "gives a page the type its own derived query reads", %{page_types: page_types} do
+      assert Entity2 in page_types[PageModule19]
     end
 
-    test "gives a page reaching no query no windows", %{page_windows: page_windows} do
-      assert page_windows[PageModule7] == []
+    test "gives a page reaching no query and naming no type no types", %{page_types: page_types} do
+      assert page_types[PageModule7] == []
     end
 
-    test "answers for every page it was given", %{page_windows: page_windows} do
+    test "answers for every page it was given", %{page_types: page_types} do
       answered_pages =
-        page_windows
+        page_types
         |> Map.keys()
         |> Enum.sort()
 
@@ -1329,147 +1282,94 @@ defmodule Hologram.CompilerTest do
     end
 
     # What a client evaluates permissions against is grant rows, so a page checking them on the
-    # client downloads them like any other rows it reads.
-    test "gives a permission-checking page the grants window", %{
+    # client fills them first like any other rows it reads.
+    test "gives a permission-checking page the grant type", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      page_windows =
-        derive_page_windows([PageModule7], call_graph, module_info_plt, [PageModule7])
+      page_types =
+        derive_sync_constants([PageModule7], call_graph, module_info_plt, [PageModule7]).page_types
 
-      assert page_windows[PageModule7] == [Registry.id(Auth.grants_window())]
+      assert page_types[PageModule7] == [RoleGrant]
     end
 
-    test "leaves the grants window out of a page that checks nothing", %{
-      page_windows: page_windows
-    } do
-      refute Registry.id(Auth.grants_window()) in page_windows[PageModule7]
-    end
-
-    test "keeps a permission-checking page's own windows beside the grants window", %{
+    test "leaves the grant type out of a page that checks nothing", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      page_windows =
-        derive_page_windows([PageModule18], call_graph, module_info_plt, [PageModule18])
+      sync_constants =
+        derive_sync_constants([PageModule7, PageModule18], call_graph, module_info_plt, [
+          PageModule7
+        ])
 
-      assert Registry.id(Auth.grants_window()) in page_windows[PageModule18]
-      assert length(page_windows[PageModule18]) == 2
-    end
-
-    # The grant entity is an entity type like any other, so a page's own query can derive the very
-    # window the permission check downloads - and then it is named once rather than subscribed to
-    # twice.
-    test "names the grants window once for a page whose own query derives it", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      page_windows =
-        derive_page_windows([PageModule20], call_graph, module_info_plt, [PageModule20])
-
-      assert page_windows[PageModule20] == [Registry.id(Auth.grants_window())]
+      assert RoleGrant in sync_constants.synced_types
+      refute RoleGrant in sync_constants.page_types[PageModule18]
     end
 
     # No user entity type, no grant store: there are no grant rows to hold.
-    test "leaves the grants window out of a checking page when the data model designates no user entity type",
+    test "leaves the grant type out of a checking page when the data model designates no user entity type",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
       plt_without_user_entity = without_user_entity(module_info_plt)
 
-      page_windows =
-        derive_page_windows([PageModule7], call_graph, plt_without_user_entity, [PageModule7])
+      page_types =
+        derive_sync_constants([PageModule7], call_graph, plt_without_user_entity, [PageModule7]).page_types
 
-      assert page_windows[PageModule7] == []
+      assert page_types[PageModule7] == []
     end
 
-    # The client answers {Hologram, :user} from its database, so a page reading it downloads the
+    # The client answers {Hologram, :user} from its database, so a page reading it reads the
     # session user's row like any row a query reads.
-    test "gives a page reading the session user from the context the user window", %{
-      page_windows: page_windows
+    test "gives a page reading the session user from the context the user type", %{
+      page_types: page_types
     } do
-      assert page_windows[SessionUserPage] == [user_window_id(false)]
+      assert page_types[SessionUserPage] == [UserEntity]
     end
 
-    test "leaves the user window out of a page that doesn't read the session user", %{
-      page_windows: page_windows
-    } do
-      refute user_window_id(false) in page_windows[PageModule7]
-    end
-
-    # The registered user window is derived with whether the build checks permissions, so the id a
-    # page names has to be derived the same way.
-    test "derives the user window's id with whether the build checks permissions", %{
+    # The browser decides the rules a checking page asks about, from the rows they read.
+    test "gives a checking page the types its rules read, as the build syncs them", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      page_windows =
-        derive_page_windows([SessionUserPage], call_graph, module_info_plt, [SessionUserPage])
+      sync_constants =
+        derive_sync_constants([PageModule21], call_graph, module_info_plt, [PageModule21])
 
-      assert user_window_id(true) in page_windows[SessionUserPage]
+      # The page's query reads the two-hop type, whose rules delegate through the other two, and
+      # the grant type holds the roles they ask about.
+      expected_types = [
+        RoleGrant,
+        PolicyEntity,
+        DelegationPolicyEntity,
+        TwoHopDelegationPolicyEntity
+      ]
+
+      assert sync_constants.page_types[PageModule21] == expected_types
+      assert sync_constants.synced_types == expected_types
     end
 
-    test "leaves the user window out when the data model designates no user entity type", %{
+    test "gives a page that checks nothing only the types its own code reads", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      plt_without_user_entity = without_user_entity(module_info_plt)
+      page_types =
+        derive_sync_constants([PageModule21], call_graph, module_info_plt, []).page_types
 
-      page_windows =
-        derive_page_windows([SessionUserPage], call_graph, plt_without_user_entity, [])
-
-      assert page_windows[SessionUserPage] == []
+      assert page_types[PageModule21] == [TwoHopDelegationPolicyEntity]
     end
 
-    # The registered windows of a checking build download the rows the rules read, so the ids a page
-    # subscribes to name those windows.
-    test "derives a checking build's window ids from the windows embedding the rows the rules read",
+    # What the rules read is worked out for the whole build when any page checks, but only a page
+    # that checks fills it first.
+    test "gives a page that checks nothing in a checking build only the types its own code reads",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      page_windows =
-        derive_page_windows([PageModule21], call_graph, module_info_plt, [PageModule21])
+      page_types =
+        derive_sync_constants([PageModule21, PageModule7], call_graph, module_info_plt, [
+          PageModule7
+        ]).page_types
 
-      window =
-        TwoHopDelegationPolicyEntity
-        |> sort(created_at)
-        |> Stage.normalize()
-        |> Window.derive(true)
-
-      assert page_windows[PageModule21] ==
-               Enum.sort([Registry.id(Auth.grants_window()), Registry.id(window)])
-    end
-
-    # No grant store, so no grants window - but the rules still read rows, which the windows embed.
-    test "derives a checking build's window ids from the windows embedding the rows the rules read when the data model designates no user entity type",
-         %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      plt_without_user_entity = without_user_entity(module_info_plt)
-
-      page_windows =
-        derive_page_windows([PageModule21], call_graph, plt_without_user_entity, [PageModule21])
-
-      window =
-        TwoHopDelegationPolicyEntity
-        |> sort(created_at)
-        |> Stage.normalize()
-        |> Window.derive(true)
-
-      assert page_windows[PageModule21] == [Registry.id(window)]
-    end
-
-    test "derives an unchecked build's window ids from the plain windows", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      page_windows = derive_page_windows([PageModule21], call_graph, module_info_plt, [])
-
-      window =
-        TwoHopDelegationPolicyEntity
-        |> sort(created_at)
-        |> Stage.normalize()
-        |> Window.derive(false)
-
-      assert page_windows[PageModule21] == [Registry.id(window)]
+      assert page_types[PageModule21] == [TwoHopDelegationPolicyEntity]
     end
   end
 
-  # The gate reads the graph the bundles come from, so what registers the window is what actually
+  # The gate reads the graph the bundles come from, so what syncs the grant rows is what actually
   # ships - not every mention of the check in the project.
   # can?/3 and the grant verbs read grant rows in the browser, which is what makes a page a
   # permission checker - and every one of them is hand-ported, or a page reaching it would have the
@@ -1637,7 +1537,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      {reach_by_page, _component_queries} =
+      reach_by_page =
         derive_kept_reach([PageModule18], call_graph, module_info_plt, [PageModule18])
 
       assert permission_checking?(reach_by_page)
@@ -1647,7 +1547,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      {reach_by_page, _component_queries} =
+      reach_by_page =
         derive_kept_reach([PageModule18], call_graph, module_info_plt, [])
 
       refute permission_checking?(reach_by_page)
@@ -1719,451 +1619,9 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_queries/3" do
-    setup do
-      [entity_types: Reflection.list_entities()]
-    end
-
-    test "collects the entries of the given components", %{entity_types: entity_types} do
-      component_queries =
-        extract_component_queries(
-          [ComponentModule40, ComponentModule41],
-          entity_types,
-          PLT.start()
-        )
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      module_40_term =
-        Entity2
-        |> filter(a: true)
-        |> sort(c)
-        |> Stage.normalize()
-
-      module_41_term =
-        Entity2
-        |> filter(b >= ^%Placeholder{name: :min_b})
-        |> Stage.normalize()
-
-      assert queries.entries == Registry.build([module_40_term, module_41_term], false)
-    end
-
-    test "collects the derived fields the components register as queries", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([QueryExtractorModule84], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      assert queries.derived_queries == MapSet.new([{QueryExtractorModule84, :ripe}])
-    end
-
-    # The grants window rides with every build's windows, whether or not a page subscribes to it -
-    # the build decides who asks, this is only where an id resolves back to a term.
-    test "registers the grants window beside the windows the queries download", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([ComponentModule40], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      grants_window = Auth.grants_window()
-
-      assert queries.windows[Registry.id(grants_window)] == grants_window
-    end
-
-    # No user entity type, no grant store: there is no table to evaluate the window against.
-    test "registers no grants window when the given entity types hold no role grant store", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([ComponentModule40], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types -- [RoleGrant], false)
-
-      refute Map.has_key?(queries.windows, Registry.id(Auth.grants_window()))
-    end
-
-    # Like the grants window, whether or not a page subscribes to it.
-    test "registers the user window beside the windows the queries download", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([ComponentModule40], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      user_window = Auth.user_window(UserEntity, false)
-
-      assert queries.windows[Registry.id(user_window)] == user_window
-    end
-
-    test "registers a checking build's user window derived as one", %{entity_types: entity_types} do
-      component_queries =
-        extract_component_queries([ComponentModule40], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, true)
-
-      user_window = Auth.user_window(UserEntity, true)
-
-      assert queries.windows[Registry.id(user_window)] == user_window
-    end
-
-    test "registers no user window when the given entity types hold no user entity type", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([ComponentModule40], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types -- [UserEntity], false)
-
-      refute Map.has_key?(queries.windows, user_window_id(false))
-    end
-
-    # A client checking permissions answers each rule over what it holds, so the window also
-    # downloads the rows the rules read - two rows along this type's delegation chain.
-    test "embeds the rows a type's rules read into its windows when a client checks permissions",
-         %{
-           entity_types: entity_types
-         } do
-      component_queries =
-        extract_component_queries([ComponentModule39], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, true)
-
-      [term] = component_queries[ComponentModule39].terms
-      window = queries.entries[Registry.id(term)].window
-
-      assert window == Window.derive(term, true)
-
-      assert window.include == %{
-               parent: %Query{
-                 entity: DelegationPolicyEntity,
-                 include: %{parent: %Query{entity: PolicyEntity}}
-               }
-             }
-
-      assert queries.windows[Registry.id(window)] == window
-    end
-
-    test "embeds no rule's rows when no client checks permissions", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([ComponentModule39], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      [term] = component_queries[ComponentModule39].terms
-
-      assert queries.entries[Registry.id(term)].window.include == %{}
-    end
-
-    test "records whether the build has a page checking permissions on the client", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([ComponentModule40], entity_types, PLT.start())
-
-      assert build_queries(component_queries, entity_types, true).permission_checking?
-      refute build_queries(component_queries, entity_types, false).permission_checking?
-    end
-
-    test "collects a registered query reading a type with server-only attributes it does not reference",
-         %{entity_types: entity_types} do
-      component_queries =
-        extract_component_queries([ComponentModule42], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      assert map_size(queries.entries) == 1
-    end
-
-    test "collects a registered query including derived fields and quantifying over a derived set",
-         %{entity_types: entity_types} do
-      put_derived_definitions([Entity37, Entity38])
-
-      term =
-        Entity37
-        |> filter(any(messages.channel.recent_messages))
-        |> include([pinned_count, recent_messages])
-        |> Stage.normalize()
-
-      component_queries = %{
-        DerivedQueries => %{count_types: %{}, derived_queries: [], terms: [term]}
-      }
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      assert map_size(queries.entries) == 1
-    end
-
-    test "raises for a registered query whose root type declares no allow lines", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module43 reads " <>
-          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
-          "default deny returns no rows to any session. Add allow lines, or drop the query."
-
-      component_queries =
-        extract_component_queries([ComponentModule43], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query whose include target declares no allow lines", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module44 includes " <>
-          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
-          "default deny leaves the embed empty in every row. Add allow lines, or drop the include."
-
-      component_queries =
-        extract_component_queries([ComponentModule44], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query whose path goes through a type declaring no allow lines",
-         %{entity_types: entity_types} do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module45 filters through " <>
-          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
-          "default deny reads every such row as missing. Add allow lines, or drop the path."
-
-      component_queries =
-        extract_component_queries([ComponentModule45], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query whose quantifier reads a type declaring no allow lines",
-         %{entity_types: entity_types} do
-      defmodule QuantifiedDeadSourceFixture do
-        use Hologram.Entity
-
-        relationship :items, [Hologram.Test.Fixtures.Entity.Module1]
-
-        allow :read
-      end
-
-      term =
-        QuantifiedDeadSourceFixture
-        |> filter(any(items))
-        |> Stage.normalize()
-
-      component_queries = %{
-        QuantifiedQueries => %{count_types: %{}, derived_queries: [], terms: [term]}
-      }
-
-      expected_msg =
-        "the registered query in QuantifiedQueries filters through " <>
-          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
-          "default deny reads every such row as missing. Add allow lines, or drop the path."
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query filtering on a server-only attribute", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module46 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      component_queries =
-        extract_component_queries([ComponentModule46], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query filtering on a server-only attribute through a path", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module47 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      component_queries =
-        extract_component_queries([ComponentModule47], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query whose quantifier reads a server-only attribute", %{
-      entity_types: entity_types
-    } do
-      term =
-        Hologram.Test.Fixtures.Entity.Module16
-        |> filter(any(secret <- secrets, secret.token == "x"))
-        |> Stage.normalize()
-
-      component_queries = %{
-        QuantifiedQueries => %{count_types: %{}, derived_queries: [], terms: [term]}
-      }
-
-      expected_msg =
-        "the registered query in QuantifiedQueries filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query ordering on a server-only attribute", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module48 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      component_queries =
-        extract_component_queries([ComponentModule48], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query filtering on a server-only attribute inside a disjunction",
-         %{
-           entity_types: entity_types
-         } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module49 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      component_queries =
-        extract_component_queries([ComponentModule49], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query comparing with a server-only attribute", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module50 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      component_queries =
-        extract_component_queries([ComponentModule50], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    # An include reads its set in the order the relationship declares, so a declared order on a
-    # server-only attribute is one the client would have to sort by.
-    test "raises for a registered query including a set ordered by a server-only attribute", %{
-      entity_types: entity_types
-    } do
-      defmodule ServerOnlyOrderFixture do
-        use Hologram.Entity
-
-        alias Hologram.Test.Fixtures.Entity.Module15
-
-        relationship :secrets, [Module15], sort: token
-
-        allow :read
-      end
-
-      term =
-        ServerOnlyOrderFixture
-        |> Stage.include(:secrets)
-        |> Stage.normalize()
-
-      component_queries = %{
-        ComponentModule1 => %{count_types: %{}, derived_queries: [], terms: [term]}
-      }
-
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module1 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, [ServerOnlyOrderFixture | entity_types], false)
-      end
-    end
-
-    test "raises for a registered query filtering on a server-only attribute inside a quantifier",
-         %{
-           entity_types: entity_types
-         } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module51 filters or sorts on " <>
-          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
-          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
-          "reference, or read the rows through the trusted backend API."
-
-      component_queries =
-        extract_component_queries([ComponentModule51], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-
-    test "raises for a registered query claiming the server's authority", %{
-      entity_types: entity_types
-    } do
-      expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module52 claims the server's " <>
-          "authority with trust() - a component's query is read for the session user on both " <>
-          "tiers, so it cannot claim another. Drop trust(), or read through the backend API in " <>
-          "a command."
-
-      component_queries =
-        extract_component_queries([ComponentModule52], entity_types, PLT.start())
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types, false)
-      end
-    end
-  end
-
   describe "build_queries_plt/2" do
-    test "holds the entries, derived queries and windows, and dumps beside the other build artifacts" do
-      entity_types = Reflection.list_entities()
-
-      queries =
-        [ComponentModule41]
-        |> extract_component_queries(entity_types, PLT.start())
-        |> build_queries(entity_types, false)
+    test "holds what the running app reads of the data layer, and dumps beside the other build artifacts" do
+      queries = %{derived: %{}, permission_checking?: false, synced_types: [Entity2]}
 
       opts = [build_dir: "/my_build_dir"]
 
@@ -2174,7 +1632,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_sync_constants/3" do
+  describe "build_sync_constants/2" do
     # A build checking permissions hashes the rules of every entity type, which read the derived
     # fields' definitions - put where the compile puts them before it derives the constants.
     setup %{call_graph: call_graph, ir_plt: ir_plt, module_info_plt: module_info_plt} do
@@ -2187,44 +1645,6 @@ defmodule Hologram.CompilerTest do
         derive_sync_constants(Reflection.list_pages(), call_graph, module_info_plt, [])
 
       [sync_constants: sync_constants]
-    end
-
-    test "records the entity types each count of the reached components reads", %{
-      module_info_plt: module_info_plt
-    } do
-      reach_by_page = %{
-        PageModule18 => %{
-          checks_permissions?: false,
-          components: [QueryExtractorModule133],
-          modules: MapSet.new([QueryExtractorModule133]),
-          reads_session_user?: false
-        }
-      }
-
-      component_queries =
-        extract_component_queries(
-          [QueryExtractorModule133],
-          Reflection.list_entities(),
-          PLT.start()
-        )
-
-      sync_constants = build_sync_constants(reach_by_page, component_queries, module_info_plt)
-
-      assert sync_constants.derived_count_types == %{
-               QueryExtractorModule133 => %{
-                 either_count: [Entity1, Entity2, Entity3],
-                 ripe_count: [Entity2]
-               }
-             }
-    end
-
-    test "leaves out a reached component with no count", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      sync_constants = derive_sync_constants([PageModule22], call_graph, module_info_plt, [])
-
-      assert sync_constants.derived_count_types == %{}
     end
 
     # The client answers {Hologram, :user} from the rows of this type.
@@ -2264,21 +1684,20 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      sync_constants = derive_sync_constants([PageModule22], call_graph, module_info_plt, [])
+      sync_constants = derive_sync_constants([PageModule24], call_graph, module_info_plt, [])
 
-      assert MapSet.member?(sync_constants.entity_types, Entity15)
+      assert MapSet.member?(sync_constants.entity_types, Entity16)
     end
 
-    # An included type is one a client holds without any window being rooted in it - reaching it
+    # An included type is one a client holds without any query being rooted in it - reaching it
     # is what puts its rows in the database, so it is named here like any other.
     test "collects the types those queries reach only through an include", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      sync_constants = derive_sync_constants([PageModule22], call_graph, module_info_plt, [])
+      sync_constants = derive_sync_constants([PageModule24], call_graph, module_info_plt, [])
 
-      assert MapSet.member?(sync_constants.entity_types, Entity3)
-      assert MapSet.member?(sync_constants.entity_types, Entity1)
+      assert MapSet.member?(sync_constants.entity_types, Entity15)
     end
 
     # A client constructs and validates entities as well as reading them, and the type it
@@ -2300,20 +1719,8 @@ defmodule Hologram.CompilerTest do
       refute MapSet.member?(sync_constants.entity_types, Entity10)
     end
 
-    test "collects the derived fields those components register as queries", %{
-      sync_constants: sync_constants
-    } do
-      assert sync_constants.derived_queries[QueryExtractorModule84] == [:ripe]
-    end
-
-    test "collects the derived fields a page registers as queries", %{
-      sync_constants: sync_constants
-    } do
-      assert sync_constants.derived_queries[PageModule19] == [:ripe]
-    end
-
-    # The grant type reaches the model by being checked rather than by being queried - its window
-    # is registered rather than extracted - so a client would otherwise hold rows of a type the
+    # The grant type reaches the model by being checked rather than by being queried - no browser
+    # code names it - so a client would otherwise hold rows of a type the
     # model never described. The page queries no grants and checks no permissions, so the user
     # entity type is the only thing it can come from.
     test "names the grant type when the data model designates a user entity type", %{
@@ -2412,11 +1819,10 @@ defmodule Hologram.CompilerTest do
     end
 
     test "records no model hash when the module info PLT records no entity type" do
-      assert build_sync_constants(%{}, %{}, PLT.start()) == %{
-               derived_count_types: %{},
-               derived_queries: %{},
+      assert build_sync_constants(%{}, PLT.start()) == %{
                entity_types: MapSet.new(),
                model_hash: nil,
+               page_types: %{},
                policy_hash: nil,
                role_modules: [],
                synced_types: [],
@@ -2450,17 +1856,6 @@ defmodule Hologram.CompilerTest do
       assert Entity1 in sync_constants.synced_types
     end
 
-    # The browser answers a query over the rows it holds, so the rows an include embeds are synced
-    # like the rows the query returns. PageModule22's query reaches Entity1 only through one.
-    test "syncs the types those queries reach only through an include", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      sync_constants = derive_sync_constants([PageModule22], call_graph, module_info_plt, [])
-
-      assert Entity1 in sync_constants.synced_types
-    end
-
     # Client-side actions read and write the types they name, which no query has to read.
     test "syncs a type the given pages mention without querying", %{
       sync_constants: sync_constants
@@ -2474,13 +1869,85 @@ defmodule Hologram.CompilerTest do
       refute Entity10 in sync_constants.synced_types
     end
 
+    # From the page's real code: the include's name is an atom in the derived field's function. The
+    # page's own types hold them too, which a session fills first.
+    test "syncs the type a page's query includes, read from the page's code", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      sync_constants = derive_sync_constants([PageModule24], call_graph, module_info_plt, [])
+
+      for entity_type <- [Entity15, Entity16] do
+        assert entity_type in sync_constants.synced_types
+        assert entity_type in sync_constants.page_types[PageModule24]
+      end
+    end
+
+    test "syncs a type a page reaches only through a relationship its code names", %{
+      module_info_plt: module_info_plt
+    } do
+      named = mentioning_reach([Entity16], false, false, [:secrets])
+      unnamed = mentioning_reach([Entity16], false)
+
+      assert Entity15 in build_sync_constants(named, module_info_plt).synced_types
+      refute Entity15 in build_sync_constants(unnamed, module_info_plt).synced_types
+    end
+
+    test "follows the names a page's code spells from type to type", %{
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = mentioning_reach([Entity37], false, false, [:messages, :author])
+
+      assert build_sync_constants(reach_by_page, module_info_plt).synced_types == [
+               Entity1,
+               Entity37,
+               Entity38
+             ]
+    end
+
+    test "syncs the types a derived field a page's code names is computed from", %{
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = mentioning_reach([Entity37], false, false, [:member_count])
+
+      assert build_sync_constants(reach_by_page, module_info_plt).synced_types == [
+               Entity2,
+               Entity37
+             ]
+    end
+
+    test "follows the names from the user type of a page reading the session user", %{
+      module_info_plt: module_info_plt
+    } do
+      plt_with_holder_user_entity = with_user_entity(module_info_plt, Entity16)
+
+      named = mentioning_reach([], false, true, [:secrets])
+      unnamed = mentioning_reach([], false, true)
+
+      assert Entity15 in build_sync_constants(named, plt_with_holder_user_entity).synced_types
+      refute Entity15 in build_sync_constants(unnamed, plt_with_holder_user_entity).synced_types
+    end
+
+    # A name means something only on the types the page that spells it reaches.
+    test "follows a page's names from that page's types only", %{
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page =
+        Map.merge(
+          %{PageModule19 => mentioning_reach([Entity16], false)[PageModule18]},
+          mentioning_reach([Entity2], false, false, [:secrets])
+        )
+
+      refute Entity15 in build_sync_constants(reach_by_page, module_info_plt).synced_types
+    end
+
     # Like an audit log: a type with rules ships them to every client, but no browser code reads
     # its rows, so no browser gets any.
     test "leaves out of the synced types a policied type nothing reads", %{
       module_info_plt: module_info_plt
     } do
       sync_constants =
-        build_sync_constants(mentioning_reach([Entity4], false), %{}, module_info_plt)
+        build_sync_constants(mentioning_reach([Entity4], false), module_info_plt)
 
       assert MapSet.member?(sync_constants.entity_types, PolicyEntity)
       refute PolicyEntity in sync_constants.synced_types
@@ -2493,7 +1960,7 @@ defmodule Hologram.CompilerTest do
     } do
       reach_by_page = mentioning_reach([PathPolicyEntity], false)
 
-      assert build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types == [
+      assert build_sync_constants(reach_by_page, module_info_plt).synced_types == [
                PathPolicyEntity
              ]
     end
@@ -2507,7 +1974,7 @@ defmodule Hologram.CompilerTest do
     } do
       reach_by_page = mentioning_reach([PathPolicyEntity], true)
 
-      assert build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types == [
+      assert build_sync_constants(reach_by_page, module_info_plt).synced_types == [
                RoleGrant,
                Entity17,
                PolicyEntity,
@@ -2522,7 +1989,7 @@ defmodule Hologram.CompilerTest do
     test "syncs the types the rules read one step out", %{module_info_plt: module_info_plt} do
       reach_by_page = mentioning_reach([TaskPolicyEntity], true)
 
-      synced_types = build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types
+      synced_types = build_sync_constants(reach_by_page, module_info_plt).synced_types
 
       assert ProjectPolicyEntity in synced_types
       refute MemberPolicyEntity in synced_types
@@ -2535,7 +2002,7 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt
     } do
       sync_constants =
-        build_sync_constants(mentioning_reach([ParcelPolicyEntity], true), %{}, module_info_plt)
+        build_sync_constants(mentioning_reach([ParcelPolicyEntity], true), module_info_plt)
 
       assert CratePolicyEntity in sync_constants.synced_types
       refute VaultPolicyEntity in sync_constants.synced_types
@@ -2550,7 +2017,7 @@ defmodule Hologram.CompilerTest do
       reach_by_page =
         mentioning_reach([ParcelPolicyEntity, VaultPolicyEntity, OwnerPolicyEntity], true)
 
-      synced_types = build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types
+      synced_types = build_sync_constants(reach_by_page, module_info_plt).synced_types
 
       assert VaultPolicyEntity in synced_types
       assert OwnerPolicyEntity in synced_types
@@ -2560,7 +2027,7 @@ defmodule Hologram.CompilerTest do
     # Entity50 row and the client's model leaves the type out - a row of it could not be read back.
     test "syncs only types of the client's model", %{module_info_plt: module_info_plt} do
       sync_constants =
-        build_sync_constants(mentioning_reach([Entity51], true), %{}, module_info_plt)
+        build_sync_constants(mentioning_reach([Entity51], true), module_info_plt)
 
       refute MapSet.member?(sync_constants.entity_types, Entity50)
       assert sync_constants.synced_types == [RoleGrant, Entity51]
@@ -2573,7 +2040,7 @@ defmodule Hologram.CompilerTest do
     } do
       reach_by_page = mentioning_reach([Entity4], false, true)
 
-      assert build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types == [
+      assert build_sync_constants(reach_by_page, module_info_plt).synced_types == [
                UserEntity,
                Entity4
              ]
@@ -2587,7 +2054,7 @@ defmodule Hologram.CompilerTest do
       reach_by_page = mentioning_reach([Entity4], false, true)
       plt_with_unreached_user_entity = with_user_entity(module_info_plt, Entity10)
 
-      sync_constants = build_sync_constants(reach_by_page, %{}, plt_with_unreached_user_entity)
+      sync_constants = build_sync_constants(reach_by_page, plt_with_unreached_user_entity)
 
       assert MapSet.member?(sync_constants.entity_types, Entity10)
       assert Entity10 in sync_constants.synced_types
@@ -2602,7 +2069,7 @@ defmodule Hologram.CompilerTest do
       plt_with_path_user_entity = with_user_entity(module_info_plt, PathPolicyEntity)
 
       synced_types =
-        build_sync_constants(reach_by_page, %{}, plt_with_path_user_entity).synced_types
+        build_sync_constants(reach_by_page, plt_with_path_user_entity).synced_types
 
       for synced_type <- [
             RoleGrant,
@@ -2621,7 +2088,7 @@ defmodule Hologram.CompilerTest do
     } do
       reach_by_page = mentioning_reach([Entity4], false)
 
-      refute UserEntity in build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types
+      refute UserEntity in build_sync_constants(reach_by_page, module_info_plt).synced_types
     end
 
     test "syncs no user type for a page reading the session user when the data model designates none",
@@ -2629,7 +2096,7 @@ defmodule Hologram.CompilerTest do
       reach_by_page = mentioning_reach([Entity4], false, true)
       plt_without_user_entity = without_user_entity(module_info_plt)
 
-      assert build_sync_constants(reach_by_page, %{}, plt_without_user_entity).synced_types == [
+      assert build_sync_constants(reach_by_page, plt_without_user_entity).synced_types == [
                Entity4
              ]
     end
@@ -2641,7 +2108,7 @@ defmodule Hologram.CompilerTest do
       reach_by_page = mentioning_reach([PathPolicyEntity], true)
       plt_without_user_entity = without_user_entity(module_info_plt)
 
-      assert build_sync_constants(reach_by_page, %{}, plt_without_user_entity).synced_types == [
+      assert build_sync_constants(reach_by_page, plt_without_user_entity).synced_types == [
                Entity17,
                PolicyEntity,
                PathPolicyEntity,
@@ -2651,39 +2118,77 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "validate_query_chains!/2" do
+    test "passes every page of the suite", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page =
+        derive_kept_reach(Reflection.list_pages(), call_graph, module_info_plt, [])
+
+      assert validate_query_chains!(reach_by_page, module_info_plt) == :ok
+    end
+
+    test "checks the query a page's derived field writes, kept with the page", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page =
+        derive_kept_reach([PageModule24], call_graph, module_info_plt, [])
+
+      assert [%{mfa: {PageModule24, :__derived_holders__, 0}, root: Entity16}] =
+               reach_by_page[PageModule24].query_chains
+    end
+
+    test "leaves out the queries server code writes", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page =
+        derive_kept_reach([PageModule25], call_graph, module_info_plt, [])
+
+      assert reach_by_page[PageModule25].query_chains == []
+    end
+
+    test "refuses a kept page's query", %{module_info_plt: module_info_plt} do
+      chain = %{
+        final_sort?: false,
+        line: 1,
+        mfa: {PageModule18, :template, 0},
+        root: Entity1,
+        steps: []
+      }
+
+      reach_by_page =
+        update_in(mentioning_reach([], false)[PageModule18].query_chains, &[chain | &1])
+
+      assert_raise Hologram.CompileError,
+                   ~r/reads Hologram\.Test\.Fixtures\.Entity\.Module1, which declares no allow lines/,
+                   fn ->
+                     validate_query_chains!(reach_by_page, module_info_plt)
+                   end
+    end
+  end
+
   describe "build_sync_constants_js/1" do
     test "renders the policy hash the sync constants carry" do
       sync_constants = %{@empty_sync_constants | policy_hash: "my_policy_hash"}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: "my_policy_hash", protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: "my_policy_hash", protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
     end
 
     test "renders the model hash the sync constants carry" do
       assert build_sync_constants_js(@empty_sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
     end
 
-    test "renders the derived fields each component registers as queries" do
-      sync_constants = %{
-        @empty_sync_constants
-        | derived_queries: %{QueryExtractorModule84 => [:ripe, :ripe_rows]}
-      }
+    # Spelled as the model's keys are, which is how a query term names its entity type.
+    test "renders the entity types sync sends rows of" do
+      sync_constants = %{@empty_sync_constants | synced_types: [Entity15, Entity16]}
 
-      assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84":["ripe","ripe_rows"]}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
-    end
-
-    test "renders the entity types each derived field building a count reads" do
-      sync_constants = %{
-        @empty_sync_constants
-        | derived_count_types: %{
-            QueryExtractorModule133 => %{either_count: [Entity1, Entity3], ripe_count: [Entity2]}
-          }
-      }
-
-      assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module133":{"either_count":["Hologram.Test.Fixtures.Entity.Module1","Hologram.Test.Fixtures.Entity.Module3"],"ripe_count":["Hologram.Test.Fixtures.Entity.Module2"]}}, derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+      assert build_sync_constants_js(sync_constants) =~
+               ~s/syncedTypes: ["Hologram.Test.Fixtures.Entity.Module15","Hologram.Test.Fixtures.Entity.Module16"], /
     end
 
     # Spelled as the model's keys are, which is how a query term names its entity type.
@@ -2700,7 +2205,7 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | role_modules: [RoleModule1, RoleModule2]}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {countTypes: {}, derivedQueries: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/globalThis.Hologram.sync = {expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
     end
 
     # A client computes a derived field itself, from the definition the build resolved - spelled in
@@ -3196,7 +2701,76 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_kept_page_reach/3" do
+  describe "build_index_needs/3" do
+    @entity2_table "test_fixtures_entity_module2"
+    @entity41_table "test_fixtures_entity_module41"
+
+    defp index_need(table, eq, range \\ nil, order \\ []) do
+      %{table: table, eq: MapSet.new(eq), range: range, order: order}
+    end
+
+    defp index_needs(query_shapes) do
+      mapping = Mapper.derive!([Entity2, Entity34, Entity39, Entity40, Entity41], [])
+
+      build_index_needs([], query_shapes, mapping)
+    end
+
+    # A derived field's body is recorded wherever it is written, like any chain the code writes.
+    test "needs what a query the code writes filters on" do
+      query_shape = {Entity2, [filter: [[b: {:==, 1}]]]}
+
+      assert index_need(@entity2_table, ["b"]) in index_needs([query_shape])
+    end
+
+    test "needs what an entity type's read rules ask, whatever the code writes" do
+      assert index_need(@entity41_table, ["public"]) in index_needs([])
+    end
+
+    test "needs what a query the code writes reads, a pinned value standing in" do
+      query_shape =
+        {Entity2,
+         [
+           filter: [[a: {:==, %Placeholder{name: :a}}]],
+           sort: [:b],
+           take: [5]
+         ]}
+
+      assert index_need(@entity2_table, ["a"], nil, ["b"]) in index_needs([query_shape])
+    end
+
+    test "leaves out a query shape the stages refuse" do
+      query_shape = {Entity2, [filter: [[unknown: {:==, 1}]]]}
+
+      assert index_needs([query_shape]) == index_needs([])
+    end
+
+    test "leaves out a query shape on a type the mapping doesn't hold" do
+      query_shape = {Entity1, [take: [1]]}
+
+      assert index_needs([query_shape]) == index_needs([])
+    end
+
+    test "lists each need once" do
+      query_shape = {Entity2, [filter: [[b: {:==, 1}]]]}
+      needs = index_needs([query_shape, query_shape])
+
+      assert needs == Enum.uniq(needs)
+      assert needs == index_needs([query_shape])
+    end
+  end
+
+  describe "build_index_needs_plt/2" do
+    test "holds the needs and dumps beside the other build artifacts" do
+      needs = [%{table: "my_table", eq: MapSet.new(["a"]), range: nil, order: []}]
+
+      {plt, dump_path} = build_index_needs_plt(needs, build_dir: "/my_build_dir")
+
+      assert PLT.get_all(plt) == %{needs: needs}
+      assert dump_path == "/my_build_dir/index_needs.plt"
+    end
+  end
+
+  describe "build_kept_page_reach/4" do
     setup do
       info = fn component? ->
         %{digest: 1, mtime: 1, size: 1, page?: false, component?: component?}
@@ -3213,30 +2787,22 @@ defmodule Hologram.CompilerTest do
       [module_info_plt: module_info_plt]
     end
 
-    test "keeps the modules a page reaches, the struct types it names included, and the components among them with the page, sorted",
+    test "keeps the modules a page reaches, the struct types it names included",
          %{module_info_plt: module_info_plt} do
       reach = %{
         mfas: [{Module1, :fun_1, 0}, {Module3, :fun_2, 1}, {Module2, :fun_3, 0}],
         types: [Module4]
       }
 
-      assert build_kept_page_reach([{Module1, reach}], [], module_info_plt) == %{
+      assert build_kept_page_reach([{Module1, reach}], [], module_info_plt, PLT.start()) == %{
                Module1 => %{
+                 atoms: MapSet.new(),
                  checks_permissions?: false,
-                 components: [Module1, Module2, Module3],
                  modules: MapSet.new([Module1, Module2, Module3, Module4]),
+                 query_chains: [],
                  reads_session_user?: false
                }
              }
-    end
-
-    test "leaves out a reached module the module info PLT does not hold as a component", %{
-      module_info_plt: module_info_plt
-    } do
-      reach = %{mfas: [{Module1, :fun_1, 0}, {Enum, :map, 2}], types: []}
-
-      assert %{Module1 => %{components: [Module1]}} =
-               build_kept_page_reach([{Module1, reach}], [], module_info_plt)
     end
 
     test "marks the pages given as checking permissions", %{module_info_plt: module_info_plt} do
@@ -3249,7 +2815,8 @@ defmodule Hologram.CompilerTest do
                build_kept_page_reach(
                  [{Module1, reach}, {Module11, reach}],
                  [Module1],
-                 module_info_plt
+                 module_info_plt,
+                 PLT.start()
                )
     end
 
@@ -3271,25 +2838,81 @@ defmodule Hologram.CompilerTest do
                build_kept_page_reach(
                  [{Module1, reading_reach}, {Module11, other_reach}],
                  [],
-                 module_info_plt
+                 module_info_plt,
+                 PLT.start()
                )
+    end
+
+    # What a page's code names of the model, read without walking it: the atom literals of every
+    # function it reaches but Elixir's, Hologram's and an entity type's generated ones, which name
+    # every relationship it declares.
+    test "keeps the atoms the functions a page reaches spell", %{
+      module_info_plt: module_info_plt
+    } do
+      info = %{digest: 1, mtime: 1, size: 1, page?: false, component?: false}
+
+      module_info_plt =
+        module_info_plt
+        |> PLT.put(Module48, info)
+        |> PLT.put(Entity16, Map.put(info, :entity?, true))
+        |> PLT.put(Enum, info)
+        |> PLT.put(Hologram.Commons.StringUtils, info)
+
+      # Enum.map/2 and StringUtils.starts_with_lowercase?/1 spell atoms of their own: :lists and
+      # String among them.
+      reach = %{
+        mfas: [
+          {Module48, :names, 0},
+          {Entity16, :__relationships__, 0},
+          {Enum, :map, 2},
+          {Hologram.Commons.StringUtils, :starts_with_lowercase?, 1}
+        ],
+        types: []
+      }
+
+      assert %{Module1 => %{atoms: atoms}} =
+               build_kept_page_reach([{Module1, reach}], [], module_info_plt, PLT.start())
+
+      assert atoms == MapSet.new([:not_a_relationship, :title])
+    end
+
+    # A component's generated functions hold what the app wrote, its prop defaults among them.
+    test "keeps the atoms a component's generated functions spell", %{
+      module_info_plt: module_info_plt
+    } do
+      info = %{digest: 1, mtime: 1, size: 1, page?: false, component?: true}
+      module_info_plt = PLT.put(module_info_plt, Module49, info)
+
+      reach = %{mfas: [{Module49, :__props__, 0}], types: []}
+
+      assert %{Module1 => %{atoms: atoms}} =
+               build_kept_page_reach([{Module1, reach}], [], module_info_plt, PLT.start())
+
+      assert :secrets in atoms
     end
 
     test "answers for every page it was given", %{module_info_plt: module_info_plt} do
       reach = %{mfas: [], types: []}
 
-      assert build_kept_page_reach([{Module1, reach}, {Module11, reach}], [], module_info_plt) ==
+      assert build_kept_page_reach(
+               [{Module1, reach}, {Module11, reach}],
+               [],
+               module_info_plt,
+               PLT.start()
+             ) ==
                %{
                  Module1 => %{
+                   atoms: MapSet.new(),
                    checks_permissions?: false,
-                   components: [Module1],
                    modules: MapSet.new(),
+                   query_chains: [],
                    reads_session_user?: false
                  },
                  Module11 => %{
+                   atoms: MapSet.new(),
                    checks_permissions?: false,
-                   components: [Module11],
                    modules: MapSet.new(),
+                   query_chains: [],
                    reads_session_user?: false
                  }
                }
@@ -3703,6 +3326,36 @@ defmodule Hologram.CompilerTest do
       allow :read, when: report.reviewed == true
     end
 
+    defmodule BakedSharedProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+      attribute :title, :string
+
+      relationship :labels, [Hologram.CompilerTest.BakedLabel]
+
+      allow :read
+      allow :update, except: [:name], when: none(labels)
+    end
+
+    defmodule BakedSecretBoard do
+      use Hologram.Entity
+
+      relationship :notes, [Hologram.CompilerTest.BakedSecretNote], inverse: board
+
+      allow :read, when: any(note <- notes, note.secret == "x")
+    end
+
+    defmodule BakedSecretNote do
+      use Hologram.Entity
+
+      attribute :secret, :string, server_only: true
+
+      relationship :board, BakedSecretBoard, optional: true
+
+      allow :read
+    end
+
     defmodule BakedHiddenProject do
       use Hologram.Entity
 
@@ -3719,10 +3372,12 @@ defmodule Hologram.CompilerTest do
       allow :read, when: project.archived == false
     end
 
-    defp archive_key do
-      [%{predicates: [clause]}] = Hologram.Policy.build(BakedProject).archive
+    # The verdict entry the build bakes for the given operation, reading the given types.
+    defp verdict_entry_js(entity_type, operation, read_types) do
+      reads_js = Enum.map_join(read_types, ",", &~s/"#{inspect(&1)}"/)
+      key = Hologram.Policy.verdict_key(entity_type, operation)
 
-      Hologram.Policy.verdict_key(BakedProject, :archive, clause)
+      ~s/{"reads":[#{reads_js}],"verdict":"#{key}"}/
     end
 
     setup do
@@ -4298,12 +3953,13 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
+                 ~s/"server_created_at":"datetime","server_updated_at":"datetime",/ <>
                  ~s/"updated_at":"datetime"},"constraints":{},"creatorRoles":[],/ <>
                  ~s/"defaults":{"c":Type.atom("x")},"derived":{},/ <>
                  ~s/"enumValues":{"c":["x","y"]},"expandedRoles":{},"frameworkAttributes":[],"inverses":{},/ <>
                  ~s/"operations":["create","delete","grant_role","read","read_roles",/ <>
                  ~s/"revoke_role","update"],"policy":{},/ <>
-                 ~s/"relationships":{},"roles":[],"serverOnly":[]}}/
+                 ~s/"relationships":{},"roles":[],"serverOnly":[],"verdicts":{}}}/
              )
     end
 
@@ -5045,10 +4701,13 @@ defmodule Hologram.CompilerTest do
              )
     end
 
-    # A deciding clause is answered from the server's verdict, so it carries the key the verdict is
-    # sent under and the types whose unanswered writes make the verdict stale - in an alternative
-    # too, and only the outer one when it holds a none inside. The any alone reads no none or all.
-    test "bakes a deciding quantifier's verdict key and the types it reads", %{
+    # A deciding quantifier renders as any other, since the rows a client holds of its set decide
+    # what one row can, and the server's verdict answers its operation whole: the key the verdict is
+    # sent under and the types whose unanswered writes make it stale. The read rule's any reads no
+    # none or all, and the whole-row update rule none either, and every member and label is read by
+    # everyone, so neither operation has a verdict. The publish line reads a member's user, which a
+    # reader may not hold, so it has one too.
+    test "bakes a deciding quantifier as it is and its operation's verdict key and reads", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
@@ -5078,44 +4737,140 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      [%{predicates: [archive_clause]}] = Hologram.Policy.build(BakedProject).archive
-      key = Hologram.Policy.verdict_key(BakedProject, :archive, archive_clause)
-
       assert String.contains?(
                js,
-               ~s/"quantifier":"none","reads":["Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{key}"}/
+               ~s/"delete":[{"predicates":[{"or":[[["name","==","draft"]],[{"filter":[],"quantifier":"none","source":["members"]}]]}],"to":null,"via":null}]/
              )
 
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"filter":[["user_id","==",{"actor":true}]],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+               ~s/"share":[{"predicates":[{"filter":[{"filter":[["name","==","x"]],"quantifier":"none","source":["labels"]}],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
              )
 
-      [%{predicates: [{:or, [_name, [delete_clause]]}]}] =
-        Hologram.Policy.build(BakedProject).delete
+      member_types = [BakedMember, BakedProject]
+      label_types = [BakedLabel, BakedMember, BakedProject]
+      user_types = [BakedMember, BakedProject, Hologram.Test.Fixtures.Entity.Module14]
 
-      delete_key = Hologram.Policy.verdict_key(BakedProject, :delete, delete_clause)
+      field_types = [
+        BakedLabel,
+        BakedMember,
+        BakedProject,
+        Hologram.Test.Fixtures.Entity.Module14
+      ]
+
+      verdicts_js =
+        ~s/"verdicts":{"archive":#{verdict_entry_js(BakedProject, :archive, member_types)},/ <>
+          ~s/"delete":#{verdict_entry_js(BakedProject, :delete, member_types)},/ <>
+          ~s/"publish":#{verdict_entry_js(BakedProject, :publish, user_types)},/ <>
+          ~s/"share":#{verdict_entry_js(BakedProject, :share, label_types)},/ <>
+          ~s/"update:name":#{verdict_entry_js(BakedProject, {:update, :name}, field_types)}}/
+
+      assert String.contains?(js, verdicts_js)
 
       assert String.contains?(
                js,
-               ~s/[{"filter":[],"quantifier":"none","reads":["Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{delete_key}"}]/
-             )
-
-      [%{predicates: [share_clause]}] = Hologram.Policy.build(BakedProject).share
-      share_key = Hologram.Policy.verdict_key(BakedProject, :share, share_clause)
-
-      assert String.contains?(
-               js,
-               ~s/"share":[{"predicates":[{"filter":[{"filter":[["name","==","x"]],"quantifier":"none","source":["labels"]}],"quantifier":"any","reads":["Hologram.CompilerTest.BakedLabel","Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{share_key}"}],"to":null,"via":null}]/
+               ~s/"serverOnly":[],"verdicts":{}},"Hologram.CompilerTest.BakedProject"/
              )
     end
 
-    # A bounded set computed over the rows a client holds can hold rows the server's doesn't, so an
-    # any over one is answered from the verdict too, which reads the rows the set is taken from.
-    test "bakes the verdict key and the types read of an any over a derived set", %{
+    # Every field but the name is covered by the one line, so each field's entry names one verdict,
+    # which a row carries once.
+    test "bakes the fields of an update the same lines cover as entries naming one verdict", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
     } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedSharedProject, BakedLabel, RoleGrant])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      entry_js =
+        verdict_entry_js(BakedSharedProject, {:update, :title}, [BakedLabel, BakedSharedProject])
+
+      assert String.contains?(
+               js,
+               ~s/"verdicts":{"update:labels":#{entry_js},"update:title":#{entry_js}}/
+             )
+
+      refute String.contains?(js, ~s/"update:name":/)
+    end
+
+    # Only a workshop's owner and members read it, its benches and its tools' permits, so each of
+    # the tool's operations reading one has a verdict, a create line only under its name.
+    test "bakes the verdicts of operations reading related rows a reader may not hold", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types:
+            MapSet.new([
+              Hologram.Test.Fixtures.Policy.Module46,
+              Hologram.Test.Fixtures.Policy.Module47,
+              Hologram.Test.Fixtures.Policy.Module48,
+              Hologram.Test.Fixtures.Policy.Module49,
+              RoleGrant
+            ])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      tool = Hologram.Test.Fixtures.Policy.Module49
+      workshop_types = [Hologram.Test.Fixtures.Policy.Module46]
+      delegation_types = [RoleGrant, Hologram.Test.Fixtures.Policy.Module46]
+
+      permit_types = [
+        Hologram.Test.Fixtures.Policy.Module46,
+        Hologram.Test.Fixtures.Policy.Module48,
+        tool
+      ]
+
+      bench_types = [
+        RoleGrant,
+        Hologram.Test.Fixtures.Policy.Module46,
+        Hologram.Test.Fixtures.Policy.Module47
+      ]
+
+      verdicts_js =
+        ~s/"verdicts":{"delete":#{verdict_entry_js(tool, :delete, delegation_types)},/ <>
+          ~s/"draft":#{verdict_entry_js(tool, :draft, workshop_types)},/ <>
+          ~s/"read":#{verdict_entry_js(tool, :read, workshop_types)},/ <>
+          ~s/"update":#{verdict_entry_js(tool, :update, workshop_types)},/ <>
+          ~s/"update:bench":#{verdict_entry_js(tool, {:update, :bench}, permit_types)},/ <>
+          ~s/"update:label":#{verdict_entry_js(tool, {:update, :label}, bench_types)}}/
+
+      assert String.contains?(js, verdicts_js)
+    end
+
+    # A bounded set computed over the rows a client holds can hold rows the server's doesn't, so an
+    # any over one leaves its operation to the verdict, which reads the rows the set is taken from.
+    test "bakes the verdict key and the types read of an operation with an any over a derived set",
+         %{
+           ir_plt: ir_plt,
+           runtime_mfas: runtime_mfas
+         } do
       put_derived_definitions([BakedBoard])
 
       sync_constants = %{
@@ -5135,20 +4890,21 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      [%{predicates: [clause]}] = Hologram.Policy.build(BakedBoard).read
-      key = Hologram.Policy.verdict_key(BakedBoard, :read, clause)
-
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"filter":[["rank","==",1]],"quantifier":"any","reads":["Hologram.CompilerTest.BakedBoard","Hologram.CompilerTest.BakedCard"],"source":["top_cards"],"verdict":"#{key}"}],"to":null,"via":null}]/
+               ~s/"read":[{"predicates":[{"filter":[["rank","==",1]],"quantifier":"any","source":["top_cards"]}],"to":null,"via":null}]/
              )
+
+      read_js = verdict_entry_js(BakedBoard, :read, [BakedBoard, BakedCard])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
     end
 
-    # No client holds a server-only value, so a predicate reading one is the key the server's verdict
-    # on it is sent under and the types it reads alone - none for the row's own attribute, which no
-    # write of the client's can move, and the types along a path, without the rule's own. A stored
-    # attribute beside it in an alternative stays a triple.
-    test "bakes a predicate on a server-only attribute as its verdict key and the types it reads",
+    # No client holds a server-only value, so a predicate reading one is a marker the client answers
+    # as unknown, its compared value left off the bundle. A stored attribute beside it in an
+    # alternative stays a triple. The read verdict reads no type for the row's own attribute, which
+    # no write of the client's can move, and the types along a path, without the rule's own.
+    test "bakes a predicate on a server-only attribute as a marker",
          %{
            ir_plt: ir_plt,
            runtime_mfas: runtime_mfas
@@ -5170,26 +4926,60 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      report_key = Hologram.Policy.verdict_key(BakedReport, :read, {:reviewed, :==, true})
-
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"or":[[{"reads":[],"verdict":"#{report_key}"}],[["title","==","x"]]]}],"to":null,"via":null}]/
+               ~s/"read":[{"predicates":[{"or":[[{"server":true}],[["title","==","x"]]]}],"to":null,"via":null}]/
              )
 
-      note_key =
-        Hologram.Policy.verdict_key(BakedReportNote, :read, {[:report, :reviewed], :==, true})
+      assert String.contains?(
+               js,
+               ~s/"verdicts":{"read":#{verdict_entry_js(BakedReport, :read, [])}}/
+             )
 
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"reads":["Hologram.CompilerTest.BakedReport"],"verdict":"#{note_key}"}],"to":null,"via":null}]/
+               ~s/"read":[{"predicates":[{"server":true}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"verdicts":{"read":#{verdict_entry_js(BakedReportNote, :read, [BakedReport])}}/
              )
     end
 
-    # No client holds a row of a type nobody may read, so a read rule's predicate reading one is the
-    # key the server's verdict on it is sent under and the types it reads, with its triple for when
-    # the project reference is empty.
-    test "bakes a read rule's predicate reading a type nobody may read with its verdict key and reads",
+    # A quantifier's condition is read on the rows of its set, so one reading a server-only value
+    # stays a triple, which the client answers as unknown on each row.
+    test "bakes a quantifier's condition on a server-only attribute as its triple", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedSecretBoard, BakedSecretNote, RoleGrant])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"filter":[["secret","==","x"]],"quantifier":"any","source":["notes"]}],"to":null,"via":null}]/
+             )
+    end
+
+    # No client holds a row of a type nobody may read, so a read rule's predicate reading one is its
+    # triple, which the client reads as unknown unless the project reference is empty, and the read
+    # verdict answers the rest.
+    test "bakes a read rule's predicate reading a type nobody may read as its triple",
          %{
            ir_plt: ir_plt,
            runtime_mfas: runtime_mfas
@@ -5211,19 +5001,20 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      key =
-        Hologram.Policy.verdict_key(BakedHiddenTask, :read, {[:project, :archived], :==, false})
-
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"predicate":[["project","archived"],"==",false],"reads":["Hologram.CompilerTest.BakedHiddenProject"],"verdict":"#{key}"}],"to":null,"via":null}]/
+               ~s/"read":[{"predicates":[[["project","archived"],"==",false]],"to":null,"via":null}]/
              )
+
+      read_js = verdict_entry_js(BakedHiddenTask, :read, [BakedHiddenProject])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
     end
 
     # Readers.Module24 reads the team's id off its project, a type nobody may read, so the read
-    # rule's reference carries the key the server's verdict on it is sent under and the types it
-    # reads. A reference one relationship away reads the team's id off the task itself.
-    test "bakes a read rule's role reference reading a type nobody may read with its verdict key and reads",
+    # rule's reference carries a fifth element the client answers as unknown, and the read verdict
+    # answers the rest. A reference one relationship away reads the team's id off the task itself.
+    test "bakes a read rule's role reference reading a type nobody may read with a marker",
          %{
            ir_plt: ir_plt,
            runtime_mfas: runtime_mfas
@@ -5245,19 +5036,16 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      key =
-        Hologram.Policy.verdict_key(
-          ReadersTask,
-          :read,
-          {:to, {:rel, [:project, :team], [:member]}}
-        )
-
       team_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module22"/
 
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[],"to":[["rel",["project","team"],#{team_js},["member"],{"reads":["Hologram.Auth.RoleGrant","Hologram.Test.Fixtures.Policy.Readers.Module23"],"verdict":"#{key}"}]],"via":null},{"predicates":[],"to":[["rel",["team"],#{team_js},["member"]]],"via":null}]/
+               ~s/"read":[{"predicates":[],"to":[["rel",["project","team"],#{team_js},["member"],true]],"via":null},{"predicates":[],"to":[["rel",["team"],#{team_js},["member"]]],"via":null}]/
              )
+
+      read_js = verdict_entry_js(ReadersTask, :read, [RoleGrant, ReadersProject])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
 
       assert String.contains?(
                js,
@@ -5266,9 +5054,9 @@ defmodule Hologram.CompilerTest do
     end
 
     # The parcel's vault and shelf have no read rule, so its read rule's delegations through them
-    # carry the key the server's verdict on each is sent under and the types it reads. The one to
-    # the crate runs through readable types alone.
-    test "bakes a read rule's delegation through a type nobody may read with its verdict key and reads",
+    # carry a third element the client answers as unknown, and the read verdict answers the rest.
+    # The one to the crate runs through readable types alone.
+    test "bakes a read rule's delegation through a type nobody may read with a marker",
          %{
            ir_plt: ir_plt,
            runtime_mfas: runtime_mfas
@@ -5291,26 +5079,19 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      vault_key = Hologram.Policy.verdict_key(ReadersParcel, :read, {:via, {:update, [:vault]}})
-
-      shelf_key =
-        Hologram.Policy.verdict_key(ReadersParcel, :read, {:via, {:read, [:shelf, :crate]}})
-
-      vault_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module25"/
-      crate_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module26"/
-      shelf_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module27"/
-
-      assert String.contains?(
-               js,
-               ~s/"via":["update",["vault"],{"reads":[#{vault_js}],"verdict":"#{vault_key}"}]/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"via":["read",["shelf","crate"],{"reads":[#{crate_js},#{shelf_js}],"verdict":"#{shelf_key}"}]/
-             )
-
+      assert String.contains?(js, ~s/"via":["update",["vault"],true]/)
+      assert String.contains?(js, ~s/"via":["read",["shelf","crate"],true]/)
       assert String.contains?(js, ~s/"via":["read",["crate"]]}/)
+
+      read_js =
+        verdict_entry_js(ReadersParcel, :read, [
+          RoleGrant,
+          ReadersVault,
+          ReadersCrate,
+          ReadersShelf
+        ])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
     end
 
     # Each time is spelled by the type of the attribute it is compared with, on the row that
@@ -5349,7 +5130,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"archive":[{"predicates":[{"filter":[["seat","==","full"],["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"none","reads":["Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{archive_key()}"}],"to":null,"via":null}]/
+               ~s/"archive":[{"predicates":[{"filter":[["seat","==","full"],["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"none","source":["members"]}],"to":null,"via":null}]/
              )
 
       assert String.contains?(
@@ -5653,7 +5434,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+               ~s/protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
              )
     end
 
@@ -7729,130 +7510,6 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "extract_component_queries/3" do
-    setup do
-      [entity_types: Reflection.list_entities(), ir_plt: PLT.start()]
-    end
-
-    test "builds the modules a derived field calls that the PLT lacks into it", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      extract_component_queries([ComponentModule54], entity_types, ir_plt)
-
-      assert PLT.member?(ir_plt, ComponentModule55)
-    end
-
-    test "extracts the queries of every given component, keyed by module", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      module_40_term =
-        Entity2
-        |> filter(a: true)
-        |> sort(c)
-        |> Stage.normalize()
-
-      module_41_term =
-        Entity2
-        |> filter(b >= ^%Placeholder{name: :min_b})
-        |> Stage.normalize()
-
-      assert extract_component_queries(
-               [ComponentModule40, ComponentModule41],
-               entity_types,
-               ir_plt
-             ) ==
-               %{
-                 ComponentModule40 => %{
-                   count_types: %{},
-                   derived_queries: [:entities],
-                   terms: [module_40_term]
-                 },
-                 ComponentModule41 => %{
-                   count_types: %{},
-                   derived_queries: [:entities],
-                   terms: [module_41_term]
-                 }
-               }
-    end
-
-    test "reads the IR of the modules a derived field calls the PLT holds instead of building it",
-         %{
-           entity_types: entity_types,
-           ir_plt: ir_plt
-         } do
-      build_missing_ir!(ir_plt, [ComponentModule54, ComponentModule55])
-
-      count =
-        count_calls({IR, :for_module, 2}, fn ->
-          extract_component_queries([ComponentModule54], entity_types, ir_plt)
-        end)
-
-      assert count == 0
-    end
-
-    test "records nothing for a component declaring no derived field", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      assert extract_component_queries([ComponentModule1], entity_types, ir_plt) == %{
-               ComponentModule1 => %{count_types: %{}, derived_queries: [], terms: []}
-             }
-    end
-
-    test "extracts the queries a component's derived fields build", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      queries = extract_component_queries([QueryExtractorModule84], entity_types, ir_plt)
-
-      assert queries == %{
-               QueryExtractorModule84 => %{
-                 count_types: %{},
-                 derived_queries: [:ripe],
-                 terms: [%Query{entity: Entity2, filter: [{:a, :==, true}], sort: [id: :asc]}]
-               }
-             }
-    end
-
-    # Every branch of a field counts towards it, and a path's types with the counted one - a field
-    # building rows records nothing, since rows are answered from what the client holds.
-    test "records the entity types each derived field building a count reads", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      queries = extract_component_queries([QueryExtractorModule133], entity_types, ir_plt)
-
-      assert queries[QueryExtractorModule133].count_types == %{
-               either_count: [Entity1, Entity2, Entity3],
-               ripe_count: [Entity2]
-             }
-    end
-
-    test "answers for no component with no entry", %{entity_types: entity_types, ir_plt: ir_plt} do
-      assert extract_component_queries([], entity_types, ir_plt) == %{}
-    end
-
-    # The refusal is the query stage's rather than a validation's - the derived field includes a
-    # name its entity type does not declare, so the extraction never reaches a term to object to.
-    test "raises for a derived field the extractor refuses", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      expected_msg =
-        normalize_newlines("""
-        test/elixir/support/fixtures/component/module_53.ex:8: derived field :entities in Hologram.Test.Fixtures.Component.Module53 builds an invalid query - unknown relationship :unknown in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c
-
-            #{@app} test/elixir/support/fixtures/component/module_53.ex:8: Hologram.Test.Fixtures.Component.Module53.__derived_entities__/0\
-        """)
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_component_queries([ComponentModule53], entity_types, ir_plt)
-      end
-    end
-  end
-
   describe "fingerprint_js_inputs/2" do
     setup do
       test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "fingerprint_js_inputs_2"])
@@ -8370,6 +8027,36 @@ defmodule Hologram.CompilerTest do
         Path.join([assets_dir, "node_modules", ".package_json_digest.bin"])
 
       assert File.read!(package_json_digest_path) == expected_digest
+    end
+
+    @tag timeout: 300_000
+    test "installs the deps an existing package-lock.json file names", %{assets_dir: assets_dir} do
+      lib_package_lock_json_path = Path.join(@assets_dir, "package-lock.json")
+      package_lock_json_path = Path.join(assets_dir, "package-lock.json")
+      File.cp!(lib_package_lock_json_path, package_lock_json_path)
+
+      install_js_deps(assets_dir)
+
+      esbuild_package_json_path =
+        Path.join([assets_dir, "node_modules", "esbuild", "package.json"])
+
+      assert File.exists?(esbuild_package_json_path)
+    end
+
+    test "leaves an existing package-lock.json file as it was", %{assets_dir: assets_dir} do
+      package_json_path = Path.join(assets_dir, "package.json")
+      File.write!(package_json_path, ~s({"name":"fixture","version":"1.0.0"}))
+
+      # A plain npm install rewrites it, since its root version doesn't match package.json.
+      package_lock_json =
+        ~s({"name":"fixture","version":"0.9.0","lockfileVersion":3,"requires":true,"packages":{"":{"name":"fixture","version":"0.9.0"}}})
+
+      package_lock_json_path = Path.join(assets_dir, "package-lock.json")
+      File.write!(package_lock_json_path, package_lock_json)
+
+      install_js_deps(assets_dir)
+
+      assert File.read!(package_lock_json_path) == package_lock_json
     end
 
     test "removes the record of the last install when npm install command fails", %{
@@ -8957,6 +8644,43 @@ defmodule Hologram.CompilerTest do
         end)
 
       assert count == 0
+    end
+  end
+
+  describe "list_query_shapes/1" do
+    test "returns the shapes each module recorded, leaving out a module recording none" do
+      shape_1 = {Entity2, [take: [1]]}
+      shape_2 = {Entity1, [take: [2]]}
+
+      module_info_plt =
+        PLT.start()
+        |> PLT.put(Module1, %{digest: 1, query_shapes: [shape_1, shape_2]})
+        |> PLT.put(Module2, %{digest: 2, query_shapes: [shape_1]})
+        |> PLT.put(Module3, %{digest: 3, query_shapes: []})
+        |> PLT.put(Module4, %{digest: 4})
+
+      assert list_query_shapes(module_info_plt) == %{
+               Module1 => [shape_1, shape_2],
+               Module2 => [shape_1]
+             }
+    end
+  end
+
+  describe "list_query_shapes/2" do
+    test "returns the shapes the given modules recorded, leaving out a module recording none or one the PLT doesn't hold" do
+      shape_1 = {Entity2, [take: [1]]}
+      shape_2 = {Entity1, [take: [2]]}
+
+      module_info_plt =
+        PLT.start()
+        |> PLT.put(Module1, %{digest: 1, query_shapes: [shape_1]})
+        |> PLT.put(Module2, %{digest: 2, query_shapes: [shape_2]})
+        |> PLT.put(Module3, %{digest: 3, query_shapes: []})
+        |> PLT.put(Module4, %{digest: 4})
+
+      modules = [Module1, Module3, Module4, Module5]
+
+      assert list_query_shapes(module_info_plt, modules) == %{Module1 => [shape_1]}
     end
   end
 

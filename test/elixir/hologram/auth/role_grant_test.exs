@@ -77,6 +77,9 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Entity.Module52,
                     Entity.Module53,
                     Entity.Module54,
+                    Entity.Module55,
+                    Entity.Module56,
+                    Entity.Module57,
                     Entity.Module6,
                     Entity.Module7,
                     Entity.Module8,
@@ -88,6 +91,8 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Mutation.Module2,
                     Mutation.Module3,
                     Mutation.Module4,
+                    Mutation.Module5,
+                    Mutation.Module6,
                     Policy.Module1,
                     Policy.Module10,
                     Policy.Module11,
@@ -128,7 +133,19 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Policy.Module43,
                     Policy.Module44,
                     Policy.Module45,
+                    Policy.Module46,
+                    Policy.Module47,
+                    Policy.Module48,
+                    Policy.Module49,
                     Policy.Module5,
+                    Policy.Module50,
+                    Policy.Module51,
+                    Policy.Module52,
+                    Policy.Module53,
+                    Policy.Module54,
+                    Policy.Module55,
+                    Policy.Module56,
+                    Policy.Module57,
                     Policy.Module6,
                     Policy.Module7,
                     Policy.Module8,
@@ -156,6 +173,10 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Policy.Readers.Module28,
                     Policy.Readers.Module29,
                     Policy.Readers.Module3,
+                    Policy.Readers.Module30,
+                    Policy.Readers.Module31,
+                    Policy.Readers.Module32,
+                    Policy.Readers.Module33,
                     Policy.Readers.Module4,
                     Policy.Readers.Module5,
                     Policy.Readers.Module6,
@@ -232,6 +253,8 @@ defmodule Hologram.Auth.RoleGrantTest do
                entity_id: nil,
                entity_type: nil,
                role: nil,
+               server_created_at: nil,
+               server_updated_at: nil,
                updated_at: nil,
                user: %NotIncluded{relationship: :user},
                user_id: nil
@@ -274,6 +297,8 @@ defmodule Hologram.Auth.RoleGrantTest do
     assert RoleGrant.__system_attributes__() == [
              {:created_at, :datetime, []},
              {:id, :uuid, []},
+             {:server_created_at, :datetime, []},
+             {:server_updated_at, :datetime, []},
              {:updated_at, :datetime, []}
            ]
   end
@@ -346,6 +371,21 @@ defmodule Hologram.Auth.RoleGrantTest do
       assert instance_id == "2c56252b-0c90-5cd9-b15d-91c5e5bf968e"
       assert global_id == "f0fd8d8d-3d3f-5dd8-9027-2441a5a93040"
       assert accented_id == "84121d8c-09a3-57fa-96e3-bd966906ce20"
+    end
+  end
+
+  describe "derive_id_from_labels/4" do
+    test "answers derive_id/4's id for an entity grant spelled as the store holds it" do
+      label_id =
+        RoleGrant.derive_id_from_labels(@user_id, inspect(@entity_type), @entity_id, "member")
+
+      assert label_id == RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
+    end
+
+    test "answers derive_id/4's id for a global grant spelled as the store holds it" do
+      label_id = RoleGrant.derive_id_from_labels(@user_id, nil, nil, inspect(Role.Module1))
+
+      assert label_id == RoleGrant.derive_id(@user_id, nil, nil, Role.Module1)
     end
   end
 

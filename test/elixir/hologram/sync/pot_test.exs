@@ -36,6 +36,11 @@ defmodule Hologram.Sync.PotTest do
     }
   end
 
+  # Rows the client's own batches created, per entity type, packed as a part names them.
+  defp created(ids_by_type) do
+    Map.new(ids_by_type, fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end)
+  end
+
   defp held(ids_by_type) do
     Enum.reduce(ids_by_type, Held.new(), fn {entity_type, ids}, held ->
       Held.add(held, entity_type, ids)
@@ -66,8 +71,14 @@ defmodule Hologram.Sync.PotTest do
       |> Map.merge(Keyword.get(opts, :unreadable, %{}), fn _type, ids, more -> ids ++ more end)
       |> Map.new(fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end)
 
+    moved =
+      opts
+      |> Keyword.get(:moved, %{})
+      |> Map.new(fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end)
+
     %{
       checked: checked,
+      moved: moved,
       pair_effects: pack_pairs(Keyword.get(opts, :pair_effects, %{})),
       pairs: pack_pairs(Keyword.get(opts, :pairs, %{})),
       readable: readable,
@@ -118,7 +129,7 @@ defmodule Hologram.Sync.PotTest do
 
       {news, told} = decide(pot(%{Project => [@id_1]}), part(readable: [project]))
 
-      assert news == %{appeared: [], edges: [], patched: [], unsynced: []}
+      assert news == %{appeared: [], edges: [], hidden: [], patched: [], unsynced: []}
       assert Held.ids(told.held, Project) == [@id_1]
     end
 
@@ -136,7 +147,7 @@ defmodule Hologram.Sync.PotTest do
 
       {news, told} = decide(Pot.new(), part)
 
-      assert news == %{appeared: [], edges: [], patched: [], unsynced: []}
+      assert news == %{appeared: [], edges: [], hidden: [], patched: [], unsynced: []}
       assert told == Pot.new()
     end
 
@@ -526,6 +537,115 @@ defmodule Hologram.Sync.PotTest do
 
       assert news.unsynced == [{@id_1, Project}]
     end
+
+    test "tells by hash the moved rows the user may not read that the client isn't taken to hold" do
+      part =
+        part(
+          moved: %{Project => [@id_3, @id_1, @id_2]},
+          readable: [%Project{id: @id_2, public: true}],
+          unreadable: %{Project => [@id_1, @id_3]}
+        )
+
+      {news, told} = decide(pot(%{Project => [@id_3]}), part, hidden_salt: "q3Vx")
+
+      assert news.hidden == [{Project, "q3Vx", [@id_1]}]
+      assert news.unsynced == [{@id_3, Project}]
+      assert Held.ids(told.dropped, Project) == [@id_3]
+    end
+
+    test "tells nothing by hash of a row the batch checked but didn't move" do
+      part = part(unreadable: %{Project => [@id_1]})
+
+      {news, _told} = decide(Pot.new(), part, hidden_salt: "q3Vx")
+
+      assert news.hidden == []
+    end
+
+    test "tells nothing by hash without a salt" do
+      part = part(moved: %{Project => [@id_1]}, unreadable: %{Project => [@id_1]})
+
+      {news, _told} = decide(Pot.new(), part)
+
+      assert news.hidden == []
+    end
+  end
+
+  describe "decide/3 - rows the client's own batches created" do
+    test "drops a created row the user may not read, among the dropped" do
+      part = part(unreadable: %{Project => [@id_1]})
+
+      {news, told} = decide(Pot.new(), part, created: created(%{Project => [@id_1]}))
+
+      assert news.unsynced == [{@id_1, Project}]
+      assert Held.ids(told.held, Project) == []
+      assert Held.ids(told.dropped, Project) == [@id_1]
+    end
+
+    test "hands a created row the user may read over whole, and holds it" do
+      project = %Project{id: @id_1, name: "new", public: true}
+
+      {news, told} =
+        decide(Pot.new(), part(readable: [project]), created: created(%{Project => [@id_1]}))
+
+      assert [%Project{id: @id_1}] = news.appeared
+      assert news.unsynced == []
+      assert Held.ids(told.held, Project) == [@id_1]
+    end
+
+    test "drops a created row once when it is held" do
+      part = part(unreadable: %{Project => [@id_1]})
+
+      {news, _told} =
+        decide(pot(%{Project => [@id_1]}), part, created: created(%{Project => [@id_1]}))
+
+      assert news.unsynced == [{@id_1, Project}]
+    end
+
+    test "tells nothing of a created row it holds that the user may read and the batch didn't write" do
+      project = %Project{id: @id_1, public: true}
+
+      {news, _told} =
+        decide(pot(%{Project => [@id_1]}), part(readable: [project]),
+          created: created(%{Project => [@id_1]})
+        )
+
+      assert news == %{appeared: [], edges: [], hidden: [], patched: [], unsynced: []}
+    end
+
+    # A catch-up's chunk has the rows an earlier chunk settled taken out of what it checked.
+    test "drops a created row the part doesn't check" do
+      {news, _told} = decide(Pot.new(), part([]), created: created(%{Project => [@id_1]}))
+
+      assert news.unsynced == [{@id_1, Project}]
+    end
+
+    test "drops created rows in id order beside the held rows of the type it drops" do
+      part = part(unreadable: %{Project => [@id_1, @id_3]})
+
+      {news, _told} =
+        decide(pot(%{Project => [@id_3]}), part, created: created(%{Project => [@id_1]}))
+
+      assert news.unsynced == [{@id_1, Project}, {@id_3, Project}]
+    end
+
+    test "takes a dropped created row out of the held rows whose sets hold it" do
+      part = part(unreadable: %{Label => [@id_2]}, pairs: %{@labels => [{@id_1, @id_2}]})
+
+      {news, _told} =
+        decide(pot(%{Project => [@id_1]}), part, created: created(%{Label => [@id_2]}))
+
+      assert news.edges == [edge(:del_relationship, Project, @id_1, "labels", @id_2)]
+    end
+
+    test "drops a created row by id alone when given a salt" do
+      part = part(moved: %{Project => [@id_1, @id_2]}, unreadable: %{Project => [@id_1, @id_2]})
+
+      {news, _told} =
+        decide(Pot.new(), part, created: created(%{Project => [@id_1]}), hidden_salt: "q3Vx")
+
+      assert news.hidden == [{Project, "q3Vx", [@id_2]}]
+      assert news.unsynced == [{@id_1, Project}]
+    end
   end
 
   describe "drop/3 and hand_over/3" do
@@ -599,7 +719,7 @@ defmodule Hologram.Sync.PotTest do
       {news, _told} =
         reread(pot(%{Label => [@id_2]}), Label, rows, fn _ids -> flunk("read pairs") end)
 
-      assert news == %{appeared: [], edges: [], patched: [], unsynced: []}
+      assert news == %{appeared: [], edges: [], hidden: [], patched: [], unsynced: []}
     end
 
     test "hands a row over with its sets holding only the rows the client holds" do

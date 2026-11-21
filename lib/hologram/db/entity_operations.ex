@@ -156,15 +156,14 @@ defmodule Hologram.DB.EntityOperations do
 
     transaction_result =
       Connection.transaction(fn ->
-        edge_effects = delete_outgoing_edges(entity_type, id, join_tables, encoded_id)
-
-        # Every edge the delete takes with it is recorded, ahead of the row. A reader learning the
-        # entity is gone knows its own edges went with it, but the targets don't: each one's
-        # inverse of the relationship lost a row, and what a read rule reads through that set may
-        # have moved. Once the delete commits, nothing else says which rows those were.
-        case delete_entity_row(entity_type, table, encoded_id) do
-          nil -> :ok
-          entity -> Oplog.append(Enum.concat(edge_effects, [delete_effect(entity)]))
+        # The row is locked before its edges go. An edge added from it meanwhile would otherwise
+        # commit between the two statements, and the join table's key on the source would refuse
+        # the row. Locked, a write adding one first is waited for, and its edge goes with the row;
+        # a new edge added after waits on the lock and fails once the row is gone. A type with no
+        # to-many has no edge to race, and the row's own delete takes the lock. The struct verb
+        # and the batch already hold the row, so this takes the locks in the order they do.
+        if join_tables == [] or lock_row?(table, encoded_id) do
+          delete_locked_row(entity_type, id, table, join_tables, encoded_id)
         end
 
         :ok
@@ -354,7 +353,8 @@ defmodule Hologram.DB.EntityOperations do
 
           stamp_placeholder = length(set_entries) + 1
           updated_at_placeholder = length(set_entries) + 2
-          id_placeholder = length(set_entries) + 3
+          server_updated_at_placeholder = length(set_entries) + 3
+          id_placeholder = length(set_entries) + 4
 
           # One stamp for the whole statement, so every column it sets reads as set together.
           set_columns =
@@ -377,21 +377,26 @@ defmodule Hologram.DB.EntityOperations do
             end)
 
           statement =
-            ~s|UPDATE #{qualified_table(table)} SET #{set_list}, #{revisions_assignment}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder} RETURNING #{returning_list}|
+            ~s|UPDATE #{qualified_table(table)} SET #{set_list}, #{revisions_assignment}, "updated_at" = $#{updated_at_placeholder}, "server_updated_at" = $#{server_updated_at_placeholder} WHERE "id" = $#{id_placeholder} RETURNING #{returning_list}|
 
           changed_values = Enum.map(set_entries, fn {{_column, value}, _form} -> value end)
 
           stamp = Keyword.get_lazy(opts, :stamp, &Clock.stamp/0)
           updated_at = written_at(stamp)
+          server_updated_at = server_written_at(opts[:stamp], updated_at)
           encoded_updated_at = Codec.encode(updated_at, :datetime)
+          encoded_server_updated_at = Codec.encode(server_updated_at, :datetime)
           encoded_id = Codec.encode(id, :uuid)
 
-          params = changed_values ++ [stamp, encoded_updated_at, encoded_id]
+          params =
+            changed_values ++ [stamp, encoded_updated_at, encoded_server_updated_at, encoded_id]
 
-          # The stamp travels with the changes: every update moves updated_at, and a client holding
-          # the row holds that too. The derived companions do not - they are derived from the values
-          # beside them, and a reader recomputes them rather than being told.
-          data = Map.put(changes_map, :updated_at, updated_at)
+          # The stamp travels with the changes: every update moves updated_at and
+          # server_updated_at, and a client holding the row holds both too. The derived
+          # companions do not - they are derived from the values beside them, and a reader
+          # recomputes them rather than being told.
+          data =
+            Map.merge(changes_map, %{server_updated_at: server_updated_at, updated_at: updated_at})
 
           # The transaction's reason is whatever refused the write, the way create/1's is - a
           # refusal rolls the update back rather than raising.
@@ -678,6 +683,24 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  defp delete_locked_row(entity_type, id, table, join_tables, encoded_id) do
+    edge_effects = delete_outgoing_edges(entity_type, id, join_tables, encoded_id)
+
+    # Every edge the delete takes with it is recorded, ahead of the row. A reader learning the
+    # entity is gone knows its own edges went with it, but the targets don't: each one's
+    # inverse of the relationship lost a row, and what a read rule reads through that set may
+    # have moved. Once the delete commits, nothing else says which rows those were.
+    case delete_entity_row(entity_type, table, encoded_id) do
+      nil ->
+        :ok
+
+      entity ->
+        edge_effects
+        |> Enum.concat([delete_effect(entity)])
+        |> Oplog.append()
+    end
+  end
+
   # The effects of the removed edges, each join table's ordered by target.
   # sobelow_skip ["SQL.Query"]
   defp delete_outgoing_edges(entity_type, id, join_tables, encoded_id) do
@@ -697,11 +720,12 @@ defmodule Hologram.DB.EntityOperations do
 
   # The creating user takes the entity type's creator roles as the row is inserted, in the
   # same transaction - so a row never exists without whoever made it holding its roles.
-  # Creating without an acting user grants nothing, which is what the trusted tier wants.
+  # Creating without an acting user grants nothing, which is what the trusted tier wants, and
+  # neither does an actor no user entity can be, since a grant names a user.
   defp creator_grants(entity) do
     entity_type = entity.__struct__
 
-    case Context.actor_user_id() do
+    case Context.actor_entity_id() do
       nil ->
         []
 
@@ -814,6 +838,7 @@ defmodule Hologram.DB.EntityOperations do
     stamp = entity.__meta__.stamp || Clock.stamp()
 
     now = written_at(stamp)
+    server_now = server_written_at(entity.__meta__.stamp, now)
     settable_columns = Enum.filter(columns, &settable?/1)
     revisions = Map.new(settable_columns, &{field_name(&1), stamp})
 
@@ -823,6 +848,8 @@ defmodule Hologram.DB.EntityOperations do
     stamped_entity = %{
       entity
       | created_at: now,
+        server_created_at: server_now,
+        server_updated_at: server_now,
         updated_at: now,
         __meta__: %Metadata{revisions: revisions}
     }
@@ -938,6 +965,18 @@ defmodule Hologram.DB.EntityOperations do
   defp lock_clause(:share), do: " FOR SHARE"
 
   defp lock_clause(:update), do: " FOR UPDATE"
+
+  # Whether a row holds the id, locking it FOR UPDATE when one does. An id no row holds locks
+  # nothing.
+  # sobelow_skip ["SQL.Query"]
+  defp lock_row?(table, encoded_id) do
+    statement = ~s|SELECT 1 FROM #{qualified_table(table)} WHERE "id" = $1 FOR UPDATE|
+
+    case Connection.query(statement, [encoded_id]) do
+      {:ok, %Postgrex.Result{num_rows: num_rows}} -> num_rows == 1
+      {:error, error} -> raise error
+    end
+  end
 
   # A delete says what the row WAS, the way a put says what it became - so a row that is gone
   # stays readable for as long as the log keeps its entry. No revisions: the stamps went with
@@ -1379,10 +1418,11 @@ defmodule Hologram.DB.EntityOperations do
 
   defp write_violations!(_entity_type, violations), do: violations
 
-  # A row is timestamped from the moment its WRITER made it, which the stamp already carries in
-  # its upper bits - so a note written offline on Monday and synced on Wednesday is filed as
-  # Monday, rather than as the moment the batch happened to arrive. A client cannot send either
-  # column, and does not need to: the number it authored says when.
+  # A row carries two pairs of timestamps. created_at and updated_at are the moment its WRITER
+  # made it, which the stamp already carries in its upper bits - so a note written offline on
+  # Monday and synced on Wednesday is filed as Monday, rather than as the moment the batch
+  # happened to arrive. A client cannot send either column, and does not need to: the number it
+  # authored says when.
   #
   # A stamp holds milliseconds, so the microseconds below them are zero. Two rows written in the
   # same millisecond therefore carry the same timestamp where they once differed - the stamps
@@ -1392,4 +1432,15 @@ defmodule Hologram.DB.EntityOperations do
 
     DateTime.from_unix!(microseconds, :microsecond)
   end
+
+  # server_created_at and server_updated_at are the moment the row reached THIS tier, from the
+  # node's own clock. The writer's pair cannot answer what arrived since someone last looked -
+  # Wednesday's sync of Monday's note is news to everyone else - nor be trusted where it must not
+  # be faked, since a writer's clock may run as far back as it likes. A write the server authored
+  # has no other moment, so it takes its own writer's timestamp and the two pairs agree exactly;
+  # a stamp authored elsewhere is the writer's alone, and the node's clock answers beside it. The
+  # same shape of number either way, milliseconds of a stamp, so the two pairs compare cleanly.
+  defp server_written_at(nil = _given_stamp, own_written_at), do: own_written_at
+
+  defp server_written_at(_given_stamp, _own_written_at), do: written_at(Clock.stamp())
 end

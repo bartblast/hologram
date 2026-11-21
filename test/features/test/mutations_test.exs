@@ -16,7 +16,8 @@ defmodule HologramFeatureTests.MutationsTest do
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.User
-  alias HologramFeatureTests.Jobs.KillWorker
+  alias HologramFeatureTests.Jobs.HoldRun
+  alias HologramFeatureTests.Jobs.KillRun
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTests.MutationsPage
 
@@ -24,11 +25,9 @@ defmodule HologramFeatureTests.MutationsTest do
   # foreign keys to the user table and the restock job's to the item table make Postgres reject truncating a
   # referenced table alone.
   setup do
-    await_evaluator_drain()
-
     tables =
       Enum.map_join(
-        [Item, KillWorker, Memo, Note, ProjectMember, RestockItem, RoleGrant, User],
+        [HoldRun, Item, KillRun, Memo, Note, ProjectMember, RestockItem, RoleGrant, User],
         ", ",
         fn entity_type ->
           ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
@@ -73,10 +72,34 @@ defmodule HologramFeatureTests.MutationsTest do
     }
   end
 
-  defp create_kill_worker_write(label) do
+  # The row reads running once the claim commits, a moment before run/1 registers its process.
+  defp await_hold_run(label) do
+    Enum.reduce_while(1..100, nil, fn _attempt, _acc ->
+      case :global.whereis_name({HoldRun, label}) do
+        :undefined ->
+          Process.sleep(50)
+          {:cont, nil}
+
+        pid ->
+          {:halt, pid}
+      end
+    end) || flunk("the held run #{label} never registered")
+  end
+
+  defp create_hold_run_write(label) do
     %{
       "op" => "create",
-      "type" => inspect(KillWorker),
+      "type" => inspect(HoldRun),
+      "id" => Entity.generate_id(),
+      "data" => %{"label" => label},
+      "stamp" => System.os_time(:millisecond) * 1024
+    }
+  end
+
+  defp create_kill_run_write(label) do
+    %{
+      "op" => "create",
+      "type" => inspect(KillRun),
       "id" => Entity.generate_id(),
       "data" => %{"label" => label},
       "stamp" => System.os_time(:millisecond) * 1024
@@ -500,20 +523,50 @@ defmodule HologramFeatureTests.MutationsTest do
     assert [%Item{stock: 0}] = DB.read(Item)
   end
 
-  # The job kills the worker running it, so nothing records its outcome. The worker comes back and
-  # gives up the lock its predecessor held, and its next look for jobs fails the row as cut short.
-  feature "fails a job whose worker died mid-run", %{session: session} do
+  # The job kills the process running it, so nothing records its outcome. The worker hears the run
+  # go down, gives up its lock, and fails the row as cut short.
+  feature "fails a job whose run was killed mid-run", %{session: session} do
     session = log_in(session)
 
-    post_batch(session, 1, [create_kill_worker_write("x")])
+    post_batch(session, 1, [create_kill_run_write("x")])
 
     assert await_response(session) ==
              %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
 
     assert_text(session, css("#killed_jobs"), "x:failed")
 
-    assert [%KillWorker{status: :failed, error: error}] = DB.read(KillWorker)
+    assert [%KillRun{status: :failed, error: error}] = DB.read(KillRun)
     assert error =~ "the run was cut short before its outcome was recorded"
+  end
+
+  # The held runs stand for slow jobs, like web pushes waiting on a remote service. Two of one type
+  # run at once, and the restock created in the same batch runs and finishes while they're still
+  # running.
+  feature "runs jobs while others are still running", %{session: session} do
+    item = create_item(0)
+
+    session = log_in(session)
+
+    writes = [
+      create_hold_run_write("a"),
+      create_hold_run_write("b"),
+      create_restock_write(item.id, 1)
+    ]
+
+    post_batch(session, 1, writes)
+
+    assert await_response(session) ==
+             %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
+
+    session
+    |> assert_text(css("#held_jobs"), "a:running,b:running")
+    |> assert_text(css("#jobs"), "1:done")
+    |> assert_text(css("#held_jobs"), "a:running,b:running")
+
+    send(await_hold_run("a"), :go)
+    send(await_hold_run("b"), :go)
+
+    assert_text(session, css("#held_jobs"), "a:done,b:done")
   end
 
   feature "runs a job created by a command, as the session's user", %{session: session} do
@@ -548,7 +601,7 @@ defmodule HologramFeatureTests.MutationsTest do
 
   feature "names the pin a variable's name forgot in a filter in the browser", %{session: session} do
     expected_msg =
-      "unknown attribute :search in HologramFeatureTests.Entities.Note - known attributes: :author_id, :body, :created_at, :id, :pinned, :updated_at - a value from the surrounding code is pinned: ^search"
+      "unknown attribute :search in HologramFeatureTests.Entities.Note - known attributes: :author_id, :body, :created_at, :id, :pinned, :server_created_at, :server_updated_at, :updated_at - a value from the surrounding code is pinned: ^search"
 
     assert_client_error session, Hologram.MisuseError, expected_msg, fn ->
       session
@@ -559,7 +612,7 @@ defmodule HologramFeatureTests.MutationsTest do
 
   feature "names how to read a field of a quantifier's row in the browser", %{session: session} do
     expected_msg =
-      "unknown attribute :position in HologramFeatureTests.Entities.Channel - known attributes: :created_at, :id, :message_count, :name, :updated_at - HologramFeatureTests.Entities.Message declares position, read as message.position"
+      "unknown attribute :position in HologramFeatureTests.Entities.Channel - known attributes: :created_at, :id, :message_count, :name, :server_created_at, :server_updated_at, :updated_at - HologramFeatureTests.Entities.Message declares position, read as message.position"
 
     assert_client_error session, Hologram.MisuseError, expected_msg, fn ->
       session

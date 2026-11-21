@@ -15,6 +15,7 @@ import ManuallyPortedElixirHologramJob from "../../assets/js/elixir/hologram/job
 import ManuallyPortedElixirHologramQueryStage from "../../assets/js/elixir/hologram/query/stage.mjs";
 import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
+import QueryCheck from "../../assets/js/query_check.mjs";
 import QuerySpelling from "../../assets/js/query_spelling.mjs";
 import ReloadNotice from "../../assets/js/reload_notice.mjs";
 import Replica from "../../assets/js/replica.mjs";
@@ -165,8 +166,26 @@ describe("DataLayer", () => {
       assert.deepStrictEqual(result, Type.integer(1));
     });
 
+    it("spells no key for a count once the whole pot is complete", () => {
+      LocalDatabase.markAllSynced();
+
+      const spell = sinon.spy(QuerySpelling, "spell");
+
+      DataLayer.answerDerivedQuery(
+        "MyApp.Complete",
+        Type.atom("count"),
+        [],
+        notDoneCount(),
+      );
+
+      sinon.assert.notCalled(spell);
+    });
+
+    // The types the server carried with the count, under the count's own key.
     const countReading = (module, types) => {
-      globalThis.Hologram.sync.countTypes = {[module]: {count: types}};
+      LocalDatabase.syncCountTypes = {
+        [carriedKey(module, "count", notDoneCount())]: types,
+      };
     };
 
     // Whichever page the component is on, and whether or not the stream connected on it: a type's
@@ -225,8 +244,8 @@ describe("DataLayer", () => {
       assert.deepStrictEqual(result, Type.integer(42));
     });
 
-    // A field the build listed no types for can only count on the whole pot.
-    it("keeps carrying until everything is complete for a count with no types listed", () => {
+    // A count carried with no types can only count on the whole pot.
+    it("keeps carrying until everything is complete for a count carried with no types", () => {
       LocalDatabase.syncCounts = {
         [carriedKey("MyApp.Unlisted", "count", notDoneCount())]: 42,
       };
@@ -258,6 +277,31 @@ describe("DataLayer", () => {
       );
 
       assert.deepStrictEqual(result, Type.integer(7));
+    });
+
+    // The types travel per query, not per field: one instance's types being complete says nothing
+    // about another's.
+    it("waits for the types the query it ran reads, apart from another instance's", () => {
+      const synced = carriedKey("MyApp.TwoReads", "count", doneCount(true));
+      const filling = carriedKey("MyApp.TwoReads", "count", doneCount(false));
+
+      LocalDatabase.syncCounts = {[filling]: 42, [synced]: 7};
+      LocalDatabase.syncCountTypes = {
+        [filling]: ["MyApp.Project"],
+        [synced]: [TASK],
+      };
+      LocalDatabase.markTypesSynced([TASK]);
+
+      const answer = (done) =>
+        DataLayer.answerDerivedQuery(
+          "MyApp.TwoReads",
+          Type.atom("count"),
+          [Type.boolean(done)],
+          doneCount(done),
+        );
+
+      assert.deepStrictEqual(answer(true), Type.integer(1));
+      assert.deepStrictEqual(answer(false), Type.integer(42));
     });
 
     it("leaves a query that does not count alone", () => {
@@ -782,38 +826,63 @@ describe("DataLayer", () => {
       applying = sinon.stub(Deltas, "apply");
 
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
+      LocalDatabase.syncCountTypes = {};
       LocalDatabase.syncCounts = {};
     });
 
     afterEach(() => {
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
+      LocalDatabase.syncCountTypes = {};
       LocalDatabase.syncCounts = {};
     });
 
-    it("files the rows the page carried, and the counts beside them", () => {
+    it("files the rows the page carried, and the counts beside them with their types", () => {
       const rows = {put_entity: {"MyApp.Task": [{id: "t1"}]}};
 
       DataLayer.ingestMountData({
+        actorEntityId: "u1",
         actorUserId: "u1",
+        syncCountTypes: {"MyApp.Counting/count/": ["MyApp.Task"]},
         syncCounts: {"MyApp.Counting/count/": 3},
         syncRows: rows,
       });
 
       sinon.assert.calledOnceWithExactly(applying, rows, {insertOnly: true});
 
+      assert.equal(LocalDatabase.actorEntityId, "u1");
       assert.equal(LocalDatabase.actorUserId, "u1");
 
       assert.deepStrictEqual(LocalDatabase.syncCounts, {
         "MyApp.Counting/count/": 3,
       });
+
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {
+        "MyApp.Counting/count/": ["MyApp.Task"],
+      });
+    });
+
+    // The server sends a user id no user entity can have as it is, beside no entity id.
+    it("files a user id no user entity can have beside no entity id", () => {
+      DataLayer.ingestMountData({
+        actorEntityId: null,
+        actorUserId: 7,
+        syncRows: {},
+      });
+
+      assert.isNull(LocalDatabase.actorEntityId);
+      assert.equal(LocalDatabase.actorUserId, 7);
     });
 
     it("takes counts the page did not carry as none", () => {
       LocalDatabase.syncCounts = {"MyApp.Stale/count/": 9};
+      LocalDatabase.syncCountTypes = {"MyApp.Stale/count/": ["MyApp.Task"]};
 
       DataLayer.ingestMountData({actorUserId: null, syncRows: {}});
 
       assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
     });
 
     it("leaves the database as it was for mount data carrying no rows", () => {
@@ -824,6 +893,7 @@ describe("DataLayer", () => {
       sinon.assert.notCalled(applying);
 
       assert.isNull(LocalDatabase.actorUserId);
+      assert.isNull(LocalDatabase.actorEntityId);
       assert.deepStrictEqual(LocalDatabase.syncCounts, {
         "MyApp.Held/count/": 9,
       });
@@ -881,6 +951,153 @@ describe("DataLayer", () => {
       DataLayer.openBatch("my_component");
 
       sinon.assert.calledOnceWithExactly(opening, "my_component");
+    });
+  });
+
+  describe("queryRefusal()", () => {
+    it("answers why the browser can't answer a query, as QueryCheck does", () => {
+      globalThis.Hologram.sync = {
+        model: {
+          "MyApp.Task": {
+            attributes: {id: "uuid", token: "string"},
+            relationships: {},
+            serverOnly: ["token"],
+          },
+        },
+      };
+
+      Model.reset();
+
+      const term = {
+        cardinality: "set",
+        entity: "MyApp.Task",
+        filter: [["token", "==", "x"]],
+        include: {},
+        skip: null,
+        sort: [],
+        take: null,
+      };
+
+      assert.strictEqual(
+        DataLayer.queryRefusal(term),
+        QueryCheck.refusal(term),
+      );
+      assert.match(DataLayer.queryRefusal(term), /^filters or sorts/);
+    });
+
+    // In the order the server refuses them: what the browser may not hold, then what sync never
+    // sends.
+    it("refuses a type sync never sends once nothing else is refused", () => {
+      globalThis.Hologram.sync = {
+        model: {
+          "MyApp.Task": {
+            attributes: {id: "uuid", token: "string"},
+            relationships: {},
+            serverOnly: ["token"],
+          },
+        },
+        syncedTypes: [],
+      };
+
+      Model.reset();
+
+      const term = (filter) => ({
+        cardinality: "set",
+        entity: "MyApp.Task",
+        filter,
+        include: {},
+        skip: null,
+        sort: [],
+        take: null,
+      });
+
+      assert.match(
+        DataLayer.queryRefusal(term([["token", "==", "x"]])),
+        /^filters or sorts/,
+      );
+
+      assert.match(
+        DataLayer.queryRefusal(term([])),
+        /^reads MyApp\.Task, which browser code never names/,
+      );
+    });
+
+    describe("its cache", () => {
+      const term = (filter) => ({
+        cardinality: "set",
+        entity: "MyApp.Task",
+        filter,
+        include: {},
+        skip: null,
+        sort: [],
+        take: null,
+      });
+
+      beforeEach(() => {
+        globalThis.Hologram.sync = {
+          model: {
+            "MyApp.Task": {
+              attributes: {id: "uuid", title: "string"},
+              relationships: {},
+              serverOnly: [],
+            },
+          },
+          syncedTypes: ["MyApp.Task"],
+        };
+
+        Model.reset();
+      });
+
+      // Every render asks again, so a query spelled alike - whatever object holds it - is answered
+      // from what the first ask worked out.
+      it("works out a query spelled alike once", () => {
+        const refusal = sinon.spy(QueryCheck, "refusal");
+
+        assert.isNull(DataLayer.queryRefusal(term([["title", "==", "x"]])));
+        assert.isNull(DataLayer.queryRefusal(term([["title", "==", "x"]])));
+
+        sinon.assert.calledOnce(refusal);
+      });
+
+      it("works out a query spelled otherwise anew", () => {
+        const refusal = sinon.spy(QueryCheck, "refusal");
+
+        DataLayer.queryRefusal(term([["title", "==", "x"]]));
+        DataLayer.queryRefusal(term([["title", "==", "y"]]));
+
+        sinon.assert.calledTwice(refusal);
+      });
+
+      // A long text a user keeps editing would otherwise keep every version of itself.
+      it("keeps no answer for a query with a very long spelling", () => {
+        const refusal = sinon.spy(QueryCheck, "refusal");
+        const query = term([["title", "==", "x".repeat(5000)]]);
+
+        DataLayer.queryRefusal(query);
+        DataLayer.queryRefusal(query);
+
+        sinon.assert.calledTwice(refusal);
+      });
+
+      it("works out anew once the synced types change", () => {
+        assert.isNull(DataLayer.queryRefusal(term([])));
+
+        globalThis.Hologram.sync.syncedTypes = [];
+
+        assert.match(DataLayer.queryRefusal(term([])), /^reads MyApp\.Task/);
+      });
+
+      // A rules frame reads the model afresh, which can make an attribute server-only.
+      it("works out anew once the model is read afresh", () => {
+        const query = term([["title", "==", "x"]]);
+
+        assert.isNull(DataLayer.queryRefusal(query));
+
+        globalThis.Hologram.sync.model["MyApp.Task"].serverOnly = ["title"];
+        Model.reset();
+
+        assert.match(DataLayer.queryRefusal(query), /^filters or sorts/);
+      });
     });
   });
 
@@ -1024,7 +1241,11 @@ describe("DataLayer", () => {
       globalThis.Hologram.sync = {
         model: {
           [USER]: {
-            attributes: {email: "string", id: "uuid", password_hash: "string"},
+            attributes: {
+              email: "string",
+              id: "uuid",
+              password_hash: "string",
+            },
             relationships: {},
             serverOnly: ["password_hash"],
           },
@@ -1035,6 +1256,7 @@ describe("DataLayer", () => {
       Model.reset();
       LocalDatabase.reset();
       LocalDatabase.actorUserId = "u1";
+      LocalDatabase.actorEntityId = "u1";
 
       LocalDatabase.putRow(USER, {
         email: "ann@example.com",
@@ -1052,8 +1274,17 @@ describe("DataLayer", () => {
     afterEach(() => {
       LocalDatabase.reset();
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
       Overlay.reset();
       delete globalThis.Hologram.sync;
+    });
+
+    // The server reads a user id no user entity can have as no session user, even one spelled like
+    // a row's id, so this does too.
+    it("answers nil for a user id no user entity can have", () => {
+      LocalDatabase.actorEntityId = null;
+
+      assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
     });
 
     it("answers the acting user's row", () => {
@@ -1114,12 +1345,14 @@ describe("DataLayer", () => {
 
     it("answers nil when the acting user's row isn't held", () => {
       LocalDatabase.actorUserId = "u3";
+      LocalDatabase.actorEntityId = "u3";
 
       assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
     });
 
     it("answers nil for an anonymous session", () => {
       LocalDatabase.actorUserId = null;
+      LocalDatabase.actorEntityId = null;
 
       assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
     });
@@ -1127,6 +1360,7 @@ describe("DataLayer", () => {
     // The server reads no row for a session user id that is not a canonical entity id.
     it("answers nil for an actor id spelled like a member every object inherits", () => {
       LocalDatabase.actorUserId = "constructor";
+      LocalDatabase.actorEntityId = "constructor";
 
       assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
     });
@@ -1140,6 +1374,7 @@ describe("DataLayer", () => {
       });
 
       LocalDatabase.actorUserId = undefined;
+      LocalDatabase.actorEntityId = undefined;
 
       assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
     });

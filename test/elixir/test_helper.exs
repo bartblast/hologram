@@ -8,7 +8,7 @@ alias Hologram.DB.QueryCache
 alias Hologram.LiveReload
 alias Hologram.Reflection
 alias Hologram.Router.PageModuleResolver
-alias Hologram.Sync.PageWindows, as: SyncPageWindows
+alias Hologram.Sync.PageTypes, as: SyncPageTypes
 
 # Create tmp dir if it doesn't exist yet.
 File.mkdir_p!(Reflection.tmp_dir())
@@ -25,7 +25,7 @@ exclude_opts =
     {:win32, _name} -> [:skip_on_windows]
   end
 
-# Make OTP's :cover available (tools app) - the extractor tests exercise
+# Make OTP's :cover available (tools app) - the compiler cover tests exercise
 # cover-compiled modules, and the reference must resolve at test compile time.
 Mix.ensure_application!(:tools)
 
@@ -52,10 +52,12 @@ PLT.dump(module_info_plt, module_info_plt_dump_path)
 PLT.stop(module_info_plt)
 
 # A running app holds every derived field's definition before anything reads its policies - the
-# build puts them, and the query cache at boot. A support fixture whose rule reads a derived set has
-# every write, frame and edges index read that set's definition, so each such fixture's are put for
-# the whole run - one added later belongs in this list.
+# build puts them, and the query cache at boot. A support fixture whose rule reads a derived set, or
+# whose verdicts' keys digest a derived field's definition, has every write, frame and edges index
+# read that definition, so each such fixture's are put for the whole run - one added later belongs
+# in this list.
 Hologram.Test.Helpers.put_derived_definitions([
+  Hologram.Test.Fixtures.Entity.Module42,
   Hologram.Test.Fixtures.Policy.Module22,
   Hologram.Test.Fixtures.Policy.Module30,
   Hologram.Test.Fixtures.Policy.Module31,
@@ -121,8 +123,8 @@ Application.put_env(:hologram, :page_module_resolver_impl, PageModuleResolverMoc
 Mox.defmock(PageDigestRegistryMock, for: PageDigestRegistry)
 Application.put_env(:hologram, :page_digest_registry_impl, PageDigestRegistryMock)
 
-Mox.defmock(SyncPageWindowsMock, for: SyncPageWindows)
-Application.put_env(:hologram, :sync_page_windows_impl, SyncPageWindowsMock)
+Mox.defmock(SyncPageTypesMock, for: SyncPageTypes)
+Application.put_env(:hologram, :sync_page_types_impl, SyncPageTypesMock)
 
 Mox.defmock(QueryCacheMock, for: QueryCache)
 Application.put_env(:hologram, :query_cache_impl, QueryCacheMock)

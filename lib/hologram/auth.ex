@@ -10,7 +10,6 @@ defmodule Hologram.Auth do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Mapper
-  alias Hologram.DB.Oplog
   alias Hologram.DB.QueryRunner
   alias Hologram.DB.SetLock
   alias Hologram.Entity
@@ -21,7 +20,6 @@ defmodule Hologram.Auth do
   alias Hologram.Policy.Evaluator
   alias Hologram.Query
   alias Hologram.Query.Stage
-  alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Server
   alias Hologram.Sync.Carry
@@ -29,45 +27,6 @@ defmodule Hologram.Auth do
   # The shape refusal can?/3 shares with its client twin (operationKey in
   # assets/js/elixir/hologram/auth.mjs) - a hand-ported pair, pinned on both tiers.
   @operation_shape_message "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
-
-  @doc """
-  Returns the window a client checking permissions locally downloads: every grant row, narrowed
-  per client by the policy the read path applies - each client receives its own grants plus the
-  ones it may administer, and nothing else.
-
-  Derived here rather than in either caller so that the build (which decides which pages
-  subscribe to it) and the query cache (which resolves the id back to a term) name one window
-  and not two.
-  """
-  @spec grants_window() :: Query.t()
-  def grants_window do
-    # Only a client checking permissions downloads it, so it is derived as one. The grant store's
-    # rules read no row through a relationship, so nothing is embedded either way.
-    RoleGrant
-    |> Stage.normalize()
-    |> Window.derive(true)
-  end
-
-  @doc """
-  Returns the window a client reading the session user from the context downloads: every row of
-  the given user entity type, narrowed per client by the policy the read path applies - so the
-  session user's own row reaches the client whenever its read rules admit it, and changes to it
-  keep reaching it.
-
-  Every row rather than the session user's alone: a window runs once per node for every session
-  holding it, so nothing in it can name one session's user. The read rules decide how much more
-  arrives - one row for a type only its own user may read, every row for one anybody may read.
-
-  Derived with whether the build checks permissions on the client, as every registered query's
-  window is, so the build (which decides which pages subscribe to it) and the query cache (which
-  resolves the id back to a term) name one window and not two.
-  """
-  @spec user_window(module, boolean) :: Query.t()
-  def user_window(user_entity, permission_checking?) do
-    user_entity
-    |> Stage.normalize()
-    |> Window.derive(permission_checking?)
-  end
 
   @doc """
   Returns the grant rows answering the permission checks a render ran - the rows the given
@@ -83,7 +42,9 @@ defmodule Hologram.Auth do
   """
   @spec carried_grants(MapSet.t({String.t() | nil, tuple | atom})) :: list(struct)
   def carried_grants(scopes) do
-    session_user_id = user_id()
+    # A user id no user entity can have reads as an anonymous session, which no grant row's read
+    # rules admit, so it carries none, as an anonymous session doesn't - without asking.
+    session_user_id = canonical_id(user_id())
 
     if session_user_id && MapSet.size(scopes) > 0 do
       scopes
@@ -115,6 +76,17 @@ defmodule Hologram.Auth do
   asks the same of every field in the list, each covered by some line that holds - what an update
   changing them all needs. The bare `:update` counts only the lines covering the whole row. A field
   is one of `Hologram.Policy.update_fields/1`, a to-one by its relationship name.
+
+  In the browser, a rule reading a related row the user may not read - through a condition, a set, a
+  role reference or a delegation - is answered from the server's verdict on the row as stored, sent
+  with it (see `Hologram.Policy.verdict_operations/1`), since the browser holds only the rows its
+  user may read. Where no verdict speaks for the question, the browser answers no while the server
+  may answer yes: a check on a new struct, any create among them, or on a struct an action changed
+  and hasn't written yet, a check on, or delegating to, a row the browser created that the server
+  hasn't sent back with its verdicts, a check about another user, or about a visitor in a signed-in
+  session, a check while a write of the browser's the server hasn't answered names a type the
+  operation's rules read, and a rule delegating `:create` to a row whose create rules read a row the
+  browser doesn't hold.
   """
   @spec can?(struct | Server.identity_id() | nil, atom | {atom, atom | list(atom)}, struct) ::
           boolean
@@ -199,31 +171,6 @@ defmodule Hologram.Auth do
       nil -> nil
       row -> related_id(row, last_name)
     end
-  end
-
-  # The grants the given user held before the given grant effects were written - what a resuming
-  # client's rules were answered against at the place it is coming back from: the grants it holds
-  # NOW, with everything the log says has happened to them since taken back off.
-  #
-  # Undone from the present BACKWARDS, which is what makes a grant given and taken back inside the
-  # run answer correctly - forwards, its creation would be undone before its deletion put it back,
-  # leaving a grant the user never held. Grant rows are only ever created and deleted, never
-  # patched, so undoing one is adding or removing a whole row and the order is the only subtlety.
-  #
-  # A deleted grant is rebuilt from what its effect recorded, which is why a delete carries the
-  # row it removed.
-  @doc false
-  @spec grants_before(String.t(), list(map)) :: list(struct)
-  def grants_before(user_id, grant_effects) do
-    current =
-      RoleGrant
-      |> Query.filter(user_id: ^user_id)
-      |> Stage.normalize()
-      |> QueryRunner.run(DB.mapping())
-
-    grant_effects
-    |> Enum.reverse()
-    |> Enum.reduce(current, &undo_grant_effect/2)
   end
 
   @doc """
@@ -501,33 +448,50 @@ defmodule Hologram.Auth do
   `Hologram.Server.put_user_id/2`), an entity id when the app signs its user entity in - or nil
   when the session is anonymous. Framework wrappers set the actor around the work they run, so the
   value always comes from an authenticated session and never from anything a client sends.
+
+  A user id no user entity can have - an app's own serial id, say - is returned as it is. The data
+  layer reads such a session as one with no user: its rules answer it as an anonymous session, and
+  its writes are judged by them rather than trusted.
   """
   @spec user_id() :: Server.identity_id() | nil
   defdelegate user_id, to: Context, as: :actor_user_id
 
   @doc """
-  Returns the server's verdict on each deciding item of the given row's type (see
-  `Hologram.Policy.deciding_quantifiers/1`) for the given user, keyed by its verdict key: whether
-  the item holds for the row, read as stored, as the rule `Hologram.Policy.verdict_rule/1` gives
-  it - what a client answers such an item by, since the rows it holds of a set can't decide one for
-  certain, it never holds a server-only value, and it never holds a row of a type nobody may read.
-  Empty for a type with none. Takes nil for an anonymous session. An item several keys share - one
-  written for several operations, or a grant lifecycle line expanded per role - is answered once.
+  Returns the server's verdict on each operation of the given row's type it sends one on (see
+  `Hologram.Policy.verdict_operations/1`) for the given user, keyed by its verdict key: what
+  `can?/3` answers for the operation on the row, read as stored - what a client answers the
+  operation by when the rows it holds leave the answer open. The read verdict is true without
+  asking, since a client is sent only rows its user may read. Empty for a type with none. Takes
+  nil for an anonymous session. A rule several operations share - a whole-row update rule covering
+  a field's operation too - is answered once.
   """
   @spec verdicts(Server.identity_id() | nil, struct) :: %{String.t() => boolean}
   def verdicts(actor_user_id, %entity_type{} = row) do
-    checker = &check_requirement(&1, &2, &3, :stored)
+    case Policy.verdict_operations(entity_type) do
+      [] ->
+        %{}
 
-    entity_type
-    |> Policy.deciding_quantifiers()
-    |> Enum.group_by(fn {_key, item} -> item end, fn {key, _item} -> key end)
-    |> Enum.flat_map(fn {item, keys} ->
-      rule = Policy.verdict_rule(item)
-      holds? = Evaluator.rule_matches?(rule, row, canonical_id(actor_user_id), checker)
+      pairs ->
+        policy = Policy.build(entity_type)
+        checker = &check_requirement(&1, &2, &3, :stored)
+        canonical_user_id = canonical_id(actor_user_id)
 
-      Enum.map(keys, &{&1, holds?})
-    end)
-    |> Map.new()
+        {answers, _held_by_rule} =
+          Enum.map_reduce(pairs, %{}, fn
+            {key, :read}, held_by_rule ->
+              {{key, true}, held_by_rule}
+
+            {key, operation}, held_by_rule ->
+              rules = Policy.operation_rules(policy, operation)
+
+              {holds?, held_by_rule} =
+                covered?(rules, row, canonical_user_id, checker, held_by_rule)
+
+              {{key, holds?}, held_by_rule}
+          end)
+
+        Map.new(answers)
+    end
   end
 
   # The acting user as rules read it - nil, an anonymous session, for an id no user entity can have.
@@ -1131,14 +1095,6 @@ defmodule Hologram.Auth do
       is_atom(relationship_target(entity_type, relationship_name))
   end
 
-  defp undo_grant_effect(%{op: :put_entity, entity_id: id}, grants) do
-    Enum.reject(grants, &(&1.id == id))
-  end
-
-  defp undo_grant_effect(%{op: :del_entity, data: data}, grants) do
-    [Oplog.entity_from_data(RoleGrant, data) | grants]
-  end
-
   defp unknown_global_role_message(role) do
     case Model.roles() do
       [] ->
@@ -1210,10 +1166,18 @@ defmodule Hologram.Auth do
   defp gate_entity(entity_type, entity_id), do: struct(entity_type, id: entity_id)
 
   # The roles the acting user holds that reach the entity, as the gate reads them: on the row
-  # itself or on its whole type, and the global roles held app-wide. Sorted, own names first.
+  # itself or on its whole type, and the global roles held app-wide. Sorted, own names first. No
+  # stored grant names an id no user entity can have, so there is nothing to look up for one.
   defp held_role_names(actor_user_id, entity_type, entity_id) do
+    case canonical_id(actor_user_id) do
+      nil -> []
+      user_id -> stored_role_names(user_id, entity_type, entity_id)
+    end
+  end
+
+  defp stored_role_names(user_id, entity_type, entity_id) do
     RoleGrant
-    |> Query.filter(user_id: ^actor_user_id)
+    |> Query.filter(user_id: ^user_id)
     |> Stage.normalize()
     |> QueryRunner.run(DB.mapping())
     |> Enum.filter(fn grant ->
@@ -1291,7 +1255,7 @@ defmodule Hologram.Auth do
       id: RoleGrant.derive_id(user_id, entity_type, entity_id, role),
       entity_id: entity_id,
       entity_type: entity_type,
-      granted_by_id: Context.actor_user_id(),
+      granted_by_id: Context.actor_entity_id(),
       role: role,
       user_id: user_id
     }

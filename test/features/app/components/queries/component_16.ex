@@ -35,8 +35,8 @@ defmodule HologramFeatureTests.Components.Queries.Component16 do
     end
   end
 
-  # The name is pinned, so the window downloads every channel with its messages and topic while
-  # the render reads one.
+  # The name is pinned, so the browser holds every channel the user may read, with its messages and
+  # topic, while the render reads one.
   defp channels_query(channel_name) do
     Channel
     |> filter(name == ^channel_name)

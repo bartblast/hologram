@@ -20,8 +20,6 @@ defmodule HologramFeatureTests.ServerOnlyRulesTest do
   # The memo, note, project member and role grant tables reference the user table, so they truncate
   # with it.
   setup do
-    await_evaluator_drain()
-
     truncate_entity_tables([
       Inspection,
       Memo,
@@ -99,7 +97,7 @@ defmodule HologramFeatureTests.ServerOnlyRulesTest do
 
   # The note's update rule asks the report's read rule, so the browser answers it from the
   # server's verdict on the report. A note on an unreviewed report is sent too, but its report
-  # isn't, so the browser can't decide that check and refuses it.
+  # isn't, so the browser answers it from the note's own verdict, which refuses it.
   feature "lets the user edit a note on a reviewed report arriving on the stream", %{
     session: session
   } do

@@ -20,7 +20,6 @@ defmodule Hologram.Sync.Live do
   alias Hologram.DB.QueryCache
   alias Hologram.Policy
   alias Hologram.Policy.Edges
-  alias Hologram.Sync.Fanout
   alias Hologram.Sync.PackedIds
   alias Hologram.Sync.Recheck
   alias Hologram.Sync.Search
@@ -41,7 +40,9 @@ defmodule Hologram.Sync.Live do
 
   @type part :: %{
           checked: %{module => binary},
+          moved: %{module => binary},
           overtaking_seqs: %{String.t() => non_neg_integer},
+          own_puts: %{String.t() => %{module => binary}},
           own_seqs: %{String.t() => non_neg_integer},
           pair_effects: %{{module, atom, module} => binary},
           pairs: %{{module, atom, module} => binary},
@@ -70,16 +71,27 @@ defmodule Hologram.Sync.Live do
     `Hologram.Sync.PackedIds.pack/1`). A checked row missing from `readable` is one the user may
     not read now, or one that is gone. Packed because it goes to every session: a binary that size
     is shared between the processes it is sent to, where a set of ids is copied into each of them.
+  - `moved` - the checked rows whose read access the batch may have moved, per entity type, packed:
+    the rows the backwards search reached, and the batch's own rows it created, deleted, or patched
+    on an attribute their type's read rule reads. The only rows a client can have lost without its
+    session knowing it held them (see `Hologram.Sync.Session`): a row the batch only renamed
+    reads as it did, and a pair moves only the rows whose rules read its set, which the search
+    reaches
   - `pair_effects` - the pairs the batch added or removed, once however many times it moved each,
     keyed by `{source type, relationship name, target type}`, the name an atom, each pair packed as
     its source id and its target id (see `Hologram.Sync.PackedIds.pack_pairs/1`)
   - `pairs` - every pair as it stands now that has a checked row at either end, keyed and packed
     the same way (see `pairs_touching/2`): what a row's sets are, whether a pair the batch moved is
     there now, and the pairs filed under other rows that a row arriving or leaving changes
+  - `own_puts` - per replica, the rows its batches among the effects put, per entity type, packed:
+    the rows it created, which its client files on its own once their batch is confirmed, so a
+    session tells its client to drop the ones its user may not read, though it never told the
+    client of them (see `Hologram.Sync.Pot.decide/3`)
   - `own_seqs` - per replica, the highest sequence number among the batches of it the effects came
     from
   - `overtaking_seqs` - per replica, the highest sequence number among its batches in a
-    transaction above the batch's, read in the same snapshot as the rows (see
+    transaction above the batch's (or above a given one, see `part/6`), read in the same snapshot
+    as the rows (see
     `Hologram.DB.Oplog.replica_seqs_after/1`). The rows are read after the effects, so they can
     hold a replica's batch the effects don't - and what the rows have applied of a replica's
     writes is the higher of this and `own_seqs` (see `Hologram.Sync.Session`)
@@ -90,13 +102,14 @@ defmodule Hologram.Sync.Live do
 
   - `readable` - the checked rows the user may read, as they stand now, keyed by id per entity type,
     with an empty map for a checked type the user may read none of
-  - `verdicts` - the server's verdicts for the user on the readable rows of each type with a
-    deciding quantifier, keyed by id per entity type - what `Hologram.Sync.Frame.row_verdicts/2`
-    answers for the user and the row, read in the batch's recheck (see `Hologram.Sync.Recheck`), so
-    no session works one out for a batch's rows - with an empty map for such a type the user may
-    read none of. In a build checking permissions on the client, every readable checked row of such
-    a type has them: given the verdicts' edges, the backwards search finds the rows whose verdicts
-    the batch may have moved together with those whose read access it may have
+  - `verdicts` - the server's verdicts for the user on the readable rows of each type the server
+    sends verdicts on (see `Hologram.Policy.verdict_operations/1`), keyed by id per entity type -
+    what `Hologram.Sync.Frame.row_verdicts/2` answers for the user and the row, read in the batch's
+    recheck (see `Hologram.Sync.Recheck`), so no session works one out for a batch's rows - with an
+    empty map for such a type the user may read none of. In a build checking permissions on the
+    client, every readable checked row of such a type has them: given the verdicts' edges, the
+    backwards search finds the rows whose verdicts the batch may have moved together with those
+    whose read access it may have
   - `written` - per readable row, the names of the attributes the batch's puts and patches wrote, as
     the log spells them - all a patch needs, and only for a row a patch can go out for
   - `whole_types` - the entity types a grant change in the batch may have moved every row of for
@@ -116,6 +129,77 @@ defmodule Hologram.Sync.Live do
           {non_neg_integer, non_neg_integer}
         ) :: %{(String.t() | nil) => part}
   def parts(effects, sessions, edges, synced_types, place) do
+    {:ok, parts} =
+      Connection.snapshot(fn -> parts_now(effects, sessions, edges, synced_types, place) end)
+
+    parts
+  end
+
+  @doc """
+  Returns the part of the given effects that is the given user's, as `parts/5` works it out for a
+  session of that user - what a returning client's catch-up decides each chunk of its gap with. The
+  user is put into the spelling the node's sessions are listed by (see
+  `Hologram.Auth.canonical_id/1`).
+
+  Its `overtaking_seqs` are of the batches in a transaction above the given one rather than above
+  the effects' highest. A chunk of a gap isn't bounded the way a batch is: the gap holds every
+  effect committed when it was read, so a transaction below the chunk's highest can have been open
+  then, and commit before the chunk's rows are read - and the rows hold it. And a chunk can end
+  inside a transaction, whose batches with effects only in a later chunk the rows hold too.
+  """
+  @spec part(
+          list(map),
+          String.t() | nil,
+          %{{module, atom} => list(tuple)},
+          list(module),
+          {non_neg_integer, non_neg_integer},
+          non_neg_integer
+        ) :: part
+  def part(effects, user_id, edges, synced_types, place, overtaken_above) do
+    {:ok, part} =
+      Connection.snapshot(fn ->
+        part_now(effects, user_id, edges, synced_types, place, overtaken_above)
+      end)
+
+    part
+  end
+
+  @doc """
+  Reads what `part/6` reads in whatever transaction the caller is in, which agrees with itself only
+  when that transaction reads every statement from one snapshot - what `part/6` opens.
+  """
+  @spec part_now(
+          list(map),
+          String.t() | nil,
+          %{{module, atom} => list(tuple)},
+          list(module),
+          {non_neg_integer, non_neg_integer},
+          non_neg_integer
+        ) :: part
+  def part_now(effects, user_id, edges, synced_types, place, overtaken_above) do
+    canonical_user_id = Auth.canonical_id(user_id)
+    sessions = [{self(), canonical_user_id}]
+
+    effects
+    |> parts_now(sessions, edges, synced_types, place, overtaken_above)
+    |> Map.fetch!(canonical_user_id)
+  end
+
+  @doc """
+  Reads what `parts/5` reads in whatever transaction the caller is in, which agrees with itself only
+  when that transaction reads every statement from one snapshot - what `parts/5` opens. Given a
+  transaction id, the overtaking batches are the ones above it (see `part/6`) rather than above the
+  effects' highest.
+  """
+  @spec parts_now(
+          list(map),
+          list({pid, String.t() | nil}),
+          %{{module, atom} => list(tuple)},
+          list(module),
+          {non_neg_integer, non_neg_integer},
+          non_neg_integer | nil
+        ) :: %{(String.t() | nil) => part}
+  def parts_now(effects, sessions, edges, synced_types, place, overtaken_above \\ nil) do
     synced = MapSet.new(synced_types)
     pair_effects = pair_effects(effects, synced)
 
@@ -133,28 +217,32 @@ defmodule Hologram.Sync.Live do
 
     tx_range = tx_range(effects)
 
-    {:ok, {searched, checked, rechecked, pairs, overtaking_seqs}} =
-      Connection.snapshot(fn ->
-        searched = Search.candidates(effects, synced_edges)
+    searched = Search.candidates(effects, synced_edges)
 
-        checked =
-          effects
-          |> own_rows(pair_effects)
-          |> merge_rows(searched.rows)
-          |> Map.filter(fn {entity_type, _ids} -> MapSet.member?(synced, entity_type) end)
+    checked =
+      effects
+      |> own_rows(pair_effects)
+      |> merge_rows(searched.rows)
+      |> Map.filter(fn {entity_type, _ids} -> MapSet.member?(synced, entity_type) end)
 
-        rechecked = recheck(checked, user_ids)
+    moved =
+      effects
+      |> moved_rows(synced_edges)
+      |> merge_rows(searched.rows)
+      |> Map.filter(fn {entity_type, _ids} -> MapSet.member?(synced, entity_type) end)
 
-        pairs = pairs_touching(checked, synced_types)
+    rechecked = recheck(checked, user_ids)
 
-        {_lowest_tx, highest_tx} = tx_range
+    pairs = pairs_touching(checked, synced_types)
 
-        {searched, checked, rechecked, pairs, Oplog.replica_seqs_after(highest_tx)}
-      end)
+    {_lowest_tx, highest_tx} = tx_range
+    overtaking_seqs = Oplog.replica_seqs_after(overtaken_above || highest_tx)
 
     shared = %{
       checked: Map.new(checked, fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end),
+      moved: Map.new(moved, fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end),
       overtaking_seqs: overtaking_seqs,
+      own_puts: own_puts(effects, synced),
       own_seqs: own_seqs(effects),
       pair_effects: pack_pair_effects(pair_effects),
       pairs: pairs,
@@ -228,17 +316,14 @@ defmodule Hologram.Sync.Live do
   end
 
   @doc """
-  Hands the given transactions, read from the given place, to everything on this node that keeps
-  clients up to date: the windows' evaluators (see `Hologram.Sync.Fanout.route/2`), and every sync
-  session, each sent `{:live, part}` with its user's part of the batch (see `parts/5`).
+  Hands the given transactions, read from the given place, to every sync session on this node, each
+  sent `{:live, part}` with its user's part of the batch (see `parts/5`).
 
   With no session on the node, nothing is read for them. In a build where no client checks
   permissions, the rows carry no verdicts, so the search follows only the read rules' edges.
   """
   @spec route(list({non_neg_integer, list(map)}), {non_neg_integer, non_neg_integer}) :: :ok
   def route(transactions, place) do
-    Fanout.route(transactions, place)
-
     case Sessions.list() do
       [] ->
         :ok
@@ -246,9 +331,9 @@ defmodule Hologram.Sync.Live do
       sessions ->
         effects = Enum.flat_map(transactions, fn {_tx, events} -> events end)
 
-        # Read from the runtime's caches rather than derived per batch, as the fan-out reads them.
-        # A build where no client checks permissions sends its rows without verdicts, so the search
-        # follows only the read rules' edges.
+        # Read from the runtime's caches rather than derived per batch. A build where no client
+        # checks permissions sends its rows without verdicts, so the search follows only the read
+        # rules' edges.
         edges = Edges.index(QueryCache.permission_checking?())
 
         parts = parts(effects, sessions, edges, QueryCache.synced_types(), place)
@@ -271,6 +356,42 @@ defmodule Hologram.Sync.Live do
     Map.merge(rows, more_rows, fn _entity_type, ids, more_ids -> MapSet.union(ids, more_ids) end)
   end
 
+  # The batch's own rows whose read access it may have moved: one it created or deleted, and one it
+  # patched on an attribute its type's read rule reads - as the log spells the attribute, so nothing
+  # read from it becomes an atom.
+  defp moved_rows(effects, edges) do
+    read_names =
+      effects
+      |> Enum.map(& &1.type)
+      |> Enum.uniq()
+      |> Map.new(&{&1, own_read_names(edges, &1)})
+
+    effects
+    |> Enum.filter(&own_row_moved?(&1, read_names))
+    |> Enum.group_by(& &1.type, & &1.entity_id)
+    |> Map.new(fn {entity_type, ids} -> {entity_type, MapSet.new(ids)} end)
+  end
+
+  defp own_read_names(edges, entity_type) do
+    for {:attributes, names} <- Map.get(edges, {entity_type, :read}, []),
+        name <- names,
+        into: MapSet.new(),
+        do: Atom.to_string(name)
+  end
+
+  defp own_row_moved?(%{op: op}, _read_names) when op in [:del_entity, :put_entity], do: true
+
+  defp own_row_moved?(%{data: data, op: :patch_entity, type: entity_type}, read_names)
+       when is_map(data) do
+    names = Map.get(read_names, entity_type, MapSet.new())
+
+    data
+    |> Map.keys()
+    |> Enum.any?(&MapSet.member?(names, &1))
+  end
+
+  defp own_row_moved?(_effect, _read_names), do: false
+
   defp own_rows(effects, pair_effects) do
     entity_rows =
       for %{op: op, entity_id: id, type: entity_type} <- effects, op in @entity_ops do
@@ -286,6 +407,31 @@ defmodule Hologram.Sync.Live do
     |> Enum.concat(pair_ends)
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
     |> Map.new(fn {entity_type, ids} -> {entity_type, MapSet.new(ids)} end)
+  end
+
+  # The rows each replica's batches put, which are the rows they created: the client's own creates,
+  # and the grants a create hands its creator, whose ids the client works out the same way. Only
+  # of the synced types, as every row a part names is.
+  defp own_puts(effects, synced) do
+    effects
+    |> Enum.flat_map(fn
+      %{op: :put_entity, mutation_ref: %{"replica_id" => replica_id}, type: entity_type} = effect ->
+        if MapSet.member?(synced, entity_type),
+          do: [{replica_id, entity_type, effect.entity_id}],
+          else: []
+
+      _effect ->
+        []
+    end)
+    |> Enum.group_by(&elem(&1, 0), &{elem(&1, 1), elem(&1, 2)})
+    |> Map.new(fn {replica_id, rows} ->
+      by_type =
+        rows
+        |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+        |> Map.new(fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end)
+
+      {replica_id, by_type}
+    end)
   end
 
   # The batches an effect came from name their replica and number. An effect with none - a
@@ -399,11 +545,11 @@ defmodule Hologram.Sync.Live do
     {Enum.min(txs), Enum.max(txs)}
   end
 
-  # Only types with a deciding quantifier send verdicts with their rows - every other row's are
+  # Only types with a verdict operation send verdicts with their rows - every other row's are
   # none, which nothing has to read. Asked of the rows the user may read alone.
   defp verdicts_for(rechecked, readable, canonical_user_id) do
     for {entity_type, rows} <- rechecked,
-        Policy.deciding_quantifiers(entity_type) != [],
+        Policy.verdict_operations(entity_type) != [],
         into: %{} do
       verdicts =
         readable

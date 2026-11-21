@@ -71,11 +71,7 @@ defmodule Hologram.Entity.Derived.Validator do
         [{set_owner_type, set_name} | clause_names(inner, [related_type | scope])]
 
       {name, _operator, operand} ->
-        names = [name | operand_names(operand)]
-
-        names
-        |> Enum.reject(&match?({:placeholder, _placeholder_name}, &1))
-        |> Enum.map(&scoped_name(&1, scope))
+        Enum.map([name | operand_names(operand)], &scoped_name(&1, scope))
     end)
   end
 
@@ -291,11 +287,7 @@ defmodule Hologram.Entity.Derived.Validator do
   defp spelled_type({type, _opts}), do: inspect(type)
 
   defp term_names(term, scope) do
-    sort_names =
-      term.sort
-      |> Enum.map(fn {key, _direction} -> key end)
-      |> Enum.reject(&match?({:placeholder, _placeholder_name}, &1))
-      |> Enum.map(&{term.entity, &1})
+    sort_names = Enum.map(term.sort, fn {key, _direction} -> {term.entity, key} end)
 
     clause_names(term.filter, scope) ++ sort_names ++ include_names(term.entity, term.include)
   end

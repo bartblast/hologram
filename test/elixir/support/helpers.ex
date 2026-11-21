@@ -102,6 +102,23 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Returns what the given function logs at info level and above. The test config logs warnings
+  and up, so the level is raised while the function runs. It sets the VM-wide Logger level, so
+  call it only from async: false modules.
+  """
+  @spec capture_info_log((-> any)) :: String.t()
+  def capture_info_log(fun) do
+    level = Logger.level()
+    Logger.configure(level: :info)
+
+    try do
+      ExUnit.CaptureLog.capture_log([level: :info], fun)
+    after
+      Logger.configure(level: level)
+    end
+  end
+
+  @doc """
   Evaluates the given module source code, which must raise Hologram.CompileError while its module
   body runs, and returns the error message with the line of the code the error points at.
   """
@@ -209,8 +226,8 @@ defmodule Hologram.Test.Helpers do
   def insert_global_grant(user_id, role) do
     insert_sql =
       ~s|INSERT INTO "hologram_data"."hologram_role_grant" | <>
-        ~s|("id", "user_id", "role", "created_at", "updated_at", "$revisions") | <>
-        ~s|VALUES ($1, $2, $3::"hologram_data"."hologram_role_grant_role_$enum", $4, $4, '{}')|
+        ~s|("id", "user_id", "role", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
+        ~s|VALUES ($1, $2, $3::"hologram_data"."hologram_role_grant_role_$enum", $4, $4, $4, $4, '{}')|
 
     params = [
       Codec.encode(Entity.generate_id(), :uuid),

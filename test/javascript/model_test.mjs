@@ -1744,6 +1744,32 @@ describe("Model", () => {
       );
     });
 
+    // A verdict key moves with the rules it answers, so the entry's replace the bundle's whole.
+    it("takes a held type's verdict entries from its entry", () => {
+      const verdicts = {
+        delete: {reads: [DOC], verdict: "delete:00112233aabbccdd"},
+      };
+
+      globalThis.Hologram.sync.model[DOC].verdicts = {
+        read: {reads: [], verdict: "read:44556677aabbccdd"},
+      };
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: [],
+          policy: {},
+          verdicts,
+        },
+      });
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].verdicts,
+        verdicts,
+      );
+    });
+
     // The bundle's own code can still ask about an operation the new build dropped, and is denied
     // it by the rules - none - rather than refused as one the type never declared.
     it("joins the operations its entry names to a held type's own", () => {
@@ -1811,13 +1837,14 @@ describe("Model", () => {
       });
     });
 
-    // Left out, a type declares no rule and no role - the server's default deny.
-    it("takes away the rules of a held type the entries leave out, keeping its operations", () => {
+    // Left out, a type declares no rule and no role - the server's default deny - and so no verdict.
+    it("takes away the rules and verdict entries of a held type the entries leave out, keeping its operations", () => {
       Model.replaceRules({});
 
       const doc = globalThis.Hologram.sync.model[DOC];
 
       assert.deepStrictEqual(doc.policy, {});
+      assert.deepStrictEqual(doc.verdicts, {});
       assert.deepStrictEqual(doc.operations, ["archive"]);
     });
 

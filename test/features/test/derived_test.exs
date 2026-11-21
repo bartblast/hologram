@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.DerivedTest do
-  # async: false - each test truncates the shared table, and one the operations log.
+  # async: false - each test truncates the shared tables, and one the operations log.
   use HologramFeatureTests.TestCase, async: false
 
   alias Hologram.DB
@@ -7,11 +7,15 @@ defmodule HologramFeatureTests.DerivedTest do
   alias HologramFeatureTests.Derived.Page2
   alias HologramFeatureTests.Derived.Page3
   alias HologramFeatureTests.Derived.Page4
+  alias HologramFeatureTests.Derived.Page5
+  alias HologramFeatureTests.Derived.Page6
+  alias HologramFeatureTests.Derived.Page7
+  alias HologramFeatureTests.Entities.Bottle
+  alias HologramFeatureTests.Entities.Crate
   alias HologramFeatureTests.Entities.Ticket
 
   setup do
-    await_evaluator_drain()
-    truncate_entity_tables([Ticket])
+    truncate_entity_tables([Bottle, Crate, Ticket])
 
     :ok
   end
@@ -66,7 +70,7 @@ defmodule HologramFeatureTests.DerivedTest do
     |> visit(Page1)
     |> assert_text(css("#tickets"), ~r/^hotel$/)
 
-    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/derived/1")
+    %HTTPoison.Response{body: html} = HTTPoison.get!(http_url() <> "/derived/1")
 
     assert html =~ ~r{id="tickets"><code>hotel</code>}
     assert html =~ ~r{id="summary"><code>HOTEL</code>}
@@ -141,6 +145,78 @@ defmodule HologramFeatureTests.DerivedTest do
 
     # The write settles before the next test empties the table it lands in.
     assert %Ticket{priority: :low} = await_server_ticket("alpha", :low)
+  end
+
+  # Bravo and delta are the excluded titles. The build can't read either query - one is folded over
+  # a list, the other built by a helper calling itself - so each runs as written, on the server
+  # and then in the browser, where a row written since joins it.
+  feature "renders and keeps current a query built by folding over a list or by recursion",
+          %{session: session} do
+    create_tickets(alpha: :high, bravo: :high, charlie: :low, delta: :medium)
+
+    session
+    |> visit(Page5)
+    |> await_local_fill()
+    |> assert_text(css("#reduced"), ~r/^alpha,charlie$/)
+    |> assert_text(css("#recursed"), ~r/^alpha,charlie$/)
+    |> mark_this_page_load()
+
+    create_tickets(echo: :low)
+
+    session
+    |> assert_text(css("#reduced"), ~r/^alpha,charlie,echo$/)
+    |> assert_text(css("#recursed"), ~r/^alpha,charlie,echo$/)
+    |> assert_same_page_load()
+  end
+
+  # The page builds the query on the server and hands it to the component in its state, so the
+  # browser rebuilds it from what the server sent and answers it over its own database.
+  feature "keeps current in the browser a query the server built and a component was handed",
+          %{session: session} do
+    create_tickets(india: :high, juliet: :low)
+
+    session
+    |> visit(Page6)
+    |> await_local_fill()
+    |> assert_text(css("#handed_tickets"), ~r/^india$/)
+    |> mark_this_page_load()
+
+    create_tickets(kilo: :high)
+
+    session
+    |> assert_text(css("#handed_tickets"), ~r/^india,kilo$/)
+    |> assert_same_page_load()
+  end
+
+  # No browser code names the bottle module: the page reaches bottles only by the relationship name
+  # it includes and reads, so that name is what makes them sync, and a bottle changed since the
+  # page rendered reaches it on the sync stream.
+  feature "keeps current a row of a type reached only through an include", %{session: session} do
+    crate =
+      [name: "north"]
+      |> Crate.new()
+      |> DB.create!()
+
+    ale =
+      [crate_id: crate.id, label: "ale"]
+      |> Bottle.new()
+      |> DB.create!()
+
+    [crate_id: crate.id, label: "beer"]
+    |> Bottle.new()
+    |> DB.create!()
+
+    session
+    |> visit(Page7)
+    |> await_local_fill()
+    |> assert_text(css("#crates"), ~r/^north:ale,beer$/)
+    |> mark_this_page_load()
+
+    DB.update!(Bottle, ale.id, label: "cider")
+
+    session
+    |> assert_text(css("#crates"), ~r/^north:beer,cider$/)
+    |> assert_same_page_load()
   end
 
   defp await_server_ticket(title, priority) do

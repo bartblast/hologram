@@ -30,8 +30,7 @@ defmodule Hologram.Sync.Handshake do
   never started.
 
   The page is the client's own claim and is taken at face value: what it names decides only which
-  windows fill first, never what it may see of them, which every row is checked against
-  separately.
+  types fill first, never what it may see of them, which every row is checked against separately.
 
   The cursor passes through unread, and is nil for a client arriving for the first time. Whether
   the place it names can still be reached is a question about the log, and this is about the

@@ -3,6 +3,7 @@ defmodule Hologram.Reflection do
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.TaskUtils
+  alias Hologram.Query.Shape
 
   @beam_info_keys [
     :digest,
@@ -26,7 +27,8 @@ defmodule Hologram.Reflection do
     :route,
     :protocol_functions,
     :implementation_for,
-    :implemented_protocol
+    :implemented_protocol,
+    :query_shapes
   ]
 
   # Functions that broadcast action params from arbitrary server code to connected clients.
@@ -64,7 +66,9 @@ defmodule Hologram.Reflection do
 
   @page_digest_plt_dump_file_name "page_digest.plt"
 
-  @page_windows_plt_dump_file_name "page_windows.plt"
+  @page_types_plt_dump_file_name "page_types.plt"
+
+  @index_needs_plt_dump_file_name "index_needs.plt"
 
   @queries_plt_dump_file_name "queries.plt"
 
@@ -106,6 +110,8 @@ defmodule Hologram.Reflection do
   that is not a literal.
   `broadcast_caller?` says whether the module calls one of the broadcast functions (see
   `broadcast_mfas/0`), read from the BEAM's import table, which lists every remote function it calls.
+  `query_shapes` holds the shapes of the queries the module writes on an entity type, which the query
+  stages record into a persisted attribute (see `Hologram.Query.Shape`).
   The route is recorded as written: a route built at runtime (with interpolation, say) is nil here, and
   `Hologram.Compiler.validate_page_modules/2` checks that every page has a route and that it is a string.
   Returns nil when the BEAM is not an Elixir module (no `__info__/1` in its export table, as for an Erlang
@@ -137,7 +143,8 @@ defmodule Hologram.Reflection do
         route: "/my-page",
         protocol_functions: nil,
         implementation_for: nil,
-        implemented_protocol: nil
+        implemented_protocol: nil,
+        query_shapes: []
       }
   """
   # WARNING: a change in what this records about a module needs a bump of the call graph's
@@ -171,7 +178,8 @@ defmodule Hologram.Reflection do
             route: term,
             protocol_functions: list({atom, arity}) | nil,
             implementation_for: module | nil,
-            implemented_protocol: module | nil
+            implemented_protocol: module | nil,
+            query_shapes: list(Shape.t())
           }
           | nil
   def beam_info(beam_source) do
@@ -187,8 +195,10 @@ defmodule Hologram.Reflection do
         {:exports, exports},
         {~c"Dbgi", dbgi_chunk},
         {:compile_info, compile_info},
-        {:imports, imports}
-      ]}} = :beam_lib.chunks(beam_source, [:exports, ~c"Dbgi", :compile_info, :imports])
+        {:imports, imports},
+        {:attributes, attributes}
+      ]}} =
+      :beam_lib.chunks(beam_source, [:exports, ~c"Dbgi", :compile_info, :imports, :attributes])
 
     if {:__info__, 1} in exports do
       page? = {:__is_hologram_page__, 0} in exports
@@ -226,7 +236,8 @@ defmodule Hologram.Reflection do
         route: literal_return(definitions, :__route__, []),
         protocol_functions: literal_return(definitions, :__protocol__, [:functions]),
         implementation_for: literal_return(definitions, :__impl__, [:for]),
-        implemented_protocol: literal_return(definitions, :__impl__, [:protocol])
+        implemented_protocol: literal_return(definitions, :__impl__, [:protocol]),
+        query_shapes: Keyword.get(attributes, Shape.attribute(), [])
       }
     end
   end
@@ -367,6 +378,19 @@ defmodule Hologram.Reflection do
   def ecto_schema?(term) do
     elixir_module?(term) && has_function?(term, :__schema__, 1) &&
       has_function?(term, :__changeset__, 0)
+  end
+
+  @doc """
+  Like ecto_schema?/1, but answered from the given module info PLT when it records the module, so
+  that a module not loaded is not read from its BEAM file. A module the PLT does not record is
+  decided the ecto_schema?/1 way.
+  """
+  @spec ecto_schema?(any, PLT.t()) :: boolean
+  def ecto_schema?(term, module_info_plt) do
+    case module_info_flag(module_info_plt, term, :ecto_schema?) do
+      {:ok, ecto_schema?} -> ecto_schema?
+      :error -> ecto_schema?(term)
+    end
   end
 
   @doc """
@@ -519,6 +543,16 @@ defmodule Hologram.Reflection do
   @spec has_struct?(module) :: boolean
   def has_struct?(module) do
     has_function?(module, :__struct__, 0) && has_function?(module, :__struct__, 1)
+  end
+
+  @doc """
+  Returns the file name of the index needs PLT dump: the access needs of the statements the server
+  runs that the build derived (see `Hologram.Compiler.build_index_needs/5`), which the database
+  converges its indexes to.
+  """
+  @spec index_needs_plt_dump_file_name() :: String.t()
+  def index_needs_plt_dump_file_name do
+    @index_needs_plt_dump_file_name
   end
 
   @doc """
@@ -1039,11 +1073,11 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Returns the file name of the dump of the page windows PLT.
+  Returns the file name of the dump of the page types PLT.
   """
-  @spec page_windows_plt_dump_file_name() :: String.t()
-  def page_windows_plt_dump_file_name do
-    @page_windows_plt_dump_file_name
+  @spec page_types_plt_dump_file_name() :: String.t()
+  def page_types_plt_dump_file_name do
+    @page_types_plt_dump_file_name
   end
 
   @doc """
@@ -1141,7 +1175,7 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Returns the file name of the dump of the registered queries PLT.
+  Returns the file name of the dump of the queries PLT.
   """
   @spec queries_plt_dump_file_name() :: String.t()
   def queries_plt_dump_file_name do

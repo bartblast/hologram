@@ -7,7 +7,6 @@ defmodule Hologram.Query.WindowTest do
   alias Hologram.DB
   alias Hologram.DB.QueryRunner
   alias Hologram.Query
-  alias Hologram.Query.Registry
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -31,7 +30,7 @@ defmodule Hologram.Query.WindowTest do
     %{Stage.normalize(entity_type) | filter: filter}
   end
 
-  describe "derive/2" do
+  describe "embed/2 - what it embeds" do
     defmodule WindowProject do
       use Hologram.Entity
 
@@ -93,268 +92,24 @@ defmodule Hologram.Query.WindowTest do
       allow :read
     end
 
-    test "downloads the type the query reads" do
-      assert derive(Stage.normalize(Module2), false).entity == Module2
-    end
-
-    test "keeps a predicate comparing to a literal" do
-      window = derive(term(Module2, [{:a, :==, true}]), false)
-
-      assert window.filter == [{:a, :==, true}]
-    end
-
-    # A comparison between two attributes says something about the row whatever value anything
-    # takes, so it bounds the download the way a literal comparison does.
-    test "keeps a predicate comparing two attributes" do
-      window = derive(term(Module2, [{:updated_at, :>, {:attribute, :created_at}}]), false)
-
-      assert window.filter == [{:updated_at, :>, {:attribute, :created_at}}]
-    end
-
-    test "keeps a path predicate comparing to a literal" do
-      window = derive(term(Module3, [{[:b, :a], :==, true}]), false)
-
-      assert window.filter == [{[:b, :a], :==, true}]
-    end
-
-    # A reader who may not read the row a path leads to reads it as missing, while the window reads
-    # it as stored - so a path predicate a missing value satisfies would leave out a row that
-    # reader's answer keeps.
-    test "drops a path predicate a missing related row satisfies" do
-      for predicate <- [
-            {[:b, :c], :!=, "x"},
-            {[:b, :c], :==, nil},
-            {[:b, :c], :in, [nil, "x"]},
-            {[:b, :c], :not_in, ["x"]},
-            {[:b, :c], :==, {:attribute, [:c, :id]}},
-            {:c_id, :!=, {:attribute, [:b, :id]}}
-          ] do
-        assert derive(term(Module3, [predicate]), false).filter == []
-      end
-    end
-
-    test "keeps a path predicate a missing related row never satisfies" do
-      for predicate <- [
-            {[:b, :c], :==, "x"},
-            {[:b, :c], :!=, nil},
-            {[:b, :c], :in, ["x", "y"]},
-            {[:b, :c], :not_in, [nil, "x"]},
-            {[:b, :b], :>, 3},
-            {[:b, :b], :<, {:attribute, [:c, :id]}},
-            {[:b, :c], :contains, "x"},
-            {[:b, :c], :starts_with_exact, "x"}
-          ] do
-        assert derive(term(Module3, [predicate]), false).filter == [predicate]
-      end
-    end
-
     test "embeds a dropped path predicate's relationships all the same" do
-      window = derive(term(Module3, [{[:b, :c], :!=, "x"}]), false)
+      window = embed(term(Module3, [{[:b, :c], :!=, "x"}]), false)
 
       assert window.include == %{b: %Query{entity: Module2}}
     end
 
-    test "drops a disjunction whose alternative held only a path predicate a missing row satisfies" do
-      filter = [{:or, [[{:c_id, :==, nil}], [{[:b, :c], :==, nil}]]}]
-
-      assert derive(term(Module3, filter), false).filter == []
-    end
-
-    test "drops a path predicate a missing related row satisfies inside an any and its set's narrowing" do
+    test "leaves a path predicate a missing related row satisfies out of an any's set's narrowing" do
       window =
         Module26
         |> filter(any(message <- messages, message.channel.name != "x" and message.position > 1))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
-      assert window.filter == [{:any, {[:messages], [{:position, :>, 1}]}}]
       assert window.include.messages.filter == [{:position, :>, 1}]
     end
 
-    test "drops a path of the row above that a missing related row satisfies, on either side" do
-      filter = [
-        {:any,
-         {[:labels],
-          [
-            {:name, :==, "u"},
-            {{:outer, 1, [:channel, :name]}, :!=, "x"},
-            {:name, :!=, {:attribute, {:outer, 1, [:channel, :name]}}}
-          ]}}
-      ]
-
-      window = derive(term(Module28, filter), false)
-
-      assert window.filter == [{:any, {[:labels], [{:name, :==, "u"}]}}]
-    end
-
-    test "keeps a path of the row above that a missing related row never satisfies" do
-      filter = [{:any, {[:labels], [{{:outer, 1, [:channel, :name]}, :==, "x"}]}}]
-
-      assert derive(term(Module28, filter), false).filter == filter
-    end
-
-    test "drops a predicate comparing to a placeholder" do
-      window = derive(term(Module2, [{:c, :==, {:placeholder, :search}}]), false)
-
-      assert window.filter == []
-    end
-
-    test "drops a predicate whose attribute is a placeholder" do
-      window = derive(term(Module2, [{{:placeholder, :field}, :==, 5}]), false)
-
-      assert window.filter == []
-    end
-
-    test "keeps the literal predicates of a query that also has placeholder ones" do
-      filter = [
-        {:a, :==, true},
-        {:c, :==, {:placeholder, :search}},
-        {{:placeholder, :field}, :==, 5}
-      ]
-
-      window = derive(term(Module2, filter), false)
-
-      assert window.filter == [{:a, :==, true}]
-    end
-
-    test "drops a placeholder predicate whatever the operator compares" do
-      filter = [
-        {:b, :!=, {:placeholder, :excluded}},
-        {:b, :<, {:placeholder, :upper}},
-        {:b, :>, {:placeholder, :lower}},
-        {:b, :in, {:placeholder, :allowed}},
-        {:b, :not_in, {:placeholder, :denied}},
-        {:c, :starts_with, {:placeholder, :query}}
-      ]
-
-      window = derive(term(Module2, filter), false)
-
-      assert window.filter == []
-    end
-
-    # The query answers for every value the placeholder takes, over the rows the path reads - so
-    # they are downloaded even when nothing about them bounds the download.
-    test "drops a path predicate comparing to a placeholder and embeds its relationships" do
-      window = derive(term(Module5, [{[:a, :b, :c], :==, {:placeholder, :search}}]), false)
-
-      assert window.filter == []
-
-      assert window.include == %{
-               a: %Query{entity: Module3, include: %{b: %Query{entity: Module2}}}
-             }
-    end
-
-    test "drops a membership predicate holding a placeholder among its values" do
-      window = derive(term(Module2, [{:b, :in, [1, {:placeholder, :chosen}]}]), false)
-
-      assert window.filter == []
-    end
-
-    test "keeps a disjunction whose alternatives compare to literals" do
-      filter = [{:or, [[{:a, :==, true}], [{:b, :==, 1}]]}]
-
-      assert derive(term(Module2, filter), false).filter == filter
-    end
-
-    test "narrows an alternative to its literal predicates" do
-      filter = [{:or, [[{:a, :==, true}, {:c, :==, {:placeholder, :search}}], [{:b, :==, 1}]]}]
-
-      assert derive(term(Module2, filter), false).filter == [
-               {:or, [[{:a, :==, true}], [{:b, :==, 1}]]}
-             ]
-    end
-
-    # Dropping the placeholder side alone would download only the todo rows, while the query also
-    # answers for whichever rows the placeholder picks - so the alternative admits every row, and
-    # the disjunction bounds nothing.
-    test "drops a disjunction when an alternative loses every predicate" do
-      filter = [{:or, [[{:c, :==, "todo"}], [{:b, :==, {:placeholder, :owner}}]]}]
-
-      assert derive(term(Module2, filter), false).filter == []
-    end
-
-    test "keeps the predicates beside a dropped disjunction" do
-      filter = [
-        {:or, [[{:c, :==, "todo"}], [{:b, :==, {:placeholder, :owner}}]]},
-        {:a, :==, true}
-      ]
-
-      assert derive(term(Module2, filter), false).filter == [{:a, :==, true}]
-    end
-
-    test "drops a nested disjunction the same way" do
-      filter = [
-        {:or,
-         [
-           [{:a, :==, true}, {:or, [[{:b, :==, 1}], [{:c, :==, {:placeholder, :search}}]]}],
-           [{:b, :==, 2}]
-         ]}
-      ]
-
-      assert derive(term(Module2, filter), false).filter == [
-               {:or, [[{:a, :==, true}], [{:b, :==, 2}]]}
-             ]
-    end
-
-    test "drops an outer disjunction when a nested one empties its alternative" do
-      filter = [
-        {:or,
-         [[{:or, [[{:b, :==, 1}], [{:c, :==, {:placeholder, :search}}]]}], [{:a, :==, true}]]}
-      ]
-
-      assert derive(term(Module2, filter), false).filter == []
-    end
-
-    # Narrowing the second alternative leaves it shorter than the first, which moves it ahead.
-    test "keeps the narrowed alternatives in canonical order" do
-      filter = [
-        {:or,
-         [
-           [{:a, :==, true}, {:b, :==, 7}],
-           [{:a, :==, true}, {:b, :>=, {:placeholder, :min}}]
-         ]}
-      ]
-
-      assert derive(term(Module2, filter), false).filter == [
-               {:or, [[{:a, :==, true}], [{:a, :==, true}, {:b, :==, 7}]]}
-             ]
-    end
-
-    test "gives two queries differing only in a pinned predicate of an alternative one window" do
-      bounded = [{:or, [[{:c, :==, "x"}, {:b, :>=, {:placeholder, :min}}], [{:a, :==, true}]]}]
-      chosen = [{:or, [[{:c, :==, "x"}, {:b, :==, {:placeholder, :one}}], [{:a, :==, true}]]}]
-
-      assert derive(term(Module2, bounded), false) == derive(term(Module2, chosen), false)
-    end
-
-    test "leaves out what a query answers rather than downloads" do
-      term =
-        Module2
-        |> filter(a: true)
-        |> sort(c)
-        |> take(20)
-        |> skip(40)
-        |> Stage.normalize()
-
-      assert derive(term, false) == %Query{entity: Module2, filter: [{:a, :==, true}]}
-    end
-
-    # A window is not a description of a query, it IS one, and it gets run - so it has to be a
-    # term every reader of terms accepts, saying it asks for every row in no order rather than
-    # leaving the question out.
-    test "is a query term, runnable as one" do
-      window =
-        Module2
-        |> filter(a: true)
-        |> sort(c)
-        |> Stage.normalize()
-        |> derive(false)
-
-      assert is_list(QueryRunner.run(window, DB.mapping()))
-    end
-
     test "embeds the relationships of a path operand" do
-      window = derive(term(Module3, [{:c_id, :==, {:attribute, [:b, :id]}}]), false)
+      window = embed(term(Module3, [{:c_id, :==, {:attribute, [:b, :id]}}]), false)
 
       assert window.include == %{b: %Query{entity: Module2}}
     end
@@ -362,21 +117,7 @@ defmodule Hologram.Query.WindowTest do
     test "embeds the relationships of a path inside an alternative" do
       filter = [{:or, [[{[:b, :a], :==, true}], [{:c_id, :==, nil}]]}]
 
-      assert derive(term(Module3, filter), false).include == %{b: %Query{entity: Module2}}
-    end
-
-    test "embeds the relationships a path goes through inside an included query's window" do
-      base_term =
-        Module26
-        |> include(messages)
-        |> Stage.normalize()
-
-      sub_term = %{base_term.include.messages | filter: [{[:channel, :name], :==, "general"}]}
-      term = %{base_term | include: %{messages: sub_term}}
-
-      assert derive(term, false).include.messages.include == %{
-               channel: %Query{entity: Module26}
-             }
+      assert embed(term(Module3, filter), false).include == %{b: %Query{entity: Module2}}
     end
 
     test "merges a path's relationships into the query's own includes" do
@@ -387,42 +128,13 @@ defmodule Hologram.Query.WindowTest do
 
       term = %{base_term | filter: [{[:a, :b, :c], :==, "x"}]}
 
-      assert derive(term, false).include == %{
+      assert embed(term, false).include == %{
                a: %Query{entity: Module3, include: %{b: %Query{entity: Module2}}}
              }
     end
 
-    test "is a query term, runnable as one, with the relationships its paths embed" do
-      window =
-        Module5
-        |> Stage.filter([{[:a, :b, :c], {:>=, "M"}}])
-        |> Stage.normalize()
-        |> derive(false)
-
-      assert is_list(QueryRunner.run(window, DB.mapping()))
-    end
-
-    # The rows along the condition paths, the row before a role reference's last relationship and the
-    # rows a delegation reads, two rows away and three - each hop embedded once.
-    test "embeds the rows the type's rules read when a client checks permissions" do
-      window = derive(Stage.normalize(Policy.Module12), true)
-
-      assert window.include == %{
-               link: %Query{entity: Module17},
-               parent: %Query{
-                 entity: Policy.Module5,
-                 include: %{
-                   parent: %Query{
-                     entity: Policy.Module1,
-                     include: %{parent: %Query{entity: Policy.Module2}}
-                   }
-                 }
-               }
-             }
-    end
-
     test "embeds the sets the type's rules read when a client checks permissions" do
-      window = derive(Stage.normalize(WindowProject), true)
+      window = embed(Stage.normalize(WindowProject), true)
 
       assert window.include == %{
                labels: %Query{entity: WindowLabel},
@@ -438,14 +150,7 @@ defmodule Hologram.Query.WindowTest do
         |> Stage.filter(any: {[:members], [seat: "full"]})
         |> Stage.normalize()
 
-      assert derive(term, true).include.members == %Query{entity: WindowMember}
-    end
-
-    # No client is ever sent a vault, so the rules' chains stop before it - the shelf still comes.
-    test "embeds a rule's chain only up to its first type nobody may read" do
-      assert derive(Stage.normalize(WindowParcel), true).include == %{
-               shelf: %Query{entity: WindowShelf}
-             }
+      assert embed(term, true).include.members == %Query{entity: WindowMember}
     end
 
     test "embeds an included type's rule chain only up to its first type nobody may read" do
@@ -454,16 +159,12 @@ defmodule Hologram.Query.WindowTest do
         |> include(parcel)
         |> Stage.normalize()
 
-      assert derive(term, true).include == %{
+      assert embed(term, true).include == %{
                parcel: %Query{
                  entity: WindowParcel,
                  include: %{shelf: %Query{entity: WindowShelf}}
                }
              }
-    end
-
-    test "embeds no rule's rows when no client checks permissions" do
-      assert derive(Stage.normalize(Policy.Module12), false).include == %{}
     end
 
     test "embeds the rows an included type's rules read under the include" do
@@ -472,7 +173,7 @@ defmodule Hologram.Query.WindowTest do
         |> include(children)
         |> Stage.normalize()
 
-      assert derive(term, true).include.children.include == %{
+      assert embed(term, true).include.children.include == %{
                parent: %Query{entity: Policy.Module2}
              }
     end
@@ -480,13 +181,13 @@ defmodule Hologram.Query.WindowTest do
     # The type's own rules read nothing through the relationship, so the row arrives for the path
     # alone - and the rows its own type's rules read stay out from under it.
     test "embeds no rule's rows under a row embedded for a path" do
-      window = derive(term(Policy.Module15, [{[:origin, :level], :==, 1}]), true)
+      window = embed(term(Policy.Module15, [{[:origin, :level], :==, 1}]), true)
 
       assert window.include == %{origin: %Query{entity: Policy.Module12}}
     end
 
     test "embeds no rule's rows under a row embedded for a rule" do
-      window = derive(Stage.normalize(Policy.Module8), true)
+      window = embed(Stage.normalize(Policy.Module8), true)
 
       assert window.include == %{
                parent: %Query{
@@ -502,7 +203,7 @@ defmodule Hologram.Query.WindowTest do
         |> include(author)
         |> Stage.normalize()
 
-      assert derive(term, true).include == %{
+      assert embed(term, true).include == %{
                author: %Query{entity: Module14},
                parent: %Query{entity: Policy.Module2}
              }
@@ -516,7 +217,7 @@ defmodule Hologram.Query.WindowTest do
         |> include(parent.parent)
         |> Stage.normalize()
 
-      assert derive(term, true).include == %{
+      assert embed(term, true).include == %{
                parent: %Query{
                  entity: Policy.Module5,
                  include: %{
@@ -529,126 +230,60 @@ defmodule Hologram.Query.WindowTest do
              }
     end
 
-    test "is a query term, runnable as one, with the rows its rules read embedded" do
-      window = derive(Stage.normalize(Policy.Module12), true)
-
-      assert is_list(QueryRunner.run(window, DB.mapping()))
-    end
-
     # An inverse of a to-one is read off each related row's own reference field, with no ids filed
-    # for the row, so its window keeps a literal narrowing like any query.
-    test "derives the window of an included query too" do
-      base_term =
-        Module26
-        |> include(messages)
-        |> Stage.normalize()
-
-      sub_term = %{
-        base_term.include.messages
-        | filter: [{:body, :==, {:placeholder, :search}}, {:position, :==, 1}]
-      }
-
-      term = %{base_term | include: %{messages: sub_term}}
-
-      assert derive(term, false).include.messages == %Query{
-               entity: Module28,
-               filter: [{:position, :==, 1}]
-             }
-    end
-
-    test "gives two queries choosing different values one window" do
-      searched = derive(term(Module2, [{:c, :==, {:placeholder, :search}}]), false)
-      chosen = derive(term(Module2, [{:a, :==, {:placeholder, :flag}}]), false)
-
-      assert searched == chosen
-    end
-
-    # Bounding it needs the thirty days written into the query, which the filter surface does not
-    # offer yet - a cutoff computed per render says nothing when the window is derived.
-    test "downloads a channel's whole history when its recency bound is a placeholder" do
-      filter = [{:c, :==, "channel-1"}, {:b, :>, {:placeholder, :cutoff}}]
-
-      window = derive(term(Module2, filter), false)
-
-      assert window.filter == [{:c, :==, "channel-1"}]
-    end
-
-    test "keeps an any and embeds its set read off a reference narrowed by the condition" do
+    # for the row, so its set is narrowed by the condition like any query.
+    test "embeds an any's set read off a reference narrowed by the condition" do
       window =
         Module26
         |> filter(any(message <- messages, message.body == "x"))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
-      assert window.filter == [{:any, {[:messages], [{:body, :==, "x"}]}}]
       assert window.include == %{messages: %Query{entity: Module28, filter: [{:body, :==, "x"}]}}
     end
 
-    test "narrows an any's condition and its set by dropping a placeholder" do
-      filter = [
-        {:any, {[:messages], [{:body, :==, {:placeholder, :body}}, {:position, :>, 2}]}}
-      ]
+    test "embeds whole the set of an any whose condition loses every predicate" do
+      filter = [{:any, {[:messages], [{[:channel, :name], :!=, "x"}]}}]
 
-      window = derive(term(Module26, filter), false)
+      window = embed(term(Module26, filter), false)
 
-      assert window.filter == [{:any, {[:messages], [{:position, :>, 2}]}}]
-      assert window.include == %{messages: %Query{entity: Module28, filter: [{:position, :>, 2}]}}
+      assert window.include == %{
+               messages: %Query{entity: Module28, include: %{channel: %Query{entity: Module26}}}
+             }
     end
 
-    test "keeps an any whose condition loses every predicate, and downloads its set whole" do
-      filter = [{:any, {[:messages], [{:body, :==, {:placeholder, :body}}]}}]
-
-      window = derive(term(Module26, filter), false)
-
-      assert window.filter == [{:any, {[:messages], []}}]
-      assert window.include == %{messages: %Query{entity: Module28}}
-    end
-
-    test "drops a none and an all, narrowing a none's set and downloading an all's whole" do
+    test "narrows a none's set and embeds an all's whole" do
       none_window =
         Module26
         |> filter(none(message <- messages, message.body == "x"))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       all_window =
         Module26
         |> filter(all(message <- messages, message.body == "x"))
         |> Stage.normalize()
-        |> derive(false)
-
-      assert none_window.filter == []
+        |> embed(false)
 
       assert none_window.include == %{
                messages: %Query{entity: Module28, filter: [{:body, :==, "x"}]}
              }
 
-      assert all_window.filter == []
       assert all_window.include == %{messages: %Query{entity: Module28}}
     end
 
-    test "drops a disjunction whose alternative held only a none" do
-      window =
-        Module26
-        |> filter(name == "a" or none(messages))
-        |> Stage.normalize()
-        |> derive(false)
-
-      assert window.filter == []
-    end
-
-    test "downloads a set the client reads through ids whole, whatever the condition" do
+    test "embeds a set the client reads through ids whole, whatever the condition" do
       stored =
         Module28
         |> filter(any(label <- labels, label.name == "x"))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       inverse =
         Module29
         |> filter(any(message <- messages, message.body == "x"))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert stored.include == %{labels: %Query{entity: Module29}}
       assert inverse.include == %{messages: %Query{entity: Module28}}
@@ -659,7 +294,7 @@ defmodule Hologram.Query.WindowTest do
         Module28
         |> filter(any(message <- channel.messages, message.position > position))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert window.include == %{
                channel: %Query{
@@ -675,7 +310,7 @@ defmodule Hologram.Query.WindowTest do
         |> filter(any(message <- messages, message.body == "b"))
         |> filter(any(message <- messages, message.body == "a"))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert window.include == %{
                messages: %Query{
@@ -685,26 +320,25 @@ defmodule Hologram.Query.WindowTest do
              }
     end
 
-    test "downloads a set whole when one of its quantifiers needs it whole" do
+    test "embeds a set whole when one of its quantifiers needs it whole" do
       window =
         Module26
         |> filter(any(message <- messages, message.body == "b"))
         |> filter(all(message <- messages, message.position > 1))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert window.include == %{messages: %Query{entity: Module28}}
     end
 
     test "leaves a set the query includes whole as it is" do
-      window =
+      term =
         Module26
         |> filter(any(message <- messages, message.body == "b"))
         |> include(messages)
         |> Stage.normalize()
-        |> derive(false)
 
-      assert window.include == %{messages: %Query{entity: Module28}}
+      assert embed(term, false).include == term.include
     end
 
     test "embeds a nested set under its parent's, each narrowed by its own condition" do
@@ -717,7 +351,7 @@ defmodule Hologram.Query.WindowTest do
           )
         )
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert window.include == %{
                messages: %Query{
@@ -736,7 +370,7 @@ defmodule Hologram.Query.WindowTest do
         Module37
         |> filter(any(message <- messages.channel.messages, message.pinned == true))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert window.include == %{
                messages: %Query{
@@ -764,7 +398,7 @@ defmodule Hologram.Query.WindowTest do
           )
         )
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert {:pinned, :==, true} in window.include.messages.filter
     end
@@ -780,7 +414,7 @@ defmodule Hologram.Query.WindowTest do
           )
         )
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert window.include.messages.filter == []
     end
@@ -793,7 +427,7 @@ defmodule Hologram.Query.WindowTest do
             any(colleague <- messages.channel.messages, colleague.pinned == false)
         )
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert window.include.messages.filter == []
     end
@@ -803,7 +437,7 @@ defmodule Hologram.Query.WindowTest do
         Module30
         |> filter(any(followed <- follows, any(reply <- replies, reply.body == followed.body)))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert window.include == %{
                follows: %Query{entity: Module30},
@@ -816,7 +450,7 @@ defmodule Hologram.Query.WindowTest do
         Module26
         |> filter(any(message <- messages, message.channel.name == "general"))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert window.include == %{
                messages: %Query{
@@ -834,7 +468,7 @@ defmodule Hologram.Query.WindowTest do
         |> filter(none(message <- messages, message.body == "b"))
         |> filter(none(message <- messages, message.body == "c"))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       second =
         Module26
@@ -842,7 +476,7 @@ defmodule Hologram.Query.WindowTest do
         |> filter(none(message <- messages, message.body == "a"))
         |> filter(none(message <- messages, message.body == "b"))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert first.include.messages.filter == [
                {:or, [[{:body, :==, "a"}], [{:body, :==, "b"}], [{:body, :==, "c"}]]}
@@ -861,7 +495,7 @@ defmodule Hologram.Query.WindowTest do
           )
         )
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert window.include.messages.filter == [{:position, :>, 1}]
     end
@@ -871,7 +505,7 @@ defmodule Hologram.Query.WindowTest do
         Module30
         |> filter(any(reply <- replies, any(nested <- reply.replies, nested.body == "y")))
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert window.include == %{
                replies: %Query{
@@ -882,7 +516,7 @@ defmodule Hologram.Query.WindowTest do
              }
     end
 
-    test "keeps a nested quantifier reading its parent's row in the parent set's narrowing, and drops one reading further out" do
+    test "narrows a parent set by a nested quantifier reading its row, not by one reading further out" do
       window =
         Module30
         |> filter(
@@ -893,81 +527,137 @@ defmodule Hologram.Query.WindowTest do
           )
         )
         |> Stage.normalize()
-        |> derive(false)
+        |> embed(false)
 
       assert window.include.replies.filter == [
                {:any, {[:replies], [{:body, :==, {:attribute, {:outer, 1, :body}}}]}}
              ]
     end
+  end
 
-    test "drops a none and an all holding a placeholder" do
-      filter = [
-        {:none, {[:messages], [{:body, :==, {:placeholder, :body}}]}},
-        {:all, {[:messages], [{:position, :>, {:placeholder, :min}}]}}
+  # A set read off its rows' own reference field is narrowed by the condition that reads it: the
+  # messages of a channel, narrowed by an any's condition about them.
+  describe "embed/2 - narrowing a set" do
+    defp narrowing(clauses) do
+      Module26
+      |> term([{:any, {[:messages], clauses}}])
+      |> embed(false)
+      |> Map.fetch!(:include)
+      |> Map.fetch!(:messages)
+      |> Map.fetch!(:filter)
+    end
+
+    test "leaves out a path predicate a missing related row satisfies" do
+      for predicate <- [
+            {[:channel, :name], :!=, "x"},
+            {[:channel, :name], :==, nil},
+            {[:channel, :name], :in, [nil, "x"]},
+            {[:channel, :name], :not_in, ["x"]},
+            {[:channel, :name], :==, {:attribute, :body}},
+            {:body, :!=, {:attribute, [:channel, :name]}}
+          ] do
+        assert narrowing([predicate]) == []
+      end
+    end
+
+    test "keeps a path predicate a missing related row never satisfies" do
+      for predicate <- [
+            {[:channel, :name], :==, "x"},
+            {[:channel, :name], :!=, nil},
+            {[:channel, :name], :in, ["x", "y"]},
+            {[:channel, :name], :not_in, [nil, "x"]},
+            {[:channel, :name], :contains, "x"},
+            {[:channel, :name], :starts_with_exact, "x"}
+          ] do
+        assert narrowing([predicate]) == [predicate]
+      end
+    end
+
+    test "narrows an alternative to what bounds it" do
+      clauses = [
+        {:or, [[{:body, :==, "a"}, {[:channel, :name], :!=, "x"}], [{:position, :==, 1}]]}
       ]
 
-      assert derive(term(Module26, filter), false).filter == []
+      assert narrowing(clauses) == [{:or, [[{:body, :==, "a"}], [{:position, :==, 1}]]}]
     end
 
-    test "gives the window the types its quantifiers' sets hold" do
-      window =
-        Module26
-        |> filter(any(messages))
-        |> Stage.normalize()
-        |> derive(false)
+    test "leaves out a disjunction when an alternative loses every predicate" do
+      clauses = [{:or, [[{:body, :==, "a"}], [{[:channel, :name], :!=, "x"}]]}]
 
-      assert Registry.entity_types(window) == MapSet.new([Module26, Module28])
+      assert narrowing(clauses) == []
     end
 
-    test "gives two queries differing only in a pinned value inside an any one window" do
-      first =
-        derive(term(Module26, [{:any, {[:messages], [{:body, :==, {:placeholder, :a}}]}}]), false)
+    test "narrows a nested disjunction the same way" do
+      clauses = [
+        {:or,
+         [
+           [
+             {:body, :==, "a"},
+             {:or, [[{:position, :==, 1}], [{[:channel, :name], :==, nil}]]}
+           ],
+           [{:position, :==, 2}]
+         ]}
+      ]
 
-      second =
-        derive(
-          term(Module26, [{:any, {[:messages], [{:position, :==, {:placeholder, :b}}]}}]),
-          false
-        )
+      assert narrowing(clauses) == [{:or, [[{:body, :==, "a"}], [{:position, :==, 2}]]}]
+    end
 
-      assert first == second
+    test "keeps the narrowed alternatives in canonical order" do
+      clauses = [
+        {:or,
+         [
+           [{:body, :==, "a"}, {:position, :==, 7}],
+           [{:body, :==, "a"}, {[:channel, :name], :in, [nil, "x"]}]
+         ]}
+      ]
+
+      assert narrowing(clauses) == [
+               {:or, [[{:body, :==, "a"}], [{:body, :==, "a"}, {:position, :==, 7}]]}
+             ]
     end
   end
 
-  describe "derive/2 - derived fields" do
+  describe "embed/2 - running what it embeds" do
+    test "is a query term, runnable as one, with the relationships its paths embed" do
+      term =
+        Module5
+        |> Stage.filter([{[:a, :b, :c], {:>=, "M"}}])
+        |> Stage.normalize()
+        |> embed(false)
+
+      assert is_list(QueryRunner.run(term, DB.mapping()))
+    end
+
+    test "is a query term, runnable as one, with the rows its rules read embedded" do
+      term = embed(Stage.normalize(Policy.Module12), true)
+
+      assert is_list(QueryRunner.run(term, DB.mapping()))
+    end
+  end
+
+  describe "embed/2 - what derived fields read" do
     setup do
       put_derived_definitions([Module32, Module33, Module37, Module38])
     end
 
-    test "drops a comparison of a derived field and downloads the rows it is computed from" do
+    test "embeds the rows a compared derived field is computed from" do
       term =
         Module37
         |> filter(member_count > 3)
         |> Stage.normalize()
 
-      window = derive(term, false)
+      window = embed(term, false)
 
-      assert window.filter == []
       assert window.include == %{members: %Query{entity: Module2}}
     end
 
-    test "drops a disjunction an alternative of which compares a derived field" do
-      term =
-        Module37
-        |> filter(name == "general" or member_count > 3)
-        |> Stage.normalize()
-
-      assert derive(term, false).filter == []
-    end
-
-    test "drops a comparison of a derived field a path ends at" do
+    test "embeds the rows a derived field a path ends at is computed from" do
       term =
         Module38
         |> filter(channel.pinned_count > 1)
         |> Stage.normalize()
 
-      window = derive(term, false)
-
-      assert window.filter == []
+      window = embed(term, false)
 
       assert window.include == %{
                channel: %Query{
@@ -977,15 +667,14 @@ defmodule Hologram.Query.WindowTest do
              }
     end
 
-    test "drops a quantifier over a derived set and downloads the rows the set is computed from" do
+    test "embeds the rows a quantified derived set is computed from" do
       term =
         Module37
         |> filter(any(message <- recent_messages, message.pinned == true))
         |> Stage.normalize()
 
-      window = derive(term, false)
+      window = embed(term, false)
 
-      assert window.filter == []
       assert window.include == %{messages: %Query{entity: Module38}}
     end
 
@@ -995,90 +684,93 @@ defmodule Hologram.Query.WindowTest do
         |> filter(pinned_count > 1)
         |> Stage.normalize()
 
-      window = derive(term, false)
+      window = embed(term, false)
 
       assert window.include == %{
                messages: %Query{entity: Module38, filter: [{:pinned, :==, true}]}
              }
     end
 
-    test "downloads a set whole for a definition's condition reading the row it belongs to" do
+    test "embeds a set whole for a definition's condition reading the row it belongs to" do
       term =
         Module37
         |> filter(unread_count > 0)
         |> Stage.normalize()
 
-      window = derive(term, false)
+      window = embed(term, false)
 
       assert window.include == %{messages: %Query{entity: Module38}}
     end
 
-    test "downloads a to-many a definition counts whole" do
+    test "embeds a to-many a definition counts whole" do
       term =
         Module37
         |> filter(member_count > 0)
         |> Stage.normalize()
 
-      window = derive(term, false)
+      window = embed(term, false)
 
       assert window.include == %{members: %Query{entity: Module2}}
     end
 
-    test "downloads a set a definition reads through a related row" do
+    test "embeds a set a definition reads through a related row" do
       term =
         Module38
         |> filter(sibling_count > 1)
         |> Stage.normalize()
 
-      window = derive(term, false)
+      window = embed(term, false)
 
       assert window.include == %{
                channel: %Query{entity: Module37, include: %{messages: %Query{entity: Module38}}}
              }
     end
 
-    test "downloads the rows a derived field a definition reads is computed from" do
+    test "embeds the rows a derived field a definition reads is computed from" do
       term =
         Module37
         |> filter(busy == true)
         |> Stage.normalize()
 
-      window = derive(term, false)
-
-      assert window.filter == []
+      window = embed(term, false)
 
       assert window.include == %{
                messages: %Query{entity: Module38, filter: [{:pinned, :==, true}]}
              }
     end
 
-    test "downloads what a definition's own includes read" do
+    test "embeds what a definition's own includes read" do
       term =
         Module37
         |> include(authored_messages)
         |> Stage.normalize()
 
-      window = derive(term, false)
+      window = embed(term, false)
 
-      assert window.include == %{
-               messages: %Query{entity: Module38, include: %{author: %Query{entity: Module1}}}
-             }
+      # A derived field's own include stays as authored, beside the rows it is computed from.
+      assert window.include ==
+               Map.put(term.include, :messages, %Query{
+                 entity: Module38,
+                 include: %{author: %Query{entity: Module1}}
+               })
     end
 
-    test "downloads what an include of a derived set includes off the rows it is computed from" do
+    test "embeds what an include of a derived set includes off the rows it is computed from" do
       term =
         Module37
         |> include(recent_messages.author)
         |> Stage.normalize()
 
-      window = derive(term, false)
+      window = embed(term, false)
 
-      assert window.include == %{
-               messages: %Query{entity: Module38, include: %{author: %Query{entity: Module1}}}
-             }
+      assert window.include ==
+               Map.put(term.include, :messages, %Query{
+                 entity: Module38,
+                 include: %{author: %Query{entity: Module1}}
+               })
     end
 
-    test "downloads what an include of a set chosen with if includes off every source it reads" do
+    test "embeds what an include of a set chosen with if includes off every source it reads" do
       term =
         Module37
         |> include(picked.author)
@@ -1086,7 +778,8 @@ defmodule Hologram.Query.WindowTest do
 
       author = %Query{entity: Module1}
 
-      assert derive(term, false).include == %{
+      assert embed(term, false).include == %{
+               picked: term.include.picked,
                messages: %Query{
                  entity: Module38,
                  include: %{
@@ -1100,13 +793,13 @@ defmodule Hologram.Query.WindowTest do
              }
     end
 
-    test "downloads every source a set chosen with if reads, for a derived field counting it" do
+    test "embeds every source a set chosen with if reads, for a derived field counting it" do
       term =
         Module37
         |> filter(picked_count > 0)
         |> Stage.normalize()
 
-      assert derive(term, false).include == %{
+      assert embed(term, false).include == %{
                messages: %Query{
                  entity: Module38,
                  include: %{
@@ -1119,15 +812,13 @@ defmodule Hologram.Query.WindowTest do
              }
     end
 
-    test "downloads every source a set chosen with if reads, for a quantifier over it" do
+    test "embeds every source a set chosen with if reads, for a quantifier over it" do
       term =
         Module37
         |> filter(any(message <- picked, message.pinned == true))
         |> Stage.normalize()
 
-      window = derive(term, false)
-
-      assert window.filter == []
+      window = embed(term, false)
 
       assert window.include == %{
                messages: %Query{
@@ -1142,16 +833,16 @@ defmodule Hologram.Query.WindowTest do
              }
     end
 
-    test "downloads nothing for an include through a set holding no rows" do
+    test "embeds nothing for an include through a set holding no rows" do
       term =
         Module37
         |> include(nothing.author)
         |> Stage.normalize()
 
-      assert derive(term, false).include == %{}
+      assert embed(term, false).include == term.include
     end
 
-    test "downloads the rows a derived field a condition of if reads is computed from" do
+    test "embeds the rows a derived field a condition of if reads is computed from" do
       put_derived_definitions([Module34])
 
       term =
@@ -1159,30 +850,31 @@ defmodule Hologram.Query.WindowTest do
         |> filter(level == :busy)
         |> Stage.normalize()
 
-      assert derive(term, false).include == %{
+      assert embed(term, false).include == %{
                channel: %Query{entity: Module32, include: %{messages: %Query{entity: Module33}}}
              }
     end
 
-    test "downloads the rows a derived field sorted by is computed from" do
+    test "embeds the rows a derived field sorted by is computed from" do
       term =
         Module37
         |> sort(member_count)
         |> Stage.normalize()
 
-      window = derive(term, false)
+      window = embed(term, false)
 
       assert window.include == %{members: %Query{entity: Module2}}
     end
 
-    test "downloads a set a definition's source reads through whole beside a narrowing of it" do
+    test "embeds a set a definition's source reads through whole beside a narrowing of it" do
       term =
         Module37
         |> filter(pinned_count > 1)
         |> include(colleague_count)
         |> Stage.normalize()
 
-      assert derive(term, false).include == %{
+      assert embed(term, false).include == %{
+               colleague_count: nil,
                messages: %Query{
                  entity: Module38,
                  include: %{
@@ -1195,13 +887,13 @@ defmodule Hologram.Query.WindowTest do
              }
     end
 
-    test "joins two narrowings of one set with or" do
+    test "joins a derived field's narrowing and a quantifier's of one set with or" do
       term =
         Module37
         |> filter(pinned_count > 1 and any(message <- messages, message.pinned == false))
         |> Stage.normalize()
 
-      assert derive(term, false).include == %{
+      assert embed(term, false).include == %{
                messages: %Query{
                  entity: Module38,
                  filter: [{:or, [[{:pinned, :==, false}], [{:pinned, :==, true}]]}]
@@ -1209,26 +901,25 @@ defmodule Hologram.Query.WindowTest do
              }
     end
 
-    test "downloads the rows the rules of a derived include's rows read when a client checks them" do
+    test "embeds the rows the rules of a derived include's rows read when a client checks them" do
       term =
         Module37
         |> include(recent_messages)
         |> Stage.normalize()
 
-      assert derive(term, true).include == %{
+      assert embed(term, true).include == %{
+               recent_messages: term.include.recent_messages,
                messages: %Query{entity: Module38, include: %{channel: %Query{entity: Module37}}}
              }
     end
 
-    test "downloads what a derived field read inside a quantifier's condition is computed from" do
+    test "embeds what a derived field read inside a quantifier's condition is computed from" do
       term =
         Module32
         |> filter(any(message <- messages, message.later_count > 2))
         |> Stage.normalize()
 
-      window = derive(term, false)
-
-      assert window.filter == [{:any, {[:messages], []}}]
+      window = embed(term, false)
 
       assert window.include == %{
                messages: %Query{
@@ -1442,6 +1133,63 @@ defmodule Hologram.Query.WindowTest do
         |> Stage.normalize()
 
       assert embed(term, false).include.recent_messages == term.include.recent_messages
+    end
+  end
+
+  describe "entity_types/1" do
+    setup do
+      put_derived_definitions([Module32, Module33, Module37, Module38])
+    end
+
+    test "reads its own type" do
+      assert entity_types(Stage.normalize(Module2)) == [Module2]
+    end
+
+    test "reads the types a path goes through" do
+      term =
+        Module3
+        |> filter(c.id != nil)
+        |> Stage.normalize()
+
+      assert entity_types(term) == [Module1, Module3]
+    end
+
+    test "reads the types it includes" do
+      term =
+        Module32
+        |> include(messages)
+        |> Stage.normalize()
+
+      assert entity_types(term) == [Module32, Module33]
+    end
+
+    test "reads the types a quantifier's set goes through" do
+      term =
+        Module37
+        |> filter(any(members))
+        |> count()
+        |> Stage.normalize()
+
+      assert entity_types(term) == [Module2, Module37]
+    end
+
+    test "reads the types a derived field it filters on is computed from" do
+      term =
+        Module37
+        |> filter(member_count > 3)
+        |> count()
+        |> Stage.normalize()
+
+      assert entity_types(term) == [Module2, Module37]
+    end
+
+    test "reads the types a derived field holding a value it includes is computed from" do
+      term =
+        Module32
+        |> include(message_count)
+        |> Stage.normalize()
+
+      assert entity_types(term) == [Module32, Module33]
     end
   end
 end

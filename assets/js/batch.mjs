@@ -94,8 +94,8 @@ export default class Batch {
   }
 
   // Marks every write naming one of the given rows as already in the base. Called with what a
-  // frame just wrote, per row rather than per batch: one batch's writes can reach two windows and
-  // arrive as two frames, and marking the second row's write on the first frame would take it off
+  // frame just wrote, per row rather than per batch: one batch's writes can be told in two parts
+  // and arrive as two frames, and marking the second row's write on the first frame would take it off
   // the screen until its own frame caught up.
   //
   // Answers whether anything was marked that was not marked already. Most frames name rows no

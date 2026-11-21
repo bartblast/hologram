@@ -4,8 +4,8 @@ defmodule HologramFeatureTests.Components.ActionWrites.Todos do
 
   alias HologramFeatureTests.Entities.Todo
 
-  # The todos reach this list through the ordinary read path - a registered query the client
-  # evaluates against its own database - so a row an action wrote appears here in the same frame
+  # The todos reach this list through the ordinary read path - a derived query the client answers
+  # over its own database - so a row an action wrote appears here in the same frame
   # as the action's state change, before anything has been sent. That is the whole claim the
   # scenarios check.
   derived :todos, [Todo], &todos_query/0

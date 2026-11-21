@@ -33,17 +33,16 @@ Benchee.run(
     permission_checking_pages = Compiler.pages_checking_permissions(listed_reach)
 
     reach_by_page =
-      Compiler.build_kept_page_reach(listed_reach, permission_checking_pages, module_info_plt)
-
-    component_queries =
-      reach_by_page
-      |> Enum.flat_map(fn {_page_module, reach} -> reach.components end)
-      |> Enum.uniq()
-      |> Compiler.extract_component_queries(Reflection.list_entities(module_info_plt), ir_plt)
+      Compiler.build_kept_page_reach(
+        listed_reach,
+        permission_checking_pages,
+        module_info_plt,
+        ir_plt
+      )
 
     sync_constants_js =
       reach_by_page
-      |> Compiler.build_sync_constants(component_queries, module_info_plt)
+      |> Compiler.build_sync_constants(module_info_plt)
       |> Compiler.build_sync_constants_js()
 
     opts = [

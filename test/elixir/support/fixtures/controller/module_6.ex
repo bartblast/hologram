@@ -85,6 +85,10 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
     %{server | user_id: 7}
   end
 
+  def command(:my_command_setting_false_user_id, _params, server) do
+    %{server | user_id: false}
+  end
+
   def command(:my_command_changing_user_id_then_raising, _params, server) do
     server = %{server | user_id: 7}
     raise "boom"

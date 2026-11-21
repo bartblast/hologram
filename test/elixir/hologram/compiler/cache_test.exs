@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.CacheTest do
   alias Hologram.Compiler.Cache
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Tracer
+  alias Hologram.Query.Placeholder
   alias Hologram.Reflection
 
   setup do
@@ -24,12 +25,21 @@ defmodule Hologram.Compiler.CacheTest do
 
   defp data_layer_state do
     %{
-      components: %{Module1 => %{count_types: %{}, derived_queries: [], terms: []}},
+      derived: %{definitions: %{}, read_modules: []},
       pages: %{
         Module2 => %{
+          atoms: MapSet.new([:==, :a]),
           checks_permissions?: false,
-          components: [Module1],
           modules: MapSet.new([Module1, Module2]),
+          query_chains: [
+            %{
+              final_sort?: true,
+              line: 4,
+              mfa: {Module2, :template, 0},
+              root: Module1,
+              steps: [{:filter, [[a: {:==, %Placeholder{name: :a}}]], 4}]
+            }
+          ],
           reads_session_user?: false
         }
       },
