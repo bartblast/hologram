@@ -1100,6 +1100,242 @@ describe("DataLayer", () => {
     });
   });
 
+  describe("pageCounts() and restoreCounts()", () => {
+    const TASK = "MyApp.Task";
+
+    let key, term;
+
+    const answer = () =>
+      DataLayer.answerDerivedQuery("MyApp.Tasks", Type.atom("total"), [], term);
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {id: "uuid", title: "string"},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+      LocalDatabase.reset();
+      DataLayer.restoreCounts(null);
+      DataLayer.isStoreRestored = true;
+      SyncStream.syncCursor = null;
+
+      term = DataLayer.normalizeQuery(
+        ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
+      );
+
+      key = `MyApp.Tasks/total/${QuerySpelling.spell(term)}`;
+    });
+
+    afterEach(() => {
+      DataLayer.restoreCounts(null);
+      DataLayer.isStoreRestored = false;
+      LocalDatabase.reset();
+      LocalDatabase.identityEndedPeriod = null;
+      SyncStream.syncCursor = null;
+      delete globalThis.Hologram.sync;
+    });
+
+    it("gives the counts the page answered with", () => {
+      LocalDatabase.carryCounts({[key]: 42}, {[key]: [TASK]});
+
+      answer();
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), [[key, 42, [TASK]]]);
+    });
+
+    it("leaves out a held count the page didn't answer with", () => {
+      LocalDatabase.carryCounts({[key]: 42}, {[key]: [TASK]});
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), []);
+    });
+
+    it("starts over for the next page's mount data", () => {
+      LocalDatabase.carryCounts({[key]: 42}, {[key]: [TASK]});
+      answer();
+
+      sinon.stub(Deltas, "apply");
+      DataLayer.ingestMountData({actorUserId: null, syncRows: {}});
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), []);
+    });
+
+    it("starts over for a page restored from its snapshot", () => {
+      LocalDatabase.carryCounts({[key]: 42}, {[key]: [TASK]});
+      answer();
+
+      DataLayer.restoreCounts(null);
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), []);
+    });
+
+    it("answers with a count restored while the client holds no place", () => {
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      assert.deepStrictEqual(answer(), Type.integer(42));
+    });
+
+    it("gives the counts the page arrived with before its first render", () => {
+      sinon.stub(Deltas, "apply");
+
+      DataLayer.ingestMountData({
+        actorUserId: null,
+        syncCountTypes: {[key]: [TASK]},
+        syncCounts: {[key]: 42},
+        syncRows: {},
+      });
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), [[key, 42, [TASK]]]);
+    });
+
+    it("gives the counts a restored page saved before its first render", () => {
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), [[key, 42, [TASK]]]);
+    });
+
+    it("gives the held counts of a page this document saved", () => {
+      LocalDatabase.carryCounts({[key]: 42}, {[key]: [TASK]});
+
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), [[key, 42, [TASK]]]);
+    });
+
+    // This document counted for itself since it saved it, so the saved number is behind.
+    it("files nothing for a count the client has counted itself", () => {
+      LocalDatabase.markTypesSynced([TASK]);
+      LocalDatabase.beginRefill();
+
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+    });
+
+    // Held back before the first mount, then saved again under this document's period.
+    it("files a saved count this document never held", () => {
+      DataLayer.isStoreRestored = false;
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      const saved = DataLayer.pageCounts();
+
+      DataLayer.isStoreRestored = true;
+      DataLayer.restoreCounts(saved);
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {[key]: 42});
+    });
+
+    it("clears the page's counts for mount data carrying no rows", () => {
+      DataLayer.isStoreRestored = false;
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      DataLayer.ingestMountData({actorUserId: null});
+
+      assert.deepStrictEqual(DataLayer.pageCounts(), []);
+    });
+
+    describe("after the stream said somebody else signed in", () => {
+      let originalPeriod;
+
+      beforeEach(() => {
+        originalPeriod = IdentityTracker.period;
+        IdentityTracker.period = "period-1";
+        LocalDatabase.reset();
+      });
+
+      afterEach(() => {
+        IdentityTracker.period = originalPeriod;
+      });
+
+      // The tab's tag can still be the previous user's when another tab signed the new one in.
+      it("files nothing while the period lasts", () => {
+        DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+        assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      });
+
+      // A page fetched before the change can still mount, and says nothing about who is here now.
+      it("files nothing after a page from before the change mounts", () => {
+        sinon.stub(Deltas, "apply");
+
+        DataLayer.ingestMountData({
+          actorUserId: null,
+          identityPeriod: "period-1",
+          syncRows: {},
+        });
+
+        DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+        assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      });
+
+      it("files the counts once a response started a new period", () => {
+        IdentityTracker.period = "period-2";
+
+        DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+        assert.deepStrictEqual(LocalDatabase.syncCounts, {[key]: 42});
+      });
+    });
+
+    describe("before this document has read its store", () => {
+      beforeEach(() => {
+        DataLayer.isStoreRestored = false;
+      });
+
+      // A stored place isn't read back yet, so a null one says nothing.
+      it("files nothing", () => {
+        DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+        assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      });
+
+      it("keeps the counts for the page's next save", () => {
+        DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+        assert.deepStrictEqual(DataLayer.pageCounts(), [[key, 42, [TASK]]]);
+      });
+
+      it("ends once the store is read", () => {
+        sinon.stub(Durability, "restore").returns(null);
+
+        DataLayer.restore();
+
+        assert.isTrue(DataLayer.isStoreRestored);
+      });
+
+      it("lets them go at the next page's mount data", () => {
+        DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+        sinon.stub(Deltas, "apply");
+        DataLayer.ingestMountData({actorUserId: null, syncRows: {}});
+
+        assert.deepStrictEqual(DataLayer.pageCounts(), []);
+      });
+    });
+
+    // A place says a fill finished, so the rows are whole and a saved number is only older.
+    it("restores nothing while the client holds a place", () => {
+      SyncStream.syncCursor = "Nzc4LjA";
+
+      DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+    });
+
+    it("restores nothing for no entries", () => {
+      DataLayer.restoreCounts(null);
+      DataLayer.restoreCounts(undefined);
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+    });
+  });
+
   describe("listenToStream()", () => {
     it("hands the stream to the sync stream to listen on", () => {
       const eventSource = {addEventListener: () => {}};

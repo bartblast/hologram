@@ -637,6 +637,26 @@ describe("SyncStream", () => {
       assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
     });
 
+    it("tells the refill it gave up a place", () => {
+      const refilling = sinon.spy(LocalDatabase, "beginRefill");
+
+      SyncStream.syncCursor = "Nzc4LjA";
+
+      SyncStream.receiveFrame("sync_resync", {reason: "retention"});
+
+      sinon.assert.calledOnceWithExactly(refilling, {hadPlace: true});
+    });
+
+    it("tells the refill it held no place", () => {
+      const refilling = sinon.spy(LocalDatabase, "beginRefill");
+
+      SyncStream.syncCursor = null;
+
+      SyncStream.receiveFrame("sync_resync", {reason: "retention"});
+
+      sinon.assert.calledOnceWithExactly(refilling, {hadPlace: false});
+    });
+
     // The path a server's resync takes, and a follower hearing the leader's.
     it("keeps a count the client can't count yet on a resync of the same identity", () => {
       LocalDatabase.syncCounts = {"MyApp.Tasks/total/": 42};

@@ -47,6 +47,18 @@ export default class DataLayer {
     syncedTypes: null,
   };
 
+  // The keys of the carried counts of the page on screen, which its snapshot saves. Those it arrived
+  // with, so that a save before its first render keeps them, and those its renders answered with.
+  static #shownCounts = new Set();
+
+  // The counts of a restored page that came too early to be filed, which its next save keeps.
+  static #unfiledCounts = [];
+
+  // Made public to make tests easier
+  //
+  // Whether this document has taken up what the store holds, so whether it holds a place is known.
+  static isStoreRestored = false;
+
   // Based on run_query!/4
   //
   // Answers the given normalized term a derived field of the given module is defined by, for the
@@ -557,6 +569,9 @@ export default class DataLayer {
   // A bundle built before any of this existed carries neither field - it leaves the database as it
   // was.
   static ingestMountData(mountData) {
+    $.#shownCounts = new Set(Object.keys(mountData.syncCounts ?? {}));
+    $.#unfiledCounts = [];
+
     if (mountData.syncRows) {
       // A number counted for one identity must never answer for another. The period tells apart
       // what the ids can't, like two integer ids too large for the browser to hold exactly. The
@@ -610,6 +625,11 @@ export default class DataLayer {
   // runs.
   static openBatch(target) {
     Batches.open(target);
+  }
+
+  // The carried counts the page on screen is showing, for its snapshot to keep (see restoreCounts).
+  static pageCounts() {
+    return [...LocalDatabase.countEntries($.#shownCounts), ...$.#unfiledCounts];
   }
 
   // Why the given normalized term can't be a derived field's query, or null (see QueryCheck): what it
@@ -685,6 +705,8 @@ export default class DataLayer {
   static restore() {
     const resumed = Durability.restore(Tabs.leader);
 
+    $.isStoreRestored = true;
+
     if (resumed === null) {
       return;
     }
@@ -706,6 +728,37 @@ export default class DataLayer {
     // opened - and flushed an empty queue - before these batches were taken up. Without this they
     // would wait for the user to do something.
     Batches.flush();
+  }
+
+  // A page is back on screen from its snapshot, with the counts the snapshot saved. They are the
+  // page's until its first render, so a save before then keeps them. Filing them brings back the
+  // number of a page whose document has gone, and one this document let go of.
+  //
+  // Before this document has read its store, it can't tell whether it holds a place, so they wait
+  // unfiled. A client holding a place finished a fill, so its own count beats a number from before
+  // it, however old the snapshot is. And nothing comes back in a period the stream ended by saying
+  // somebody else signed in. A count the client has counted for itself isn't filed either (see
+  // LocalDatabase.restoreCountEntries).
+  static restoreCounts(entries) {
+    $.#shownCounts = new Set((entries ?? []).map(([key]) => key));
+    $.#unfiledCounts = [];
+
+    if (!entries) {
+      return;
+    }
+
+    if (!$.isStoreRestored) {
+      $.#unfiledCounts = entries;
+      return;
+    }
+
+    const isIdentityEnded =
+      LocalDatabase.identityEndedPeriod !== null &&
+      LocalDatabase.identityEndedPeriod === IdentityTracker.period;
+
+    if (SyncStream.syncCursor === null && !isIdentityEnded) {
+      LocalDatabase.restoreCountEntries(entries);
+    }
   }
 
   // Whether rows changed since the last render, which computed the derived fields from the rows it
@@ -786,7 +839,13 @@ export default class DataLayer {
       return null;
     }
 
-    return LocalDatabase.syncCounts[key] ?? null;
+    const carried = LocalDatabase.syncCounts[key] ?? null;
+
+    if (carried !== null) {
+      $.#shownCounts.add(key);
+    }
+
+    return carried;
   }
 }
 

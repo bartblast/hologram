@@ -3513,6 +3513,35 @@ describe("Hologram", () => {
 
         assert.deepStrictEqual(snapshot.chunkDigests, ["SNAPSHOT1"]);
       });
+
+      // A document loaded later has no other way to get back the numbers the page was showing.
+      it("holds the counts the data layer says the page is showing", async () => {
+        const carriedCounts = [["App.Page/total/", 42, ["App.Task"]]];
+
+        Hologram.dataLayer = {
+          pageCounts: () => carriedCounts,
+          saved: async () => null,
+          stopped: () => false,
+        };
+
+        try {
+          await Hologram.loadNewPage("/target", payloadFor("new"));
+        } finally {
+          Hologram.dataLayer = null;
+        }
+
+        const snapshot = serializeStub.firstCall.args[0];
+
+        assert.deepStrictEqual(snapshot.carriedCounts, carriedCounts);
+      });
+
+      it("holds no counts in a build with no data layer", async () => {
+        await Hologram.loadNewPage("/target", payloadFor("new"));
+
+        const snapshot = serializeStub.firstCall.args[0];
+
+        assert.deepStrictEqual(snapshot.carriedCounts, []);
+      });
     });
 
     describe("a page whose code the tab holds from an earlier visit", () => {
@@ -6442,6 +6471,69 @@ describe("Hologram", () => {
         Hologram.historyId = originalHistoryId;
         Hologram.domEpoch = 0;
         Hologram.registryEpoch = 0;
+      });
+
+      describe("the counts it saved", () => {
+        const carriedCounts = [
+          ["App.Page/total/", 42, ["App.Task"]],
+          ["App.Page/other/", 7, null],
+        ];
+
+        let restoreCounts;
+
+        beforeEach(() => {
+          restoreCounts = sinon.spy();
+
+          Hologram.dataLayer = {
+            pageCounts: () => [],
+            restoreCounts,
+            saved: async () => null,
+            stopped: () => false,
+          };
+        });
+
+        afterEach(() => {
+          Hologram.dataLayer = null;
+        });
+
+        // A reloaded document keeps the entries the document before it pushed, and never held
+        // the numbers of their pages.
+        it("go to the data layer when another document took it", async () => {
+          seedSnapshot("history-counts-1", {
+            carriedCounts,
+            identityPeriod: "a-period-of-another-document",
+            identityTag: "tag-1",
+          });
+
+          await Hologram.handlePopstateEvent({state: "history-counts-1"});
+          await flushPromises();
+
+          sinon.assert.calledOnceWithExactly(restoreCounts, carriedCounts);
+        });
+
+        it("go to the data layer when this document took it", async () => {
+          seedSnapshot("history-counts-2", {
+            carriedCounts,
+            identityPeriod: IdentityTracker.period,
+          });
+
+          await Hologram.handlePopstateEvent({state: "history-counts-2"});
+          await flushPromises();
+
+          sinon.assert.calledOnceWithExactly(restoreCounts, carriedCounts);
+        });
+
+        it("are none for a snapshot an earlier build took", async () => {
+          seedSnapshot("history-counts-3", {
+            identityPeriod: "a-period-of-another-document",
+            identityTag: "tag-1",
+          });
+
+          await Hologram.handlePopstateEvent({state: "history-counts-3"});
+          await flushPromises();
+
+          sinon.assert.calledOnceWithExactly(restoreCounts, undefined);
+        });
       });
 
       // The page is asked for the way a fresh visit asks for it, so its middleware runs. The

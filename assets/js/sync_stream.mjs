@@ -318,7 +318,7 @@ export default class SyncStream {
           // DataLayer.rowsChangedSinceRender).
           $.rowsChangedSinceRender = true;
         } else {
-          LocalDatabase.beginRefill();
+          LocalDatabase.beginRefill({hadPlace: $.syncCursor !== null});
         }
 
         $.syncCursor = null;
