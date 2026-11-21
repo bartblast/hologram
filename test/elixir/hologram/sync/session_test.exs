@@ -219,7 +219,7 @@ defmodule Hologram.Sync.SessionTest do
     receive do
       {:sync_deltas, _cursor, deltas, _applied_seq} -> await_fill(acc ++ deltas)
       {:sync_synced, :all, _cursor} -> acc
-      {:sync_synced, {:types, _types}, _cursor} -> await_fill(acc)
+      {:sync_synced, {:types, _types, _applied_seq}, _cursor} -> await_fill(acc)
     after
       1_000 -> flunk("the client was never told it holds everything")
     end
@@ -1496,9 +1496,9 @@ defmodule Hologram.Sync.SessionTest do
       start_session!([])
 
       assert synced_scopes() == [
-               {:types, [PolicyModule1]},
-               {:types, [Module2]},
-               {:types, [PolicyModule5]},
+               {:types, [PolicyModule1], nil},
+               {:types, [Module2], nil},
+               {:types, [PolicyModule5], nil},
                :all
              ]
     end
@@ -1511,9 +1511,9 @@ defmodule Hologram.Sync.SessionTest do
       start_session!([])
 
       assert synced_scopes() == [
-               {:types, [PolicyModule1]},
-               {:types, [Module2]},
-               {:types, [PolicyModule5]},
+               {:types, [PolicyModule1], nil},
+               {:types, [Module2], nil},
+               {:types, [PolicyModule5], nil},
                :all
              ]
     end
@@ -1523,10 +1523,51 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, {:types, [Module2]}, nil}
-      assert_receive {:sync_synced, {:types, [PolicyModule1]}, nil}
-      assert_receive {:sync_synced, {:types, [PolicyModule5]}, nil}
+      assert_receive {:sync_synced, {:types, [Module2], nil}, nil}
+      assert_receive {:sync_synced, {:types, [PolicyModule1], nil}, nil}
+      assert_receive {:sync_synced, {:types, [PolicyModule5], nil}, nil}
       assert_receive {:sync_synced, :all, _cursor}
+    end
+
+    # Each type is read at its own moment, so each marker speaks for its own read. A type with no
+    # rows has no frame to carry the number, and its marker is the only thing that can.
+    test "names on each type's marker the number read with that type's rows" do
+      page_types(%{@page => [PolicyModule1], @other_page => [Module2]})
+
+      read_fill = fn
+        PolicyModule1, _actor_user_id, _replica_id, _synced_types -> {[], 4}
+        Module2, _actor_user_id, _replica_id, _synced_types -> {[], 6}
+        PolicyModule5, _actor_user_id, _replica_id, _synced_types -> {[], 9}
+      end
+
+      start_session!(read_fill: read_fill, replica_id: @replica_id)
+
+      assert synced_scopes() == [
+               {:types, [PolicyModule1], 4},
+               {:types, [Module2], 6},
+               {:types, [PolicyModule5], 9},
+               :all
+             ]
+    end
+
+    # Every batch the session's own number counts committed before the read, so a marker can say
+    # they are in the type's rows even when the read found no higher one.
+    test "never names a number below the one the session was given on a type's marker" do
+      page_types(%{@page => [Module2]})
+
+      read_fill = fn _entity_type, _actor_user_id, _replica_id, _synced_types -> {[], 5} end
+
+      start_session!(applied_seq: 7, read_fill: read_fill, replica_id: @replica_id)
+
+      assert_receive {:sync_synced, {:types, [Module2], 7}, nil}
+    end
+
+    test "names no number on a type's marker for a replica with no confirmed batch" do
+      page_types(%{@page => [Module2]})
+
+      start_session!(replica_id: @replica_id)
+
+      assert_receive {:sync_synced, {:types, [Module2], nil}, nil}
     end
 
     # The marker is what a filled client resumes from: a deltas frame carries no place until the
@@ -1548,7 +1589,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!(fill_place: {200, 0})
 
-      assert_receive {:sync_synced, {:types, [Module2]}, cursor}
+      assert_receive {:sync_synced, {:types, [Module2], _applied_seq}, cursor}
       assert cursor == nil
     end
 
@@ -1561,7 +1602,7 @@ defmodule Hologram.Sync.SessionTest do
 
       assert_receive {:sync_synced, :all, cursor}
       assert cursor == Cursor.encode(200, 0, @policy_hash, @types_hash)
-      refute_received {:sync_synced, {:types, _types}, _cursor}
+      refute_received {:sync_synced, {:types, _types, _applied_seq}, _cursor}
     end
   end
 

@@ -146,6 +146,26 @@ defmodule Hologram.RouterTest do
              ]
     end
 
+    test "serves the data model bundle, for good" do
+      file_name = "data-model-#{System.unique_integer([:positive])}.js"
+      file_path = Path.join(Reflection.bundles_dir(), file_name)
+
+      File.write!(file_path, "my_data_model_bundle_content")
+      on_exit(fn -> File.rm(file_path) end)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/#{file_name}")
+        |> call([])
+
+      assert conn.status == 200
+      assert conn.resp_body == "my_data_model_bundle_content"
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+               "public, max-age=31536000, immutable"
+             ]
+    end
+
     test "passes a request for a missing bundle on" do
       conn =
         :get
