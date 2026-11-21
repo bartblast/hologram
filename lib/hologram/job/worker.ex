@@ -55,9 +55,9 @@ defmodule Hologram.Job.Worker do
   `Hologram.Job.Runner.queued/3`, `Hologram.Job.Runner.sweep/2`, `Hologram.Job.Runner.process/3`,
   `Hologram.Job.RunLock.release/2` of the run's lock name (see `Hologram.Job.Runner.lock_name/2`),
   `Hologram.Job.max_concurrency/1`, `Hologram.Job.timeout/1` and `Hologram.Job.Runner.time_out/3`,
-  the run and the release on the `:run_lock` connection, so `:run_lock` is required unless both `:run` and `:release` are
-  given. Only tests give them: the seams are what let this process be exercised without a
-  database, the way the dispatcher takes the handler it routes through.
+  the run and the release on the `:run_lock` connection, so `:run_lock` is required unless both
+  `:run` and `:release` are given. Only tests give them: the seams are what let this process be
+  exercised without a database, the way the dispatcher takes the handler it routes through.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do

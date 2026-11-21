@@ -107,7 +107,10 @@ else
   # The suite needs a role that can create databases. A test that revokes a catalog grant needs a
   # superuser, so it's left out for a role that isn't one - but never on CI, where leaving it out
   # would mean nothing runs it.
-  {:ok, role_session} = Postgrex.start_link(Hologram.DB.Config.connection_opts([]))
+  {:ok, role_session} =
+    []
+    |> Hologram.DB.Config.connection_opts()
+    |> Postgrex.start_link()
 
   %{rows: [[superuser?]]} =
     Postgrex.query!(

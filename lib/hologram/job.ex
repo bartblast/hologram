@@ -54,8 +54,8 @@ defmodule Hologram.Job do
   work: run/1 has to be safe to repeat. A job that must never run twice sets `max_attempts: 1`.
 
   The attempt limit is checked when an attempt fails, so a job already waiting for a retry when
-  the limit is lowered still gets that run. To stop those at once, delete the waiting rows
-  (`status == :queued and attempt > 0`) as part of the deploy.
+  the limit is lowered still gets that run. To stop the ones past the new limit at once, delete
+  them as part of the deploy. For a new limit of 3 they are `status == :queued and attempt >= 3`.
 
   A run that doesn't end within its time limit is killed and counts as a failed attempt, so a run
   that never returns can't keep its row running or hold on to its slot. The limit is 1 hour unless
