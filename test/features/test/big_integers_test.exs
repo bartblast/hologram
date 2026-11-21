@@ -49,7 +49,10 @@ defmodule HologramFeatureTests.BigIntegersTest do
   end
 
   feature "shows a big integer that arrives on the sync stream exactly", %{session: session} do
-    session = visit(session, BigIntegersPage)
+    session =
+      session
+      |> visit(BigIntegersPage)
+      |> await_local_fill()
 
     create_todo("big", @big)
 
