@@ -201,15 +201,19 @@ export default class SyncStream {
 
       $.markServed();
 
-      $.receiveFrame("synced", frame);
+      const written = $.receiveFrame("synced", frame);
 
-      // Written down through the same call a frame's rows go down by, with no rows, because this
-      // frame carries none - which also takes the clock down beside it. The same truthiness the
-      // memory half tests, for the same reason: a marker naming no place says nothing about
-      // where this client stands.
-      const stored = frame.cursor
-        ? Durability.persistFrame([], frame.cursor)
-        : null;
+      // Written down through the same call a frame's rows go down by. A marker carries no rows, but
+      // the sweep can take a row out of a set a stored row holds, and that row goes down again -
+      // which also takes the clock down beside it. The same truthiness the memory half tests, for
+      // the same reason: a marker naming no place says nothing about where this client stands.
+      const stored =
+        frame.cursor || written?.size > 0
+          ? Durability.persistFrame(
+              LocalDatabase.records(written ?? []),
+              frame.cursor || null,
+            )
+          : null;
 
       $.tell("synced", frame, stored);
     });
@@ -234,7 +238,7 @@ export default class SyncStream {
 
   // What a frame does to MEMORY - shared by the stream that delivered it and by a tab that was
   // handed it by another tab, since a frame means the same thing wherever it arrives from.
-  // Answers the rows a deltas frame wrote, and nothing for the other four kinds.
+  // Answers the rows a deltas frame wrote, or a types marker's sweep changed, and nothing else.
   //
   // What is deliberately NOT here is the storing. Which caller writes the frame down is a question
   // about ROLES rather than about frames: one tab of a browser holds the stream and stores what it
@@ -345,15 +349,24 @@ export default class SyncStream {
       // Truthy rather than a null test, unlike the deltas kind: a server built before this frame
       // carried a place sends no such key at all, and a rolling deploy can put a new bundle in
       // front of an old node.
-      case "synced":
+      case "synced": {
         if (frame.cursor) {
           $.syncCursor = frame.cursor;
         }
 
+        let written = null;
+
         // A scope this client does not know names nothing it holds - a node of an older build
         // speaks of the page it connected on, which is not a claim about any type.
         if (frame.scope === "types") {
-          LocalDatabase.markTypesSynced(frame.types);
+          written = LocalDatabase.markTypesSynced(
+            frame.types,
+            frame.applied_seq,
+          );
+
+          // Here rather than in the stream's listener, so every tab of the group rules them out of
+          // its own copy of the queue.
+          Batches.landUnsent(frame.types, frame.applied_seq);
         } else if (frame.scope === "all") {
           LocalDatabase.markAllSynced();
         }
@@ -363,7 +376,8 @@ export default class SyncStream {
         // render like any frame is.
         $.scheduleRender();
 
-        return null;
+        return written;
+      }
     }
   }
 

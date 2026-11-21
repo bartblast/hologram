@@ -68,13 +68,13 @@ defmodule Hologram.Sync.OutboxTest do
       {:ok, _outbox} =
         self()
         |> new([])
-        |> put({:sync_synced, {:types, [Module2]}, nil})
+        |> put({:sync_synced, {:types, [Module2], 7}, nil})
 
       session = self()
       assert_receive {:sync_frame, ^session, chunk}
 
       id = event_id(chunk)
-      assert chunk == Frame.encode_synced_envelope(id, {:types, [Module2]}, nil)
+      assert chunk == Frame.encode_synced_envelope(id, {:types, [Module2], 7}, nil)
     end
 
     test "sends the message as the term it is when raw" do
