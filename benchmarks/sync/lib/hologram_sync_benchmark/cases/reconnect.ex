@@ -35,6 +35,12 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
 
   @counts [100, 500, 1_000, 2_000, 5_000]
 
+  # How long the writes made during the wave may take to reach every client they should, once the
+  # last of them is caught up.
+  @drain_ms 10_000
+
+  @drain_poll_ms 50
+
   @doc """
   Returns the reconnect case on the given data, `:board` or `:tenants`, for the given options.
   """
@@ -55,7 +61,8 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
       options: [
         source.data,
         "#{opts[:gap_writes]} writes made while the clients are away, each to a row of its own",
-        "each client comes back at a random moment within #{opts[:wave_spread]} s"
+        "each client comes back at a random moment within #{opts[:wave_spread]} s",
+        "#{opts[:wave_writes]} writes per second while they do, each to a row of its own"
       ],
       passed?: &passed?(&1, opts),
       seed: source.seed,
@@ -119,14 +126,17 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
             "#{Enum.max(counts)} clients need more users than the #{source.users} seeded"
     end
 
-    if opts[:gap_writes] > reachable_rows(Enum.min(counts), opts, source) do
-      raise ArgumentError,
-            "#{opts[:gap_writes]} writes need a row each, more than the fewest clients read"
+    # A session reads its gap when its turn comes, so the last one's holds the writes made during
+    # the wave as well.
+    writes = opts[:gap_writes] + opts[:wave_writes] * opts[:wave_limit]
+
+    if writes > reachable_rows(Enum.min(counts), opts, source) do
+      raise ArgumentError, "#{writes} writes need a row each, more than the fewest clients read"
     end
 
-    if opts[:gap_writes] > Catchup.gap_limit() do
+    if writes > Catchup.gap_limit() do
       raise ArgumentError,
-            "#{opts[:gap_writes]} writes are past the #{Catchup.gap_limit()} a catch-up replays"
+            "#{writes} writes are past the #{Catchup.gap_limit()} a catch-up replays"
     end
 
     :ok
@@ -183,7 +193,8 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
           unfinished: Enum.count(fills, &(&1.synced_all_at == nil and &1.failure == nil))
         },
         left_out: Enum.map(left_out, &elem(&1, 0)),
-        numbers: numbers
+        numbers: numbers,
+        write: fn peer, number -> spec.write.(peer, rows, number - first_marker, number) end
       }
     catch
       kind, reason ->
@@ -222,13 +233,21 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
 
     stats_before = DB.settled_stats(conn)
     cpu_before = Measure.cpu_sample(peer)
+    # Only for a run with writes during the wave, which is what fills a session's mailbox: reading
+    # the gate costs the node some CPU, which a plain wave's figures shouldn't hold.
+    sessions = if opts[:wave_writes] > 0, do: Measure.start_session_sampler(peer)
+    writer = start_wave_writer(peer, prepared, opts)
 
     wave_from = now_ms()
     returning = prepared.clients -- prepared.left_out
     :ok = Clients.come_back_all(returning, opts[:wave_spread] * 1_000)
     _reports = Clients.await_caught_up(returning, opts[:wave_limit] * 1_000)
+
+    {wave_numbers, writer_error} = stop_wave_writer(writer)
+    :ok = await_wave_writes(prepared, wave_numbers)
     wave_to = now_ms()
 
+    session_figures = sessions && Measure.stop_session_sampler(sessions)
     cpu_after = Measure.cpu_sample(peer)
     reports = Enum.map(prepared.clients, &Client.report/1)
 
@@ -237,7 +256,7 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
     samples = Probe.stop(probe)
     peak_backends = DB.stop_backend_sampler(backends)
 
-    writes = Map.new(prepared.numbers, &{&1, 0})
+    writes = Map.new(prepared.numbers ++ wave_numbers, &{&1, 0})
     {_times, missing} = Measure.latencies(writes, reports, prepared.expected)
 
     %{
@@ -255,8 +274,115 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
       probe_baseline: Probe.summary(samples, baseline_from, baseline_to),
       probe_wave: Probe.summary(samples, wave_from, wave_to),
       return_restarts: Enum.sum_by(reports, & &1.return_restarts),
-      waits_ms: waits_ms(reports)
+      sessions: session_figures,
+      wave_writes: length(wave_numbers),
+      waits_ms: waits_ms(reports),
+      writer_error: writer_error
     }
+  end
+
+  # Writes at a fixed rate until stopped, each to a row of its own, numbered on from the writes
+  # made while the clients were away, and never more than `check!/3` found rows for. A write that
+  # fails ends the writing but not the writer, so the step still gets the ones that went through
+  # and says why the rest didn't.
+  defp start_wave_writer(peer, prepared, opts) do
+    case opts[:wave_writes] do
+      0 ->
+        nil
+
+      rate ->
+        writing = %{
+          first_number: List.last(prepared.numbers) + 1,
+          gap_ms: 1_000 / rate,
+          limit: rate * opts[:wave_limit],
+          peer: peer,
+          started_at: now_ms(),
+          write: prepared.write
+        }
+
+        spawn(fn -> write_wave(writing, 0, []) end)
+    end
+  end
+
+  defp write_wave(%{limit: limit}, limit, written), do: await_writer_stop(written, nil)
+
+  defp write_wave(writing, offset, written) do
+    wait_ms = max(writing.started_at + round(offset * writing.gap_ms) - now_ms(), 0)
+
+    receive do
+      {:stop, from, ref} ->
+        send(from, {ref, {Enum.reverse(written), nil}})
+    after
+      wait_ms ->
+        number = writing.first_number + offset
+
+        case wave_write(writing, number) do
+          :ok -> write_wave(writing, offset + 1, [number | written])
+          {:error, reason} -> await_writer_stop(written, reason)
+        end
+    end
+  end
+
+  defp wave_write(writing, number) do
+    _committed_at = writing.write.(writing.peer, number)
+
+    :ok
+  catch
+    kind, reason -> {:error, Exception.format_banner(kind, reason)}
+  end
+
+  defp await_writer_stop(written, error) do
+    receive do
+      {:stop, from, ref} -> send(from, {ref, {Enum.reverse(written), error}})
+    end
+  end
+
+  defp stop_wave_writer(nil), do: {[], nil}
+
+  defp stop_wave_writer(writer) do
+    ref = Process.monitor(writer)
+    send(writer, {:stop, self(), ref})
+
+    receive do
+      {^ref, stopped} ->
+        Process.demonitor(ref, [:flush])
+        stopped
+
+      {:DOWN, ^ref, :process, ^writer, reason} ->
+        {[], inspect(reason)}
+    end
+  end
+
+  # Waits until each client holds every write it should. A client's writes can arrive out of order
+  # across its catch-up's chunks, so every one is asked about. One that never arrives is counted as
+  # missing by the step.
+  defp await_wave_writes(_prepared, []), do: :ok
+
+  defp await_wave_writes(prepared, numbers) do
+    clients = List.to_tuple(prepared.clients)
+
+    numbers
+    |> Enum.flat_map(fn number ->
+      number
+      |> prepared.expected.()
+      |> Enum.map(&{&1, number})
+    end)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Enum.map(fn {index, expected} -> {elem(clients, index), expected} end)
+    |> Enum.reject(fn {client, _expected} -> client in prepared.left_out end)
+    |> await_markers(now_ms() + @drain_ms)
+  end
+
+  defp await_markers(pending, deadline) do
+    unfinished =
+      Enum.reject(pending, fn {client, numbers} -> Client.has_markers?(client, numbers) end)
+
+    if unfinished == [] or now_ms() >= deadline do
+      :ok
+    else
+      Process.sleep(@drain_poll_ms)
+      await_markers(unfinished, deadline)
+    end
   end
 
   # What the wave cost the server and the database, with the idle rate taken off. Nil for a wave
@@ -313,7 +439,7 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
   end
 
   defp why_failed(result, opts) do
-    (fill_reasons(result.fill) ++ wave_reasons(result, opts))
+    (fill_reasons(result.fill) ++ wave_reasons(result, opts) ++ measuring_reasons(result))
     |> Enum.filter(& &1)
     |> Enum.join(", ")
   end
@@ -335,6 +461,17 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
       result.missing > 0 && "#{result.missing} deliveries missing",
       result.leaked > 0 && "#{result.leaked} deliveries leaked",
       slow_wave?(result, opts) && "the last client took #{round(result.last_caught_up_ms)} ms"
+    ]
+  end
+
+  # A figure the step was asked for and couldn't read fails it, with the finished steps' figures
+  # still written.
+  defp measuring_reasons(result) do
+    sampler_error = result.sessions && result.sessions.error
+
+    [
+      result.writer_error && "the wave's writer failed: #{result.writer_error}",
+      sampler_error && "reading the sessions failed: #{sampler_error}"
     ]
   end
 
@@ -410,7 +547,51 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
         ]
       end)
 
-    [{"Wave", columns, rows}]
+    wave = {"Wave", columns, rows}
+
+    # Read only in a run with writes during the wave.
+    if Enum.any?(results, & &1.sessions) do
+      [wave, {"Returning sessions", session_columns(), session_rows(results)}]
+    else
+      [wave]
+    end
+  end
+
+  defp session_columns do
+    [
+      "Clients",
+      "Writes during the wave",
+      "Most waiting",
+      "KB waiting, most in one",
+      "KB catching up, most in one",
+      "MB catching up, most at once",
+      "Longest mailbox",
+      "Gate reads missed",
+      "Turns seen",
+      "Turn p50 ms",
+      "Turn max ms"
+    ]
+  end
+
+  defp session_rows(results) do
+    Enum.map(results, fn result ->
+      figures = result.sessions || %{}
+      turns = Map.get(figures, :turns_ms, [])
+
+      [
+        result.clients,
+        result.wave_writes,
+        figures[:waiting],
+        figures[:waiting_each_bytes] && figures.waiting_each_bytes / 1_024,
+        figures[:catching_up_each_bytes] && figures.catching_up_each_bytes / 1_024,
+        figures[:catching_up_sum_bytes] && figures.catching_up_sum_bytes / 1_048_576,
+        figures[:longest_mailbox],
+        figures[:gate_reads_missed],
+        length(turns),
+        Measure.percentile(turns, 50),
+        Enum.max(turns, fn -> nil end)
+      ]
+    end)
   end
 
   defp now_ms, do: System.monotonic_time(:millisecond)

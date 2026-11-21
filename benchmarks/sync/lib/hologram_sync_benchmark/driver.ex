@@ -37,9 +37,10 @@ defmodule HologramSyncBenchmark.Driver do
   # with; how long in seconds a client may take to fill; how long in seconds the deploy cases'
   # clients may take to all hold their pots again; how many writes the reconnect cases make while
   # their clients are away, how long in seconds those clients take to come back and how long they
-  # may take to be caught up; how long in seconds the lock case runs each number of writers; and
-  # the server node's memory in GB past which a step is stopped, fixed rather than a share of the
-  # machine's, so a figure means the same on any machine.
+  # may take to be caught up, and how many writes per second land while they do; how long in
+  # seconds the lock case runs each number of writers; and the server node's memory in GB past
+  # which a step is stopped, fixed rather than a share of the machine's, so a figure means the
+  # same on any machine.
   @defaults [
     access_limit: 10,
     cards: 2_000,
@@ -56,7 +57,8 @@ defmodule HologramSyncBenchmark.Driver do
     tasks: 100,
     tenants: 20,
     wave_limit: 120,
-    wave_spread: 5
+    wave_spread: 5,
+    wave_writes: 0
   ]
 
   # How long in milliseconds the boot check runs the probe.
@@ -88,7 +90,8 @@ defmodule HologramSyncBenchmark.Driver do
     tasks: :integer,
     tenants: :integer,
     wave_limit: :integer,
-    wave_spread: :integer
+    wave_spread: :integer,
+    wave_writes: :integer
   ]
 
   @doc """
@@ -137,8 +140,12 @@ defmodule HologramSyncBenchmark.Driver do
       raise ArgumentError, "--case must be one of: #{Enum.join(@cases, ", ")}"
     end
 
-    for {key, value} <- opts, is_integer(value), value < 1 do
-      raise ArgumentError, "--#{key} must be at least 1"
+    for {key, value} <- opts, key != :wave_writes, is_integer(value), value < 1 do
+      raise ArgumentError, "--#{String.replace(to_string(key), "_", "-")} must be at least 1"
+    end
+
+    if opts[:wave_writes] < 0 do
+      raise ArgumentError, "--wave-writes can't be negative"
     end
 
     writes = Step.writes(opts[:rate], opts[:duration])

@@ -163,6 +163,14 @@ defmodule HologramSyncBenchmark.Client do
   end
 
   @doc """
+  Returns whether the client has seen every marker with the given numbers.
+  """
+  @spec has_markers?(pid, [non_neg_integer]) :: boolean
+  def has_markers?(client, numbers) do
+    GenServer.call(client, {:has_markers?, numbers}, :infinity)
+  end
+
+  @doc """
   Returns the marker a timed write with the given number sets, which a client records when it
   first sees.
   """
@@ -347,6 +355,10 @@ defmodule HologramSyncBenchmark.Client do
 
   def handle_call({:has_marker?, number}, _from, state) do
     {:reply, Map.has_key?(state.markers, number), state}
+  end
+
+  def handle_call({:has_markers?, numbers}, _from, state) do
+    {:reply, Enum.all?(numbers, &Map.has_key?(state.markers, &1)), state}
   end
 
   def handle_call(:report, _from, state) do
