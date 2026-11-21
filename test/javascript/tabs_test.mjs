@@ -2433,9 +2433,11 @@ describe("Tabs", () => {
 
       // Not ready, it would hold everything its group says for the rest of its life.
       it("is ready again when taking up the store fails", async () => {
+        let read;
+
         sinon
           .stub(Durability, "readBase")
-          .resolves({cursor: "place-2", records: []});
+          .returns(new Promise((resolve) => (read = resolve)));
 
         rendering.throws(new Error("refused"));
 
@@ -2474,6 +2476,13 @@ describe("Tabs", () => {
           other.postMessage({kind: "barrier"});
 
           await hasArrived;
+
+          // Held while the read is out, past a message that is not: it is the replay that brings
+          // the frame.
+          assert.deepStrictEqual(seen, ["state", "barrier"]);
+
+          read({cursor: "place-2", records: []});
+          await waitForEventLoop();
         } finally {
           process.removeAllListeners("unhandledRejection");
           listeners.forEach((listener) =>
@@ -2481,8 +2490,11 @@ describe("Tabs", () => {
           );
         }
 
-        assert.deepStrictEqual(seen, ["state", "frame", "barrier"]);
-        assert.equal(rejected.length, 1);
+        assert.deepStrictEqual(seen, ["state", "barrier", "frame"]);
+        assert.deepStrictEqual(
+          rejected.map((error) => error.message),
+          ["refused"],
+        );
       });
 
       it("takes a lead handed to it while it read the store", async () => {
@@ -3380,8 +3392,8 @@ describe("Tabs", () => {
     it("replays the rest and takes the lead when one message it held cannot be taken", async () => {
       const group = nextGroup();
       const release = await holdLeaderLock(group);
-      const led = sinon.spy();
       const seen = [];
+      const led = sinon.spy(() => seen.push("lead"));
 
       let arrived;
 
@@ -3437,7 +3449,8 @@ describe("Tabs", () => {
         SyncStream.syncCursor = null;
       }
 
-      assert.deepStrictEqual(seen, [barrier, frame(2)]);
+      // The rest first: the lead repairs the store from the rows and the place the replay leaves.
+      assert.deepStrictEqual(seen, [barrier, frame(2), "lead"]);
       assert.isTrue(led.calledOnce);
       assert.deepStrictEqual(
         failures.map((error) => error.message),
