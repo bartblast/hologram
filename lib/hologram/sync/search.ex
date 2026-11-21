@@ -139,7 +139,7 @@ defmodule Hologram.Sync.Search do
   # a rule's reference the way the checks match it (`Hologram.Auth`, and the SQL the rules compile
   # to): an own role on the row or on its whole type, a type role and a global role held without a
   # row, a role on a related row - or on its whole type, which a delegated own role matches - and
-  # the grant store's named role on the row a grant names.
+  # the grant store's named role on the row a grant names or on its whole type.
   defp entries(%{op: op, data: data}, {entity_type, edge, labels})
        when elem(edge, 0) in @grant_kinds and op in @whole_row_ops and is_map(data) do
     grant_entries(entity_type, edge, labels, data)
@@ -165,15 +165,20 @@ defmodule Hologram.Sync.Search do
     end
   end
 
-  # The grant store's own rule reads the role on the row a grant names. A delegation to a grant
-  # carries the edge to its own type unchanged, without the chain to the grant, so there the rows
-  # can't be found - and the grant moved what its holder alone may read, so that holder rereads the
-  # type instead.
+  # The grant store's own rule reads the role on the row a grant names or on its whole type. A
+  # type-wide grant moves what its holder alone may read, across every row of the type. So does any
+  # grant read through a delegation to a grant, which carries the edge to its own type unchanged,
+  # without the chain to the grant, so there the rows can't be found. That holder rereads the type.
   defp grant_entries(entity_type, {:named_grants, _target_type, _roles}, labels, grant) do
     cond do
-      not held_on?(grant, labels) or grant["entity_id"] == nil -> []
-      entity_type != RoleGrant -> [{:whole_type, entity_type, grant["user_id"]}]
-      true -> [{:named, entity_type, labels.type, canonical_id(grant["entity_id"])}]
+      not held_on?(grant, labels) ->
+        []
+
+      grant["entity_id"] == nil or entity_type != RoleGrant ->
+        [{:whole_type, entity_type, grant["user_id"]}]
+
+      true ->
+        [{:named, entity_type, labels.type, canonical_id(grant["entity_id"])}]
     end
   end
 

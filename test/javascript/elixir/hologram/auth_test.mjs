@@ -1826,6 +1826,63 @@ describe("Elixir_Hologram_Auth", () => {
         Type.boolean(false),
       );
     });
+
+    describe("the grant store's own rule", () => {
+      const grantOf = (entityId) =>
+        Model.box(GRANT, {
+          entity_id: entityId,
+          entity_type: DOCUMENT,
+          id: "grant-of-bob",
+          role: "editor",
+          user_id: BOB,
+        });
+
+      beforeEach(() => {
+        defineModel();
+
+        globalThis.Hologram.sync.model[GRANT].policy = {
+          read: [rule({to: [["named", DOCUMENT, ["viewer"]]]})],
+        };
+
+        Model.reset();
+      });
+
+      it("grants through a role held on the entity the grant row names", () => {
+        LocalDatabase.putRow(
+          GRANT,
+          grantRow({entity_id: DOC, entity_type: DOCUMENT}),
+        );
+
+        assert.deepStrictEqual(
+          can(Type.bitstring(ALICE), Type.atom("read"), grantOf(DOC)),
+          Type.boolean(true),
+        );
+      });
+
+      it("grants through a role held on that entity's whole type", () => {
+        LocalDatabase.putRow(
+          GRANT,
+          grantRow({entity_id: null, entity_type: DOCUMENT}),
+        );
+
+        assert.deepStrictEqual(
+          can(Type.bitstring(ALICE), Type.atom("read"), grantOf(DOC)),
+          Type.boolean(true),
+        );
+      });
+
+      it("denies a type-wide grant row to a role held on the whole type", () => {
+        LocalDatabase.putRow(
+          GRANT,
+          grantRow({entity_id: null, entity_type: DOCUMENT}),
+        );
+
+        assert.deepStrictEqual(
+          can(Type.bitstring(ALICE), Type.atom("read"), grantOf(null)),
+          Type.boolean(false),
+        );
+      });
+    });
   });
 
   describe("delegation", () => {

@@ -1175,6 +1175,30 @@ defmodule Hologram.MutationTest do
       assert kept["0"]["granted_by_id"] == first_member.id
     end
 
+    # The gate admits a role held on the whole type, so the read rule has to as well, or the answer
+    # hands over a row its user may not read.
+    test "answers a type-wide holder's repeated grant with a row that holder may read" do
+      holder = create_user("type-wide-holder@example.com")
+      granter = create_user("row-granter@example.com")
+      user = create_user("row-grantee@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(holder, :member, PolicyModule2)
+      Auth.grant_role(granter, :member, resource)
+
+      Context.with_actor(granter.id, fn ->
+        Auth.grant_role(user, :member, resource)
+      end)
+
+      write = grant_write(user.id, resource, :member)
+
+      assert {:ok, %{"status" => "confirmed", "kept" => kept}} =
+               run(envelope([write]), server(holder.id))
+
+      assert kept["0"]["granted_by_id"] == granter.id
+      assert Auth.can?(holder.id, :read, EntityOperations.get(RoleGrant, write["id"]))
+    end
+
     test "rolls the batch back on a refused grant" do
       member = create_user("rollback-member@example.com")
       user = create_user("rollback-user@example.com")

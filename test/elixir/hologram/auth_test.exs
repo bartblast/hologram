@@ -944,6 +944,49 @@ defmodule Hologram.AuthTest do
       assert can?(owner, :read, grant)
       refute can?(editor, :read, grant)
     end
+
+    test "shows a row's grants to a holder of a qualifying role on the whole type" do
+      holder = create_user("user_type_wide_1@example.com")
+      other_user = create_user("user_type_wide_2@example.com")
+      resource = create_resource()
+
+      grant_role(holder, :owner, Module1)
+
+      grant = %RoleGrant{
+        user_id: other_user.id,
+        entity_type: Module1,
+        entity_id: resource.id
+      }
+
+      assert can?(holder, :read, grant)
+    end
+
+    test "hides a row's grants from a holder of a non-qualifying role on the whole type" do
+      holder = create_user("user_type_wide_3@example.com")
+      other_user = create_user("user_type_wide_4@example.com")
+      resource = create_resource()
+
+      grant_role(holder, :editor, Module1)
+
+      grant = %RoleGrant{
+        user_id: other_user.id,
+        entity_type: Module1,
+        entity_id: resource.id
+      }
+
+      refute can?(holder, :read, grant)
+    end
+
+    test "hides another user's type-wide grant from a holder of a role on the whole type" do
+      holder = create_user("user_type_wide_5@example.com")
+      other_user = create_user("user_type_wide_6@example.com")
+
+      grant_role(holder, :owner, Module1)
+
+      grant = %RoleGrant{user_id: other_user.id, entity_type: Module1, entity_id: nil}
+
+      refute can?(holder, :read, grant)
+    end
   end
 
   describe "canonical_id/1" do
