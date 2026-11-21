@@ -2268,10 +2268,9 @@ defmodule Hologram.CompilerTest do
         | entity_types: MapSet.new([BigIntegerBoard, BigIntegerCard])
       }
 
-      assert String.contains?(
-               build_sync_constants_js(sync_constants),
-               ~s/"n":{"in":{"first":0,"last":"9007199254740993","step":1}/
-             )
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"n":{"in":{"first":0,"last":"9007199254740993","step":1}/)
     end
 
     # JavaScript and Erlang round this integer to different floats, so the build hands over the
@@ -2283,10 +2282,9 @@ defmodule Hologram.CompilerTest do
 
       float_js = Jason.encode!(28_097_012_775_158_772_737 * 1.0)
 
-      assert String.contains?(
-               build_sync_constants_js(sync_constants),
-               ~s/"cap":{"definition":{"value":#{float_js}},/
-             )
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"cap":{"definition":{"value":#{float_js}},/)
     end
 
     # A client computes a derived field itself, from the definition the build resolved - spelled in
