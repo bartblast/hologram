@@ -374,6 +374,21 @@ defmodule Hologram.Auth.RoleGrantTest do
     end
   end
 
+  describe "derive_id_from_labels/4" do
+    test "answers derive_id/4's id for an entity grant spelled as the store holds it" do
+      label_id =
+        RoleGrant.derive_id_from_labels(@user_id, inspect(@entity_type), @entity_id, "member")
+
+      assert label_id == RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
+    end
+
+    test "answers derive_id/4's id for a global grant spelled as the store holds it" do
+      label_id = RoleGrant.derive_id_from_labels(@user_id, nil, nil, inspect(Role.Module1))
+
+      assert label_id == RoleGrant.derive_id(@user_id, nil, nil, Role.Module1)
+    end
+  end
+
   describe "entity_type/1" do
     test "answers the entity type whose resource type label it is given" do
       assert RoleGrant.entity_type(Module14) == Module14

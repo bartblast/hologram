@@ -729,7 +729,6 @@ defmodule Hologram.DB.IntrospectionTest do
                  "ok_tuple",
                  "raise",
                  "record_actor",
-                 "record_order",
                  "swept",
                  "throw"
                ],

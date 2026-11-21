@@ -471,6 +471,31 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, _cursor, [%{id: _id, op: :put_entity}], 5}
     end
 
+    # The client went away before the batch's answer, so its create is still pending and it holds no
+    # row under the id. Only a drop by id claiming the batch's number lands the create, so the
+    # answer to the batch sent again files nothing. A drop by hash claims no number.
+    test "tells the client to drop a row its own batch in the gap created that its user may not read" do
+      hidden = DB.create!(PolicyModule1.new())
+
+      gap = [
+        logged(
+          :put_entity,
+          PolicyModule1,
+          hidden.id,
+          %{"public" => false},
+          {300, 1},
+          ref(@replica_id, 9)
+        )
+      ]
+
+      start_session!(applied_seq: 3, gap: gap, replica_id: @replica_id)
+
+      assert_receive {:sync_deltas, _cursor, deltas, 9}, 1_000
+      assert deltas == [Frame.unsync_entity(hidden.id, PolicyModule1)]
+
+      refute_receive {:sync_deltas, _cursor, _deltas, nil}, 100
+    end
+
     test "joins the node's sessions before it reads what its user may read" do
       test_pid = self()
       read_ids = read_ids_in_sandbox()
@@ -634,8 +659,7 @@ defmodule Hologram.Sync.SessionTest do
       page_types(%{})
 
       stop_supervised!(Gate)
-      put_app_env(:sync, catchups_at_once: 1)
-      start_supervised!(Gate)
+      start_supervised!({Gate, limit: 1})
 
       test_pid = self()
 
@@ -1798,6 +1822,82 @@ defmodule Hologram.Sync.SessionTest do
       refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
     end
 
+    # The client files the row once the batch is confirmed, whatever its session was told.
+    test "tells the client to drop a row its own batch created that its user may not read" do
+      page_types(%{})
+
+      start_session!(replica_id: @replica_id)
+      await_fill()
+
+      hidden =
+        %{public: false}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      route([
+        live_effect(
+          :put_entity,
+          PolicyModule1,
+          hidden.id,
+          %{"public" => false},
+          ref(@replica_id, 4)
+        )
+      ])
+
+      assert_receive {:sync_deltas, _cursor, deltas, 4}
+      assert deltas == [Frame.unsync_entity(hidden.id, PolicyModule1)]
+    end
+
+    test "tells nothing of a row a batch created that its user may not read when it serves no replica" do
+      page_types(%{})
+
+      start_session!([])
+      await_fill()
+
+      hidden =
+        %{public: false}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      route([
+        live_effect(
+          :put_entity,
+          PolicyModule1,
+          hidden.id,
+          %{"public" => false},
+          ref(@replica_id, 4)
+        )
+      ])
+
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
+    test "tells nothing of a row another replica's batch created that its user may not read" do
+      page_types(%{})
+
+      start_session!(replica_id: @replica_id)
+      await_fill()
+
+      hidden =
+        %{public: false}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      another_replica_id = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
+
+      route([
+        live_effect(
+          :put_entity,
+          PolicyModule1,
+          hidden.id,
+          %{"public" => false},
+          ref(another_replica_id, 4)
+        )
+      ])
+
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
     test "passes over a batch the fill already holds" do
       task = create("before")
       page_types(%{})
@@ -2130,6 +2230,7 @@ defmodule Hologram.Sync.SessionTest do
       part = %{
         checked: %{},
         overtaking_seqs: %{},
+        own_puts: %{},
         own_seqs: %{},
         pair_effects: %{},
         pairs: %{},
@@ -2366,6 +2467,7 @@ defmodule Hologram.Sync.SessionTest do
       part = %{
         checked: %{},
         overtaking_seqs: %{},
+        own_puts: %{},
         own_seqs: %{},
         pair_effects: %{},
         pairs: %{},
@@ -2663,6 +2765,7 @@ defmodule Hologram.Sync.SessionTest do
     %{
       checked: %{PolicyProject => PackedIds.pack([project.id])},
       overtaking_seqs: %{},
+      own_puts: %{},
       own_seqs: %{},
       pair_effects: %{},
       pairs: %{},
@@ -2683,6 +2786,7 @@ defmodule Hologram.Sync.SessionTest do
     %{
       checked: %{},
       overtaking_seqs: %{},
+      own_puts: %{},
       own_seqs: %{},
       pair_effects: %{},
       pairs: %{},

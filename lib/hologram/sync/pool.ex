@@ -84,8 +84,9 @@ defmodule Hologram.Sync.Pool do
 
   @doc """
   Returns how many connections the pool opens: the `:pool_size` key of the `:sync` config,
-  defaulting to how many catch-ups a node runs at once (see `Hologram.Sync.Gate.catchups_at_once/0`).
-  0 starts none, and sync's reads share the app's pool. Anything but a non-negative integer raises.
+  defaulting to how many catch-ups a node runs at once, 4 (see
+  `Hologram.Sync.Gate.catchups_at_once/0`). 0 starts none, and sync's reads share the app's pool.
+  Anything but a non-negative integer raises.
   """
   @spec size() :: non_neg_integer
   def size do

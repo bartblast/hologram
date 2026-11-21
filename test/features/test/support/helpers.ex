@@ -32,6 +32,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Item
   alias HologramFeatureTests.Entities.Label
   alias HologramFeatureTests.Entities.Leg
+  alias HologramFeatureTests.Entities.Locker
   alias HologramFeatureTests.Entities.Membership
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Message
@@ -51,6 +52,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Shelf
   alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Shop
+  alias HologramFeatureTests.Entities.Slip
   alias HologramFeatureTests.Entities.Sticker
   alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Ticket
@@ -61,7 +63,8 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Entities.Vault
   alias HologramFeatureTests.Entities.Workshop
-  alias HologramFeatureTests.Jobs.KillWorker
+  alias HologramFeatureTests.Jobs.HoldRun
+  alias HologramFeatureTests.Jobs.KillRun
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTestsWeb.Endpoint
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
@@ -1176,11 +1179,13 @@ defmodule HologramFeatureTests.Helpers do
         Event,
         Folder,
         GuestEntry,
+        HoldRun,
         Inspection,
         Item,
-        KillWorker,
+        KillRun,
         Label,
         Leg,
+        Locker,
         Membership,
         Memo,
         Message,
@@ -1202,6 +1207,7 @@ defmodule HologramFeatureTests.Helpers do
         Shelf,
         Ship,
         Shop,
+        Slip,
         Sticker,
         Stop,
         Ticket,

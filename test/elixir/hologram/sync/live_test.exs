@@ -436,6 +436,66 @@ defmodule Hologram.Sync.LiveTest do
       assert part.own_seqs == %{"replica_a" => 7, "replica_b" => 2}
     end
 
+    test "names the rows each replica's batches put, per entity type", context do
+      project_1 = create!(PolicyModule17)
+      project_2 = create!(PolicyModule17)
+      label = create!(PolicyModule19)
+
+      effects = [
+        effect(:put_entity, PolicyModule17, project_1.id, %{"name" => nil, "public" => false},
+          mutation_ref: %{"replica_id" => "replica_a", "seq" => 1}
+        ),
+        effect(:put_entity, PolicyModule19, label.id, %{"name" => nil},
+          mutation_ref: %{"replica_id" => "replica_a", "seq" => 2}
+        ),
+        effect(:put_entity, PolicyModule17, project_2.id, %{"name" => nil, "public" => false},
+          mutation_ref: %{"replica_id" => "replica_b", "seq" => 1}
+        )
+      ]
+
+      parts = parts(effects, context.sessions, context.edges, @synced, @place)
+      part = Map.fetch!(parts, nil)
+
+      assert Map.new(part.own_puts, fn {replica_id, puts} -> {replica_id, unpacked(puts)} end) ==
+               %{
+                 "replica_a" => %{
+                   PolicyModule17 => ids([project_1]),
+                   PolicyModule19 => ids([label])
+                 },
+                 "replica_b" => %{PolicyModule17 => ids([project_2])}
+               }
+    end
+
+    test "names no row a replica's batches patched, deleted or put of a type sync doesn't send",
+         context do
+      project = create!(PolicyModule17)
+      label = create!(PolicyModule19)
+      ref = %{"replica_id" => "replica_a", "seq" => 1}
+
+      effects = [
+        effect(:patch_entity, PolicyModule17, project.id, %{"name" => "a"}, mutation_ref: ref),
+        effect(:del_entity, PolicyModule17, Ecto.UUID.generate(), %{}, mutation_ref: ref),
+        effect(:put_entity, PolicyModule19, label.id, %{"name" => nil}, mutation_ref: ref)
+      ]
+
+      synced = [PolicyModule17, PolicyModule18]
+      parts = parts(effects, context.sessions, context.edges, synced, @place)
+
+      assert Map.fetch!(parts, nil).own_puts == %{}
+    end
+
+    test "names no row a put with no batch made", context do
+      project = create!(PolicyModule17)
+
+      effects = [
+        effect(:put_entity, PolicyModule17, project.id, %{"name" => nil, "public" => false})
+      ]
+
+      parts = parts(effects, context.sessions, context.edges, @synced, @place)
+
+      assert Map.fetch!(parts, nil).own_puts == %{}
+    end
+
     # Module17's archive rule reads none(label <- labels, label.name == "locked"), which a browser
     # can't decide, so a renamed label moves the verdicts of the projects holding it.
     test "gives the verdicts of the rows the batch may have moved them of, as they stand now",
