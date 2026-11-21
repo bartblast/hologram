@@ -53,11 +53,33 @@ defmodule HologramSyncBenchmark.Clients do
   end
 
   @doc """
+  Waits until every given client that came back holds its whole pot again or failed, or the timeout
+  passes, and returns their reports in the clients' order.
+  """
+  @spec await_caught_up([pid], non_neg_integer) :: [Client.report()]
+  def await_caught_up(clients, timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+
+    await_reports(clients, deadline, &(&1.caught_up_at != nil or &1.failure != nil))
+  end
+
+  @doc """
   Closes the given clients and returns :ok.
   """
   @spec close_all([pid]) :: :ok
   def close_all(clients) do
     Enum.each(clients, &Client.close/1)
+  end
+
+  @doc """
+  Has each given client come back at its own uniformly random moment within the given
+  milliseconds, the way browsers retrying with jitter spread over a moment, and returns :ok.
+  """
+  @spec come_back_all([pid], non_neg_integer) :: :ok
+  def come_back_all(clients, spread_ms) do
+    Enum.each(clients, fn client ->
+      :ok = Client.come_back(client, :rand.uniform(spread_ms + 1) - 1)
+    end)
   end
 
   @doc """
@@ -67,6 +89,20 @@ defmodule HologramSyncBenchmark.Clients do
   @spec connect_all([pid], pos_integer) :: [{pid, term}]
   def connect_all(clients, concurrency) do
     run_all(clients, concurrency, &Client.connect/1)
+  end
+
+  @doc """
+  Closes the stream of each given client, keeping what it knows, and returns the ones that
+  couldn't leave as `{client, reason}` pairs.
+  """
+  @spec leave_all([pid]) :: [{pid, term}]
+  def leave_all(clients) do
+    Enum.flat_map(clients, fn client ->
+      case Client.leave(client) do
+        :ok -> []
+        {:error, reason} -> [{client, reason}]
+      end
+    end)
   end
 
   @doc """
@@ -111,18 +147,17 @@ defmodule HologramSyncBenchmark.Clients do
   def await_fills(clients, timeout_ms) do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
 
-    await_fills_until(clients, deadline)
+    await_reports(clients, deadline, &(&1.synced_all_at != nil or &1.failure != nil))
   end
 
-  defp await_fills_until(clients, deadline) do
+  defp await_reports(clients, deadline, settled?) do
     reports = Enum.map(clients, &Client.report/1)
-    settled? = Enum.all?(reports, &(&1.synced_all_at != nil or &1.failure != nil))
 
-    if settled? or System.monotonic_time(:millisecond) >= deadline do
+    if Enum.all?(reports, settled?) or System.monotonic_time(:millisecond) >= deadline do
       reports
     else
       Process.sleep(@fill_poll_ms)
-      await_fills_until(clients, deadline)
+      await_reports(clients, deadline, settled?)
     end
   end
 

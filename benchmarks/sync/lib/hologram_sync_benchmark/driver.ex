@@ -12,6 +12,7 @@ defmodule HologramSyncBenchmark.Driver do
   alias HologramSyncBenchmark.Cases.Deploy
   alias HologramSyncBenchmark.Cases.Lock
   alias HologramSyncBenchmark.Cases.Tenants
+  alias HologramSyncBenchmark.Client
   alias HologramSyncBenchmark.Clients
   alias HologramSyncBenchmark.DB
   alias HologramSyncBenchmark.Entities.Card
@@ -20,6 +21,7 @@ defmodule HologramSyncBenchmark.Driver do
   alias HologramSyncBenchmark.Seeding
   alias HologramSyncBenchmark.Step
   alias HologramSyncBenchmark.Sweep
+  alias HologramSyncBenchmark.Writer
 
   @board_page "HologramSyncBenchmark.BoardPage"
 
@@ -50,6 +52,12 @@ defmodule HologramSyncBenchmark.Driver do
   ]
 
   @default_smoke_clients 10
+
+  # How many writes the smoke check makes while its clients are away, and how long in milliseconds
+  # the clients take to come back.
+  @smoke_gap_writes 5
+
+  @smoke_return_spread_ms 200
 
   @switches [
     access_limit: :integer,
@@ -166,7 +174,8 @@ defmodule HologramSyncBenchmark.Driver do
   end
 
   # Connects anonymous clients to a seeded board and prints how long each took to hold every
-  # card - the check that clients connect, sync and report.
+  # card, then has them leave, makes a few writes and has them come back, printing what each was
+  # sent - the check that clients connect, sync, report and catch up from where they were.
   defp run_case("smoke", opts) do
     conn = DB.connect!()
     count = hd(opts[:clients] || [@default_smoke_clients])
@@ -175,15 +184,20 @@ defmodule HologramSyncBenchmark.Driver do
     _seeded = Seeding.board!(conn, Card, opts[:cards])
 
     Peer.with_peer(fn peer ->
+      ids = Peer.rpc(peer, Writer, :ids, [Card])
+      :ok = Peer.rpc(peer, Writer, :warm_up, [Card, elem(ids, 0), :title, "warm-up"])
+
       clients = start_clients(peer, count, "/session", @board_page)
 
       Clients.prepare_all!(clients, Step.connect_concurrency())
       failures = Clients.connect_all(clients, Step.connect_concurrency())
       reports = Clients.await_fills(clients, opts[:fill_timeout] * 1_000)
 
-      Clients.close_all(clients)
-
       print_fills(reports, failures)
+
+      smoke_return(peer, clients, ids, opts)
+
+      Clients.close_all(clients)
     end)
   end
 
@@ -353,6 +367,50 @@ defmodule HologramSyncBenchmark.Driver do
     end
 
     IO.puts("#{length(failures)} clients failed to connect")
+  end
+
+  defp smoke_return(peer, clients, ids, opts) do
+    left_out = Clients.leave_all(clients)
+    numbers = Enum.to_list(0..(min(@smoke_gap_writes, tuple_size(ids)) - 1))
+
+    for number <- numbers do
+      Peer.rpc(peer, Writer, :update, [Card, elem(ids, number), :title, Client.marker(number)])
+    end
+
+    # Numbered among all the clients, so a line names the same client as its fill's line above.
+    {returning, indexes} =
+      clients
+      |> Enum.with_index(1)
+      |> Enum.reject(fn {client, _index} -> List.keymember?(left_out, client, 0) end)
+      |> Enum.unzip()
+
+    :ok = Clients.come_back_all(returning, @smoke_return_spread_ms)
+
+    returning
+    |> Clients.await_caught_up(opts[:fill_timeout] * 1_000)
+    |> Enum.zip(indexes)
+    |> print_returns(numbers)
+
+    IO.puts("#{length(left_out)} clients couldn't leave")
+  end
+
+  defp print_returns(indexed_reports, numbers) do
+    for {report, index} <- indexed_reports do
+      back =
+        if report.caught_up_at do
+          "#{div(report.caught_up_at - report.returned_at, 1_000)} ms"
+        else
+          "not caught up"
+        end
+
+      got = Enum.count(numbers, &Map.has_key?(report.markers, &1))
+
+      IO.puts(
+        "Client #{index} back: #{back}, #{report.bytes - report.bytes_at_leave} bytes, " <>
+          "#{got}/#{length(numbers)} gap writes, #{report.return_restarts} restarts" <>
+          if(report.failure, do: ", failed: #{inspect(report.failure)}", else: "")
+      )
+    end
   end
 
   defp start_clients(peer, count, cookie_path, page) do
