@@ -1103,7 +1103,25 @@ describe("DataLayer", () => {
 
   describe("rendered()", () => {
     afterEach(() => {
+      SyncStream.servedModelHash = null;
       SyncStream.stopReason = null;
+    });
+
+    // Served across models, it goes on working; only its next page loads afresh.
+    it("leaves the notice down in a tab a server of another model serves", () => {
+      const updating = sinon.stub(ReloadNotice, "update");
+      const sync = globalThis.Hologram.sync;
+      globalThis.Hologram.sync = {...sync, modelHash: "a3f9c2"};
+
+      try {
+        SyncStream.servedModelHash = "b7e1d4";
+
+        DataLayer.rendered();
+
+        sinon.assert.calledOnceWithExactly(updating, false);
+      } finally {
+        globalThis.Hologram.sync = sync;
+      }
     });
 
     it("puts the notice up in a tab the server stopped", () => {
@@ -1382,7 +1400,22 @@ describe("DataLayer", () => {
 
   describe("stopped()", () => {
     afterEach(() => {
+      SyncStream.servedModelHash = null;
       SyncStream.stopReason = null;
+    });
+
+    // Served, but the next page would be the new build's, over this tab's runtime and store.
+    it("is true while a server of another model serves the tab", () => {
+      const sync = globalThis.Hologram.sync;
+      globalThis.Hologram.sync = {...sync, modelHash: "a3f9c2"};
+
+      try {
+        SyncStream.servedModelHash = "b7e1d4";
+
+        assert.isTrue(DataLayer.stopped());
+      } finally {
+        globalThis.Hologram.sync = sync;
+      }
     });
 
     it("is true once the server stopped serving the tab", () => {
@@ -1393,6 +1426,19 @@ describe("DataLayer", () => {
 
     it("is false while the server serves it", () => {
       assert.isFalse(DataLayer.stopped());
+    });
+
+    it("is false while a server of this bundle's model serves it", () => {
+      const sync = globalThis.Hologram.sync;
+      globalThis.Hologram.sync = {...sync, modelHash: "a3f9c2"};
+
+      try {
+        SyncStream.servedModelHash = "a3f9c2";
+
+        assert.isFalse(DataLayer.stopped());
+      } finally {
+        globalThis.Hologram.sync = sync;
+      }
     });
   });
 

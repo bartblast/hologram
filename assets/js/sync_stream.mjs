@@ -15,6 +15,12 @@ import Tabs from "./tabs.mjs";
 // kinds the stream delivers, and what a frame does to memory - shared with the tabs that are
 // handed a frame by the tab holding the stream.
 export default class SyncStream {
+  // The longest list of synced types a greeting names, as the stream's URL spells it. The greeting
+  // rides that URL, and a request line past what the server reads takes the whole stream down,
+  // realtime traffic and all, while a greeting naming no types is still served by a server of the
+  // same model.
+  static MAX_SYNCED_TYPES_LENGTH = 4000;
+
   static renderScheduled = false;
 
   // The last rules a server handed this client in place of its bundle's, as the frame carried
@@ -23,8 +29,9 @@ export default class SyncStream {
   static rules = null;
 
   // Whether this tab's own stream has served it sync since the page loaded - so its bundle's rules
-  // are the ones the server enforces, or it was handed those (see rulesForGroup). Until then they
-  // are only what the bundle was built with, which a deploy since can have left behind.
+  // are the ones the server enforces, or it was handed those, or the server runs a newer model and
+  // serves this bundle by its own rules (see rulesForGroup). Until then they are only what the
+  // bundle was built with, which a deploy since can have left behind.
   static served = false;
 
   // Why the server stopped serving this tab, or null while it is served. Kept for the life of the
@@ -33,6 +40,11 @@ export default class SyncStream {
   // since a server is always newer than the tab reading it. A refused write can tell the tab the
   // same thing, and a tab joining the group is told by the tab that heard it.
   static stopReason = null;
+
+  // The hash of the model the server runs, as its frames last said, or null until one did. A server
+  // of a newer model serves this tab its rows in the shape this bundle reads (see servedAcrossModels),
+  // but the pages it renders are the new build's.
+  static servedModelHash = null;
 
   // Whether a frame or a batch changed rows since the last render, which computed the derived
   // fields from the rows it saw (see DataLayer.rowsChangedSinceRender).
@@ -79,6 +91,19 @@ export default class SyncStream {
 
     // The rules this client holds, which are the bundle's until a server hands it others.
     greeting.policy_hash = sync.policyHash;
+
+    // The entity types this bundle reads rows of. A server of the same model serves its own list,
+    // which a deploy changing only rules can widen past these. One running another model can't
+    // know them, and serves this bundle only the ones it names, under the names this bundle knows
+    // them by.
+    const syncedTypes = sync.syncedTypes?.join(",");
+
+    if (
+      syncedTypes !== undefined &&
+      encodeURIComponent(syncedTypes).length <= $.MAX_SYNCED_TYPES_LENGTH
+    ) {
+      greeting.synced_types = syncedTypes;
+    }
 
     // A client arriving for the first time has no place to name, and asks for everything it may
     // see. One coming back names where it got to, and is told only what moved since.
@@ -140,7 +165,7 @@ export default class SyncStream {
     eventSource.addEventListener("sync_deltas", (event) => {
       const frame = JSON.parse(event.data);
 
-      $.markServed();
+      $.markServedBy(frame.model_hash);
       const written = $.receiveFrame("sync_deltas", frame);
 
       // Behind memory, and only what the STREAM delivered: the rows this frame wrote, and the
@@ -199,7 +224,7 @@ export default class SyncStream {
     eventSource.addEventListener("synced", (event) => {
       const frame = JSON.parse(event.data);
 
-      $.markServed();
+      $.markServedBy(frame.model_hash);
 
       const written = $.receiveFrame("synced", frame);
 
@@ -246,6 +271,8 @@ export default class SyncStream {
   static receiveFrame(event, frame) {
     switch (event) {
       case "sync_deltas": {
+        $.noteServedModel(frame.model_hash);
+
         const written = Deltas.apply(frame.deltas);
 
         // What this client's own pending writes are worth against what just arrived: every batch
@@ -350,6 +377,8 @@ export default class SyncStream {
       // carried a place sends no such key at all, and a rolling deploy can put a new bundle in
       // front of an old node.
       case "synced": {
+        $.noteServedModel(frame.model_hash);
+
         if (frame.cursor) {
           $.syncCursor = frame.cursor;
         }
@@ -381,11 +410,54 @@ export default class SyncStream {
     }
   }
 
+  // Keeps the model the server says it runs, answering whether that changed what this tab knew. A
+  // frame of a build from before frames named it names none, which says nothing.
+  static noteServedModel(modelHash) {
+    if (typeof modelHash !== "string" || modelHash === $.servedModelHash) {
+      return false;
+    }
+
+    $.servedModelHash = modelHash;
+
+    return true;
+  }
+
+  // What a frame naming the server's model tells the group, ahead of the frame itself, which
+  // reaches the other tabs only once it is stored: one navigating meanwhile has to know already
+  // what model the server runs (see servedAcrossModels). The first frame served tells it with the
+  // rest of the state (see markServed). A model the server names later - the first frame of a
+  // returning tab is a resync, which names none, and a reconnect can reach a node of another
+  // build - is told with the state again.
+  static markServedBy(modelHash) {
+    const wasServed = $.served;
+    const changed = $.noteServedModel(modelHash);
+
+    $.markServed();
+
+    if (wasServed && changed && Tabs.name !== null) {
+      Tabs.postState();
+    }
+  }
+
+  // Whether the server serving this tab runs another model than this bundle was built against. It
+  // serves the rows this bundle's pages read, but another page would come from the new build, whose
+  // code reads rows of its own model - over this tab's runtime and its store, which hold this
+  // bundle's. So a navigation loads the next page afresh, with the runtime and the store of the
+  // new build (see DataLayer.stopped), without stopping anything until then.
+  static servedAcrossModels() {
+    return (
+      $.servedModelHash !== null &&
+      $.servedModelHash !== globalThis.Hologram.sync?.modelHash
+    );
+  }
+
   // The rules the group's stream syncs under, as a frame carries them, for a tab joining it (see
   // Tabs.postState): the ones a server handed this tab, or, when it handed none, this bundle's own
-  // - a server hands over its rules exactly when a bundle's differ from them, and before anything
-  // else it serves. None before this tab's stream has served it anything: a bundle built before a
-  // deploy would hand on rules the deploy left behind.
+  // - a server of the same model hands over its rules exactly when a bundle's differ from them,
+  // and before anything else it serves. One running a newer model hands over none: its rules name
+  // what its model calls things, and this bundle's stand for what its pages offer. A group shares
+  // one model, so the rules it is handed on fit its rows. None before this tab's stream has served
+  // it anything: a bundle built before a deploy would hand on rules the deploy left behind.
   static rulesForGroup() {
     if ($.rules !== null) {
       return $.rules;
