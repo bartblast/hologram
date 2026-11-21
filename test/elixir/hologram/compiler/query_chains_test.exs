@@ -130,6 +130,60 @@ defmodule Hologram.Compiler.QueryChainsTest do
       assert error.line == source_line(Module2, "derived :spread_secrets") + 5
     end
 
+    test "refuses the sort of a derived field's branch, at the sort" do
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          validate_all!(Module2, :__derived_branch_secrets__, 1)
+        end
+
+      assert error.message =~
+               ~r/derived field :branch_secrets in .+ filters or sorts on server_only attributes/
+
+      assert error.line == source_line(Module2, "derived :branch_secrets") + 2
+    end
+
+    test "refuses the sort of a derived field's cond clause of several expressions" do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :cond_secrets in .+ filters or sorts on server_only attributes/,
+                   fn -> validate_all!(Module2, :__derived_cond_secrets__, 1) end
+    end
+
+    test "refuses the sort of a derived field's with else clause" do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :with_secrets in .+ filters or sorts on server_only attributes/,
+                   fn -> validate_all!(Module2, :__derived_with_secrets__, 1) end
+    end
+
+    test "refuses the sort of a derived field's try rescue clause" do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :try_secrets in .+ filters or sorts on server_only attributes/,
+                   fn -> validate_all!(Module2, :__derived_try_secrets__, 0) end
+    end
+
+    test "refuses the sort of a branch handed straight to the database" do
+      assert_raise Hologram.CompileError, ~r/filters or sorts on server_only attributes/, fn ->
+        validate_all!(Module1, :read_branch_secret, 1)
+      end
+    end
+
+    test "refuses the sort of a derived field's branch a later stage keeps" do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :taken_branch_secrets in .+ filters or sorts on server_only attributes/,
+                   fn -> validate_all!(Module2, :__derived_taken_branch_secrets__, 1) end
+    end
+
+    test "passes the sort of a derived field's branch a later stage replaces" do
+      assert validate_all!(Module2, :__derived_sorted_branch_again__, 1) == :ok
+    end
+
+    test "passes the sort of a derived field's branch a later count drops" do
+      assert validate_all!(Module2, :__derived_counted_branch__, 1) == :ok
+    end
+
+    test "passes a sort in a derived field's case condition, which a later stage can replace" do
+      assert validate_all!(Module2, :__derived_sorted_condition__, 0) == :ok
+    end
+
     test "passes a sort on a server-only attribute of a query in an anonymous function" do
       assert validate_all!(Module1, :sorted_secret_in_fun, 0) == :ok
     end

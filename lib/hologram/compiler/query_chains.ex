@@ -418,7 +418,7 @@ defmodule Hologram.Compiler.QueryChains do
          mfa,
          acc
        ) do
-    Enum.reduce(args, acc, &walk_query(&1, mfa, &2, true))
+    Enum.reduce(args, acc, &walk_value(&1, mfa, &2, true))
   end
 
   defp walk(%IR.RemoteFunctionCall{} = call, mfa, acc) do
@@ -462,19 +462,73 @@ defmodule Hologram.Compiler.QueryChains do
 
   defp walk_clause(clause, mfa, acc), do: walk(clause, mfa, acc)
 
-  # A block's value is its last expression's, a block among them included: a derived field's body of
-  # several expressions is a block inside the clause's own.
+  # A block's value is its last expression's: a derived field's body of several expressions is a
+  # block inside the clause's own.
   defp walk_tail(expressions, mfa, acc, read_as_is?) do
     {init, [tail]} = Enum.split(expressions, -1)
-    acc = walk(init, mfa, acc)
 
-    case tail do
-      %IR.Block{expressions: [_expression | _expressions] = inner} ->
-        walk_tail(inner, mfa, acc, read_as_is?)
+    walk_value(tail, mfa, walk(init, mfa, acc), read_as_is?)
+  end
 
-      _tail ->
-        walk_query(tail, mfa, acc, read_as_is?)
-    end
+  # A value, read as is when nothing can sort it again once it is built. A block's, case's, cond's,
+  # with's or try's is the value of the expression or clause body it ends with - an if, unless, &&
+  # and || are cases here - while what picks the clause is a value like any other. A try with else
+  # clauses hands its body's value to them, and its after block's value is never the try's.
+  defp walk_value(
+         %IR.Block{expressions: [_expression | _expressions] = expressions},
+         mfa,
+         acc,
+         read_as_is?
+       ) do
+    walk_tail(expressions, mfa, acc, read_as_is?)
+  end
+
+  defp walk_value(%IR.Case{condition: condition, clauses: clauses}, mfa, acc, read_as_is?) do
+    walk_clauses(clauses, mfa, walk(condition, mfa, acc), read_as_is?)
+  end
+
+  defp walk_value(%IR.Cond{clauses: clauses}, mfa, acc, read_as_is?) do
+    Enum.reduce(clauses, acc, fn clause, clause_acc ->
+      walk_value(clause.body, mfa, walk(clause.condition, mfa, clause_acc), read_as_is?)
+    end)
+  end
+
+  defp walk_value(%IR.With{} = with_ir, mfa, acc, read_as_is?) do
+    body_acc = walk_value(with_ir.body, mfa, walk(with_ir.clauses, mfa, acc), read_as_is?)
+
+    walk_clauses(with_ir.else_clauses, mfa, body_acc, read_as_is?)
+  end
+
+  defp walk_value(%IR.Try{} = try_ir, mfa, acc, read_as_is?) do
+    after_acc = walk(try_ir.after_block, mfa, acc)
+
+    body_acc =
+      if try_ir.else_clauses == [] do
+        walk_value(try_ir.body, mfa, after_acc, read_as_is?)
+      else
+        walk_clauses(try_ir.else_clauses, mfa, walk(try_ir.body, mfa, after_acc), read_as_is?)
+      end
+
+    catch_acc = walk_clauses(try_ir.catch_clauses, mfa, body_acc, read_as_is?)
+
+    Enum.reduce(try_ir.rescue_clauses, catch_acc, &walk_value(&1.body, mfa, &2, read_as_is?))
+  end
+
+  defp walk_value(ir, mfa, acc, read_as_is?), do: walk_query(ir, mfa, acc, read_as_is?)
+
+  # The clauses of a case, a with's or a try's else or a try's catch: what each matches against is
+  # a value like any other, and its body is the value.
+  defp walk_clauses(clauses, mfa, acc, read_as_is?) do
+    Enum.reduce(clauses, acc, fn clause, clause_acc ->
+      clause_acc =
+        clause
+        |> Map.from_struct()
+        |> Map.delete(:body)
+        |> Map.values()
+        |> walk(mfa, clause_acc)
+
+      walk_value(clause.body, mfa, clause_acc, read_as_is?)
+    end)
   end
 
   defp derived_body?({_module, function, _arity}) do
@@ -505,8 +559,11 @@ defmodule Hologram.Compiler.QueryChains do
 
             [chain | acc]
 
+          # A chain built on a case's or a block's value reads that value as the chain does, unless
+          # a stage of the chain can sort it again.
           _root ->
-            walk(root, mfa, acc)
+            reorders? = Enum.any?(calls, &(&1.function in [:count, :sort]))
+            walk_value(root, mfa, acc, read_as_is? and not reorders?)
         end
 
       Enum.reduce(calls, acc, fn %{args: [_query | args]}, inner_acc ->

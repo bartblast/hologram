@@ -86,6 +86,11 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryChains.Module1 do
 
   def string_sort, do: Stage.sort(Entity2, "c")
 
+  def read_branch_secret(sorted?) do
+    # credo:disable-for-next-line Credo.Check.Readability.NestedFunctionCalls
+    DB.read(if sorted?, do: sort(Entity15, token), else: Entity15)
+  end
+
   def read_sorted_secret do
     Entity15
     |> sort(token)
