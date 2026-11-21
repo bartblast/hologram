@@ -3,16 +3,4 @@ reviews:
   auto_review:
     base_branches: [".*"]
     drafts: true
-  path_filters:
-    - "!test/elixir/support/fixtures/**"
-    - "!benchmarks/**"
-    - "!test/**/mix.exs"
-    - "!test/**/mix.lock"
-    - "!test/elixir/hologram/query/registry_test.exs"
-    - "!test/elixir/hologram/sync/diff_test.exs"
-    - "!test/elixir/hologram/sync/evaluator_test.exs"
-    - "!test/elixir/hologram/sync/evaluators_test.exs"
-    - "!test/elixir/hologram/sync/fanout_test.exs"
-    - "!test/elixir/hologram/sync/result_store_test.exs"
-    - "!test/elixir/hologram/sync/scoper_test.exs"
   poem: false
