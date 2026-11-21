@@ -142,14 +142,14 @@ export default class Overlay {
         return;
       }
 
-      // Optional because a batch can be answered by a node that predates the key - a rolling
-      // deploy serves this bundle from one node and answers from another - and an answer that
-      // names nothing kept is one this client simply cannot show early.
       const awaitsMarker =
         fillPending &&
         write.op === "create" &&
         LocalDatabase.baseRow(write.type, write.id) === null;
 
+      // Optional because a batch can be answered by a node that predates the key - a rolling
+      // deploy serves this bundle from one node and answers from another - and an answer that
+      // names nothing kept is one this client simply cannot show early.
       Overlay.#absorb(write, kept?.[String(index)]);
       Overlay.#promoteWrite(write);
 

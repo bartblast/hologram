@@ -50,7 +50,7 @@ export default class LocalDatabase {
   static #carried = new Set();
 
   // The rows an answer filed while a fill was on its way, each with the number of the batch that
-  // created them. Each is carried until a frame delivers it, so nothing stores it
+  // created them. Each is carried until a frame delivers it or the fill ends, so nothing stores it
   // before then. The type's marker takes away the ones whose batch the fill read and left out (see
   // #settlePromoted). The rest wait here, out of the marker's sweep, until the marker ending the
   // fill.
