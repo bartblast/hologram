@@ -44,6 +44,19 @@ defmodule Hologram.DB.SQLQueryTest do
     id
   end
 
+  # Asked from another process, so on another connection: a session never waits on its own lock. A
+  # lock this takes ends with the statement.
+  defp lock_free?(key) do
+    fn ->
+      {:ok, %Postgrex.Result{rows: [[free?]]}} =
+        Connection.query("SELECT pg_try_advisory_xact_lock($1)", [key])
+
+      free?
+    end
+    |> Task.async()
+    |> Task.await()
+  end
+
   defp read_only_message(server_message) do
     "DB.sql/3 can only read data, and this statement writes it (PostgreSQL: #{server_message}). " <>
       "Use DB.create/1, DB.update/3 or DB.delete/2 to write, so that the change reaches the sync " <>
@@ -272,15 +285,203 @@ defmodule Hologram.DB.SQLQueryTest do
       delete_by_id(id)
     end
 
-    # A transaction-level lock ends with the transaction the read runs in, so it outlives nothing.
-    test "allows a transaction-level advisory lock" do
-      assert run("SELECT pg_advisory_xact_lock(1378)", [], []) ==
-               {:ok, %{columns: ["pg_advisory_xact_lock"], rows: [[:void]]}}
+    test "holds a transaction-level advisory lock until the enclosing transaction ends" do
+      key = 175_001
+
+      {:ok, free_inside?} =
+        Connection.transaction(fn ->
+          assert run("SELECT pg_advisory_xact_lock($1)", [key], []) ==
+                   {:ok, %{columns: ["pg_advisory_xact_lock"], rows: [[:void]]}}
+
+          lock_free?(key)
+        end)
+
+      refute free_inside?
+      assert lock_free?(key)
+    end
+
+    test "holds a shared transaction-level advisory lock" do
+      key = 175_002
+
+      {:ok, free_inside?} =
+        Connection.transaction(fn ->
+          {:ok, _result} = run("SELECT pg_advisory_xact_lock_shared($1)", [key], [])
+          lock_free?(key)
+        end)
+
+      refute free_inside?
+      assert lock_free?(key)
+    end
+
+    test "holds a transaction-level advisory lock taken with try" do
+      key = 175_003
+
+      {:ok, free_inside?} =
+        Connection.transaction(fn ->
+          assert run(~s|SELECT pg_try_advisory_xact_lock($1) AS "taken"|, [key], []) ==
+                   {:ok, %{columns: ["taken"], rows: [[true]]}}
+
+          lock_free?(key)
+        end)
+
+      refute free_inside?
+      assert lock_free?(key)
+    end
+
+    test "holds a shared transaction-level advisory lock taken with try" do
+      key = 175_004
+
+      {:ok, free_inside?} =
+        Connection.transaction(fn ->
+          {:ok, _result} = run("SELECT pg_try_advisory_xact_lock_shared($1)", [key], [])
+          lock_free?(key)
+        end)
+
+      refute free_inside?
+      assert lock_free?(key)
+    end
+
+    test "holds a transaction-level advisory lock named schema-qualified, in any case" do
+      key = 175_005
+
+      {:ok, free_inside?} =
+        Connection.transaction(fn ->
+          {:ok, _result} = run("SELECT PG_CATALOG.PG_ADVISORY_XACT_LOCK($1)", [key], [])
+          lock_free?(key)
+        end)
+
+      refute free_inside?
+      assert lock_free?(key)
+    end
+
+    test "leaves the enclosing transaction writable after a lock" do
+      {:ok, id} =
+        Connection.transaction(fn ->
+          {:ok, _result} = run("SELECT pg_advisory_xact_lock($1)", [175_006], [])
+          insert_row()
+        end)
+
+      assert count_by_id(id) == 1
+
+      delete_by_id(id)
+    end
+
+    test "leaves the enclosing transaction's statement timeout as it was after a lock" do
+      result =
+        Connection.transaction(fn ->
+          statement = "SELECT current_setting('statement_timeout')"
+
+          {:ok, _result} = Connection.query("SET LOCAL statement_timeout = '7s'")
+          {:ok, _result} = run("SELECT pg_advisory_xact_lock($1)", [175_007], timeout: 60_000)
+          {:ok, %Postgrex.Result{rows: [[timeout]]}} = Connection.query(statement)
+
+          Connection.rollback(timeout)
+        end)
+
+      assert result == {:error, "7s"}
+    end
+
+    test "gives the lock back when the statement taking it fails" do
+      key = 175_008
+
+      {:ok, free_inside?} =
+        Connection.transaction(fn ->
+          assert {:error, %SQLError{code: :division_by_zero}} =
+                   run("SELECT pg_advisory_xact_lock($1), 1 / (random() * 0)::int", [key], [])
+
+          lock_free?(key)
+        end)
+
+      assert free_inside?
+    end
+
+    test "refuses a write beside the lock" do
+      statement =
+        "WITH added AS (#{@insert_returning_id_sql}) " <>
+          "SELECT pg_advisory_xact_lock($1), (SELECT count(*) FROM added)"
+
+      result =
+        Connection.transaction(fn ->
+          assert {:error, %SQLError{code: :read_only_sql_transaction}} =
+                   run(statement, [175_009], [])
+
+          Connection.rollback(:done)
+        end)
+
+      assert result == {:error, :done}
+    end
+
+    test "gives the lock back when the nested transaction it was taken in rolls back" do
+      key = 175_010
+
+      {:ok, free_after_nested?} =
+        Connection.transaction(fn ->
+          {:error, :undone} =
+            Connection.transaction(fn ->
+              {:ok, _result} = run("SELECT pg_advisory_xact_lock($1)", [key], [])
+              refute lock_free?(key)
+
+              Connection.rollback(:undone)
+            end)
+
+          lock_free?(key)
+        end)
+
+      assert free_after_nested?
+    end
+
+    test "answers a wait for a lock past the timeout as a cancelled read" do
+      key = 175_011
+      test_pid = self()
+
+      holder =
+        Task.async(fn ->
+          Connection.transaction(fn ->
+            {:ok, _result} = Connection.query("SELECT pg_advisory_xact_lock($1)", [key])
+            send(test_pid, :locked)
+
+            receive do
+              :finish -> :ok
+            end
+          end)
+        end)
+
+      assert_receive :locked, 5_000
+
+      {:ok, id} =
+        Connection.transaction(fn ->
+          assert {:error, %SQLError{code: :query_canceled}} =
+                   run("SELECT pg_advisory_xact_lock($1)", [key], timeout: 50)
+
+          insert_row()
+        end)
+
+      send(holder.pid, :finish)
+      Task.await(holder)
+
+      assert count_by_id(id) == 1
+
+      delete_by_id(id)
+    end
+
+    test "raises on a transaction-level advisory lock outside a transaction" do
+      expected_msg =
+        "DB.sql/3 cannot hold a transaction-level advisory lock outside a transaction - the " <>
+          "lock would end with the read. Call it inside DB.transaction/2."
+
+      assert_error MisuseError, expected_msg, fn ->
+        run("SELECT pg_advisory_xact_lock(1378)", [], [])
+      end
     end
 
     test "allows a lock function name inside a param" do
       assert run(~s|SELECT $1::text AS "text"|, ["pg_advisory_lock(1378)"], []) ==
                {:ok, %{columns: ["text"], rows: [["pg_advisory_lock(1378)"]]}}
+    end
+
+    test "allows a transaction-level lock function name inside a param outside a transaction" do
+      assert run(~s|SELECT $1::text AS "text"|, ["pg_advisory_xact_lock(1378)"], []) ==
+               {:ok, %{columns: ["text"], rows: [["pg_advisory_xact_lock(1378)"]]}}
     end
 
     test "refuses an insert with Hologram's message" do

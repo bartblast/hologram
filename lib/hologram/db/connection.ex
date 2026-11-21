@@ -45,6 +45,20 @@ defmodule Hologram.DB.Connection do
     Postgrex.execute(current_connection(), query, params, with_timeout_opt(opts))
   end
 
+  @doc """
+  Returns whether the calling process is inside a transaction it opened. The externally managed
+  sandbox transaction doesn't count, so a test outside any transaction of its own gets the answer
+  production would.
+  """
+  @spec in_transaction?() :: boolean
+  def in_transaction? do
+    case Process.get(@transaction_key) do
+      {:transaction, _connection, _depth} -> true
+      {:sandbox_transaction, _pool_name, _depth} -> true
+      _other -> false
+    end
+  end
+
   # The unnamed statement needs no close: the next parse on the connection replaces it.
   @doc false
   @spec prepare(String.t(), keyword) :: {:ok, Postgrex.Query.t()} | {:error, Exception.t()}
