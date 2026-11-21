@@ -1315,6 +1315,10 @@ defmodule Hologram.Compiler.CallGraph do
   runtime's protocol functions add: those functions, their dispatch helpers, and their
   implementations for the built-in types with what those call.
 
+  A type the page reaches only through a relationship or derived field name is not one it can hold
+  here: its rows sync, but its implementations are not listed and the page doesn't preload them. The
+  browser gets them when the server sends it a struct or the module of that type.
+
   Give it the graph without the manually ported functions, as `list_client_protocols/4` asks, or the
   walk follows their Elixir bodies, which don't run on the client. `analyses` is taken as
   `list_page_mfas/5` takes it.
