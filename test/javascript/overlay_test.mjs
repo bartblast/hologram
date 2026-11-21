@@ -724,6 +724,71 @@ describe("Overlay", () => {
       LocalDatabase.reset();
     });
 
+    describe("a delete the answer kept the row of", () => {
+      it("leaves the row standing when its revisions are below the delete's stamp", () => {
+        const row = base();
+
+        LocalDatabase.putRow(TODO, row);
+
+        const batch = pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+        Overlay.promote(batch, {0: row});
+
+        assert.deepEqual(LocalDatabase.baseRow(TODO, "t1"), row);
+        assert.isFalse(Overlay.names(TODO, "t1"));
+      });
+    });
+
+    describe("a write the answer withholds", () => {
+      const withheld = {0: {$withheld: true}};
+
+      it("leaves a held row standing under a delete", () => {
+        const row = base();
+
+        LocalDatabase.putRow(TODO, row);
+
+        const batch = pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+        Overlay.promote(batch, withheld);
+
+        assert.deepEqual(LocalDatabase.baseRow(TODO, "t1"), row);
+        assert.isFalse(Overlay.names(TODO, "t1"));
+      });
+
+      it("files nothing, leaves a held row alone and takes the layer away", () => {
+        const held = base({id: "t2", title: "Held", title$sort: "held"});
+
+        LocalDatabase.putRow(TODO, held);
+
+        const batch = pushed(createWrite(), createWrite({id: "t2"}));
+
+        Overlay.promote(batch, {0: {$withheld: true}, 1: {$withheld: true}});
+
+        assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+        assert.deepEqual(LocalDatabase.baseRow(TODO, "t2"), held);
+        assert.isFalse(Overlay.names(TODO, "t1"));
+      });
+
+      it("records nothing for a pending fill", () => {
+        const batch = pushed(createWrite());
+
+        batch.seal(3);
+
+        Overlay.promote(batch, withheld, {fillPending: true});
+
+        assert.deepEqual(LocalDatabase.carriedEntries(), []);
+      });
+
+      it("still promotes the batch's other writes", () => {
+        const batch = pushed(createWrite(), createWrite({id: "t2"}));
+
+        Overlay.promote(batch, withheld);
+
+        assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+        assert.isNotNull(LocalDatabase.baseRow(TODO, "t2"));
+      });
+    });
+
     describe("while a fill is pending", () => {
       const sealedCreate = (seq, overrides = {}) => {
         const batch = pushed(createWrite(overrides));

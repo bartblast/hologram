@@ -142,6 +142,14 @@ export default class Overlay {
         return;
       }
 
+      const keptEntry = kept?.[String(index)];
+
+      // A resent batch's grant the server no longer stands behind: revoked since, or hidden from
+      // this user. Applying the write would file its own version of a row no frame ever corrects.
+      if (keptEntry?.$withheld === true) {
+        return;
+      }
+
       const awaitsMarker =
         fillPending &&
         write.op === "create" &&
@@ -150,7 +158,20 @@ export default class Overlay {
       // Optional because a batch can be answered by a node that predates the key - a rolling
       // deploy serves this bundle from one node and answers from another - and an answer that
       // names nothing kept is one this client simply cannot show early.
-      Overlay.#absorb(write, kept?.[String(index)]);
+      Overlay.#absorb(write, keptEntry);
+
+      // A delete answered with a whole row leaves that row standing: the server dropped it, or a
+      // resent revocation's grant was made again since. Its stamp can't be weighed against that
+      // row: a replay answers the row as it is now, whose revisions can sit below the stamp when
+      // the clock that wrote them ran behind this one.
+      if (
+        write.op === "delete" &&
+        keptEntry !== undefined &&
+        "id" in keptEntry
+      ) {
+        return;
+      }
+
       Overlay.#promoteWrite(write);
 
       if (awaitsMarker) {
