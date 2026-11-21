@@ -54,6 +54,40 @@ defmodule Hologram.DB.ConnectionTest do
     :ok
   end
 
+  describe "in_transaction?/0" do
+    test "is false outside a transaction" do
+      refute in_transaction?()
+    end
+
+    test "is true inside a transaction" do
+      assert transaction(fn -> in_transaction?() end) == {:ok, true}
+    end
+
+    test "is true inside a nested transaction" do
+      assert transaction(fn -> transaction(fn -> in_transaction?() end) end) == {:ok, {:ok, true}}
+    end
+
+    test "is false in the sandbox outside a transaction" do
+      task =
+        Task.async(fn ->
+          enter_sandbox()
+          in_transaction?()
+        end)
+
+      refute Task.await(task)
+    end
+
+    test "is false on another connection routed from inside a transaction" do
+      {:ok, connection} = Postgrex.start_link(Config.connection_opts())
+
+      assert transaction(fn ->
+               with_connection(connection, fn -> in_transaction?() end)
+             end) == {:ok, false}
+
+      GenServer.stop(connection)
+    end
+  end
+
   describe "query/3" do
     test "executes the statement with the given params" do
       assert {:ok, %Postgrex.Result{rows: [[42]]}} = query("SELECT $1::int8 + 1", [41])
