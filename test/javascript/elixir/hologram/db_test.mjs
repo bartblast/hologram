@@ -1559,6 +1559,22 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
+    // The browser never holds a server-only value, so a filter on one can't be answered from the
+    // local rows. That refusal is told first, as a derived field's is, though the type doesn't sync
+    // either.
+    it("refuses a query filtering on a server-only attribute", () => {
+      globalThis.Hologram.sync.syncedTypes = [];
+
+      const doc = Type.alias(DOC);
+
+      assertBoxedError(
+        () =>
+          read(filter(doc, predicates([["api_token", Type.bitstring("x")]]))),
+        "Hologram.MisuseError",
+        `DB.read can't answer the query: it filters or sorts on server_only attributes (${DOC} :api_token) - the client never holds those values, so it could not evaluate the reference locally. Drop the reference, or read the rows through the trusted backend API.`,
+      );
+    });
+
     it("answers the rows a filter admits", () => {
       LocalDatabase.putRow(TASK, row(ID_1));
       LocalDatabase.putRow(TASK, row(ID_2, {done: true}));

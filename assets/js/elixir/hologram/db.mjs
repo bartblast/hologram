@@ -645,13 +645,16 @@ const Elixir_Hologram_DB = {
   "read/1": (query) => {
     const term = Elixir_Hologram_Query_Stage["normalize/1"](query);
 
-    // Read from the rows sync keeps current, so a type it never sends would answer from rows that
-    // never change.
-    const unsynced = QueryCheck.unsyncedRefusal(term);
+    // Read from the rows sync keeps current: a server-only attribute is one the browser never
+    // holds, so a filter or sort on it would answer as if every row held nil, and a type sync
+    // never sends would answer from rows that never change. A query written in one piece in browser
+    // code is checked at build time too, and any other, like one the server built, only here.
+    const refusal =
+      QueryCheck.refusal(term) ?? QueryCheck.unsyncedRefusal(term);
 
-    if (unsynced !== null) {
+    if (refusal !== null) {
       Interpreter.raiseMisuseError(
-        `DB.read can't answer the query: it ${unsynced}`,
+        `DB.read can't answer the query: it ${refusal}`,
       );
     }
 
