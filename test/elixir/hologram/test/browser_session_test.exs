@@ -831,6 +831,7 @@ defmodule Hologram.Test.BrowserSessionTest do
       # after its own args. No process has the pid it names, since pids stay far
       # below it.
       chrome_path = Path.join(tmp_dir, "chrome")
+      marker = run_marker("999999999")
 
       "perl"
       |> System.find_executable()
@@ -839,11 +840,26 @@ defmodule Hologram.Test.BrowserSessionTest do
       port =
         Port.open({:spawn_executable, chrome_path}, [
           :exit_status,
-          args: ["-e", "sleep 60", "--", "--test-type=webdriver", run_marker("999999999")]
+          args: ["-e", "sleep 60", "--", "--test-type=webdriver", marker]
         ])
 
       {:os_pid, os_pid} = Port.info(port, :os_pid)
       on_exit(fn -> System.cmd("kill", ["-9", to_string(os_pid)], stderr_to_stdout: true) end)
+
+      # The pid is known before the stand-in execs, so on a busy machine ps can
+      # still show the command line of the process that forked it, or none. Each
+      # try runs ps, which can take a few hundred ms, so this waits by tries.
+      wait_until(
+        fn ->
+          {command, _status} =
+            System.cmd("ps", ["-ww", "-p", to_string(os_pid), "-o", "command="],
+              stderr_to_stdout: true
+            )
+
+          command =~ marker
+        end,
+        100
+      )
 
       opts = Keyword.drop(opts, [:kill_fn, :ps_fn])
 
