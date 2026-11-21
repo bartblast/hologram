@@ -258,6 +258,198 @@ defmodule Hologram.Policy.ExpressionTest do
                    fn -> lower_spec("[when: new() == 2]") end
     end
 
+    test "lowers has_role on the new row" do
+      assert lower_spec("[when: has_role(:member, new(trip.project))]") == [
+               when: [{{:has_role, :member}, [:trip, :project]}]
+             ]
+    end
+
+    test "lowers can on the new row" do
+      assert lower_spec("[when: can(:update, new(project))]") == [
+               when: [{{:can, :update}, [:project]}]
+             ]
+    end
+
+    test "lowers has_role and can in the alternatives of a disjunction" do
+      assert lower_spec("[when: has_role(:member, new(a)) or can(:update, new(b))]") == [
+               when: [or: [[{{:has_role, :member}, [:a]}], [{{:can, :update}, [:b]}]]]
+             ]
+    end
+
+    test "lowers a pinned role" do
+      assert lower_spec("[when: has_role(^role, new(project))]", role: :member) == [
+               when: [{{:has_role, :member}, [:project]}]
+             ]
+    end
+
+    test "raises on has_role of the stored row" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: has_role reads the row a change leads to, got: has_role(:member, project) - write has_role(:member, new(project)), and the stored row goes in to: {:member, project}",
+                   fn -> lower_spec("[when: has_role(:member, project)]") end
+    end
+
+    test "raises on can of the stored row" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can reads the row a change leads to, got: can(:update, project) - write can(:update, new(project)), and the stored row goes in via: {:update, project}",
+                   fn -> lower_spec("[when: can(:update, project)]") end
+    end
+
+    test "raises on has_role inside a quantifier" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: has_role stands at the top of a condition or in an or, not inside a quantifier, got: has_role(:member, new(project))",
+                   fn ->
+                     lower_spec("[when: any(tag <- tags, has_role(:member, new(project)))]")
+                   end
+    end
+
+    test "raises on has_role on a line for another operation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: has_role works only in the when: condition of an allow :update line, with the operation written as that atom, got: has_role(:member, new(project))",
+                   fn -> lower_spec("[when: has_role(:member, new(project))]", [], :read) end
+    end
+
+    test "raises on has_role? in a condition" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: has_role? isn't available in a condition - write has_role(:member, new(project)), got: has_role?(:member, new(project))",
+                   fn -> lower_spec("[when: has_role?(:member, new(project))]") end
+    end
+
+    test "raises on can? in a condition" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write can(:update, new(project)), got: can?(:update, new(project))",
+                   fn -> lower_spec("[when: can?(:update, new(project))]") end
+    end
+
+    test "raises on has_role with the wrong number of arguments" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: has_role takes a role and new() of a relationship - has_role(:member, new(project)) - got: has_role(:member)",
+                   fn -> lower_spec("[when: has_role(:member)]") end
+    end
+
+    test "raises on has_role naming its role with a bare name" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: has_role names a role with an atom or a pinned expression, got: member in has_role(member, new(project))",
+                   fn -> lower_spec("[when: has_role(member, new(project))]") end
+    end
+
+    test "raises on new() in a to: reference" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: to reads the stored row, got: {:member, new(project)} - a role on the row a change leads to goes in when: has_role(:member, new(project))",
+                   fn -> lower_spec("[to: {:member, new(project)}]") end
+    end
+
+    test "raises on new() as a via: relationship" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: via reads the stored row, got: new(project) - the row a change leads to goes in when: can(:update, new(project))",
+                   fn -> lower_spec("[via: new(project)]") end
+    end
+
+    test "raises on new() in a via: tuple" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: via reads the stored row, got: {:archive, new(project)} - the row a change leads to goes in when: can(:archive, new(project))",
+                   fn -> lower_spec("[via: {:archive, new(project)}]") end
+    end
+
+    test "raises on new() written first in a via: tuple" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: via reads the stored row, got: {new(project), :archive} - the row a change leads to goes in when: can(:archive, new(project))",
+                   fn -> lower_spec("[via: {new(project), :archive}]") end
+    end
+
+    test "raises on new() in via: on a line for another operation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() works only in the when: condition of an allow :update line, with the operation written as that atom, got: new(project)",
+                   fn -> lower_spec("[via: new(project)]", [], :read) end
+    end
+
+    test "raises on new() in to: on a line for another operation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() works only in the when: condition of an allow :update line, with the operation written as that atom, got: new(project)",
+                   fn -> lower_spec("[to: {:member, new(project)}]", [], :read) end
+    end
+
+    test "raises on new() as a whole to: reference" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: to reads the stored row, got: new(project) - a role on the row a change leads to goes in when: has_role(:role, new(project))",
+                   fn -> lower_spec("[to: new(project)]") end
+    end
+
+    test "gives a malformed new() in to: the option's own refusal" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:7: to takes a role name, a role module, a {role, relationship}, {role, path} or {role, entity type} tuple, a list of them, or a pinned expression, got: {:member, new(1)}",
+                   fn -> lower_spec("[to: {:member, new(1)}]") end
+    end
+
+    test "raises on has_role with a target that is no relationship" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: has_role takes a role and new() of a relationship - has_role(:member, new(project)) - got: has_role(:member, :project)",
+                   fn -> lower_spec("[when: has_role(:member, :project)]") end
+    end
+
+    test "raises on a pinned role no variable holds" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: ^member pins member, which no variable holds here - has_role names a role with an atom: :member",
+                   fn -> lower_spec("[when: has_role(^member, new(project))]") end
+    end
+
+    test "refuses a pin no variable holds before naming the stored row" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: ^member pins member, which no variable holds here - has_role names a role with an atom: :member",
+                   fn -> lower_spec("[when: has_role(^member, project)]") end
+    end
+
+    test "names has_role with a pinned role a variable holds" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: to reads the stored row, got: {^role, new(project)} - a role on the row a change leads to goes in when: has_role(^role, new(project))",
+                   fn -> lower_spec("[to: {^role, new(project)}]", role: :member) end
+    end
+
+    test "names has_role with an example for a pinned role no variable holds" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: to reads the stored row, got: {^role, new(project)} - a role on the row a change leads to goes in when: has_role(:role, new(project))",
+                   fn -> lower_spec("[to: {^role, new(project)}]") end
+    end
+
+    test "refuses a pinned path no variable holds" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: ^member.role pins member, which no variable holds here - has_role names a role with an atom or a pinned expression",
+                   fn -> lower_spec("[when: has_role(^member.role, project)]") end
+    end
+
+    test "names has_role with an example for a pinned path no variable holds" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: to reads the stored row, got: {^member.role, new(project)} - a role on the row a change leads to goes in when: has_role(:role, new(project))",
+                   fn -> lower_spec("[to: {^member.role, new(project)}]") end
+    end
+
+    test "names has_role with a pinned path a variable holds" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: to reads the stored row, got: {^member.role, new(project)} - a role on the row a change leads to goes in when: has_role(^member.role, new(project))",
+                   fn ->
+                     lower_spec("[to: {^member.role, new(project)}]", member: %{role: :lead})
+                   end
+    end
+
+    test "names can with an example for a pinned operation no variable holds" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: via reads the stored row, got: {^operation, new(project)} - the row a change leads to goes in when: can(:update, new(project))",
+                   fn -> lower_spec("[via: {^operation, new(project)}]") end
+    end
+
+    test "names no replacement for has_role? on a line for another operation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: has_role? isn't available in a condition, got: has_role?(:member, new(project))",
+                   fn -> lower_spec("[when: has_role?(:member, new(project))]", [], :read) end
+    end
+
+    test "names no replacement for has_role? inside a quantifier" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: has_role? isn't available in a condition, got: has_role?(:member, new(project))",
+                   fn ->
+                     lower_spec("[when: any(tag <- tags, has_role?(:member, new(project)))]")
+                   end
+    end
+
     test "keeps __MODULE__ as a role module" do
       assert lower_spec("[to: __MODULE__]") == [to: __MODULE__]
     end

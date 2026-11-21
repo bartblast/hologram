@@ -53,6 +53,15 @@ defmodule Hologram.Query.Expression do
   # holds it where the query macros expand - see mark_pinnable/1.
   @pinnable_key :hologram_pinnable
 
+  # The condition words asking about the row a change leads to, and the functions of the same
+  # meaning they're likely written as.
+  @new_row_words [:can, :has_role]
+
+  @new_row_functions %{
+    can?: "can(:update, new(project))",
+    has_role?: "has_role(:member, new(project))"
+  }
+
   @quantifiers [:all, :any, :none]
 
   @range_operators [:.., :..//]
@@ -265,6 +274,45 @@ defmodule Hologram.Query.Expression do
     do: name
 
   def name!(ast, names, env), do: name_error!(ast, names, env)
+
+  @doc """
+  Returns whether the given node is a `new()` call, or a dot chain over one.
+  """
+  @spec new_call?(Macro.t()) :: boolean
+  def new_call?({:new, _meta, args}) when is_list(args), do: true
+
+  def new_call?({{:., _dot_meta, [left, field]}, _meta, []}) when is_atom(field),
+    do: new_call?(left)
+
+  def new_call?(_ast), do: false
+
+  @doc """
+  Returns whether the given node is `new()` of a name or a path, with any names dotted after it.
+  """
+  @spec new_path?(Macro.t()) :: boolean
+  def new_path?(ast), do: new_call?(ast) and new_hops(ast) != nil
+
+  @doc """
+  Returns whether the given pinned node reads a value where it is written - false for a pinned bare
+  name or path whose first name no variable of the surrounding code holds.
+  """
+  @spec pin_holds_value?(Macro.t(), Macro.Env.t()) :: boolean
+  def pin_holds_value?({:^, _meta, [expr]}, env) do
+    hops(expr) == nil or pinned_value?(root_name(expr), env)
+  end
+
+  @doc """
+  Raises Hologram.CompileError, located at the given node, for a `new()` written anywhere but the
+  condition of an update line.
+  """
+  @spec new_row_error!(Macro.t(), Macro.Env.t()) :: no_return
+  def new_row_error!(ast, env) do
+    compile_error!(
+      "new() works only in the when: condition of an allow :update line, with the operation written as that atom, got: #{Macro.to_string(ast)}",
+      ast,
+      env
+    )
+  end
 
   @doc """
   Lowers the spec argument of `sort/2` to the AST of what `Hologram.Query.Stage.sort/2`
@@ -1038,14 +1086,6 @@ defmodule Hologram.Query.Expression do
     )
   end
 
-  # Whether the given node is a new() call, or a dot chain over one.
-  defp new_call?({:new, _meta, args}) when is_list(args), do: true
-
-  defp new_call?({{:., _dot_meta, [left, field]}, _meta, []}) when is_atom(field),
-    do: new_call?(left)
-
-  defp new_call?(_ast), do: false
-
   # The names a new() call reads, those inside it and any dotted after it - nil when it holds
   # anything but a name or a path.
   defp new_hops(ast) do
@@ -1087,14 +1127,98 @@ defmodule Hologram.Query.Expression do
     |> scoped_name(length(names.bindings) + 1)
   end
 
-  @spec new_row_error!(Macro.t(), Macro.Env.t()) :: no_return
-  defp new_row_error!(ast, env) do
+  # A role held on, or an operation granted on, the row the change leads to, as a data-form entry
+  # keyed by the word and what it asks for. Each stands where it can be answered on the update as a
+  # whole: at the top of a condition or in an alternative, never about a row a quantifier binds.
+  defp new_row_check!({word, _meta, args} = ast, names, env) do
+    cond do
+      not names.new_row ->
+        compile_error!(
+          "#{word} works only in the when: condition of an allow :update line, with the operation written as that atom, got: #{Macro.to_string(ast)}",
+          ast,
+          env
+        )
+
+      names.bindings != [] ->
+        compile_error!(
+          "#{word} stands at the top of a condition or in an or, not inside a quantifier, got: #{Macro.to_string(ast)}",
+          ast,
+          env
+        )
+
+      true ->
+        new_row_entry!(ast, word, args, names, env)
+    end
+  end
+
+  # A stored row is named only for what can be written with it, so its hint never suggests a target
+  # that is no relationship or a role that is no role.
+  defp new_row_entry!(ast, word, [asked, target], names, env) do
+    cond do
+      new_call?(target) ->
+        hops = new_hops!(target, names, env)
+
+        {{word, new_row_asked!(asked, word, ast, env)}, hops}
+
+      hops(target) != nil and new_row_asked?(asked) ->
+        new_row_asked!(asked, word, ast, env)
+        stored_target_error!(ast, word, asked, target, env)
+
+      true ->
+        new_row_shape_error!(ast, word, env)
+    end
+  end
+
+  defp new_row_entry!(ast, word, _args, _names, env), do: new_row_shape_error!(ast, word, env)
+
+  @spec new_row_shape_error!(Macro.t(), atom, Macro.Env.t()) :: no_return
+  defp new_row_shape_error!(ast, word, env) do
     compile_error!(
-      "new() works only in the when: condition of an allow :update line, with the operation written as that atom, got: #{Macro.to_string(ast)}",
+      "#{word} takes #{new_row_asked_noun(word)} and new() of a relationship - #{new_row_example(word)} - got: #{Macro.to_string(ast)}",
       ast,
       env
     )
   end
+
+  defp new_row_asked?({:^, _meta, [_expr]}), do: true
+
+  defp new_row_asked?(asked), do: is_atom(asked) and asked not in [nil, true, false]
+
+  # A pinned bare name no variable holds is the atom written with a pin it doesn't take.
+  defp new_row_asked!({:^, _meta, [expr]} = pinned, word, _ast, env) do
+    if not pin_holds_value?(pinned, env) do
+      [root | rest] = hops(expr)
+      fix = if rest == [], do: "an atom: #{inspect(root)}", else: "an atom or a pinned expression"
+
+      compile_error!(
+        "#{Macro.to_string(pinned)} pins #{root}, which no variable holds here - #{word} names #{new_row_asked_noun(word)} with #{fix}",
+        pinned,
+        env
+      )
+    end
+
+    expr
+  end
+
+  defp new_row_asked!(atom, _word, _ast, _env)
+       when is_atom(atom) and atom not in [nil, true, false],
+       do: atom
+
+  defp new_row_asked!(asked, word, ast, env) do
+    compile_error!(
+      "#{word} names #{new_row_asked_noun(word)} with an atom or a pinned expression, got: #{Macro.to_string(asked)} in #{Macro.to_string(ast)}",
+      ast,
+      env
+    )
+  end
+
+  defp new_row_asked_noun(:can), do: "an operation"
+
+  defp new_row_asked_noun(:has_role), do: "a role"
+
+  defp new_row_example(:can), do: "can(:update, new(project))"
+
+  defp new_row_example(:has_role), do: "has_role(:member, new(project))"
 
   # A value is known where the line is written, and new() reads a field of a row that isn't, so no
   # pin around it would compile. Where new() can't be written at all, that is what's refused.
@@ -1331,6 +1455,26 @@ defmodule Hologram.Query.Expression do
        )
        when is_map_key(@string_functions, function) and is_list(args) do
     string_function_error!(ast, Map.fetch!(@string_functions, function), args, names, env)
+  end
+
+  defp predicate_list!({word, _meta, args} = ast, %{kind: :condition} = names, env)
+       when word in @new_row_words and is_list(args) do
+    [new_row_check!(ast, names, env)]
+  end
+
+  # Where the word can't be written either, the refusal doesn't suggest it.
+  defp predicate_list!({word, _meta, args} = ast, %{kind: :condition} = names, env)
+       when is_map_key(@new_row_functions, word) and is_list(args) do
+    fix =
+      if names.new_row and names.bindings == [],
+        do: " - write #{Map.fetch!(@new_row_functions, word)}",
+        else: ""
+
+    compile_error!(
+      "#{word} isn't available in a condition#{fix}, got: #{Macro.to_string(ast)}",
+      ast,
+      env
+    )
   end
 
   defp predicate_list!(ast, names, env), do: unsupported!(ast, names, env)
@@ -1614,6 +1758,25 @@ defmodule Hologram.Query.Expression do
     else
       written_source!(ast, names, env)
     end
+  end
+
+  # A role or an operation on the stored row has an option of its own, which says it plainly.
+  @spec stored_target_error!(Macro.t(), atom, Macro.t(), Macro.t(), Macro.Env.t()) :: no_return
+  defp stored_target_error!(ast, word, asked, target, env) do
+    asked_spelled = Macro.to_string(asked)
+    target_spelled = Macro.to_string(target)
+
+    {option, spelled} =
+      case word do
+        :can -> {"via", "{#{asked_spelled}, #{target_spelled}}"}
+        :has_role -> {"to", "{#{asked_spelled}, #{target_spelled}}"}
+      end
+
+    compile_error!(
+      "#{word} reads the row a change leads to, got: #{Macro.to_string(ast)} - write #{word}(#{asked_spelled}, new(#{target_spelled})), and the stored row goes in #{option}: #{spelled}",
+      ast,
+      env
+    )
   end
 
   # String.starts_with?/2 and String.contains?/2 compare bytes, and the query operators ignore case

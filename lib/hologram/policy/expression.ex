@@ -195,6 +195,14 @@ defmodule Hologram.Policy.Expression do
 
   defp grant_references!(ast, env), do: grant_reference!(ast, env)
 
+  # A role or an operation as a hint can repeat it, or the given example for a pin no variable holds,
+  # which the hint would be refused for.
+  defp hinted_name(ast, example, env) do
+    if pinned?(ast) and not QueryExpression.pin_holds_value?(ast, env),
+      do: example,
+      else: Macro.to_string(ast)
+  end
+
   # An atom (nil, true and false included), a number, a string, a module name, or a number with a
   # sign.
   defp literal?(value) when is_atom(value) or is_number(value) or is_binary(value), do: true
@@ -240,9 +248,19 @@ defmodule Hologram.Policy.Expression do
 
   defp option!({:only, value}, _operation, env), do: {:only, field_names!(value, :only, env)}
 
-  defp option!({:to, value}, _operation, env), do: {:to, grant_references!(value, env)}
+  defp option!({:to, value}, operation, env) do
+    value
+    |> List.wrap()
+    |> Enum.each(&refuse_new_reference!(&1, operation, env))
 
-  defp option!({:via, value}, _operation, env), do: {:via, delegation!(value, env)}
+    {:to, grant_references!(value, env)}
+  end
+
+  defp option!({:via, value}, operation, env) do
+    refuse_new_delegation!(value, operation, env)
+
+    {:via, delegation!(value, env)}
+  end
 
   # Only an update has a row after the change for new() to read.
   defp option!({:when, value}, operation, env),
@@ -310,6 +328,61 @@ defmodule Hologram.Policy.Expression do
   defp relationship_first?({first, second}) do
     ((bare_name?(first) or path?(first)) and name_atom?(second)) or
       (path?(first) and pinned?(second))
+  end
+
+  # to: and via: read the stored row, and each has a condition word for the row a change leads to.
+  # A new() the word couldn't be written with is left to the option's own refusal.
+  defp refuse_new_delegation!({first, second} = ast, operation, env) do
+    cond do
+      QueryExpression.new_path?(second) and atom_or_pin?(first) ->
+        new_delegation_error!(ast, hinted_name(first, ":update", env), second, operation, env)
+
+      QueryExpression.new_path?(first) and atom_or_pin?(second) ->
+        new_delegation_error!(ast, hinted_name(second, ":update", env), first, operation, env)
+
+      true ->
+        :ok
+    end
+  end
+
+  defp refuse_new_delegation!(ast, operation, env) do
+    if QueryExpression.new_path?(ast),
+      do: new_delegation_error!(ast, Macro.to_string(operation), ast, operation, env)
+  end
+
+  @spec new_delegation_error!(Macro.t(), String.t(), Macro.t(), Macro.t(), Macro.Env.t()) ::
+          no_return
+  defp new_delegation_error!(ast, asked, target, operation, env) do
+    if operation != :update, do: QueryExpression.new_row_error!(target, env)
+
+    QueryExpression.compile_error!(
+      "via reads the stored row, got: #{Macro.to_string(ast)} - the row a change leads to goes in when: can(#{asked}, #{Macro.to_string(target)})",
+      target,
+      env
+    )
+  end
+
+  defp refuse_new_reference!({role, scope} = ast, operation, env) do
+    if QueryExpression.new_path?(scope) and atom_or_pin?(role) do
+      new_reference_error!(ast, hinted_name(role, ":role", env), scope, operation, env)
+    end
+  end
+
+  defp refuse_new_reference!(ast, operation, env) do
+    if QueryExpression.new_path?(ast),
+      do: new_reference_error!(ast, ":role", ast, operation, env)
+  end
+
+  @spec new_reference_error!(Macro.t(), String.t(), Macro.t(), Macro.t(), Macro.Env.t()) ::
+          no_return
+  defp new_reference_error!(ast, role, target, operation, env) do
+    if operation != :update, do: QueryExpression.new_row_error!(target, env)
+
+    QueryExpression.compile_error!(
+      "to reads the stored row, got: #{Macro.to_string(ast)} - a role on the row a change leads to goes in when: has_role(#{role}, #{Macro.to_string(target)})",
+      target,
+      env
+    )
   end
 
   @spec repeated_option!(atom, Macro.t(), Macro.t(), Macro.Env.t()) :: no_return
