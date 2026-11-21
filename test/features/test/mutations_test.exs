@@ -6,6 +6,7 @@ defmodule HologramFeatureTests.MutationsTest do
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.EntityOperations
   alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Entity.Model
@@ -16,9 +17,11 @@ defmodule HologramFeatureTests.MutationsTest do
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.User
+  alias HologramFeatureTests.Jobs.FlakyRun
   alias HologramFeatureTests.Jobs.HoldRun
   alias HologramFeatureTests.Jobs.KillRun
   alias HologramFeatureTests.Jobs.RestockItem
+  alias HologramFeatureTests.Jobs.SlowRun
   alias HologramFeatureTests.MutationsPage
 
   # Every table truncates in one statement: the memo, note, project member and role grant tables'
@@ -27,7 +30,19 @@ defmodule HologramFeatureTests.MutationsTest do
   setup do
     tables =
       Enum.map_join(
-        [HoldRun, Item, KillRun, Memo, Note, ProjectMember, RestockItem, RoleGrant, User],
+        [
+          FlakyRun,
+          HoldRun,
+          Item,
+          KillRun,
+          Memo,
+          Note,
+          ProjectMember,
+          RestockItem,
+          RoleGrant,
+          SlowRun,
+          User
+        ],
         ", ",
         fn entity_type ->
           ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
@@ -104,6 +119,37 @@ defmodule HologramFeatureTests.MutationsTest do
       "data" => %{"label" => label},
       "stamp" => System.os_time(:millisecond) * 1024
     }
+  end
+
+  defp create_flaky_run_write(label, succeeds_on) do
+    %{
+      "op" => "create",
+      "type" => inspect(FlakyRun),
+      "id" => Entity.generate_id(),
+      "data" => %{"label" => label, "succeeds_on" => succeeds_on},
+      "stamp" => System.os_time(:millisecond) * 1024
+    }
+  end
+
+  defp create_slow_run_write(label) do
+    %{
+      "op" => "create",
+      "type" => inspect(SlowRun),
+      "id" => Entity.generate_id(),
+      "data" => %{"label" => label},
+      "stamp" => System.os_time(:millisecond) * 1024
+    }
+  end
+
+  # Ends the job's wait for its next attempt, so the test doesn't sit out the backoff. The write
+  # announces itself, which wakes the worker.
+  defp end_retry_wait(job_type) do
+    [job] = DB.read(job_type)
+
+    :ok =
+      EntityOperations.update(job_type, job.id, %{
+        scheduled_at: DateTime.add(DateTime.utc_now(), -1)
+      })
   end
 
   defp create_note_write(author_id, body) do
@@ -537,6 +583,58 @@ defmodule HologramFeatureTests.MutationsTest do
 
     assert [%KillRun{status: :failed, error: error}] = DB.read(KillRun)
     assert error =~ "the run was cut short before its outcome was recorded"
+  end
+
+  feature "retries a job that failed, and runs it to done", %{session: session} do
+    session = log_in(session)
+
+    post_batch(session, 1, [create_flaky_run_write("x", 2)])
+
+    assert await_response(session) ==
+             %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
+
+    assert_text(session, css("#flaky_jobs"), "x:queued:1")
+
+    assert [%FlakyRun{error: error}] = DB.read(FlakyRun)
+    assert error =~ "target_down"
+
+    end_retry_wait(FlakyRun)
+
+    assert_text(session, css("#flaky_jobs"), "x:done:2")
+
+    assert [%FlakyRun{status: :done, error: nil}] = DB.read(FlakyRun)
+  end
+
+  feature "leaves a job failed once it is out of attempts", %{session: session} do
+    session = log_in(session)
+
+    post_batch(session, 1, [create_flaky_run_write("x", 3)])
+
+    assert await_response(session) ==
+             %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
+
+    assert_text(session, css("#flaky_jobs"), "x:queued:1")
+
+    end_retry_wait(FlakyRun)
+
+    assert_text(session, css("#flaky_jobs"), "x:failed:2")
+
+    assert [%FlakyRun{status: :failed, error: error}] = DB.read(FlakyRun)
+    assert error =~ "target_down"
+  end
+
+  feature "cuts off a run that passes its time limit", %{session: session} do
+    session = log_in(session)
+
+    post_batch(session, 1, [create_slow_run_write("x")])
+
+    assert await_response(session) ==
+             %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
+
+    assert_text(session, css("#slow_jobs"), "x:failed")
+
+    assert [%SlowRun{status: :failed, attempt: 1, error: error}] = DB.read(SlowRun)
+    assert error =~ "the run passed its time limit of 1000 ms and was killed"
   end
 
   # The held runs stand for slow jobs, like web pushes waiting on a remote service. Two of one type
