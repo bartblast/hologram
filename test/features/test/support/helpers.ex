@@ -30,6 +30,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Item
   alias HologramFeatureTests.Entities.Label
   alias HologramFeatureTests.Entities.Leg
+  alias HologramFeatureTests.Entities.Locker
   alias HologramFeatureTests.Entities.Membership
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Message
@@ -49,6 +50,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Shelf
   alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Shop
+  alias HologramFeatureTests.Entities.Slip
   alias HologramFeatureTests.Entities.Sticker
   alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Ticket
@@ -1179,6 +1181,7 @@ defmodule HologramFeatureTests.Helpers do
         KillRun,
         Label,
         Leg,
+        Locker,
         Membership,
         Memo,
         Message,
@@ -1200,6 +1203,7 @@ defmodule HologramFeatureTests.Helpers do
         Shelf,
         Ship,
         Shop,
+        Slip,
         Sticker,
         Stop,
         Ticket,
