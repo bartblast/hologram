@@ -455,7 +455,8 @@ function namesActor(clauses) {
       return clause.or.some(namesActor);
     }
 
-    return namesActor(clause.filter);
+    // The marker the build sends for what no client decides says nothing about who it asks of.
+    return Object.hasOwn(clause, "filter") && namesActor(clause.filter);
   });
 }
 

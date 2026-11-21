@@ -85,6 +85,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module44, as: CratePolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module45, as: ParcelPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module5, as: DelegationPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module58, as: ChangedProject
+  alias Hologram.Test.Fixtures.Policy.Module59, as: ChangedTask
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module8, as: TwoHopDelegationPolicyEntity
@@ -3217,6 +3219,21 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "build_runtime_js/7" do
+    defp sync_constants_js_for(entity_type, runtime_mfas, ir_plt) do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([entity_type])}
+
+      build_runtime_js(
+        runtime_mfas,
+        ir_plt,
+        PLT.start(),
+        MapSet.new(),
+        [],
+        build_sync_constants_js(sync_constants),
+        js_dir: @js_dir,
+        subsystems: [:data_layer]
+      )
+    end
+
     defmodule BakedBoard do
       use Hologram.Entity
 
@@ -4070,6 +4087,60 @@ defmodule Hologram.CompilerTest do
              )
     end
 
+    test "bakes a rule reading the row after the change with its clauses as written", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = sync_constants_js_for(ChangedTask, runtime_mfas, ir_plt)
+
+      assert String.contains?(
+               js,
+               ~s/{"new":{"predicates":[["status","==","pending"],/ <>
+                 ~s/[{"name":"status","outer":1},"==","approved"]]},/ <>
+                 ~s/"predicates":[["status","==","pending"]],"to":/
+             )
+    end
+
+    test "bakes a role asked of the row after the change", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = sync_constants_js_for(ChangedTask, runtime_mfas, ir_plt)
+
+      assert String.contains?(
+               js,
+               ~s/{"new":{"predicates":[{"hasRole":[["project"],/ <>
+                 ~s/"#{inspect(ChangedProject)}",["member"]]}]},"predicates":[]/
+             )
+    end
+
+    test "bakes an operation asked of the row the row after the change leads to", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = sync_constants_js_for(ChangedTask, runtime_mfas, ir_plt)
+
+      assert String.contains?(
+               js,
+               ~s/{"new":{"predicates":[{"can":["read",["project"]]}]},"predicates":[]/
+             )
+    end
+
+    test "bakes the names update lines carry", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+      js = sync_constants_js_for(ChangedTask, runtime_mfas, ir_plt)
+
+      assert String.contains?(js, ~s/"updateNames":["approve","move"]/)
+    end
+
+    test "bakes no update names for a type with none", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      js = sync_constants_js_for(ChangedProject, runtime_mfas, ir_plt)
+
+      refute String.contains?(js, ~s/"updateNames"/)
+    end
+
     # A field key is spelled the way a per-role key is, so the client asks a field the way it asks a
     # role.
     test "bakes a field-limited line under each field it covers", %{
@@ -4866,6 +4937,7 @@ defmodule Hologram.CompilerTest do
 
     # A bounded set computed over the rows a client holds can hold rows the server's doesn't, so an
     # any over one leaves its operation to the verdict, which reads the rows the set is taken from.
+    # What its condition compares stays off the bundle, since no client reads it.
     test "bakes the verdict key and the types read of an operation with an any over a derived set",
          %{
            ir_plt: ir_plt,
@@ -4892,7 +4964,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"read":[{"predicates":[{"filter":[["rank","==",1]],"quantifier":"any","source":["top_cards"]}],"to":null,"via":null}]/
+               ~s/"read":[{"predicates":[{"server":true}],"to":null,"via":null}]/
              )
 
       read_js = verdict_entry_js(BakedBoard, :read, [BakedBoard, BakedCard])

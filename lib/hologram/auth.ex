@@ -1168,7 +1168,7 @@ defmodule Hologram.Auth do
        when is_atom(operation) do
     Policy.validate_operation!(entity_type, operation)
 
-    if not update_line_name?(entity_type, operation) do
+    if operation not in Policy.update_names(entity_type) do
       raise MisuseError, change_operation_message(operation)
     end
 
@@ -1186,12 +1186,6 @@ defmodule Hologram.Auth do
 
   defp change_operation_message(operation) do
     "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got #{inspect(operation)}"
-  end
-
-  defp update_line_name?(entity_type, name) do
-    Enum.any?(entity_type.__policies__(), fn {operation, _to, _via, _predicates, line_name, _f} ->
-      operation == :update and line_name == name
-    end)
   end
 
   defp reads_changed_row?(entity_type) do

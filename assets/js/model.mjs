@@ -526,9 +526,10 @@ export default class Model {
               ...new Set([...(held.operations ?? []), ...entry.operations]),
             ].sort(),
             policy: entry.policy,
+            updateNames: entry.updateNames,
             verdicts: entry.verdicts,
           }
-        : {...held, policy: {}, verdicts: {}};
+        : {...held, policy: {}, updateNames: undefined, verdicts: {}};
     }
 
     for (const [type, entry] of Object.entries(entries)) {

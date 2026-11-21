@@ -469,6 +469,19 @@ defmodule Hologram.Policy do
     |> CryptographicUtils.short_digest(@hash_bytes)
   end
 
+  # The names the given entity type's update lines carry, sorted.
+  @doc false
+  @spec update_names(module) :: list(atom)
+  def update_names(entity_type) do
+    names =
+      for {:update, _to, _via, _predicates, name, _fields} <- entity_type.__policies__(),
+          name != nil,
+          uniq: true,
+          do: name
+
+    Enum.sort(names)
+  end
+
   # The given names of a write's values as allow lines name them: an attribute by its name, a to-one
   # by its relationship's rather than its reference field's.
   @doc false
@@ -2002,7 +2015,8 @@ defmodule Hologram.Policy do
           {type, name, Entity.inverse_relationship(type, name)}
         end),
       operations: operations(entity_type),
-      rules: rules
+      rules: rules,
+      update_names: update_names(entity_type)
     }
   end
 

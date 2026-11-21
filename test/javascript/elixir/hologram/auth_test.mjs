@@ -3521,6 +3521,29 @@ describe("Elixir_Hologram_Auth", () => {
   // Cases this side alone has: no client holds a server-only attribute's value - a struct holds its
   // sentinel and a held row nothing at all - so a rule reading one never decides on it, wherever the
   // rule reads it, and only the server's verdict on the operation answers it.
+  describe("a quantifier's condition holding the build's marker", () => {
+    it("answers a visitor without reading the marker as a clause naming somebody", () => {
+      defineModel({
+        read: [
+          rule({
+            predicates: [
+              {
+                filter: [{server: true}],
+                quantifier: "none",
+                source: ["tags"],
+              },
+            ],
+          }),
+        ],
+      });
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document()),
+        Type.boolean(false),
+      );
+    });
+  });
+
   describe("server-only attributes", () => {
     const KEY = "read:00112233aabbccdd";
 

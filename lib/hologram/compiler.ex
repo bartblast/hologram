@@ -3073,6 +3073,16 @@ defmodule Hologram.Compiler do
 
   # The type of the rows of the set a quantifier's source leads to, from the row it is read on - the
   # row the quantifier is about, the nearest of the given types, or the row that many out.
+  defp quantified_through_derived_set?({:outer, levels, hops}, types) do
+    types
+    |> Enum.at(levels)
+    |> Derived.through_set?(hops)
+  end
+
+  defp quantified_through_derived_set?(hops, [entity_type | _types_above]) do
+    Derived.through_set?(entity_type, hops)
+  end
+
   defp quantified_type({:outer, levels, hops}, types) do
     types
     |> Enum.at(levels)
@@ -5001,7 +5011,16 @@ defmodule Hologram.Compiler do
       {"roles", render_roles(entity_type)},
       {"serverOnly", server_only},
       {"verdicts", render_verdicts(entity_type)}
-    ]
+    ] ++ render_update_names(entity_type)
+  end
+
+  # The names update lines carry, which a check of one specific change can ask. Left out for a type
+  # with none.
+  defp render_update_names(entity_type) do
+    case Policy.update_names(entity_type) do
+      [] -> []
+      names -> [{"updateNames", Jason.encode!(names)}]
+    end
   end
 
   # A type with no enum attributes carries an empty object rather than nothing at all - the reader
@@ -5217,12 +5236,27 @@ defmodule Hologram.Compiler do
   defp render_policy_rule(entity_type, operation, rule) do
     verdict_context = {entity_type, operation}
 
-    render_json_object([
-      {"predicates", render_policy_predicates([entity_type], rule.predicates, verdict_context)},
-      {"to", render_policy_references(entity_type, rule.to, verdict_context)},
-      {"via", render_policy_delegation(rule.via, verdict_context)}
-    ])
+    render_json_object(
+      render_policy_exact(entity_type, rule, verdict_context) ++
+        [
+          {"predicates",
+           render_policy_predicates([entity_type], rule.predicates, verdict_context)},
+          {"to", render_policy_references(entity_type, rule.to, verdict_context)},
+          {"via", render_policy_delegation(rule.via, verdict_context)}
+        ]
+    )
   end
+
+  # The clauses a rule reading the row after the change holds as written, which only a check of one
+  # specific change reads. They're read with that row one level above the rule's own.
+  defp render_policy_exact(entity_type, %{exact: %{predicates: predicates}}, verdict_context) do
+    predicates_js =
+      render_policy_predicates([entity_type, entity_type], predicates, verdict_context)
+
+    [{"new", render_json_object([{"predicates", predicates_js}])}]
+  end
+
+  defp render_policy_exact(_entity_type, _rule, _verdict_context), do: []
 
   # Triples, the same shape the client's query filters take - name, operator, value - so one
   # reader spells both. The types are those of the rows the clauses are read on, nearest first: the
@@ -5249,23 +5283,54 @@ defmodule Hologram.Compiler do
   # leads to, read on the row it is about or on one above it, and the condition each of the set's
   # rows is matched with, read on that row with the rows above it. A deciding one renders the same:
   # the rows the client holds of its set decide what one row can and leave the rest unknown, and
-  # over a derived set they decide nothing.
+  # over a derived set they decide nothing, so one is the marker a client answers as unknown: what
+  # its condition compares, a server-only attribute's value among it, stays off the bundle.
   defp render_policy_clause(types, {quantifier, {source, clauses}}, _verdict_context)
        when quantifier in [:all, :any, :none] do
-    related_type = quantified_type(source, types)
+    if quantified_through_derived_set?(source, types) do
+      render_json_object([{"server", "true"}])
+    else
+      related_type = quantified_type(source, types)
 
-    quantifier_js =
-      quantifier
-      |> Atom.to_string()
-      |> Jason.encode!()
+      quantifier_js =
+        quantifier
+        |> Atom.to_string()
+        |> Jason.encode!()
 
+      members = [
+        {"filter", render_policy_predicates([related_type | types], clauses)},
+        {"quantifier", quantifier_js},
+        {"source", render_derived_name(source)}
+      ]
+
+      render_json_object(members)
+    end
+  end
+
+  # A role asked of the row after the change: the chain to the row it's held on, that row's type and
+  # the roles that count, spelled as a role reference through a chain is.
+  defp render_policy_clause(
+         [entity_type | _types_above],
+         {:has_role, {role_names, chain}},
+         _verdict_context
+       ) do
     members = [
-      {"filter", render_policy_predicates([related_type | types], clauses)},
-      {"quantifier", quantifier_js},
-      {"source", render_derived_name(source)}
+      render_policy_name(chain),
+      render_entity_type_label(Entity.path_target(entity_type, chain)),
+      render_policy_roles(role_names)
     ]
 
-    render_json_object(members)
+    render_json_object([{"hasRole", "[#{Enum.join(members, ",")}]"}])
+  end
+
+  # An operation asked of the row the row after the change leads to, spelled as a delegation is.
+  defp render_policy_clause(_types, {:can, {operation, chain}}, _verdict_context) do
+    operation_js =
+      operation
+      |> Policy.operation_key()
+      |> Jason.encode!()
+
+    render_json_object([{"can", "[#{operation_js},#{render_policy_name(chain)}]"}])
   end
 
   # A predicate standing in a rule's predicates that reads a server-only attribute, whose value no
@@ -5276,7 +5341,9 @@ defmodule Hologram.Compiler do
   # A clause reading a server-only attribute is deciding for that alone, so only whether it stands
   # in a rule's predicates is left to ask - inside a quantifier, with no context, it stays a triple.
   defp render_policy_clause(types, {_name, _operator, _value} = clause, {entity_type, _operation}) do
-    if Policy.reads_server_only?(entity_type, clause) do
+    [stored_clause] = Policy.stored_spelling([clause])
+
+    if Policy.reads_server_only?(entity_type, stored_clause) do
       render_json_object([{"server", "true"}])
     else
       render_policy_triple(types, clause)

@@ -31,6 +31,7 @@ defmodule Hologram.PolicyTest do
       revoke_role_qualifying_roles: 2,
       stored_spelling: 1,
       update_fields: 1,
+      update_names: 1,
       validate_operation!: 2,
       verdict_key: 2,
       verdict_operations: 1,
@@ -1451,6 +1452,21 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "update_names/1" do
+    test "returns the names update lines carry, sorted" do
+      assert update_names(Hologram.Test.Fixtures.Policy.Module59) == [:approve, :move]
+    end
+
+    test "returns no names for a type whose update lines carry none" do
+      assert update_names(Hologram.Test.Fixtures.Policy.Module58) == []
+    end
+
+    test "leaves out a name carried by a line of another operation" do
+      assert update_names(Hologram.Test.Fixtures.Policy.Module49) == []
+      assert :draft in operations(Hologram.Test.Fixtures.Policy.Module49)
+    end
+  end
+
   describe "hash/1" do
     defmodule HashedTask do
       use Hologram.Entity
@@ -1505,6 +1521,30 @@ defmodule Hologram.PolicyTest do
       """
 
       assert hash_of_project(narrow) != hash_of_project(wide)
+    end
+
+    # The rules under each key are the same either way, and a browser asking about one change refuses
+    # a name no update line carries.
+    test "gives a type a new hash when a name moves between an update line and another" do
+      on_update = """
+      attribute :public, :boolean
+
+      role :editor
+
+      allow :update, as: :publish, to: :editor
+      allow :create, to: :editor
+      """
+
+      on_create = """
+      attribute :public, :boolean
+
+      role :editor
+
+      allow :update, to: :editor
+      allow :create, as: :publish, to: :editor
+      """
+
+      assert hash_of_project(on_update) != hash_of_project(on_create)
     end
 
     # Rules are OR'd, so lines written in another order decide the same thing.

@@ -1770,6 +1770,49 @@ describe("Model", () => {
       );
     });
 
+    it("takes the update names of a held type's entry", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: [],
+          policy: {},
+          updateNames: ["approve"],
+          verdicts: {},
+        },
+      });
+
+      assert.deepStrictEqual(globalThis.Hologram.sync.model[DOC].updateNames, [
+        "approve",
+      ]);
+    });
+
+    it("drops the update names of a held type its entry carries none for", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: [],
+          policy: {},
+          verdicts: {},
+        },
+      });
+
+      assert.equal(globalThis.Hologram.sync.model[DOC].updateNames, undefined);
+    });
+
+    it("drops the update names of a held type the entries leave out", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({});
+
+      assert.equal(globalThis.Hologram.sync.model[DOC].updateNames, undefined);
+    });
+
     // The bundle's own code can still ask about an operation the new build dropped, and is denied
     // it by the rules - none - rather than refused as one the type never declared.
     it("joins the operations its entry names to a held type's own", () => {
