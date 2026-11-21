@@ -880,6 +880,27 @@ describe("Tabs", () => {
         assert.deepStrictEqual(heard.seen, [answered, barrier]);
       });
 
+      // Passed over for what it says of the rows. What model the server runs is no claim about
+      // them, and a returning tab's own first frame names none.
+      it("keeps the model the server runs from a state it passes over", async () => {
+        const group = nextGroup();
+        const heard = hearing();
+
+        assert.isTrue(await Tabs.join(group, heard));
+
+        say(group, [{...state, servedModelHash: "b7e1d4"}]);
+        await heard.hasHeard;
+
+        try {
+          Tabs.ready();
+
+          assert.deepStrictEqual(heard.seen, [barrier]);
+          assert.equal(SyncStream.servedModelHash, "b7e1d4");
+        } finally {
+          SyncStream.servedModelHash = null;
+        }
+      });
+
       it("takes them while it follows", async () => {
         const group = nextGroup();
         const heard = hearing();
@@ -1257,6 +1278,7 @@ describe("Tabs", () => {
       LocalDatabase.reset();
       Replica.reset();
 
+      SyncStream.servedModelHash = null;
       SyncStream.stopReason = null;
       SyncStream.syncCursor = null;
     });
@@ -1270,6 +1292,7 @@ describe("Tabs", () => {
       LocalDatabase.markTypesSynced(["MyApp.Task"]);
       Replica.offer({id: "r-group", token: "statement-group"});
 
+      SyncStream.servedModelHash = "b7e1d4";
       SyncStream.stopReason = "model_hash";
       SyncStream.syncCursor = "place-1";
 
@@ -1281,6 +1304,7 @@ describe("Tabs", () => {
         kind: "state",
         replica: {id: "r-group", token: "statement-group"},
         rules: null,
+        servedModelHash: "b7e1d4",
         stopReason: "model_hash",
         synced: [],
       });
@@ -1655,6 +1679,22 @@ describe("Tabs", () => {
         "sync_reload",
         {reason: "protocol_version"},
       );
+    });
+
+    it("takes the model the group's server runs", () => {
+      const noting = sinon.stub(SyncStream, "noteServedModel");
+
+      Tabs.receive({
+        cursor: null,
+        kind: "state",
+        replica: {id: null, token: null},
+        servedModelHash: "b7e1d4",
+        stopReason: null,
+        completeness: {all: false, types: []},
+        synced: [],
+      });
+
+      sinon.assert.calledOnceWithExactly(noting, "b7e1d4");
     });
 
     it("takes no stop from a group's state naming none", () => {

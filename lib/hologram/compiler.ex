@@ -149,23 +149,31 @@ defmodule Hologram.Compiler do
   @typedoc """
   What the data layer keeps of a page's reach between compiles: whether the page's client code
   reaches a permission check (see `pages_checking_permissions/1`), the atoms its client code spells
-  (see `build_kept_page_reach/4`), the modules it reaches, the struct types it names included,
-  whether one of the components among them reads the session user from the context, and the
-  queries its client code writes in one piece (see `Hologram.Compiler.QueryChains`).
+  (see `build_kept_page_reach/4`), the modules it names, which are the ones it reaches, the struct
+  types it names and the ones the implementations it can dispatch to spell, the modules those
+  implementations reach, which only say when an edit moves the page's reach, whether one of the
+  components among them reads the session user from the context, and the queries its client code
+  writes in one piece (see `Hologram.Compiler.QueryChains`).
   """
   @type kept_page_reach :: %{
           atoms: MapSet.t(atom),
           checks_permissions?: boolean,
+          impl_modules: MapSet.t(module),
           modules: MapSet.t(module),
           query_chains: [QueryChains.t()],
           reads_session_user?: boolean
         }
 
   @typedoc """
-  What a page's client code reaches (see `list_reach_by_page/2`): the MFAs reachable from it, and
-  the struct types it names, which carry no MFA of their own in the list.
+  What a page's client code reaches (see `list_reach_by_page/2`): the MFAs reachable from it, the
+  struct types it names, which carry no MFA of their own in the list, and, once `put_impl_mfas/2`
+  has added them, the MFAs it reaches through the protocol implementations for struct types.
   """
-  @type page_reach :: %{mfas: [mfa], types: [module]}
+  @type page_reach :: %{
+          required(:mfas) => [mfa],
+          required(:types) => [module],
+          optional(:impl_mfas) => [mfa]
+        }
 
   @typedoc """
   What the client's data layer is compiled with (see `build_sync_constants/2`).
@@ -436,6 +444,28 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the pages whose client code reaches a permission check only through a protocol
+  implementation for a struct type, from each page's reach with its implementation MFAs (see
+  `put_impl_mfas/2`).
+
+  Those MFAs are listed on the graph without the manually ported functions, which every permission
+  MFA is one of, so the given call graph, which still holds them, says which of the MFAs call one.
+  Asked this way because a walk of the implementations on that graph would follow the Elixir bodies
+  of the ported functions, which don't run on the client.
+  """
+  @spec pages_checking_permissions_in_impls([{module, page_reach}], CallGraph.t()) :: [module]
+  def pages_checking_permissions_in_impls(reach_by_page, call_graph) do
+    callers = CallGraph.list_callers(call_graph, @permission_mfas)
+
+    for {page_module, reach} <- reach_by_page,
+        reach
+        |> Map.get(:impl_mfas, [])
+        |> Enum.any?(&MapSet.member?(callers, &1)) do
+      page_module
+    end
+  end
+
+  @doc """
   Returns true when some page checks permissions on the client, or false otherwise - from what the
   data layer keeps of each page's reach (see `build_kept_page_reach/4`).
 
@@ -462,6 +492,40 @@ defmodule Hologram.Compiler do
   # bundle, down to a NIF. The two lists live in two modules for two reasons, and this is the
   # invariant that ties them.
   def permission_mfas, do: @permission_mfas
+
+  @doc """
+  Adds to each page's reach the MFAs its client code reaches through the protocol implementations
+  for struct types (see `CallGraph.list_page_impl_mfas/5`), one task per page through a shared
+  graph. Give it the graph without the manually ported functions.
+  """
+  @spec put_impl_mfas([{module, page_reach}], CallGraph.t()) :: [{module, page_reach}]
+  def put_impl_mfas([], _call_graph), do: []
+
+  def put_impl_mfas(reach_by_page, call_graph) do
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+    analyses = PLT.start()
+
+    try do
+      CallGraph.with_shared_graph(call_graph, fn read_graph ->
+        seeds = CallGraph.page_impl_seeds(read_graph.(), module_info_plt)
+
+        TaskUtils.map_concurrently(reach_by_page, fn {page_module, reach} ->
+          impl_mfas =
+            CallGraph.list_page_impl_mfas(
+              read_graph.(),
+              page_module,
+              analyses,
+              module_info_plt,
+              seeds
+            )
+
+          {page_module, Map.put(reach, :impl_mfas, impl_mfas)}
+        end)
+      end)
+    after
+      PLT.stop(analyses)
+    end
+  end
 
   @doc false
   @spec server_only_mfas() :: list(mfa)
@@ -779,6 +843,12 @@ defmodule Hologram.Compiler do
   their module declares. Kept whole, not narrowed to the names the model declares now: a model
   change derives again without listing the pages again. A function many pages reach is read once.
 
+  The functions a page reaches through protocol implementations (see `put_impl_mfas/2`) are read the
+  same way, since they run in the browser too. The modules they count as naming are the ones they
+  spell, not the ones they reach, and an implementation doesn't name the type it's written for: a
+  `to_string` matching `%AuditLog{}` doesn't make a type only server code names sync. A query
+  written in one piece in such a function does name its root, its own type included.
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_kept_page_reach_4/README.md
   """
   @spec build_kept_page_reach([{module, page_reach}], [module], PLT.t(), PLT.t()) :: %{
@@ -787,16 +857,26 @@ defmodule Hologram.Compiler do
   def build_kept_page_reach(reach_by_page, permission_checking_pages, module_info_plt, ir_plt) do
     checking_pages = MapSet.new(permission_checking_pages)
     read_by_mfa = read_by_mfa(reach_by_page, module_info_plt, ir_plt)
+    read_of = &Map.get(read_by_mfa, &1, %{atoms: MapSet.new(), chains: [], names: MapSet.new()})
 
     Map.new(reach_by_page, fn {page_module, reach} ->
-      modules = list_reached_modules(reach)
+      impl_mfas = Map.get(reach, :impl_mfas, [])
+      impl_reads = Enum.map(impl_mfas, read_of)
+      reads = Enum.map(reach.mfas, read_of) ++ impl_reads
+
+      modules =
+        reach
+        |> list_reached_modules()
+        |> MapSet.new()
+        |> MapSet.union(impl_named_modules(impl_reads))
+
+      impl_modules = MapSet.new(impl_mfas, fn {module, _function, _arity} -> module end)
 
       components =
         modules
+        |> MapSet.union(impl_modules)
         |> reached_components(module_info_plt)
         |> Enum.concat([page_module])
-
-      reads = Enum.map(reach.mfas, &Map.get(read_by_mfa, &1, %{atoms: MapSet.new(), chains: []}))
 
       atoms = Enum.reduce(reads, MapSet.new(), &MapSet.union(&2, &1.atoms))
 
@@ -808,7 +888,8 @@ defmodule Hologram.Compiler do
       kept_reach = %{
         atoms: atoms,
         checks_permissions?: MapSet.member?(checking_pages, page_module),
-        modules: MapSet.new(modules),
+        impl_modules: impl_modules,
+        modules: modules,
         query_chains: query_chains,
         reads_session_user?: Enum.any?(components, &reads_session_user?/1)
       }
@@ -2028,7 +2109,8 @@ defmodule Hologram.Compiler do
   `CallGraph.list_page_chunk_types/4`), which the MFAs do not show, since a type's struct functions
   ship in its chunks rather than in the page's bundle. Both are listed one task per page, through
   the reader of a graph shared with the page tasks (see `CallGraph.with_shared_graph/2`) and the
-  server callback analyses they compute, for this call. With no page, the graph is not read.
+  server callback analyses they compute, for this call. With no page, the graph is not read. The
+  code a page reaches through protocol implementations is added by `put_impl_mfas/2`.
 
   What the data layer derives per page reads it: what the data layer keeps of the page's reach (see
   `build_kept_page_reach/4`) and whether the page checks permissions (see
@@ -2383,12 +2465,15 @@ defmodule Hologram.Compiler do
   checks only rows of types it queries or mentions, and a rule's chains already follow its
   delegations. A chain's types stop before its first type no session may read (see
   `Hologram.Policy.readable_prefix/2`), since no client gets a row of it, nor any row reached
-  through it. A type only server code names, like an audit log, is left out, rules or not, and
-  never reaches a browser. A name the code only builds at run time names nothing here, and a
-  derived query reading such a type is refused on its render (see
+  through it. Code in a protocol implementation the page can dispatch to counts as client code, but
+  an implementation doesn't name the type it's written for (see `build_kept_page_reach/4`). A type
+  only server code names, like an audit log, is left out, rules or not, and never reaches a browser.
+  A name the code only builds at run time names nothing here, and a derived query reading such a
+  type is refused on its render (see
   `Hologram.Template.Renderer`). The server reads the list (see
-  `Hologram.DB.QueryCache.synced_types/0`), and the client is told it, refusing a query that reads
-  another type the same way (see `build_sync_constants_js/1`).
+  `Hologram.DB.QueryCache.synced_types/0`). The client is told it, refusing a query that reads
+  another type the same way (see `build_sync_constants_js/1`), and names it when it greets, so a
+  server running a newer model can tell which types a tab built with this one reads.
 
   `:page_types` are each page's share of those, sorted by name: the types its own client code
   reaches the same way, with the user type when it reads the session user, and the types its rules
@@ -3064,17 +3149,20 @@ defmodule Hologram.Compiler do
 
   defp collect_operation_asks(_ir, _mfa, acc), do: acc
 
-  # What each MFA the given pages reach writes, keyed by MFA: the atom literals it spells and the
-  # query chains it writes (see Hologram.Compiler.QueryChains) - for every function but Elixir's and
-  # Hologram's (see build_kept_page_reach/4), each read once however many pages reach it. The IR of
-  # their modules is built into the PLT first, in one go. Module aliases are left out of the atoms:
-  # they name modules, which the pages' reach already lists, and no relationship or derived field.
+  # What each MFA the given pages reach writes, keyed by MFA: the atom literals it spells, the
+  # modules it spells, and the query chains it writes (see Hologram.Compiler.QueryChains) - for every
+  # function but Elixir's and Hologram's (see build_kept_page_reach/4), each read once however many
+  # pages reach it. The IR of their modules is built into the PLT first, in one go. Module aliases
+  # are kept apart from the atoms: they name modules, and no relationship or derived field. An
+  # implementation's own type is left out of its modules.
   defp read_by_mfa(reach_by_page, module_info_plt, ir_plt) do
     elixir_lib_dir = elixir_lib_dir()
 
     mfas_by_module =
       reach_by_page
-      |> Enum.flat_map(fn {_page_module, reach} -> reach.mfas end)
+      |> Enum.flat_map(fn {_page_module, reach} ->
+        reach.mfas ++ Map.get(reach, :impl_mfas, [])
+      end)
       |> Enum.uniq()
       |> Enum.group_by(fn {module, _function, _arity} -> module end)
       |> Enum.filter(fn {module, _mfas} ->
@@ -3086,30 +3174,62 @@ defmodule Hologram.Compiler do
     mfas_by_module
     |> Enum.flat_map(fn {module, module_mfas} ->
       funs = module_funs(ir_plt, module)
+      own_type = implementation_type(module, module_info_plt)
 
       # An entity type's and an Ecto schema's generated functions name every relationship, field
       # and derived field they declare. A component's or a page's hold what the app wrote, its prop
-      # and state defaults among them, so they are read like the rest of its code.
+      # and state defaults among them, so they are read like the rest of its code. A protocol's and
+      # an implementation's dispatch functions are generated whole, and spell every implementing
+      # type and their own option and error keys.
       declares_model? =
         Reflection.entity?(module, module_info_plt) or
           Reflection.ecto_schema?(module, module_info_plt)
 
       module_mfas
-      |> Enum.reject(fn {_module, function, _arity} ->
-        declares_model? and generated?(function)
+      |> Enum.reject(fn {_module, function, _arity} = mfa ->
+        (declares_model? and generated?(function)) or
+          CallGraph.protocol_metadata_mfa?(mfa, module_info_plt)
       end)
       |> Enum.map(fn {_module, function, arity} = mfa ->
         {_visibility, clauses} = Map.get(funs, {function, arity}, {:public, []})
 
-        atoms =
-          clauses
-          |> collect_atoms(MapSet.new())
-          |> MapSet.reject(&Reflection.alias?/1)
-
-        {mfa, %{atoms: atoms, chains: QueryChains.collect(clauses, mfa)}}
+        {mfa, read_function(clauses, mfa, own_type)}
       end)
     end)
     |> Map.new()
+  end
+
+  # What the given function's clauses write: see read_by_mfa/3.
+  defp read_function(clauses, mfa, own_type) do
+    spelled = collect_atoms(clauses, MapSet.new())
+
+    %{
+      atoms: MapSet.reject(spelled, &Reflection.alias?/1),
+      chains: QueryChains.collect(clauses, mfa),
+      names: MapSet.filter(spelled, &(Reflection.alias?(&1) and &1 != own_type))
+    }
+  end
+
+  # The struct type the given module implements a protocol for, or nil for any other module.
+  defp implementation_type(module, module_info_plt) do
+    case PLT.get(module_info_plt, module) do
+      {:ok, %{protocol_implementation?: true} = info} ->
+        Map.get(info, :implementation_for) || module.__impl__(:for)
+
+      _fallback ->
+        nil
+    end
+  end
+
+  # The modules what a page reaches through implementations names: the ones those functions spell,
+  # and the roots of the queries they write in one piece.
+  defp impl_named_modules(impl_reads) do
+    Enum.reduce(impl_reads, MapSet.new(), fn read, acc ->
+      read.chains
+      |> MapSet.new(& &1.root)
+      |> MapSet.union(read.names)
+      |> MapSet.union(acc)
+    end)
   end
 
   # The functions of the given module the IR PLT holds, by name and arity, or none for a module it

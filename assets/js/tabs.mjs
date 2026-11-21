@@ -446,6 +446,14 @@ export default class Tabs {
     const fromNowhere = Tabs.leader && SyncStream.syncCursor === null;
     const first = Tabs.leader && !lead;
 
+    // A state passed over below still says what model the server runs, which is no claim about
+    // the rows, and a returning tab's own first frame names none (see SyncStream.markServedBy).
+    for (const message of Tabs.#held) {
+      if (message.kind === "state") {
+        SyncStream.noteServedModel(message.servedModelHash);
+      }
+    }
+
     const held = Tabs.#held.filter((message) => {
       if (fromNowhere) {
         return (
@@ -616,6 +624,7 @@ export default class Tabs {
         kind: "state",
         replica: Replica.current(),
         rules: SyncStream.rulesForGroup(),
+        servedModelHash: SyncStream.servedModelHash,
         stopReason: SyncStream.stopReason,
         synced: completeness.all ? ["all"] : [],
       },
@@ -751,6 +760,11 @@ export default class Tabs {
     if (message.replica?.id) {
       Replica.adopt(message.replica);
     }
+
+    // And what model the server runs: the group syncs one, so a tab joining it goes to its next
+    // page afresh whenever the tab that answered would. Ahead of any read of the store, since it
+    // says nothing about the rows and a navigation during the read has to know it.
+    SyncStream.noteServedModel(message.servedModelHash);
 
     if (
       !Tabs.leader &&

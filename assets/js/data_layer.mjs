@@ -649,10 +649,12 @@ export default class DataLayer {
     ]).finally(() => clearTimeout(timer));
   }
 
-  // Whether the server stopped serving this tab, which a navigation answers by loading the page
-  // afresh: in-app, the next page would run the same code the server can no longer serve.
+  // Whether a navigation loads the next page afresh: the server stopped serving this tab, and
+  // in-app the next page would run the same code the server can no longer serve - or it serves the
+  // tab across models, and in-app the next page would run the new build's code over this tab's
+  // runtime and store (see SyncStream.servedAcrossModels). Only the first shows the reload notice.
   static stopped() {
-    return SyncStream.stopReason !== null;
+    return SyncStream.stopReason !== null || SyncStream.servedAcrossModels();
   }
 
   // Called by every render that finished: a tab the server stopped serving says so to the person

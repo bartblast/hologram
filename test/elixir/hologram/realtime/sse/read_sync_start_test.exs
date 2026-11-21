@@ -15,7 +15,6 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @policy_hash "0123456789abcdef0123456789abcdef"
   @synced_types [Module2]
-  @types_hash Cursor.types_hash(@synced_types, false)
 
   use_module_stub :query_cache
 
@@ -35,6 +34,9 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
 
     :ok
   end
+
+  # The hash a place filled by this build names its types by.
+  defp types_hash, do: Cursor.types_hash(@synced_types, false, Model.hash())
 
   defp seed(tx) do
     statement = """
@@ -57,7 +59,7 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
   # start read did, under the same rules and types.
   describe "sync_session_opts/5" do
     defp gap_reader(cursor) do
-      start = %{cursor: cursor, rules: nil, types_hash: @types_hash}
+      start = %{cursor: cursor, rules: nil, types_hash: types_hash()}
       connection = %{applied_seq: nil, fill_place: {200, 0}, replica_id: nil}
 
       sync_session_opts(nil, MyApp.Page, @policy_hash, start, connection)[:read_gap]
@@ -66,13 +68,22 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     test "hands the session a gap reader that reads past a place filled under the same rules and types" do
       {tx, seq} = seed(200)
 
-      assert {:ok, [], _edge} = gap_reader(Cursor.encode(tx, seq, @policy_hash, @types_hash)).()
+      assert {:ok, [], _edge} = gap_reader(Cursor.encode(tx, seq, @policy_hash, types_hash())).()
     end
 
     test "hands the session a gap reader that refuses a place filled with other types" do
       {tx, seq} = seed(200)
 
-      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([], false))
+      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([], false, Model.hash()))
+
+      assert gap_reader(cursor).() == {:full_resync, :synced_types}
+    end
+
+    test "hands the session a gap reader that refuses a place filled under another model" do
+      {tx, seq} = seed(200)
+
+      cursor =
+        Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash(@synced_types, false, "0ld"))
 
       assert gap_reader(cursor).() == {:full_resync, :synced_types}
     end
@@ -80,7 +91,7 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     test "hands the session a gap reader that refuses a place judged under other rules" do
       {tx, seq} = seed(200)
 
-      cursor = Cursor.encode(tx, seq, "fedcba9876543210fedcba9876543210", @types_hash)
+      cursor = Cursor.encode(tx, seq, "fedcba9876543210fedcba9876543210", types_hash())
 
       assert gap_reader(cursor).() == {:full_resync, :policy_hash}
     end
@@ -95,8 +106,8 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
       assert read_sync_start("1.2.0123.4567", nil, @policy_hash, true, true) == :held
     end
 
-    # Nothing else is read for a first arrival with current rules, so the check that the rules
-    # stayed the ones the handshake compared is what meets the hold.
+    # Every start names the model its rows are read under in the types hash, which is what meets the
+    # hold.
     test "waits for the compile when a hold began before a first arrival's start" do
       on_exit(&Model.release/0)
 
@@ -105,17 +116,18 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
       assert read_sync_start(nil, nil, @policy_hash, false, true) == :held
     end
 
-    # A place the log still reaches, and an effect after it the client missed: a gap holding
-    # effects is compared against the model, which is the read the hold refuses.
+    # A place the log still reaches, and an effect after it the client missed: the hold meets the
+    # model hash the place is compared against before the gap is.
     test "waits for the compile when a hold began before a returning client's catch-up" do
       on_exit(&Model.release/0)
 
       {tx, seq} = seed(200)
       seed(201)
 
-      Model.hold()
+      # Named before the hold, which refuses the model hash a place names.
+      cursor = Cursor.encode(tx, seq, @policy_hash, types_hash())
 
-      cursor = Cursor.encode(tx, seq, @policy_hash, @types_hash)
+      Model.hold()
 
       assert read_sync_start(cursor, nil, @policy_hash, false, true) == :held
     end
@@ -132,9 +144,11 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
                {:ok,
                 %{
                   cursor: nil,
+                  lens: nil,
                   resync_reason: nil,
                   rules: nil,
-                  types_hash: @types_hash
+                  synced_types: nil,
+                  types_hash: types_hash()
                 }}
     end
 
@@ -143,15 +157,17 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
       {tx, seq} = seed(200)
       seed(201)
 
-      cursor = Cursor.encode(tx, seq, @policy_hash, @types_hash)
+      cursor = Cursor.encode(tx, seq, @policy_hash, types_hash())
 
       assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
                {:ok,
                 %{
                   cursor: cursor,
+                  lens: nil,
                   resync_reason: nil,
                   rules: nil,
-                  types_hash: @types_hash
+                  synced_types: nil,
+                  types_hash: types_hash()
                 }}
     end
 
@@ -160,16 +176,70 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     test "hands on no place to resume from for a client sent everything again" do
       {tx, seq} = seed(200)
 
-      cursor = Cursor.encode(tx, seq, "fedcba9876543210fedcba9876543210", @types_hash)
+      cursor = Cursor.encode(tx, seq, "fedcba9876543210fedcba9876543210", types_hash())
 
       assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
                {:ok,
                 %{
                   cursor: nil,
+                  lens: nil,
                   resync_reason: :policy_hash,
                   rules: nil,
-                  types_hash: @types_hash
+                  synced_types: nil,
+                  types_hash: types_hash()
                 }}
+    end
+
+    # A migration can change rows at rest with nothing in the log to say so, and a tab built against
+    # an older model keeps the rows it holds across the deploy.
+    test "sends everything again to a client filled under another model" do
+      {tx, seq} = seed(200)
+
+      cursor =
+        Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash(@synced_types, false, "0ld"))
+
+      assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
+               {:ok,
+                %{
+                  cursor: nil,
+                  lens: nil,
+                  resync_reason: :synced_types,
+                  rules: nil,
+                  synced_types: nil,
+                  types_hash: types_hash()
+                }}
+    end
+
+    # A client of another model is sent only the types its bundle names, and its place names those -
+    # here none, where the build syncs `Module2`.
+    test "names the types an old client is served in the place it is handed" do
+      serving = %{lens: :a_lens, model_hash: Model.hash(), types: []}
+
+      assert {:ok, start} = read_sync_start(nil, nil, @policy_hash, false, true, serving)
+
+      assert start.lens == :a_lens
+      assert start.synced_types == []
+      assert start.types_hash == Cursor.types_hash([], false, Model.hash())
+    end
+
+    # A live reload between the handshake and these reads can change the model the old client's lens
+    # translates from, and the start is made again from the handshake.
+    test "starts over when the model changed under an old client's lens after the handshake" do
+      serving = %{lens: :a_lens, model_hash: "0ld", types: [Module2]}
+
+      assert read_sync_start(nil, nil, @policy_hash, false, true, serving) == :rules_changed
+    end
+
+    test "names the types an old client is served, not the build's, in the place it resumes from" do
+      {tx, seq} = seed(200)
+
+      # Filled with the build's own types, which the old client isn't served.
+      cursor = Cursor.encode(tx, seq, @policy_hash, types_hash())
+
+      serving = %{lens: :a_lens, model_hash: Model.hash(), types: []}
+
+      assert {:ok, %{cursor: nil, resync_reason: :synced_types}} =
+               read_sync_start(cursor, nil, @policy_hash, false, true, serving)
     end
 
     # A deploy that starts syncing a type moves no row of it, so only the place's own record of the
@@ -177,15 +247,17 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
     test "sends everything again to a client filled with other types" do
       {tx, seq} = seed(200)
 
-      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([], false))
+      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([], false, Model.hash()))
 
       assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
                {:ok,
                 %{
                   cursor: nil,
+                  lens: nil,
                   resync_reason: :synced_types,
                   rules: nil,
-                  types_hash: @types_hash
+                  synced_types: nil,
+                  types_hash: types_hash()
                 }}
     end
   end
