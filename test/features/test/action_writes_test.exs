@@ -19,24 +19,6 @@ defmodule HologramFeatureTests.ActionWritesTest do
     :ok
   end
 
-  # Polls the SERVER until the one row holds the given number of votes.
-  #
-  # What it is for: while a batch's answer is held, nothing on the client says whether the server
-  # has applied it. Knowing that it HAS is the starting point for making a later write whose
-  # arrival proves the earlier one's frame has already been applied.
-  defp await_server_votes(expected_votes) do
-    Enum.reduce_while(1..100, nil, fn _attempt, _acc ->
-      case DB.read(Todo) do
-        [%Todo{votes: ^expected_votes} = todo] ->
-          {:halt, todo}
-
-        _not_yet ->
-          Process.sleep(50)
-          {:cont, nil}
-      end
-    end)
-  end
-
   defp page_replica_id(session) do
     script_result(session, "return globalThis.Hologram.replicaId;")
   end
