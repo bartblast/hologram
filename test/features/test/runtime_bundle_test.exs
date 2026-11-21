@@ -32,6 +32,16 @@ defmodule HologramFeatureTests.RuntimeBundleTest do
     assert carries_data_layer?(read_runtime_bundle())
   end
 
+  # The app's data model goes into the data model bundle, so that a data model edit leaves the
+  # runtime bundle as it is. The runtime's own code reads the constants, but a build with the data
+  # layer never sets them there, not even to null.
+  test "the runtime bundle carries none of the app's data model" do
+    runtime_bundle = read_runtime_bundle()
+
+    assert String.contains?(runtime_bundle, "Hologram.sync")
+    refute String.contains?(runtime_bundle, "Hologram.sync=")
+  end
+
   defp carries_data_layer?(bundle) do
     String.contains?(bundle, @data_layer_marker)
   end
