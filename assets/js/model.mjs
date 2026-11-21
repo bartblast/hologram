@@ -60,6 +60,10 @@ export default class Model {
   // it is out of date.
   static #generation = 0;
 
+  // What an integer column holds.
+  static #INT8_MAX = 9223372036854775807n;
+  static #INT8_MIN = -9223372036854775808n;
+
   // A year the way Date.to_iso8601/1 spells one, which is how every date and datetime arrives:
   // four digits, or more with no leading zero, and a minus before a year below 0 - never before 0
   // itself. So one year is one spelling, as one day is, and the year of every date the server
@@ -598,6 +602,34 @@ export default class Model {
     }
 
     return leftRest < rightRest ? -1 : 1;
+  }
+
+  // The given value as it compares with the other one. A BigInt beside a Number reads as a Number,
+  // which is what the database does with an integer beside a float. Beside a safe integer the
+  // rounding changes nothing, since a BigInt held here is always past what a Number holds exactly.
+  // One no column can hold stays exact, as Hologram.Query.Ordering leaves it.
+  static widened(value, other) {
+    return Model.#isInt8BigInt(value) && typeof other === "number"
+      ? Number(value)
+      : value;
+  }
+
+  // The given value as a field of the given declared type reads it: an integer a float field reads
+  // is a Number, the way the database casts it.
+  static widenedTo(value, type) {
+    return type === "float" &&
+      typeof value === "bigint" &&
+      Number.isFinite(Number(value))
+      ? Number(value)
+      : value;
+  }
+
+  static #isInt8BigInt(value) {
+    return (
+      typeof value === "bigint" &&
+      value >= Model.#INT8_MIN &&
+      value <= Model.#INT8_MAX
+    );
   }
 
   // A datetime as the wire spells it, from a count of milliseconds - six fractional digits, the

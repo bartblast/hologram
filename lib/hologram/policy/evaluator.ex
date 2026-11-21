@@ -409,13 +409,14 @@ defmodule Hologram.Policy.Evaluator do
   end
 
   # A derived field is computed from its definition as the build resolved it, on the row it is read
-  # on alone. An integer a float field reads compares equal to its float, so it stays as is.
+  # on alone. An integer a float field reads is widened, the way the database casts it.
   defp read_value([%entity_type{} = row | _outer_rows], name, actor_user_id, checker) do
     case List.keyfind(entity_type.__derived__(), name, 0) do
-      {_name, _type, _opts} ->
+      {_name, type, _opts} ->
         entity_type
         |> Derived.definition(name)
         |> evaluated([row], actor_user_id, checker)
+        |> Ordering.widened(type)
 
       nil ->
         Map.fetch!(row, name)

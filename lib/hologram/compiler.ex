@@ -26,6 +26,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Job
   alias Hologram.Policy
   alias Hologram.Policy.Edges
+  alias Hologram.Query.Ordering
   alias Hologram.Query.Shape
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
@@ -4823,9 +4824,12 @@ defmodule Hologram.Compiler do
     render_json_object([{"query", render_derived_term(term, [term.entity, entity_type])}])
   end
 
+  # An integer a float field holds is rendered as the float the server reads it as, because the two
+  # runtimes round an integer past 64 bits differently.
   defp render_derived_definition({:value, value}, _entity_type, type) do
     value_js =
       value
+      |> Ordering.widened(type)
       |> Codec.encode_json(type)
       |> Jason.encode!()
 

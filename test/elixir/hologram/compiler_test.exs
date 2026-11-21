@@ -2208,6 +2208,27 @@ defmodule Hologram.CompilerTest do
                ~s/globalThis.Hologram.sync = {expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
     end
 
+    defmodule BigFloatLiteral do
+      use Hologram.Entity
+
+      derived :cap, :float, fn -> 28_097_012_775_158_772_737 end
+    end
+
+    # JavaScript and Erlang round this integer to different floats, so the build hands over the
+    # float the server compares with rather than the digits.
+    test "renders an integer a float derived field holds as the server's float" do
+      put_derived_definitions([BigFloatLiteral])
+
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([BigFloatLiteral])}
+
+      float_js = Jason.encode!(28_097_012_775_158_772_737 * 1.0)
+
+      assert String.contains?(
+               build_sync_constants_js(sync_constants),
+               ~s/"cap":{"definition":{"value":#{float_js}},/
+             )
+    end
+
     # A client computes a derived field itself, from the definition the build resolved - spelled in
     # the shapes its query kernel reads, values as the wire spells them.
     test "renders a derived field holding a value with its declared type and its definition" do
