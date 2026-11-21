@@ -153,9 +153,8 @@ defmodule Hologram.Mutation.Envelope do
   defp decode_delta_amount(name, amount) do
     case Codec.decode_wire(amount, :integer) do
       {:ok, decoded} when is_integer(decoded) and decoded != 0 ->
-        # Bounded here because nothing downstream can: the column is judged on the value the
-        # statement leaves, and an amount the column cannot hold fails the statement's own
-        # parameters instead - the same range a put's value is judged against.
+        # Bounded here, to the range a put's value is judged against, so an amount no column can
+        # hold is refused with the rest of a malformed entry, before any row is read.
         if Validator.attribute_value_valid?(decoded, :integer) do
           {:ok, decoded}
         else
