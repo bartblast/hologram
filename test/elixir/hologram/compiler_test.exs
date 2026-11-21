@@ -10554,44 +10554,13 @@ defmodule Hologram.CompilerTest do
       assert File.exists?(gzip_path)
     end
 
-    test "removes the other data model bundles when the bundle is on disk already", %{
-      bundle: bundle,
-      static_dir: static_dir
-    } do
-      write_data_model_bundle!(bundle)
-
-      for file_name <- ["data-model-AAAAAAAA.js", "data-model-AAAAAAAA.js.gz"] do
-        static_dir
-        |> Path.join(file_name)
-        |> File.write!("content")
-      end
+    # The asset path registry names the old bundle until the compile tells it to reload.
+    test "leaves the data model bundles it replaces", %{bundle: bundle, static_dir: static_dir} do
+      old_bundle_path = Path.join(static_dir, "data-model-AAAAAAAA.js")
+      File.write!(old_bundle_path, "old")
 
       assert write_data_model_bundle!(bundle) == true
-
-      bundle_file_name = Path.basename(bundle.static_bundle_path)
-      assert list_sorted_files(static_dir) == [bundle_file_name, bundle_file_name <> ".gz"]
-    end
-
-    test "removes the data model bundles it replaces, and leaves the other bundles", %{
-      bundle: bundle,
-      static_dir: static_dir
-    } do
-      for file_name <- [
-            "data-model-AAAAAAAA.js",
-            "data-model-AAAAAAAA.js.gz",
-            "runtime-CCCCCCCC.js"
-          ] do
-        static_dir
-        |> Path.join(file_name)
-        |> File.write!("content")
-      end
-
-      write_data_model_bundle!(bundle)
-
-      bundle_file_name = Path.basename(bundle.static_bundle_path)
-
-      assert list_sorted_files(static_dir) ==
-               Enum.sort([bundle_file_name, bundle_file_name <> ".gz", "runtime-CCCCCCCC.js"])
+      assert File.read!(old_bundle_path) == "old"
     end
   end
 end

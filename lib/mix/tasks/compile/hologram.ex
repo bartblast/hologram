@@ -667,7 +667,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       subsystems = runtime_subsystems(entity_types)
 
       # The data model bundle this build serves, none without the data layer: written or kept with
-      # the first batch (see update_data_model_bundle/2). Asked for here, before any bundling, so
+      # the first batch (see write_data_model_bundle/2). Asked for here, before any bundling, so
       # that a bundle over the size limit fails the compile before any bundle is written.
       data_model_bundle =
         Compiler.data_model_bundle(sync_constants_js, subsystems, opts[:static_dir])
@@ -852,7 +852,6 @@ defmodule Mix.Tasks.Compile.Hologram do
         links: links,
         listed_mfas_by_page: Map.new(unrecorded_mfas_by_page),
         module_info_plt: new_module_info_plt,
-        old_runtime_bundle_info: cache.runtime && cache.runtime.bundle_info,
         opts: opts,
         read_graph: nil,
         runtime_js_binding_modules: runtime_js_binding_modules,
@@ -1112,11 +1111,16 @@ defmodule Mix.Tasks.Compile.Hologram do
   # Builds the given pages, and the runtime and the chunks when their entry files are given, and
   # records them: their states in the cache, the chunk registry PLT and the page digest PLT that
   # name them, and the pages no longer pending. The first batch writes or keeps the data model
-  # bundle once esbuild is done (see update_data_model_bundle/2). Then the :bundles_built option is
-  # told what was built (see built_shared_entries/2). A batch with nothing to bundle tells it only of
-  # a data model bundle it changed, and of nothing when it changed none.
+  # bundle once esbuild is done (see write_data_model_bundle/2). The runtime and data model bundles
+  # the batch replaces go once its dumps are written, since the asset path registry names them
+  # until the :bundles_built option is told what was built (see built_shared_entries/2). A batch
+  # with nothing to bundle tells it only of a data model bundle it changed, and of nothing when it
+  # changed none.
   defp bundle_batch([], %{entry_files_info: []} = shared, bundles, context) do
-    if update_data_model_bundle(shared, context) do
+    data_model_written? = write_data_model_bundle(shared, context)
+    data_model_removed? = remove_replaced_data_model_bundles(shared, context)
+
+    if data_model_written? or data_model_removed? do
       context.opts[:bundles_built].([:data_model])
     end
 
@@ -1140,6 +1144,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     built_bundles_info =
       Compiler.bundle(shared.entry_files_info ++ page_entry_files_info, context.opts)
 
+    data_model_written? = write_data_model_bundle(shared, context)
+
     built_chunk_bundles_info = built_chunk_bundles_info(built_bundles_info, context)
 
     batch = %{
@@ -1147,20 +1153,27 @@ defmodule Mix.Tasks.Compile.Hologram do
       mfas_by_page: Map.new(batch_mfas_by_page)
     }
 
-    keep_built_bundles(built_bundles_info, batch, context)
-    keep_built_chunk_bundles(built_chunk_bundles_info, context)
-
     new_bundles =
       bundles
-      |> put_built_bundles_info(built_bundles_info, context)
+      |> put_built_bundles_info(built_bundles_info)
       |> put_built_chunk_bundles_info(built_chunk_bundles_info, context)
       |> Map.update!(:page_chunk_types, &Map.merge(&1, batch.chunk_types_by_page))
 
     dump_chunk_registry_plt(new_bundles, context)
     dump_page_digest_plt(new_bundles, context)
+
+    remove_replaced_runtime_bundles(built_bundles_info, context.opts[:static_dir])
+
+    # Recorded only now, so that a compile failing on anything above leaves nothing kept of this
+    # batch: the next one builds it again, and removes what it replaces.
+    keep_built_bundles(built_bundles_info, batch, context)
+    keep_built_chunk_bundles(built_chunk_bundles_info, context)
     Cache.delete_pending_pages(page_modules)
 
-    data_model_changed? = update_data_model_bundle(shared, context)
+    # After the state is kept, since no state brings this removal back: a retry runs it whatever is
+    # kept, and the old bundle it then finds is what tells it to report the change.
+    data_model_removed? = remove_replaced_data_model_bundles(shared, context)
+    data_model_changed? = data_model_written? or data_model_removed?
 
     built_entries = built_shared_entries(shared, data_model_changed?) ++ page_modules
     context.opts[:bundles_built].(built_entries)
@@ -1631,7 +1644,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # module of those MFAs was edited: its functions are in the bundle, so their code is too. It is
   # rebuilt too when a file its bundle read changed (see Hologram.Compiler.js_inputs_changed?/2),
   # and when the client config or the subsystems it ships differ from this compile's. The data
-  # model is none of its inputs: it goes into a bundle of its own (see update_data_model_bundle/2),
+  # model is none of its inputs: it goes into a bundle of its own (see write_data_model_bundle/2),
   # so a data model edit leaves the runtime bundle as it is. Its bundle, gzip copy and source map
   # are all required, since nothing else in the compile would recreate a missing one.
   defp keep_runtime_bundle?(nil, _reaching_modules, _inputs), do: false
@@ -1748,11 +1761,10 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  # The runtime bundle is found by scanning the static dir rather than through the page digest PLT, so
-  # the one it replaces is deleted as soon as it is written: a registry reload between two batches
-  # could otherwise find the old one. A page's old bundle stays until the cleanup at the end. The
-  # chunk bundles are put together (see put_built_chunk_bundles_info/2).
-  defp put_built_bundles_info(bundles, built_bundles_info, context) do
+  # A page's old bundle stays until the cleanup at the end, and the runtime's until its batch is
+  # done (see remove_replaced_runtime_bundles/2). The chunk bundles are put together (see
+  # put_built_chunk_bundles_info/2).
+  defp put_built_bundles_info(bundles, built_bundles_info) do
     Enum.reduce(built_bundles_info, bundles, fn
       %{bundle_name: "chunk"}, acc ->
         acc
@@ -1761,7 +1773,6 @@ defmodule Mix.Tasks.Compile.Hologram do
         %{acc | pages: Map.put(acc.pages, page_module, bundle_info)}
 
       %{bundle_name: "runtime"} = bundle_info, acc ->
-        remove_replaced_bundle(context.old_runtime_bundle_info, bundle_info)
         %{acc | runtime: bundle_info}
     end)
   end
@@ -2358,21 +2369,40 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> Enum.each(&File.touch!/1)
   end
 
-  # A digest names its bundle's content, so a rebuild that wrote the same content wrote the same file.
-  defp remove_replaced_bundle(nil, _new_bundle_info), do: :ok
+  # The data model bundles the first batch replaces, or every one for a build that serves none.
+  # Returns whether it removed any. A compile that failed after writing the new bundle left the old
+  # one here, so the retry finds it, and still reports the change to the tabs.
+  defp remove_replaced_data_model_bundles(%{data_model?: false}, _context), do: false
 
-  defp remove_replaced_bundle(old_bundle_info, new_bundle_info) do
-    if old_bundle_info.static_bundle_path != new_bundle_info.static_bundle_path do
-      File.rm(old_bundle_info.static_bundle_path)
+  defp remove_replaced_data_model_bundles(%{data_model?: true}, context) do
+    kept_bundle_path = context.data_model_bundle && context.data_model_bundle.static_bundle_path
 
-      old_bundle_info.static_bundle_path
-      |> Compiler.gzip_path()
-      |> File.rm()
+    Compiler.remove_data_model_bundles(context.opts[:static_dir], kept_bundle_path)
+  end
 
-      File.rm(old_bundle_info.static_source_map_path)
+  # The runtime bundle is found by scanning the static dir rather than through the page digest PLT,
+  # so the ones a built runtime replaces go before the registry reloads, which could otherwise pick
+  # one over it. Found by name rather than through the kept state, which a compile that failed after
+  # bundling has forgotten while the old runtime is still on disk.
+  defp remove_replaced_runtime_bundles(built_bundles_info, static_dir) do
+    case Enum.find(built_bundles_info, &(&1.bundle_name == "runtime")) do
+      nil ->
+        :ok
+
+      bundle_info ->
+        kept_paths = [
+          bundle_info.static_bundle_path,
+          Compiler.gzip_path(bundle_info.static_bundle_path),
+          bundle_info.static_source_map_path
+        ]
+
+        static_dir
+        |> File.ls!()
+        |> Enum.filter(&String.starts_with?(&1, "runtime-"))
+        |> Enum.map(&Path.join(static_dir, &1))
+        |> Enum.reject(&(&1 in kept_paths))
+        |> Enum.each(&File.rm/1)
     end
-
-    :ok
   end
 
   defp remove_lock_file_with_invalid_os_pid(lock_path) do
@@ -2511,20 +2541,16 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
-  # Writes the data model bundle of the build, or keeps it when it is on disk, and removes the ones
-  # it replaces, or every data model bundle for a build that serves none. Only in the first batch,
-  # and once esbuild is done: a bundling that fails leaves the old bundle in place, which the asset
-  # path registry still names, as the runtime's (see put_built_bundles_info/3). Returns whether the
-  # static dir changed, which only the registries read anew at :bundles_built see.
-  defp update_data_model_bundle(%{data_model?: false}, _context), do: false
-
-  defp update_data_model_bundle(%{data_model?: true}, %{data_model_bundle: nil} = context) do
-    Compiler.remove_data_model_bundles(context.opts[:static_dir])
+  # Writes the data model bundle of the build, or keeps it when it is on disk, and returns whether it
+  # wrote it. Only in the first batch, and once esbuild is done. The bundle it replaces stays until
+  # the batch is done (see remove_replaced_data_model_bundles/2), since the asset path registry
+  # names it until then.
+  defp write_data_model_bundle(%{data_model?: true}, %{data_model_bundle: bundle})
+       when bundle != nil do
+    Compiler.write_data_model_bundle!(bundle)
   end
 
-  defp update_data_model_bundle(%{data_model?: true}, context) do
-    Compiler.write_data_model_bundle!(context.data_model_bundle)
-  end
+  defp write_data_model_bundle(_shared, _context), do: false
 
   defp validate_data_model!(entity_types, role_modules) do
     EntityValidator.validate_model!(entity_types)

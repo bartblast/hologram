@@ -2571,6 +2571,73 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert list_data_model_files(opts) == old_file_names
     end
 
+    # The asset path registry still names the old runtime when a compile fails here.
+    test "a data model write that fails leaves the runtime bundle it would replace", %{opts: opts} do
+      run(opts)
+
+      old_bundle_info = put_kept_runtime_bundle_under_old_digest(opts)
+      fake_edit(find_editable_runtime_module())
+
+      bundle = data_model_bundle(opts)
+      File.rm!(bundle.static_bundle_path)
+
+      # A dir where the write puts its temporary file makes the write fail.
+      blocking_dir = Compiler.gzip_path(bundle.static_bundle_path) <> ".tmp"
+      File.mkdir!(blocking_dir)
+      on_exit(fn -> File.rmdir(blocking_dir) end)
+
+      assert_raise File.Error, fn -> run(opts) end
+
+      assert File.exists?(old_bundle_info.static_bundle_path)
+    end
+
+    # The asset path registry names the old bundles until a batch is reported. The retry finds them
+    # there, so it still removes them and reloads every tab.
+    test "a compile failing after the bundling keeps the old bundles for the next one to replace",
+         %{opts: opts} do
+      run(opts)
+
+      old_runtime_info = put_kept_runtime_bundle_under_old_digest(opts)
+      fake_edit(find_editable_runtime_module())
+
+      # A page to build, so that the compile asks for a batch.
+      put_pending_kept_pages(1)
+
+      bundle = data_model_bundle(opts)
+      old_model_path = Path.join(opts[:static_dir], "data-model-OLDMODEL.js")
+      gzip_path = Compiler.gzip_path(bundle.static_bundle_path)
+
+      File.rename!(bundle.static_bundle_path, old_model_path)
+      File.rename!(gzip_path, Compiler.gzip_path(old_model_path))
+
+      # A dir where the batch's page digest dump puts its temporary file makes that dump fail. It
+      # goes in once the batches start, since the compile writes the same dump before them.
+      blocking_dir =
+        Path.join(opts[:build_dir], Reflection.page_digest_plt_dump_file_name()) <> ".tmp"
+
+      on_exit(fn -> File.rmdir(blocking_dir) end)
+
+      next_batch = fn _remaining_pages, _links ->
+        File.mkdir!(blocking_dir)
+        :stop
+      end
+
+      assert_raise File.Error, fn -> run(Keyword.put(opts, :next_batch, next_batch)) end
+
+      assert File.exists?(old_runtime_info.static_bundle_path)
+      assert File.exists?(old_model_path)
+
+      File.rmdir!(blocking_dir)
+
+      {record_built, recorded_built} = record_calls()
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert [[:runtime, :data_model | _rest] | _batches] = recorded_built.()
+      refute File.exists?(old_runtime_info.static_bundle_path)
+      assert list_data_model_files(opts) == data_model_file_names(bundle)
+      test_runtime_bundle(opts)
+    end
+
     test "writes the data model bundle again when it is gone", %{opts: opts} do
       run(opts)
 

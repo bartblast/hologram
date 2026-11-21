@@ -2715,8 +2715,8 @@ defmodule Hologram.Compiler do
   @doc """
   Removes the data model bundles in the given static dir, each with its gzip copy, except the one
   at the given path, if any, and returns whether it removed any file. A data model bundle is found
-  by scanning the static dir rather than through a registry, so a replaced one must go as soon as
-  its successor is written, or a scan between the two can find it.
+  by scanning the static dir rather than through a registry, so a replaced one must go before the
+  asset path registry next scans it, or the scan can pick it over its successor.
   """
   @spec remove_data_model_bundles(T.file_path(), T.file_path() | nil) :: boolean
   def remove_data_model_bundles(static_dir, kept_bundle_path \\ nil) do
@@ -2976,9 +2976,9 @@ defmodule Hologram.Compiler do
 
   @doc """
   Writes the given data model bundle (see `data_model_bundle/3`) with its gzip copy, unless both are
-  on disk already, and removes the other data model bundles in its static dir (see
-  `remove_data_model_bundles/2`). Returns whether it changed the static dir: what the asset path
-  registry finds there is then not what it found before.
+  on disk already, and returns whether it wrote them. The bundles it replaces stay: the asset path
+  registry names one of them until the compile tells it to reload, so the compile task removes them
+  then (see `remove_data_model_bundles/2`).
 
   The gzip copy goes first, and each file is written under a temporary name and renamed, so that a
   served bundle always has its gzip copy and is never half written.
@@ -2993,12 +2993,7 @@ defmodule Hologram.Compiler do
       FileUtils.write_atomically!(bundle_path, js)
     end
 
-    removed? =
-      bundle_path
-      |> Path.dirname()
-      |> remove_data_model_bundles(bundle_path)
-
-    written? or removed?
+    written?
   end
 
   defp ask_location(%{mfa: {module, function, arity}, line: nil}) do
