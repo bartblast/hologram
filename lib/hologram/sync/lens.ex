@@ -48,6 +48,7 @@ defmodule Hologram.Sync.Lens do
   @new :"$new"
 
   @type history :: %{
+          applied: %{String.t() => DateTime.t()},
           migrations: list(%{atom => any}),
           model_hash: String.t(),
           positions: %{String.t() => list(String.t())},
@@ -144,8 +145,8 @@ defmodule Hologram.Sync.Lens do
   @doc """
   Returns the lens a tab built against the data model of the given hash is served through,
   resolved for the current model's entity types, or `:error` when it can't be served through one:
-  the hash names no point of the release's migration history, or a change since it can't be given
-  back by renaming (see `build/2`).
+  the hash names no point of the release's migration history, the release's files no longer say
+  what that point held, or a change since it can't be given back by renaming (see `build/2`).
 
   A hash standing for several points is served from the latest when they all agree (see
   `for_hash/3`). Once a history leading to the running model is read, it is kept for that model,
@@ -168,7 +169,8 @@ defmodule Hologram.Sync.Lens do
 
   @doc """
   Returns the history `for_hash/3` reads, from every version the migration table records with its
-  model hash and the release's migrations as `Hologram.Migration.Loader.list!/0` gives them.
+  model hash, the release's migrations as `Hologram.Migration.Loader.list!/0` gives them, and when
+  each recorded version was applied.
 
   Each version stands for the hash the table records for it, and for the hash this Hologram works
   out for the model its file leaves: a deploy of a Hologram whose model term differs from the one
@@ -180,8 +182,12 @@ defmodule Hologram.Sync.Lens do
   The history also holds the hash of the model all the files fold to, which is the running model's
   when the release is consistent.
   """
-  @spec history(%{String.t() => String.t()}, list(%{atom => any})) :: history
-  def history(recorded, migrations) do
+  @spec history(
+          %{String.t() => String.t()},
+          list(%{atom => any}),
+          %{String.t() => DateTime.t()}
+        ) :: history
+  def history(recorded, migrations, applied \\ %{}) do
     {model, computed} =
       Enum.reduce(migrations, {Model.empty(), []}, fn migration, {model, acc} ->
         folded = Model.fold(model, migration.ops)
@@ -205,6 +211,7 @@ defmodule Hologram.Sync.Lens do
       end)
 
     %{
+      applied: applied,
       migrations: migrations,
       model_hash: Model.hash(model),
       positions: positions,
@@ -213,11 +220,14 @@ defmodule Hologram.Sync.Lens do
   end
 
   @doc """
-  Returns what `for_hash/1` answers for the given hash, given the history (see `history/2`) and the
+  Returns what `for_hash/1` answers for the given hash, given the history (see `history/3`) and the
   current model's entity types.
 
   A recorded point the release has no migration for can't be served from, and neither can one
-  before a recorded version the release lacks, since its ops are what the lens is built from.
+  before a recorded version the release lacks, since its ops are what the lens is built from. Nor
+  can one whose files aren't the ones the database had applied by then - one since removed, or one
+  applied out of order, like an older file merged late - unless they still fold to the hash the
+  point recorded.
 
   A hash standing for several points is served only when every one of them is servable and gives
   the same translation, from the latest. A tab says only its hash, and the points can mean
@@ -857,6 +867,7 @@ defmodule Hologram.Sync.Lens do
       {through, later} = Enum.split_with(history.migrations, &(&1.version <= version))
 
       with {:ok, old_model} <- fold_through(through),
+           true <- model_at?(old_model, version, versions, history),
            {:ok, lens} <- build(old_model, Enum.flat_map(later, & &1.ops)) do
         {:ok, resolve(lens, entity_types)}
       else
@@ -864,6 +875,31 @@ defmodule Hologram.Sync.Lens do
       end
     else
       :error
+    end
+  end
+
+  # Whether the files up to a point fold to the model a tab built there read. They do when they are
+  # the files the database had applied by then, whatever hash this Hologram works out for them.
+  # When one was since removed or applied out of order, the point is served only if they still fold
+  # to the hash it recorded. A tab built from those files later is then told to reload too, which
+  # is safe, where serving a tab that never held them would send it the wrong names.
+  defp model_at?(model, version, versions, history) do
+    Enum.all?(history.recorded, fn {recorded, _hash} ->
+      MapSet.member?(versions, recorded) and in_order?(recorded, version, history.applied)
+    end) or Model.hash(model) == Map.get(history.recorded, version)
+  end
+
+  # Files applied in one run share a time, and run in version order.
+  defp in_order?(other, version, applied) do
+    with %DateTime{} = other_at <- Map.get(applied, other),
+         %DateTime{} = version_at <- Map.get(applied, version) do
+      case DateTime.compare(other_at, version_at) do
+        :gt -> other >= version
+        :lt -> other <= version
+        :eq -> true
+      end
+    else
+      nil -> true
     end
   end
 
@@ -931,16 +967,18 @@ defmodule Hologram.Sync.Lens do
   defp changed(names), do: Map.reject(names, fn {name, old} -> name == old end)
 
   defp read_history do
-    statement = ~s(SELECT "version", "model_hash" FROM "#{Mapper.system_schema()}"."migration")
+    statement =
+      ~s(SELECT "version", "model_hash", "applied_at" FROM "#{Mapper.system_schema()}"."migration")
 
     # A read the database fails raises, as every other read starting a stream does: the stream
     # ends and the browser greets again, where an answer of `:error` would tell it never to expect
     # sync from this page.
     case Connection.query(statement) do
       {:ok, %Postgrex.Result{rows: rows}} ->
-        recorded = Map.new(rows, fn [version, model_hash] -> {version, model_hash} end)
+        recorded = Map.new(rows, fn [version, model_hash, _at] -> {version, model_hash} end)
+        applied = Map.new(rows, fn [version, _model_hash, at] -> {version, at} end)
 
-        {:ok, uncapped(fn -> history(recorded, Loader.list!()) end)}
+        {:ok, uncapped(fn -> history(recorded, Loader.list!(), applied) end)}
 
       {:error, error} ->
         raise error

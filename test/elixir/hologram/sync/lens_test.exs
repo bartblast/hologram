@@ -1122,6 +1122,101 @@ defmodule Hologram.Sync.LensTest do
       assert for_hash("h1", lacking, @entity_types) == :error
     end
 
+    # A tab built at the point held the file the release no longer has, so what the rest fold to
+    # isn't what it read.
+    test "serves nothing from a point after a recorded version the release lacks" do
+      %{migrations: migrations, recorded: recorded} = history()
+      lacking = history(Map.put(recorded, "20260101120000", "h0"), migrations)
+
+      assert for_hash("h2", lacking, @entity_types) == :error
+    end
+
+    # A file removed before the point was applied is one the tab's build never held either.
+    test "serves a point after a removed version when its files fold to the hash it recorded" do
+      %{migrations: migrations} = history()
+
+      recorded =
+        migrations
+        |> Enum.scan({nil, Model.empty()}, fn migration, {_version, model} ->
+          {migration.version, Model.fold(model, migration.ops)}
+        end)
+        |> Map.new(fn {version, model} -> {version, Model.hash(model)} end)
+
+      removed = Map.put(recorded, "20251231000000", "h0")
+      first_hash = recorded["20260101000000"]
+
+      assert {:ok, lens} = for_hash(first_hash, history(removed, migrations), @entity_types)
+      assert old_attribute(lens, Module39, :score) == :points
+    end
+
+    # The tab was built between the two applied files, so the older one merged after them isn't
+    # in its model, though it sorts before its point.
+    test "serves nothing from a point an older file was applied after" do
+      create = %{
+        ops: [
+          %{op: :create_entity, entity: Module39},
+          %{op: :add_attribute, entity: Module39, name: :points, type: :integer, opts: []}
+        ],
+        version: "20260101000000"
+      }
+
+      late = %{
+        ops: [%{op: :rename_attribute, entity: Module39, from: :points, to: :score}],
+        version: "20260102000000"
+      }
+
+      added = %{
+        ops: [
+          %{
+            op: :add_attribute,
+            entity: Module39,
+            name: :kind,
+            type: :string,
+            opts: [optional: true]
+          }
+        ],
+        version: "20260103000000"
+      }
+
+      built_at =
+        Model.empty()
+        |> Model.fold(create.ops)
+        |> Model.fold(added.ops)
+        |> Model.hash()
+
+      recorded = %{
+        create.version => "h1",
+        added.version => built_at,
+        late.version => "h3"
+      }
+
+      applied = %{
+        create.version => ~U[2026-01-01 00:00:00Z],
+        added.version => ~U[2026-01-02 00:00:00Z],
+        late.version => ~U[2026-01-03 00:00:00Z]
+      }
+
+      assert for_hash(built_at, history(recorded, [create, late, added], applied), @entity_types) ==
+               :error
+    end
+
+    # The hash a clean history records can come from a Hologram that spelled the model another way.
+    test "serves a point of files applied in order whatever hash it recorded" do
+      %{migrations: migrations, recorded: recorded} = history()
+
+      applied =
+        recorded
+        |> Map.keys()
+        |> Enum.sort()
+        |> Enum.with_index(1)
+        |> Map.new(fn {version, day} ->
+          {version, DateTime.add(~U[2026-01-01 00:00:00Z], day, :day)}
+        end)
+
+      assert {:ok, lens} = for_hash("h1", history(recorded, migrations, applied), @entity_types)
+      assert old_attribute(lens, Module39, :score) == :points
+    end
+
     test "serves nothing across a change renaming can't give back" do
       %{migrations: migrations, recorded: recorded} = history()
 
