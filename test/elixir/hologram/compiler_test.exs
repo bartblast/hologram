@@ -1856,16 +1856,18 @@ defmodule Hologram.CompilerTest do
       refute Entity10 in sync_constants.synced_types
     end
 
-    # From the page's real code: the include's name is an atom in the derived field's function.
+    # From the page's real code: the include's name is an atom in the derived field's function. The
+    # page's own types hold them too, which a session fills first.
     test "syncs the type a page's query includes, read from the page's code", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      synced_types =
-        derive_sync_constants([PageModule24], call_graph, module_info_plt, []).synced_types
+      sync_constants = derive_sync_constants([PageModule24], call_graph, module_info_plt, [])
 
-      assert Entity15 in synced_types
-      assert Entity16 in synced_types
+      for entity_type <- [Entity15, Entity16] do
+        assert entity_type in sync_constants.synced_types
+        assert entity_type in sync_constants.page_types[PageModule24]
+      end
     end
 
     test "syncs a type a page reaches only through a relationship its code names", %{
