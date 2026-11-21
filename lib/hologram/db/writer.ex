@@ -278,7 +278,7 @@ defmodule Hologram.DB.Writer do
   # Asked with :held, so the grant rows the answer rests on, and the related rows its delegations
   # read, stay as read until the write's transaction ends - every caller of this runs inside one.
   defp evaluate_operation!(operation, row) do
-    if Auth.can?(Context.actor_user_id(), operation, row, :held) do
+    if Auth.can_from?(Context.actor_user_id(), operation, row, :held) do
       :ok
     else
       raise Hologram.AccessDeniedError,
@@ -289,13 +289,7 @@ defmodule Hologram.DB.Writer do
   # The fields an update changes, as allow lines name them: an attribute by its name, a to-one by
   # its relationship's rather than its reference field's, a to-many by its own.
   defp changed_fields(entity_type, attribute_names, relationship_op_keys) do
-    reference_names =
-      for {name, type, _opts} <- entity_type.__relationships__(),
-          not is_list(type),
-          into: %{},
-          do: {String.to_existing_atom("#{name}_id"), name}
-
-    attribute_fields = Enum.map(attribute_names, &Map.get(reference_names, &1, &1))
+    attribute_fields = Policy.changed_field_names(entity_type, attribute_names)
     relationship_fields = Enum.map(relationship_op_keys, fn {name, _target_id} -> name end)
 
     Enum.uniq(attribute_fields ++ relationship_fields)

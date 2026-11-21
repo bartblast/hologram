@@ -14,6 +14,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Policy.Evaluator
+  alias Hologram.Query
   alias Hologram.Sync.Carry
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module26, as: Channel
@@ -972,7 +973,7 @@ defmodule Hologram.AuthTest do
     end
   end
 
-  describe "can?/4" do
+  describe "can_from?/4" do
     test "answers a user id in a spelling Hologram doesn't generate as an anonymous session" do
       user = create_user("user_168@example.com")
       entity = %Module1{id: Entity.generate_id()}
@@ -984,9 +985,9 @@ defmodule Hologram.AuthTest do
         role: :viewer
       }
 
-      assert can?(user.id, :read, entity, [grant])
-      refute can?(String.upcase(user.id), :read, entity, [grant])
-      refute can?(7, :read, %ReadersModule5{owner_id: nil}, [])
+      assert can_from?(user.id, :read, entity, [grant])
+      refute can_from?(String.upcase(user.id), :read, entity, [grant])
+      refute can_from?(7, :read, %ReadersModule5{owner_id: nil}, [])
     end
 
     test "answers from the given grants rather than the stored ones" do
@@ -1001,7 +1002,7 @@ defmodule Hologram.AuthTest do
       }
 
       refute can?(user, :read, entity)
-      assert can?(user, :read, entity, [grant])
+      assert can_from?(user, :read, entity, [grant])
     end
 
     test "denies what the given grants do not hold though the store does" do
@@ -1011,7 +1012,7 @@ defmodule Hologram.AuthTest do
       grant_role(user, :viewer, entity)
 
       assert can?(user, :read, entity)
-      refute can?(user, :read, entity, [])
+      refute can_from?(user, :read, entity, [])
     end
 
     test "matches a global grant" do
@@ -1020,7 +1021,7 @@ defmodule Hologram.AuthTest do
 
       grant = %RoleGrant{user_id: user.id, role: Role.Module1}
 
-      assert can?(user, :archive, entity, [grant])
+      assert can_from?(user, :archive, entity, [grant])
     end
 
     test "matches a type-wide grant" do
@@ -1033,7 +1034,7 @@ defmodule Hologram.AuthTest do
         role: :admin
       }
 
-      assert can?(user, :read, entity, [grant])
+      assert can_from?(user, :read, entity, [grant])
     end
 
     # An own-scope check admits the row's grant AND the type-wide one, which the store's own
@@ -1048,7 +1049,7 @@ defmodule Hologram.AuthTest do
         role: :viewer
       }
 
-      assert can?(user, :read, entity, [grant])
+      assert can_from?(user, :read, entity, [grant])
     end
 
     test "matches a grant on the row itself" do
@@ -1062,7 +1063,7 @@ defmodule Hologram.AuthTest do
         role: :editor
       }
 
-      assert can?(user, :update, entity, [grant])
+      assert can_from?(user, :update, entity, [grant])
     end
 
     test "matches a grant on a related row" do
@@ -1077,7 +1078,7 @@ defmodule Hologram.AuthTest do
         role: :admin
       }
 
-      assert can?(user, :delete, entity, [grant])
+      assert can_from?(user, :delete, entity, [grant])
     end
 
     # A delegation asks the RELATED row's policy, so the list has to reach that far too - a
@@ -1090,7 +1091,7 @@ defmodule Hologram.AuthTest do
       grant = %RoleGrant{user_id: user.id, role: Role.Module1}
 
       refute can?(user, :archive, entity)
-      assert can?(user, :archive, entity, [grant])
+      assert can_from?(user, :archive, entity, [grant])
     end
 
     test "reads the related row a delegation reads without a lock" do
@@ -1098,7 +1099,7 @@ defmodule Hologram.AuthTest do
       parent = create_parent()
       grant = %RoleGrant{user_id: user.id, role: Role.Module1}
 
-      assert can?(user, :archive, %Module4{id: Entity.generate_id(), parent_id: parent.id}, [
+      assert can_from?(user, :archive, %Module4{id: Entity.generate_id(), parent_id: parent.id}, [
                grant
              ])
 
@@ -1123,8 +1124,8 @@ defmodule Hologram.AuthTest do
         role: :member
       }
 
-      refute can?(user, :read, row, [])
-      assert can?(user, :read, row, [grant])
+      refute can_from?(user, :read, row, [])
+      assert can_from?(user, :read, row, [grant])
     end
 
     test "denies a grant held by somebody else" do
@@ -1139,7 +1140,7 @@ defmodule Hologram.AuthTest do
         role: :viewer
       }
 
-      refute can?(user, :read, entity, [grant])
+      refute can_from?(user, :read, entity, [grant])
     end
 
     # A check answered from a list is nobody's question, so a render gathers nothing from it -
@@ -1156,7 +1157,7 @@ defmodule Hologram.AuthTest do
       }
 
       Carry.start()
-      assert can?(user, :read, entity, [grant])
+      assert can_from?(user, :read, entity, [grant])
       assert Carry.take_grant_scopes() == MapSet.new()
 
       Carry.start()
@@ -1179,8 +1180,8 @@ defmodule Hologram.AuthTest do
 
       grant_role(user, :editor, %Module1{id: entity.id})
 
-      assert can?(user, :update, entity, :held)
-      refute can?(other_user, :update, entity, :held)
+      assert can_from?(user, :update, entity, :held)
+      refute can_from?(other_user, :update, entity, :held)
     end
 
     test "with :held matches a type-wide grant" do
@@ -1189,7 +1190,7 @@ defmodule Hologram.AuthTest do
 
       grant_role(user, :editor, Module1)
 
-      assert can?(user, :update, entity, :held)
+      assert can_from?(user, :update, entity, :held)
     end
 
     test "with :held matches a type-wide grant on another entity type" do
@@ -1197,7 +1198,7 @@ defmodule Hologram.AuthTest do
 
       grant_role(user, :admin, Module2)
 
-      assert can?(user, :read, %Module1{id: Entity.generate_id()}, :held)
+      assert can_from?(user, :read, %Module1{id: Entity.generate_id()}, :held)
     end
 
     test "with :held matches a global role module grant" do
@@ -1206,7 +1207,7 @@ defmodule Hologram.AuthTest do
 
       insert_global_grant(user.id, Role.Module1)
 
-      assert can?(user, :archive, entity, :held)
+      assert can_from?(user, :archive, entity, :held)
     end
 
     test "with :held matches a grant on a related row" do
@@ -1215,8 +1216,14 @@ defmodule Hologram.AuthTest do
 
       grant_role(user, :admin, parent)
 
-      assert can?(user, :delete, %Module1{id: Entity.generate_id(), parent_id: parent.id}, :held)
-      refute can?(user, :delete, %Module1{id: Entity.generate_id(), parent_id: nil}, :held)
+      assert can_from?(
+               user,
+               :delete,
+               %Module1{id: Entity.generate_id(), parent_id: parent.id},
+               :held
+             )
+
+      refute can_from?(user, :delete, %Module1{id: Entity.generate_id(), parent_id: nil}, :held)
     end
 
     test "with :held follows a delegation" do
@@ -1224,11 +1231,11 @@ defmodule Hologram.AuthTest do
       parent = create_parent()
       entity = %Module4{id: Entity.generate_id(), parent_id: parent.id}
 
-      refute can?(user, :archive, entity, :held)
+      refute can_from?(user, :archive, entity, :held)
 
       insert_global_grant(user.id, Role.Module1)
 
-      assert can?(user, :archive, entity, :held)
+      assert can_from?(user, :archive, entity, :held)
     end
 
     # A locking read shows in pg_locks as RowShareLock on the relation, even uncontended - the row
@@ -1240,7 +1247,7 @@ defmodule Hologram.AuthTest do
 
       # The answer is false - Module2's :archive wants a global role the user does not hold - and
       # beside the point: the parent row is read before any grant is asked.
-      can?(user, :archive, %Module4{id: Entity.generate_id(), parent_id: parent.id}, :held)
+      can_from?(user, :archive, %Module4{id: Entity.generate_id(), parent_id: parent.id}, :held)
 
       assert "RowShareLock" in relation_lock_modes(Module2)
     end
@@ -1260,7 +1267,12 @@ defmodule Hologram.AuthTest do
         |> Module5.new()
         |> DB.create!()
 
-      assert can?(user, :read, %Module8{id: Entity.generate_id(), parent_id: middle.id}, :held)
+      assert can_from?(
+               user,
+               :read,
+               %Module8{id: Entity.generate_id(), parent_id: middle.id},
+               :held
+             )
 
       assert "RowShareLock" in relation_lock_modes(Module5)
     end
@@ -1271,7 +1283,12 @@ defmodule Hologram.AuthTest do
       user = create_user("user_160@example.com")
       parent = DB.create!(Module10.new())
 
-      refute can?(user, :create, %Module11{id: Entity.generate_id(), parent_id: parent.id}, :held)
+      refute can_from?(
+               user,
+               :create,
+               %Module11{id: Entity.generate_id(), parent_id: parent.id},
+               :held
+             )
 
       assert "RowShareLock" in relation_lock_modes(Module10)
     end
@@ -1283,7 +1300,7 @@ defmodule Hologram.AuthTest do
       {_resource, middle} = create_path_rows(parent.id)
       entity = %Module12{id: Entity.generate_id(), parent_id: middle.id}
 
-      assert can?(create_user("user_163@example.com"), :publish, entity, :held)
+      assert can_from?(create_user("user_163@example.com"), :publish, entity, :held)
 
       assert "RowShareLock" in relation_lock_modes(Module5)
     end
@@ -1294,7 +1311,12 @@ defmodule Hologram.AuthTest do
 
       grant_role(user, :viewer, resource)
 
-      assert can?(user, :update, %Module12{id: Entity.generate_id(), parent_id: middle.id}, :held)
+      assert can_from?(
+               user,
+               :update,
+               %Module12{id: Entity.generate_id(), parent_id: middle.id},
+               :held
+             )
 
       assert "RowShareLock" in relation_lock_modes(Module5)
     end
@@ -1314,7 +1336,7 @@ defmodule Hologram.AuthTest do
 
       entity = %Module12{id: Entity.generate_id(), parent_id: middle.id}
 
-      assert can?(create_user("user_165@example.com"), :read, entity, :held)
+      assert can_from?(create_user("user_165@example.com"), :read, entity, :held)
 
       assert "RowShareLock" in relation_lock_modes(Module5)
     end
@@ -1330,19 +1352,19 @@ defmodule Hologram.AuthTest do
         entity_id: resource.id
       }
 
-      refute can?(user, :read, row, :held)
+      refute can_from?(user, :read, row, :held)
 
       grant_role(user, :member, resource)
 
-      assert can?(user, :read, row, :held)
+      assert can_from?(user, :read, row, :held)
     end
 
     test "with :held answers false for an anonymous session" do
-      refute can?(nil, :update, %Module1{id: Entity.generate_id(), priority: 5}, :held)
+      refute can_from?(nil, :update, %Module1{id: Entity.generate_id(), priority: 5}, :held)
     end
   end
 
-  describe "can?/4 for quantified rules over stored rows" do
+  describe "can_from?/4 for quantified rules over stored rows" do
     defp create_project(values \\ %{}) do
       values
       |> PolicyProject.new()
@@ -1383,33 +1405,33 @@ defmodule Hologram.AuthTest do
       project = create_project()
       create_member(project, "half")
 
-      refute can?(nil, :update, project, :stored)
+      refute can_from?(nil, :update, project, :stored)
 
       create_member(project, "full")
 
-      assert can?(nil, :update, project, :stored)
+      assert can_from?(nil, :update, project, :stored)
     end
 
     test "answers a none over a stored to-many" do
       project = create_project()
       locked = create_label("locked")
 
-      assert can?(nil, :archive, project, :stored)
+      assert can_from?(nil, :archive, project, :stored)
 
       :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
 
-      refute can?(nil, :archive, project, :stored)
+      refute can_from?(nil, :archive, project, :stored)
     end
 
     test "answers an any over an inverse of a to-many" do
       tag = create_tag("x")
       task = create_task(%{subject: "open"})
 
-      refute can?(nil, :read, tag, :stored)
+      refute can_from?(nil, :read, tag, :stored)
 
       :ok = EntityOperations.add_relationship(PolicyTask, task.id, :tags, tag.id)
 
-      assert can?(nil, :read, tag, :stored)
+      assert can_from?(nil, :read, tag, :stored)
     end
 
     test "answers a none over a set read through a to-one" do
@@ -1417,11 +1439,11 @@ defmodule Hologram.AuthTest do
       task = create_task(%{project_id: project.id})
       locked = create_label("locked")
 
-      assert can?(nil, :update, task, :stored)
+      assert can_from?(nil, :update, task, :stored)
 
       :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
 
-      refute can?(nil, :update, task, :stored)
+      refute can_from?(nil, :update, task, :stored)
     end
 
     # Only the second task holds the tag, so every task's set is read, not the first one's alone.
@@ -1431,11 +1453,11 @@ defmodule Hologram.AuthTest do
       second_task = create_task(%{project_id: project.id})
       done = create_tag("done")
 
-      refute can?(nil, :close, project, :stored)
+      refute can_from?(nil, :close, project, :stored)
 
       :ok = EntityOperations.add_relationship(PolicyTask, second_task.id, :tags, done.id)
 
-      assert can?(nil, :close, project, :stored)
+      assert can_from?(nil, :close, project, :stored)
     end
 
     # Every task's shelf is followed to its cards, the second task's among them.
@@ -1445,11 +1467,11 @@ defmodule Hologram.AuthTest do
       create_task(%{project_id: project.id})
       create_task(%{project_id: project.id, shelf_id: shelf.id})
 
-      assert can?(nil, :publish, project, :stored)
+      assert can_from?(nil, :publish, project, :stored)
 
       create_card(%{flagged: true, shelf_id: shelf.id})
 
-      refute can?(nil, :publish, project, :stored)
+      refute can_from?(nil, :publish, project, :stored)
     end
 
     # The profile is an inverse holding one row, read on the way to its badges.
@@ -1463,11 +1485,11 @@ defmodule Hologram.AuthTest do
 
       banned = create_label("banned")
 
-      assert can?(nil, :feature, project, :stored)
+      assert can_from?(nil, :feature, project, :stored)
 
       :ok = EntityOperations.add_relationship(PolicyProfile, profile.id, :badges, banned.id)
 
-      refute can?(nil, :feature, project, :stored)
+      refute can_from?(nil, :feature, project, :stored)
     end
 
     test "answers an any over a set a row moved out of" do
@@ -1475,11 +1497,11 @@ defmodule Hologram.AuthTest do
       member = create_member(project, "full")
       other_project = create_project()
 
-      assert can?(nil, :update, project, :stored)
+      assert can_from?(nil, :update, project, :stored)
 
       DB.update!(PolicyMember, member.id, project_id: other_project.id)
 
-      refute can?(nil, :update, project, :stored)
+      refute can_from?(nil, :update, project, :stored)
     end
 
     # A none rests on the whole set, so :held holds it and share-locks the rows it reads.
@@ -1487,20 +1509,20 @@ defmodule Hologram.AuthTest do
       project = create_project()
       locked = create_label("locked")
 
-      assert can?(nil, :archive, project, :held)
+      assert can_from?(nil, :archive, project, :held)
 
       :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
 
-      refute can?(nil, :archive, project, :held)
+      refute can_from?(nil, :archive, project, :held)
     end
 
     # A row not created yet has nothing in any set of its.
     test "answers an any asked of a row not created yet false" do
-      refute can?(nil, :update, %{PolicyProject.new() | id: nil}, :stored)
+      refute can_from?(nil, :update, %{PolicyProject.new() | id: nil}, :stored)
     end
 
     test "answers a none asked of a row not created yet true" do
-      assert can?(nil, :archive, %{PolicyProject.new() | id: nil}, :stored)
+      assert can_from?(nil, :archive, %{PolicyProject.new() | id: nil}, :stored)
     end
 
     # The board's top two cards by rank leave the flagged one out until it ranks among them.
@@ -1512,11 +1534,11 @@ defmodule Hologram.AuthTest do
         create_card(%{board_id: board.id, rank: rank})
       end
 
-      refute can?(nil, :read, board, :stored)
+      refute can_from?(nil, :read, board, :stored)
 
       DB.update!(PolicyCard, flagged.id, rank: 4)
 
-      assert can?(nil, :read, board, :stored)
+      assert can_from?(nil, :read, board, :stored)
     end
   end
 
@@ -1787,6 +1809,216 @@ defmodule Hologram.AuthTest do
       row = %Message{position: 3}
 
       assert after_row(row, %{}, %{position: -1}, %{}).position == 2
+    end
+  end
+
+  describe "can?/4 for one specific change" do
+    defp create_values_task(values \\ %{}) do
+      task =
+        values
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      EntityOperations.get(ChangedTask, task.id)
+    end
+
+    defp create_values_project(archived \\ false) do
+      %{archived: archived}
+      |> ChangedProject.new()
+      |> DB.create!()
+    end
+
+    defp create_task_admin(task) do
+      user = create_user("values-admin@example.com")
+      grant_role(user, :admin, task)
+
+      user
+    end
+
+    test ":update answers on the row the values leave" do
+      task = create_values_task()
+      user = create_task_admin(task)
+
+      assert can?(user, :update, task, status: :approved)
+      refute can?(user, :update, task, status: :rejected)
+    end
+
+    test ":update counts the lines limited to a field, as a write does" do
+      task = create_values_task(%{count: 1})
+
+      assert can?(nil, :update, task, count: 10)
+      refute can?(nil, :update, task, count: 11)
+    end
+
+    test ":update needs every changed field covered" do
+      task = create_values_task(%{count: 1})
+
+      refute can?(nil, :update, task, count: 2, status: :approved)
+    end
+
+    test "a name asks that name's rules" do
+      task = create_values_task()
+      user = create_task_admin(task)
+
+      assert can?(user, :approve, task, status: :approved)
+      refute can?(user, :approve, task, status: :rejected)
+      refute can?(nil, :approve, task, status: :approved)
+    end
+
+    test "{:update, field} asks that field's rules" do
+      archived = create_values_project(true)
+      open = create_values_project()
+      task = create_values_task(%{project_id: archived.id})
+
+      assert can?(nil, {:update, :note}, task, note: "x", project_id: open.id)
+      refute can?(nil, {:update, :note}, task, note: "x")
+    end
+
+    test "{:update, fields} asks every field's rules" do
+      task = create_values_task(%{count: 1})
+      user = create_task_admin(task)
+
+      assert can?(user, {:update, [:count, :status]}, task, count: 2, status: :approved)
+      refute can?(user, {:update, [:count, :status]}, task, count: 11, status: :approved)
+    end
+
+    test "takes the values as a map" do
+      task = create_values_task(%{count: 1})
+
+      assert can?(nil, :update, task, %{count: 10})
+      refute can?(nil, :update, task, %{count: 11})
+    end
+
+    test "names a to-one by its reference" do
+      user = create_user("values-mover@example.com")
+      source = create_values_project()
+      granted = create_values_project()
+      other = create_values_project()
+      task = create_values_task(%{project_id: source.id})
+      grant_role(user, :member, source)
+      grant_role(user, :member, granted)
+
+      assert can?(user, :update, task, project_id: granted.id)
+      refute can?(user, :update, task, project_id: other.id)
+    end
+
+    test "reads a value failing its declaration as stored" do
+      task = create_values_task()
+      user = create_task_admin(task)
+
+      refute can?(user, :update, task, status: :bogus)
+    end
+
+    test "reads a reference naming no row as stored" do
+      user = create_user("values-missing@example.com")
+      project = create_values_project()
+      task = create_values_task(%{project_id: project.id})
+      grant_role(user, :member, project)
+
+      assert can?(user, :update, task, project_id: Entity.generate_id())
+    end
+
+    test "answers a rule with no new() as it stands" do
+      user = create_user("values-plain@example.com")
+      parent = create_parent()
+      grant_role(user, :admin, parent)
+
+      assert can?(user, :update, parent, public: true)
+      refute can?(nil, :update, parent, public: true)
+    end
+
+    test "writes nothing" do
+      task = create_values_task(%{count: 1})
+
+      assert can?(nil, :update, task, count: 10)
+      assert EntityOperations.get(ChangedTask, task.id).count == 1
+    end
+
+    test "refuses a row carrying recorded changes" do
+      task = Query.put_attribute(create_values_task(), :count, 2)
+
+      expected_msg =
+        "can? with values asks about a row as stored - #{inspect(ChangedTask)} #{inspect(task.id)} carries recorded changes, so its fields no longer hold the stored values"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?(nil, :update, task, count: 3)
+      end
+    end
+
+    test "refuses values that are neither a keyword list nor a map" do
+      task = create_values_task()
+
+      expected_msg = "can? takes the values of a change as a keyword list or a map - got [1]"
+
+      assert_error MisuseError, expected_msg, fn -> can?(nil, :update, task, [1]) end
+    end
+
+    test "refuses a struct as the values" do
+      task = create_values_task()
+
+      expected_msg =
+        "can? takes the values of a change as a keyword list or a map - got #{inspect(task)}"
+
+      assert_error MisuseError, expected_msg, fn -> can?(nil, :update, task, task) end
+    end
+
+    test "refuses a value name DB.update/3 refuses" do
+      task = create_values_task()
+
+      expected_msg =
+        "invalid changes for #{inspect(ChangedTask)} - only declared attributes and to-one relationships can be updated: :nope"
+
+      assert_error MisuseError, expected_msg, fn -> can?(nil, :update, task, nope: 1) end
+    end
+
+    test "refuses a keyword list naming a struct key" do
+      task = create_values_task()
+
+      expected_msg =
+        "can? takes the values of a change as a keyword list or a map - got [__struct__: URI, count: 1]"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?(nil, :update, task, __struct__: URI, count: 1)
+      end
+    end
+
+    test "refuses a map naming a struct key" do
+      task = create_values_task()
+
+      assert_raise MisuseError, fn -> can?(nil, :update, task, %{__struct__: URI}) end
+    end
+
+    test "answers for a row that isn't stored yet" do
+      assert can?(nil, {:update, :labels}, %ChangedTask{}, note: "x")
+    end
+
+    test "refuses empty values, as DB.update/3 does" do
+      task = create_values_task()
+
+      expected_msg =
+        "invalid changes for #{inspect(ChangedTask)} - at least one declared attribute or to-one relationship must be changed"
+
+      assert_error MisuseError, expected_msg, fn -> can?(nil, :update, task, []) end
+    end
+
+    test "refuses an operation that isn't an update" do
+      task = create_values_task()
+
+      expected_msg =
+        "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got :read"
+
+      assert_error MisuseError, expected_msg, fn -> can?(nil, :read, task, count: 1) end
+    end
+
+    test "refuses a role operation" do
+      task = create_values_task()
+
+      expected_msg =
+        "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got {:grant_role, :admin}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?(nil, {:grant_role, :admin}, task, count: 1)
+      end
     end
   end
 

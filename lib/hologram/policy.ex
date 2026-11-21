@@ -469,6 +469,20 @@ defmodule Hologram.Policy do
     |> CryptographicUtils.short_digest(@hash_bytes)
   end
 
+  # The given names of a write's values as allow lines name them: an attribute by its name, a to-one
+  # by its relationship's rather than its reference field's.
+  @doc false
+  @spec changed_field_names(module, list(atom)) :: list(atom)
+  def changed_field_names(entity_type, names) do
+    reference_names =
+      for {name, type, _opts} <- entity_type.__relationships__(),
+          not is_list(type),
+          into: %{},
+          do: {String.to_existing_atom("#{name}_id"), name}
+
+    Enum.map(names, &Map.get(reference_names, &1, &1))
+  end
+
   # Whether a rule covering one of the given fields of an update reads the row after the change.
   @doc false
   @spec judges_change?(module, list(atom)) :: boolean

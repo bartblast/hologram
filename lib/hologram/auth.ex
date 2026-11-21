@@ -6,6 +6,7 @@ defmodule Hologram.Auth do
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
+  alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
@@ -36,7 +37,7 @@ defmodule Hologram.Auth do
   # The checker a rule's exact clauses are evaluated with (see Hologram.Policy.Evaluator): what it
   # reads from a row marked by after_row/4, and from the rows reached from one, is the database as
   # the change would leave it. An unmarked row reads as stored, so a bare name keeps meaning the
-  # stored value. The source is the one can?/4 takes.
+  # stored value. The source is the one can_from?/4 takes.
   @doc false
   @spec after_checker(struct, list(struct) | :held | :stored) :: fun
   def after_checker(new_row, source) do
@@ -139,22 +140,44 @@ defmodule Hologram.Auth do
   # write, never between its evaluation and its commit.
   # Outside a transaction the lock ends with the statement, so it holds nothing there.
   @doc false
-  @spec can?(
+  @spec can_from?(
           struct | Server.identity_id() | nil,
           atom | {atom, atom | list(atom)},
           struct,
           list(struct) | :held
         ) ::
           boolean
-  def can?(user_or_id, operation, entity, source) do
+  def can_from?(user_or_id, operation, entity, source) do
     evaluate(user_or_id, operation, entity, source)
+  end
+
+  # Whether the given user may make one specific change to the given stored row, the values named
+  # as DB.update/3 names them: the rules reading the row after the change read it with those values
+  # on it. :update asks what the Writer asks, every field the values change covered by a line that
+  # holds. A name asks that name's rules, and {:update, field} or {:update, fields} those fields'.
+  @doc false
+  @spec can?(
+          struct | Server.identity_id() | nil,
+          atom | {atom, atom | list(atom)},
+          struct,
+          keyword | map
+        ) ::
+          boolean
+  def can?(user_or_id, operation, %entity_type{} = row, values) do
+    validate_change_row!(row)
+    validate_change_values!(entity_type, values)
+
+    changes = Map.new(values)
+    new_row = if reads_changed_row?(entity_type), do: row_with_values(row, changes)
+
+    evaluate_change(user_or_id, operation, row, changes, new_row)
   end
 
   # The fields among the given ones of an update of the given row that no update rule holding for the
   # given user covers, sorted - none when the user may change them all. A field is covered by the
   # field-limited lines covering it and by every line covering the whole row (see
   # Hologram.Policy.field_rules/2). Each rule is evaluated once however many fields it covers, with
-  # the grants taken from the given source as can?/4 takes them. The fields are not validated: the
+  # the grants taken from the given source as can_from?/4 takes them. The fields are not validated: the
   # Writer passes what a write changed, and can? what it validated. Given the row the change leaves
   # (see after_row/4), a rule reading it is judged on it, and otherwise asked whether some change
   # could pass.
@@ -581,7 +604,7 @@ defmodule Hologram.Auth do
   # read and the write it authorizes. A gate line reads nothing of the row but its id, so an
   # id-only struct is the whole entity it needs.
   defp check_authority!(entity, operation, role, actor_user_id) do
-    if not can?(actor_user_id, {operation, role}, entity, :held) do
+    if not can_from?(actor_user_id, {operation, role}, entity, :held) do
       raise Hologram.AccessDeniedError,
             unqualified_role_message(
               entity.__struct__,
@@ -847,18 +870,23 @@ defmodule Hologram.Auth do
   defp after_linked_rows(row, relationship_name, read_opts, hold_set?, new_row) do
     entity_type = row.__struct__
 
-    if to_one?(entity_type, relationship_name) do
-      row
-      |> after_to_one(relationship_name, read_opts, new_row)
-      |> List.wrap()
-    else
-      if hold_set?, do: SetLock.hold!(entity_type, row.id)
+    cond do
+      to_one?(entity_type, relationship_name) ->
+        row
+        |> after_to_one(relationship_name, read_opts, new_row)
+        |> List.wrap()
 
-      entity_type
-      |> EntityOperations.related_rows(row.id, relationship_name, read_opts)
-      |> after_set_members(row, relationship_name, read_opts, new_row)
-      |> Enum.map(&Map.put(&1, @after_change, true))
-      |> Enum.sort_by(& &1.id)
+      row.id == nil ->
+        []
+
+      true ->
+        if hold_set?, do: SetLock.hold!(entity_type, row.id)
+
+        entity_type
+        |> EntityOperations.related_rows(row.id, relationship_name, read_opts)
+        |> after_set_members(row, relationship_name, read_opts, new_row)
+        |> Enum.map(&Map.put(&1, @after_change, true))
+        |> Enum.sort_by(& &1.id)
     end
   end
 
@@ -1121,6 +1149,86 @@ defmodule Hologram.Auth do
     checker = &check_requirement(&1, &2, &3, source)
 
     Evaluator.grants?(policy, operation, entity, acting_user_id(user_or_id), checker)
+  end
+
+  defp evaluate_change(user_or_id, :update, %entity_type{} = row, changes, new_row) do
+    fields = Policy.changed_field_names(entity_type, Map.keys(changes))
+
+    uncovered_fields(user_or_id, row, fields, :stored, new_row) == []
+  end
+
+  defp evaluate_change(user_or_id, {:update, field_names} = operation, row, _changes, new_row)
+       when is_atom(field_names) or is_list(field_names) do
+    Policy.validate_operation!(row.__struct__, operation)
+
+    uncovered_fields(user_or_id, row, List.wrap(field_names), :stored, new_row) == []
+  end
+
+  defp evaluate_change(user_or_id, operation, %entity_type{} = row, _changes, new_row)
+       when is_atom(operation) do
+    Policy.validate_operation!(entity_type, operation)
+
+    if not update_line_name?(entity_type, operation) do
+      raise MisuseError, change_operation_message(operation)
+    end
+
+    judge = rule_judge(row, new_row, acting_user_id(user_or_id), :stored)
+
+    entity_type
+    |> Policy.build()
+    |> Map.get(operation, [])
+    |> Enum.any?(judge)
+  end
+
+  defp evaluate_change(_user_or_id, operation, _row, _changes, _new_row) do
+    raise MisuseError, change_operation_message(operation)
+  end
+
+  defp change_operation_message(operation) do
+    "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got #{inspect(operation)}"
+  end
+
+  defp update_line_name?(entity_type, name) do
+    Enum.any?(entity_type.__policies__(), fn {operation, _to, _via, _predicates, line_name, _f} ->
+      operation == :update and line_name == name
+    end)
+  end
+
+  defp reads_changed_row?(entity_type) do
+    entity_type
+    |> Policy.build()
+    |> Map.values()
+    |> Enum.any?(fn rules -> Enum.any?(rules, &Map.has_key?(&1, :exact)) end)
+  end
+
+  # The row the given values leave, carrying the timestamps a write of them would set, so a rule
+  # ranking a set by them reads what the write would.
+  defp row_with_values(%entity_type{} = row, changes) do
+    {values, _invalid, _missing} = judged_values(entity_type, changes, :stored)
+    timestamps = EntityOperations.written_timestamps(nil, Clock.stamp())
+
+    after_row(row, Map.merge(values, timestamps), %{}, %{})
+  end
+
+  defp validate_change_row!(%{__meta__: %{attribute_ops: attribute_ops, relationship_ops: edges}})
+       when attribute_ops == %{} and edges == %{},
+       do: :ok
+
+  defp validate_change_row!(%entity_type{id: id}) do
+    raise MisuseError,
+          "can? with values asks about a row as stored - #{inspect(entity_type)} #{inspect(id)} carries recorded changes, so its fields no longer hold the stored values"
+  end
+
+  # A keyword list holding a __struct__ key becomes a struct once it's a map, so it's judged as one.
+  defp validate_change_values!(entity_type, values) do
+    changes = if Keyword.keyword?(values), do: Map.new(values), else: values
+
+    if is_struct(changes) or not is_map(changes) do
+      raise MisuseError,
+            "can? takes the values of a change as a keyword list or a map - got #{inspect(values)}"
+    end
+
+    EntityOperations.validate_update!(entity_type, changes)
   end
 
   defp grant_answer(rows, :held), do: rows != []
