@@ -122,13 +122,13 @@ defmodule Hologram.LiveReload do
   end
 
   def handle_call({:bundles_built, built}, _from, state) do
-    pages = built -- [:chunks, :runtime]
+    pages = built -- [:chunks, :data_model, :runtime]
 
     # The first batch of a pass is where the registries learn what the compile wrote: the pages and
-    # routes of the module info dump, the static files, among them a new runtime bundle and new
-    # chunk bundles, the chunks each struct type needs and each page preloads, the page digests,
-    # the page windows and the registered queries. Later batches change the page digests and the
-    # chunks their pages preload only.
+    # routes of the module info dump, the static files, among them a new runtime bundle, a new data
+    # model bundle and new chunk bundles, the chunks each struct type needs and each page preloads,
+    # the page digests, the page windows and the registered queries. Later batches change the page
+    # digests and the chunks their pages preload only.
     state =
       if state.pass.registries_reloaded? do
         ChunkRegistry.reload()
@@ -149,8 +149,9 @@ defmodule Hologram.LiveReload do
     # reloads, the ones on pages this pass has not built yet included: they ask for their page,
     # which is then built next. Rebuilt chunks reload every tab too: a tab that loaded a chunk
     # holds its old code, and no page bundle carries the implementation that changed, so only a
-    # reload brings the new code in.
-    if :runtime in built or :chunks in built do
+    # reload brings the new code in. So does a rewritten data model bundle: every tab holds the
+    # data model it loaded with, which no longer is the server's.
+    if Enum.any?([:chunks, :data_model, :runtime], &(&1 in built)) do
       broadcast_reload(:all)
     else
       broadcast_reload(pages)

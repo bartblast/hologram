@@ -100,6 +100,23 @@ defmodule Hologram.Compiler do
     {"Utils", "utils.mjs"}
   ]
 
+  # The name the data model bundle's file starts with, and the bundle's name in a size error.
+  @data_model_bundle_name "data-model"
+
+  # The runtime's classes a page bundle, a chunk or the data model bundle is defined with (see
+  # render_script_deps/1). The keys of Hologram.#deps in assets/js/hologram.mjs.
+  @script_deps ~w(
+    Bitstring
+    ERTS
+    ElementRefRegistry
+    HologramBoxedError
+    HologramInterpreterError
+    Interpreter
+    MemoryStorage
+    Type
+    Utils
+  )
+
   # The hand-written runtime modules a build ships only when it needs them, each with its file under
   # the js dir, its class, the handle the runtime reads it through and the Elixir modules whose
   # manually ported functions it defines. The handle is a public static of Hologram, null when the
@@ -720,6 +737,33 @@ defmodule Hologram.Compiler do
       Path.join([opts[:build_dir], Reflection.chunk_registry_plt_dump_file_name()])
 
     {chunk_registry_plt, chunk_registry_plt_dump_path}
+  end
+
+  @doc """
+  Builds the JavaScript source of the data model bundle from the given statement, which sets the
+  client's data layer constants (see `build_sync_constants_js/1`).
+
+  The statement cannot run when the bundle does: the terms it builds need the runtime's classes,
+  and the bundle can run before the runtime has. So the bundle leaves a function behind that runs
+  the statement given the runtime's classes, and dispatches `hologram:dataModelLoaded`, and the
+  runtime calls the function before it boots (see `defineDataModel()` in
+  `assets/js/hologram.mjs`).
+  """
+  @spec build_data_model_js(String.t()) :: String.t()
+  def build_data_model_js(sync_constants_js) do
+    """
+    "use strict";
+
+    globalThis.Hologram ??= {};
+
+    globalThis.Hologram.pendingDataModel = (deps) => {
+      #{render_script_deps(2)}
+
+      #{sync_constants_js}
+    };
+
+    document.dispatchEvent(new CustomEvent("hologram:dataModelLoaded"));\
+    """
   end
 
   @doc """
@@ -1611,6 +1655,35 @@ defmodule Hologram.Compiler do
       subsystems: Keyword.fetch!(opts, :subsystems)
     )
     |> create_entry_file("runtime", opts[:tmp_dir])
+  end
+
+  @doc """
+  Returns the data model bundle a build with the given runtime subsystems serves from the given
+  static dir: its JavaScript source, built from the given statement (see `build_data_model_js/1`),
+  and the path it goes to, `data-model-<hash>.js` named by the hash of its content like every
+  bundle. `nil` when the subsystems leave out the data layer: the runtime script sets the client's
+  data layer constants to null itself then, and the page loads no data model bundle.
+
+  Asked of the subsystems rather than of the statement, so that the runtime script and the data
+  model bundle are decided by one fact: a kept statement can be older than the subsystems.
+
+  Raises when the bundle is bigger than the `:max_bundle_size` config value, on every compile,
+  whether or not its file is written: a bundle an earlier compile left in place still fails.
+  """
+  @spec data_model_bundle(String.t(), [atom], T.file_path()) ::
+          %{js: String.t(), static_bundle_path: T.file_path()} | nil
+  def data_model_bundle(sync_constants_js, subsystems, static_dir) do
+    if :data_layer in subsystems do
+      js = build_data_model_js(sync_constants_js)
+
+      if Application.get_env(:hologram, :max_bundle_size) do
+        ensure_bundle_size_within_limit!(@data_model_bundle_name, byte_size(js))
+      end
+
+      file_name = "#{@data_model_bundle_name}-#{data_model_digest(js)}.js"
+
+      %{js: js, static_bundle_path: Path.join(static_dir, file_name)}
+    end
   end
 
   @doc """
@@ -2811,6 +2884,31 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Removes the data model bundles in the given static dir, each with its gzip copy, except the one
+  at the given path, if any, and returns whether it removed any file. A data model bundle is found
+  by scanning the static dir rather than through a registry, so a replaced one must go as soon as
+  its successor is written, or a scan between the two can find it.
+  """
+  @spec remove_data_model_bundles(T.file_path(), T.file_path() | nil) :: boolean
+  def remove_data_model_bundles(static_dir, kept_bundle_path \\ nil) do
+    kept_paths =
+      if kept_bundle_path, do: [kept_bundle_path, gzip_path(kept_bundle_path)], else: []
+
+    # Listed rather than matched with Path.wildcard/1, which would read glob characters in the
+    # static dir's own path, a project dir named like "[work]" say, as a pattern and match nothing.
+    removed_paths =
+      static_dir
+      |> File.ls!()
+      |> Enum.filter(&String.starts_with?(&1, "#{@data_model_bundle_name}-"))
+      |> Enum.map(&Path.join(static_dir, &1))
+      |> Enum.reject(&(&1 in kept_paths))
+
+    Enum.each(removed_paths, &File.rm/1)
+
+    removed_paths != []
+  end
+
+  @doc """
   Renders, as a JSON object keyed by label, the client's model entry of every entity type a build
   bakes whatever the pages reach, out of the given ones - those declaring a rule or a role, the
   types their rules read through relationships, and the grant store when the model has one - and of
@@ -3045,6 +3143,33 @@ defmodule Hologram.Compiler do
 
       {module, used_modules}
     end)
+  end
+
+  @doc """
+  Writes the given data model bundle (see `data_model_bundle/3`) with its gzip copy, unless both are
+  on disk already, and removes the other data model bundles in its static dir (see
+  `remove_data_model_bundles/2`). Returns whether it changed the static dir: what the asset path
+  registry finds there is then not what it found before.
+
+  The gzip copy goes first, and each file is written under a temporary name and renamed, so that a
+  served bundle always has its gzip copy and is never half written.
+  """
+  @spec write_data_model_bundle!(%{js: String.t(), static_bundle_path: T.file_path()}) :: boolean
+  def write_data_model_bundle!(%{js: js, static_bundle_path: bundle_path}) do
+    gzip_path = gzip_path(bundle_path)
+    written? = not (File.exists?(bundle_path) and File.exists?(gzip_path))
+
+    if written? do
+      FileUtils.write_atomically!(gzip_path, :zlib.gzip(js))
+      FileUtils.write_atomically!(bundle_path, js)
+    end
+
+    removed? =
+      bundle_path
+      |> Path.dirname()
+      |> remove_data_model_bundles(bundle_path)
+
+    written? or removed?
   end
 
   defp ask_location(%{mfa: {module, function, arity}, line: nil}) do
@@ -4057,26 +4182,40 @@ defmodule Hologram.Compiler do
     |> Enum.sort()
   end
 
+  # The hash a data model bundle is named by: 8 characters of the base32 alphabet, like the hash
+  # esbuild names the other bundles by, which is what the asset path registry reads a bundle's hash
+  # as.
+  defp data_model_digest(js) do
+    :sha256
+    |> :crypto.hash(js)
+    |> Base.encode32()
+    |> binary_part(0, 8)
+  end
+
   defp maybe_ensure_bundle_within_size_limit!("chunk", _entry_name, _bundle_path), do: :ok
 
   defp maybe_ensure_bundle_within_size_limit!(_bundle_name, entry_name, bundle_path) do
-    max_bundle_size = Application.get_env(:hologram, :max_bundle_size)
+    if Application.get_env(:hologram, :max_bundle_size) do
+      ensure_bundle_size_within_limit!(entry_name, File.stat!(bundle_path).size)
+    end
+  end
 
-    if max_bundle_size do
-      bundle_size = File.stat!(bundle_path).size
+  # Raises when the given size of the named bundle is over the :max_bundle_size config value, which
+  # must be set.
+  defp ensure_bundle_size_within_limit!(entry_name, bundle_size) do
+    max_bundle_size = Application.fetch_env!(:hologram, :max_bundle_size)
 
-      if bundle_size > max_bundle_size do
-        raise RuntimeError,
-          message: """
-          Generated JavaScript bundle '#{entry_name}' is #{bundle_size} bytes, which exceeds the configured maximum of #{max_bundle_size} bytes.
+    if bundle_size > max_bundle_size do
+      raise RuntimeError,
+        message: """
+        Generated JavaScript bundle '#{entry_name}' is #{bundle_size} bytes, which exceeds the configured maximum of #{max_bundle_size} bytes.
 
-          This limit acts as an early warning system to surface abnormally large bundles before they reach your app (e.g., accidentally pulling in too many modules or dependencies).
+        This limit acts as an early warning system to surface abnormally large bundles before they reach your app (e.g., accidentally pulling in too many modules or dependencies).
 
-          You can change this limit by setting the [:hologram, :max_bundle_size] config value (in bytes). For example:
+        You can change this limit by setting the [:hologram, :max_bundle_size] config value (in bytes). For example:
 
-              config :hologram, max_bundle_size: 2 * 1024 * 1024\
-          """
-      end
+            config :hologram, max_bundle_size: 2 * 1024 * 1024\
+        """
     end
   end
 
@@ -5791,22 +5930,23 @@ defmodule Hologram.Compiler do
     globalThis.Hologram.pendingScripts.push({
       digest: new URL(document.currentScript.src).pathname.match(/-([^-]+)\\.js$/)[1],
       define: (deps) => {
-        const {
-          Bitstring,
-          ERTS,
-          ElementRefRegistry,
-          HologramBoxedError,
-          HologramInterpreterError,
-          Interpreter,
-          MemoryStorage,
-          Type,
-          Utils,
-        } = deps;#{defs}
+        #{render_script_deps(4)}#{defs}
       },
     });
 
     document.dispatchEvent(new CustomEvent("hologram:scriptLoaded"));\
     """
+  end
+
+  # The statement a script's define function takes the runtime's classes from its deps with, its
+  # lines after the first indented by the given number of spaces: the first one goes where the
+  # caller puts it.
+  defp render_script_deps(indent) do
+    padding = String.duplicate(" ", indent)
+
+    names = Enum.map_join(@script_deps, fn name -> "#{padding}  #{name},\n" end)
+
+    String.trim_leading("#{padding}const {\n#{names}#{padding}} = deps;")
   end
 
   # What a script holding the given MFAs is made of besides its wrapper: the import statements of

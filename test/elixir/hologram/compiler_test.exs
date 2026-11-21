@@ -429,6 +429,12 @@ defmodule Hologram.CompilerTest do
     end)
   end
 
+  defp list_sorted_files(dir) do
+    dir
+    |> File.ls!()
+    |> Enum.sort()
+  end
+
   # Reproduces what the compile Phoenix's reloader runs leaves behind: the protocol loaded from its
   # own beam while its consolidated beam is back on the code path. Returns the own beam path and the
   # consolidated one, and restores the consolidated module when the test exits.
@@ -3195,6 +3201,50 @@ defmodule Hologram.CompilerTest do
                PLT.get(plt, Module1)
 
       PLT.stop(plt)
+    end
+  end
+
+  describe "build_data_model_js/1" do
+    test "leaves a function behind that runs the statement given the runtime's classes" do
+      assert build_data_model_js("globalThis.Hologram.sync = {model: {}};") == """
+             "use strict";
+
+             globalThis.Hologram ??= {};
+
+             globalThis.Hologram.pendingDataModel = (deps) => {
+               const {
+                 Bitstring,
+                 ERTS,
+                 ElementRefRegistry,
+                 HologramBoxedError,
+                 HologramInterpreterError,
+                 Interpreter,
+                 MemoryStorage,
+                 Type,
+                 Utils,
+               } = deps;
+
+               globalThis.Hologram.sync = {model: {}};
+             };
+
+             document.dispatchEvent(new CustomEvent("hologram:dataModelLoaded"));\
+             """
+    end
+
+    # The runtime calls the function with these deps (see defineDataModel() in hologram.mjs).
+    test "takes from the deps the classes the runtime hands every script" do
+      [_full_match, deps_body] =
+        Regex.run(
+          ~r/static #deps = \{(.*?)\};/s,
+          File.read!(Path.join([@root_dir, "assets", "js", "hologram.mjs"]))
+        )
+
+      runtime_deps = Regex.scan(~r/(\w+):/, deps_body, capture: :all_but_first)
+
+      [_full_match, destructured] =
+        Regex.run(~r/const \{(.*?)\} = deps;/s, build_data_model_js(""))
+
+      assert Regex.scan(~r/(\w+),/, destructured, capture: :all_but_first) == runtime_deps
     end
   end
 
@@ -7640,6 +7690,52 @@ defmodule Hologram.CompilerTest do
            |> String.contains?("Interpreter.defineElixirFunction")
   end
 
+  describe "data_model_bundle/3" do
+    @static_dir "/my_static_dir"
+    @statement "globalThis.Hologram.sync = {model: {}};"
+
+    test "none for a build without the data layer" do
+      assert data_model_bundle(@statement, [], @static_dir) == nil
+    end
+
+    test "the bundle built from the statement, at a path in the static dir named by its hash" do
+      assert %{js: js, static_bundle_path: bundle_path} =
+               data_model_bundle(@statement, [:data_layer], @static_dir)
+
+      assert js == build_data_model_js(@statement)
+      assert bundle_path =~ ~r"^/my_static_dir/data-model-[A-Z2-7]{8}\.js$"
+    end
+
+    test "the same path for the same statement, and another one for another statement" do
+      bundle = data_model_bundle(@statement, [:data_layer], @static_dir)
+
+      other_bundle =
+        data_model_bundle("globalThis.Hologram.sync = {};", [:data_layer], @static_dir)
+
+      assert data_model_bundle(@statement, [:data_layer], @static_dir) == bundle
+      assert other_bundle.static_bundle_path != bundle.static_bundle_path
+    end
+
+    test "raises when the bundle exceeds the specified :max_bundle_size" do
+      Application.put_env(:hologram, :max_bundle_size, 10)
+      on_exit(fn -> Application.delete_env(:hologram, :max_bundle_size) end)
+
+      exception =
+        assert_raise RuntimeError, fn ->
+          data_model_bundle(@statement, [:data_layer], @static_dir)
+        end
+
+      assert exception.message =~ "Generated JavaScript bundle 'data-model'"
+    end
+
+    test "does not raise for a bundle within the specified :max_bundle_size" do
+      Application.put_env(:hologram, :max_bundle_size, 1_000_000)
+      on_exit(fn -> Application.delete_env(:hologram, :max_bundle_size) end)
+
+      assert %{} = data_model_bundle(@statement, [:data_layer], @static_dir)
+    end
+  end
+
   describe "delete_module_encodings/2" do
     setup do
       encode_plt =
@@ -10472,6 +10568,69 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "remove_data_model_bundles/2" do
+    setup do
+      static_dir = Path.join([@tmp_dir, "tests", "compiler", "remove_data_model_bundles_2"])
+      clean_dir(static_dir)
+
+      for file_name <- [
+            "data-model-AAAAAAAA.js",
+            "data-model-AAAAAAAA.js.gz",
+            "data-model-BBBBBBBB.js",
+            "data-model-BBBBBBBB.js.gz",
+            "runtime-CCCCCCCC.js",
+            "page-MyPage-DDDDDDDD.js"
+          ] do
+        static_dir
+        |> Path.join(file_name)
+        |> File.write!("content")
+      end
+
+      [static_dir: static_dir]
+    end
+
+    test "removes every data model bundle and leaves the other bundles", %{static_dir: static_dir} do
+      assert remove_data_model_bundles(static_dir) == true
+
+      assert list_sorted_files(static_dir) == ["page-MyPage-DDDDDDDD.js", "runtime-CCCCCCCC.js"]
+    end
+
+    test "keeps the bundle at the given path with its gzip copy", %{static_dir: static_dir} do
+      kept_bundle_path = Path.join(static_dir, "data-model-BBBBBBBB.js")
+      assert remove_data_model_bundles(static_dir, kept_bundle_path) == true
+
+      assert list_sorted_files(static_dir) == [
+               "data-model-BBBBBBBB.js",
+               "data-model-BBBBBBBB.js.gz",
+               "page-MyPage-DDDDDDDD.js",
+               "runtime-CCCCCCCC.js"
+             ]
+    end
+
+    test "removes nothing, and says so, when the only data model bundle is the kept one", %{
+      static_dir: static_dir
+    } do
+      remove_data_model_bundles(static_dir, Path.join(static_dir, "data-model-BBBBBBBB.js"))
+
+      refute remove_data_model_bundles(
+               static_dir,
+               Path.join(static_dir, "data-model-BBBBBBBB.js")
+             )
+    end
+
+    test "finds the bundles in a static dir whose path holds glob characters" do
+      static_dir = Path.join([@tmp_dir, "tests", "compiler", "remove_data_model_bundles_2[x]{y}"])
+      clean_dir(static_dir)
+
+      static_dir
+      |> Path.join("data-model-AAAAAAAA.js")
+      |> File.write!("content")
+
+      assert remove_data_model_bundles(static_dir) == true
+      assert File.ls!(static_dir) == []
+    end
+  end
+
   describe "render_rules/1" do
     # A client swaps these in for the rules its bundle was built with, so an entry reads the way the
     # bundle spells it.
@@ -11559,6 +11718,87 @@ defmodule Hologram.CompilerTest do
       assert_raise Hologram.CompileError, expected_msg, fn ->
         validate_page_modules([InlinePageModuleFixture4], plt)
       end
+    end
+  end
+
+  describe "write_data_model_bundle!/1" do
+    setup do
+      static_dir = Path.join([@tmp_dir, "tests", "compiler", "write_data_model_bundle_1"])
+      clean_dir(static_dir)
+
+      bundle = data_model_bundle("globalThis.Hologram.sync = {};", [:data_layer], static_dir)
+
+      [bundle: bundle, static_dir: static_dir]
+    end
+
+    test "writes the bundle and its gzip copy", %{bundle: bundle} do
+      assert write_data_model_bundle!(bundle) == true
+
+      assert File.read!(bundle.static_bundle_path) == bundle.js
+
+      gzip_copy =
+        bundle.static_bundle_path
+        |> gzip_path()
+        |> File.read!()
+
+      assert :zlib.gunzip(gzip_copy) == bundle.js
+    end
+
+    test "writes nothing when the bundle and its gzip copy are on disk", %{bundle: bundle} do
+      write_data_model_bundle!(bundle)
+      File.write!(bundle.static_bundle_path, "kept")
+
+      assert write_data_model_bundle!(bundle) == false
+      assert File.read!(bundle.static_bundle_path) == "kept"
+    end
+
+    test "writes the bundle again when its gzip copy is gone", %{bundle: bundle} do
+      write_data_model_bundle!(bundle)
+      gzip_path = gzip_path(bundle.static_bundle_path)
+      File.rm!(gzip_path)
+
+      assert write_data_model_bundle!(bundle) == true
+      assert File.exists?(gzip_path)
+    end
+
+    test "removes the other data model bundles when the bundle is on disk already", %{
+      bundle: bundle,
+      static_dir: static_dir
+    } do
+      write_data_model_bundle!(bundle)
+
+      for file_name <- ["data-model-AAAAAAAA.js", "data-model-AAAAAAAA.js.gz"] do
+        static_dir
+        |> Path.join(file_name)
+        |> File.write!("content")
+      end
+
+      assert write_data_model_bundle!(bundle) == true
+
+      bundle_file_name = Path.basename(bundle.static_bundle_path)
+      assert list_sorted_files(static_dir) == [bundle_file_name, bundle_file_name <> ".gz"]
+    end
+
+    test "removes the data model bundles it replaces, and leaves the other bundles", %{
+      bundle: bundle,
+      static_dir: static_dir
+    } do
+      for file_name <- [
+            "data-model-AAAAAAAA.js",
+            "data-model-AAAAAAAA.js.gz",
+            "runtime-CCCCCCCC.js"
+          ] do
+        static_dir
+        |> Path.join(file_name)
+        |> File.write!("content")
+      end
+
+      write_data_model_bundle!(bundle)
+
+      bundle_file_name = Path.basename(bundle.static_bundle_path)
+
+      assert list_sorted_files(static_dir) ==
+               Enum.sort([bundle_file_name, bundle_file_name <> ".gz", "runtime-CCCCCCCC.js"])
     end
   end
 end
