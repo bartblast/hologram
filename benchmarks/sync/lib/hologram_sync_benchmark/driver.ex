@@ -17,6 +17,7 @@ defmodule HologramSyncBenchmark.Driver do
   alias HologramSyncBenchmark.DB
   alias HologramSyncBenchmark.Entities.Card
   alias HologramSyncBenchmark.Peer
+  alias HologramSyncBenchmark.Probe
   alias HologramSyncBenchmark.Report
   alias HologramSyncBenchmark.Seeding
   alias HologramSyncBenchmark.Step
@@ -50,6 +51,9 @@ defmodule HologramSyncBenchmark.Driver do
     tasks: 100,
     tenants: 20
   ]
+
+  # How long in milliseconds the boot check runs the probe.
+  @boot_probe_ms 1_000
 
   @default_smoke_clients 10
 
@@ -433,5 +437,28 @@ defmodule HologramSyncBenchmark.Driver do
     end
 
     IO.puts("It renders pages and signs clients in")
+
+    started_at = System.monotonic_time(:millisecond)
+
+    probe =
+      peer
+      |> Peer.base_url()
+      |> Probe.start()
+
+    Process.sleep(@boot_probe_ms)
+
+    figures =
+      probe
+      |> Probe.stop()
+      |> Probe.summary(started_at, System.monotonic_time(:millisecond))
+
+    if figures.requests == 0 or figures.failures > 0 do
+      raise "the probe page didn't answer: #{inspect(figures)}"
+    end
+
+    IO.puts(
+      "The probe made #{figures.requests} requests, p50 #{Report.cell(figures.p50_ms)} ms, " <>
+        "p99 #{Report.cell(figures.p99_ms)} ms"
+    )
   end
 end
