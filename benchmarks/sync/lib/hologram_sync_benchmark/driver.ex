@@ -254,7 +254,8 @@ defmodule HologramSyncBenchmark.Driver do
       Sweep.run(
         conn,
         counts,
-        &step.(conn, &1, &2, &3, context),
+        # A case preparing each step on a node of its own hands the step what it prepared.
+        &step.(conn, &1, &2, &3, &4 || context),
         Map.get(sweep_case, :passed?, &passed?(&1, opts)),
         Map.get(sweep_case, :summary, &Sweep.summary/1),
         memory_limit

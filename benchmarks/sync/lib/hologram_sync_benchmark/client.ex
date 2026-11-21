@@ -145,12 +145,21 @@ defmodule HologramSyncBenchmark.Client do
 
   @doc """
   Closes the stream of a client holding its whole pot, the way a deploy closes it, and keeps what
-  the client knows, returning :ok. A client leaves once. One that hasn't filled, has failed or left
-  before answers `{:error, reason}`.
+  the client knows, returning :ok. A client leaves once. One that hasn't filled, has failed, left
+  before or was told no place to come back to answers `{:error, reason}`.
   """
   @spec leave(pid) :: :ok | {:error, term}
   def leave(client) do
     GenServer.call(client, :leave, :infinity)
+  end
+
+  @doc """
+  Closes the client's stream for good and marks it failed, returning :ok. For a client a step can't
+  use, which would otherwise go on retrying.
+  """
+  @spec give_up(pid) :: :ok
+  def give_up(client) do
+    GenServer.call(client, :give_up, :infinity)
   end
 
   @doc """
@@ -291,9 +300,9 @@ defmodule HologramSyncBenchmark.Client do
   def handle_call(
         :leave,
         _from,
-        %{bytes_at_leave: nil, failure: nil, synced_all_at: synced_all_at} = state
+        %{bytes_at_leave: nil, cursor: cursor, failure: nil, synced_all_at: synced_all_at} = state
       )
-      when synced_all_at != nil do
+      when cursor != nil and synced_all_at != nil do
     if state.conn, do: Mint.HTTP.close(state.conn)
 
     left = %{
@@ -316,6 +325,14 @@ defmodule HologramSyncBenchmark.Client do
 
   def handle_call(:leave, _from, state) do
     {:reply, {:error, state.failure || :cannot_leave}, state}
+  end
+
+  def handle_call(:give_up, _from, state) do
+    if state.conn, do: Mint.HTTP.close(state.conn)
+
+    closed = %{state | carry: "", conn: nil, frames: "", pending: [], request_ref: nil}
+
+    {:reply, :ok, fail(closed, :gave_up)}
   end
 
   def handle_call({:come_back, delay_ms}, _from, %{away: true} = state) do
@@ -357,6 +374,11 @@ defmodule HologramSyncBenchmark.Client do
   @impl GenServer
   def handle_info(:come_back, %{conn: nil} = state) do
     reopen(%{state | returned_at: now()})
+  end
+
+  # A client given up on stays down, whatever retry was already on its way.
+  def handle_info(:reconnect, %{failure: failure} = state) when failure != nil do
+    {:noreply, state}
   end
 
   # Tried again until the driver gives up on the fill, the way a browser keeps trying: what the

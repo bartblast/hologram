@@ -42,6 +42,11 @@ defmodule HologramSyncBenchmark.Sweep do
   given first one, and `passed?` judges its result. `summary` turns a result into the line the
   step prints, for a case whose steps measure other things than writes.
 
+  `hooks` may hold `:before_step`, run for a client count and first marker on a server node of its
+  own before the step's, for a case whose step starts on a node that has just replaced another.
+  What it returns is the step's fourth argument, nil without one. `:after_step` is then called with
+  it once the step is over, however it ended.
+
   A step whose server node passes `memory_limit` bytes is stopped there, by halting the node, so
   the run can't exhaust the machine. It has no figures, so it's returned apart, as the step that
   stopped the sweep with the reading that stopped it, or nil when none did.
@@ -49,12 +54,13 @@ defmodule HologramSyncBenchmark.Sweep do
   @spec run(
           pid,
           [pos_integer],
-          (Peer.t(), pos_integer, non_neg_integer -> map),
+          (Peer.t(), pos_integer, non_neg_integer, term -> map),
           (map -> boolean),
           (map -> String.t()),
-          pos_integer
+          pos_integer,
+          keyword
         ) :: {[map], %{clients: pos_integer, memory: non_neg_integer} | nil}
-  def run(conn, counts, step, passed?, summary, memory_limit) do
+  def run(conn, counts, step, passed?, summary, memory_limit, hooks \\ []) do
     if length(counts) > @max_steps do
       raise ArgumentError, "a sweep takes at most #{@max_steps} steps"
     end
@@ -64,7 +70,7 @@ defmodule HologramSyncBenchmark.Sweep do
       |> Enum.with_index()
       |> Enum.reduce_while({[], nil}, fn {count, index}, {results, nil} ->
         conn
-        |> run_step(count, index, step, passed?, memory_limit)
+        |> run_step(count, index, step, passed?, memory_limit, hooks)
         |> take_step(count, results, summary)
       end)
 
@@ -92,35 +98,88 @@ defmodule HologramSyncBenchmark.Sweep do
   # A guard on the server node halts it past the memory limit, and is asked once the step is
   # over whether it did: a node halted while the step only waited, with no call to fail, still
   # makes the step a stopped one, and a step that failed for another reason keeps its error.
-  defp run_step(conn, count, index, step, passed?, memory_limit) do
+  defp run_step(conn, count, index, step, passed?, memory_limit, hooks) do
     :ok = DB.truncate_log!(conn)
     :ok = DB.vacuum_analyze!(conn)
     autovacuum_before = DB.autovacuum_runs(conn)
+    first_marker = index * @markers_per_step
 
     IO.puts("Step: #{count} clients")
 
-    case Peer.with_peer(&guarded_step(&1, step, count, index, memory_limit)) do
-      {:stopped, memory} ->
-        {:stopped, memory}
+    with {:ok, step_context} <- prepare_step(hooks, count, first_marker, memory_limit),
+         {:ok, result} <-
+           guarded_step(hooks, step_context, memory_limit, fn peer ->
+             step.(peer, count, first_marker, step_context)
+           end) do
+      result =
+        Map.merge(result, %{
+          autovacuum_ran: DB.autovacuum_runs(conn) != autovacuum_before,
+          heap_kills: Measure.heap_kills(Peer.log_path()),
+          session_cuts: Measure.session_cuts(Peer.log_path())
+        })
 
-      {:ok, result} ->
-        result =
-          Map.merge(result, %{
-            autovacuum_ran: DB.autovacuum_runs(conn) != autovacuum_before,
-            heap_kills: Measure.heap_kills(Peer.log_path()),
-            session_cuts: Measure.session_cuts(Peer.log_path())
-          })
-
-        {:ok, Map.put(result, :passed, passed?.(result))}
+      {:ok, Map.put(result, :passed, passed?.(result))}
     end
   end
 
-  defp guarded_step(peer, step, count, index, memory_limit) do
+  defp prepare_step(hooks, count, first_marker, memory_limit) do
+    case Keyword.fetch(hooks, :before_step) do
+      {:ok, before_step} ->
+        # Kept aside, since a node stopped just after the hook returned loses what it returned, and
+        # what it prepared still has to be cleaned up.
+        key = {__MODULE__, make_ref()}
+
+        prepared =
+          with_guarded_peer(memory_limit, fn peer ->
+            step_context = before_step.(peer, count, first_marker)
+            Process.put(key, step_context)
+            step_context
+          end)
+
+        step_context = Process.delete(key)
+
+        if match?({:stopped, _memory}, prepared) and step_context != nil do
+          call_after_step(hooks, step_context)
+        end
+
+        prepared
+
+      :error ->
+        {:ok, nil}
+    end
+  end
+
+  defp guarded_step(hooks, step_context, memory_limit, fun) do
+    with_guarded_peer(memory_limit, fun)
+  after
+    call_after_step(hooks, step_context)
+  end
+
+  defp call_after_step(hooks, step_context) do
+    case Keyword.fetch(hooks, :after_step) do
+      {:ok, after_step} -> after_step.(step_context)
+      :error -> :ok
+    end
+  end
+
+  @doc """
+  Calls the given function with a fresh server node, stopping the node past the given number of
+  bytes of memory, and returns `{:ok, result}`, or `{:stopped, memory}` with the reading it was
+  stopped at.
+  """
+  @spec with_guarded_peer(pos_integer, (Peer.t() -> result)) ::
+          {:ok, result} | {:stopped, non_neg_integer}
+        when result: term
+  def with_guarded_peer(memory_limit, fun) do
+    Peer.with_peer(&guarded(&1, fun, memory_limit))
+  end
+
+  defp guarded(peer, fun, memory_limit) do
     guard = Measure.start_memory_guard(peer, memory_limit)
 
     outcome =
       try do
-        {:ok, step.(peer, count, index * @markers_per_step)}
+        {:ok, fun.(peer)}
       catch
         kind, reason -> {:error, kind, reason, __STACKTRACE__}
       end
