@@ -5,20 +5,31 @@ defmodule HologramSyncBenchmark.Probe do
   # records how long each took, so a case can show whether sync's work slows the app down.
   #
   # Each request is timed from when it was due rather than from when it was sent. Sent one at a
-  # time, a stalled request holds back the ones behind it, and timing those from their send would
-  # hide the stall from every request but the first.
+  # time on a connection, a stalled request holds back the ones behind it, and timing those from
+  # their send would hide the stall from every request but the first.
   #
-  # One kept-alive connection, so the probe doesn't compete with a wave of clients for the listen
-  # backlog. High priority, since it shares the driver's VM with thousands of client processes,
-  # whose work would otherwise count as the server being slow.
+  # A few workers take turns, each on a kept-alive connection of its own. On one connection, a
+  # render slower than the gap between two requests would put every later request further behind
+  # for good, and the figures would show the probe's own queue rather than the app. Kept-alive, so
+  # the probe doesn't compete with a wave of clients for the listen backlog. High priority, since
+  # it shares the driver's VM with thousands of client processes, whose work would otherwise count
+  # as the server being slow.
 
   alias HologramSyncBenchmark.Measure
 
-  @interval_ms 50
+  # The gap between two requests of the probe as a whole.
+  @request_gap_ms 50
+
+  @workers 4
+
+  # The gap between two requests of one worker.
+  @interval_ms @request_gap_ms * @workers
 
   @path "/probe"
 
   @timeout_ms 10_000
+
+  @opaque t :: [pid]
 
   @type sample :: {integer, float | :failed}
 
@@ -36,21 +47,24 @@ defmodule HologramSyncBenchmark.Probe do
   returns the probe. Linked to the caller, so it goes if the caller crashes. A caller that carries
   on after a failure has to stop it, with `stop/1`.
   """
-  @spec start(String.t()) :: pid
+  @spec start(String.t()) :: t
   def start(base_url) do
     uri = URI.parse(base_url)
+    started_at = now_ms()
 
-    spawn_link(fn ->
-      Process.flag(:priority, :high)
+    for index <- 0..(@workers - 1) do
+      spawn_link(fn ->
+        Process.flag(:priority, :high)
 
-      loop(%{
-        conn: nil,
-        due_at: now_ms(),
-        host: uri.host,
-        port: uri.port,
-        samples: []
-      })
-    end)
+        loop(%{
+          conn: nil,
+          due_at: started_at + index * @request_gap_ms,
+          host: uri.host,
+          port: uri.port,
+          samples: []
+        })
+      end)
+    end
   end
 
   @doc """
@@ -61,17 +75,26 @@ defmodule HologramSyncBenchmark.Probe do
 
   Waits for a request under way, so it can take as long as a request's timeout.
   """
-  @spec stop(pid) :: [sample]
+  @spec stop(t) :: [sample]
   def stop(probe) do
-    ref = Process.monitor(probe)
-    send(probe, {:stop, self(), ref})
+    probe
+    |> Enum.map(fn worker ->
+      ref = Process.monitor(worker)
+      send(worker, {:stop, self(), ref})
 
+      {worker, ref}
+    end)
+    |> Enum.flat_map(&await_samples/1)
+    |> Enum.sort_by(fn {due_at, _taken} -> due_at end)
+  end
+
+  defp await_samples({worker, ref}) do
     receive do
       {^ref, samples} ->
         Process.demonitor(ref, [:flush])
         samples
 
-      {:DOWN, ^ref, :process, ^probe, reason} ->
+      {:DOWN, ^ref, :process, ^worker, reason} ->
         raise "the probe went down: #{inspect(reason)}"
     end
   end
