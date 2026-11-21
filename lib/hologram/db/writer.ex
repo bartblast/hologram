@@ -13,14 +13,26 @@ defmodule Hologram.DB.Writer do
   # propagates to it instead.
   # EntityOperations itself stays claim-blind, so the framework's own writes (a grant under an
   # acting user) reach it as they always have.
+  #
+  # A rule reading the row after the change (new()) is judged on that row: the stored one with what
+  # the write states applied. A batch's write is judged twice, on what it states before the merge
+  # and on what the merge lets through when it reaches update/1, since a client picks its stamp and
+  # can make one value lose on purpose. A value that can't be on the row - it fails its declaration
+  # or names a row that doesn't exist - reads as the stored one, and the executor answers it with
+  # its violations.
 
   alias Hologram.Auth
   alias Hologram.Auth.Context
+  alias Hologram.DB.Clock
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.Entity.Metadata
   alias Hologram.MisuseError
+  alias Hologram.Policy
   alias Hologram.Reflection
+
+  # What a write no rule reading the row after the change covers is judged with.
+  @not_judged %{clock_stamp: nil, invalid: [], new_row: nil, unjudged: []}
 
   @doc false
   @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
@@ -104,11 +116,18 @@ defmodule Hologram.DB.Writer do
 
     fields = changed_fields(entity_type, Map.keys(attribute_ops), Map.keys(relationship_ops))
 
+    change = %{
+      deltas: attribute_deltas,
+      edges: relationship_ops,
+      stamp: stamp,
+      values: attribute_changes
+    }
+
     {:ok, applied} =
       Connection.retry_on_deadlock(fn ->
         row = lock_row!(entity_type, entity.id, "update")
 
-        evaluate_update!(entity, row, fields)
+        judged = evaluate_update!(entity, row, fields, change)
 
         apply_update(
           entity_type,
@@ -116,7 +135,8 @@ defmodule Hologram.DB.Writer do
           attribute_changes,
           attribute_deltas,
           relationship_ops,
-          stamp
+          stamp,
+          judged.clock_stamp
         )
       end)
 
@@ -136,14 +156,15 @@ defmodule Hologram.DB.Writer do
 
       names = Enum.map(changes, fn {name, _value} -> name end)
       fields = changed_fields(entity_type, names, [])
+      change = %{deltas: %{}, edges: %{}, stamp: nil, values: Map.new(changes)}
 
       {:ok, applied} =
         Connection.retry_on_deadlock(fn ->
           row = lock_row!(entity_type, id, "update")
 
-          check_fields!(row, fields)
+          judged = check_fields!(row, fields, change)
 
-          EntityOperations.update(entity_type, id, changes)
+          EntityOperations.update(entity_type, id, changes, clock_opts(judged.clock_stamp))
         end)
 
       applied
@@ -163,13 +184,26 @@ defmodule Hologram.DB.Writer do
   def check_delete!(row), do: evaluate_operation!(:delete, row)
 
   @doc false
-  @spec check_update!(struct, list(atom)) :: :ok
-  # The update verb's own check of the fields a client's call names - its values, its amounts and
-  # its to-many edges - for the batch applier to make before the merge: whether a write is refused
+  @spec check_update!(
+          struct,
+          %{atom => any},
+          %{atom => integer},
+          %{{atom, String.t()} => :add | :delete},
+          pos_integer | nil
+        ) :: list(atom)
+  # The update verb's own check of what a client's call states - its values, its amounts and its
+  # to-many edges - for the batch applier to make before the merge: whether a write is refused
   # must not turn on which of its values lose to another writer's, and a write whose every value
   # loses still answers with the columns it lost to. Judged whether or not anyone is signed in, as
-  # every client write is.
-  def check_update!(row, names), do: check_fields!(row, changed_fields(row.__struct__, names, []))
+  # every client write is. Returns the columns a rule reading the row after the change couldn't
+  # judge the stated value of: what stands in one of them isn't an answer this check gave.
+  def check_update!(row, values, deltas, edges, stamp) do
+    names = Map.keys(values) ++ Map.keys(deltas)
+    fields = changed_fields(row.__struct__, names, Map.keys(edges))
+    change = %{deltas: deltas, edges: edges, stamp: stamp, values: values}
+
+    check_fields!(row, fields, change).unjudged
+  end
 
   defp apply_relationship_op(:add, entity_type, id, relationship_name, target_id) do
     EntityOperations.add_relationship(entity_type, id, relationship_name, target_id)
@@ -191,8 +225,23 @@ defmodule Hologram.DB.Writer do
 
   # The attribute changes go first and the edges follow, all inside one transaction: a refused
   # value leaves the edges unapplied, and an edge that raises takes the values with it.
-  defp apply_update(entity_type, id, attribute_changes, attribute_deltas, relationship_ops, stamp) do
-    case update_attributes(entity_type, id, attribute_changes, attribute_deltas, stamp) do
+  defp apply_update(
+         entity_type,
+         id,
+         attribute_changes,
+         attribute_deltas,
+         relationship_ops,
+         stamp,
+         clock_stamp
+       ) do
+    case update_attributes(
+           entity_type,
+           id,
+           attribute_changes,
+           attribute_deltas,
+           stamp,
+           clock_stamp
+         ) do
       :ok -> apply_relationship_ops(entity_type, id, relationship_ops)
       {:error, violations} -> {:error, violations}
     end
@@ -254,31 +303,51 @@ defmodule Hologram.DB.Writer do
 
   # Asked with :held, as an operation is, so what the answer rests on stays as read until the write
   # commits. A refusal names every field no rule lets the acting user change.
-  defp check_fields!(row, fields) do
-    case Auth.uncovered_fields(Context.actor_user_id(), row, fields, :held) do
+  defp check_fields!(row, fields, change) do
+    judged = judge_change(row, fields, change)
+
+    case Auth.uncovered_fields(Context.actor_user_id(), row, fields, :held, judged.new_row) do
       [] ->
-        :ok
+        judged
 
       uncovered ->
         raise Hologram.AccessDeniedError,
           message:
-            "not allowed to update #{inspect(row.__struct__)} #{inspect(row.id)} - no allow line that holds covers #{Enum.map_join(uncovered, ", ", &inspect/1)}"
+            "not allowed to update #{inspect(row.__struct__)} #{inspect(row.id)} - no allow line that holds covers #{Enum.map_join(uncovered, ", ", &inspect/1)}#{invalid_value_hint(uncovered, judged.invalid)}"
+    end
+  end
+
+  # A refused field whose given value was invalid was judged on the stored one, which reads as a
+  # wrong rule unless the refusal says so.
+  defp invalid_value_hint(uncovered, invalid) do
+    case Enum.filter(uncovered, &(&1 in invalid)) do
+      [] ->
+        ""
+
+      [field] ->
+        " (the value given for #{inspect(field)} is invalid, so its rule read the stored value)"
+
+      fields ->
+        names = Enum.map_join(fields, ", ", &inspect/1)
+
+        " (the values given for #{names} are invalid, so their rules read the stored values)"
     end
   end
 
   # An update is judged as any write is - by its claim, on the trusted tier not at all - but by
   # the fields it changes rather than the operation alone.
-  defp evaluate_update!(%{__meta__: %Metadata{claim: :trust}}, _row, _fields), do: :ok
+  defp evaluate_update!(%{__meta__: %Metadata{claim: :trust}}, _row, _fields, _change),
+    do: @not_judged
 
-  defp evaluate_update!(%{__meta__: %Metadata{claim: :client}}, row, fields) do
-    check_fields!(row, fields)
+  defp evaluate_update!(%{__meta__: %Metadata{claim: :client}}, row, fields, change) do
+    check_fields!(row, fields, change)
   end
 
-  defp evaluate_update!(_entity, row, fields) do
+  defp evaluate_update!(_entity, row, fields, change) do
     if Context.actor_user_id() do
-      check_fields!(row, fields)
+      check_fields!(row, fields, change)
     else
-      :ok
+      @not_judged
     end
   end
 
@@ -294,6 +363,41 @@ defmodule Hologram.DB.Writer do
         row
     end
   end
+
+  # The row the given change leaves, for the rules covering the given fields that read it, with the
+  # columns whose stated value can't be on it and the clock reading the write is to be stored under:
+  # read once, after the row's lock, so what a rule ranks by a write's timestamp is what lands.
+  defp judge_change(%entity_type{} = row, fields, change) do
+    if Policy.judges_change?(entity_type, fields) do
+      clock_stamp = Clock.stamp()
+      {values, invalid, missing} = Auth.judged_values(entity_type, change.values, :held)
+      written = values_written(change, values, clock_stamp)
+      new_row = Auth.after_row(row, written, change.deltas, change.edges)
+
+      %{
+        clock_stamp: clock_stamp,
+        invalid: changed_fields(entity_type, invalid, []),
+        new_row: new_row,
+        unjudged: invalid ++ missing
+      }
+    else
+      @not_judged
+    end
+  end
+
+  # What an update sets on the row: its values, and the timestamps a value or an amount moves. An
+  # update of edges alone moves neither.
+  defp values_written(%{deltas: deltas, values: stated}, values, _clock_stamp)
+       when deltas == %{} and stated == %{},
+       do: values
+
+  defp values_written(%{stamp: stamp}, values, clock_stamp) do
+    Map.merge(values, EntityOperations.written_timestamps(stamp, clock_stamp))
+  end
+
+  defp clock_opts(nil), do: []
+
+  defp clock_opts(clock_stamp), do: [clock_stamp: clock_stamp]
 
   # The executor takes values and amounts apart: a put sets its column, an increment moves it.
   defp split_attribute_ops(attribute_ops) do
@@ -334,15 +438,15 @@ defmodule Hologram.DB.Writer do
     end
   end
 
-  defp update_attributes(_entity_type, _id, attribute_changes, attribute_deltas, _stamp)
+  defp update_attributes(_entity_type, _id, attribute_changes, attribute_deltas, _stamp, _clock)
        when map_size(attribute_changes) == 0 and map_size(attribute_deltas) == 0,
        do: :ok
 
-  defp update_attributes(entity_type, id, attribute_changes, attribute_deltas, stamp) do
+  defp update_attributes(entity_type, id, attribute_changes, attribute_deltas, stamp, clock) do
     # An absent stamp is left absent rather than passed as nil: the option's presence is what
     # says a revision was authored elsewhere, and a nil under the key would reach the statement.
     # Deltas travel the same way: present only when the struct recorded some.
-    stamp_opts = if stamp, do: [stamp: stamp], else: []
+    stamp_opts = if stamp, do: [{:stamp, stamp} | clock_opts(clock)], else: clock_opts(clock)
 
     opts =
       if attribute_deltas == %{}, do: stamp_opts, else: [{:deltas, attribute_deltas} | stamp_opts]

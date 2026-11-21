@@ -263,9 +263,8 @@ defmodule Hologram.Mutation do
   defp apply_write(%Write{op: :update} = write, followers, index, _created_rows) do
     row = lock_row(write, index)
     edges = edge_ops(followers)
-    edge_fields = Enum.map(followers, & &1.relationship)
 
-    Writer.check_update!(row, Map.keys(write.data) ++ Map.keys(write.deltas) ++ edge_fields)
+    Writer.check_update!(row, write.data, write.deltas, edges, write.stamp)
 
     {changes, lost} =
       Merge.resolve(write.data, write.based_on, write.stamp, row.__meta__.revisions)

@@ -39,6 +39,9 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
   alias Hologram.Test.Fixtures.Policy.Module39, as: ChannelMessage
   alias Hologram.Test.Fixtures.Policy.Module40
+  alias Hologram.Test.Fixtures.Policy.Module58, as: ChangedProject
+  alias Hologram.Test.Fixtures.Policy.Module59, as: ChangedTask
+  alias Hologram.Test.Fixtures.Policy.Module60, as: ChangedLabel
   alias Hologram.Test.Fixtures.Policy.Module9
 
   defp create_user(email) do
@@ -921,6 +924,228 @@ defmodule Hologram.DB.WriterTest do
           |> update()
         end)
       end
+    end
+  end
+
+  describe "update/1 of rules reading the row after the change" do
+    defp create_changed_task(values \\ %{}) do
+      task =
+        values
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      EntityOperations.get(ChangedTask, task.id)
+    end
+
+    defp create_changed_project(archived \\ false) do
+      %{archived: archived}
+      |> ChangedProject.new()
+      |> DB.create!()
+    end
+
+    defp create_changed_label(blocked) do
+      %{blocked: blocked}
+      |> ChangedLabel.new()
+      |> DB.create!()
+    end
+
+    defp uncovered_message(task, field) do
+      "not allowed to update #{inspect(ChangedTask)} #{inspect(task.id)} - no allow line that holds covers #{inspect(field)}"
+    end
+
+    test "lets a change through to the value the rule allows" do
+      user = create_user("approver@example.com")
+      task = create_changed_task()
+      Auth.grant_role(user, :admin, task)
+
+      assert as_user(user, fn -> update(put_attribute(task, :status, :approved)) end) == :ok
+      assert EntityOperations.get(ChangedTask, task.id).status == :approved
+    end
+
+    test "refuses a change to a value the rule doesn't allow" do
+      user = create_user("rejecter@example.com")
+      task = create_changed_task()
+      Auth.grant_role(user, :admin, task)
+
+      assert_error AccessDeniedError, uncovered_message(task, :status), fn ->
+        as_user(user, fn -> update(put_attribute(task, :status, :rejected)) end)
+      end
+    end
+
+    test "still reads a bare name as the stored value" do
+      user = create_user("reapprover@example.com")
+      task = create_changed_task(%{status: :rejected})
+      Auth.grant_role(user, :admin, task)
+
+      assert_error AccessDeniedError, uncovered_message(task, :status), fn ->
+        as_user(user, fn -> update(put_attribute(task, :status, :approved)) end)
+      end
+    end
+
+    test "moves a row between two projects the user is a member of" do
+      user = create_user("mover@example.com")
+      source = create_changed_project()
+      target = create_changed_project()
+      task = create_changed_task(%{project_id: source.id})
+      Auth.grant_role(user, :member, source)
+      Auth.grant_role(user, :member, target)
+
+      assert as_user(user, fn -> update(put_attribute(task, :project_id, target.id)) end) == :ok
+    end
+
+    test "refuses a move into a project the user isn't a member of" do
+      user = create_user("intruder@example.com")
+      source = create_changed_project()
+      target = create_changed_project()
+      task = create_changed_task(%{project_id: source.id})
+      Auth.grant_role(user, :member, source)
+
+      assert_error AccessDeniedError, uncovered_message(task, :project), fn ->
+        as_user(user, fn -> update(put_attribute(task, :project_id, target.id)) end)
+      end
+    end
+
+    test "refuses a move out of a project the user isn't a member of" do
+      user = create_user("outsider@example.com")
+      source = create_changed_project()
+      target = create_changed_project()
+      task = create_changed_task(%{project_id: source.id})
+      Auth.grant_role(user, :member, target)
+
+      assert_error AccessDeniedError, uncovered_message(task, :project), fn ->
+        as_user(user, fn -> update(put_attribute(task, :project_id, target.id)) end)
+      end
+    end
+
+    test "judges a counter by the value it moves to" do
+      user = create_user("counter@example.com")
+      task = create_changed_task(%{count: 9})
+
+      assert as_user(user, fn -> update(increment(task, :count, 1)) end) == :ok
+
+      moved = EntityOperations.get(ChangedTask, task.id)
+
+      assert_error AccessDeniedError, uncovered_message(task, :count), fn ->
+        as_user(user, fn -> update(increment(moved, :count, 1)) end)
+      end
+    end
+
+    test "reads a field the change doesn't touch as stored" do
+      user = create_user("noter@example.com")
+      archived = create_changed_project(true)
+      task = create_changed_task(%{project_id: archived.id})
+
+      assert_error AccessDeniedError, uncovered_message(task, :note), fn ->
+        as_user(user, fn -> update(put_attribute(task, :note, "x")) end)
+      end
+    end
+
+    test "judges a to-many by the edges the call adds" do
+      user = create_user("labeler@example.com")
+      task = create_changed_task()
+      plain = create_changed_label(false)
+      blocked = create_changed_label(true)
+
+      assert as_user(user, fn -> update(add_relationship(task, :labels, plain.id)) end) == :ok
+
+      assert_error AccessDeniedError, uncovered_message(task, :labels), fn ->
+        as_user(user, fn -> update(add_relationship(task, :labels, blocked.id)) end)
+      end
+    end
+
+    test "answers an invalid value with its violations when its rule holds" do
+      user = create_user("invalid@example.com")
+      project = create_changed_project()
+      task = create_changed_task(%{project_id: project.id})
+      Auth.grant_role(user, :member, project)
+
+      assert {:error, %{code: [_violation]}} =
+               as_user(user, fn -> update(put_attribute(task, :code, "too long")) end)
+    end
+
+    test "says a refused field's value was invalid" do
+      user = create_user("invalid_status@example.com")
+      task = create_changed_task()
+      Auth.grant_role(user, :admin, task)
+
+      expected_msg =
+        uncovered_message(task, :status) <>
+          " (the value given for :status is invalid, so its rule read the stored value)"
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn -> update(put_attribute(task, :status, :bogus)) end)
+      end
+    end
+
+    test "says so for each refused field whose value was invalid" do
+      user = create_user("invalid_outsider@example.com")
+      task = create_changed_task()
+
+      expected_msg =
+        "not allowed to update #{inspect(ChangedTask)} #{inspect(task.id)} - no allow line that holds covers :code, :status (the values given for :code, :status are invalid, so their rules read the stored values)"
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn ->
+          task
+          |> put_attribute(:code, "too long")
+          |> put_attribute(:status, :bogus)
+          |> update()
+        end)
+      end
+    end
+
+    test "names a relationship whose reference was malformed" do
+      user = create_user("malformed_reference@example.com")
+      task = create_changed_task()
+
+      expected_msg =
+        uncovered_message(task, :project) <>
+          " (the value given for :project is invalid, so its rule read the stored value)"
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn -> update(put_attribute(task, :project_id, "not-a-uuid")) end)
+      end
+    end
+
+    test "doesn't say a refused reference names no row" do
+      user = create_user("missing_outsider@example.com")
+      task = create_changed_task()
+      missing_id = Entity.generate_id()
+
+      assert_error AccessDeniedError, uncovered_message(task, :project), fn ->
+        as_user(user, fn -> update(put_attribute(task, :project_id, missing_id)) end)
+      end
+    end
+
+    test "judges a reference naming no row on the stored one" do
+      user = create_user("missing_target@example.com")
+      project = create_changed_project()
+      task = create_changed_task(%{project_id: project.id})
+      Auth.grant_role(user, :member, project)
+      missing_id = Entity.generate_id()
+
+      assert {:error, %{project_id: [:not_found]}} =
+               as_user(user, fn -> update(put_attribute(task, :project_id, missing_id)) end)
+    end
+
+    test "judges nothing on the trusted tier" do
+      task = create_changed_task()
+
+      assert update(put_attribute(task, :status, :rejected)) == :ok
+    end
+  end
+
+  describe "update/3 of rules reading the row after the change" do
+    test "judges the values it's given" do
+      user = create_user("indexed@example.com")
+      task = create_changed_task()
+      Auth.grant_role(user, :admin, task)
+
+      assert_error AccessDeniedError, uncovered_message(task, :status), fn ->
+        as_user(user, fn -> update(ChangedTask, task.id, status: :rejected) end)
+      end
+
+      assert as_user(user, fn -> update(ChangedTask, task.id, status: :approved) end) == :ok
     end
   end
 
