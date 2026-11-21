@@ -28,6 +28,35 @@ defmodule Hologram.Auth do
   # assets/js/elixir/hologram/auth.mjs) - a hand-ported pair, pinned on both tiers.
   @operation_shape_message "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
+  # Marks a struct as a row of the database as a change would leave it. Kept on the struct rather
+  # than in its metadata, whose fields travel to the browser with every entity: a marked row lives
+  # only for the length of a rule's evaluation.
+  @after_change :__after_change__
+
+  # The checker a rule's exact clauses are evaluated with (see Hologram.Policy.Evaluator): what it
+  # reads from a row marked by after_row/4, and from the rows reached from one, is the database as
+  # the change would leave it. An unmarked row reads as stored, so a bare name keeps meaning the
+  # stored value. The source is the one can?/4 takes.
+  @doc false
+  @spec after_checker(struct, list(struct) | :held | :stored) :: fun
+  def after_checker(new_row, source) do
+    &check_after_requirement(&1, &2, &3, source, new_row)
+  end
+
+  # The given stored row as the given change leaves it: the values put, the amounts moved and the
+  # edges the call adds or deletes, marked for after_checker/2 to read.
+  @doc false
+  @spec after_row(struct, map, map, %{{atom, Entity.id()} => :add | :delete}) :: struct
+  def after_row(row, values, deltas, edge_ops) do
+    moved = Map.new(deltas, fn {name, amount} -> {name, Map.fetch!(row, name) + amount} end)
+
+    row
+    |> Map.merge(values)
+    |> Map.merge(moved)
+    |> Map.put(:__meta__, %{row.__meta__ | relationship_ops: edge_ops})
+    |> Map.put(@after_change, true)
+  end
+
   @doc """
   Returns the grant rows answering the permission checks a render ran - the rows the given
   {user id, scope} pairs ask about, read as the session user.
@@ -659,6 +688,215 @@ defmodule Hologram.Auth do
     entity
     |> chain_row(relationship_names, delegation_read_opts(source))
     |> delegates?(actor_user_id, delegated_operation, source)
+  end
+
+  # What a rule reads from a row of the database as a change would leave it. Each hop applies the
+  # change, since a set read by id can't see it: the changed row is presented as it will be, and joins
+  # or leaves the sets its new values and edges put it in or take it out of. A role is looked up, and
+  # a delegated rule judged, against the database as stored, on the row the chain leads to.
+  defp check_after_requirement(
+         {:related, relationship_names},
+         %{@after_change => true} = row,
+         _actor_user_id,
+         source,
+         new_row
+       ) do
+    after_chain_row(row, relationship_names, delegation_read_opts(source), new_row)
+  end
+
+  defp check_after_requirement(
+         {:set, relationship_names},
+         %{@after_change => true} = row,
+         _actor_user_id,
+         source,
+         new_row
+       ) do
+    after_set_rows(row, relationship_names, delegation_read_opts(source), false, new_row)
+  end
+
+  defp check_after_requirement(
+         {:set, relationship_names, :whole},
+         %{@after_change => true} = row,
+         _actor_user_id,
+         source,
+         new_row
+       ) do
+    read_opts = delegation_read_opts(source)
+
+    after_set_rows(row, relationship_names, read_opts, source == :held, new_row)
+  end
+
+  defp check_after_requirement(
+         {:rel, relationship_names, role_names},
+         %{@after_change => true} = row,
+         actor_user_id,
+         source,
+         new_row
+       ) do
+    {hops, [last_name]} = Enum.split(relationship_names, -1)
+
+    with %{} = end_row <- after_chain_row(row, hops, delegation_read_opts(source), new_row),
+         target_id when target_id != nil <- related_id(end_row, last_name) do
+      target_type = Entity.path_target(row.__struct__, relationship_names)
+
+      grant_exists?(actor_user_id, {:instance, target_type, target_id}, role_names, source)
+    else
+      nil -> false
+    end
+  end
+
+  defp check_after_requirement(
+         {:via, delegated_operation, relationship_names},
+         %{@after_change => true} = row,
+         actor_user_id,
+         source,
+         new_row
+       ) do
+    read_opts = delegation_read_opts(source)
+
+    row
+    |> after_chain_row(relationship_names, read_opts, new_row)
+    |> stored_target(read_opts, new_row)
+    |> delegates?(actor_user_id, delegated_operation, source)
+  end
+
+  defp check_after_requirement(requirement, row, actor_user_id, source, _new_row) do
+    check_requirement(requirement, row, actor_user_id, source)
+  end
+
+  # A delegated rule is asked about a row as it stands, so a chain leading back to the changed row
+  # asks about the row as stored.
+  defp stored_target(%new_type{id: new_id}, read_opts, %new_type{id: new_id}),
+    do: EntityOperations.get(new_type, new_id, read_opts)
+
+  defp stored_target(target, _read_opts, _new_row), do: target
+
+  defp after_chain_row(nil, _relationship_names, _read_opts, _new_row), do: nil
+
+  defp after_chain_row(row, [], _read_opts, _new_row), do: row
+
+  defp after_chain_row(row, [relationship_name | rest], read_opts, new_row) do
+    row
+    |> after_to_one(relationship_name, read_opts, new_row)
+    |> after_chain_row(rest, read_opts, new_row)
+  end
+
+  # A reference naming the changed row leads to it as it will be, with no read.
+  defp after_to_one(row, relationship_name, read_opts, %new_type{id: new_id} = new_row) do
+    target_type = relationship_target(row.__struct__, relationship_name)
+
+    case related_id(row, relationship_name) do
+      nil ->
+        nil
+
+      ^new_id when target_type == new_type ->
+        new_row
+
+      target_id ->
+        with %{} = target <- EntityOperations.get(target_type, target_id, read_opts) do
+          Map.put(target, @after_change, true)
+        end
+    end
+  end
+
+  defp after_set_rows(row, relationship_names, read_opts, hold_set?, new_row) do
+    Enum.reduce(relationship_names, [row], fn relationship_name, rows ->
+      rows
+      |> Enum.flat_map(&after_linked_rows(&1, relationship_name, read_opts, hold_set?, new_row))
+      |> Enum.uniq_by(& &1.id)
+    end)
+  end
+
+  # In id order, as a set is read, so a derived set's bounds see what the database would return.
+  defp after_linked_rows(row, relationship_name, read_opts, hold_set?, new_row) do
+    entity_type = row.__struct__
+
+    if to_one?(entity_type, relationship_name) do
+      row
+      |> after_to_one(relationship_name, read_opts, new_row)
+      |> List.wrap()
+    else
+      if hold_set?, do: SetLock.hold!(entity_type, row.id)
+
+      entity_type
+      |> EntityOperations.related_rows(row.id, relationship_name, read_opts)
+      |> after_set_members(row, relationship_name, read_opts, new_row)
+      |> Enum.map(&Map.put(&1, @after_change, true))
+      |> Enum.sort_by(& &1.id)
+    end
+  end
+
+  # The members of the set the given owner holds under the given relationship, once the change has
+  # applied, from the ones stored.
+  defp after_set_members(rows, %owner_type{} = owner, relationship_name, read_opts, new_row) do
+    %new_type{id: new_id} = new_row
+
+    case Entity.inverse_relationship(owner_type, relationship_name) do
+      %{reference?: true, forward: forward, target: ^new_type} ->
+        after_reference_members(rows, owner, forward, new_row)
+
+      %{forward: forward, target: ^new_type} ->
+        after_pair_members(rows, owner, forward, new_row)
+
+      nil when owner_type == new_type and owner.id == new_id ->
+        rows
+        |> with_call_edges(owner_type, relationship_name, read_opts, new_row)
+        |> present_row(new_row)
+
+      _other_set ->
+        present_row(rows, new_row)
+    end
+  end
+
+  # The changed row belongs to the set its reference names, whatever it held before.
+  defp after_reference_members(rows, owner, forward, new_row) do
+    others = without_row(rows, new_row)
+    reference_field = String.to_existing_atom("#{forward}_id")
+
+    if Map.fetch!(new_row, reference_field) == owner.id, do: [new_row | others], else: others
+  end
+
+  # A pair of the changed row's own to-many: the call's edge on this owner overrides the stored one.
+  defp after_pair_members(rows, owner, forward, new_row) do
+    case Map.get(new_row.__meta__.relationship_ops, {forward, owner.id}) do
+      :add -> [new_row | without_row(rows, new_row)]
+      :delete -> without_row(rows, new_row)
+      nil -> present_row(rows, new_row)
+    end
+  end
+
+  # The changed row's own to-many with the call's edges applied: an add already stored and a delete
+  # not stored change nothing, and a target that is gone is left out for the edge write to refuse.
+  defp with_call_edges(rows, entity_type, relationship_name, read_opts, new_row) do
+    target_type = Entity.related_type(entity_type, relationship_name)
+
+    new_row.__meta__.relationship_ops
+    |> Enum.filter(fn {{name, _target_id}, _op} -> name == relationship_name end)
+    |> Enum.reduce(rows, fn
+      {{_name, target_id}, :delete}, members ->
+        Enum.reject(members, &(&1.id == target_id))
+
+      {{_name, target_id}, :add}, members ->
+        if Enum.any?(members, &(&1.id == target_id)) do
+          members
+        else
+          target_type
+          |> EntityOperations.get(target_id, read_opts)
+          |> List.wrap()
+          |> Enum.concat(members)
+        end
+    end)
+  end
+
+  defp present_row(rows, %new_type{id: new_id} = new_row) do
+    Enum.map(rows, fn
+      %^new_type{id: ^new_id} -> new_row
+      row -> row
+    end)
+  end
+
+  defp without_row(rows, %new_type{id: new_id}) do
+    Enum.reject(rows, &match?(%^new_type{id: ^new_id}, &1))
   end
 
   # The gate a revocation passes, asked the same way by the verb and by a batch's revocation write

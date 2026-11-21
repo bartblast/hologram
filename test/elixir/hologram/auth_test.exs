@@ -9,11 +9,18 @@ defmodule Hologram.AuthTest do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
+  alias Hologram.DB.SetLock
   alias Hologram.Entity
   alias Hologram.MisuseError
   alias Hologram.Policy
+  alias Hologram.Policy.Evaluator
   alias Hologram.Sync.Carry
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module26, as: Channel
+  alias Hologram.Test.Fixtures.Entity.Module28, as: Message
+  alias Hologram.Test.Fixtures.Entity.Module29, as: Label
+  alias Hologram.Test.Fixtures.Entity.Module32, as: CountedChannel
+  alias Hologram.Test.Fixtures.Entity.Module33, as: CountedMessage
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module10
   alias Hologram.Test.Fixtures.Policy.Module11
@@ -39,6 +46,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module49
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module8
+  alias Hologram.Test.Fixtures.Policy.Module9, as: SelfParent
   alias Hologram.Test.Fixtures.Policy.Readers.Module20, as: ReadersModule20
   alias Hologram.Test.Fixtures.Policy.Readers.Module21, as: ReadersModule21
   alias Hologram.Test.Fixtures.Policy.Readers.Module25, as: ReadersModule25
@@ -1507,6 +1515,276 @@ defmodule Hologram.AuthTest do
       DB.update!(PolicyCard, flagged.id, rank: 4)
 
       assert can?(nil, :read, board, :stored)
+    end
+  end
+
+  describe "after_checker/2" do
+    defp create_channel(name \\ "general") do
+      %{name: name}
+      |> Channel.new()
+      |> DB.create!()
+    end
+
+    defp create_message(channel, body) do
+      %{body: body, channel_id: channel && channel.id, position: 1}
+      |> Message.new()
+      |> DB.create!()
+    end
+
+    defp create_named_label(name) do
+      %{name: name}
+      |> Label.new()
+      |> DB.create!()
+    end
+
+    defp create_target(public) do
+      %{public: public}
+      |> Module1.new()
+      |> DB.create!()
+    end
+
+    defp stored(%entity_type{id: id}), do: EntityOperations.get(entity_type, id)
+
+    # Whether the given exact clauses hold for the given stored row under the given change.
+    defp holds_after?(clauses, row, values, edges \\ %{}, source \\ :stored) do
+      new_row = after_row(row, values, %{}, edges)
+      rule = %{exact: %{predicates: clauses}, predicates: [], to: nil, via: nil}
+
+      Evaluator.rule_matches?(rule, row, new_row, nil, after_checker(new_row, source))
+    end
+
+    defp none_pinned(source) do
+      [{:none, {source, [{:body, :==, "pinned"}]}}]
+    end
+
+    defp any_pinned(source) do
+      [{:any, {source, [{:body, :==, "pinned"}]}}]
+    end
+
+    test "sees a row of the set changing to a value" do
+      message = create_message(create_channel(), "plain")
+
+      refute holds_after?(none_pinned({:outer, 1, [:channel, :messages]}), message, %{
+               body: "pinned"
+             })
+    end
+
+    test "sees a row of the set changing away from a value" do
+      message = create_message(create_channel(), "pinned")
+
+      assert holds_after?(none_pinned({:outer, 1, [:channel, :messages]}), message, %{
+               body: "plain"
+             })
+    end
+
+    test "reads the stored set from the stored row" do
+      message = create_message(create_channel(), "plain")
+
+      assert holds_after?(none_pinned([:channel, :messages]), message, %{body: "pinned"})
+    end
+
+    test "sees a row joining the set it moves into" do
+      target = create_channel("target")
+      message = create_message(create_channel("source"), "pinned")
+
+      assert holds_after?(any_pinned({:outer, 1, [:channel, :messages]}), message, %{
+               channel_id: target.id
+             })
+    end
+
+    test "leaves a row out of the set it moves away from" do
+      channel = create_channel()
+      label = create_named_label("shared")
+      message = create_message(channel, "pinned")
+      other = create_message(channel, "plain")
+
+      EntityOperations.add_relationship(Message, message.id, :labels, label.id)
+      EntityOperations.add_relationship(Message, other.id, :labels, label.id)
+
+      refute holds_after?(
+               any_pinned({:outer, 1, [:labels, :messages, :channel, :messages]}),
+               stored(message),
+               %{channel_id: nil}
+             )
+    end
+
+    test "follows a reference to the changed row as it will be" do
+      channel = create_channel("old")
+      create_message(channel, "plain")
+
+      clauses = [
+        {:any, {{:outer, 1, [:messages]}, [{[:channel, :name], :==, "new"}]}}
+      ]
+
+      assert holds_after?(clauses, stored(channel), %{name: "new"})
+    end
+
+    test "applies an edge the call adds" do
+      label = create_named_label("urgent")
+      message = create_message(create_channel(), "plain")
+      clauses = [{:any, {{:outer, 1, [:labels]}, [{:name, :==, "urgent"}]}}]
+
+      refute holds_after?(clauses, message, %{})
+      assert holds_after?(clauses, message, %{}, %{{:labels, label.id} => :add})
+    end
+
+    test "applies an edge the call deletes" do
+      label = create_named_label("urgent")
+      message = create_message(create_channel(), "plain")
+      EntityOperations.add_relationship(Message, message.id, :labels, label.id)
+      clauses = [{:any, {{:outer, 1, [:labels]}, [{:name, :==, "urgent"}]}}]
+
+      assert holds_after?(clauses, message, %{})
+      refute holds_after?(clauses, message, %{}, %{{:labels, label.id} => :delete})
+    end
+
+    test "changes nothing for an add already stored or a delete not stored" do
+      kept = create_named_label("urgent")
+      absent = create_named_label("other")
+      message = create_message(create_channel(), "plain")
+      EntityOperations.add_relationship(Message, message.id, :labels, kept.id)
+      clauses = [{:any, {{:outer, 1, [:labels]}, [{:name, :==, "urgent"}]}}]
+
+      assert holds_after?(clauses, message, %{}, %{
+               {:labels, kept.id} => :add,
+               {:labels, absent.id} => :delete
+             })
+    end
+
+    test "leaves out an added edge's target that is gone" do
+      message = create_message(create_channel(), "plain")
+      edges = %{{:labels, Entity.generate_id()} => :add}
+
+      assert holds_after?([{:none, {{:outer, 1, [:labels]}, []}}], message, %{}, edges)
+    end
+
+    test "overrides a stored pair by the call's edge from the other side of the set" do
+      channel = create_channel()
+      label = create_named_label("shared")
+      message = create_message(channel, "pinned")
+      other = create_message(channel, "plain")
+      EntityOperations.add_relationship(Message, message.id, :labels, label.id)
+      EntityOperations.add_relationship(Message, other.id, :labels, label.id)
+
+      source = {:outer, 1, [:channel, :messages, :labels, :messages]}
+
+      assert holds_after?(any_pinned(source), message, %{})
+      refute holds_after?(any_pinned(source), message, %{}, %{{:labels, label.id} => :delete})
+    end
+
+    test "carries the change into a nested quantifier" do
+      label = create_named_label("urgent")
+      message = create_message(create_channel(), "plain")
+
+      clauses = [
+        {:any,
+         {{:outer, 1, [:channel, :messages]}, [{:any, {[:labels], [{:name, :==, "urgent"}]}}]}}
+      ]
+
+      assert holds_after?(clauses, message, %{}, %{{:labels, label.id} => :add})
+    end
+
+    test "counts a derived field over the set as the change leaves it" do
+      put_derived_definitions([CountedChannel, CountedMessage])
+
+      target =
+        %{name: "target"}
+        |> CountedChannel.new()
+        |> DB.create!()
+
+      message =
+        %{body: "plain", position: 1}
+        |> CountedMessage.new()
+        |> DB.create!()
+
+      clauses = [{{:outer, 1, [:channel, :message_count]}, :==, 1}]
+
+      assert holds_after?(clauses, stored(message), %{channel_id: target.id})
+    end
+
+    test "holds the set of a none read whole under :held" do
+      message = create_message(create_channel(), "plain")
+
+      assert holds_after?(
+               none_pinned({:outer, 1, [:channel, :messages]}),
+               message,
+               %{body: "other"},
+               %{},
+               :held
+             )
+
+      {class_key, object_key} = SetLock.keys(Channel, message.channel_id)
+
+      statement =
+        "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND objsubid = 2 " <>
+          "AND pid = pg_backend_pid() AND mode = 'ExclusiveLock' " <>
+          "AND classid = $1::bigint::oid AND objid = $2::bigint::oid"
+
+      unsigned = fn key -> if key < 0, do: key + 4_294_967_296, else: key end
+
+      assert {:ok, %Postgrex.Result{rows: [[1]]}} =
+               Connection.query(statement, [unsigned.(class_key), unsigned.(object_key)])
+    end
+
+    test "asks a role about the row the new reference leads to" do
+      user = create_user("after-role@example.com")
+      granted = create_target(false)
+      other = create_target(false)
+      grant_role(user, :editor, granted)
+
+      row = %Module5{id: Entity.generate_id(), parent_id: other.id}
+      new_row = after_row(row, %{parent_id: granted.id}, %{}, %{})
+      checker = after_checker(new_row, :stored)
+
+      assert checker.({:rel, [:parent], [:editor]}, new_row, user.id)
+
+      refute checker.(
+               {:rel, [:parent], [:editor]},
+               after_row(row, %{}, %{}, %{}),
+               user.id
+             )
+    end
+
+    test "asks a delegated rule about the stored row when the chain leads back to the changed row" do
+      row =
+        %{archived: true}
+        |> SelfParent.new()
+        |> DB.create!()
+
+      new_row = after_row(row, %{archived: false, parent_id: row.id}, %{}, %{})
+      checker = after_checker(new_row, :stored)
+
+      refute checker.({:via, :update, [:parent]}, new_row, nil)
+    end
+
+    test "asks a delegated rule about the row the new reference leads to" do
+      public = create_target(true)
+      hidden = create_target(false)
+
+      row = %Module5{id: Entity.generate_id(), parent_id: hidden.id}
+      new_row = after_row(row, %{parent_id: public.id}, %{}, %{})
+      checker = after_checker(new_row, :stored)
+
+      assert checker.({:via, :read, [:parent]}, new_row, nil)
+      refute checker.({:via, :read, [:parent]}, after_row(row, %{}, %{}, %{}), nil)
+    end
+  end
+
+  describe "after_row/4" do
+    test "puts the values and keeps the edges" do
+      edges = %{{:labels, "id"} => :add}
+
+      new_row =
+        after_row(%Module14{email: "old@example.com"}, %{email: "new@example.com"}, %{}, edges)
+
+      assert new_row.email == "new@example.com"
+      assert new_row.__meta__.relationship_ops == edges
+    end
+
+    test "moves a counter by its amount" do
+      row = %Message{position: 3}
+
+      assert after_row(row, %{}, %{position: -1}, %{}).position == 2
     end
   end
 
