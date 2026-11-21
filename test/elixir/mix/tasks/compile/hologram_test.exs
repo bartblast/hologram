@@ -24,6 +24,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Policy.Edges
   alias Hologram.Query
   alias Hologram.Reflection
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity3, as: ImplEntity3
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity4, as: ImplEntity4
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Helper, as: ImplHelper
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page1, as: ImplPage1
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page6, as: ImplPage6
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Protocol, as: ImplProtocol
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct1, as: ImplStruct1
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct4, as: ImplStruct4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, as: QueryExtractorModule53
   alias Hologram.Test.Fixtures.Component.Module40, as: ComponentModule40
   alias Hologram.Test.Fixtures.Component.Module43, as: ComponentModule43
@@ -452,6 +460,40 @@ defmodule Mix.Tasks.Compile.HologramTest do
   defp count_pages_holding(module) do
     Enum.count(cache_state().data_layer.pages, fn {_page_module, reach} ->
       MapSet.member?(reach.modules, module)
+    end)
+  end
+
+  # Compiles without the implementation's beam, puts it back, compiles again, and checks that the
+  # page then names the entity, as a cold compile has it.
+  defp assert_added_impl_names(impl, page, entity, opts) do
+    beam_path = :code.which(impl)
+    bytecode = File.read!(beam_path)
+
+    remove_beam(impl)
+    run(opts)
+
+    refute entity in cache_state().data_layer.pages[page].modules
+
+    File.write!(beam_path, bytecode)
+    report_compiled(impl)
+    run(opts)
+
+    assert entity in cache_state().data_layer.pages[page].modules
+    assert_data_layer_pages_match_cold(opts)
+  end
+
+  defp assert_data_layer_pages_match_cold(opts) do
+    pages = cache_state().data_layer.pages
+
+    start_cold(opts)
+    run(opts)
+
+    assert cache_state().data_layer.pages == pages
+  end
+
+  defp count_pages_holding_impl_module(module) do
+    Enum.count(cache_state().data_layer.pages, fn {_page_module, reach} ->
+      MapSet.member?(reach.impl_modules, module)
     end)
   end
 
@@ -2038,6 +2080,89 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       assert cache_state().data_layer.pages == pages
+    end
+
+    # Twice per page holding the module, on the runtime's copy and on the unsplit graph: a struct's
+    # implementation is in no page's bundle, so no bundle is rebuilt for it.
+    test "an edit of an implementation lists the pages that can dispatch to it", %{opts: opts} do
+      run(opts)
+      impl = Module.safe_concat(ImplProtocol, ImplStruct1)
+
+      assert count_pages_holding_impl_module(impl) == 1
+
+      fake_edit(impl)
+
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) == 2
+      assert_data_layer_pages_match_cold(opts)
+    end
+
+    test "an edit of a function only an implementation calls lists the pages reaching it", %{
+      opts: opts
+    } do
+      run(opts)
+
+      assert count_pages_holding_impl_module(ImplHelper) == 1
+
+      fake_edit(ImplHelper)
+
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) == 2
+      assert_data_layer_pages_match_cold(opts)
+    end
+
+    test "a removed implementation stops naming what it named", %{opts: opts} do
+      run(opts)
+      impl = Module.safe_concat(ImplProtocol, ImplStruct1)
+
+      assert ImplEntity3 in cache_state().data_layer.pages[ImplPage1].modules
+
+      remove_beam(impl)
+      run(opts)
+
+      refute ImplEntity3 in cache_state().data_layer.pages[ImplPage1].modules
+      assert_data_layer_pages_match_cold(opts)
+    end
+
+    test "an added implementation brings what it names", %{opts: opts} do
+      impl = Module.safe_concat(ImplProtocol, ImplStruct1)
+
+      assert_added_impl_names(impl, ImplPage1, ImplEntity3, opts)
+    end
+
+    test "an added implementation of a protocol only the runtime dispatches brings what it names",
+         %{opts: opts} do
+      impl = Module.safe_concat(String.Chars, ImplStruct4)
+
+      assert_added_impl_names(impl, ImplPage6, ImplEntity4, opts)
+    end
+
+    test "a kept data layer with no implementation seeds lists every page", %{opts: opts} do
+      run(opts)
+
+      %{data_layer: data_layer} = cache_state()
+
+      data_layer
+      |> Map.delete(:impl_seeds)
+      |> Cache.put_data_layer()
+
+      fake_edit(PageModule18)
+
+      # Twice per page for the data layer, and once for the bundle of the edited page.
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) ==
+               2 * @num_pages + 1
+    end
+
+    test "a change of what the implementation walks start with lists every page", %{opts: opts} do
+      run(opts)
+
+      %{data_layer: data_layer} = cache_state()
+      seeds = %{data_layer.impl_seeds | runtime_protocol_vertices: []}
+      Cache.put_data_layer(%{data_layer | impl_seeds: seeds})
+
+      fake_edit(PageModule18)
+
+      # Twice per page for the data layer, and once for the bundle of the edited page.
+      assert count_calls({CallGraph, :list_page_mfas, 5}, fn -> run(opts) end) ==
+               2 * @num_pages + 1
     end
 
     test "a removed page is forgotten from the kept page reach", %{opts: opts} do

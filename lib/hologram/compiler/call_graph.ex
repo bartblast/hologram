@@ -1078,6 +1078,15 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the protocol the given implementation implements, from the module info PLT or, when it
+  holds no literal, from the implementation itself.
+  """
+  @spec implemented_protocol(module, PLT.t() | nil) :: module
+  def implemented_protocol(impl, module_info_plt) do
+    fact(module_info_plt, impl, :implemented_protocol) || impl.__impl__(:protocol)
+  end
+
+  @doc """
   Returns the vertices with an edge to one of the given vertices.
   """
   @spec list_callers(t, [vertex]) :: MapSet.t(vertex)
@@ -1511,6 +1520,15 @@ defmodule Hologram.Compiler.CallGraph do
       | added_modules: Enum.filter(diff.added_modules, graph_module?),
         edited_modules: Enum.filter(diff.edited_modules, graph_module?)
     }
+  end
+
+  @doc """
+  Returns `page_impl_seeds/2` of the given call graph, read inside its agent so that the graph is
+  not copied out.
+  """
+  @spec page_impl_seeds(t) :: page_impl_seeds
+  def page_impl_seeds(%{pid: pid, module_info_plt: module_info_plt}) do
+    read_graph(pid, &page_impl_seeds(&1, module_info_plt))
   end
 
   @doc """
@@ -2456,10 +2474,6 @@ defmodule Hologram.Compiler.CallGraph do
   defp implementation_of_graph_protocol?(module, graph_modules, module_info_plt) do
     flag?(module_info_plt, module, :protocol_implementation?) and
       MapSet.member?(graph_modules, implemented_protocol(module, module_info_plt))
-  end
-
-  defp implemented_protocol(impl, module_info_plt) do
-    fact(module_info_plt, impl, :implemented_protocol) || impl.__impl__(:protocol)
   end
 
   defp incoming_edges(%{pid: pid}, vertex) do
