@@ -521,9 +521,9 @@ defmodule Hologram.Sync.SessionTest do
       refute_received {:sync_synced, :all, _cursor}
     end
 
-    # The batch is read while the gap is told, so it reaches the session before the catch-up is
-    # over - and below the edge read after it, so it may be in some of what the catch-up read and
-    # not in the rest.
+    # The batch reaches the session before the catch-up is over, dated at the gap's edge, so it is
+    # told - and below the edge read once the catch-up is over, so it may be in some of what the
+    # catch-up read and not in the rest.
     test "tells a batch routed during the catch-up after the marker, its rows whole" do
       task = create("before")
       test_pid = self()
@@ -555,6 +555,66 @@ defmodule Hologram.Sync.SessionTest do
 
       assert id == task.id
       assert data.c == "after"
+    end
+
+    # The batch's rows are read before the gap's edge, and a transaction committing in between
+    # writes the row again - which the gap holds, and the chunk's rows hold too. Told after the
+    # marker, the batch would put the row back as it stood before that transaction, under the edge.
+    test "passes over a batch routed during the catch-up that committed wholly below the edge" do
+      row = create("before")
+
+      batch = [logged(:patch_entity, Module2, row.id, %{"c" => "before"}, {100, 1})]
+      part = Live.part_now(batch, nil, Edges.index(), QueryCache.synced_types(), {100, 0}, 100)
+
+      DB.update!(Module2, row.id, c: "after")
+
+      gap = [logged(:patch_entity, Module2, row.id, %{"c" => "after"}, {150, 1})]
+
+      session =
+        start_session!(
+          read_gap: fn ->
+            send(self(), {:live, part})
+
+            {:ok, gap, 200}
+          end
+        )
+
+      assert_receive {:sync_deltas, cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert id == row.id
+      assert data.c == "after"
+      assert cursor == Cursor.encode(150, 1, @policy_hash, @types_hash)
+
+      assert_receive {:sync_synced, :all, all_cursor}
+      assert all_cursor == Cursor.encode(200, 0, @policy_hash, @types_hash)
+
+      await_live(session)
+      refute_received {:sync_deltas, _cursor, _deltas, _seq}
+    end
+
+    # Its last transaction can have committed after the gap was read, which then holds nothing of it.
+    test "tells a batch routed during the catch-up that reaches the edge" do
+      row = create("after")
+
+      batch = [
+        logged(:patch_entity, Module2, row.id, %{"c" => "before"}, {190, 1}),
+        logged(:patch_entity, Module2, row.id, %{"c" => "after"}, {200, 1})
+      ]
+
+      part = Live.part_now(batch, nil, Edges.index(), QueryCache.synced_types(), {190, 0}, 200)
+
+      start_session!(
+        read_gap: fn ->
+          send(self(), {:live, part})
+
+          {:ok, [], 200}
+        end
+      )
+
+      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_deltas, cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert id == row.id
+      assert data.c == "after"
+      assert cursor == Cursor.encode(200, 0, @policy_hash, @types_hash)
     end
   end
 
@@ -791,8 +851,8 @@ defmodule Hologram.Sync.SessionTest do
              end)
     end
 
-    # The batch is read after the gap, which holds nothing of it, and below the edge read once the
-    # catch-up is over.
+    # The batch is dated at the gap's edge, which holds nothing of it, so it is told - and below the
+    # edge read once the catch-up is over.
     test "drops by hash a row a batch routed during the catch-up hid", %{
       child: child,
       parent: parent
@@ -823,8 +883,8 @@ defmodule Hologram.Sync.SessionTest do
 
       assert_receive {:sync_synced, :all, _cursor}
 
-      # The held ids of both types are read after the parent went private, so neither row is held:
-      # the batch tells both by hash, each type in a frame of its own.
+      # The held ids of both types are read after the parent went private, so neither row is held,
+      # and the batch is below the trust edge: it tells both by hash, each type in a frame of its own.
       assert_receive {:sync_deltas, _cursor, first, nil}
       assert_receive {:sync_deltas, _cursor, second, nil}
 
@@ -841,7 +901,8 @@ defmodule Hologram.Sync.SessionTest do
 
     # The chunk's search walks the tables as they stand once the child moved, so it no longer
     # reaches the child from the parent - and the move's own batch, routed meanwhile, finds the
-    # child hidden and not held.
+    # child hidden and not held. The move commits after the gap was read, so its transaction is at
+    # or above the gap's edge, and its batch is told.
     test "drops by hash a row its parent's going private hid that then moved", %{
       child: child,
       parent: parent
@@ -872,7 +933,7 @@ defmodule Hologram.Sync.SessionTest do
         | old: %{"parent_id" => parent.id}
       }
 
-      route([moved], {1, 0})
+      route([moved], {301, 0})
       send(session, :moved)
 
       chunk_frames = await_frames()
