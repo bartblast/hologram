@@ -9,6 +9,7 @@ defmodule Hologram.Migration.Value do
   # model at the op's point in the file's history, which isn't known here. The term reuses the
   # tags of Hologram.Entity.Derived's definitions where they mean the same.
 
+  alias Hologram.DB.Codec
   alias Hologram.Entity.Model
   alias Hologram.Migration.Value.Resolver
   alias Hologram.Query.Expression
@@ -114,10 +115,20 @@ defmodule Hologram.Migration.Value do
 
   @doc """
   Returns the given constant backfill of the given type as it's stored: a uuid in lowercase, the
-  only spelling the database codec and the browser compare, whichever case the file wrote it in.
+  only spelling the database codec and the browser compare, whichever case the file wrote it in,
+  and a datetime in UTC or a time at microsecond precision, as the database gives them back. A
+  value that isn't of the type stays as it is, for the check to refuse.
   """
   @spec normalize_constant(any, atom) :: any
   def normalize_constant(value, :uuid) when is_binary(value), do: String.downcase(value)
+
+  def normalize_constant(value, type) when type in [:datetime, :time] do
+    if Resolver.storable?(value) and Resolver.fits_type?(value, type) do
+      Codec.encode(value, type)
+    else
+      value
+    end
+  end
 
   def normalize_constant(value, _type), do: value
 

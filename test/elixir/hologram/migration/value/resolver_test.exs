@@ -241,6 +241,66 @@ defmodule Hologram.Migration.Value.ResolverTest do
                  "relationships, so read through owner, not owner_id"
     end
 
+    test "refuses reading through a to-one sharing its name with an attribute" do
+      model =
+        update_in(
+          @model.entities[MyApp.Trip].attributes,
+          &[{:owner, :string, [optional: true]} | &1]
+        )
+
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          resolve!(
+            %Value{term: {:name, [:owner, :name]}},
+            model,
+            MyApp.Trip,
+            attribute_target(:string)
+          )
+        end
+
+      assert error.message =~ "both a relationship and a field at this op"
+    end
+
+    test "refuses reading through a to-one named like another's reference" do
+      model =
+        update_in(
+          @model.entities[MyApp.Trip].relationships,
+          &[{:owner_id, MyApp.User, [optional: true]} | &1]
+        )
+
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          resolve!(
+            %Value{term: {:name, [:owner_id, :name]}},
+            model,
+            MyApp.Trip,
+            attribute_target(:string)
+          )
+        end
+
+      assert error.message =~ "both a relationship and a field at this op"
+    end
+
+    test "refuses a set sharing its name with an attribute" do
+      model =
+        update_in(
+          @model.entities[MyApp.Trip].attributes,
+          &[{:tags, :string, [optional: true]} | &1]
+        )
+
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          resolve!(
+            %Value{term: {:count, {:relationship, [:tags]}}},
+            model,
+            MyApp.Trip,
+            attribute_target(:integer)
+          )
+        end
+
+      assert error.message =~ "both a relationship and a field at this op"
+    end
+
     test "refuses a hop to a type the model no longer has" do
       model = update_in(@model.entities, &Map.delete(&1, MyApp.User))
 
@@ -416,6 +476,32 @@ defmodule Hologram.Migration.Value.ResolverTest do
         end
 
       assert error.message =~ "which isn't a value of type :date"
+    end
+
+    test "holds a datetime in UTC at microsecond precision, as a column gives it back" do
+      offset = %{
+        ~U[2026-01-01 12:00:00Z]
+        | utc_offset: 3600,
+          zone_abbr: "CET",
+          time_zone: "Europe/Warsaw"
+      }
+
+      term = {:coalesce, [{:name, [:created_at]}, {:value, offset}]}
+
+      assert %{term: {:coalesce, [_field, {:value, value, :datetime}]}} =
+               resolved(term, attribute_target(:datetime))
+
+      assert value == ~U[2026-01-01 11:00:00.000000Z]
+    end
+
+    test "holds a time at microsecond precision, as a column gives it back" do
+      term = {:coalesce, [{:name, [:starts]}, {:value, ~T[10:00:00]}]}
+      model = put_in(@model.entities[MyApp.Trip].attributes, [{:starts, :time, []}])
+
+      assert %{term: {:coalesce, [_field, {:value, value, :time}]}} =
+               resolve!(%Value{term: term}, model, MyApp.Trip, attribute_target(:time))
+
+      assert value == ~T[10:00:00.000000]
     end
 
     test "refuses a string PostgreSQL can't store" do

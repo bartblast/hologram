@@ -233,6 +233,29 @@ defmodule Hologram.Migration.ValueTest do
     end
   end
 
+  describe "normalize_constant/2" do
+    test "lowercases a uuid" do
+      assert Value.normalize_constant("018F0000-AAAA", :uuid) == "018f0000-aaaa"
+    end
+
+    test "holds a datetime in UTC at microsecond precision" do
+      assert Value.normalize_constant(~U[2026-01-01 12:00:00Z], :datetime) ==
+               ~U[2026-01-01 12:00:00.000000Z]
+    end
+
+    test "holds a time at microsecond precision" do
+      assert Value.normalize_constant(~T[10:00:00], :time) == ~T[10:00:00.000000]
+    end
+
+    test "leaves a value that isn't of the type for the check to refuse" do
+      assert Value.normalize_constant("nope", :datetime) == "nope"
+    end
+
+    test "leaves other types alone" do
+      assert Value.normalize_constant("A", :string) == "A"
+    end
+  end
+
   describe "max_position/0" do
     test "is the largest position at takes" do
       assert Value.max_position() == 1_000_000

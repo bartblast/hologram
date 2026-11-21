@@ -6,6 +6,7 @@ defmodule Hologram.Migration.Value.Resolver do
   # carries it. An enum's type names the attribute it belongs to, because PostgreSQL gives each
   # enum attribute a type of its own, so two enums holding the same values still differ.
 
+  alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.Entity.Validator
   alias Hologram.Migration.Value
@@ -130,6 +131,19 @@ defmodule Hologram.Migration.Value.Resolver do
     end
   end
 
+  # A row holds its related data under the relationship's name, so a field of that name would be
+  # read as the related row. The model allows the pair mid-history, while a field is being
+  # converted into a relationship.
+  defp check_unambiguous!(name, owner, entry, context) do
+    if relationship(entry, name) != nil and field?(entry, name) do
+      refuse!(
+        context,
+        "reads through #{inspect(name)} of #{inspect(owner)}, which is both a relationship and " <>
+          "a field at this op - rename one of them in an op above the backfill"
+      )
+    end
+  end
+
   defp entry!(owner, context) do
     case context.model.entities do
       %{^owner => entry} -> entry
@@ -184,7 +198,7 @@ defmodule Hologram.Migration.Value.Resolver do
 
   defp fit_value!(value, type, context) do
     if storable?(value) and Validator.attribute_value_valid?(value, type) do
-      value
+      stored_form(value, type)
     else
       refuse_value!(value, type, context)
     end
@@ -247,6 +261,8 @@ defmodule Hologram.Migration.Value.Resolver do
 
   defp name_type!(owner, [hop | rest], expected, context) do
     entry = entry!(owner, context)
+
+    check_unambiguous!(hop, owner, entry, context)
 
     case relationship(entry, hop) do
       {^hop, [_target], _opts} ->
@@ -474,6 +490,8 @@ defmodule Hologram.Migration.Value.Resolver do
   defp set_target!(owner, [name], context) do
     entry = entry!(owner, context)
 
+    check_unambiguous!(name, owner, entry, context)
+
     case relationship(entry, name) do
       {^name, [target], _opts} ->
         target
@@ -501,6 +519,8 @@ defmodule Hologram.Migration.Value.Resolver do
   defp set_target!(owner, [hop | rest], context) do
     entry = entry!(owner, context)
 
+    check_unambiguous!(hop, owner, entry, context)
+
     case relationship(entry, hop) do
       {^hop, [_target], _opts} ->
         refuse!(
@@ -524,6 +544,12 @@ defmodule Hologram.Migration.Value.Resolver do
   defp spell_type({:reference, target}), do: "a reference to #{inspect(target)}"
 
   defp spell_type(type), do: "a value of type #{inspect(type)}"
+
+  # A datetime in UTC and a time at microsecond precision, as the database gives them back, so a
+  # value here compares equal to the same value read from a column.
+  defp stored_form(value, type) when type in [:datetime, :time], do: Codec.encode(value, type)
+
+  defp stored_form(value, _type), do: value
 
   defp system_type(name) do
     case List.keyfind(Entity.system_attributes(), name, 0) do
