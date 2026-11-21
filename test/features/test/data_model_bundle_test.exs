@@ -15,8 +15,6 @@ defmodule HologramFeatureTests.DataModelBundleTest do
   # The review table truncates too: its foreign key to the product table makes Postgres reject
   # truncating the referenced table alone.
   setup do
-    await_evaluator_drain()
-
     tables =
       Enum.map_join([Product, Review], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
