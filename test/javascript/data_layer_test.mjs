@@ -166,6 +166,21 @@ describe("DataLayer", () => {
       assert.deepStrictEqual(result, Type.integer(1));
     });
 
+    it("spells no key for a count once the whole pot is complete", () => {
+      LocalDatabase.markAllSynced();
+
+      const spell = sinon.spy(QuerySpelling, "spell");
+
+      DataLayer.answerDerivedQuery(
+        "MyApp.Complete",
+        Type.atom("count"),
+        [],
+        notDoneCount(),
+      );
+
+      sinon.assert.notCalled(spell);
+    });
+
     // The types the server carried with the count, under the count's own key.
     const countReading = (module, types) => {
       LocalDatabase.syncCountTypes = {

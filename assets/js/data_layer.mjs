@@ -753,6 +753,11 @@ export default class DataLayer {
       return null;
     }
 
+    // Every count is local once the client holds every row, so no key needs spelling.
+    if (LocalDatabase.isAllSynced()) {
+      return null;
+    }
+
     const key = `${module}/${name.value}/${QuerySpelling.spell(term)}`;
 
     if ($.#countsLocally(key)) {
@@ -763,10 +768,6 @@ export default class DataLayer {
   }
 
   static #countsLocally(key) {
-    if (LocalDatabase.isAllSynced()) {
-      return true;
-    }
-
     const types = LocalDatabase.syncCountTypes[key];
 
     return (
