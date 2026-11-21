@@ -11,8 +11,9 @@ defmodule HologramFeatureTests.CreatedRowsTest do
 
   # The browser creates rows it shows at once, and keeps them once the server confirms their batch,
   # until the page reloads. Rows its user may not read leave it then, so its local queries don't
-  # list them and its rules don't read them. A reload isn't checked: the browser never writes a
-  # confirmed batch's rows to disk, so a reload drops them with or without the server's word.
+  # list them and its rules don't read them. A reload isn't checked: the browser writes a confirmed
+  # batch's row its user may not read to disk only when a tab taking the lead finds the store out of
+  # step with it, so a reload almost always drops the row even before the fix.
   setup do
     await_evaluator_drain()
 

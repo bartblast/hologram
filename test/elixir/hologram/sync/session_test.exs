@@ -498,6 +498,31 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, _cursor, [%{id: _id, op: :put_entity}], 5}
     end
 
+    # The client went away before the batch's answer, so its create is still pending and it holds no
+    # row under the id. Only a drop by id claiming the batch's number lands the create, so the
+    # answer to the batch sent again files nothing. A drop by hash claims no number.
+    test "tells the client to drop a row its own batch in the gap created that its user may not read" do
+      hidden = DB.create!(PolicyModule1.new())
+
+      gap = [
+        logged(
+          :put_entity,
+          PolicyModule1,
+          hidden.id,
+          %{"public" => false},
+          {300, 1},
+          ref(@replica_id, 9)
+        )
+      ]
+
+      start_session!(applied_seq: 3, gap: gap, replica_id: @replica_id)
+
+      assert_receive {:sync_deltas, _cursor, deltas, 9}, 1_000
+      assert deltas == [Frame.unsync_entity(hidden.id, PolicyModule1)]
+
+      refute_receive {:sync_deltas, _cursor, _deltas, nil}, 100
+    end
+
     test "joins the node's sessions before it reads what its user may read" do
       test_pid = self()
       read_ids = read_ids_in_sandbox()

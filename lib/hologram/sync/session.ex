@@ -394,8 +394,10 @@ defmodule Hologram.Sync.Session do
   # And a row the client holds that its user lost before the read is missing from it, so every row
   # the gap may have moved out of the user's reach that the session doesn't take the client to hold
   # is told by hash (see `Hologram.Sync.Frame.unsync_hashed/3`): the client drops it if it has it,
-  # and learns nothing of it if not. Grants are the exception, told by the list of the ones the
-  # client may keep (see `tell_part/3`).
+  # and learns nothing of it if not. Grants are an exception, told by the list of the ones the
+  # client may keep (see `tell_part/3`), and so are the rows the client's own batches created, told
+  # by id: the client knows their ids already, and only a frame naming them can claim the batch's
+  # number, which lands a create still pending (see `Hologram.Sync.Pot.decide/3`).
   #
   # The batches that reach the session meanwhile queue behind this callback, and are told after it
   # (see `trusts_held?/2`).
@@ -563,7 +565,8 @@ defmodule Hologram.Sync.Session do
 
   # What a chunk settled, given what the session took the client to hold before it: every row the
   # user may read is handed over whole, every held row it checked that the user may not is
-  # dropped, and every other row it may have moved out of the user's reach is told by hash.
+  # dropped, and every other row it may have moved out of the user's reach is told by hash, or by
+  # id when the client's own batch created it.
   defp settle(settled, part, pot) do
     Enum.reduce(part.checked, settled, fn {entity_type, packed_ids}, acc ->
       {held, _not_held} = Held.split(pot.held, entity_type, packed_ids)
