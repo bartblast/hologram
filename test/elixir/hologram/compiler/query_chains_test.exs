@@ -25,6 +25,10 @@ defmodule Hologram.Compiler.QueryChainsTest do
     assert collected != [],
            "no query chain was collected from #{inspect(module)}.#{function}/#{arity}"
 
+    # A chain whose root is no entity type passes without its stages being checked.
+    assert Enum.all?(collected, &Hologram.Reflection.entity?(&1.root, nil)),
+           "a query chain from #{inspect(module)}.#{function}/#{arity} has no entity type as its root"
+
     Enum.each(collected, &validate!(&1, nil))
   end
 
