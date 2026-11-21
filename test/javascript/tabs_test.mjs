@@ -1933,6 +1933,10 @@ describe("Tabs", () => {
         release();
         await waitForEventLoop();
 
+        // Handed the lead while it reads, or this would be a follower leaving.
+        assert.isTrue(Tabs.leader);
+        assert.isTrue(Tabs.takingLead);
+
         read({cursor: "place-2", owner: "u2", records: []});
         await waitForEventLoop();
 
