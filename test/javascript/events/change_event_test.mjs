@@ -194,7 +194,7 @@ describe("ChangeEvent", () => {
         currentTarget: form,
       };
 
-      const result = ChangeEvent.buildOperationParam(event);
+      const result = ChangeEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
