@@ -1154,9 +1154,10 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Builds Hologram runtime JavaScript source code. The given statement sets the client's data layer
-  constants (see `build_sync_constants_js/1`); it is taken rendered, since the compile task keeps
-  it with the runtime bundle it built.
+  Builds Hologram runtime JavaScript source code. A build that ships the data layer sets the
+  client's data layer constants in the data model bundle (see `build_data_model_js/1`), so the
+  runtime script carries none of the app's data model and a data model edit leaves it as it is. A
+  build that does not sets them to null here, and loads no data model bundle.
 
   The script starts the runtime once it has run. It waits for no page script: the runtime mounts
   the page when the scripts the page needs have announced themselves (see
@@ -1181,24 +1182,17 @@ defmodule Hologram.Compiler do
           PLT.t(),
           MapSet.t(mfa),
           keyword(String.t()),
-          String.t(),
           T.opts()
         ) :: String.t()
-  def build_runtime_js(
-        runtime_mfas,
-        ir_plt,
-        encode_plt,
-        async_mfas,
-        app_versions,
-        sync_constants_js,
-        opts
-      ) do
+  def build_runtime_js(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, opts) do
     js_dir = Keyword.fetch!(opts, :js_dir)
+    subsystem_keys = Keyword.fetch!(opts, :subsystems)
+    subsystems = Enum.map(subsystem_keys, &fetch_optional_runtime_subsystem!/1)
 
-    subsystems =
-      opts
-      |> Keyword.fetch!(:subsystems)
-      |> Enum.map(&fetch_optional_runtime_subsystem!/1)
+    # Set here only by a build without the data layer, so that the runtime does not wait for a data
+    # model bundle (see defineDataModel() in assets/js/hologram.mjs).
+    sync_constants_js =
+      if :data_layer in subsystem_keys, do: "", else: "\n\nglobalThis.Hologram.sync = null;"
 
     runtime_import_statements =
       subsystems
@@ -1257,9 +1251,7 @@ defmodule Hologram.Compiler do
 
     const startTime = PerformanceTimer.start();
 
-    globalThis.Hologram.config = #{client_config()};
-
-    #{sync_constants_js}
+    globalThis.Hologram.config = #{client_config()};#{sync_constants_js}
 
     ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}#{subsystem_handles}
 
@@ -1627,7 +1619,7 @@ defmodule Hologram.Compiler do
   Creates runtime bundle entry file. Requires the `:subsystems` option: the keys of the optional
   runtime subsystems to render.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_7/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_6/README.md
   """
   @spec create_runtime_entry_file(
           list(mfa),
@@ -1635,20 +1627,11 @@ defmodule Hologram.Compiler do
           PLT.t(),
           MapSet.t(mfa),
           keyword(String.t()),
-          String.t(),
           T.opts()
         ) :: T.file_path()
-  def create_runtime_entry_file(
-        runtime_mfas,
-        ir_plt,
-        encode_plt,
-        async_mfas,
-        app_versions,
-        sync_constants_js,
-        opts
-      ) do
+  def create_runtime_entry_file(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, opts) do
     runtime_mfas
-    |> build_runtime_js(ir_plt, encode_plt, async_mfas, app_versions, sync_constants_js,
+    |> build_runtime_js(ir_plt, encode_plt, async_mfas, app_versions,
       js_dir: opts[:js_dir],
       module_info_plt: opts[:module_info_plt],
       module_metadata: opts[:module_metadata],
@@ -2676,17 +2659,21 @@ defmodule Hologram.Compiler do
   client holds, the hash of the project's data model, the hash of the rules it was rendered with,
   the sync protocol version, and the user entity type.
 
-  What the runtime bundle was built against, said by the bundle itself. It has to be baked in
-  rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
+  The statement goes into the data model bundle (see `build_data_model_js/1`), which the build
+  writes next to the runtime bundle, so a data model edit leaves the runtime bundle as it is. The
+  constants say what the bundles were built against, said by a bundle itself. They have to be baked
+  in rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
   is stale, and a value the current server puts in the page would always agree with the current
   server.
 
   `null` when the APPLICATION declares no entity type - the sync constants carry no model hash
   then (see `build_sync_constants/3`) - which is the fact `application.ex` gates the database
   children on and `Handshake.check/1` refuses sync by. The three answer alike on purpose: the
-  bundle claims a data layer exactly when the server has one. Null rather than nothing, so a client reads one unambiguous value instead of
-  probing for a missing global - and rather than `{}`, which is truthy, so every "does this
-  bundle sync?" check would pass on a bundle that never syncs.
+  bundle claims a data layer exactly when the server has one. Null rather than nothing, so a
+  client reads one unambiguous value instead of probing for a missing global - and rather than
+  `{}`, which is truthy, so every "does this bundle sync?" check would pass on a bundle that never
+  syncs. Such a build ships no data layer, so the runtime script sets the null itself (see
+  `build_runtime_js/6`) and no data model bundle is written.
 
   This is NOT the same as the build's own `:entity_types` being empty, which says only that no
   page reaches a query, no type declares a rule or a role, and the model has no user entity type. Such an app HAS a database
@@ -2695,7 +2682,7 @@ defmodule Hologram.Compiler do
   can.
 
   The model is rendered from what the entity types declare when this is called, which is why the
-  compile task keeps the statement with the runtime bundle it built, and builds the constants and
+  compile task keeps the statement with the data layer it derived, and builds the constants and
   the statement together: the rules the model renders are the ones the policy hash was taken over
   only while nothing between the two moved them.
 
@@ -2914,7 +2901,7 @@ defmodule Hologram.Compiler do
   types their rules read through relationships, and the grant store when the model has one - and of
   every type the derived fields and inverses of those entries lead to, each the way that build
   bakes it, but for the terms among its defaults and constraints, which are serialized (see
-  `Hologram.Runtime.Serializer`) where the runtime script spells them as JavaScript.
+  `Hologram.Runtime.Serializer`) where the data model bundle spells them as JavaScript.
 
   What a server sends a client whose bundle was built with other rules but the same model, so it
   answers permission checks the way the server does without reloading. A whole entry rather than
@@ -4904,7 +4891,7 @@ defmodule Hologram.Compiler do
   # reported in - one spelling, written by the build and read back in the answer.
   #
   # The terms among them - a bound, a pattern's options - are written by the given function: as
-  # JavaScript for the runtime script, and serialized for a sync frame, which carries JSON.
+  # JavaScript for the data model bundle, and serialized for a sync frame, which carries JSON.
   defp render_constraints(entity_type, encode_term) do
     max_bytes = Validator.unique_string_max_bytes(entity_type)
 
@@ -4949,7 +4936,7 @@ defmodule Hologram.Compiler do
 
   # A pattern travels as its source and its options rather than as a compiled one: a compiled
   # pattern exists only inside the runtime that compiled it, and the encoded form of a Regex is a
-  # struct wrapping a :re.import/1 CALL, which this line sits above in the runtime script. The
+  # struct wrapping a :re.import/1 CALL, which this line sits above in the data model bundle. The
   # client compiles it once instead, which is what the import would have done anyway.
   #
   # The options travel as an ENCODED TERM rather than as their names, because not all of them are

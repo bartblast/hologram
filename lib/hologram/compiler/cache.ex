@@ -73,7 +73,7 @@ defmodule Hologram.Compiler.Cache do
   # What the data layer was derived from and what it rendered: the registered queries of every
   # component of the build, the definitions of its derived fields, what the data layer read of each
   # page's reach, the shapes of the queries server code writes by module, and the statement the
-  # runtime script sets the client's data layer constants with.
+  # data model bundle sets the client's data layer constants with.
   @type data_layer_state :: %{
           components: %{module => Compiler.component_queries()},
           derived: Compiler.derived_definitions(),
@@ -94,7 +94,6 @@ defmodule Hologram.Compiler.Cache do
           mfas: [mfa],
           dynamic_calls: CallGraph.runtime_dynamic_calls(),
           subsystems: [atom],
-          sync_constants_js: String.t(),
           types: MapSet.t(module)
         }
 
@@ -468,7 +467,7 @@ defmodule Hologram.Compiler.Cache do
   @doc """
   Keeps what the data layer was derived from and what it rendered: the registered queries of every
   component of the build, what the data layer read of each page's reach, and the statement the
-  runtime script sets the client's data layer constants with. nil forgets it, so that the next
+  data model bundle sets the client's data layer constants with. nil forgets it, so that the next
   compile derives the whole data layer again.
   """
   @spec put_data_layer(data_layer_state | nil) :: :ok

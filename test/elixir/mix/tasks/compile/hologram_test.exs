@@ -307,6 +307,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
     Hologram.MisuseError -> false
   end
 
+  # The data model bundle the kept data layer's statement makes for this build (see
+  # Hologram.Compiler.data_model_bundle/3).
+  defp data_model_bundle(opts) do
+    Compiler.data_model_bundle(
+      Cache.get().data_layer.sync_constants_js,
+      [:data_layer],
+      opts[:static_dir]
+    )
+  end
+
+  defp data_model_file_names(bundle) do
+    file_name = Path.basename(bundle.static_bundle_path)
+    [file_name, file_name <> ".gz"]
+  end
+
   # Only a component declaring a derived field can be refused - one without produces no terms, so
   # neither the extractor nor the validations have anything to object to. Asking the cheap question
   # first keeps this out of the suite's timing.
@@ -657,6 +672,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
     receive do
       {:ir_builds, modules} -> modules
     end
+  end
+
+  # The data model bundle files in the static dir, sorted.
+  defp list_data_model_files(opts) do
+    opts[:static_dir]
+    |> File.ls!()
+    |> Enum.filter(&String.starts_with?(&1, "data-model-"))
+    |> Enum.sort()
   end
 
   defp load_entity_fixture_app(app, modules) do
@@ -2204,11 +2227,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a compile keeps what the data layer derived", %{opts: opts} do
       run(opts)
 
-      %{data_layer: data_layer, runtime: runtime} = cache_state()
+      data_layer = cache_state().data_layer
 
       assert map_size(data_layer.pages) == @num_pages
       assert Enum.all?(opts[:component_modules], &Map.has_key?(data_layer.components, &1))
-      assert data_layer.sync_constants_js == runtime.sync_constants_js
+
+      assert File.read!(data_model_bundle(opts).static_bundle_path) =~
+               data_layer.sync_constants_js
     end
 
     test "the kept reach of a page names the components it reaches, itself included", %{
@@ -2545,6 +2570,135 @@ defmodule Mix.Tasks.Compile.HologramTest do
                  run(Keyword.put(opts, :data_model_ready, data_model_ready))
                end
              end) == 0
+    end
+  end
+
+  describe "data model bundle" do
+    setup do
+      on_exit(&Cache.reset/0)
+    end
+
+    test "a build with entity types writes the data model bundle, and the runtime sets none of it",
+         %{opts: opts} do
+      run(opts)
+
+      bundle = data_model_bundle(opts)
+
+      assert File.read!(bundle.static_bundle_path) == bundle.js
+
+      gzip_copy =
+        bundle.static_bundle_path
+        |> Compiler.gzip_path()
+        |> File.read!()
+
+      assert :zlib.gunzip(gzip_copy) == bundle.js
+      assert list_data_model_files(opts) == data_model_file_names(bundle)
+
+      # The runtime's own code reads the constants, so it is told apart by the key the statement
+      # sets them with.
+      runtime_js = File.read!(cache_state().runtime.bundle_info.static_bundle_path)
+      assert runtime_js =~ "globalThis.Hologram.sync?.countTypes"
+      refute runtime_js =~ "countTypes:"
+    end
+
+    # A data model edit only renders the statement anew, so a kept data layer with another statement
+    # stands in for one.
+    test "a data model change writes a new data model bundle and keeps the runtime bundle", %{
+      opts: opts
+    } do
+      run(opts)
+
+      old_bundle = data_model_bundle(opts)
+      runtime_bundle_path = cache_state().runtime.bundle_info.static_bundle_path
+
+      Cache.put_data_layer(%{
+        cache_state().data_layer
+        | sync_constants_js: "globalThis.Hologram.sync = {model: {}};"
+      })
+
+      {record_built, recorded_built} = record_calls()
+
+      assert count_built_bundles(fn -> run(Keyword.put(opts, :bundles_built, record_built)) end) ==
+               0
+
+      new_bundle = data_model_bundle(opts)
+
+      assert new_bundle.static_bundle_path != old_bundle.static_bundle_path
+      assert File.read!(new_bundle.static_bundle_path) == new_bundle.js
+      assert list_data_model_files(opts) == data_model_file_names(new_bundle)
+      assert cache_state().runtime.bundle_info.static_bundle_path == runtime_bundle_path
+      assert recorded_built.() == [[:data_model]]
+    end
+
+    test "replaces a data model bundle of an older build", %{opts: opts} do
+      run(opts)
+
+      bundle = data_model_bundle(opts)
+      old_bundle_path = Path.join(opts[:static_dir], "data-model-OLDMODEL.js")
+      gzip_path = Compiler.gzip_path(bundle.static_bundle_path)
+
+      File.rename!(bundle.static_bundle_path, old_bundle_path)
+      File.rename!(gzip_path, Compiler.gzip_path(old_bundle_path))
+
+      {record_built, recorded_built} = record_calls()
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert File.read!(bundle.static_bundle_path) == bundle.js
+      assert list_data_model_files(opts) == data_model_file_names(bundle)
+      assert recorded_built.() == [[:data_model]]
+    end
+
+    test "a compile with nothing changed keeps the data model bundle and reports none", %{
+      opts: opts
+    } do
+      run(opts)
+
+      bundle = data_model_bundle(opts)
+
+      # The static dir outlives the test, so the bundle gets its content back.
+      on_exit(fn -> File.write!(bundle.static_bundle_path, bundle.js) end)
+      File.write!(bundle.static_bundle_path, "kept")
+
+      {record_built, recorded_built} = record_calls()
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert File.read!(bundle.static_bundle_path) == "kept"
+      assert recorded_built.() == []
+    end
+
+    # The bundling comes first, so the bundle the asset path registry names stays on disk.
+    test "a compile failing while bundling leaves the data model bundle as it was", %{opts: opts} do
+      run(opts)
+
+      old_file_names = list_data_model_files(opts)
+
+      # A page to build, so that the compile reaches esbuild.
+      put_pending_kept_pages(1)
+
+      Cache.put_data_layer(%{
+        cache_state().data_layer
+        | sync_constants_js: "globalThis.Hologram.sync = {model: {}};"
+      })
+
+      missing_esbuild_path = Path.join(opts[:build_dir], "missing_esbuild")
+      failing_opts = Keyword.put(opts, :esbuild_bin_path, missing_esbuild_path)
+
+      assert_raise RuntimeError, ~r/executable not found/, fn -> run(failing_opts) end
+
+      assert list_data_model_files(opts) == old_file_names
+    end
+
+    test "writes the data model bundle again when it is gone", %{opts: opts} do
+      run(opts)
+
+      bundle = data_model_bundle(opts)
+      File.rm!(bundle.static_bundle_path)
+
+      {record_built, recorded_built} = record_calls()
+      run(Keyword.put(opts, :bundles_built, record_built))
+
+      assert File.read!(bundle.static_bundle_path) == bundle.js
+      assert recorded_built.() == [[:data_model]]
     end
   end
 
@@ -4212,7 +4366,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       # The edit is faked in the kept infos, so the beam and with it the rebuilt bundle are
       # byte-identical and keep their digest; what the test asserts is that the bundle was built.
-      mfa = {Compiler, :create_runtime_entry_file, 7}
+      mfa = {Compiler, :create_runtime_entry_file, 6}
       :erlang.trace_pattern(mfa, true, [:call_count])
 
       try do
@@ -4552,7 +4706,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert load_chunk_registry_items(opts) == items
     end
 
-    test "the chunks are built with the first batch, after the runtime", %{opts: opts} do
+    test "the chunks are built with the first batch, after the runtime and the data model bundle",
+         %{
+           opts: opts
+         } do
       start_cold(opts)
       {record_built, recorded_built} = record_calls()
 
@@ -4560,8 +4717,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       run(Keyword.merge(opts, bundles_built: record_built, next_batch: next_batch))
 
-      assert [[:runtime, :chunks, _first_page] | rest] = recorded_built.()
+      assert [[:runtime, :data_model, :chunks, _first_page] | rest] = recorded_built.()
       refute Enum.any?(rest, &(:chunks in &1))
+      refute Enum.any?(rest, &(:data_model in &1))
       test_chunk_bundles(opts)
     end
 
@@ -5282,7 +5440,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert_raise RuntimeError, ~r/executable not found/, fn -> run(failing_opts) end
 
-      mfa = {Compiler, :create_runtime_entry_file, 7}
+      mfa = {Compiler, :create_runtime_entry_file, 6}
       :erlang.trace_pattern(mfa, true, [:call_count])
 
       try do
@@ -5447,6 +5605,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
       with_edited_fixture("js_fixture.mjs", fn ->
         assert run(opts) == :ok
       end)
+    end
+
+    test "a new VM whose data model bundle is gone compiles and writes it again", %{opts: opts} do
+      [_bundle_file_name, _gzip_copy_file_name] = file_names = list_data_model_files(opts)
+      Enum.each(file_names, &File.rm!(Path.join(opts[:static_dir], &1)))
+
+      assert run(opts) == :ok
+      assert list_data_model_files(opts) == file_names
     end
 
     test "a new VM whose kept bundle is gone compiles", %{opts: opts} do

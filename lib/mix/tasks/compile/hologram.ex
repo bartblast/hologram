@@ -12,13 +12,16 @@ defmodule Mix.Tasks.Compile.Hologram do
       from each page to the `MapSet` of pages it links to, as the last compile that built the page
       found them, or as this compile finds them for a page no compile has built), returns the
       pages to build now, a non-empty list of some of them, or `:stop` to leave the rest pending
-      for the next compile. The runtime bundle and the chunk bundles, when they are rebuilt, are
-      built with the first batch, or alone when the first answer is `:stop`. Defaults to every
-      page in one batch.
+      for the next compile. The runtime bundle and the chunk bundles, when they are rebuilt, and
+      the data model bundle, when it is written anew, are built with the first batch, or alone
+      when the first answer is `:stop`. Defaults to every page in one batch.
 
     * `:bundles_built` - called after each batch is on disk and named by the page digest PLT dump,
-      with the page modules built, preceded by `:runtime` when the runtime bundle was built and
-      by `:chunks` when the chunk bundles were, in that order. Defaults to doing nothing.
+      with the page modules built, preceded by `:runtime` when the runtime bundle was built, by
+      `:data_model` when the data model bundles on disk changed and by `:chunks` when the chunk
+      bundles were built, in that order. Called with `[:data_model]` alone when a compile builds
+      nothing else but changes the data model bundles, and not at all when it builds and changes
+      nothing. Defaults to doing nothing.
 
   ## Data model
 
@@ -135,6 +138,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   # show no lock file has ever been removed while its owner was still alive, the
   # margin can shrink.
   @abandoned_empty_lock_grace_period_s 5
+
+  # What a batch after the first is given of what every page shares: nothing, since the first one
+  # built it (see build_page_batches/4).
+  @later_batch_shared %{data_model?: false, entry_files_info: []}
 
   @ls_build_dirs [".elixir_ls", ".elixir-tools", ".expert", ".lexical"]
 
@@ -474,8 +481,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       # What the data layer derives from the build (see derive_data_layer!/1) is kept whole while
       # the edit touches nothing it reads (see data_layer_kept?/3): its dumps are on disk from the
-      # compile that derived it, and the data layer state holds what it rendered into the runtime
-      # bundle.
+      # compile that derived it, and the data layer state holds the statement it rendered for the
+      # data model bundle.
       data_layer_kept? =
         data_layer_kept?(
           cache.data_layer,
@@ -520,8 +527,8 @@ defmodule Mix.Tasks.Compile.Hologram do
         module_digests_diff: module_digests_diff
       })
 
-      # The statement the runtime script sets the client's data layer constants with: rendered by
-      # the derivation, or kept with the runtime bundle it was rendered into.
+      # The statement the data model bundle sets the client's data layer constants with: rendered by
+      # the derivation, or kept with the data layer it was derived with.
       sync_constants_js =
         sync_constants_js(data_layer_kept?, %{
           call_graph: call_graph,
@@ -687,6 +694,12 @@ defmodule Mix.Tasks.Compile.Hologram do
       # the runtime entry file and kept with its bundle as one of its inputs.
       subsystems = runtime_subsystems(entity_types)
 
+      # The data model bundle this build serves, none without the data layer: written or kept with
+      # the first batch (see update_data_model_bundle/2). Asked for here, before any bundling, so
+      # that a bundle over the size limit fails the compile before any bundle is written.
+      data_model_bundle =
+        Compiler.data_model_bundle(sync_constants_js, subsystems, opts[:static_dir])
+
       entry_file_opts =
         Keyword.merge(opts,
           module_info_plt: new_module_info_plt,
@@ -709,8 +722,7 @@ defmodule Mix.Tasks.Compile.Hologram do
              js_fingerprints: js_fingerprints,
              mfas: runtime_mfas,
              static_dir: opts[:static_dir],
-             subsystems: subsystems,
-             sync_constants_js: sync_constants_js
+             subsystems: subsystems
            ) do
           []
         else
@@ -728,7 +740,6 @@ defmodule Mix.Tasks.Compile.Hologram do
               encode_plt,
               async_mfas,
               app_versions,
-              sync_constants_js,
               entry_file_opts
             )
 
@@ -860,6 +871,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         chunk_sizes: chunk_sizes,
         chunks: chunks,
         client_config: client_config,
+        data_model_bundle: data_model_bundle,
         encode_plt: encode_plt,
         entry_file_opts: entry_file_opts,
         gate: gate,
@@ -875,8 +887,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         runtime_mfas: runtime_mfas,
         runtime_types: runtime_analysis.types,
         subsystems: subsystems,
-        supervisor: sup,
-        sync_constants_js: sync_constants_js
+        supervisor: sup
       }
 
       # The chunk registry names the chunks the kept state names until the first batch replaces
@@ -894,7 +905,12 @@ defmodule Mix.Tasks.Compile.Hologram do
           end)
 
       bundles =
-        build_batches(remaining_pages, shared_entry_files_info, bundles, batch_context)
+        build_batches(
+          remaining_pages,
+          %{data_model?: true, entry_files_info: shared_entry_files_info},
+          bundles,
+          batch_context
+        )
 
       # The pages built are in their states now, and no longer pending. The module info dump on disk
       # is the one this compile wrote or kept, so only a change of the state writes it.
@@ -905,7 +921,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       )
 
       # Whatever ended the batches, the static dir keeps the bundles the page digest PLT names, the
-      # runtime bundle and the chunk bundles.
+      # runtime bundle, the data model bundle and the chunk bundles.
       served_bundles_info =
         Enum.reject(
           [bundles.runtime | Map.values(bundles.pages)] ++ Map.values(bundles.chunks),
@@ -913,13 +929,15 @@ defmodule Mix.Tasks.Compile.Hologram do
         )
 
       named_build_static_artifacts =
-        Enum.flat_map(served_bundles_info, fn info ->
+        served_bundles_info
+        |> Enum.flat_map(fn info ->
           [
             info.static_bundle_path,
             Compiler.gzip_path(info.static_bundle_path),
             info.static_source_map_path
           ]
         end)
+        |> Enum.concat(data_model_bundle_artifacts(data_model_bundle))
 
       Enum.each(old_build_static_artifacts -- named_build_static_artifacts, &File.rm/1)
 
@@ -955,18 +973,28 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
+  # The files of the data model bundle the build serves, which the cleanup at the end keeps.
+  defp data_model_bundle_artifacts(nil), do: []
+
+  defp data_model_bundle_artifacts(data_model_bundle) do
+    [
+      data_model_bundle.static_bundle_path,
+      Compiler.gzip_path(data_model_bundle.static_bundle_path)
+    ]
+  end
+
   # The pages graph is shared with the batches once, and only when a page is left to build: the
   # runtime and the chunks alone read no page's reach. A page listed before the batches has its
   # MFAs already, but the struct types it names are listed with its batch. So a compile with no
   # page to rebuild neither waits for the pages graph nor copies it.
-  defp build_batches(remaining_pages, shared_entry_files_info, bundles, context) do
+  defp build_batches(remaining_pages, shared, bundles, context) do
     if MapSet.size(remaining_pages) == 0 do
-      build_page_batches(remaining_pages, shared_entry_files_info, bundles, context)
+      build_page_batches(remaining_pages, shared, bundles, context)
     else
       CallGraph.with_shared_graph(context.call_graph, fn read_graph ->
         build_page_batches(
           remaining_pages,
-          shared_entry_files_info,
+          shared,
           bundles,
           %{context | read_graph: read_graph}
         )
@@ -1029,21 +1057,22 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  # Builds the pages still to rebuild in the batches the :next_batch option asks for, and the runtime
-  # and the chunks with the first one, and returns the bundles the page digest PLT names once the
-  # batches stop: the ones built, and for the pages the batches did not get to, the ones they had.
-  # The runtime and the chunks are built even when the first answer is :stop, since the pages kept
-  # and the pages built both load them.
-  defp build_page_batches(remaining_pages, shared_entry_files_info, bundles, context) do
+  # Builds the pages still to rebuild in the batches the :next_batch option asks for, and with the
+  # first one what every page shares - the runtime, the data model bundle and the chunks - given as
+  # %{data_model?: true, entry_files_info: ...}, and returns the bundles the page digest PLT names
+  # once the batches stop: the ones built, and for the pages the batches did not get to, the ones
+  # they had. What every page shares is built even when the first answer is :stop, since the pages
+  # kept and the pages built both load it.
+  defp build_page_batches(remaining_pages, shared, bundles, context) do
     case next_batch(remaining_pages, context) do
       :stop ->
-        bundle_batch([], shared_entry_files_info, bundles, context)
+        bundle_batch([], shared, bundles, context)
 
       page_modules ->
-        new_bundles = bundle_batch(page_modules, shared_entry_files_info, bundles, context)
+        new_bundles = bundle_batch(page_modules, shared, bundles, context)
         new_remaining_pages = MapSet.difference(remaining_pages, MapSet.new(page_modules))
 
-        build_page_batches(new_remaining_pages, [], new_bundles, context)
+        build_page_batches(new_remaining_pages, @later_batch_shared, new_bundles, context)
     end
   end
 
@@ -1090,26 +1119,39 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  # What the :bundles_built option is told of the given shared entry files: the runtime first.
-  defp built_shared_entries(shared_entry_files_info) do
+  # What the :bundles_built option is told of what every page shares: the runtime first, then the
+  # data model bundle when the batch changed it, then the chunks.
+  defp built_shared_entries(shared, data_model_changed?) do
     bundle_names =
-      MapSet.new(shared_entry_files_info, fn {_entry_name, _entry_file_path, bundle_name} ->
+      MapSet.new(shared.entry_files_info, fn {_entry_name, _entry_file_path, bundle_name} ->
         bundle_name
       end)
 
-    for {entry, bundle_name} <- [runtime: "runtime", chunks: "chunk"],
-        MapSet.member?(bundle_names, bundle_name) do
+    for {entry, built?} <- [
+          runtime: MapSet.member?(bundle_names, "runtime"),
+          data_model: data_model_changed?,
+          chunks: MapSet.member?(bundle_names, "chunk")
+        ],
+        built? do
       entry
     end
   end
 
   # Builds the given pages, and the runtime and the chunks when their entry files are given, and
   # records them: their states in the cache, the chunk registry PLT and the page digest PLT that
-  # name them, and the pages no longer pending. Then the :bundles_built option is told what was
-  # built, the runtime first, then the chunks.
-  defp bundle_batch([], [], bundles, _context), do: bundles
+  # name them, and the pages no longer pending. The first batch writes or keeps the data model
+  # bundle once esbuild is done (see update_data_model_bundle/2). Then the :bundles_built option is
+  # told what was built (see built_shared_entries/2). A batch with nothing to bundle tells it only of
+  # a data model bundle it changed, and of nothing when it changed none.
+  defp bundle_batch([], %{entry_files_info: []} = shared, bundles, context) do
+    if update_data_model_bundle(shared, context) do
+      context.opts[:bundles_built].([:data_model])
+    end
 
-  defp bundle_batch(page_modules, shared_entry_files_info, bundles, context) do
+    bundles
+  end
+
+  defp bundle_batch(page_modules, shared, bundles, context) do
     batch_mfas_by_page = list_batch_mfas(page_modules, context)
 
     page_entry_files_info =
@@ -1124,7 +1166,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> Enum.map(fn {page_module, entry_file_path} -> {page_module, entry_file_path, "page"} end)
 
     built_bundles_info =
-      Compiler.bundle(shared_entry_files_info ++ page_entry_files_info, context.opts)
+      Compiler.bundle(shared.entry_files_info ++ page_entry_files_info, context.opts)
 
     built_chunk_bundles_info = built_chunk_bundles_info(built_bundles_info, context)
 
@@ -1146,7 +1188,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     dump_page_digest_plt(new_bundles, context)
     Cache.delete_pending_pages(page_modules)
 
-    built_entries = built_shared_entries(shared_entry_files_info) ++ page_modules
+    data_model_changed? = update_data_model_bundle(shared, context)
+
+    built_entries = built_shared_entries(shared, data_model_changed?) ++ page_modules
     context.opts[:bundles_built].(built_entries)
 
     new_bundles
@@ -1281,7 +1325,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # What the data layer derives from the build, validated and dumped for the running app: the
   # windows each page downloads, the registered queries of every component, and the statement the
-  # runtime script sets the client's data layer constants with, which is returned. What it was
+  # data model bundle sets the client's data layer constants with, which is returned. What it was
   # derived from is kept with the statement (see Hologram.Compiler.Cache.put_data_layer/1). A
   # derivation that raises writes no dump and keeps nothing.
   #
@@ -1427,8 +1471,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> Map.put(:synced_types, sync_constants.synced_types)
       |> Compiler.build_queries_plt(Keyword.put(opts, :supervisor, context.supervisor))
 
-    # The runtime bundle sets the client's data layer constants, so what they render to is one of
-    # its inputs: the model they render reads what the entity types declare now, so the two are
+    # The data model bundle sets the client's data layer constants, so it is built from what they
+    # render to: the model they render reads what the entity types declare now, so the two are
     # built together (see Hologram.Compiler.build_sync_constants_js/1).
     sync_constants_js = Compiler.build_sync_constants_js(sync_constants)
 
@@ -1581,7 +1625,6 @@ defmodule Mix.Tasks.Compile.Hologram do
           mfas: context.runtime_mfas,
           dynamic_calls: context.gate.runtime,
           subsystems: context.subsystems,
-          sync_constants_js: context.sync_constants_js,
           types: context.runtime_types
         })
     end)
@@ -1674,9 +1717,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   # the JS imports it registers or the app versions it names differ from the kept ones, and when a
   # module of those MFAs was edited: its functions are in the bundle, so their code is too. It is
   # rebuilt too when a file its bundle read changed (see Hologram.Compiler.js_inputs_changed?/2),
-  # and when the client config or the data layer constants it sets differ from this compile's. Its
-  # bundle, gzip copy and source map are all required, since nothing else in the compile would
-  # recreate a missing one.
+  # and when the client config or the subsystems it ships differ from this compile's. The data
+  # model is none of its inputs: it goes into a bundle of its own (see update_data_model_bundle/2),
+  # so a data model edit leaves the runtime bundle as it is. Its bundle, gzip copy and source map
+  # are all required, since nothing else in the compile would recreate a missing one.
   defp keep_runtime_bundle?(nil, _reaching_modules, _inputs), do: false
 
   defp keep_runtime_bundle?(kept_runtime, reaching_modules, inputs) do
@@ -1688,7 +1732,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     ) and
       kept_runtime.client_config == inputs[:client_config] and
       kept_runtime.subsystems == inputs[:subsystems] and
-      kept_runtime.sync_constants_js == inputs[:sync_constants_js] and
       not Compiler.js_inputs_changed?(
         kept_runtime.bundle_info.js_inputs,
         inputs[:js_fingerprints]
@@ -2023,7 +2066,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  # The data layer's statement for the runtime script: the kept data layer's when it is kept (see
+  # The data layer's statement for the data model bundle: the kept data layer's when it is kept (see
   # data_layer_kept?/3), else the one derived now (see derive_data_layer!/1).
   defp sync_constants_js(true, context), do: context.kept_data_layer.sync_constants_js
 
@@ -2140,7 +2183,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   # The optional runtime subsystems this build needs (see
   # Hologram.Compiler.optional_runtime_subsystems/0), one predicate per subsystem: the data layer
   # when the application declares an entity type, the same fact that gates the database children,
-  # the sync handshake and the sync constants statement.
+  # the sync handshake and the sync constants statement, and decides whether the build serves a
+  # data model bundle (see Hologram.Compiler.data_model_bundle/3).
   defp runtime_subsystems([]), do: []
 
   defp runtime_subsystems(_entity_types), do: [:data_layer]
@@ -2636,6 +2680,21 @@ defmodule Mix.Tasks.Compile.Hologram do
         :code.delete(module)
       end
     end)
+  end
+
+  # Writes the data model bundle of the build, or keeps it when it is on disk, and removes the ones
+  # it replaces, or every data model bundle for a build that serves none. Only in the first batch,
+  # and once esbuild is done: a bundling that fails leaves the old bundle in place, which the asset
+  # path registry still names, as the runtime's (see put_built_bundles_info/3). Returns whether the
+  # static dir changed, which only the registries read anew at :bundles_built see.
+  defp update_data_model_bundle(%{data_model?: false}, _context), do: false
+
+  defp update_data_model_bundle(%{data_model?: true}, %{data_model_bundle: nil} = context) do
+    Compiler.remove_data_model_bundles(context.opts[:static_dir])
+  end
+
+  defp update_data_model_bundle(%{data_model?: true}, context) do
+    Compiler.write_data_model_bundle!(context.data_model_bundle)
   end
 
   defp validate_data_model!(entity_types, role_modules) do

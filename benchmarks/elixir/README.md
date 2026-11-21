@@ -274,11 +274,11 @@ create_page_entry_files/6          5.01      199.73 ms     ±5.64%      199.33 m
 ```
 
 
-### ✅ compiler » create_runtime_entry_file_7
+### ✅ compiler » create_runtime_entry_file_6
 
 ```
 Name                                  ips        average  deviation         median         99th %
-create_runtime_entry_file/7          8.68      115.26 ms     ±4.40%      114.32 ms      142.16 ms
+create_runtime_entry_file/6          7.44      134.38 ms    ±13.61%      127.08 ms      220.30 ms
 ```
 
 
