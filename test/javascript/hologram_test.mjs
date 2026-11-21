@@ -8101,6 +8101,7 @@ describe("Hologram", () => {
       block.textContent = JSON.stringify({
         actorEntityId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
         actorUserId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
+        syncCountTypes: {"App.Page/total/": ["App.Task"]},
         syncCounts: {"App.Page/total/": 3},
         syncRows: syncRows,
       });
@@ -8149,6 +8150,7 @@ describe("Hologram", () => {
       sinon.assert.calledOnceWithExactly(ingestMountDataSpy, {
         actorEntityId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
         actorUserId: "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f",
+        syncCountTypes: {"App.Page/total/": ["App.Task"]},
         syncCounts: {"App.Page/total/": 3},
         syncRows: syncRows,
       });

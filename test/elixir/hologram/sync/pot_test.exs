@@ -36,6 +36,11 @@ defmodule Hologram.Sync.PotTest do
     }
   end
 
+  # Rows the client's own batches created, per entity type, packed as a part names them.
+  defp created(ids_by_type) do
+    Map.new(ids_by_type, fn {entity_type, ids} -> {entity_type, PackedIds.pack(ids)} end)
+  end
+
   defp held(ids_by_type) do
     Enum.reduce(ids_by_type, Held.new(), fn {entity_type, ids}, held ->
       Held.add(held, entity_type, ids)
@@ -562,6 +567,84 @@ defmodule Hologram.Sync.PotTest do
       {news, _told} = decide(Pot.new(), part)
 
       assert news.hidden == []
+    end
+  end
+
+  describe "decide/3 - rows the client's own batches created" do
+    test "drops a created row the user may not read, among the dropped" do
+      part = part(unreadable: %{Project => [@id_1]})
+
+      {news, told} = decide(Pot.new(), part, created: created(%{Project => [@id_1]}))
+
+      assert news.unsynced == [{@id_1, Project}]
+      assert Held.ids(told.held, Project) == []
+      assert Held.ids(told.dropped, Project) == [@id_1]
+    end
+
+    test "hands a created row the user may read over whole, and holds it" do
+      project = %Project{id: @id_1, name: "new", public: true}
+
+      {news, told} =
+        decide(Pot.new(), part(readable: [project]), created: created(%{Project => [@id_1]}))
+
+      assert [%Project{id: @id_1}] = news.appeared
+      assert news.unsynced == []
+      assert Held.ids(told.held, Project) == [@id_1]
+    end
+
+    test "drops a created row once when it is held" do
+      part = part(unreadable: %{Project => [@id_1]})
+
+      {news, _told} =
+        decide(pot(%{Project => [@id_1]}), part, created: created(%{Project => [@id_1]}))
+
+      assert news.unsynced == [{@id_1, Project}]
+    end
+
+    test "tells nothing of a created row it holds that the user may read and the batch didn't write" do
+      project = %Project{id: @id_1, public: true}
+
+      {news, _told} =
+        decide(pot(%{Project => [@id_1]}), part(readable: [project]),
+          created: created(%{Project => [@id_1]})
+        )
+
+      assert news == %{appeared: [], edges: [], hidden: [], patched: [], unsynced: []}
+    end
+
+    # A catch-up's chunk has the rows an earlier chunk settled taken out of what it checked.
+    test "drops a created row the part doesn't check" do
+      {news, _told} = decide(Pot.new(), part([]), created: created(%{Project => [@id_1]}))
+
+      assert news.unsynced == [{@id_1, Project}]
+    end
+
+    test "drops created rows in id order beside the held rows of the type it drops" do
+      part = part(unreadable: %{Project => [@id_1, @id_3]})
+
+      {news, _told} =
+        decide(pot(%{Project => [@id_3]}), part, created: created(%{Project => [@id_1]}))
+
+      assert news.unsynced == [{@id_1, Project}, {@id_3, Project}]
+    end
+
+    test "takes a dropped created row out of the held rows whose sets hold it" do
+      part = part(unreadable: %{Label => [@id_2]}, pairs: %{@labels => [{@id_1, @id_2}]})
+
+      {news, _told} =
+        decide(pot(%{Project => [@id_1]}), part, created: created(%{Label => [@id_2]}))
+
+      assert news.edges == [edge(:del_relationship, Project, @id_1, "labels", @id_2)]
+    end
+
+    test "drops a created row by id alone when given a salt" do
+      part = part(moved: %{Project => [@id_1, @id_2]}, unreadable: %{Project => [@id_1, @id_2]})
+
+      {news, _told} =
+        decide(Pot.new(), part, created: created(%{Project => [@id_1]}), hidden_salt: "q3Vx")
+
+      assert news.hidden == [{Project, "q3Vx", [@id_2]}]
+      assert news.unsynced == [{@id_1, Project}]
     end
   end
 

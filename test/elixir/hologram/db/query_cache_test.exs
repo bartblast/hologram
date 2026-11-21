@@ -1,26 +1,14 @@
 defmodule Hologram.DB.QueryCacheTest do
-  # async: false - the tests write the query cache's persistent term, shared by the whole node,
-  # and one drops the Hologram schemas, which takes AccessExclusiveLock and deadlocks with row
-  # locks that concurrent sandboxed tests hold until rollback.
+  # async: false - the tests write the query cache's persistent term, shared by the whole node.
   use Hologram.Test.DatabaseCase, async: false
-  use Hologram.DB
 
   import Hologram.DB.QueryCache
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Auth
   alias Hologram.Commons.PLT
-  alias Hologram.DB.Connection
   alias Hologram.Entity.Derived
-  alias Hologram.Query.Placeholder
-  alias Hologram.Query.Registry
-  alias Hologram.Query.Stage
   alias Hologram.Reflection
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84
-  alias Hologram.Test.Fixtures.Component.Module40
-  alias Hologram.Test.Fixtures.Component.Module41
-  alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module33
 
@@ -28,109 +16,20 @@ defmodule Hologram.DB.QueryCacheTest do
 
   setup :set_mox_global
 
-  # The derived fields of Module40 and Module41 build the queries the cache serves.
   setup do
     setup_query_cache(QueryCacheStub, false)
-    dump_query_cache(QueryCacheStub, [Module40, Module41])
+    dump_query_cache(QueryCacheStub)
   end
 
   defp expected_data do
-    entries = expected_entries()
-
     %{
       derived: %{},
-      derived_queries: MapSet.new([{Module40, :entities}, {Module41, :entities}]),
-      entries: entries,
       permission_checking?: false,
-      synced_types: [],
-      windows: expected_windows(entries)
+      synced_types: Reflection.list_entities()
     }
   end
 
-  # The grants window and the user window ride with every build's windows, whether or not a page
-  # subscribes to them - the build decides who asks, this is only where an id resolves back to a
-  # term.
-  defp expected_windows(entries) do
-    grants_window = Auth.grants_window()
-    user_window = Auth.user_window(UserEntity, false)
-
-    entries
-    |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
-    |> Map.put(Registry.id(grants_window), grants_window)
-    |> Map.put(Registry.id(user_window), user_window)
-  end
-
-  defp expected_entries do
-    module_40_term =
-      Entity2
-      |> filter(a: true)
-      |> sort(c)
-      |> Stage.normalize()
-
-    module_41_term =
-      Entity2
-      |> filter(b >= ^%Placeholder{name: :min_b})
-      |> Stage.normalize()
-
-    Registry.build([module_40_term, module_41_term], false)
-  end
-
-  test "entries/0" do
-    init(nil)
-
-    assert entries() == expected_entries()
-  end
-
-  describe "derived_query?/2" do
-    test "returns true for a derived field the build registered as a query" do
-      dump_query_cache(QueryCacheStub, [Module84])
-
-      init(nil)
-
-      assert derived_query?(Module84, :ripe)
-    end
-
-    test "returns false when no query cache has started" do
-      :persistent_term.erase(QueryCacheStub.persistent_term_key())
-
-      refute derived_query?(Module84, :ripe)
-    end
-
-    test "returns false for a derived field computing a plain value" do
-      dump_query_cache(QueryCacheStub, [Module84])
-
-      init(nil)
-
-      refute derived_query?(Module84, :ripe_total)
-    end
-  end
-
-  describe "fetch/1" do
-    test "returns the entry for a registered query id" do
-      init(nil)
-
-      [{id, entry} | _other_entries] = Enum.to_list(expected_entries())
-
-      assert fetch(id) == {:ok, entry}
-    end
-
-    test "returns :error for an unknown query id" do
-      init(nil)
-
-      assert fetch("unknown") == :error
-    end
-  end
-
   test "init/1" do
-    assert init(nil) == {:ok, nil}
-
-    assert :persistent_term.get(QueryCacheStub.persistent_term_key()) == expected_data()
-  end
-
-  test "init/1 populates against a virgin database" do
-    {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_system" CASCADE))
-    {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
-
     assert init(nil) == {:ok, nil}
 
     assert :persistent_term.get(QueryCacheStub.persistent_term_key()) == expected_data()
@@ -149,7 +48,7 @@ defmodule Hologram.DB.QueryCacheTest do
 
   describe "permission_checking?/0" do
     test "returns true for a build with a page checking permissions on the client" do
-      dump_query_cache(QueryCacheStub, [Module40], true)
+      dump_query_cache(QueryCacheStub, true)
 
       init(nil)
 
@@ -164,54 +63,25 @@ defmodule Hologram.DB.QueryCacheTest do
   end
 
   test "synced_types/0" do
-    dump_query_cache(QueryCacheStub, [Module40], false, [Entity2, Module33])
+    dump_query_cache(QueryCacheStub, false, [Entity2, Module33])
 
     init(nil)
 
     assert synced_types() == [Entity2, Module33]
   end
 
-  describe "window/1" do
-    test "returns the term a registered window downloads" do
-      init(nil)
-
-      [{_id, entry} | _other_entries] = Enum.to_list(expected_entries())
-
-      assert window(entry.window_id) == entry.window
-    end
-
-    # Registered whether or not anything subscribes: the build decides which pages check
-    # permissions locally, and a client the build told to ask must find a term here.
-    test "returns the grants window a client checking permissions locally downloads" do
-      init(nil)
-
-      grants_window = Auth.grants_window()
-
-      assert window(Registry.id(grants_window)) == grants_window
-    end
-
-    test "returns nil for an id nothing downloads" do
-      init(nil)
-
-      assert window("unknown") == nil
-    end
-  end
-
-  test "reload/0 picks up the queries the build has dumped since" do
+  test "reload/0 picks up what the build has dumped since" do
     init(nil)
 
     key = QueryCacheStub.persistent_term_key()
     assert :persistent_term.get(key) == expected_data()
 
     # What live reload does: the recompile ahead of it rewrites the dump, and this reads it again.
-    dump_query_cache(QueryCacheStub, [Module84])
+    dump_query_cache(QueryCacheStub, false, [Entity2])
 
     reload()
 
-    reloaded = :persistent_term.get(key)
-
-    assert reloaded != expected_data()
-    assert reloaded.derived_queries == MapSet.new([{Module84, :ripe}])
+    assert :persistent_term.get(key).synced_types == [Entity2]
   end
 
   test "dump_path/0 reads from the build directory" do

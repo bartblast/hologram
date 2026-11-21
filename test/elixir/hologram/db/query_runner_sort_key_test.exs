@@ -8,7 +8,6 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.SortKey
-  alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -48,7 +47,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
     |> Enum.map(& &1.c)
   end
 
-  describe "run/3" do
+  describe "run/2" do
     test "orders string attributes practically through sort-key companions" do
       {:ok, _entity} =
         %{a: true, c: "Zürich"}
@@ -142,18 +141,18 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
 
     # The bound is spelled "M" and its key is "m" - binding it raw would put every row after it in
     # C order (lowercase sorts above "M"), so the answer only holds if the key slot was folded.
-    test "binds a placeholder bound through its key" do
+    test "binds a bound through its folded key" do
       create_module2_rows(["Zürich", "Łódź", "apple", "Mango"])
 
       term =
         Module2
-        |> filter(c >= ^%Placeholder{name: :min})
+        |> filter(c >= "M")
         |> sort(c)
         |> Stage.normalize()
 
       values =
         term
-        |> run(companion_mapping(), %{min: "M"})
+        |> run(companion_mapping())
         |> Enum.map(& &1.c)
 
       assert values == ["Mango", "Zürich"]

@@ -1188,6 +1188,7 @@ export default class Hologram {
     Hologram.dataLayer?.ingestMountData({
       actorEntityId: $.#bootData.actorEntityId,
       actorUserId: $.#bootData.actorUserId,
+      syncCountTypes: $.#bootData.syncCountTypes,
       syncCounts: $.#bootData.syncCounts,
       syncRows: $.#bootData.syncRows,
     });
@@ -1388,6 +1389,7 @@ export default class Hologram {
       selfEchoes: Deserializer.deserialize(bootData.selfEchoes),
       subReceiptAdds: Deserializer.deserialize(bootData.subReceiptAdds),
       subReceiptDrops: Deserializer.deserialize(bootData.subReceiptDrops),
+      syncCountTypes: bootData.syncCountTypes,
       syncCounts: bootData.syncCounts,
       syncRows: bootData.syncRows,
     };
@@ -2828,6 +2830,7 @@ export default class Hologram {
       selfEchoes: Deserializer.deserialize(payload.selfEchoes),
       subReceiptAdds: Deserializer.deserialize(payload.subReceiptAdds),
       subReceiptDrops: Deserializer.deserialize(payload.subReceiptDrops),
+      syncCountTypes: payload.syncCountTypes,
       syncCounts: payload.syncCounts,
       syncRows: payload.syncRows,
     };

@@ -574,6 +574,7 @@ defmodule Hologram.ControllerTest do
           component_registry: %{"page" => %{module: Module1, struct: %Component{}}},
           page_module: Module1,
           page_params: %{key: "value"},
+          sync_count_types: %{"posts" => ["MyApp.Post"]},
           sync_counts: %{"posts" => 2},
           sync_rows: %{"posts" => []}
         },
@@ -614,6 +615,7 @@ defmodule Hologram.ControllerTest do
                :selfEchoes,
                :subReceiptAdds,
                :subReceiptDrops,
+               :syncCountTypes,
                :syncCounts,
                :syncRows
              ]
@@ -655,6 +657,7 @@ defmodule Hologram.ControllerTest do
       assert decoded["pageParams"] == serialized_term(%{key: "value"})
       assert decoded["replicaId"] == "my_replica_id"
       assert decoded["replicaToken"] == "my_replica_token"
+      assert decoded["syncCountTypes"] == %{"posts" => ["MyApp.Post"]}
       assert decoded["syncCounts"] == %{"posts" => 2}
       assert decoded["syncRows"] == %{"posts" => []}
     end
@@ -669,6 +672,7 @@ defmodule Hologram.ControllerTest do
           component_registry: %{"page" => %{module: Module1, struct: %Component{}}},
           page_module: Module1,
           page_params: %{},
+          sync_count_types: %{"posts" => ["MyApp.Post"]},
           sync_counts: %{"posts" => 2},
           sync_rows: %{"posts" => []}
         },
@@ -728,6 +732,7 @@ defmodule Hologram.ControllerTest do
 
       assert decoded["actorEntityId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
       assert decoded["actorUserId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
+      assert decoded["syncCountTypes"] == %{"posts" => ["MyApp.Post"]}
       assert decoded["syncCounts"] == %{"posts" => 2}
       assert decoded["syncRows"] == %{"posts" => []}
     end
@@ -766,6 +771,7 @@ defmodule Hologram.ControllerTest do
                :selfEchoes,
                :subReceiptAdds,
                :subReceiptDrops,
+               :syncCountTypes,
                :syncCounts,
                :syncRows,
                :tree,

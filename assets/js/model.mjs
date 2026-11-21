@@ -30,7 +30,13 @@ export default class Model {
   // back needs their types, so anything asking what a type DECLARES has to subtract them. Held
   // here rather than beside each reader: it is one list mirroring an Elixir one, and a second copy
   // is how the two drift.
-  static systemAttributes = ["created_at", "id", "updated_at"];
+  static systemAttributes = [
+    "created_at",
+    "id",
+    "server_created_at",
+    "server_updated_at",
+    "updated_at",
+  ];
 
   // IMPORTANT!
   // The twin of Hologram.Policy.framework_operations/0 - the seven operations the framework itself
@@ -49,6 +55,10 @@ export default class Model {
   ];
 
   static #entries = {};
+
+  // Moves whenever the model's entries are read afresh, so what was worked out from them can tell
+  // it is out of date.
+  static #generation = 0;
 
   // A year the way Date.to_iso8601/1 spells one, which is how every date and datetime arrives:
   // four digits, or more with no leading zero, and a minus before a year below 0 - never before 0
@@ -528,8 +538,15 @@ export default class Model {
     Model.reset();
   }
 
+  // How many times the model's entries have been read afresh: a value worked out from the model is
+  // current while this stays what it was.
+  static generation() {
+    return Model.#generation;
+  }
+
   static reset() {
     Model.#entries = {};
+    Model.#generation += 1;
   }
 
   // The model entries this client holds, in the shape a server hands them over in (see

@@ -527,6 +527,71 @@ describe("RegexTranslator", () => {
       });
     });
 
+    describe("Unicode properties", () => {
+      it("translates property escape", () => {
+        assert.deepEqual(translate("\\p{L}", {unicode: true}), {
+          source: "[\\p{L}]",
+          flags: "u",
+        });
+      });
+
+      it("translates negated property escape", () => {
+        assert.deepEqual(translate("\\P{L}", {unicode: true}), {
+          source: "[^\\p{L}]",
+          flags: "u",
+        });
+      });
+
+      it("translates script property as a script extension", () => {
+        assert.deepEqual(translate("\\p{Greek}", {unicode: true}), {
+          source: "[\\p{Script_Extensions=Greek}]",
+          flags: "u",
+        });
+      });
+
+      it("translates compound property escape", () => {
+        assert.deepEqual(translate("\\p{Xan}", {unicode: true}), {
+          source: "[\\p{L}\\p{N}]",
+          flags: "u",
+        });
+      });
+
+      it("translates negated compound property escape", () => {
+        assert.deepEqual(translate("\\P{Xan}", {unicode: true}), {
+          source: "[^\\p{L}\\p{N}]",
+          flags: "u",
+        });
+      });
+
+      it("translates property class member", () => {
+        assert.deepEqual(translate("[a\\p{Lu}]", {unicode: true}), {
+          source: "[a\\p{Lu}]",
+          flags: "u",
+        });
+      });
+
+      it("translates negated property class member", () => {
+        assert.deepEqual(translate("[a\\P{Lu}]", {unicode: true}), {
+          source: "[a\\P{Lu}]",
+          flags: "u",
+        });
+      });
+
+      it("translates property member of a negated class", () => {
+        assert.deepEqual(translate("[^a\\p{Lu}]", {unicode: true}), {
+          source: "[^a\\p{Lu}]",
+          flags: "u",
+        });
+      });
+
+      it("translates compound property class member", () => {
+        assert.deepEqual(translate("[\\p{Xan}_]", {unicode: true}), {
+          source: "[\\p{L}\\p{N}_]",
+          flags: "u",
+        });
+      });
+    });
+
     it("produces a working RegExp", () => {
       const {source, flags} = translate("(a|b)+[c-e]{2}");
       const regex = new RegExp(source, flags);

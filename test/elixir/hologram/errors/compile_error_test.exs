@@ -11,36 +11,41 @@ defmodule Hologram.CompileErrorTest do
 
   describe "message/1" do
     test "reads as the message alone when no location is carried" do
-      error = %CompileError{message: "the query builds no window"}
+      error = %CompileError{message: "the template reads an undefined prop"}
 
-      assert Exception.message(error) == "the query builds no window"
+      assert Exception.message(error) == "the template reads an undefined prop"
     end
 
     test "opens with the file when no line is carried" do
-      error = %CompileError{message: "the query builds no window", file: absolute_file_path()}
+      error = %CompileError{
+        message: "the template reads an undefined prop",
+        file: absolute_file_path()
+      }
 
-      assert Exception.message(error) == "lib/my_app/task_list.ex: the query builds no window"
+      assert Exception.message(error) ==
+               "lib/my_app/task_list.ex: the template reads an undefined prop"
     end
 
     test "opens with the file and the line" do
       error = %CompileError{
-        message: "the query builds no window",
+        message: "the template reads an undefined prop",
         file: absolute_file_path(),
         line: 17
       }
 
-      assert Exception.message(error) == "lib/my_app/task_list.ex:17: the query builds no window"
+      assert Exception.message(error) ==
+               "lib/my_app/task_list.ex:17: the template reads an undefined prop"
     end
 
     test "renders a frame whose file is unknown as the function alone" do
       error = %CompileError{
-        message: "the query builds no window",
+        message: "the template reads an undefined prop",
         stack: [{MyApp.TaskList, :entities_query, 1, [file: nil, line: 17]}]
       }
 
       expected_msg =
         normalize_newlines("""
-        the query builds no window
+        the template reads an undefined prop
 
             MyApp.TaskList.entities_query/1\
         """)
@@ -50,7 +55,7 @@ defmodule Hologram.CompileErrorTest do
 
     test "renders every frame's file relative to the project, as the opening does" do
       error = %CompileError{
-        message: "the query builds no window",
+        message: "the template reads an undefined prop",
         file: absolute_file_path(),
         line: 20,
         stack: [{MyApp.TaskList, :bounds, 0, [file: absolute_file_path(), line: 20]}]
@@ -58,7 +63,7 @@ defmodule Hologram.CompileErrorTest do
 
       expected_msg =
         normalize_newlines("""
-        lib/my_app/task_list.ex:20: the query builds no window
+        lib/my_app/task_list.ex:20: the template reads an undefined prop
 
             lib/my_app/task_list.ex:20: MyApp.TaskList.bounds/0\
         """)
@@ -68,7 +73,7 @@ defmodule Hologram.CompileErrorTest do
 
     test "closes with the path the error was reached through" do
       error = %CompileError{
-        message: "the query builds no window",
+        message: "the template reads an undefined prop",
         file: absolute_file_path(),
         line: 20,
         stack: [
@@ -79,7 +84,7 @@ defmodule Hologram.CompileErrorTest do
 
       expected_msg =
         normalize_newlines("""
-        lib/my_app/task_list.ex:20: the query builds no window
+        lib/my_app/task_list.ex:20: the template reads an undefined prop
 
             lib/my_app/task_list.ex:20: MyApp.TaskList.bounds/0
             lib/my_app/task_list.ex:17: MyApp.TaskList.entities_query/1\

@@ -23,9 +23,11 @@ defmodule Hologram.Sync.Carry do
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
   alias Hologram.Query
+  alias Hologram.Query.Window
   alias Hologram.Sync.Frame
 
   @key {__MODULE__, :entities}
+  @count_types_key {__MODULE__, :count_types}
   @counts_key {__MODULE__, :counts}
   @grant_scopes_key {__MODULE__, :grant_scopes}
 
@@ -42,6 +44,7 @@ defmodule Hologram.Sync.Carry do
   @spec start() :: :ok
   def start do
     Process.delete(@key)
+    Process.delete(@count_types_key)
     Process.delete(@counts_key)
 
     # Armed rather than cleared: a permission check outside a render finds no set here and
@@ -63,12 +66,27 @@ defmodule Hologram.Sync.Carry do
   way the client spells its own (see `spell_query/1`). The query holds every value it reads, so a
   changed value is a changed key, and the client never shows this number for a query the server
   didn't count. Two instances of one component running one query share a key, and the number.
+
+  The entity types the count reads are recorded under the same key (see
+  `Hologram.Query.Window.entity_types/1`), spelled as the client names a type: the client counts for
+  itself once it holds every row of each of them it may see.
   """
   @spec collect_count(module, atom, Query.t(), integer) :: :ok
   def collect_count(module, name, term, count) do
-    collected = Map.put(gathered_counts(), count_key(module, name, term), count)
+    key = count_key(module, name, term)
 
-    Process.put(@counts_key, collected)
+    # The key spells the whole query, so a key already recorded reads the same types.
+    count_types =
+      @count_types_key
+      |> Process.get(%{})
+      |> Map.put_new_lazy(key, fn ->
+        term
+        |> Window.entity_types()
+        |> Enum.map(&Codec.encode_enum_value/1)
+      end)
+
+    Process.put(@counts_key, Map.put(gathered_counts(), key, count))
+    Process.put(@count_types_key, count_types)
 
     :ok
   end
@@ -140,6 +158,19 @@ defmodule Hologram.Sync.Carry do
     else
       %{put_entity: group(entities, actor_user_id)}
     end
+  end
+
+  @doc """
+  Returns the entity types each count gathered so far reads, keyed as the counts are (see
+  `collect_count/4`), and clears what was gathered.
+  """
+  @spec take_count_types() :: %{String.t() => [String.t()]}
+  def take_count_types do
+    count_types = Process.get(@count_types_key, %{})
+
+    Process.delete(@count_types_key)
+
+    count_types
   end
 
   @doc """
@@ -417,10 +448,6 @@ defmodule Hologram.Sync.Carry do
 
   defp spell_value({:outer, levels, name}) when is_integer(levels) do
     spell_object([{"name", spell_value(name)}, {"outer", spell_number(levels)}])
-  end
-
-  defp spell_value({:placeholder, name}) when is_atom(name) do
-    spell_object([{"placeholder", spell_string(Atom.to_string(name))}])
   end
 
   defp spell_value(value), do: spell_unknown(value)

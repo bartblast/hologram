@@ -16,7 +16,7 @@ defmodule Hologram.LiveReload do
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
-  alias Hologram.Sync.PageWindows
+  alias Hologram.Sync.PageTypes
 
   @doc """
   Reloads the application after a change of the given file (nil when a request for a pending page
@@ -127,8 +127,8 @@ defmodule Hologram.LiveReload do
     # The first batch of a pass is where the registries learn what the compile wrote: the pages and
     # routes of the module info dump, the static files, among them a new runtime bundle, a new data
     # model bundle and new chunk bundles, the chunks each struct type needs and each page preloads,
-    # the page digests, the page windows and the registered queries. Later batches change the page
-    # digests and the chunks their pages preload only.
+    # the page digests, the page types and the query cache. Later batches change the page digests
+    # and the chunks their pages preload only.
     state =
       if state.pass.registries_reloaded? do
         ChunkRegistry.reload()
@@ -139,8 +139,8 @@ defmodule Hologram.LiveReload do
         reload_runtime()
 
         # The runtime now reads all the compile derived from the data model: the policy caches and
-        # the database schema of its data model step, then the derived field definitions, the
-        # registered queries and the page windows. Before the tabs are told to reload, so that they
+        # the database schema of its data model step, then the query cache with the derived field
+        # definitions, and the page types. Before the tabs are told to reload, so that they
         # reload into a released model, unless a save since holds it again.
         maybe_release_model(state)
       end
@@ -576,9 +576,9 @@ defmodule Hologram.LiveReload do
   """
   @spec reload(String.t() | nil, any, keyword) :: :ok | {:error, [[Diagnostic.segment()]]}
   def reload(_file_path, endpoint, opts) do
-    # The query cache is not reloaded with the database: it reads the registered queries the
-    # Hologram compile dumps, so it reloads with the runtime registries, and a compile that refused
-    # a query builder fails before any registry is reloaded, leaving the previous dump in place.
+    # The query cache is not reloaded with the database: it reads what the Hologram compile dumps,
+    # so it reloads with the runtime registries, and a compile that refused a query fails before
+    # any registry is reloaded, leaving the previous dump in place.
     with :ok <- reload_code(endpoint),
          :ok <-
            recompile_hologram(
@@ -835,7 +835,7 @@ defmodule Hologram.LiveReload do
     ManifestCache.reload()
     ChunkRegistry.reload()
     PageDigestRegistry.reload()
-    PageWindows.reload()
+    PageTypes.reload()
     QueryCache.reload()
   end
 

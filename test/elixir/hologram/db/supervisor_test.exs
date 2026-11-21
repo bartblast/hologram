@@ -10,7 +10,7 @@ defmodule Hologram.DB.SupervisorTest do
   alias Hologram.Sync
 
   # Sync and the jobs restart with the database they read through: rest_for_one takes them down
-  # when the database goes, so no evaluator keeps rows read over a connection that no longer exists
+  # when the database goes, so no session goes on reading over a connection that no longer exists
   # and no worker goes on scanning through one.
   test "init/1" do
     assert init(nil) ==

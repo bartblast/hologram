@@ -27,8 +27,6 @@ defmodule HologramFeatureTests.ResyncTest do
   # newest thing in a log the client's place still predates.
 
   setup do
-    await_evaluator_drain()
-
     table = ~s("hologram_data"."#{Mapper.table_name(Todo)}")
 
     {:ok, _result} = Connection.query("TRUNCATE #{table}", [])
@@ -42,7 +40,7 @@ defmodule HologramFeatureTests.ResyncTest do
 
   # Raising rather than returning: every assertion this gates would otherwise pass on the rows the
   # client kept, which is exactly what a refill that never landed leaves on the screen. Same shape
-  # as `await_pending_writes/3` and `await_evaluator_drain/1` in the framework's own helpers.
+  # as `await_pending_writes/3` in the framework's own helpers.
   defp await_place(session, 0) do
     raise Wallaby.ExpectationNotMetError,
           "Timed out waiting for the refill to complete, the client holds place " <>

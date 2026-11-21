@@ -8,8 +8,7 @@ defmodule HologramSyncBenchmark.DocsPage do
 
   layout HologramSyncBenchmark.Components.DefaultLayout
 
-  # The access case's clients greet with this page. Every doc, so the window the compiler derives
-  # is the whole table.
+  # The access case's clients greet with this page, which reads every doc.
   derived :docs, [Doc], fn -> sort(Doc, position) end
 
   def template do

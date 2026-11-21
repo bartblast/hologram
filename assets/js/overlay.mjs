@@ -276,7 +276,9 @@ export default class Overlay {
   }
 
   // The row a create will store, built from the write alone - the id it minted, the values it
-  // carries, and both timestamps from its own stamp, which is the instant its writer made it.
+  // carries, and both timestamps from its own stamp, which is the instant its writer made it. The
+  // server's pair is nil: it is the moment the row reaches the server, which has not happened
+  // yet, and the server's own row brings it.
   // Every settable field takes that stamp as its revision, which is what the server's insert does
   // with the same number.
   //
@@ -291,6 +293,8 @@ export default class Overlay {
 
     const row = Object.assign({id: write.id}, write.data, {
       created_at: timestamp,
+      server_created_at: null,
+      server_updated_at: null,
       updated_at: timestamp,
       $revisions: revisions,
     });
@@ -470,6 +474,8 @@ export default class Overlay {
       return row;
     }
 
+    // server_updated_at stays as the base holds it: the server moves it when the write lands,
+    // and its row says so.
     const updated = Object.assign({}, row, {
       updated_at: Model.wireDateTime(Clock.wallClockMs(write.stamp)),
     });

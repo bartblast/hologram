@@ -846,9 +846,9 @@ function canonicalId(value) {
 // An answer can settle a batch before the frame carrying its round arrives, and between the two
 // the verdict predates the write again: the answer files the write's values into the base row,
 // which keeps the verdicts the server worked out before it. A verdict answers its operation whole,
-// so in that window it can grant over values it was never worked out for - those of the row itself
+// so in that gap it can grant over values it was never worked out for - those of the row itself
 // or of a row its rules read - and an action can write what the server then refuses and rolls
-// back. The window closes itself: a write moving a verdict brings the new one with its frame, and
+// back. The gap closes itself: a write moving a verdict brings the new one with its frame, and
 // a write that moves none sends none, since the verdict held stands. A rule the held rows decide
 // never reads it in between.
 function verdictHolds(entityType, entity, entry, actorUserId) {

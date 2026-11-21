@@ -852,7 +852,7 @@ defmodule Hologram.DB.Mapper do
   defp strip_root(segments, _root), do: segments
 
   defp timestamp_columns do
-    Enum.map(["created_at", "updated_at"], fn name ->
+    Enum.map(["created_at", "server_created_at", "server_updated_at", "updated_at"], fn name ->
       %{
         name: name,
         type: :datetime,

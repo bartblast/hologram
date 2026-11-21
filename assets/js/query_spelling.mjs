@@ -59,13 +59,9 @@ export default class QuerySpelling {
   }
 
   // The objects a value can be, each the twin of a tuple the server knows: an attribute compared
-  // with, a name or a source on a row further out, and a placeholder.
+  // with, and a name or a source on a row further out.
   static #isValueObject(value) {
-    return (
-      $.#hasKeys(value, "attribute") ||
-      $.#hasKeys(value, "name,outer") ||
-      $.#hasKeys(value, "placeholder")
-    );
+    return $.#hasKeys(value, "attribute") || $.#hasKeys(value, "name,outer");
   }
 
   static #sorted(spellings) {
@@ -192,8 +188,8 @@ export default class QuerySpelling {
     return `!${text}`;
   }
 
-  // A name, a path, an operand, a membership list, an attribute compared with, a placeholder and a
-  // source, all as the stages left them: plain values, arrays and objects of them.
+  // A name, a path, an operand, a membership list, an attribute compared with and a source, all as
+  // the stages left them: plain values, arrays and objects of them.
   //
   // WARNING: must match spell_value/1 on the server (carry.ex).
   static #spellValue(value) {

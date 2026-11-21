@@ -1,6 +1,7 @@
 defmodule Hologram.DB.Preflight do
   @moduledoc false
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
@@ -90,6 +91,36 @@ defmodule Hologram.DB.Preflight do
     |> unique_indexes(table)
     |> Enum.filter(&(column_name in &1.columns))
     |> check_filled_keys!(table, column_name, encoded_value)
+  end
+
+  @doc """
+  Validates that the role grants a :rederive_grant_ids op gives new ids - the ones holding its
+  new label - repeat no grant's four identity columns.
+
+  Returns :ok, or raises naming the store, the label this rename moves the grants from and to,
+  and how many keys repeat. The label it moves them from is the one the database holds once the
+  refusal takes the file back, unless an earlier rename in the same file moved them to it. Two
+  grants repeating one key derive one id, and the primary key refuses the second whatever state
+  the store's unique index is in, so the rows are counted rather than the index asked about.
+  They can repeat only where that index was missing or unbuilt while they were written.
+  """
+  @spec check_grant_repeats!(%{atom => any}) :: :ok
+  def check_grant_repeats!(op) do
+    statement = DDL.grant_repeat_check_statement(op.table, op.column)
+
+    {:ok, %{rows: [[count]]}} = Connection.query(statement, [op.value])
+
+    if count > 0 do
+      columns = Enum.map_join(RoleGrant.identity_columns(), ", ", &~s("#{&1}"))
+
+      raise ~s{found #{count} duplicate #{pluralize_keys(count)} in "#{op.table}" over } <>
+              ~s{(#{columns}) among the grants a rename moves from "#{op.from}" to } <>
+              ~s{"#{op.value}" in "#{op.column}" - a renamed grant takes the id these columns } <>
+              "derive, so the repeats would share one - delete all but one grant of each " <>
+              "repeated key"
+    end
+
+    :ok
   end
 
   @doc """

@@ -10,8 +10,6 @@ defmodule HologramFeatureTests.TimeAttributeTest do
 
   # Shop references nothing, so it truncates alone - no other table's foreign keys reach it.
   setup do
-    await_evaluator_drain()
-
     table = ~s("hologram_data"."#{Mapper.table_name(Shop)}")
 
     {:ok, _result} = Connection.query("TRUNCATE #{table}", [])

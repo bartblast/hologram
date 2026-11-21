@@ -20,8 +20,6 @@ defmodule HologramFeatureTests.ServerOnlyRulesTest do
   # The memo, note, project member and role grant tables reference the user table, so they truncate
   # with it.
   setup do
-    await_evaluator_drain()
-
     truncate_entity_tables([
       Inspection,
       Memo,

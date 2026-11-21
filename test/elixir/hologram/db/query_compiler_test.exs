@@ -9,7 +9,6 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Query
-  alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -82,18 +81,6 @@ defmodule Hologram.DB.QueryCompilerTest do
   defp table(entity_type), do: ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
 
   describe "compile/2" do
-    test "assigns placeholders to placeholder slots" do
-      mapping = Mapper.derive!([Module2], [])
-      term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
-
-      assert %{
-               params: [{:placeholder, :search, :sort_key}, {:placeholder, :search, :string}],
-               sql: sql
-             } = compile(term, mapping)
-
-      assert String.contains?(sql, ~s| WHERE ("c_$sort" = $1 AND "c" = $2)|)
-    end
-
     test "compiles equality predicates into bound placeholders" do
       mapping = Mapper.derive!([Module2], [])
 
@@ -105,7 +92,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [{:value, true}, {:value, 123}],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions" ) <>
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
                    ~s(WHERE "a" = $1 AND "b" = $2 ORDER BY "id" ASC)
              }
@@ -153,40 +140,6 @@ defmodule Hologram.DB.QueryCompilerTest do
              )
     end
 
-    test "binds membership element placeholders as scalar slots in an array constructor" do
-      mapping = Mapper.derive!([Module2], [])
-      term = %{Stage.normalize(Module2) | filter: [{:b, :in, [{:placeholder, :bound}, 1]}]}
-
-      assert %{params: placeholders, sql: sql} = compile(term, mapping)
-      assert placeholders == [{:placeholder, :bound, :integer}, {:value, 1}]
-      assert String.contains?(sql, ~s|WHERE "b" = ANY(ARRAY[$1, $2]::int8[])|)
-    end
-
-    test "binds membership element placeholders under the nil-inclusive branch" do
-      mapping = Mapper.derive!([Module2], [])
-      term = %{Stage.normalize(Module2) | filter: [{:b, :in, [nil, {:placeholder, :bound}]}]}
-
-      assert %{params: [{:placeholder, :bound, :integer}], sql: sql} =
-               compile(term, mapping)
-
-      assert String.contains?(sql, ~s|("b" = ANY(ARRAY[$1]::int8[]) OR "b" IS NULL)|)
-    end
-
-    test "binds membership placeholders with list types" do
-      mapping = Mapper.derive!([Module2], [])
-      term = %{Stage.normalize(Module2) | filter: [{:c, :in, {:placeholder, :names}}]}
-
-      assert %{
-               params: [
-                 {:placeholder, :names, {:list, :sort_key}},
-                 {:placeholder, :names, {:list, :string}}
-               ],
-               sql: sql
-             } = compile(term, mapping)
-
-      assert String.contains?(sql, ~s| WHERE ("c_$sort" = ANY($1) AND "c" = ANY($2))|)
-    end
-
     test "compiles a to-one reference field predicate against its reference column" do
       mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
@@ -201,22 +154,10 @@ defmodule Hologram.DB.QueryCompilerTest do
                   <<1, 143, 69, 113, 161, 178, 124, 61, 142, 79, 90, 107, 124, 141, 158, 15>>}
                ],
                sql:
-                 ~s(SELECT "id", "b_id", "c_id", "created_at", "updated_at", "$revisions" ) <>
+                 ~s(SELECT "id", "b_id", "c_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module3" ) <>
                    ~s(WHERE "c_id" = $1 ORDER BY "id" ASC)
              }
-    end
-
-    test "binds a to-one reference field placeholder as a uuid slot" do
-      mapping = Mapper.derive!([Module1, Module2, Module3], [])
-      term = %{Stage.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :owner}}]}
-
-      assert %{
-               params: [{:placeholder, :owner, :uuid}],
-               sql: sql
-             } = compile(term, mapping)
-
-      assert String.contains?(sql, ~s( WHERE "c_id" = $1))
     end
 
     test "composes a policy rule after the authored filter" do
@@ -232,7 +173,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, true}, {:value, "text_1"}, {:value, "text_1"}],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions" ) <>
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
                    ~s|WHERE "a" = $1 AND ("c_$sort" = $2 AND "c" = $3) ORDER BY "id" ASC|
              }
@@ -455,14 +396,17 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(sql, ~s|WHERE (("b_id" = $1) OR ("c_id" = $1))|)
     end
 
-    test "allocates the actor slot after the authored placeholders" do
+    test "allocates the actor slot after the authored slots" do
       mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
-      term = %{Stage.normalize(Module3) | filter: [{:c_id, :==, {:placeholder, :target}}]}
+      term =
+        Module3
+        |> filter(c_id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+        |> Stage.normalize()
 
       rules = [%{predicates: [{:b_id, :==, {:actor}}], to: nil, via: nil}]
 
-      assert %{params: [{:placeholder, :target, :uuid}, :actor], sql: sql} =
+      assert %{params: [{:value, _target_id}, :actor], sql: sql} =
                compile(term, mapping, %{rules: rules})
 
       assert String.contains?(sql, ~s|WHERE "c_id" = $1 AND "b_id" = $2|)
@@ -500,7 +444,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                ],
                sql:
                  ~s|SELECT "id", "priority", "public", "author_id", "parent_id", | <>
-                   ~s|"created_at", "updated_at", "$revisions" | <>
+                   ~s|"created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module1" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
                    ~s|WHERE "$rg"."user_id" = $1 | <>
@@ -525,7 +469,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                   ["Hologram.Test.Fixtures.Role.Module1", "Hologram.Test.Fixtures.Role.Module2"]}
                ],
                sql:
-                 ~s|SELECT "id", "public", "created_at", "updated_at", "$revisions" | <>
+                 ~s|SELECT "id", "public", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module2" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
                    ~s|WHERE "$rg"."user_id" = $1 | <>
@@ -659,7 +603,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                params: [{:value, true}],
                sql:
                  ~s|SELECT "id", "priority", "public", "author_id", "parent_id", | <>
-                   ~s|"created_at", "updated_at", "$revisions" | <>
+                   ~s|"created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module1" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module2" | <>
                    ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
@@ -689,7 +633,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, true}],
                sql:
-                 ~s|SELECT "id", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                 ~s|SELECT "id", "parent_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module8" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module1" | <>
                    ~s|AS "$d1" WHERE "$d1"."id" = #{target_id_sql} | <>
@@ -709,7 +653,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, false}],
                sql:
-                 ~s|SELECT "id", "archived", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                 ~s|SELECT "id", "archived", "parent_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module9" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module9" | <>
                    ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
@@ -738,7 +682,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, false}],
                sql:
-                 ~s|SELECT "id", "archived", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                 ~s|SELECT "id", "archived", "parent_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."d1" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."d1" AS "$d1" | <>
                    ~s|WHERE "$d1"."id" = "d1"."parent_id" AND "archived" = $1) | <>
@@ -759,7 +703,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping, %{anonymous?: true, rules: rules}) == %{
                params: [{:value, true}],
                sql:
-                 ~s|SELECT "id", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                 ~s|SELECT "id", "parent_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module8" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module5" | <>
                    ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module8"."parent_id" | <>
@@ -784,9 +728,11 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, false}, {:value, false}],
                sql:
-                 ~s|SELECT "id", "archived", "parent_id", "created_at", "updated_at", "$revisions", | <>
+                 ~s|SELECT "id", "archived", "parent_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions", | <>
                    ~s|(SELECT jsonb_build_object('id', "$i1"."id", 'archived', "$i1"."archived", | <>
                    ~s|'parent_id', "$i1"."parent_id", 'created_at', "$i1"."created_at", | <>
+                   ~s|'server_created_at', "$i1"."server_created_at", | <>
+                   ~s|'server_updated_at', "$i1"."server_updated_at", | <>
                    ~s|'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module9" AS "$i1" | <>
                    ~s|WHERE "$i1"."id" = "test_fixtures_policy_module9"."parent_id" | <>
@@ -916,20 +862,6 @@ defmodule Hologram.DB.QueryCompilerTest do
              )
     end
 
-    test "binds the placeholders of a disjunction in reading order" do
-      mapping = Mapper.derive!([Module2], [])
-
-      term = %{
-        Stage.normalize(Module2)
-        | filter: [{:or, [[{:a, :==, {:placeholder, :x}}], [{:b, :==, {:placeholder, :y}}]]}]
-      }
-
-      assert %{params: params, sql: sql} = compile(term, mapping)
-
-      assert params == [{:placeholder, :x, :boolean}, {:placeholder, :y, :integer}]
-      assert String.contains?(sql, ~s|WHERE (("a" = $1) OR ("b" = $2)) ORDER BY|)
-    end
-
     test "compiles a disjunction as an OR group of its alternatives" do
       mapping = Mapper.derive!([Module2], [])
 
@@ -941,7 +873,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [{:value, true}, {:value, 3}, {:value, "x"}, {:value, "x"}],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions" ) <>
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
                    ~s|WHERE (("a" = $1) OR ("b" >= $2 AND ("c_$sort" = $3 AND "c" = $4))) | <>
                    ~s|ORDER BY "id" ASC|
@@ -1096,25 +1028,6 @@ defmodule Hologram.DB.QueryCompilerTest do
              )
     end
 
-    test "binds string membership element placeholders with key slots ahead of the values" do
-      mapping = Mapper.derive!([Module2], [])
-      term = %{Stage.normalize(Module2) | filter: [{:c, :in, [{:placeholder, :name}, "Ann"]}]}
-
-      assert %{params: params, sql: sql} = compile(term, mapping)
-
-      assert params == [
-               {:placeholder, :name, :sort_key},
-               {:value, "ann"},
-               {:placeholder, :name, :string},
-               {:value, "Ann"}
-             ]
-
-      assert String.contains?(
-               sql,
-               ~s| WHERE ("c_$sort" = ANY(ARRAY[$1, $2]::text[]) AND "c" = ANY(ARRAY[$3, $4]::text[]))|
-             )
-    end
-
     test "raises on a literal that isn't a string compared with a string attribute" do
       mapping = Mapper.derive!([Module2], [])
       term = %{Stage.normalize(Module2) | filter: [{:c, :==, 5}]}
@@ -1227,7 +1140,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       expected_fragment =
         ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
           ~s|'id', "$i1"."id", 'a', "$i1"."a", 'b', "$i1"."b", 'c', "$i1"."c", | <>
-          ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions"| <>
+          ~s|'created_at', "$i1"."created_at", 'server_created_at', "$i1"."server_created_at", 'server_updated_at', "$i1"."server_updated_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions"| <>
           ~s|) ORDER BY "$i1"."id" ASC), '[]'::jsonb) | <>
           ~s|FROM (SELECT "$t1".* | <>
           ~s|FROM "hologram_data"."test_fixtures_entity_module2" AS "$t1" | <>
@@ -1250,8 +1163,8 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s|SELECT "id", "b_id", "c_id", "created_at", "updated_at", "$revisions", | <>
-                   ~s|(SELECT jsonb_build_object('id', "$i1"."id", 'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
+                 ~s|SELECT "id", "b_id", "c_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions", | <>
+                   ~s|(SELECT jsonb_build_object('id', "$i1"."id", 'created_at', "$i1"."created_at", 'server_created_at', "$i1"."server_created_at", 'server_updated_at', "$i1"."server_updated_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
                    ~s|FROM "hologram_data"."test_fixtures_entity_module1" AS "$i1" | <>
                    ~s|WHERE "$i1"."id" = "test_fixtures_entity_module3"."c_id") AS "c" | <>
                    ~s|FROM "hologram_data"."test_fixtures_entity_module3" ORDER BY "id" ASC|
@@ -1342,18 +1255,6 @@ defmodule Hologram.DB.QueryCompilerTest do
       term = %{Stage.normalize(Module2) | filter: [{:c, :>=, "Zoe"}]}
 
       assert %{params: [{:value, "zoe"}, {:value, "Zoe"}], sql: sql} = compile(term, mapping)
-
-      assert String.contains?(sql, ~s|WHERE ("c_$sort", "c") >= ($1, $2)|)
-    end
-
-    test "binds a placeholder compared against a string as a key slot and a value slot" do
-      mapping = Mapper.derive!([Module2], [])
-      term = %{Stage.normalize(Module2) | filter: [{:c, :>=, {:placeholder, :min}}]}
-
-      assert %{
-               params: [{:placeholder, :min, :sort_key}, {:placeholder, :min, :string}],
-               sql: sql
-             } = compile(term, mapping)
 
       assert String.contains?(sql, ~s|WHERE ("c_$sort", "c") >= ($1, $2)|)
     end
@@ -1469,18 +1370,16 @@ defmodule Hologram.DB.QueryCompilerTest do
              )
     end
 
-    test "binds no slot for an attribute operand beside a placeholder" do
+    test "binds no slot for an attribute operand beside a literal" do
       mapping = Mapper.derive!([Module10], [])
 
       term = %{
         Stage.normalize(Module10)
-        | filter: [{:count, :<, {:attribute, :priority}}, {:username, :==, {:placeholder, :name}}]
+        | filter: [{:count, :<, {:attribute, :priority}}, {:username, :==, "dan"}]
       }
 
-      assert %{
-               params: [{:placeholder, :name, :sort_key}, {:placeholder, :name, :string}],
-               sql: sql
-             } = compile(term, mapping)
+      # The string's sort key binds first, then its value - "dan" is its own key.
+      assert %{params: [{:value, "dan"}, {:value, "dan"}], sql: sql} = compile(term, mapping)
 
       assert String.contains?(
                sql,
@@ -1534,26 +1433,6 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(sql, ~s( WHERE "c" = $1))
     end
 
-    test "mixes literal and placeholder bindings in placeholder order" do
-      mapping = Mapper.derive!([Module2], [])
-
-      term = %{
-        Stage.normalize(Module2)
-        | filter: [{:a, :==, true}, {:c, :==, {:placeholder, :search}}]
-      }
-
-      assert %{
-               params: [
-                 {:value, true},
-                 {:placeholder, :search, :sort_key},
-                 {:placeholder, :search, :string}
-               ],
-               sql: sql
-             } = compile(term, mapping)
-
-      assert String.contains?(sql, ~s| WHERE "a" = $1 AND ("c_$sort" = $2 AND "c" = $3)|)
-    end
-
     test "nests a to-one inside a to-one include" do
       mapping = Mapper.derive!([Module2, Module3, Module5], [])
 
@@ -1567,7 +1446,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       expected_fragment =
         ~s|, 'b', (SELECT jsonb_build_object(| <>
           ~s|'id', "$i2"."id", 'a', "$i2"."a", 'b', "$i2"."b", 'c', "$i2"."c", | <>
-          ~s|'created_at', "$i2"."created_at", 'updated_at', "$i2"."updated_at", '$revisions', "$i2"."$revisions"| <>
+          ~s|'created_at', "$i2"."created_at", 'server_created_at', "$i2"."server_created_at", 'server_updated_at', "$i2"."server_updated_at", 'updated_at', "$i2"."updated_at", '$revisions', "$i2"."$revisions"| <>
           ~s|) FROM "hologram_data"."test_fixtures_entity_module2" AS "$i2" | <>
           ~s|WHERE "$i2"."id" = "$i1"."b_id")|
 
@@ -1608,10 +1487,10 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", | <>
+                 ~s|SELECT "id", "name", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions", | <>
                    ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
                    ~s|'id', "$i1"."id", 'body', "$i1"."body", 'position', "$i1"."position", 'channel_id', "$i1"."channel_id", | <>
-                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
+                   ~s|'created_at', "$i1"."created_at", 'server_created_at', "$i1"."server_created_at", 'server_updated_at', "$i1"."server_updated_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
                    ~s|ORDER BY "$i1"."position" ASC, "$i1"."id" ASC), '[]'::jsonb) | <>
                    ~s|FROM (SELECT "$t1".* FROM "hologram_data"."test_fixtures_entity_module28" AS "$t1" | <>
                    ~s|WHERE "$t1"."channel_id" = "test_fixtures_entity_module26"."id" | <>
@@ -1631,10 +1510,10 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", | <>
+                 ~s|SELECT "id", "name", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions", | <>
                    ~s|(SELECT jsonb_build_object(| <>
                    ~s|'id', "$i1"."id", 'code', "$i1"."code", 'summary', "$i1"."summary", 'channel_id', "$i1"."channel_id", | <>
-                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
+                   ~s|'created_at', "$i1"."created_at", 'server_created_at', "$i1"."server_created_at", 'server_updated_at', "$i1"."server_updated_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
                    ~s|FROM "hologram_data"."test_fixtures_entity_module27" AS "$i1" | <>
                    ~s|WHERE "$i1"."channel_id" = "test_fixtures_entity_module26"."id") AS "topic" | <>
                    ~s|FROM "hologram_data"."test_fixtures_entity_module26" ORDER BY "id" ASC|
@@ -1652,10 +1531,10 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", | <>
+                 ~s|SELECT "id", "name", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions", | <>
                    ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
                    ~s|'id', "$i1"."id", 'body', "$i1"."body", 'position', "$i1"."position", 'channel_id', "$i1"."channel_id", | <>
-                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
+                   ~s|'created_at', "$i1"."created_at", 'server_created_at', "$i1"."server_created_at", 'server_updated_at', "$i1"."server_updated_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
                    ~s|ORDER BY "$i1"."id" ASC), '[]'::jsonb) | <>
                    ~s|FROM (SELECT "$t1".* FROM "hologram_data"."test_fixtures_entity_module28" AS "$t1" | <>
                    ~s|WHERE "$t1"."id" IN (SELECT "$j1"."source_id" | <>
@@ -1702,7 +1581,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions" FROM "hologram_data"."test_fixtures_entity_module2" ORDER BY "id" ASC)
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" FROM "hologram_data"."test_fixtures_entity_module2" ORDER BY "id" ASC)
              }
     end
 
@@ -1713,21 +1592,20 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s(SELECT "id", "b_id", "c_id", "created_at", "updated_at", "$revisions" FROM "hologram_data"."test_fixtures_entity_module3" ORDER BY "id" ASC)
+                 ~s(SELECT "id", "b_id", "c_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" FROM "hologram_data"."test_fixtures_entity_module3" ORDER BY "id" ASC)
              }
     end
 
-    test "threads include placeholders after the root's" do
+    test "threads include slots after the root's" do
       mapping = Mapper.derive!([Module1, Module2, Module3], [])
 
-      base_term =
+      term =
         Module3
+        |> filter(id: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
         |> narrowed_include(:a, &filter(&1, a: true))
         |> Stage.normalize()
 
-      term = %{base_term | filter: [{:id, :==, {:placeholder, :root_id}}]}
-
-      assert %{params: [{:placeholder, :root_id, :uuid}, {:value, true}], sql: sql} =
+      assert %{params: [{:value, _root_id}, {:value, true}], sql: sql} =
                compile(term, mapping)
 
       assert String.contains?(sql, ~s( WHERE "id" = $1))
@@ -1874,7 +1752,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, true}],
                sql:
-                 ~s|SELECT "id", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                 ~s|SELECT "id", "parent_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" | <>
                    ~s|FROM "hologram_data"."test_fixtures_policy_module5" | <>
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module1" | <>
                    ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module5"."parent_id" | <>
@@ -2173,7 +2051,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [{:value, 10}, {:value, 10}],
                sql:
-                 ~s(SELECT "id", "nickname", "score", "channel_id", "created_at", "updated_at", "$revisions" ) <>
+                 ~s(SELECT "id", "nickname", "score", "channel_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module34" ) <>
                    ~s(WHERE $1::int8 = $2 ORDER BY "id" ASC)
              }
@@ -2510,27 +2388,6 @@ defmodule Hologram.DB.QueryCompilerTest do
              )
     end
 
-    test "binds membership element placeholders on a derived enum as labels", %{mapping: mapping} do
-      term =
-        Module39
-        |> filter(tier in [^%Placeholder{name: :tier}, :gold])
-        |> Stage.normalize()
-
-      assert %{params: params, sql: sql} = compile(term, mapping)
-
-      assert params == [
-               {:value, 10},
-               {:value, "gold"},
-               {:value, 5},
-               {:value, "silver"},
-               {:value, "bronze"},
-               {:placeholder, :tier, :enum},
-               {:value, "gold"}
-             ]
-
-      assert String.contains?(sql, ~s| = ANY(ARRAY[$6, $7]::text[]) ORDER BY|)
-    end
-
     test "binds a derived sort's slots after the policy's", %{mapping: mapping} do
       term =
         Module39
@@ -2611,7 +2468,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     defp message_pairs(quoted_alias) do
       Enum.map_join(
-        ~w(id body position channel_id created_at updated_at $revisions),
+        ~w(id body position channel_id created_at server_created_at server_updated_at updated_at $revisions),
         ", ",
         &~s|'#{&1}', "#{quoted_alias}"."#{&1}"|
       )
@@ -2619,7 +2476,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
     defp pinned_message_pairs(quoted_alias) do
       Enum.map_join(
-        ~w(id pinned author_id channel_id created_at updated_at $revisions),
+        ~w(id pinned author_id channel_id created_at server_created_at server_updated_at updated_at $revisions),
         ", ",
         &~s|'#{&1}', "#{quoted_alias}"."#{&1}"|
       )
@@ -2634,7 +2491,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", | <>
+                 ~s|SELECT "id", "name", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions", | <>
                    ~s|(SELECT count(*) FROM #{table(Module33)} AS "$s1" | <>
                    ~s|WHERE "$s1"."channel_id" = "test_fixtures_entity_module32"."id") AS "message_count" | <>
                    ~s|FROM #{table(Module32)} ORDER BY "id" ASC|
@@ -2686,12 +2543,16 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       author =
         ~s|(SELECT jsonb_build_object('id', "$i2"."id", 'created_at', "$i2"."created_at", | <>
+          ~s|'server_created_at', "$i2"."server_created_at", | <>
+          ~s|'server_updated_at', "$i2"."server_updated_at", | <>
           ~s|'updated_at', "$i2"."updated_at", '$revisions', "$i2"."$revisions") | <>
           ~s|FROM #{table(Module1)} AS "$i2" WHERE "$i2"."id" = "$i1"."author_id")|
 
       channel =
         ~s|(SELECT jsonb_build_object('id', "$i3"."id", 'last_read_at', "$i3"."last_read_at", | <>
           ~s|'name', "$i3"."name", 'created_at', "$i3"."created_at", | <>
+          ~s|'server_created_at', "$i3"."server_created_at", | <>
+          ~s|'server_updated_at', "$i3"."server_updated_at", | <>
           ~s|'updated_at', "$i3"."updated_at", '$revisions', "$i3"."$revisions") | <>
           ~s|FROM #{table(Module37)} AS "$i3" WHERE "$i3"."id" = "$i1"."channel_id")|
 
@@ -2738,7 +2599,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       note_pairs =
         Enum.map_join(
-          ~w(id public team_id created_at updated_at $revisions),
+          ~w(id public team_id created_at server_created_at server_updated_at updated_at $revisions),
           ", ",
           &~s|'#{&1}', "$i1"."#{&1}"|
         )
@@ -2848,7 +2709,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [{:value, true}],
                sql:
-                 ~s(SELECT "id", "b_id", "c_id", "created_at", "updated_at", "$revisions" ) <>
+                 ~s(SELECT "id", "b_id", "c_id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module3" ) <>
                    ~s(WHERE #{b_a} = $1 ORDER BY "id" ASC)
              }
@@ -2985,14 +2846,6 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert %{params: [{:value, ["x"]}], sql: sql} = compile(term, mapping)
       assert String.contains?(sql, ~s| WHERE (#{b_c} != ALL($1) OR #{b_c} IS NULL) ORDER BY|)
-    end
-
-    test "binds a placeholder on a path with the type of the attribute it ends at" do
-      mapping = path_mapping([Module1, Module2, Module3])
-      base_term = Stage.normalize(Module3)
-      term = %{base_term | filter: [{[:b, :c], :==, {:placeholder, :name}}]}
-
-      assert %{params: [{:placeholder, :name, :string}]} = compile(term, mapping)
     end
 
     test "applies the hop type's read policy to the row a hop reads under a policied read" do
@@ -3801,16 +3654,6 @@ defmodule Hologram.DB.QueryCompilerTest do
       term = %{Stage.normalize(Module2) | filter: [{:c, :contains_exact, "50%_"}]}
 
       assert %{params: [{:value, "%50\\%\\_%"}]} = compile(term, mapping)
-    end
-
-    test "binds a placeholder term as a pattern slot" do
-      mapping = Mapper.derive!([Module2], [])
-      term = %{Stage.normalize(Module2) | filter: [{:c, :starts_with, {:placeholder, :query}}]}
-
-      assert %{params: [{:placeholder, :query, {:pattern, :prefix, :loose}}], sql: sql} =
-               compile(term, mapping)
-
-      assert String.contains?(sql, ~s| WHERE COALESCE("c_$search", "c_$sort") LIKE $1|)
     end
 
     test "reads a loose search on a path through the related row's keys" do
