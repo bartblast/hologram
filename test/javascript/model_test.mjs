@@ -1681,6 +1681,111 @@ describe("Model", () => {
     });
   });
 
+  describe("readIntegers()", () => {
+    const TYPE = "MyApp.Counted";
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TYPE]: {
+            attributes: {id: "uuid", label: "string", n: "integer"},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+    });
+
+    it("reads an integer attribute's text as a BigInt", () => {
+      assert.strictEqual(
+        Model.readIntegers(TYPE, {n: "-9007199254740993"}).n,
+        -9007199254740993n,
+      );
+    });
+
+    it("leaves a Number, a BigInt and null as they are", () => {
+      assert.strictEqual(Model.readIntegers(TYPE, {n: 42}).n, 42);
+      assert.strictEqual(Model.readIntegers(TYPE, {n: 5n}).n, 5n);
+      assert.isNull(Model.readIntegers(TYPE, {n: null}).n);
+    });
+
+    it("leaves another attribute's text as it is", () => {
+      assert.strictEqual(Model.readIntegers(TYPE, {label: "12"}).label, "12");
+    });
+  });
+
+  describe("integer literals in the rules", () => {
+    const TYPE = "MyApp.Counted";
+
+    const literal = {$integer: "9007199254740993"};
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TYPE]: {
+            attributes: {id: "uuid", n: "integer"},
+            derived: {
+              cap: {
+                definition: {value: literal},
+                kind: "scalar",
+                type: "integer",
+              },
+            },
+            policy: {
+              read: [
+                {predicates: [["n", "in", [1, literal]]], to: null, via: null},
+              ],
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+    });
+
+    it("reads a derived field's literal as a BigInt", () => {
+      assert.strictEqual(
+        Model.derivedField(TYPE, "cap").definition.value,
+        9007199254740993n,
+      );
+    });
+
+    it("reads a rule's literal as a BigInt, wherever it sits", () => {
+      assert.deepEqual(Model.entry(TYPE).policy.read[0].predicates, [
+        ["n", "in", [1, 9007199254740993n]],
+      ]);
+    });
+
+    it("leaves the model holding JSON, for another tab to take", () => {
+      Model.entry(TYPE);
+
+      assert.doesNotThrow(() => JSON.stringify(Model.serializedEntries()));
+      assert.deepEqual(
+        Model.serializedEntries()[TYPE].derived.cap.definition.value,
+        literal,
+      );
+    });
+
+    it("reads one policy into one object, however often it is asked for", () => {
+      const policy = globalThis.Hologram.sync.model[TYPE].policy;
+
+      assert.strictEqual(Model.readPolicy(policy), Model.readPolicy(policy));
+    });
+
+    it("hands back rules holding no literal as they are", () => {
+      const policy = {read: [{predicates: [], to: null, via: null}]};
+
+      globalThis.Hologram.sync.model[TYPE].policy = policy;
+      Model.reset();
+
+      assert.strictEqual(Model.entry(TYPE).policy, policy);
+    });
+  });
+
   describe("replaceRules()", () => {
     const DOC = "MyApp.Doc";
     const FOLDER = "MyApp.Folder";

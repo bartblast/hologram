@@ -66,6 +66,12 @@ export default class Serializer {
         return value;
       }
 
+      // A query term a page snapshot holds can carry one. The server reads no plain JavaScript
+      // value of this kind, so one bound there stays refused below.
+      if (valueType === "bigint" && destination === "client") {
+        return `n${value}`;
+      }
+
       // Cases ordered by expected frequency (most common first)
       switch (valueType) {
         case "object":

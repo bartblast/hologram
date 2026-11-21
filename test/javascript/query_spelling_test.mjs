@@ -761,14 +761,30 @@ describe("QuerySpelling", () => {
     });
 
     it("spells a value JSON can't write so that no server spelling matches it", () => {
+      const cyclic = {};
+      cyclic.self = cyclic;
+
       const term = {
         ...Stage["normalize/1"](module(2)),
-        filter: [["c", "==", 1n]],
+        filter: [["c", "==", cyclic]],
       };
 
       assert.equal(
         QuerySpelling.spell(term),
-        String.raw`{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==",![object BigInt]]],"include":{},"skip":null,"sort":[["id","asc"]],"take":null}`,
+        String.raw`{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==",![object Object]]],"include":{},"skip":null,"sort":[["id","asc"]],"take":null}`,
+      );
+    });
+
+    it("spells a BigInt in full, the way the server spells the integer", () => {
+      const term = {
+        ...Stage["normalize/1"](module(2)),
+        filter: [["b", "==", 9007199254740993n]],
+        take: 9007199254740992n,
+      };
+
+      assert.equal(
+        QuerySpelling.spell(term),
+        String.raw`{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["b","==",9007199254740993]],"include":{},"skip":null,"sort":[["id","asc"]],"take":9007199254740992}`,
       );
     });
 

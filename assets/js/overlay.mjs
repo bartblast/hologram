@@ -190,7 +190,10 @@ export default class Overlay {
     // server wrote nothing. So the answer's row is filed as the row, whole - its sort keys are
     // computed by #promoteWrite, which re-files whatever the base holds under the id next.
     if (base === null && write.op === "create" && "id" in kept) {
-      LocalDatabase.putRow(write.type, kept);
+      LocalDatabase.putRow(
+        write.type,
+        Model.readIntegers(write.type, {...kept}),
+      );
 
       return;
     }
@@ -217,7 +220,10 @@ export default class Overlay {
 
     LocalDatabase.putRow(
       write.type,
-      Model.computeSortKeys(write.type, absorbed),
+      Model.computeSortKeys(
+        write.type,
+        Model.readIntegers(write.type, absorbed),
+      ),
     );
   }
 

@@ -917,6 +917,21 @@ describe("Overlay", () => {
       assert.equal(row.title$sort, "theirs");
     });
 
+    it("holds a kept big integer as a BigInt", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed(updateWrite({data: {votes: 1}}));
+
+      Overlay.promote(batch, {
+        0: {votes: "9007199254740993", $revisions: {votes: stamp + 1}},
+      });
+
+      assert.strictEqual(
+        LocalDatabase.baseRow(TODO, "t1").votes,
+        9007199254740993n,
+      );
+    });
+
     // A resend of a batch already applied is answered from the record, so an answer can be older
     // than what frames have delivered since - taking it whole would walk the row backwards.
     it("leaves a base that has moved past what the answer kept", () => {

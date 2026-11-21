@@ -584,6 +584,12 @@ describe("QueryKernel", () => {
 
         assert.deepEqual(titles(QueryKernel.run(bounded)), ["bob"]);
       });
+
+      it("reads a bound held as a BigInt", () => {
+        const bounded = term({skip: 1n, take: 9007199254740993n});
+
+        assert.deepEqual(titles(QueryKernel.run(bounded)), ["bob", "cleo"]);
+      });
     });
 
     describe("terminals", () => {

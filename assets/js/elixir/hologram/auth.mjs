@@ -912,7 +912,9 @@ function viaHolds(rule, entityType, entity, actorUserId) {
 // The rules the build baked under the given key, or none. Only the policy's own keys count: it is
 // a plain object, so a name like constructor would otherwise read a property of Object.prototype.
 function policyRules(entry, key) {
-  return Object.hasOwn(entry.policy, key) ? entry.policy[key] : [];
+  const policy = Model.readPolicy(entry.policy);
+
+  return Object.hasOwn(policy, key) ? policy[key] : [];
 }
 
 // The verdict entry the build baked under the given key, or undefined - a hand-built entry may

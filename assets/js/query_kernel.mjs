@@ -139,11 +139,12 @@ export default class QueryKernel {
   }
 
   static #bound(rows, term) {
-    const skip = term.skip ?? 0;
+    // A bound can be a BigInt, which no array is long enough for it to tell from its Number.
+    const skip = Number(term.skip ?? 0);
 
     return term.take === null || term.take === undefined
       ? rows.slice(skip)
-      : rows.slice(skip, skip + term.take);
+      : rows.slice(skip, skip + Number(term.take));
   }
 
   // The rows a source chain leads to from the row: the last link's rows of every row the links

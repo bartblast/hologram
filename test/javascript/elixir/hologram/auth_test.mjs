@@ -1255,26 +1255,6 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
-    it("compares a big integer with a float the way the database does", () => {
-      assert.deepStrictEqual(
-        reads(
-          [rule({predicates: [["rating", "==", 9007199254740993n]]})],
-          document({rating: 9007199254740992}),
-        ),
-        Type.boolean(true),
-      );
-    });
-
-    it("compares an integer no column can hold with a float exactly", () => {
-      assert.deepStrictEqual(
-        reads(
-          [rule({predicates: [["rating", "==", 18446744073709551617n]]})],
-          document({rating: 18446744073709551616}),
-        ),
-        Type.boolean(false),
-      );
-    });
-
     it("reads a path's attribute off the row its relationships lead to", () => {
       const rules = [
         rule({predicates: [[["folder", "parent", "archived"], "==", false]]}),
@@ -3857,6 +3837,56 @@ describe("Elixir_Hologram_Auth", () => {
       assert.deepStrictEqual(
         can(Type.nil(), Type.atom("read"), entity),
         Type.boolean(true),
+      );
+    });
+  });
+
+  // Cases this side alone has: a rule carries a big integer as JSON, and JavaScript holds it as a
+  // BigInt beside the Numbers it compares with.
+  describe("big integers", () => {
+    const reads = (rules, entity) => {
+      defineModel({read: rules});
+
+      return can(Type.nil(), Type.atom("read"), entity);
+    };
+
+    it("compares a big integer with a float the way the database does", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["rating", "==", 9007199254740993n]]})],
+          document({rating: 9007199254740992}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("reads a rule's big integer literal as the integer it stands for", () => {
+      const literal = {$integer: "9007199254740993"};
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", "==", literal]]})],
+          document({count: 5}),
+        ),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", "<", literal]]})],
+          document({count: 5}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("compares an integer no column can hold with a float exactly", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["rating", "==", 18446744073709551617n]]})],
+          document({rating: 18446744073709551616}),
+        ),
+        Type.boolean(false),
       );
     });
   });

@@ -581,6 +581,22 @@ describe("Deserializer", () => {
         });
       });
 
+      describe("BigInt", () => {
+        const term = -9007199254740993n;
+
+        it("top-level", () => {
+          testTopLevelDeserialization(term, "client");
+        });
+
+        it("nested", () => {
+          testNestedDeserialization(term, "client");
+        });
+
+        it("leaves a string that isn't one as it is", () => {
+          assert.equal(deserialize('[4,"not-a-number"]'), "not-a-number");
+        });
+      });
+
       describe("float", () => {
         const term = 1.23;
 

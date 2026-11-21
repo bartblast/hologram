@@ -8,6 +8,7 @@ import Interpreter from "./interpreter.mjs";
 import Serializer from "./serializer.mjs";
 import SortKey from "./sort_key.mjs";
 import Type from "./type.mjs";
+import Utils from "./utils.mjs";
 
 // What the client knows about the shape of its own rows, and the boundary where a row becomes
 // something transpiled Elixir can read.
@@ -16,6 +17,10 @@ import Type from "./type.mjs";
 // and uuids as strings - because that is the form the kernel matches and sorts on. A boxed entity
 // struct is built only when a result leaves for a template, which is the only form that can be
 // read there.
+//
+// An integer a Number can't hold exactly arrives as its decimal text, since JSON has no other way
+// to carry it whole, and is held as a BigInt. Every other integer is a Number, so one value has one
+// form and === still tells two apart.
 //
 // A value's type is not recoverable from the value itself, since a date, an enum and a uuid all
 // arrive as strings, so reading one back means knowing the attribute it belongs to. That is what
@@ -63,6 +68,14 @@ export default class Model {
   // What an integer column holds.
   static #INT8_MAX = 9223372036854775807n;
   static #INT8_MIN = -9223372036854775808n;
+
+  // The key a compiled rule or derived field spells a big integer literal under. Rules travel as
+  // JSON, in a frame as well as in the bundle, and the value's own type isn't there to read it by.
+  static #INTEGER_LITERAL = "$integer";
+
+  // Each baked policy as its rules read it, so a rule stays one object however often it is asked
+  // for. Keyed by the baked object, which taking in new rules replaces.
+  static #readPolicies = new WeakMap();
 
   // A year the way Date.to_iso8601/1 spells one, which is how every date and datetime arrives:
   // four digits, or more with no leading zero, and a minus before a year below 0 - never before 0
@@ -271,11 +284,11 @@ export default class Model {
       attributes: baked.attributes,
       constraints: Model.#boxConstraints(baked.constraints ?? {}),
       defaults: baked.defaults ?? {},
-      derived: baked.derived ?? {},
+      derived: Model.#withIntegerLiterals(baked.derived ?? {}),
       enumValues: baked.enumValues,
       frameworkAttributes: baked.frameworkAttributes ?? [],
       inverses: baked.inverses ?? {},
-      policy: baked.policy,
+      policy: Model.readPolicy(baked.policy),
       relationships: baked.relationships,
       serverOnly: new Set(baked.serverOnly),
     };
@@ -292,6 +305,34 @@ export default class Model {
       [Type.atom("__struct__"), Type.alias("Hologram.Entity.NotIncluded")],
       [Type.atom("relationship"), Type.atom(name)],
     ]);
+  }
+
+  // The given baked policy with each big integer literal as the BigInt it stands for.
+  static readPolicy(policy) {
+    if (policy === null || typeof policy !== "object") {
+      return policy;
+    }
+
+    if (!Model.#readPolicies.has(policy)) {
+      Model.#readPolicies.set(policy, Model.#withIntegerLiterals(policy));
+    }
+
+    return Model.#readPolicies.get(policy);
+  }
+
+  // Turns the text a big integer attribute arrives as into the BigInt it is held as, in the object
+  // it is given, and hands that object back. A value already held passes through, since a patch
+  // files the held row's values beside the ones it brought.
+  static readIntegers(type, attributes) {
+    for (const [name, attributeType] of Object.entries(
+      Model.entry(type).attributes,
+    )) {
+      if (attributeType === "integer" && typeof attributes[name] === "string") {
+        attributes[name] = BigInt(attributes[name]);
+      }
+    }
+
+    return attributes;
   }
 
   // The type a chain of relationships leads to from the given type - what a path's last name is an
@@ -873,6 +914,35 @@ export default class Model {
       default:
         return Type.bitstring(value);
     }
+  }
+
+  // The given rules or derived definitions with each big integer literal as the BigInt it stands
+  // for. The model itself keeps the JSON form, which is what it hands another tab. Most models hold
+  // no such literal, and those are handed back as they are.
+  static #withIntegerLiterals(value) {
+    return Utils.stringify(value)?.includes(`"${Model.#INTEGER_LITERAL}"`)
+      ? Model.#readIntegerLiterals(value)
+      : value;
+  }
+
+  static #readIntegerLiterals(value) {
+    if (Array.isArray(value)) {
+      return value.map((item) => Model.#readIntegerLiterals(item));
+    }
+
+    if (value === null || typeof value !== "object") {
+      return value;
+    }
+
+    const entries = Object.entries(value);
+
+    if (entries.length === 1 && entries[0][0] === Model.#INTEGER_LITERAL) {
+      return BigInt(entries[0][1]);
+    }
+
+    return Object.fromEntries(
+      entries.map(([key, item]) => [key, Model.#readIntegerLiterals(item)]),
+    );
   }
 
   // A compiled pattern exists only inside the runtime that compiled it, so the build bakes what
