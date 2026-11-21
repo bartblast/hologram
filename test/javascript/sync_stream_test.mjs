@@ -540,6 +540,63 @@ describe("SyncStream", () => {
       assert.equal(animationFrames.length, 1);
     });
 
+    // Here rather than in the stream's listener, since a follower is handed the marker through
+    // this and holds its own copy of the queue.
+    it("rules out the creates a type's marker covers, after its sweep", () => {
+      const marking = sinon.spy(LocalDatabase, "markTypesSynced");
+      const landing = sinon.stub(Batches, "landUnsent");
+
+      SyncStream.receiveFrame("synced", {
+        applied_seq: 7,
+        cursor: null,
+        scope: "types",
+        types: ["MyApp.Task"],
+      });
+
+      sinon.assert.calledOnceWithExactly(landing, ["MyApp.Task"], 7);
+      sinon.assert.callOrder(marking, landing);
+    });
+
+    // The copy a page carried is what the sweep takes, and a create checked before it would pass
+    // for one the fill delivered, and be filed by its answer once the copy is gone.
+    it("rules out a create whose only copy the marker's sweep took away", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "carried"});
+      LocalDatabase.markCarried("MyApp.Task", "t1");
+
+      Batches.adopt([
+        {
+          actorUserId: null,
+          landed: [],
+          seq: 3,
+          writes: [
+            {data: {}, id: "t1", op: "create", stamp: 1, type: "MyApp.Task"},
+          ],
+        },
+      ]);
+
+      try {
+        SyncStream.receiveFrame("synced", {
+          applied_seq: 3,
+          cursor: null,
+          scope: "types",
+          types: ["MyApp.Task"],
+        });
+
+        assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
+        assert.isTrue(Batches.pending[0].isLanded(0));
+      } finally {
+        Batches.reset();
+      }
+    });
+
+    it("rules out nothing on the marker for everything", () => {
+      const landing = sinon.stub(Batches, "landUnsent");
+
+      SyncStream.receiveFrame("synced", {cursor: "Nzc4LjA", scope: "all"});
+
+      sinon.assert.notCalled(landing);
+    });
+
     // A follower reaches this through the group rather than through a stream, and the page-load
     // half of a change of identity is posted to it exactly this way.
     it("starts over on a resync naming a change of identity", () => {
@@ -1329,6 +1386,57 @@ describe("SyncStream", () => {
 
       assert.isTrue(persisting.calledOnce);
       assert.deepStrictEqual(persisting.firstCall.args, [[], "Nzc4LjA"]);
+    });
+
+    // The holder's stored record names the row the sweep took, and a reload would read it back.
+    it("stores a held row whose set the marker's sweep changed, naming no place", () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+      const written = new Set(["MyApp.Task t1"]);
+      const records = [{id: "t1", row: {id: "t1"}, type: "MyApp.Task"}];
+
+      sinon.stub(LocalDatabase, "markTypesSynced").returns(written);
+
+      const reading = sinon.stub(LocalDatabase, "records").returns(records);
+
+      eventSource.listeners.synced({
+        data: JSON.stringify({
+          applied_seq: 3,
+          cursor: null,
+          scope: "types",
+          types: ["MyApp.Task"],
+        }),
+      });
+
+      sinon.assert.calledOnceWithExactly(reading, written);
+      sinon.assert.calledOnceWithExactly(persisting, records, null);
+    });
+
+    it("passes the marker's number on to what it settles", () => {
+      const marking = sinon.spy(LocalDatabase, "markTypesSynced");
+
+      SyncStream.receiveFrame("synced", {
+        applied_seq: 7,
+        cursor: null,
+        scope: "types",
+        types: ["MyApp.Task"],
+      });
+
+      sinon.assert.calledOnceWithExactly(marking, ["MyApp.Task"], 7);
+    });
+
+    it("answers what a types marker's sweep changed", () => {
+      const written = new Set(["MyApp.Task t1"]);
+
+      sinon.stub(LocalDatabase, "markTypesSynced").returns(written);
+
+      const answered = SyncStream.receiveFrame("synced", {
+        applied_seq: 7,
+        cursor: null,
+        scope: "types",
+        types: ["MyApp.Task"],
+      });
+
+      assert.strictEqual(answered, written);
     });
 
     // A first arrival's types markers are narrower than the claim a place makes, so they name

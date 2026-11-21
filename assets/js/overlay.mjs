@@ -125,20 +125,37 @@ export default class Overlay {
   // base first - so the column goes straight from what this client wrote to the winning value,
   // with nothing shown in between. Without it the only thing left to show is the value the row
   // held before either writer touched it, which is a value nobody wrote.
-  static promote(batch, kept) {
+  //
+  // Given `fillPending`, a whole fill is on its way, so a create filed here is one nothing has
+  // vouched for yet (see LocalDatabase.markPromoted). Past its type's marker it is a batch the fill
+  // didn't read, since the marker landed the ones it did (see Batches.landUnsent), and it waits for
+  // its session. Asked of the base before the write, since #absorb can file the row itself. A
+  // create over a row the base holds files nothing.
+  static promote(batch, kept, {fillPending = false} = {}) {
     batch.writes.forEach((write, index) => {
       // A write whose frame has already arrived is in the base as the server resolved it, so
       // there is nothing left to move - and folding it in again would apply a moved counter a
-      // second time, which is exactly what the frame arriving first would otherwise cost.
+      // second time, which is exactly what the frame arriving first would otherwise cost. A create
+      // a fill's marker ruled out is passed over the same way: the row is gone or its user may not
+      // read it, so it is not this client's to file (see Batches.landUnsent).
       if (batch.isLanded(index)) {
         return;
       }
+
+      const awaitsMarker =
+        fillPending &&
+        write.op === "create" &&
+        LocalDatabase.baseRow(write.type, write.id) === null;
 
       // Optional because a batch can be answered by a node that predates the key - a rolling
       // deploy serves this bundle from one node and answers from another - and an answer that
       // names nothing kept is one this client simply cannot show early.
       Overlay.#absorb(write, kept?.[String(index)]);
       Overlay.#promoteWrite(write);
+
+      if (awaitsMarker) {
+        LocalDatabase.markPromoted(write.type, write.id, batch.seq);
+      }
     });
 
     Overlay.remove(batch);

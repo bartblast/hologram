@@ -16,10 +16,13 @@ export default class Batch {
   // would become Bob's.
   actorUserId = null;
 
-  // The writes whose effect the base already holds, by their position in `writes`. A frame naming
-  // this batch's number is what puts one here: the server applied it, resolved it against
+  // The writes the server has already settled, by their position in `writes`. A frame naming this
+  // batch's number is what usually puts one here: the server applied it, resolved it against
   // whatever else had moved, and sent back the row it left - so folding the write on top again
   // would be applying the same change twice, which for a moved counter means counting it twice.
+  // A fill's marker can put one here too: the fill read this batch and left out the row a write
+  // created, so the row is gone or its user may not read it, and neither the fold nor the answer
+  // may bring it back (see Batches.landUnsent).
   //
   // The wire object itself is untouched, so a batch that has to be sent again ships exactly what
   // it always would. And the batch goes on NAMING the row until the answer arrives: it is still
@@ -126,8 +129,9 @@ export default class Batch {
   //
   // Four things, each here because rebuilding without it would be wrong: the writes, which are
   // what gets sent; the number, which identifies the batch and is the order it ships in; who made
-  // it, which decides who may send it; and which of its writes the base already holds, without
-  // which a moved counter is added a second time on the next load.
+  // it, which decides who may send it; and which of its writes the server has settled, without
+  // which a moved counter is added a second time on the next load, and a row its user may not read
+  // is filed.
   record() {
     return {
       actorUserId: this.actorUserId,
