@@ -31,7 +31,7 @@ function buildWithFormDataListener(formContent, listener) {
 
     const event = {target: dom.window.document.getElementById("my_form")};
 
-    return SubmitEvent.buildOperationParam(event);
+    return SubmitEvent.buildEventParam(event);
   } finally {
     globalThis.FormData = OriginalFormData;
   }
@@ -103,7 +103,7 @@ describe("SubmitEvent", () => {
       `);
 
       const event = {target: dom.window.document.getElementById("my_form")};
-      const result = SubmitEvent.buildOperationParam(event);
+      const result = SubmitEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -127,7 +127,7 @@ describe("SubmitEvent", () => {
       `);
 
       const event = {target: dom.window.document.getElementById("my_form")};
-      const result = SubmitEvent.buildOperationParam(event);
+      const result = SubmitEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -147,7 +147,7 @@ describe("SubmitEvent", () => {
       `);
 
       const event = {target: dom.window.document.getElementById("my_form")};
-      const result = SubmitEvent.buildOperationParam(event);
+      const result = SubmitEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -178,7 +178,7 @@ describe("SubmitEvent", () => {
       document.getElementById("bom_valued").setAttribute("value", "\uFEFFx");
 
       const event = {target: document.getElementById("my_form")};
-      const result = SubmitEvent.buildOperationParam(event);
+      const result = SubmitEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -203,7 +203,7 @@ describe("SubmitEvent", () => {
       `);
 
       const event = {target: dom.window.document.getElementById("my_form")};
-      const result = SubmitEvent.buildOperationParam(event);
+      const result = SubmitEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -224,7 +224,7 @@ describe("SubmitEvent", () => {
       `);
 
       const event = {target: dom.window.document.getElementById("my_form")};
-      const result = SubmitEvent.buildOperationParam(event);
+      const result = SubmitEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -248,7 +248,7 @@ describe("SubmitEvent", () => {
       `);
 
       const event = {target: dom.window.document.getElementById("my_form")};
-      const result = SubmitEvent.buildOperationParam(event);
+      const result = SubmitEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
@@ -369,7 +369,7 @@ describe("SubmitEvent", () => {
       `);
 
       const event = {target: dom.window.document.getElementById("my_form")};
-      const result = SubmitEvent.buildOperationParam(event);
+      const result = SubmitEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
