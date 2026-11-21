@@ -523,7 +523,8 @@ defmodule Hologram.Sync.SessionTest do
 
     # The batch reaches the session before the catch-up is over, dated at the gap's edge, so it is
     # told - and below the edge read once the catch-up is over, so it may be in some of what the
-    # catch-up read and not in the rest.
+    # catch-up read and not in the rest. Routed during the held read, a real batch would be wholly
+    # below the edge and passed over: the date makes it one not finished when the edge was read.
     test "tells a batch routed during the catch-up after the marker, its rows whole" do
       task = create("before")
       test_pid = self()
@@ -591,7 +592,8 @@ defmodule Hologram.Sync.SessionTest do
       refute_received {:sync_deltas, _cursor, _deltas, _seq}
     end
 
-    # Its last transaction can have committed after the gap was read, which then holds nothing of it.
+    # Its last transaction can have been open when the gap's edge was read, and commit after the gap
+    # was read, so the gap need not hold it.
     test "tells a batch routed during the catch-up that reaches the edge" do
       row = create("after")
 
@@ -851,8 +853,9 @@ defmodule Hologram.Sync.SessionTest do
              end)
     end
 
-    # The batch is dated at the gap's edge, which holds nothing of it, so it is told - and below the
-    # edge read once the catch-up is over.
+    # The batch is dated at the gap's edge, so it is told - and below the edge read once the
+    # catch-up is over. Routed during the held read, a real batch would be wholly below the edge
+    # and passed over: the date makes it one not finished when the edge was read.
     test "drops by hash a row a batch routed during the catch-up hid", %{
       child: child,
       parent: parent
@@ -884,7 +887,8 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_synced, :all, _cursor}
 
       # The held ids of both types are read after the parent went private, so neither row is held,
-      # and the batch is below the trust edge: it tells both by hash, each type in a frame of its own.
+      # and the batch is below the trust edge: it tells both by hash, each type in a frame of its
+      # own.
       assert_receive {:sync_deltas, _cursor, first, nil}
       assert_receive {:sync_deltas, _cursor, second, nil}
 
