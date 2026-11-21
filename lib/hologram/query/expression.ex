@@ -18,6 +18,7 @@ defmodule Hologram.Query.Expression do
   @condition_names %{
     bindings: [],
     kind: :condition,
+    new_row: false,
     operand: "a literal, an attribute, a path, user_id() or a pinned expression",
     row: "the entity",
     runtime: "a condition built at runtime goes whole into when: ^predicates",
@@ -32,6 +33,7 @@ defmodule Hologram.Query.Expression do
   @filter_names %{
     bindings: [],
     kind: :filter,
+    new_row: false,
     operand: "a literal, an attribute, a path or a pinned expression",
     row: "the queried entity",
     runtime: "a filter built at runtime goes whole into filter(^predicates)",
@@ -122,7 +124,13 @@ defmodule Hologram.Query.Expression do
   `any`, `none` or `all` over a relationship's rows - lowers as it does in a filter (see
   `predicates/2`), and its condition may name `user_id()` too.
 
-  Raises Hologram.CompileError, located at the offending node, on a keyword list (naming the
+  With `new_row?` true, for an update line, `new(name)` reads the name on the row after the change,
+  which the data form holds one level above the rule's own row: `{:outer, levels, name}`, levels
+  being one more than the quantifiers around it. `new(project.archived)` and `new(project).archived`
+  are one path, and either stands wherever a name or a quantifier's source does.
+
+  Raises Hologram.CompileError, located at the offending node, on `new()` without `new_row?`, on
+  `new()` around anything but a name or a path of the rule's own row, on a keyword list (naming the
   expression to write when it holds equalities only), on a pinned list as one side of `and` or
   `or`, on a quantifier refused as a filter refuses it, on a comparison or a search reading the
   same attribute of the same row on both sides (naming what it always answers, and the pin when
@@ -133,17 +141,20 @@ defmodule Hologram.Query.Expression do
   `String.starts_with?/2` and `String.contains?/2` (naming the search operator), and on anything
   else.
   """
-  @spec condition(Macro.t(), Macro.Env.t()) :: Macro.t()
-  def condition({:^, _meta, [expr]}, _env), do: expr
+  @spec condition(Macro.t(), Macro.Env.t(), boolean) :: Macro.t()
+  def condition(ast, env, new_row? \\ false)
 
-  def condition(list, env) when is_list(list), do: keyword_list_error!(list, env)
+  def condition({:^, _meta, [expr]}, _env, _new_row?), do: expr
 
-  def condition(ast, env), do: predicate_list!(ast, @condition_names, env)
+  def condition(list, env, _new_row?) when is_list(list), do: keyword_list_error!(list, env)
+
+  def condition(ast, env, new_row?),
+    do: predicate_list!(ast, %{@condition_names | new_row: new_row?}, env)
 
   @doc """
   Returns the hints `Hologram.Query.Stage.predicate_triples!/3` can add to its refusal of a name
   the given `when:` condition wrote - what `predicate_hints/2` returns for a filter's predicates.
-  Takes a condition `condition/2` lowered without raising.
+  Takes a condition `condition/3` lowered without raising.
   """
   @spec condition_hints(Macro.t(), Macro.Env.t()) :: list(Hologram.Query.Stage.name_hint())
   def condition_hints(ast, env), do: predicate_hints(ast, env)
@@ -320,7 +331,7 @@ defmodule Hologram.Query.Expression do
   A path - a dot chain through relationships to an attribute of the row at its end,
   `channel.archived` - lowers to the list of its names, `[:channel, :archived]`, as a predicate's
   key on the left side and inside an attribute operand on the right. A search lowers the way it
-  does in `condition/2`.
+  does in `condition/3`.
 
   A quantifier - `any`, `none` or `all` over a relationship's rows, with a condition binding one of
   them (`any(message <- messages, message.author_id == ^id)`) or with the relationship alone
@@ -340,7 +351,7 @@ defmodule Hologram.Query.Expression do
   of the surrounding code), on a pinned name or path on the right side of a comparison or a search
   whose first name no variable of the surrounding code holds (naming the field it reads without the
   pin - the queried row's, or the bound row's through the name a quantifier around it binds), on a
-  search the way `condition/2` refuses one, on `user_id()`, which only a policy condition names,
+  search the way `condition/3` refuses one, on `user_id()`, which only a policy condition names,
   and on anything else.
   """
   @spec predicates(Macro.t(), Macro.Env.t()) :: Macro.t()
@@ -688,6 +699,21 @@ defmodule Hologram.Query.Expression do
     )
   end
 
+  # Whether a new() call stands anywhere in the given node, a pinned expression being the
+  # surrounding code's own.
+  defp holds_new_call?({:^, _meta, _args}), do: false
+
+  defp holds_new_call?({:new, _meta, args}) when is_list(args), do: true
+
+  defp holds_new_call?({left, meta, args}) when is_list(meta),
+    do: holds_new_call?(left) or holds_new_call?(args)
+
+  defp holds_new_call?({left, right}), do: holds_new_call?(left) or holds_new_call?(right)
+
+  defp holds_new_call?(list) when is_list(list), do: Enum.any?(list, &holds_new_call?/1)
+
+  defp holds_new_call?(_ast), do: false
+
   # A list element of an include spec: a pinned element keeps its place, a keyword entry with a
   # pinned value pairs a relationship with a nested spec chosen at runtime, and a bare name or a path
   # joins the merge.
@@ -737,7 +763,7 @@ defmodule Hologram.Query.Expression do
   # right side reading one too keeps its own fix, which the stage names first when that side is no
   # attribute either - one that is an attribute leaves the key's fix to name.
   defp key_fix(operator, left, right, bindings, env) do
-    with right_name when right_name != nil <- written_name(right, bindings),
+    with true <- written_name(right, bindings) != nil or other_row_field?(left, right),
          fix when fix != nil <- pin_fix(left, bindings, env, :key) do
       swapped = Macro.to_string({flipped(operator), [], [right, {:^, [], [left]}]})
 
@@ -890,7 +916,9 @@ defmodule Hologram.Query.Expression do
   defp membership!({:user_id, _meta, []} = ast, %{kind: :filter}, env),
     do: acting_user_error!(ast, env)
 
-  defp membership!(ast, _names, env) do
+  defp membership!(ast, names, env) do
+    if new_in_value?(ast, names), do: new_value_error!(ast, names, env)
+
     compile_error!(
       "a membership operand is a list, a range or a pinned expression, got: #{Macro.to_string(ast)} - a value from the surrounding code is pinned: #{pin_hint(ast)}",
       ast,
@@ -1008,6 +1036,101 @@ defmodule Hologram.Query.Expression do
       value,
       env
     )
+  end
+
+  # Whether the given node is a new() call, or a dot chain over one.
+  defp new_call?({:new, _meta, args}) when is_list(args), do: true
+
+  defp new_call?({{:., _dot_meta, [left, field]}, _meta, []}) when is_atom(field),
+    do: new_call?(left)
+
+  defp new_call?(_ast), do: false
+
+  # The names a new() call reads, those inside it and any dotted after it - nil when it holds
+  # anything but a name or a path.
+  defp new_hops(ast) do
+    case reversed_new_hops(ast) do
+      nil -> nil
+      reversed -> Enum.reverse(reversed)
+    end
+  end
+
+  defp new_hops!(ast, names, env) do
+    if not names.new_row, do: new_row_error!(ast, env)
+
+    case new_hops(ast) do
+      nil ->
+        compile_error!(
+          "new() takes a field of the row being updated, or a path through its to-one relationships, got: #{Macro.to_string(ast)}",
+          ast,
+          env
+        )
+
+      [root | _rest] = hops ->
+        if root in names.bindings do
+          compile_error!(
+            "new() reads the row being updated, and #{root} is a row a quantifier binds, got: #{Macro.to_string(ast)}",
+            ast,
+            env
+          )
+        end
+
+        hops
+    end
+  end
+
+  # A name of the row after the change, one level past the quantifiers around it.
+  defp new_reference!(ast, names, env) do
+    ast
+    |> new_hops!(names, env)
+    |> local_name()
+    |> scoped_name(length(names.bindings) + 1)
+  end
+
+  @spec new_row_error!(Macro.t(), Macro.Env.t()) :: no_return
+  defp new_row_error!(ast, env) do
+    compile_error!(
+      "new() works only in the when: condition of an allow :update line, with the operation written as that atom, got: #{Macro.to_string(ast)}",
+      ast,
+      env
+    )
+  end
+
+  # A value is known where the line is written, and new() reads a field of a row that isn't, so no
+  # pin around it would compile. Where new() can't be written at all, that is what's refused.
+  @spec new_value_error!(Macro.t(), map, Macro.Env.t()) :: no_return
+  defp new_value_error!(ast, names, env) do
+    if not names.new_row, do: new_row_error!(ast, env)
+
+    compile_error!(
+      "new() stands alone on one side of a comparison, not inside a list, a range or another expression, got: #{Macro.to_string(ast)}",
+      ast,
+      env
+    )
+  end
+
+  # Whether a new() call stands in the given value of a policy condition, outside any pin. In a
+  # filter a call of new is the surrounding code's own function.
+  defp new_in_value?(ast, %{kind: :condition}), do: holds_new_call?(ast)
+
+  defp new_in_value?(_ast, _names), do: false
+
+  # Whether the given node is the new() a policy condition reads the row after the change with. In
+  # a filter it's the surrounding code's own function, whose pin the refusals name.
+  defp new_word?(ast, %{kind: :condition}), do: new_call?(ast)
+
+  defp new_word?(_ast, _names), do: false
+
+  # Whether the right side is a new() of a field other than the one the left side starts at: a left
+  # side no entity declares is read as a value only when the right side doesn't read that same name.
+  defp other_row_field?(left, right) do
+    with true <- new_call?(right),
+         [right_root | _right_rest] <- new_hops(right),
+         [left_root | _left_rest] <- hops(left) do
+      left_root != right_root
+    else
+      _no_field -> false
+    end
   end
 
   @spec operand_error!(String.t(), Macro.t(), Macro.Env.t()) :: no_return
@@ -1248,11 +1371,7 @@ defmodule Hologram.Query.Expression do
         {lowered_source, []}
 
       [source, _condition] ->
-        compile_error!(
-          "a quantifier binds the related row its condition reads, got: #{Macro.to_string(ast)} - write #{quantifier}(row <- #{Macro.to_string(source)}, ...) and read the row as row.<attribute>",
-          ast,
-          env
-        )
+        unbound_condition_error!(ast, quantifier, source, names, env)
 
       _args when quantifier == :all ->
         compile_error!(
@@ -1296,13 +1415,9 @@ defmodule Hologram.Query.Expression do
   # A name as the row it is read on spells it, and how many quantifiers out that row is - nil for
   # anything that is no name, and a refusal for a row a quantifier binds, compared whole.
   defp reference!(ast, names, env) do
-    case {written_name(ast, names.bindings), hops(ast)} do
-      {nil, [root]} ->
-        bound_row_error!(root, "compare one of its attributes: #{root}.<attribute>", ast, env)
-
-      {name, _hops} ->
-        if name, do: Macro.escape(name)
-    end
+    if new_word?(ast, names),
+      do: new_reference!(ast, names, env),
+      else: written_reference!(ast, names, env)
   end
 
   defp reversed_hops({name, _meta, context} = ast) when is_atom(name) and is_atom(context) do
@@ -1320,8 +1435,20 @@ defmodule Hologram.Query.Expression do
 
   defp reversed_hops(_ast), do: nil
 
+  defp reversed_new_hops({:new, _meta, [arg]}), do: reversed_hops(arg)
+
+  defp reversed_new_hops({:new, _meta, _args}), do: nil
+
+  defp reversed_new_hops({{:., _dot_meta, [left, field]}, meta, []}) do
+    left_hops = reversed_new_hops(left)
+
+    if Keyword.get(meta, :no_parens, false) and left_hops != nil, do: [field | left_hops]
+  end
+
   # The bare name a reference starts at - the reference is a bare name or a dot chain over one.
   defp root_name({name, _meta, context} = ast) when is_atom(name) and is_atom(context), do: ast
+
+  defp root_name({:new, _meta, [arg]}), do: root_name(arg)
 
   defp root_name({{:., _dot_meta, [left, _field]}, _meta, []}), do: root_name(left)
 
@@ -1480,30 +1607,12 @@ defmodule Hologram.Query.Expression do
   end
 
   defp source!(ast, names, env) do
-    case hops(ast) do
-      nil ->
-        compile_error!(
-          "a quantifier's source is a relationship or a path to one, got: #{Macro.to_string(ast)}",
-          ast,
-          env
-        )
-
-      [root | rest] = hops ->
-        case root_row(root, names.bindings) do
-          {:queried, levels} ->
-            scoped_name(hops, levels)
-
-          {:bound, _levels} when rest == [] ->
-            bound_row_error!(
-              root,
-              "a quantifier's source is a relationship: #{root}.<relationship>",
-              ast,
-              env
-            )
-
-          {:bound, levels} ->
-            scoped_name(rest, levels)
-        end
+    if new_word?(ast, names) do
+      ast
+      |> new_hops!(names, env)
+      |> scoped_name(length(names.bindings) + 1)
+    else
+      written_source!(ast, names, env)
     end
   end
 
@@ -1511,6 +1620,8 @@ defmodule Hologram.Query.Expression do
   # and accents unless asked not to, so the refusal names both spellings with what was written.
   @spec string_function_error!(Macro.t(), atom, list(Macro.t()), map, Macro.Env.t()) :: no_return
   defp string_function_error!(ast, operator, args, names, env) do
+    Enum.each(args, &validate_hinted_new!(&1, names, env))
+
     written_args = Enum.map_join(args, ", ", &Macro.to_string/1)
 
     compile_error!(
@@ -1523,6 +1634,18 @@ defmodule Hologram.Query.Expression do
   defp tails_of([]), do: []
 
   defp tails_of(tail), do: [tail]
+
+  # The hint names the given source, so a new() that can't be written there is refused first.
+  @spec unbound_condition_error!(Macro.t(), atom, Macro.t(), map, Macro.Env.t()) :: no_return
+  defp unbound_condition_error!(ast, quantifier, source, names, env) do
+    validate_hinted_new!(source, names, env)
+
+    compile_error!(
+      "a quantifier binds the related row its condition reads, got: #{Macro.to_string(ast)} - write #{quantifier}(row <- #{Macro.to_string(source)}, ...) and read the row as row.<attribute>",
+      ast,
+      env
+    )
+  end
 
   @spec unsupported!(Macro.t(), map, Macro.Env.t()) :: no_return
   defp unsupported!(ast, names, env) do
@@ -1552,6 +1675,16 @@ defmodule Hologram.Query.Expression do
 
   defp user_id_call(_ast), do: nil
 
+  # A refusal whose hint repeats the given node refuses first a new() that can't be written there:
+  # on a line for another operation, around a value or inside a larger expression.
+  defp validate_hinted_new!(ast, names, env) do
+    cond do
+      not new_in_value?(ast, names) -> :ok
+      new_call?(ast) -> new_hops!(ast, names, env)
+      true -> new_value_error!(ast, names, env)
+    end
+  end
+
   # Both sides naming the same field of the same row tell nothing about the row but whether the
   # field is set. The lowering spells each row its own way - a name of the row a condition is about
   # as it is, one of a row above wrapped in {:outer, levels, name} - so equal names are one field,
@@ -1571,7 +1704,7 @@ defmodule Hologram.Query.Expression do
       {root, _meta, _context} = root_node = root_name(right)
 
       fix =
-        if root not in names.bindings and pinnable?(root_node, env) do
+        if not new_call?(right) and root not in names.bindings and pinnable?(root_node, env) do
           " - a value from the surrounding code is pinned: #{pin_hint(right)}"
         else
           self_comparison_fix(operator, field)
@@ -1592,6 +1725,7 @@ defmodule Hologram.Query.Expression do
 
   defp value!(ast, description, names, env) do
     cond do
+      new_in_value?(ast, names) -> new_value_error!(ast, names, env)
       literal?(ast) -> ast
       bare_name?(ast) -> forgotten_pin!(ast, description, names, env, "")
       true -> operand_error!(description, ast, env)
@@ -1677,7 +1811,45 @@ defmodule Hologram.Query.Expression do
     end
   end
 
+  defp written_reference!(ast, names, env) do
+    case {written_name(ast, names.bindings), hops(ast)} do
+      {nil, [root]} ->
+        bound_row_error!(root, "compare one of its attributes: #{root}.<attribute>", ast, env)
+
+      {name, _hops} ->
+        if name, do: Macro.escape(name)
+    end
+  end
+
   defp written_scoped(name, 0), do: name
 
   defp written_scoped(name, levels), do: {:outer, levels, name}
+
+  defp written_source!(ast, names, env) do
+    case hops(ast) do
+      nil ->
+        compile_error!(
+          "a quantifier's source is a relationship or a path to one, got: #{Macro.to_string(ast)}",
+          ast,
+          env
+        )
+
+      [root | rest] = hops ->
+        case root_row(root, names.bindings) do
+          {:queried, levels} ->
+            scoped_name(hops, levels)
+
+          {:bound, _levels} when rest == [] ->
+            bound_row_error!(
+              root,
+              "a quantifier's source is a relationship: #{root}.<relationship>",
+              ast,
+              env
+            )
+
+          {:bound, levels} ->
+            scoped_name(rest, levels)
+        end
+    end
+  end
 end

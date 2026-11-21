@@ -31,7 +31,7 @@ defmodule Hologram.Policy.Expression do
   in a list or alone. `via:` lowers a bare name to an atom and a path to the list of its names,
   alone or as the relationship of an `{operation, relationship}` tuple (`{:update, project}` to
   `{:update, :project}`, `trip.user` to `[:trip, :user]`). `when:`
-  lowers through `Hologram.Query.Expression.condition/2`. A pinned `as:`, `except:`, `only:`, `to:`, `via:` or `when:` value, a pinned
+  lowers through `Hologram.Query.Expression.condition/3`. A pinned `as:`, `except:`, `only:`, `to:`, `via:` or `when:` value, a pinned
   element of a `to:` list, a pinned role or scope of a grant reference and a pinned operation or
   relationship of a delegation lower to the expression.
   `__MODULE__` names a module wherever a module goes. A nil `to:` or `via:` value and a list
@@ -46,7 +46,7 @@ defmodule Hologram.Policy.Expression do
   a bare name, on a delegation written as an atom, on a delegation with the relationship first or
   with an operation that is not an atom, on a pinned bare name no variable of the surrounding code
   holds where `via:` names a relationship (naming the bare spelling), on what
-  `Hologram.Query.Expression.condition/2` refuses in a `when:`, and on anything else.
+  `Hologram.Query.Expression.condition/3` refuses in a `when:`, and on anything else.
   """
   @spec spec(Macro.t(), Macro.t(), Macro.Env.t()) :: Macro.t()
   def spec(operation, spec, env) when is_list(spec) do
@@ -244,8 +244,9 @@ defmodule Hologram.Policy.Expression do
 
   defp option!({:via, value}, _operation, env), do: {:via, delegation!(value, env)}
 
-  defp option!({:when, value}, _operation, env),
-    do: {:when, QueryExpression.condition(value, env)}
+  # Only an update has a row after the change for new() to read.
+  defp option!({:when, value}, operation, env),
+    do: {:when, QueryExpression.condition(value, env, operation == :update)}
 
   defp option!({key, value}, operation, env) when is_atom(key),
     do: unknown_option!(key, value, operation, env)

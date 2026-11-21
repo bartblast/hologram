@@ -52,6 +52,212 @@ defmodule Hologram.Policy.ExpressionTest do
       assert lower_spec("[when: owner_id == user_id()]") == [when: [owner_id: {:==, {:actor}}]]
     end
 
+    test "lowers new() on an update line to the row one level above" do
+      assert lower_spec("[when: new(status) == :approved]") == [
+               when: [{{:outer, 1, :status}, {:==, :approved}}]
+             ]
+    end
+
+    test "lowers a path inside new()" do
+      assert lower_spec("[when: new(project.archived) == false]") == [
+               when: [{{:outer, 1, [:project, :archived]}, {:==, false}}]
+             ]
+    end
+
+    test "lowers a path dotted after new() to the same name" do
+      assert lower_spec("[when: new(project).archived == false]") == [
+               when: [{{:outer, 1, [:project, :archived]}, {:==, false}}]
+             ]
+    end
+
+    test "lowers new() as an operand" do
+      assert lower_spec("[when: priority <= new(priority)]") == [
+               when: [priority: {:<=, {:attribute, {:outer, 1, :priority}}}]
+             ]
+    end
+
+    test "lowers new() in a membership and a search" do
+      assert lower_spec(~s/[when: new(status) in [:a, :b] and contains(new(title), "x")]/) == [
+               when: [
+                 {{:outer, 1, :status}, {:in, [:a, :b]}},
+                 {{:outer, 1, :title}, {:contains, "x"}}
+               ]
+             ]
+    end
+
+    test "lowers new() as a quantifier's source" do
+      lowered = lower_spec("[when: any(member <- new(project).members, member.active == true)]")
+
+      assert lowered[:when] == [
+               any: {{:outer, 1, [:project, :members]}, [active: {:==, true}]}
+             ]
+    end
+
+    test "lowers new() inside a quantifier's condition to the level past the rule's row" do
+      lowered = lower_spec("[when: any(member <- members, member.level >= new(priority))]")
+
+      assert lowered[:when] == [
+               any: {[:members], [level: {:>=, {:attribute, {:outer, 2, :priority}}}]}
+             ]
+    end
+
+    test "keeps an attribute named new" do
+      assert lower_spec("[when: new == 1]") == [when: [new: {:==, 1}]]
+    end
+
+    test "carries the swapped hint for a variable compared with new()" do
+      assert lower_spec("[when: search == new(title)]", search: "x") == [
+               when: [search: {:==, {:attribute, {:outer, 1, :title}}}],
+               __name_hints__: [
+                 {:key, 0, :search,
+                  "a value from the surrounding code is pinned, on the right side: new(title) == ^search",
+                  []}
+               ]
+             ]
+    end
+
+    test "gives no swapped hint when new() reads the name the left side starts at" do
+      assert lower_spec("[when: search == new(search)]", search: "x") == [
+               when: [search: {:==, {:attribute, {:outer, 1, :search}}}]
+             ]
+    end
+
+    test "raises on new() inside a larger operand" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() stands alone on one side of a comparison, not inside a list, a range or another expression, got: new(priority) + 1",
+                   fn -> lower_spec("[when: priority <= new(priority) + 1]") end
+    end
+
+    test "raises on new() inside a range in a membership list" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() stands alone on one side of a comparison, not inside a list, a range or another expression, got: new(low)..5",
+                   fn -> lower_spec("[when: priority in [new(low)..5]]") end
+    end
+
+    test "raises on new() inside a larger membership operand" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() stands alone on one side of a comparison, not inside a list, a range or another expression, got: new(allowed) ++ [1]",
+                   fn -> lower_spec("[when: priority in new(allowed) ++ [1]]") end
+    end
+
+    test "raises on new() inside a larger operand on a line for another operation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() works only in the when: condition of an allow :update line, with the operation written as that atom, got: new(priority) + 1",
+                   fn -> lower_spec("[when: priority <= new(priority) + 1]", [], :read) end
+    end
+
+    test "keeps a pinned call of new as the surrounding code's own" do
+      quoted = Code.string_to_quoted!("[when: priority == ^new(1)]", line: 12)
+
+      assert [when: [priority: {:==, {:new, _meta, [1]}}]] = spec(:update, quoted, env())
+    end
+
+    test "raises on new() around a value as a source with an unbound condition" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() takes a field of the row being updated, or a path through its to-one relationships, got: new(1)",
+                   fn -> lower_spec("[when: any(new(1), task.done == true)]") end
+    end
+
+    test "raises on a value holding new() as a source with an unbound condition" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() stands alone on one side of a comparison, not inside a list, a range or another expression, got: new(tags) ++ [1]",
+                   fn -> lower_spec("[when: any(new(tags) ++ [1], tag.done == true)]") end
+    end
+
+    test "names the search with new() in a refusal of a String function" do
+      assert_error Hologram.CompileError,
+                   ~s/lib\/my_app\/policies.ex:12: String.contains?\/2 isn't available in a condition - write contains(new(title), "x"), which ignores case and accents, or contains(new(title), "x", mode: :exact) to match byte for byte/,
+                   fn -> lower_spec(~s/[when: String.contains?(new(title), "x")]/) end
+    end
+
+    test "raises on new() in a String function on a line for another operation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() works only in the when: condition of an allow :update line, with the operation written as that atom, got: new(title)",
+                   fn -> lower_spec(~s/[when: String.contains?(new(title), "x")]/, [], :read) end
+    end
+
+    test "raises on new() around a value in a String function" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() takes a field of the row being updated, or a path through its to-one relationships, got: new(1)",
+                   fn -> lower_spec(~s/[when: String.contains?(new(1), "x")]/) end
+    end
+
+    test "raises on a larger value holding new() in a String function" do
+      assert_error Hologram.CompileError,
+                   ~s/lib\/my_app\/policies.ex:12: new() stands alone on one side of a comparison, not inside a list, a range or another expression, got: new(a) <> "x"/,
+                   fn -> lower_spec(~s/[when: String.contains?(title, new(a) <> "x")]/) end
+    end
+
+    test "raises on new() as a membership element" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() stands alone on one side of a comparison, not inside a list, a range or another expression, got: new(other)",
+                   fn -> lower_spec("[when: status in [new(other)]]") end
+    end
+
+    test "raises on new() as a membership operand" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() stands alone on one side of a comparison, not inside a list, a range or another expression, got: new(allowed)",
+                   fn -> lower_spec("[when: status in new(allowed)]") end
+    end
+
+    test "raises on new() as a range bound" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() stands alone on one side of a comparison, not inside a list, a range or another expression, got: new(low)",
+                   fn -> lower_spec("[when: priority in new(low)..5]") end
+    end
+
+    test "raises on new() in a membership on a line for another operation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() works only in the when: condition of an allow :update line, with the operation written as that atom, got: new(other)",
+                   fn -> lower_spec("[when: status in [new(other)]]", [], :read) end
+    end
+
+    test "raises on new() as a source with an unbound condition on another operation's line" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() works only in the when: condition of an allow :update line, with the operation written as that atom, got: new(tasks)",
+                   fn -> lower_spec("[when: any(new(tasks), task.done == true)]", [], :read) end
+    end
+
+    test "raises on new() compared with itself" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new(status) == new(status) compares new(status) with itself, which is always true",
+                   fn -> lower_spec("[when: new(status) == new(status)]") end
+    end
+
+    test "raises on new() on a line for another operation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() works only in the when: condition of an allow :update line, with the operation written as that atom, got: new(status)",
+                   fn -> lower_spec("[when: new(status) == :approved]", [], :read) end
+    end
+
+    test "raises on new() on a line whose operation isn't written as an atom" do
+      operation = quote(do: @operation)
+
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() works only in the when: condition of an allow :update line, with the operation written as that atom, got: new(status)",
+                   fn -> lower_spec("[when: new(status) == :approved]", [], operation) end
+    end
+
+    test "raises on new() around a row a quantifier binds" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() reads the row being updated, and member is a row a quantifier binds, got: new(member.level)",
+                   fn ->
+                     lower_spec("[when: any(member <- members, new(member.level) == 1)]")
+                   end
+    end
+
+    test "raises on new() around a value" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() takes a field of the row being updated, or a path through its to-one relationships, got: new(1)",
+                   fn -> lower_spec("[when: new(1) == 2]") end
+    end
+
+    test "raises on new() with no argument" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: new() takes a field of the row being updated, or a path through its to-one relationships, got: new()",
+                   fn -> lower_spec("[when: new() == 2]") end
+    end
+
     test "keeps __MODULE__ as a role module" do
       assert lower_spec("[to: __MODULE__]") == [to: __MODULE__]
     end
