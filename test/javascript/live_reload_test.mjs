@@ -254,6 +254,42 @@ describe("LiveReload", () => {
       assert.isTrue(LiveReload.snapshotFits({}, "page-2", "runtime-2"));
     });
 
+    it("a snapshot with no stamp, in a build with a data model", () => {
+      assert.isFalse(
+        LiveReload.snapshotFits({}, "page-2", "runtime-2", "model-1"),
+      );
+    });
+
+    it("a snapshot stamped with no page bundle and another data model", () => {
+      assert.isFalse(
+        LiveReload.snapshotFits(
+          {
+            dataModelDigest: "model-1",
+            pageDigest: null,
+            runtimeDigest: "runtime-1",
+          },
+          "page-2",
+          "runtime-2",
+          "model-2",
+        ),
+      );
+    });
+
+    it("a snapshot stamped with no page bundle and the same data model", () => {
+      assert.isTrue(
+        LiveReload.snapshotFits(
+          {
+            dataModelDigest: "model-1",
+            pageDigest: null,
+            runtimeDigest: "runtime-1",
+          },
+          "page-2",
+          "runtime-2",
+          "model-1",
+        ),
+      );
+    });
+
     it("a snapshot stamped with no page bundle", () => {
       assert.isTrue(
         LiveReload.snapshotFits(
