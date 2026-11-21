@@ -26,8 +26,8 @@ defmodule Hologram.Migration.SortKeyFillTest do
 
   defp insert_tasks(column, values) do
     statement = """
-    INSERT INTO "hologram_data"."my_app_task" ("id", "#{column}", "created_at", "updated_at", "$revisions")
-    VALUES (gen_random_uuid(), $1, now(), now(), '{}')
+    INSERT INTO "hologram_data"."my_app_task" ("id", "#{column}", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+    VALUES (gen_random_uuid(), $1, now(), now(), now(), now(), '{}')
     """
 
     Enum.each(values, fn value ->

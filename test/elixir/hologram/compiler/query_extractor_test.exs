@@ -1715,7 +1715,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_msg =
         normalize_newlines("""
-        test/elixir/support/fixtures/compiler/query_extractor/module_109.ex:22: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module109 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at
+        test/elixir/support/fixtures/compiler/query_extractor/module_109.ex:22: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module109 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :server_created_at, :server_updated_at, :updated_at
 
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_109.ex:22: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module109.narrow/1
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_109.ex:13: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module109.__derived_rows__/1\
@@ -1934,7 +1934,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     test "raises on an invalid query", %{entity_types: entity_types, ir_plt: ir_plt} do
       expected_msg =
         normalize_newlines("""
-        test/elixir/support/fixtures/compiler/query_extractor/module_121.ex:13: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module121 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at
+        test/elixir/support/fixtures/compiler/query_extractor/module_121.ex:13: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module121 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :server_created_at, :server_updated_at, :updated_at
 
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_121.ex:13: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module121.__derived_rows__/1\
         """)
@@ -1966,7 +1966,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_msg =
         normalize_newlines("""
-        test/elixir/support/fixtures/compiler/query_extractor/module_135.ex:10: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module135 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at
+        test/elixir/support/fixtures/compiler/query_extractor/module_135.ex:10: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module135 builds an invalid query - unknown attribute :nonexistent in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :server_created_at, :server_updated_at, :updated_at
 
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_135.ex:10: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module135.__derived_rows__/1\
         """)
@@ -1982,7 +1982,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
     } do
       expected_msg =
         normalize_newlines("""
-        test/elixir/support/fixtures/compiler/query_extractor/module_137.ex:10: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module137 builds an invalid query - unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at - a value from the surrounding code is pinned: ^search
+        test/elixir/support/fixtures/compiler/query_extractor/module_137.ex:10: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module137 builds an invalid query - unknown attribute :search in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :server_created_at, :server_updated_at, :updated_at - a value from the surrounding code is pinned: ^search
 
             #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_137.ex:10: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module137.__derived_rows__/1\
         """)

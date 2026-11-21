@@ -686,8 +686,7 @@ defmodule Hologram.Sync.SessionTest do
       windows(%{})
 
       stop_supervised!(Gate)
-      put_app_env(:sync, catchups_at_once: 1)
-      start_supervised!(Gate)
+      start_supervised!({Gate, limit: 1})
 
       test_pid = self()
 

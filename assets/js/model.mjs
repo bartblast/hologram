@@ -30,7 +30,13 @@ export default class Model {
   // back needs their types, so anything asking what a type DECLARES has to subtract them. Held
   // here rather than beside each reader: it is one list mirroring an Elixir one, and a second copy
   // is how the two drift.
-  static systemAttributes = ["created_at", "id", "updated_at"];
+  static systemAttributes = [
+    "created_at",
+    "id",
+    "server_created_at",
+    "server_updated_at",
+    "updated_at",
+  ];
 
   // IMPORTANT!
   // The twin of Hologram.Policy.framework_operations/0 - the seven operations the framework itself

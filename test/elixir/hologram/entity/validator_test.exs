@@ -2041,12 +2041,12 @@ defmodule Hologram.Entity.ValidatorTest do
     end
 
     test "rejects reserved system attribute names" do
-      for reserved_name <- [:created_at, :id, :updated_at] do
+      for reserved_name <- [:created_at, :id, :server_created_at, :server_updated_at, :updated_at] do
         module_name =
           "Hologram.Entity.ValidatorTest.ReservedAttr#{Macro.camelize(to_string(reserved_name))}"
 
         expected_msg =
-          "reserved name #{inspect(reserved_name)} used for attribute in #{module_name} - system attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
+          "reserved name #{inspect(reserved_name)} used for attribute in #{module_name} - system attributes :created_at, :id, :server_created_at, :server_updated_at, :updated_at are managed automatically and can't be declared"
 
         code = """
         defmodule #{module_name} do
@@ -2145,7 +2145,7 @@ defmodule Hologram.Entity.ValidatorTest do
       line = __ENV__.line + 9
 
       expected_msg =
-        "#{location(line)}reserved name :id used for derived field in Hologram.Entity.ValidatorTest.ReservedDerivedFixture - system attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
+        "#{location(line)}reserved name :id used for derived field in Hologram.Entity.ValidatorTest.ReservedDerivedFixture - system attributes :created_at, :id, :server_created_at, :server_updated_at, :updated_at are managed automatically and can't be declared"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule ReservedDerivedFixture do
@@ -2448,7 +2448,7 @@ defmodule Hologram.Entity.ValidatorTest do
       line = __ENV__.line + 11
 
       expected_msg =
-        "#{location(line)}last_seen_at is not a field of Hologram.Entity.ValidatorTest.InlineEntityFixture154 - the arguments of derived field :unread's function name the fields it reads: created_at, id, last_read_at, updated_at"
+        "#{location(line)}last_seen_at is not a field of Hologram.Entity.ValidatorTest.InlineEntityFixture154 - the arguments of derived field :unread's function name the fields it reads: created_at, id, last_read_at, server_created_at, server_updated_at, updated_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture154 do
@@ -2592,7 +2592,7 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       expected_msg =
-        "invalid data model:\n  * #{location(line)}relationship :messages in Hologram.Entity.ValidatorTest.InlineEntityFixture141 is the inverse of :chanel, which Hologram.Test.Fixtures.Entity.Module28 does not declare - its relationships are: :channel, :labels\n  * #{location(line)}relationship :messages in Hologram.Entity.ValidatorTest.InlineEntityFixture141 has an invalid sort option - unknown attribute :posted_at in Hologram.Test.Fixtures.Entity.Module28 - known attributes: :body, :created_at, :id, :position, :updated_at"
+        "invalid data model:\n  * #{location(line)}relationship :messages in Hologram.Entity.ValidatorTest.InlineEntityFixture141 is the inverse of :chanel, which Hologram.Test.Fixtures.Entity.Module28 does not declare - its relationships are: :channel, :labels\n  * #{location(line)}relationship :messages in Hologram.Entity.ValidatorTest.InlineEntityFixture141 has an invalid sort option - unknown attribute :posted_at in Hologram.Test.Fixtures.Entity.Module28 - known attributes: :body, :created_at, :id, :position, :server_created_at, :server_updated_at, :updated_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlineEntityFixture141])
@@ -2766,7 +2766,7 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       expected_msg =
-        "invalid data model:\n  * #{location(line)}relationship :messages in Hologram.Entity.ValidatorTest.InlineEntityFixture138 has an invalid sort option - unknown attribute :posted_at in Hologram.Entity.ValidatorTest.InlineEntityFixture137 - known attributes: :created_at, :id, :updated_at"
+        "invalid data model:\n  * #{location(line)}relationship :messages in Hologram.Entity.ValidatorTest.InlineEntityFixture138 has an invalid sort option - unknown attribute :posted_at in Hologram.Entity.ValidatorTest.InlineEntityFixture137 - known attributes: :created_at, :id, :server_created_at, :server_updated_at, :updated_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlineEntityFixture137, InlineEntityFixture138])
@@ -2793,7 +2793,7 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       expected_msg =
-        "invalid data model:\n  * #{location(line)}relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture163 has an invalid sort option - unknown attribute :posted_at in Hologram.Test.Fixtures.Entity.Module1 - known attributes: :created_at, :id, :updated_at"
+        "invalid data model:\n  * #{location(line)}relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture163 has an invalid sort option - unknown attribute :posted_at in Hologram.Test.Fixtures.Entity.Module1 - known attributes: :created_at, :id, :server_created_at, :server_updated_at, :updated_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlineEntityFixture163])
@@ -2969,6 +2969,45 @@ defmodule Hologram.Entity.ValidatorTest do
           relationship :owners, [Module1], unique: true
         end
       end
+    end
+
+    test "rejects a to-one relationship to the role grant store" do
+      expected_msg =
+        "relationship :grant in Hologram.Entity.ValidatorTest.InlineEntityFixture198 stores a reference to Hologram.Auth.RoleGrant - a grant can't be referenced, since revoking deletes it and a migration renaming its entity type or role gives it a new id - store the user, entity type, entity and role instead, and find the grant by them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture198 do
+          use Hologram.Entity
+
+          relationship :grant, Hologram.Auth.RoleGrant
+        end
+      end
+    end
+
+    test "rejects a to-many relationship to the role grant store" do
+      expected_msg =
+        "relationship :grants in Hologram.Entity.ValidatorTest.InlineEntityFixture199 stores a reference to Hologram.Auth.RoleGrant - a grant can't be referenced, since revoking deletes it and a migration renaming its entity type or role gives it a new id - store the user, entity type, entity and role instead, and find the grant by them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture199 do
+          use Hologram.Entity
+
+          relationship :grants, [Hologram.Auth.RoleGrant]
+        end
+      end
+    end
+
+    # An inverse stores nothing, so it pins no grant row.
+    test "accepts an inverse of a role grant store relationship" do
+      defmodule InlineEntityFixture200 do
+        use Hologram.Entity
+
+        relationship :grants, [Hologram.Auth.RoleGrant], inverse: user
+      end
+
+      assert InlineEntityFixture200.__inverse_relationships__() == [
+               {:grants, [Hologram.Auth.RoleGrant], [inverse: :user]}
+             ]
     end
 
     test "rejects an inverse naming a relationship with a value that is not an atom" do
@@ -3210,12 +3249,12 @@ defmodule Hologram.Entity.ValidatorTest do
     end
 
     test "rejects reserved system attribute names" do
-      for reserved_name <- [:created_at, :id, :updated_at] do
+      for reserved_name <- [:created_at, :id, :server_created_at, :server_updated_at, :updated_at] do
         module_name =
           "Hologram.Entity.ValidatorTest.ReservedRelationship#{Macro.camelize(to_string(reserved_name))}"
 
         expected_msg =
-          "reserved name #{inspect(reserved_name)} used for relationship in #{module_name} - system attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
+          "reserved name #{inspect(reserved_name)} used for relationship in #{module_name} - system attributes :created_at, :id, :server_created_at, :server_updated_at, :updated_at are managed automatically and can't be declared"
 
         code = """
         defmodule #{module_name} do

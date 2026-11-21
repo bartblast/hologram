@@ -36,6 +36,7 @@ defmodule Hologram.DB.IndexPlanTest do
   alias Hologram.Test.Fixtures.Entity.Module55
   alias Hologram.Test.Fixtures.Entity.Module56
   alias Hologram.Test.Fixtures.Entity.Module57
+  alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
 
   @mapping Mapper.derive!(
              [
@@ -1144,6 +1145,14 @@ defmodule Hologram.DB.IndexPlanTest do
       grant_need = need("hologram_role_grant", ["entity_type"], nil, ["entity_id", "role"])
 
       assert grant_need in framework_needs(mapping)
+    end
+
+    test "needs a job worker's lookup of a job type's jobs, by status and oldest first, for job types only" do
+      mapping = Mapper.derive!([Module1, JobModule1], [])
+
+      assert framework_needs(mapping) == [
+               need("test_fixtures_job_module1", ["status"], nil, ["created_at"])
+             ]
     end
   end
 

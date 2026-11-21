@@ -582,7 +582,8 @@ function writeEntry(entity, entityType, stamp) {
 
 // What the verb answers: the struct as the row now stands, carrying the revisions this write set
 // and nothing of what it was asked to do. The server's own create answers the same way - the
-// metadata starts over, because what the struct was holding has been spent by the write.
+// metadata starts over, because what the struct was holding has been spent by the write. The
+// server's pair is the one difference: nil until the row reaches the server, which stamps it.
 function storedEntity(entity, entityType, stamp) {
   const timestamp = Model.boxValue(
     Model.wireDateTime(Clock.wallClockMs(stamp)),
@@ -608,6 +609,8 @@ function storedEntity(entity, entityType, stamp) {
   for (const [key, value] of [
     [Type.atom("__meta__"), metadata],
     [Type.atom("created_at"), timestamp],
+    [Type.atom("server_created_at"), Type.nil()],
+    [Type.atom("server_updated_at"), Type.nil()],
     [Type.atom("updated_at"), timestamp],
   ]) {
     stored.data[Type.encodeMapKey(key)] = [key, value];

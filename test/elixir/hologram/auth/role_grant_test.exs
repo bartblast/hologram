@@ -253,6 +253,8 @@ defmodule Hologram.Auth.RoleGrantTest do
                entity_id: nil,
                entity_type: nil,
                role: nil,
+               server_created_at: nil,
+               server_updated_at: nil,
                updated_at: nil,
                user: %NotIncluded{relationship: :user},
                user_id: nil
@@ -295,6 +297,8 @@ defmodule Hologram.Auth.RoleGrantTest do
     assert RoleGrant.__system_attributes__() == [
              {:created_at, :datetime, []},
              {:id, :uuid, []},
+             {:server_created_at, :datetime, []},
+             {:server_updated_at, :datetime, []},
              {:updated_at, :datetime, []}
            ]
   end
@@ -367,6 +371,21 @@ defmodule Hologram.Auth.RoleGrantTest do
       assert instance_id == "2c56252b-0c90-5cd9-b15d-91c5e5bf968e"
       assert global_id == "f0fd8d8d-3d3f-5dd8-9027-2441a5a93040"
       assert accented_id == "84121d8c-09a3-57fa-96e3-bd966906ce20"
+    end
+  end
+
+  describe "derive_id_from_labels/4" do
+    test "answers derive_id/4's id for an entity grant spelled as the store holds it" do
+      label_id =
+        RoleGrant.derive_id_from_labels(@user_id, inspect(@entity_type), @entity_id, "member")
+
+      assert label_id == RoleGrant.derive_id(@user_id, @entity_type, @entity_id, :member)
+    end
+
+    test "answers derive_id/4's id for a global grant spelled as the store holds it" do
+      label_id = RoleGrant.derive_id_from_labels(@user_id, nil, nil, inspect(Role.Module1))
+
+      assert label_id == RoleGrant.derive_id(@user_id, nil, nil, Role.Module1)
     end
   end
 

@@ -1,6 +1,7 @@
 defmodule Hologram.DB.DDL do
   @moduledoc false
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Mapper
 
   # Types the mapper emits by name - anything else is a derived enum type, which lives
@@ -228,6 +229,51 @@ defmodule Hologram.DB.DDL do
   end
 
   @doc """
+  Returns the parameterized statement writing new ids into the given role grant table: the
+  first parameter holds the ids the rows have, the second the ids they take, both as text and
+  in the same order.
+  """
+  @spec grant_id_update_statement(String.t()) :: String.t()
+  def grant_id_update_statement(table) do
+    ~s{UPDATE #{qualified(table)} AS "grant" SET "id" = "moved"."new"::uuid } <>
+      ~s{FROM unnest($1::text[], $2::text[]) AS "moved" ("old", "new") } <>
+      ~s{WHERE "grant"."id" = "moved"."old"::uuid}
+  end
+
+  @doc """
+  Returns the parameterized statement counting the key groups of the four identity columns that
+  more than one of the given role grant table's grants holding the first parameter in the given
+  column share. NULLs group together, as the store's unique index compares them.
+  """
+  @spec grant_repeat_check_statement(String.t(), String.t()) :: String.t()
+  def grant_repeat_check_statement(table, column) do
+    identity_columns =
+      Enum.map_join(RoleGrant.identity_columns(), ", ", &Mapper.quote_identifier/1)
+
+    ~s{SELECT COUNT(*) FROM (SELECT 1 FROM #{qualified(table)} } <>
+      ~s{WHERE #{Mapper.quote_identifier(column)}::text = $1 } <>
+      ~s{GROUP BY #{identity_columns} HAVING COUNT(*) > 1) AS repeats}
+  end
+
+  @doc """
+  Returns the parameterized statement reading one page of the role grants holding the first
+  parameter in the given column, after the id in the second, in id order and at most the third
+  parameter of them. Each row holds the id and the four identity columns, all as text - the
+  spelling the grant id derives from - in the order of `Hologram.Auth.RoleGrant.identity_columns/0`.
+  """
+  @spec grant_identity_statement(String.t(), String.t()) :: String.t()
+  def grant_identity_statement(table, column) do
+    identity_columns = Enum.map_join(RoleGrant.identity_columns(), ", ", &~s{"#{&1}"::text})
+
+    # Ordered by the stored uuid, named through its table: a bare "id" in ORDER BY would name the
+    # text id the SELECT returns, which sorts all the matching grants after the cursor on each page
+    # instead of reading the primary key index up to the limit.
+    ~s{SELECT "id"::text, #{identity_columns} FROM #{qualified(table)} } <>
+      ~s{WHERE #{Mapper.quote_identifier(column)}::text = $1 AND "id" > $2::text::uuid } <>
+      ~s{ORDER BY #{qualified(table)}."id" LIMIT $3}
+  end
+
+  @doc """
   Returns the pre-flight check statement counting the rows with a NULL in the given
   column - the rows that block making the column required without a fill.
   """
@@ -386,8 +432,9 @@ defmodule Hologram.DB.DDL do
   Returns the DDL statements that execute the given change op, in execution order.
 
   :create_table renders one statement with all columns and the named primary key
-  constraint - columns are laid out in canonical order (id first, created_at and
-  updated_at last, everything else alphabetical). :add_column, :drop_column, and
+  constraint - columns are laid out in canonical order (id first, the timestamps -
+  created_at, server_created_at, server_updated_at and updated_at - last, everything
+  else alphabetical). :add_column, :drop_column, and
   :drop_table render one statement each. :alter_column renders one ALTER TABLE
   statement combining a type action (with COLLATE and a USING cast) and a nullability
   action, as needed.
@@ -409,7 +456,10 @@ defmodule Hologram.DB.DDL do
   :delete_role_grants empties the role grant store, the second op that touches rows
   rather than the schema. It too comes from the applier only, and for a stronger reason:
   the migration file has to SAY it deletes the grants, so the destruction is reviewed
-  rather than inferred from a designation change.
+  rather than inferred from a designation change. A third such op, :rederive_grant_ids,
+  never reaches this function: the ids it writes are SHA-1 digests, which PostgreSQL can't
+  compute, so the migrator derives them between grant_identity_statement/2 and
+  grant_id_update_statement/1.
 
   :create_enum_type, :drop_enum_type, :add_enum_value (with its BEFORE anchor when
   positioned), and :rename_enum_value render one statement each. :rebuild_enum_type
@@ -630,6 +680,10 @@ defmodule Hologram.DB.DDL do
   defp column_order_key("id"), do: {0, "id"}
 
   defp column_order_key("created_at"), do: {2, "created_at"}
+
+  defp column_order_key("server_created_at"), do: {2, "server_created_at"}
+
+  defp column_order_key("server_updated_at"), do: {2, "server_updated_at"}
 
   defp column_order_key("updated_at"), do: {2, "updated_at"}
 

@@ -212,6 +212,8 @@ defmodule Hologram.DB.IntrospectionTest do
                "c_$sort" => %{type: "text", collation: "C", null: true},
                "c_$search" => %{type: "text", collation: "C", null: true},
                "created_at" => %{type: "timestamptz", collation: nil, null: false},
+               "server_created_at" => %{type: "timestamptz", collation: nil, null: false},
+               "server_updated_at" => %{type: "timestamptz", collation: nil, null: false},
                "updated_at" => %{type: "timestamptz", collation: nil, null: false},
                "$revisions" => %{type: "jsonb", collation: nil, null: false}
              }
@@ -727,7 +729,6 @@ defmodule Hologram.DB.IntrospectionTest do
                  "ok_tuple",
                  "raise",
                  "record_actor",
-                 "record_order",
                  "swept",
                  "throw"
                ],
