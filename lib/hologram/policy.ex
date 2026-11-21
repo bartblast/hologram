@@ -540,7 +540,7 @@ defmodule Hologram.Policy do
     for entity_type <- entity_types,
         {_operation, rules} <- build(entity_type),
         rule <- rules,
-        link <- rule_links(entity_type, rule.predicates),
+        link <- rule_links(entity_type, read_clauses(rule)),
         into: MapSet.new(),
         do: link
   end
@@ -1521,6 +1521,12 @@ defmodule Hologram.Policy do
     end)
   end
 
+  # Every clause a rule reads, those judging a change included, each as what it reads on a stored
+  # row: the row after the change has the same type and the same chains.
+  defp read_clauses(%{exact: %{predicates: predicates}}), do: stored_spelling(predicates)
+
+  defp read_clauses(%{predicates: predicates}), do: predicates
+
   # Whether the given clauses, nested in the given number of quantifiers, read the row after the
   # change: the row one level past the rule's own.
   defp reads_new_row?(clauses, depth) do
@@ -1798,14 +1804,16 @@ defmodule Hologram.Policy do
   end
 
   # The chains a rule reads - all of them, or those a client answers from the rows it holds.
-  defp rule_chains(entity_type, %{predicates: predicates, to: to, via: via}, reads) do
+  defp rule_chains(entity_type, %{to: to, via: via} = rule, reads) do
+    clauses = read_clauses(rule)
+
     {read_predicates, read_references, read_via} =
       case reads do
         :all ->
-          {predicates, to, via}
+          {clauses, to, via}
 
         {:held, operation} ->
-          {undecided_predicates(entity_type, operation, predicates),
+          {undecided_predicates(entity_type, operation, clauses),
            undecided_references(entity_type, operation, to),
            undecided_via(entity_type, operation, via)}
       end
@@ -1841,7 +1849,7 @@ defmodule Hologram.Policy do
       |> build()
       |> Map.values()
       |> Enum.concat()
-      |> Enum.flat_map(& &1.predicates)
+      |> Enum.flat_map(&read_clauses/1)
 
     derived = Derived.read_fields(entity_type, predicates)
 

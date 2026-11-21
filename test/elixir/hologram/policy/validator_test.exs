@@ -1712,6 +1712,31 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects new() on a path through a type nobody may read" do
+      defmodule NewRowValidatorFixture6 do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        allow :create
+      end
+
+      defmodule NewRowValidatorFixture7 do
+        use Hologram.Entity
+
+        relationship :parent, Hologram.Policy.ValidatorTest.NewRowValidatorFixture6
+
+        allow :update, when: new(parent.archived) == false
+      end
+
+      expected_msg =
+        "allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture7 reads Hologram.Policy.ValidatorTest.NewRowValidatorFixture6 through parent, which declares no allow :read line - no browser ever holds such a row, so a check on a new or changed struct answers no in every browser while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.NewRowValidatorFixture6: a browser holding the row answers such a check itself"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NewRowValidatorFixture6, NewRowValidatorFixture7], [])
+      end
+    end
+
     test "rejects a pinned condition wrapping the row above twice" do
       expected_msg =
         ~s/invalid when option [{{:outer, 1, {:outer, 1, :title}}, {:==, "x"}}] for allow :update in Hologram.Policy.ValidatorTest.NewRowValidatorFixture5 - a pinned condition must be a list of predicates, each pairing a name or a path with a value/

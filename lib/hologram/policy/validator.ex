@@ -711,9 +711,10 @@ defmodule Hologram.Policy.Validator do
   # rule, so its own chains stay checked, while the delegated read rules are answered by the read
   # verdict on the row it delegates to. The chains a deciding item reads are not checked, since the
   # server's verdict answers the operation over the rows as stored (see
-  # Hologram.Policy.held_chains/2). Like any verdict, it answers no in a browser while a write it
-  # has not answered names a type the operation reads, until the server's answer brings the verdict
-  # anew.
+  # Hologram.Policy.held_chains/2), or, for a clause reading the row after a change, which no verdict
+  # speaks for, the server's check of the write, a browser leaving it unknown. Like any verdict, it
+  # answers no in a browser while a write it has not answered names a type the operation reads,
+  # until the server's answer brings the verdict anew.
   defp validate_readable_chains!(entity_types) do
     unreadable_hops =
       for entity_type <- Enum.sort(entity_types),

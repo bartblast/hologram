@@ -1696,6 +1696,69 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "what a rule reading the row after the change reads" do
+    defmodule NewReadChannel do
+      use Hologram.Entity
+
+      attribute :archived, :boolean, default: false
+
+      relationship :messages, [Hologram.PolicyTest.NewReadMessage], inverse: channel
+
+      allow :read
+    end
+
+    defmodule NewReadMessage do
+      use Hologram.Entity
+
+      attribute :body, :string
+      attribute :pinned, :boolean, default: false
+
+      relationship :channel, NewReadChannel, optional: true
+
+      derived :label, :string, fn body -> body <> "!" end
+
+      allow :read
+
+      allow :update,
+        as: :pin,
+        only: [:pinned],
+        when: none(message <- new(channel.messages), message.pinned == true)
+
+      allow :update, as: :move, only: [:channel], when: new(channel.archived) == false
+      allow :update, as: :retitle, only: [:body], when: new(label) == "x!"
+    end
+
+    setup do
+      put_derived_definitions([NewReadMessage])
+    end
+
+    test "counts the chains new() follows among the related chains" do
+      assert related_chains(NewReadMessage) == [[:channel], [:channel, :messages]]
+    end
+
+    test "counts a path through new() among the chains a client holds" do
+      assert held_chains(NewReadMessage, :move) == [[:channel]]
+    end
+
+    # A none is one the rows a client holds can't answer.
+    test "leaves a deciding quantifier over new() out of the chains a client holds" do
+      assert held_chains(NewReadMessage, :pin) == []
+    end
+
+    test "names the set a none over new() reads among the locked links" do
+      assert locked_set_links([NewReadMessage]) ==
+               MapSet.new([{:reference, NewReadMessage, :channel_id, NewReadChannel}])
+    end
+
+    test "gives a type a new hash when a derived field only new() reads changes" do
+      rules_hash = hash([NewReadMessage])
+
+      Derived.put_definitions(%{{NewReadMessage, :label} => {:value, "y"}})
+
+      assert hash([NewReadMessage]) != rules_hash
+    end
+  end
+
   describe "held_chains/2" do
     defmodule HeldTask do
       use Hologram.Entity
