@@ -380,7 +380,7 @@ describe("LocalDatabase", () => {
     const PROJECT = "MyApp.Project";
     const TASK = "MyApp.Task";
 
-    it("drops the carried counts and the completeness marks", () => {
+    it("drops the completeness marks and the counts the client counted itself", () => {
       LocalDatabase.syncCounts = {"MyApp.Component/todos/": 3};
       LocalDatabase.syncCountTypes = {"MyApp.Component/todos/": [TASK]};
       LocalDatabase.markTypesSynced([TASK]);
@@ -392,6 +392,73 @@ describe("LocalDatabase", () => {
       assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
       assert.isFalse(LocalDatabase.isAllSynced());
       assert.isFalse(LocalDatabase.isTypeSynced(TASK));
+    });
+
+    it("keeps a count the client can't count yet", () => {
+      LocalDatabase.syncCounts = {"MyApp.Component/todos/": 3};
+      LocalDatabase.syncCountTypes = {"MyApp.Component/todos/": [TASK]};
+
+      LocalDatabase.beginRefill();
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Component/todos/": 3,
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {
+        "MyApp.Component/todos/": [TASK],
+      });
+    });
+
+    it("keeps a count with no types while not everything is marked", () => {
+      LocalDatabase.syncCounts = {"MyApp.Component/todos/": 3};
+      LocalDatabase.markTypesSynced([TASK]);
+
+      LocalDatabase.beginRefill();
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Component/todos/": 3,
+      });
+    });
+
+    it("keeps a count only one of whose types is marked", () => {
+      LocalDatabase.syncCounts = {"MyApp.Component/todos/": 3};
+      LocalDatabase.syncCountTypes = {
+        "MyApp.Component/todos/": [PROJECT, TASK],
+      };
+      LocalDatabase.markTypesSynced([TASK]);
+
+      LocalDatabase.beginRefill();
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Component/todos/": 3,
+      });
+    });
+
+    it("lets a kept count go only at the marker of the last type it reads", () => {
+      const key = "MyApp.Component/todos/";
+
+      LocalDatabase.syncCounts = {[key]: 3};
+      LocalDatabase.syncCountTypes = {[key]: [PROJECT, TASK]};
+
+      LocalDatabase.beginRefill();
+
+      LocalDatabase.markTypesSynced([PROJECT]);
+      assert.isFalse(LocalDatabase.countsLocally(key));
+
+      LocalDatabase.markTypesSynced([TASK]);
+      assert.isTrue(LocalDatabase.countsLocally(key));
+    });
+
+    // The client has been counting it, so the number it was carried with is behind by now.
+    it("doesn't bring back a count the client was counting itself", () => {
+      LocalDatabase.syncCounts = {"MyApp.Component/todos/": 3};
+      LocalDatabase.syncCountTypes = {"MyApp.Component/todos/": [TASK]};
+      LocalDatabase.markTypesSynced([TASK]);
+
+      LocalDatabase.beginRefill();
+
+      assert.isUndefined(LocalDatabase.syncCounts["MyApp.Component/todos/"]);
+      assert.isFalse(LocalDatabase.countsLocally("MyApp.Component/todos/"));
     });
 
     // The whole point of marking rather than dropping: the screen goes on showing what it showed,

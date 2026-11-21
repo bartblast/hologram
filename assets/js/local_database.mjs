@@ -103,9 +103,13 @@ export default class LocalDatabase {
   // takes away whatever it never delivered, through the same sweep that takes away the rows a
   // page carried and the stream never vouched for.
   //
-  // The counts and the completeness marks go, because neither is true of a database being filled: a
-  // count is answered from the rows as they stand once the client can count for itself, and nothing
-  // is complete again until a marker says so.
+  // The completeness marks go, because nothing is complete again until a marker says so. A carried
+  // count stays: it's the only number the client has for a query it can't count yet, and the first
+  // greeting of a page load comes here right after the page filed its counts. Like the rows kept
+  // above, it can be behind what the user may now read, until the marker of the last type it
+  // reads. Counting sooner would count a table still being filled or swept. One the client has
+  // been counting itself goes, while the marks still say which those are. Kept past them, it would
+  // come back as a number the rows have moved on from.
   static beginRefill() {
     for (const [type, table] of Object.entries(LocalDatabase.#tables)) {
       for (const id of Object.keys(table)) {
@@ -119,8 +123,7 @@ export default class LocalDatabase {
     // back after the fill when its user may read it.
     LocalDatabase.#promotedSeqs = new Map();
 
-    LocalDatabase.syncCountTypes = {};
-    LocalDatabase.syncCounts = {};
+    LocalDatabase.#dropCountable();
     LocalDatabase.#syncedAll = false;
     LocalDatabase.#syncedTypes = new Set();
   }

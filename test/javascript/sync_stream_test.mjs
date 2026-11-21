@@ -312,6 +312,31 @@ describe("SyncStream", () => {
       }
     });
 
+    // A first visit greets with no place right after the page filed the counts it was rendered
+    // with.
+    it("keeps a count the client can't count yet when it greets with no place", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      sinon.stub(Durability, "clear");
+      sinon.stub(Tabs, "post");
+
+      SyncStream.syncCursor = null;
+      LocalDatabase.syncCounts = {"MyApp.Tasks/total/": 42};
+      LocalDatabase.syncCountTypes = {"MyApp.Tasks/total/": ["MyApp.Task"]};
+
+      SyncStream.buildGreeting(pageModule);
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Tasks/total/": 42,
+      });
+
+      LocalDatabase.reset();
+    });
+
     // A frame served while the tab settles where its lead starts from would land on a store about
     // to be cleared; the tab greets again once that is settled.
     it("says nothing for a tab still settling the lead it took", () => {
@@ -601,11 +626,33 @@ describe("SyncStream", () => {
     // half of a change of identity is posted to it exactly this way.
     it("starts over on a resync naming a change of identity", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
+      LocalDatabase.syncCounts = {"MyApp.Tasks/total/": 42};
+      LocalDatabase.syncCountTypes = {"MyApp.Tasks/total/": ["MyApp.Task"]};
 
       SyncStream.receiveFrame("sync_resync", {reason: "identity"});
 
       assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
       assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
+    });
+
+    // The path a server's resync takes, and a follower hearing the leader's.
+    it("keeps a count the client can't count yet on a resync of the same identity", () => {
+      LocalDatabase.syncCounts = {"MyApp.Tasks/total/": 42};
+      LocalDatabase.syncCountTypes = {"MyApp.Tasks/total/": ["MyApp.Task"]};
+
+      SyncStream.receiveFrame("sync_resync", {reason: "retention"});
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Tasks/total/": 42,
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {
+        "MyApp.Tasks/total/": ["MyApp.Task"],
+      });
+
+      LocalDatabase.reset();
     });
 
     // The rows the last render computed the derived fields from are gone, so an action run before
