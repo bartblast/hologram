@@ -139,22 +139,31 @@ defmodule Hologram.Mutation.Envelope do
 
   defp decode_delta(name, amount, fields, entity_type) do
     case Map.fetch(fields, name) do
-      {:ok, {field, _type}} when is_integer(amount) and amount != 0 ->
-        # Bounded here because nothing downstream can: the column is judged on the value the
-        # statement leaves, and an amount the column cannot hold fails the statement's own
-        # parameters instead - the same range a put's value is judged against.
-        if Validator.attribute_value_valid?(amount, :integer) do
-          {:ok, {field, amount}}
-        else
-          {:error, ~s(deltas."#{name}" is out of range for an integer attribute)}
+      {:ok, {field, _type}} ->
+        with {:ok, decoded} <- decode_delta_amount(name, amount) do
+          {:ok, {field, decoded}}
         end
-
-      {:ok, _field} ->
-        {:error, ~s(deltas."#{name}" must be a non-zero integer)}
 
       :error ->
         {:error,
          ~s("#{name}" is not a counter of #{inspect(entity_type)} a client can move - a counter is a required integer attribute)}
+    end
+  end
+
+  defp decode_delta_amount(name, amount) do
+    case Codec.decode_wire(amount, :integer) do
+      {:ok, decoded} when is_integer(decoded) and decoded != 0 ->
+        # Bounded here because nothing downstream can: the column is judged on the value the
+        # statement leaves, and an amount the column cannot hold fails the statement's own
+        # parameters instead - the same range a put's value is judged against.
+        if Validator.attribute_value_valid?(decoded, :integer) do
+          {:ok, decoded}
+        else
+          {:error, ~s(deltas."#{name}" is out of range for an integer attribute)}
+        end
+
+      _other ->
+        {:error, ~s(deltas."#{name}" must be a non-zero integer)}
     end
   end
 
@@ -209,7 +218,7 @@ defmodule Hologram.Mutation.Envelope do
   end
 
   defp decode_value(name, value, field, type) do
-    case Codec.decode_json(value, type) do
+    case Codec.decode_wire(value, type) do
       {:ok, decoded} -> {:ok, {field, decoded}}
       :error -> {:error, ~s("#{name}" is not a valid #{type_word(type)})}
     end
