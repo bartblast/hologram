@@ -167,8 +167,16 @@ defmodule Hologram.Compiler.QueryChains do
     {Enum.reverse(steps), Enum.drop(calls, length(steps))}
   end
 
-  defp entry(%IR.TupleType{data: [%IR.AtomType{value: :or}, %IR.ListType{data: alternatives}]}) do
-    {:or, Enum.map(alternatives, &predicates!/1)}
+  # Alternatives are told by their shape, as the stages tell them: a list of lists. Any other list
+  # is a membership in an attribute of the same name.
+  defp entry(%IR.TupleType{
+         data: [%IR.AtomType{value: :or}, %IR.ListType{data: alternatives} = value]
+       }) do
+    if Enum.all?(alternatives, &is_struct(&1, IR.ListType)) do
+      {:or, Enum.map(alternatives, &predicates!/1)}
+    else
+      comparison_entry(:or, value)
+    end
   end
 
   # A quantifier is told by its shape, as the stages tell it (see quantifier_value?/1 in
@@ -194,11 +202,7 @@ defmodule Hologram.Compiler.QueryChains do
   # attribute's comparison is.
   defp entry(%IR.TupleType{data: [%IR.AtomType{value: name}, value]})
        when name == :or or name in @quantifiers do
-    if literal(value) == :error and not operator_value_ir?(value) do
-      throw(:cut)
-    else
-      {name, value(value)}
-    end
+    comparison_entry(name, value)
   end
 
   defp entry(%IR.TupleType{data: [name, value]}) do
@@ -212,6 +216,14 @@ defmodule Hologram.Compiler.QueryChains do
   end
 
   defp entry(_ir), do: throw(:cut)
+
+  defp comparison_entry(name, value) do
+    if literal(value) == :error and not operator_value_ir?(value) do
+      throw(:cut)
+    else
+      {name, value(value)}
+    end
+  end
 
   # A literal IR node as the term it spells, or :error for one only known at run time.
   defp literal(%IR.AtomType{value: value}), do: {:ok, value}

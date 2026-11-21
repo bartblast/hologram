@@ -265,6 +265,16 @@ defmodule Hologram.Compiler.QueryChainsTest do
                    end
     end
 
+    # Alternatives are a list of lists, so a list of plain values is a membership in an attribute
+    # named or, as the stages read it.
+    test "checks a membership filter on an attribute named like alternatives" do
+      assert_raise Hologram.CompileError,
+                   ~r/builds an invalid query - unknown attribute :or/,
+                   fn ->
+                     validate_all!(Module1, :membership_or, 0)
+                   end
+    end
+
     # A quantifier's condition is a list, so an operator tuple is a comparison of an attribute named
     # any, as the stages read it.
     test "checks a comparison through an operator of an attribute named like a quantifier" do

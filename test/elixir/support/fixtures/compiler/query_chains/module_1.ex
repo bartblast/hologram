@@ -40,6 +40,8 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryChains.Module1 do
 
   def literal_or, do: Stage.filter(Entity2, or: {:==, "x"})
 
+  def membership_or, do: Stage.filter(Entity2, or: [1, 2])
+
   def operator_any, do: Stage.filter(Entity2, any: {:>=, 2})
 
   def through_variable(query), do: sort(query, nonexistent)
