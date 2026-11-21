@@ -10,12 +10,14 @@ defmodule HologramFeatureTests.DerivedTest do
   alias HologramFeatureTests.Derived.Page5
   alias HologramFeatureTests.Derived.Page6
   alias HologramFeatureTests.Derived.Page7
+  alias HologramFeatureTests.Derived.Page8
   alias HologramFeatureTests.Entities.Bottle
   alias HologramFeatureTests.Entities.Crate
   alias HologramFeatureTests.Entities.Ticket
+  alias HologramFeatureTests.Entities.Waybill
 
   setup do
-    truncate_entity_tables([Bottle, Crate, Ticket])
+    truncate_entity_tables([Bottle, Crate, Ticket, Waybill])
 
     :ok
   end
@@ -28,6 +30,26 @@ defmodule HologramFeatureTests.DerivedTest do
     |> visit(Page1)
     |> assert_text(css("#tickets"), ~r/^alpha,foxtrot$/)
     |> assert_text(css("#summary"), ~r{^ALPHA/FOXTROT$})
+  end
+
+  # The page names the struct, and only the struct's protocol implementation names the entity type,
+  # so its rows reach the browser only if the build reads that implementation.
+  feature "renders a query written in a struct's protocol implementation", %{session: session} do
+    create_waybill("alpha", true)
+    create_waybill("bravo", false)
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> assert_text(css("#urgent_count"), ~r/^1$/)
+      |> mark_this_page_load()
+
+    create_waybill("charlie", true)
+
+    session
+    |> assert_text(css("#urgent_count"), ~r/^2$/)
+    |> assert_same_page_load()
   end
 
   # Init picks high, and the click switches to low - the value computed from the rows follows them.
@@ -241,5 +263,11 @@ defmodule HologramFeatureTests.DerivedTest do
       |> Ticket.new()
       |> DB.create!()
     end)
+  end
+
+  defp create_waybill(code, urgent) do
+    %{code: code, urgent: urgent}
+    |> Waybill.new()
+    |> DB.create!()
   end
 end

@@ -253,6 +253,30 @@ defmodule Hologram.Compiler.CallGraphTest do
     call_graph
   end
 
+  # An implementation of ReachTest.Proto for the given type whose function calls the given callees.
+  defp reach_impl(type, callees) do
+    {%{
+       protocol_implementation?: true,
+       implementation_for: type,
+       implemented_protocol: ReachTest.Proto
+     }, [{:__impl__, 1, []}, {:fun, 1, callees}]}
+  end
+
+  # What list_page_impl_mfas/5 lists for reach_modules/0's page on the graph of the given modules.
+  defp reach_impl_mfas(modules) do
+    call_graph = reach_full(modules)
+    graph = CallGraph.get_graph(call_graph)
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+
+    list_page_impl_mfas(
+      graph,
+      ReachTest.Page,
+      PLT.start(),
+      module_info_plt,
+      page_impl_seeds(graph, module_info_plt)
+    )
+  end
+
   # The IR of a module of reach_modules/0: a function definition per given function, whose body
   # calls the given functions and names the given modules.
   defp reach_ir(modules, module) do
@@ -372,6 +396,19 @@ defmodule Hologram.Compiler.CallGraphTest do
          }, [{:__impl__, 1, []}, {:fun, 1, [{ReachTest.ImplHelper, :fun, 0}]}]},
       ReachTest.TypeC => {%{struct?: true}, [{:__struct__, 0, []}, {:__struct__, 1, []}]}
     })
+  end
+
+  # A second protocol, which reach_modules/0's code doesn't call, implemented for TypeA.
+  defp reach_proto3_modules do
+    %{
+      ReachTest.Proto3 => {%{protocol?: true, protocol_functions: [fun: 1]}, [{:fun, 1, []}]},
+      ReachTest.Proto3.TypeA =>
+        {%{
+           protocol_implementation?: true,
+           implementation_for: ReachTest.TypeA,
+           implemented_protocol: ReachTest.Proto3
+         }, [{:__impl__, 1, []}, {:fun, 1, []}]}
+    }
   end
 
   defp reach_state(%{pid: pid}), do: Agent.get(pid, & &1.reach)
@@ -2250,6 +2287,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  test "list_callers/2", %{empty_call_graph: call_graph} do
+    add_edges(call_graph, [{:a, :target_1}, {:b, :target_2}, {:c, :other}])
+
+    assert list_callers(call_graph, [:target_1, :target_2]) == MapSet.new([:a, :b])
+  end
+
   describe "list_chunk_entries/2" do
     test "leaves out an implementation for a built-in type" do
       result = list_chunk_entries([Protocol1], module_info_plt_fixture())
@@ -2830,6 +2873,199 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "empty modules list", %{empty_call_graph: call_graph} do
       assert list_modules_reaching(call_graph, []) == MapSet.new()
+    end
+  end
+
+  describe "list_page_impl_mfas/5" do
+    test "lists what the implementation for a type the page's client code names reaches" do
+      assert reach_impl_mfas(reach_modules()) == [
+               {ReachTest.ImplHelper, :fun, 0},
+               {ReachTest.Proto.TypeA, :__impl__, 1},
+               {ReachTest.Proto.TypeA, :fun, 1}
+             ]
+    end
+
+    test "lists the implementation for a type the page's server callbacks name" do
+      modules =
+        Map.put(
+          reach_modules(),
+          ReachTest.Server,
+          {%{}, [{:load, 0, [ReachTest.Named, ReachTest.Plain, ReachTest.TypeB]}]}
+        )
+
+      assert {ReachTest.Proto.TypeB, :fun, 1} in reach_impl_mfas(modules)
+    end
+
+    test "lists the implementation for a type broadcast callers' code names" do
+      modules =
+        Map.put(reach_modules(), ReachTest.CallerHelper, {%{}, [{:fun, 0, [ReachTest.TypeB]}]})
+
+      assert {ReachTest.Proto.TypeB, :fun, 1} in reach_impl_mfas(modules)
+    end
+
+    test "lists the implementation of a protocol only the runtime dispatches" do
+      modules =
+        Map.merge(reach_modules(), %{
+          String.Chars =>
+            {%{protocol?: true, protocol_functions: [to_string: 1]}, [{:to_string, 1, []}]},
+          ReachTest.Chars.TypeA =>
+            {%{
+               protocol_implementation?: true,
+               implementation_for: ReachTest.TypeA,
+               implemented_protocol: String.Chars
+             }, [{:__impl__, 1, []}, {:to_string, 1, []}]},
+          ReachTest.Chars.Atom =>
+            {%{
+               protocol_implementation?: true,
+               implementation_for: Atom,
+               implemented_protocol: String.Chars
+             }, [{:__impl__, 1, []}, {:to_string, 1, []}]}
+        })
+
+      result = reach_impl_mfas(modules)
+
+      assert {String.Chars, :to_string, 1} in result
+      assert {ReachTest.Chars.Atom, :to_string, 1} in result
+      assert {ReachTest.Chars.TypeA, :to_string, 1} in result
+    end
+
+    test "lists the implementation of a protocol the page and the runtime both dispatch" do
+      modules =
+        Map.put(reach_modules(), Exception, {%{}, [{:message, 1, [{ReachTest.Proto, :fun, 1}]}]})
+
+      assert {ReachTest.Proto.TypeA, :fun, 1} in reach_impl_mfas(modules)
+    end
+
+    test "lists the implementation for a type the runtime's code names" do
+      modules = Map.put(reach_modules(), Exception, {%{}, [{:message, 1, [ReachTest.TypeB]}]})
+
+      assert {ReachTest.Proto.TypeB, :fun, 1} in reach_impl_mfas(modules)
+    end
+
+    test "lists the implementation of a protocol a broadcast-referenced component calls" do
+      modules =
+        reach_modules()
+        |> Map.merge(reach_proto3_modules())
+        |> Map.merge(%{
+          ReachTest.BroadcastComponent =>
+            {%{component?: true}, [{:template, 0, [{ReachTest.Proto3, :fun, 1}]}]},
+          ReachTest.CallerHelper => {%{}, [{:fun, 0, [ReachTest.BroadcastComponent]}]}
+        })
+
+      assert {ReachTest.Proto3.TypeA, :fun, 1} in reach_impl_mfas(modules)
+    end
+
+    test "lists the implementation for a type a broadcast-referenced component's server code names" do
+      modules =
+        Map.merge(reach_modules(), %{
+          ReachTest.BroadcastComponent =>
+            {%{component?: true}, [{:command, 3, [ReachTest.TypeB]}, {:template, 0, []}]},
+          ReachTest.CallerHelper => {%{}, [{:fun, 0, [ReachTest.BroadcastComponent]}]}
+        })
+
+      assert {ReachTest.Proto.TypeB, :fun, 1} in reach_impl_mfas(modules)
+    end
+
+    test "follows a protocol first reached inside an entered implementation" do
+      modules =
+        reach_modules()
+        |> Map.merge(reach_proto3_modules())
+        |> Map.merge(%{
+          ReachTest.Proto.TypeA => reach_impl(ReachTest.TypeA, [{ReachTest.Proto3, :fun, 1}]),
+          ReachTest.Proto3.TypeB =>
+            {%{
+               protocol_implementation?: true,
+               implementation_for: ReachTest.TypeB,
+               implemented_protocol: ReachTest.Proto3
+             }, [{:__impl__, 1, []}, {:fun, 1, []}]}
+        })
+
+      result = reach_impl_mfas(modules)
+
+      assert {ReachTest.Proto3.TypeA, :fun, 1} in result
+      refute {ReachTest.Proto3.TypeB, :fun, 1} in result
+    end
+
+    test "leaves out the implementation of a protocol nothing dispatches" do
+      modules =
+        Map.merge(reach_modules(), reach_proto3_modules())
+
+      refute {ReachTest.Proto3.TypeA, :fun, 1} in reach_impl_mfas(modules)
+    end
+
+    test "leaves out the implementation for a type the page can't hold" do
+      refute {ReachTest.Proto.TypeB, :fun, 1} in reach_impl_mfas(reach_modules())
+    end
+
+    test "enters the implementation for a type an entered implementation names" do
+      modules =
+        Map.put(
+          reach_modules(),
+          ReachTest.Proto.TypeA,
+          {%{
+             protocol_implementation?: true,
+             implementation_for: ReachTest.TypeA,
+             implemented_protocol: ReachTest.Proto
+           }, [{:__impl__, 1, []}, {:fun, 1, [ReachTest.TypeB]}]}
+        )
+
+      result = reach_impl_mfas(modules)
+
+      assert {ReachTest.TypeB, :__struct__, 0} in result
+      assert {ReachTest.Proto.TypeB, :fun, 1} in result
+    end
+
+    test "takes in what the server callbacks of a component an implementation reaches name" do
+      modules =
+        Map.merge(reach_modules(), %{
+          ReachTest.ImplComponent =>
+            {%{component?: true}, [{:init, 3, [ReachTest.TypeB]}, {:template, 0, []}]},
+          ReachTest.Proto.TypeA =>
+            {%{
+               protocol_implementation?: true,
+               implementation_for: ReachTest.TypeA,
+               implemented_protocol: ReachTest.Proto
+             }, [{:__impl__, 1, []}, {:fun, 1, [ReachTest.ImplComponent]}]}
+        })
+
+      assert {ReachTest.Proto.TypeB, :fun, 1} in reach_impl_mfas(modules)
+    end
+
+    test "takes in a component the server callbacks of an implementation's component reference" do
+      modules =
+        Map.merge(reach_modules(), %{
+          ReachTest.ImplComponent =>
+            {%{component?: true}, [{:init, 3, [ReachTest.ServerComponent]}, {:template, 0, []}]},
+          ReachTest.Proto.TypeA => reach_impl(ReachTest.TypeA, [ReachTest.ImplComponent]),
+          ReachTest.ServerComponent =>
+            {%{component?: true}, [{:init, 3, [ReachTest.TypeB]}, {:template, 0, []}]}
+        })
+
+      assert {ReachTest.Proto.TypeB, :fun, 1} in reach_impl_mfas(modules)
+    end
+
+    test "goes on while the components implementations reach open further implementations" do
+      modules =
+        Map.merge(reach_modules(), %{
+          ReachTest.ImplComponent =>
+            {%{component?: true}, [{:init, 3, [ReachTest.TypeB]}, {:template, 0, []}]},
+          ReachTest.ImplComponent2 =>
+            {%{component?: true}, [{:init, 3, [ReachTest.TypeC]}, {:template, 0, []}]},
+          ReachTest.Proto.TypeA => reach_impl(ReachTest.TypeA, [ReachTest.ImplComponent]),
+          ReachTest.Proto.TypeB => reach_impl(ReachTest.TypeB, [ReachTest.ImplComponent2]),
+          ReachTest.Proto.TypeC => reach_impl(ReachTest.TypeC, []),
+          ReachTest.TypeC => {%{struct?: true}, [{:__struct__, 0, []}, {:__struct__, 1, []}]}
+        })
+
+      assert {ReachTest.Proto.TypeC, :fun, 1} in reach_impl_mfas(modules)
+    end
+
+    test "leaves out what the page reaches without entering an implementation" do
+      result = reach_impl_mfas(reach_modules())
+
+      refute {ReachTest.Page, :template, 0} in result
+      refute {ReachTest.Proto, :fun, 1} in result
+      refute {ReachTest.TypeA, :__struct__, 0} in result
     end
   end
 
@@ -4030,6 +4266,89 @@ defmodule Hologram.Compiler.CallGraphTest do
                  [NarrowDiff.HeldImpl, NarrowDiff.Held],
                  []
                )
+    end
+  end
+
+  describe "protocol_metadata_mfa?/2" do
+    test "a protocol's dispatch function" do
+      assert protocol_metadata_mfa?({Protocol1, :impl_for!, 1}, module_info_plt_fixture())
+    end
+
+    test "an implementation's __impl__/1" do
+      impl = Module.safe_concat(Protocol1, Struct1)
+
+      assert protocol_metadata_mfa?({impl, :__impl__, 1}, module_info_plt_fixture())
+    end
+
+    test "a protocol's own function" do
+      refute protocol_metadata_mfa?({Protocol1, :my_fun, 1}, module_info_plt_fixture())
+    end
+
+    test "a function of that name in a module that is no protocol" do
+      refute protocol_metadata_mfa?({Module5, :impl_for, 1}, module_info_plt_fixture())
+    end
+
+    test "no vertex" do
+      refute protocol_metadata_mfa?(nil, module_info_plt_fixture())
+    end
+  end
+
+  describe "page_impl_seeds/2" do
+    test "lists the struct types broadcast callers' code names" do
+      modules =
+        Map.put(reach_modules(), ReachTest.CallerHelper, {%{}, [{:fun, 0, [ReachTest.TypeB]}]})
+
+      call_graph = reach_full(modules)
+      module_info_plt = CallGraph.module_info_plt(call_graph)
+
+      seeds = page_impl_seeds(CallGraph.get_graph(call_graph), module_info_plt)
+
+      assert ReachTest.TypeB in seeds.types
+    end
+
+    test "lists the struct types the runtime's code names" do
+      modules = Map.put(reach_modules(), Exception, {%{}, [{:message, 1, [ReachTest.TypeB]}]})
+
+      call_graph = reach_full(modules)
+      module_info_plt = CallGraph.module_info_plt(call_graph)
+
+      seeds = page_impl_seeds(CallGraph.get_graph(call_graph), module_info_plt)
+
+      assert ReachTest.TypeB in seeds.types
+    end
+
+    test "leaves out a type only a manually ported function's Elixir body names" do
+      modules =
+        Map.merge(reach_modules(), %{
+          Kernel => {%{}, [{:inspect, 1, [ReachTest.TypeB]}]},
+          ReachTest.CallerHelper => {%{}, [{:fun, 0, [{Kernel, :inspect, 1}]}]}
+        })
+
+      call_graph = reach_full(modules)
+      module_info_plt = CallGraph.module_info_plt(call_graph)
+
+      seeds = page_impl_seeds(CallGraph.get_graph(call_graph), module_info_plt)
+
+      refute ReachTest.TypeB in seeds.types
+    end
+
+    test "lists the protocol functions the runtime's entries reach" do
+      graph = Digraph.add_edge(Digraph.new(), {Exception, :message, 1}, {Protocol1, :my_fun, 1})
+
+      seeds = page_impl_seeds(graph, module_info_plt_fixture())
+
+      assert seeds.runtime_protocol_vertices == [{Protocol1, :my_fun, 1}]
+    end
+
+    test "leaves out a protocol only a manually ported function's Elixir body calls" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Exception, :message, 1}, {Kernel, :inspect, 1})
+        |> Digraph.add_edge({Kernel, :inspect, 1}, {Protocol1, :my_fun, 1})
+
+      seeds = page_impl_seeds(graph, module_info_plt_fixture())
+
+      assert seeds.runtime_protocol_vertices == []
     end
   end
 

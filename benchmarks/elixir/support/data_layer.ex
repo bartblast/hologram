@@ -25,14 +25,27 @@ defmodule Hologram.Benchmarks.DataLayer do
       |> Compiler.list_reach_by_page(call_graph)
       |> Compiler.pages_checking_permissions()
 
+    unsplit_call_graph = CallGraph.clone(call_graph)
+
     CallGraph.remove_manually_ported_mfas(call_graph)
 
     # Listed with the runtime's MFAs still in the graph, as the compile task lists it: a
     # component reached through a runtime MFA is still one the page can reach.
-    reach_by_page =
+    listed_reach =
       page_modules
       |> Compiler.list_reach_by_page(call_graph)
-      |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt, ir_plt)
+      |> Compiler.put_impl_mfas(call_graph)
+
+    impl_checking_pages =
+      Compiler.pages_checking_permissions_in_impls(listed_reach, unsplit_call_graph)
+
+    reach_by_page =
+      Compiler.build_kept_page_reach(
+        listed_reach,
+        permission_checking_pages ++ impl_checking_pages,
+        module_info_plt,
+        ir_plt
+      )
 
     {reach_by_page, module_info_plt}
   end

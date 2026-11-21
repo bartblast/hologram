@@ -62,6 +62,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Entities.Vault
+  alias HologramFeatureTests.Entities.Waybill
   alias HologramFeatureTests.Entities.Workshop
   alias HologramFeatureTests.Jobs.HoldRun
   alias HologramFeatureTests.Jobs.KillRun
@@ -1217,6 +1218,7 @@ defmodule HologramFeatureTests.Helpers do
         Trip,
         User,
         Vault,
+        Waybill,
         Workshop
       ]
       |> Enum.map(&Mapper.table_name/1)
