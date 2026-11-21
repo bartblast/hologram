@@ -518,6 +518,7 @@ defmodule Hologram.Migration.Generator do
   # two reads of one declaration compare equal - the migration file spells it the way the entity
   # type does. Building the regex back is what turns the flags into the modifiers they were
   # written as.
+  # sobelow_skip ["DOS.Regex"]
   defp render_opt_value({:regex, source, regex_opts}) do
     source
     |> Regex.compile!(regex_opts)
