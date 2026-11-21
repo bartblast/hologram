@@ -25,14 +25,16 @@ defmodule Hologram.DB.SQLQuery do
   # integer, and a larger value fails the statement that sets it.
   @max_timeout 2_147_483_647
 
-  # The two kinds of session state that outlive the read: a session-level advisory lock and a named
-  # prepared statement. The read-only setting refuses neither, and either would stay with whichever
-  # pooled connection ran the read, where the next read, likely on another connection, cannot reach
-  # it. Refused by the statement's text before anything is sent - a transaction-level lock has
-  # other names and is not refused here, params are never scanned, and a function of the app's own
-  # that takes a lock inside is not seen.
+  # The two kinds of session state that outlive the read, found by this pattern and
+  # @session_lock_pattern: a named prepared statement and a session-level advisory lock. The
+  # read-only setting refuses neither, and either would stay with whichever pooled connection ran
+  # the read, where the next read, likely on another connection, cannot reach it. Refused by the
+  # statement's text before anything is sent - a transaction-level lock has other names and is not
+  # refused here, params are never scanned, and a function of the app's own that takes a lock
+  # inside is not seen.
   @prepare_statement_pattern ~r/\A(?:\s|--[^\n]*(?:\n|\z)|\/\*.*?\*\/)*prepare\b/is
 
+  # These two run around a read that keeps a lock, whose savepoint is released (see run/3).
   @read_timeout_statement "SELECT current_setting('statement_timeout')"
 
   @restore_timeout_statement "SELECT set_config('statement_timeout', $1, true)"

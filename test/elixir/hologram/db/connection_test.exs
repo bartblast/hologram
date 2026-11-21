@@ -83,6 +83,8 @@ defmodule Hologram.DB.ConnectionTest do
       assert transaction(fn ->
                with_connection(connection, fn -> in_transaction?() end)
              end) == {:ok, false}
+
+      GenServer.stop(connection)
     end
   end
 

@@ -443,7 +443,7 @@ defmodule Hologram.DB do
   transaction-level advisory lock outside a transaction, where the lock would end with the read.
   Raises it as well for an option other than `timeout:`, an invalid timeout, a number of
   params that differs from the statement's placeholders, and a param that does not fit its
-  placeholder's type. None of these reaches the server.
+  placeholder's type. None of these runs the statement.
   """
   @spec sql(String.t(), list, keyword) :: {:ok, sql_result} | {:error, SQLError.t()}
   def sql(statement, params \\ [], opts \\ []) do
@@ -493,10 +493,11 @@ defmodule Hologram.DB do
   PostgreSQL aborts the transaction as a deadlock victim - the error propagates, and this
   transaction is the one to retry.
 
-  The `timeout:` option is the milliseconds the transaction may hold its connection, or
-  `:infinity`, and is fifteen seconds by default. Past it the driver closes the connection, the
-  running statement raises DBConnection.ConnectionError and the transaction is lost. A nested
-  call's `timeout:` is ignored, since the outermost transaction's bound is the one that applies.
+  The `timeout:` option is the milliseconds from this call until the transaction has to be done,
+  the wait for a free connection included, or `:infinity`, and is fifteen seconds by default. Past
+  it the driver closes the connection, the running statement raises DBConnection.ConnectionError
+  and the transaction is lost. A nested call's `timeout:` is ignored, since the outermost
+  transaction's bound is the one that applies.
 
   A nested call costs two statements (SAVEPOINT and RELEASE, three when it rolls back), and
   PostgreSQL caches 64 subtransactions per session - a transaction opening more than that, such
