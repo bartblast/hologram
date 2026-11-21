@@ -1732,6 +1732,9 @@ describe("Tabs", () => {
 
         rendering = sinon.stub(SyncStream, "scheduleRender");
 
+        // Completeness is not reset between files either, and a claim already made sweeps nothing.
+        LocalDatabase.reset();
+
         LocalDatabase.putRow("MyApp.Task", {id: "t-vouched", title: "held"});
         LocalDatabase.putRow("MyApp.Task", {id: "t-carried", title: "page"});
         LocalDatabase.markCarried("MyApp.Task", "t-carried");
@@ -2102,16 +2105,26 @@ describe("Tabs", () => {
         }
       });
 
-      // A completeness claim judges it: the server may no longer send it.
-      it("keeps a row only the page carried, still carried", async () => {
-        sinon.stub(Durability, "readBase").resolves({
+      // A completeness claim judges it: the server may no longer send it. So the read leaves it,
+      // and the real claim, not a stand-in, is what takes it away.
+      it("keeps a row only the page carried, still carried, until a completeness claim", async () => {
+        LocalDatabase.markAllSynced.restore();
+        LocalDatabase.markTypesSynced.restore();
+
+        const reading = sinon.stub(Durability, "readBase").resolves({
           cursor: "place-2",
           records: [record("t-stored", "stored")],
         });
 
         await follow();
 
-        Tabs.receive(state("place-2"));
+        Tabs.receive(
+          state("place-2", {
+            completeness: {all: false, types: []},
+            synced: [],
+          }),
+        );
+
         await waitForEventLoop();
 
         assert.deepStrictEqual(
@@ -2125,6 +2138,23 @@ describe("Tabs", () => {
         assert.deepStrictEqual(LocalDatabase.carriedEntries(), [
           ["MyApp.Task", "t-carried"],
         ]);
+
+        Tabs.receive(state("place-2"));
+        await waitForEventLoop();
+
+        // At the place it already holds, so the claim is taken without another read.
+        sinon.assert.calledOnce(reading);
+
+        assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t-carried"));
+        assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseRow("MyApp.Task", "t-stored"),
+          {
+            id: "t-stored",
+            title: "stored",
+          },
+        );
       });
 
       it("holds what arrives while it reads the store, and replays it after", async () => {
