@@ -500,6 +500,8 @@ defmodule Hologram.Sync.LensTest do
                id: @id_1,
                kind: "staff",
                points: 5,
+               server_created_at: nil,
+               server_updated_at: nil,
                updated_at: nil
              }
     end
