@@ -17,8 +17,7 @@ defmodule HologramFeatureTests.Components.Queries.Component13 do
   end
 
   # The pinned exclusion sits in the high alternative only, so the low ticket stays whatever its
-  # title. The window drops the pinned exclusion and keeps both alternatives - the high one still
-  # holds its priority - so a medium ticket is downloaded only when another query asks for it.
+  # title, and a medium ticket matches neither alternative.
   defp tickets_query(skipped_title) do
     Ticket
     |> filter((priority == :high and title != ^skipped_title) or priority == :low)

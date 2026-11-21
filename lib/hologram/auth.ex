@@ -20,7 +20,6 @@ defmodule Hologram.Auth do
   alias Hologram.Policy.Evaluator
   alias Hologram.Query
   alias Hologram.Query.Stage
-  alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Server
   alias Hologram.Sync.Carry
@@ -28,45 +27,6 @@ defmodule Hologram.Auth do
   # The shape refusal can?/3 shares with its client twin (operationKey in
   # assets/js/elixir/hologram/auth.mjs) - a hand-ported pair, pinned on both tiers.
   @operation_shape_message "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
-
-  @doc """
-  Returns the window a client checking permissions locally downloads: every grant row, narrowed
-  per client by the policy the read path applies - each client receives its own grants plus the
-  ones it may administer, and nothing else.
-
-  Derived here rather than in either caller so that the build (which decides which pages
-  subscribe to it) and the query cache (which resolves the id back to a term) name one window
-  and not two.
-  """
-  @spec grants_window() :: Query.t()
-  def grants_window do
-    # Only a client checking permissions downloads it, so it is derived as one. The grant store's
-    # rules read no row through a relationship, so nothing is embedded either way.
-    RoleGrant
-    |> Stage.normalize()
-    |> Window.derive(true)
-  end
-
-  @doc """
-  Returns the window a client reading the session user from the context downloads: every row of
-  the given user entity type, narrowed per client by the policy the read path applies - so the
-  session user's own row reaches the client whenever its read rules admit it, and changes to it
-  keep reaching it.
-
-  Every row rather than the session user's alone: a window runs once per node for every session
-  holding it, so nothing in it can name one session's user. The read rules decide how much more
-  arrives - one row for a type only its own user may read, every row for one anybody may read.
-
-  Derived with whether the build checks permissions on the client, as every registered query's
-  window is, so the build (which decides which pages subscribe to it) and the query cache (which
-  resolves the id back to a term) name one window and not two.
-  """
-  @spec user_window(module, boolean) :: Query.t()
-  def user_window(user_entity, permission_checking?) do
-    user_entity
-    |> Stage.normalize()
-    |> Window.derive(permission_checking?)
-  end
 
   @doc """
   Returns the grant rows answering the permission checks a render ran - the rows the given

@@ -4,9 +4,9 @@ defmodule Hologram.Query.Stage do
   # What Hologram.Query's stages run: the query stages and the entity-struct stages, over the data
   # form - lists pairing attribute names or paths with predicate values, operator tuples,
   # membership lists, ranges and placeholders. Hologram.Query delegates its stages here, or expands to them
-  # from the stages written in the query syntax, and documents them there. Normalization,
-  # placeholder listing and the predicate triples policies share are framework internals, called
-  # on this module directly.
+  # from the stages written in the query syntax, and documents them there. Normalization, the
+  # refusal of a term holding placeholders and the predicate triples policies share are framework
+  # internals, called on this module directly.
 
   alias Hologram.Entity
   alias Hologram.Entity.Derived
@@ -128,16 +128,19 @@ defmodule Hologram.Query.Stage do
   # source written {:outer, levels, list} is read from that row too. As with or:, the shape decides
   # rather than the name, so an attribute named any keeps every other spelling.
   #
-  # A Hologram.Query.Placeholder struct in a value position - bare, as an operator-tuple operand,
-  # or as a membership list element - stands for a runtime-bound value: the triple stores a
-  # {:placeholder, name} leaf instead of a concrete value, and value validation is skipped (the
-  # concrete value is validated when the placeholder binds at execution). A membership-element
-  # placeholder binds a single value of the attribute's type, and an ordering comparison with a
-  # placeholder operand still requires an orderable attribute. A placeholder also
+  # A Hologram.Query.Placeholder struct exists only for the build's chain check
+  # (Hologram.Compiler.QueryChains), which replays the queries browser code writes through these
+  # stages with one wherever a value is pinned, since the value only exists at run time. In a value
+  # position - bare, as an operator-tuple operand, or as a membership list element - the triple
+  # stores a {:placeholder, name} leaf instead of a concrete value, and value validation is skipped
+  # (the concrete value is validated when the query is built with it at run time). An ordering
+  # comparison with a placeholder operand still requires an orderable attribute. A placeholder also
   # stands where a filtered attribute's name goes ([{placeholder, value}]), an ordering key or
   # direction goes, or a view bound goes, storing a leaf in its place and skipping the checks that
   # would need a concrete one. A placeholder-keyed predicate leaves its operand unchecked too - the
-  # attribute's type is unknown, so nothing about the operand can be judged against it.
+  # attribute's type is unknown, so nothing about the operand can be judged against it. The check
+  # never runs such a term, and the database executor and the reference interpreter refuse one
+  # (see assert_no_placeholders!/1).
   #
   # Every concrete value an attribute is compared with - by equality, by an ordering operator, as a
   # membership list element or a range bound - fits the type of what the name reads, as
@@ -146,10 +149,10 @@ defmodule Hologram.Query.Stage do
   # database driver error far from the filter, and in the browser in a read answering the wrong
   # rows, since it unboxes each value to the attribute's type.
   #
-  # A leaf names the ARGUMENT a value came from, not the value: a computed operand carries the
-  # name of the argument it derives from, so b: ^(n * 2) stores {:placeholder, :n}. Nothing binds a
-  # leaf back to a value - both execution tiers call the builder with real values and normalize
-  # THAT - so the name serves reading a term, never evaluating one.
+  # A leaf's name is what the check could tell about the pinned value - the variable's name, or
+  # :pinned for an expression like ^(n * 2). Nothing binds a leaf back to a value - both execution
+  # tiers call the builder with real values and normalize THAT - so the name serves reading a
+  # term, never evaluating one.
   #
   # A Hologram.Query.RowField struct in a value position - bare or as the operand of a comparison or
   # a search - stands for a field of the row a derived field is computed for, and is taken only by a
@@ -275,14 +278,13 @@ defmodule Hologram.Query.Stage do
     end)
   end
 
-  # Returns the canonical form of the given query - the form executors run literally
-  # and the registry hashes. Normalization: sorts filter clauses into canonical order,
-  # disjunctions all the way down, gives every set-returning shape a total
-  # deterministic order by appending an ascending id tiebreaker (or the id ordering
-  # itself when no ordering is set) unless id is already among the ordering keys,
-  # drops the ordering from counting queries (counts are order-invariant, view bounds
-  # included), and normalizes included sub-terms recursively - to-one includes embed
-  # a single entity and carry no ordering. Idempotent.
+  # Returns the canonical form of the given query - the form executors run literally, in which two
+  # queries reading the same rows compare equal. Normalization: sorts filter clauses into canonical
+  # order, disjunctions all the way down, gives every set-returning shape a total deterministic
+  # order by appending an ascending id tiebreaker (or the id ordering itself when no ordering is
+  # set) unless id is already among the ordering keys, drops the ordering from counting queries
+  # (counts are order-invariant, view bounds included), and normalizes included sub-terms
+  # recursively - to-one includes embed a single entity and carry no ordering. Idempotent.
   @doc false
   @spec normalize(module | Query.t()) :: Query.t()
   def normalize(query) do
@@ -338,6 +340,25 @@ defmodule Hologram.Query.Stage do
     query
     |> skip(paginate_skip(page, size))
     |> take(size)
+  end
+
+  @doc """
+  Raises Hologram.MisuseError when the given query term holds a placeholder leaf anywhere
+  `placeholder_names/1` looks, and returns :ok otherwise. The database executor and the reference
+  interpreter call it before they read a term, so a placeholder never reaches SQL or the
+  interpreter's matching.
+  """
+  @spec assert_no_placeholders!(Query.t()) :: :ok
+  def assert_no_placeholders!(term) do
+    case placeholder_names(term) do
+      [] ->
+        :ok
+
+      [name | _rest] ->
+        raise MisuseError,
+          message:
+            "cannot run a query term holding the placeholder #{inspect(name)} - a placeholder only stands in for a pinned value while the build checks a query, so a query that runs holds its values: build the term from the values themselves"
+    end
   end
 
   @doc """
@@ -574,13 +595,12 @@ defmodule Hologram.Query.Stage do
   # judges it, except that a float takes an integer too, the same number as a float when compared.
   # An integer is bounded as an integer attribute's value is: a bigger one is a driver error on the
   # server and no exact number in the browser.
-  @doc false
   @spec value_fits?(any, atom, keyword) :: boolean
-  def value_fits?(value, :float, _opts) do
+  defp value_fits?(value, :float, _opts) do
     is_float(value) or Validator.attribute_value_valid?(value, :integer)
   end
 
-  def value_fits?(value, type, opts), do: Validator.attribute_value_valid?(value, type, opts)
+  defp value_fits?(value, type, opts), do: Validator.attribute_value_valid?(value, type, opts)
 
   # Returns every name the given data-form predicates spell, in order, without judging any of them:
   # each key, the name an {:attribute, name} operand carries bare, under an operator or in a list of
@@ -1181,9 +1201,9 @@ defmodule Hologram.Query.Stage do
         "invalid direction #{inspect(direction)} for attribute #{inspect(key)} - use :asc or :desc"
   end
 
-  # A placeholder spec binds either a single ordering key or a whole spec list at execution - the build
-  # cannot tell which, and does not need to: the registered term's ordering is dead weight, since
-  # Hologram.Query.Window empties it. One entry stands for whatever arrives.
+  # A pinned sort spec is either a single ordering key or a whole spec list at run time - the build
+  # check cannot tell which, and does not need to: it checks the term's ordering only when the
+  # spec is written out. One entry stands for whatever arrives.
   defp order_entries!(%Placeholder{name: placeholder_name}, _entity_type, _hints) do
     [{{:placeholder, placeholder_name}, :asc}]
   end
@@ -1262,13 +1282,9 @@ defmodule Hologram.Query.Stage do
   defp owner_row_hint(_scope, _position, _name, 0), do: nil
 
   # The skip a page produces depends on both options, so a placeholder in either makes it one too -
-  # named for whichever option it varies with, page first.
-  #
-  # THE NAME IS NOT A BINDING KEY. A leaf names the ARGUMENT a value derives from, never the value
-  # itself, which is why `skip(^((page - 1) * size))` written out by hand yields this same leaf, and
-  # why `filter(b: ^(n * 2))` yields `{:b, :==, {:placeholder, :n}}`. Nothing ever turns a leaf back
-  # into a value: both tiers call the real builder with the component's real props, so the skip
-  # that executes is the computed one.
+  # named for whichever option it varies with, page first. Nothing ever turns a leaf back into a
+  # value: both tiers call the real builder with the component's real props, so the skip that runs
+  # is the computed one.
   defp paginate_skip(%Placeholder{} = page, _size), do: page
 
   defp paginate_skip(_page, %Placeholder{} = size), do: size
@@ -1281,8 +1297,7 @@ defmodule Hologram.Query.Stage do
 
   # Nothing about a placeholder-keyed predicate can be checked - the attribute is unknown, so its type,
   # its operators and its operand's shape are all unknown with it. The triple records what was
-  # written and Hologram.Query.Window drops it from the download, the real builder validating for
-  # real once the attribute arrives.
+  # written, and the real builder validates for real at run time, once the attribute is known.
   #
   # A bare attribute operand is an equality, as it is under an attribute's own name - read as an
   # operator tuple, it would store :attribute where the operator goes.

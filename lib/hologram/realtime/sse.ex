@@ -1045,7 +1045,7 @@ defmodule Hologram.Realtime.SSE do
 
   # What the client says about its own sync arrives on the stream's own request rather than
   # through the handshake stash: the page is its claim either way (what it names decides which
-  # windows are kept, never what it may see of them), and the stash is a flat tuple gossiped
+  # types fill first, never what it may see of them), and the stash is a flat tuple gossiped
   # between nodes, which is not a shape to grow for a claim that needs no protecting.
   # A client arriving for the first time holds nothing and is simply filled. One coming back is
   # either told what it missed, or told to let go of what it holds - and is then filled the same
@@ -1079,8 +1079,8 @@ defmodule Hologram.Realtime.SSE do
     |> Plug.Conn.halt()
   end
 
-  # A page this build has never compiled stays the string it arrived as, which matches no window
-  # and leaves the client with an empty session rather than an error.
+  # A page this build has never compiled stays the string it arrived as, which names no page types
+  # and leaves the client filled in the build's order rather than with an error.
   defp page_module(page) do
     String.to_existing_atom("Elixir." <> page)
   rescue

@@ -963,6 +963,15 @@ describe("Deltas", () => {
       assert.deepStrictEqual(written, new Set([`${TASK} t1`]));
     });
 
+    // A row this client created and its user may not read is dropped by a frame that can arrive
+    // before the batch's answer, while only the pending create holds the row. Naming it lands the
+    // create, so the answer files nothing.
+    it("names a row it unsynced that it doesn't hold", () => {
+      const written = Deltas.apply({unsync_entity: {[TASK]: ["t1"]}});
+
+      assert.deepStrictEqual(written, new Set([`${TASK} t1`]));
+    });
+
     // An edge names the row whose relationships changed, which is the row a batch's own edge
     // write names - so the two match up.
     it("names an edge's source row rather than its target", () => {

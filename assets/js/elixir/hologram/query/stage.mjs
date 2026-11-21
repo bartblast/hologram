@@ -726,11 +726,7 @@ function localName(name) {
 function membershipValues(values, name, entityType) {
   values.forEach((value) => validateOperandValue(name, value, entityType));
 
-  return values.map((value) =>
-    isStruct(value, "Hologram.Query.Placeholder")
-      ? placeholderLeaf(value)
-      : Model.unbox(value, nameType(entityType, name)),
-  );
+  return values.map((value) => Model.unbox(value, nameType(entityType, name)));
 }
 
 // Two includes of one relationship are one include: what each includes merges, by the same rule
@@ -860,21 +856,6 @@ function operatorTriples(name, tuple, entityType, scope) {
     return rangeTriples(name, operand, entityType);
   }
 
-  if (isStruct(operand, "Hologram.Query.Placeholder")) {
-    if (ORDERING_OPERATORS.includes(operator)) {
-      validateOrderableAttribute(name, entityType, operator);
-    } else if (SEARCH_OPERATORS.includes(operator)) {
-      validateSearchableAttribute(name, entityType, operator);
-    } else if (
-      !EQUALITY_OPERATORS.includes(operator) &&
-      !MEMBERSHIP_OPERATORS.includes(operator)
-    ) {
-      raiseUnknownOperator(operator, name);
-    }
-
-    return [[nameValue(name), operator, placeholderLeaf(operand)]];
-  }
-
   if (
     isAttributeOperand(operand) &&
     (EQUALITY_OPERATORS.includes(operator) ||
@@ -932,20 +913,13 @@ function operatorTriples(name, tuple, entityType, scope) {
   raiseUnknownOperator(operator, name);
 }
 
-function placeholderLeaf(placeholder) {
-  return {placeholder: field(placeholder, "name").value};
-}
-
 // Every shape a predicate value can take, dispatched in the order the Elixir clauses are written
-// in - the shapes that are structures (a range, a placeholder) before the general tuple, and the
-// general tuple before the plain value a bare term falls through to.
+// in - the shape that is a structure (a range) before the general tuple, and the general tuple
+// before the plain value a bare term falls through to. A Hologram.Query.Placeholder, which the
+// Elixir stages take for the build's chain check, never reaches the browser.
 function predicateTriples(name, value, entityType, scope) {
   if (isStruct(value, "Range")) {
     return rangeTriples(name, value, entityType);
-  }
-
-  if (isStruct(value, "Hologram.Query.Placeholder")) {
-    return [[nameValue(name), "==", placeholderLeaf(value)]];
   }
 
   if (isAttributeOperand(value)) {
@@ -1319,9 +1293,110 @@ function toOneRelationshipNames(entityType) {
     .map(([name]) => name);
 }
 
+// A query the server built reaches the browser as the struct it is, carried in state or context:
+// plain data, not the term the stages here build. It is built again here from what it holds, through
+// the same stages, so its values are read by their attributes' types and checked as any query's
+// are, and what comes out normalizes to the term the server's does. Its clauses are stored as the
+// stages store them - {name, operator, value} - which the stages take written as a name and an
+// operator tuple, in whatever order and with whatever ordering it was built.
+function termFromStruct(struct) {
+  const structField = (name) => field(struct, name);
+  const stages = Elixir_Hologram_Query_Stage;
+
+  if (!Type.isNil(structField("source"))) {
+    Interpreter.raiseMisuseError(
+      `${Interpreter.inspect(struct)} reads the rows of a derived field's source, which only a derived field's definition does`,
+    );
+  }
+
+  if (Type.isTrue(structField("trust"))) {
+    stages["trust/1"](struct);
+  }
+
+  let term = toTerm(structField("entity"));
+
+  const clauses = structField("filter");
+
+  if (clauses.data.length > 0) {
+    term = stages["filter/2"](term, Type.list(clauses.data.map(structClause)));
+  }
+
+  const includeSpec = structIncludeSpec(structField("include"));
+
+  if (includeSpec.data.length > 0) {
+    term = stages["include/2"](term, includeSpec);
+  }
+
+  const sort = structField("sort");
+
+  if (sort.data.length > 0) {
+    term = stages["sort/2"](term, sort);
+  }
+
+  for (const bound of ["skip", "take"]) {
+    if (!Type.isNil(structField(bound))) {
+      term = stages[`${bound}/2`](term, structField(bound));
+    }
+  }
+
+  const cardinality = structField("cardinality").value;
+
+  return cardinality === "set" ? term : setCardinality(term, cardinality);
+}
+
+// A normalized clause as the stages take it: a disjunction of clause lists, a quantifier over a
+// source with its clause list, or a triple, written as its name and an operator tuple.
+function structClause(clause) {
+  if (clause.data.length === 3) {
+    const [name, operator, value] = clause.data;
+
+    return Type.tuple([name, Type.tuple([operator, value])]);
+  }
+
+  const [kind, body] = clause.data;
+
+  if (kind.value === "or") {
+    return Type.tuple([
+      kind,
+      Type.list(
+        body.data.map((alternative) =>
+          Type.list(alternative.data.map(structClause)),
+        ),
+      ),
+    ]);
+  }
+
+  const [source, innerClauses] = body.data;
+
+  return Type.tuple([
+    kind,
+    Type.tuple([source, Type.list(innerClauses.data.map(structClause))]),
+  ]);
+}
+
+// The include spec a struct's includes were built by: each name, with what is included under it.
+// A derived field holding a value is included with nothing under it.
+function structIncludeSpec(include) {
+  return Type.list(
+    Object.values(include.data).map(([name, subStruct]) => {
+      if (Type.isNil(subStruct)) {
+        return name;
+      }
+
+      const nested = structIncludeSpec(field(subStruct, "include"));
+
+      return nested.data.length === 0 ? name : Type.tuple([name, nested]);
+    }),
+  );
+}
+
 function toTerm(query) {
   if (isQueryTerm(query)) {
     return query;
+  }
+
+  if (isStruct(query, "Hologram.Query")) {
+    return termFromStruct(query);
   }
 
   const name = Type.isAlias(query) ? Interpreter.moduleExName(query) : null;
@@ -1745,11 +1820,10 @@ function validateOperandName(operandName, entityType, hint = null) {
 // A value compared with a name fits the type of what the name reads, refused where it is written
 // rather than where it is run, as on the server: the browser would otherwise unbox it into a value
 // that compares as something else, like "yes" against a boolean matching the false rows. An enum's
-// value is one of the values it declares, which the refusal lists. Nil and a placeholder's value
-// are judged elsewhere, nil by the operator taking it and a placeholder's when the query is built
-// with real values. A float takes an integer too, the same number when compared.
+// value is one of the values it declares, which the refusal lists. Nil is judged by the operator
+// taking it. A float takes an integer too, the same number when compared.
 function validateOperandValue(name, value, entityType) {
-  if (Type.isNil(value) || isStruct(value, "Hologram.Query.Placeholder")) {
+  if (Type.isNil(value)) {
     return;
   }
 

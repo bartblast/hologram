@@ -11,7 +11,6 @@ defmodule HologramFeatureTests.ForeignSessionTest do
   alias HologramFeatureTests.ForeignSessionPage
 
   setup do
-    await_evaluator_drain()
     truncate_every_entity_table()
 
     :ok

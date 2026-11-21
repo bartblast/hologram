@@ -29,7 +29,6 @@ defmodule Hologram.Sync.Session do
   alias Hologram.DB.QueryCache
   alias Hologram.Entity
   alias Hologram.Policy.Edges
-  alias Hologram.Query.Registry
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Fill
@@ -39,7 +38,7 @@ defmodule Hologram.Sync.Session do
   alias Hologram.Sync.Live
   alias Hologram.Sync.Outbox
   alias Hologram.Sync.PackedIds
-  alias Hologram.Sync.PageWindows
+  alias Hologram.Sync.PageTypes
   alias Hologram.Sync.Pool
   alias Hologram.Sync.Pot
   alias Hologram.Sync.Sessions
@@ -394,8 +393,10 @@ defmodule Hologram.Sync.Session do
   # And a row the client holds that its user lost before the read is missing from it, so every row
   # the gap may have moved out of the user's reach that the session doesn't take the client to hold
   # is told by hash (see `Hologram.Sync.Frame.unsync_hashed/3`): the client drops it if it has it,
-  # and learns nothing of it if not. Grants are the exception, told by the list of the ones the
-  # client may keep (see `tell_part/3`).
+  # and learns nothing of it if not. Grants are an exception, told by the list of the ones the
+  # client may keep (see `tell_part/3`), and so are the rows the client's own batches created, told
+  # by id: the client knows their ids already, and only a frame naming them can claim the batch's
+  # number, which lands a create still pending (see `Hologram.Sync.Pot.decide/3`).
   #
   # The batches that reach the session meanwhile queue behind this callback, and are told after it
   # (see `trusts_held?/2`).
@@ -563,7 +564,8 @@ defmodule Hologram.Sync.Session do
 
   # What a chunk settled, given what the session took the client to hold before it: every row the
   # user may read is handed over whole, every held row it checked that the user may not is
-  # dropped, and every other row it may have moved out of the user's reach is told by hash.
+  # dropped, and every other row it may have moved out of the user's reach is told by hash, or by
+  # id when the client's own batch created it.
   defp settle(settled, part, pot) do
     Enum.reduce(part.checked, settled, fn {entity_type, packed_ids}, acc ->
       {held, _not_held} = Held.split(pot.held, entity_type, packed_ids)
@@ -683,14 +685,12 @@ defmodule Hologram.Sync.Session do
 
   defp tell_part_unless_filled(state, part), do: tell_part(state, part)
 
-  # The entity types the page's windows read, which the fill sends first. Read from the terms the
-  # build gave the windows; nothing is subscribed to.
+  # The entity types the page's own code reads, which the fill sends first (see
+  # `Hologram.Sync.PageTypes`).
   defp page_types(page) do
     page
-    |> PageWindows.lookup()
-    |> Enum.map(&QueryCache.window/1)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.reduce(MapSet.new(), &MapSet.union(&2, Registry.entity_types(&1)))
+    |> PageTypes.lookup()
+    |> MapSet.new()
   end
 
   # A type read again whole for this user, because a grant moved what it may read of every row of
@@ -843,8 +843,9 @@ defmodule Hologram.Sync.Session do
   end
 
   # What one batch tells this client: where it leaves it, how far its own batches are in, what the
-  # batch changed of what it holds and may read (see `Hologram.Sync.Pot.decide/3`), the verdicts it
-  # moved, and then the types a grant moved whole.
+  # batch changed of what it holds and may read, which rows its own batches created it may not
+  # hold (see `Hologram.Sync.Pot.decide/3`), the verdicts it moved, and then the types a grant moved
+  # whole.
   #
   # The rows were read after the batch, so they can hold a later batch of this client's own that the
   # batch doesn't. The client takes a frame's number to cover every write of its own to the rows the
@@ -881,7 +882,11 @@ defmodule Hologram.Sync.Session do
     hidden_salt = unless trust_given? and trusts_held?(placed, part), do: state.drop_salt
 
     {news, pot} =
-      Pot.decide(placed.pot, part, trust_held?: trust_held?, hidden_salt: hidden_salt)
+      Pot.decide(placed.pot, part,
+        created: own_puts(part, state.replica_id),
+        hidden_salt: hidden_salt,
+        trust_held?: trust_held?
+      )
 
     stale = stale_verdicts(placed, part, trust_held?)
 
@@ -915,6 +920,12 @@ defmodule Hologram.Sync.Session do
     |> Enum.reduce(told, &reread_type(&1, &2, part.synced_types, reread_trust?, keep_salt))
     |> flush_frames()
   end
+
+  # The rows the client's own batches in the part created, which it files once each batch is
+  # confirmed (see `Hologram.Sync.Pot.decide/3`). A stream serving no replica has none.
+  defp own_puts(_part, nil), do: %{}
+
+  defp own_puts(part, replica_id), do: Map.get(part.own_puts, replica_id, %{})
 
   # Read as they stand, rather than taken from what the session holds of them: a grant the client's
   # own write made meanwhile - a creator's, which the browser files the moment its write is

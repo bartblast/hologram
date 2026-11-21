@@ -32,6 +32,7 @@ defmodule HologramFeatureTests.RegularExpressionsPage do
       <button id="regex scan" $click="regex scan"> regex scan </button>
       <button id="regex split" $click="regex split"> regex split </button>
       <button id="server-sent regex" $click={command: :"server-sent regex"}> server-sent regex </button>
+      <button id="unicode property escape" $click="unicode property escape"> unicode property escape </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -87,6 +88,11 @@ defmodule HologramFeatureTests.RegularExpressionsPage do
 
   def action(:"server-sent regex result", params, component) do
     put_state(component, :result, Regex.run(params.regex, "xeefy"))
+  end
+
+  def action(:"unicode property escape", _params, component) do
+    regex = Regex.compile!("\\p{L}+", [:unicode])
+    put_state(component, :result, Regex.run(regex, "1zażółć2"))
   end
 
   def command(:"client-sent regex echo", params, server) do

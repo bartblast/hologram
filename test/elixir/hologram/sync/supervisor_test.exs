@@ -5,12 +5,9 @@ defmodule Hologram.Sync.SupervisorTest do
 
   alias Hologram.DB.Listener
   alias Hologram.Sync.Dispatcher
-  alias Hologram.Sync.Evaluator
-  alias Hologram.Sync.Evaluators
   alias Hologram.Sync.Gate
   alias Hologram.Sync.Live
   alias Hologram.Sync.ReadEdge
-  alias Hologram.Sync.ResultStore
   alias Hologram.Sync.Sessions
 
   defp child_ids do
@@ -28,9 +25,6 @@ defmodule Hologram.Sync.SupervisorTest do
   describe "init/1" do
     test "starts what a node needs to keep its clients up to date" do
       assert child_ids() == [
-               Evaluator.registry(),
-               ResultStore,
-               Evaluators,
                ReadEdge,
                Gate,
                Sessions.registry(),
@@ -39,19 +33,10 @@ defmodule Hologram.Sync.SupervisorTest do
              ]
     end
 
-    # Restarting one of these alone is what nothing here can survive quietly: evaluators left
-    # alive by a replaced registry are unfindable rather than dead, so rounds reach nobody and no
-    # error is raised anywhere.
+    # Restarting one of these alone is what nothing here can survive quietly: a dispatcher left
+    # listening to a replaced connection falls back to its poll, and no error is raised anywhere.
     test "restarts a child with everything that depends on it" do
       assert {:ok, {%{strategy: :rest_for_one}, _children}} = init([])
-    end
-
-    test "finds evaluators by window id" do
-      spec = child_spec_of(Evaluator.registry())
-
-      assert {Registry, :start_link, [opts]} = spec.start
-      assert opts[:keys] == :unique
-      assert opts[:name] == Evaluator.registry()
     end
 
     # Each session is its own key, so one leaving is cleared without a scan of every other.
@@ -90,8 +75,7 @@ defmodule Hologram.Sync.SupervisorTest do
     end
 
     # The dispatcher reads the log and has to hand what it reads somewhere - the live router is
-    # what turns a batch of writes into what it means for each session, and the windows it could
-    # have changed.
+    # what turns a batch of writes into what it means for each session.
     test "reads the log into the live router, listening on the connection beside it" do
       spec = child_spec_of(Dispatcher)
 
@@ -113,12 +97,6 @@ defmodule Hologram.Sync.SupervisorTest do
 
     test "starts the dispatcher after what it hands work to" do
       ids = child_ids()
-
-      assert Enum.find_index(ids, &(&1 == Dispatcher)) >
-               Enum.find_index(ids, &(&1 == Evaluators))
-
-      assert Enum.find_index(ids, &(&1 == Dispatcher)) >
-               Enum.find_index(ids, &(&1 == Evaluator.registry()))
 
       assert Enum.find_index(ids, &(&1 == Dispatcher)) >
                Enum.find_index(ids, &(&1 == Sessions.registry()))
@@ -144,7 +122,7 @@ defmodule Hologram.Sync.SupervisorTest do
 
     # The other side of that: restarting the connection restarts the dispatcher, and a dispatcher
     # coming back has to find the edge it had reached still kept. Behind the connection it would be
-    # replaced along with it, and every reconnection of a listener would cost a skipped window.
+    # replaced along with it, and every reconnection of a listener would skip part of the log.
     test "keeps the read edge ahead of what a restart of the dispatcher follows from" do
       ids = child_ids()
 

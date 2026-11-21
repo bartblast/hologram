@@ -8,7 +8,7 @@ defmodule HologramSyncBenchmark.Measure do
 
   @heap_kill_line "maximum heap size reached"
 
-  # How a sync session cut for falling behind its windows' rounds ends, in the server's log.
+  # How a sync session cut for falling behind ended, in the server's log.
   @session_cut_line "(stop) :behind_the_ring"
 
   @type cpu_sample :: {integer, term}
@@ -79,7 +79,7 @@ defmodule HologramSyncBenchmark.Measure do
   end
 
   @doc """
-  Counts the sync sessions the given log says were cut for falling behind their windows' rounds.
+  Counts the sync sessions the given log says were cut for falling behind.
 
   Counted from the log rather than from the clients: the server ends a cut session's stream, so
   the client sees a stream end like any other, and only the log says why.

@@ -4,8 +4,8 @@ defmodule HologramFeatureTests.Components.OptimisticGrants.GrantList do
 
   alias Hologram.Auth.RoleGrant
 
-  # The grant store's rows as this client holds them - the window a permission-checking page
-  # downloads, read through the overlay, so a grant an action just made (or just revoked) shows
+  # The grant store's rows as this client holds them - the rows a permission-checking page syncs,
+  # read through the overlay, so a grant an action just made (or just revoked) shows
   # here before anything is sent.
   derived :grants, [RoleGrant], fn -> RoleGrant end
 

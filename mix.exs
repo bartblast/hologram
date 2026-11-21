@@ -2,7 +2,7 @@
 defmodule Hologram.MixProject do
   use Mix.Project
 
-  @version "0.12.9"
+  @version "0.12.10"
 
   # Copied from Hologram.Commons.SystemUtils
   @windows_exec_suffixes [".bat", ".cmd", ".exe"]
@@ -208,10 +208,12 @@ defmodule Hologram.MixProject do
     end
   end
 
+  # Whether another project compiles Hologram as its dependency, so that Hologram's own repo doesn't
+  # boot Hologram. Mix gives a dependency the lockfile of the project that depends on it, wherever
+  # the dependency sits: in deps/, at a path dependency's path or in a custom deps path.
   defp dep? do
-    __MODULE__.module_info()[:compile][:source]
-    |> to_string()
-    |> String.ends_with?("/deps/hologram/mix.exs")
+    lockfile_path = Path.expand(Mix.Project.config()[:lockfile], __DIR__)
+    lockfile_path != Path.join(__DIR__, "mix.lock")
   end
 
   # Copied from Hologram.Commons.SystemUtils

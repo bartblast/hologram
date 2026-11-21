@@ -7,6 +7,8 @@ defmodule Hologram.Component.DerivedTest do
   alias Hologram.Component.NotComputed
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Component.Module37
+  alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
+  alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Page.Module17
 
@@ -20,9 +22,9 @@ defmodule Hologram.Component.DerivedTest do
     compute(entries, Module37, props, state, computed, plain_opts())
   end
 
-  defp plain_opts, do: [registered_query?: fn _name -> false end, run_query: &no_query/3]
+  defp plain_opts, do: [run_query: &no_query/3]
 
-  defp query_opts(run_query), do: [registered_query?: fn _name -> true end, run_query: run_query]
+  defp query_opts(run_query), do: [run_query: run_query]
 
   describe "compute/6" do
     test "computes the fields in order, each reading the fields before it" do
@@ -68,6 +70,51 @@ defmodule Hologram.Component.DerivedTest do
       assert compute(entries, Module37, %{}, %{}, %{}, query_opts(run_query)) == %{
                entities: Stage.normalize(Entity2)
              }
+    end
+
+    test "raises on a query reading a type that declares no allow lines, before running it" do
+      entries = [entry(:rows, [Entity1], [], fn -> filter(Entity1, []) end)]
+
+      assert_error Hologram.MisuseError,
+                   "derived field :rows in Hologram.Test.Fixtures.Component.Module37 reads " <>
+                     "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
+                     "default deny returns no rows to any session. Add allow lines, or drop the query.",
+                   fn -> compute(entries, Module37, %{}, %{}, %{}, query_opts(&no_query/3)) end
+    end
+
+    test "raises on a query filtering on a server-only attribute, before running it" do
+      entries = [
+        entry(:rows, [Entity15], [:token], fn token -> filter(Entity15, token == ^token) end)
+      ]
+
+      assert_error Hologram.MisuseError,
+                   "derived field :rows in Hologram.Test.Fixtures.Component.Module37 filters or " <>
+                     "sorts on server_only attributes (Hologram.Test.Fixtures.Entity.Module15 " <>
+                     ":token) - the client never holds those values, so it could not evaluate the " <>
+                     "reference locally. Drop the reference, or read the rows through the trusted " <>
+                     "backend API.",
+                   fn ->
+                     compute(entries, Module37, %{token: "t"}, %{}, %{}, query_opts(&no_query/3))
+                   end
+    end
+
+    test "raises on a query sorting on a server-only attribute" do
+      entries = [entry(:rows, [Entity15], [], fn -> sort(Entity15, secret_note) end)]
+
+      assert_error Hologram.MisuseError,
+                   ~r/^derived field :rows in .+ filters or sorts on server_only attributes \(Hologram\.Test\.Fixtures\.Entity\.Module15 :secret_note\)/,
+                   fn -> compute(entries, Module37, %{}, %{}, %{}, query_opts(&no_query/3)) end
+    end
+
+    test "raises on a query claiming trust" do
+      entries = [entry(:rows, [Entity15], [], fn -> trust(filter(Entity15, label == "x")) end)]
+
+      assert_error Hologram.MisuseError,
+                   "derived field :rows in Hologram.Test.Fixtures.Component.Module37 claims the " <>
+                     "server's authority with trust() - a query in browser code is read for the " <>
+                     "session user on both tiers, so it cannot claim another. Drop trust(), or " <>
+                     "read through the backend API in a command.",
+                   fn -> compute(entries, Module37, %{}, %{}, %{}, query_opts(&no_query/3)) end
     end
 
     test "raises on a query of another shape than the type" do
@@ -161,15 +208,47 @@ defmodule Hologram.Component.DerivedTest do
       assert compute_plain(entries, %{}) == %{tags: ["a", 1]}
     end
 
-    test "raises on a query result of a field the build didn't register as a query" do
-      entries = [entry(:entities, [Entity2], [], fn -> filter(Entity2, a == true) end)]
+    test "runs a query handed in as a prop value" do
+      query = filter(Entity2, a == true)
+      entries = [entry(:entities, [Entity2], [:query], fn query -> query end)]
 
-      expected_msg =
-        "derived field :entities in Hologram.Test.Fixtures.Component.Module37 returned a query the build didn't register - a query is built in the derived field's own function or the builders it calls, not passed in as data"
+      run_query = fn _name, _args, term -> term end
 
-      assert_error Hologram.MisuseError, expected_msg, fn ->
-        compute_plain(entries, %{})
-      end
+      assert compute(entries, Module37, %{query: query}, %{}, %{}, query_opts(run_query)) == %{
+               entities: Stage.normalize(query)
+             }
+    end
+
+    test "runs an entity type handed in as a prop value for a field declared to hold its rows" do
+      entries = [entry(:entities, [Entity2], [:source], fn source -> source end)]
+
+      run_query = fn _name, _args, term -> term end
+
+      assert compute(entries, Module37, %{source: Entity2}, %{}, %{}, query_opts(run_query)) == %{
+               entities: Stage.normalize(Entity2)
+             }
+    end
+
+    test "raises on an entity type returned by a field declared to hold one of its rows" do
+      entries = [entry(:entity, Entity2, [], fn -> Entity2 end)]
+
+      assert_error Hologram.MisuseError,
+                   "derived field :entity in Hologram.Test.Fixtures.Component.Module37 is declared Hologram.Test.Fixtures.Entity.Module2, but its query is a set of Hologram.Test.Fixtures.Entity.Module2 rows",
+                   fn -> compute(entries, Module37, %{}, %{}, %{}, query_opts(&no_query/3)) end
+    end
+
+    test "takes an entity type of another type than the declared rows as a plain value" do
+      entries = [entry(:entities, [Entity1], [], fn -> Entity2 end)]
+
+      assert_error Hologram.MisuseError,
+                   "derived field :entities in Hologram.Test.Fixtures.Component.Module37 is declared [Hologram.Test.Fixtures.Entity.Module1], but computed Hologram.Test.Fixtures.Entity.Module2",
+                   fn -> compute_plain(entries, %{}) end
+    end
+
+    test "takes an entity type as a plain value for a field not declared to hold its rows" do
+      entries = [entry(:kind, :atom, [], fn -> Entity2 end)]
+
+      assert compute_plain(entries, %{}) == %{kind: Entity2}
     end
 
     test "takes nil for any type" do
