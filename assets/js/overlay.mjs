@@ -129,7 +129,9 @@ export default class Overlay {
     batch.writes.forEach((write, index) => {
       // A write whose frame has already arrived is in the base as the server resolved it, so
       // there is nothing left to move - and folding it in again would apply a moved counter a
-      // second time, which is exactly what the frame arriving first would otherwise cost.
+      // second time, which is exactly what the frame arriving first would otherwise cost. A create
+      // a fill's marker ruled out is passed over the same way: the row is gone or its user may not
+      // read it, so it is not this client's to file (see Batches.landUnsent).
       if (batch.isLanded(index)) {
         return;
       }

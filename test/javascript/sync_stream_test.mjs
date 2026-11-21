@@ -540,6 +540,63 @@ describe("SyncStream", () => {
       assert.equal(animationFrames.length, 1);
     });
 
+    // Here rather than in the stream's listener, since a follower is handed the marker through
+    // this and holds its own copy of the queue.
+    it("rules out the creates a type's marker covers, after its sweep", () => {
+      const marking = sinon.spy(LocalDatabase, "markTypesSynced");
+      const landing = sinon.stub(Batches, "landUnsent");
+
+      SyncStream.receiveFrame("synced", {
+        applied_seq: 7,
+        cursor: null,
+        scope: "types",
+        types: ["MyApp.Task"],
+      });
+
+      sinon.assert.calledOnceWithExactly(landing, ["MyApp.Task"], 7);
+      sinon.assert.callOrder(marking, landing);
+    });
+
+    // The copy a page carried is what the sweep takes, and a create checked before it would pass
+    // for one the fill delivered, and be filed by its answer once the copy is gone.
+    it("rules out a create whose only copy the marker's sweep took away", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "carried"});
+      LocalDatabase.markCarried("MyApp.Task", "t1");
+
+      Batches.adopt([
+        {
+          actorUserId: null,
+          landed: [],
+          seq: 3,
+          writes: [
+            {data: {}, id: "t1", op: "create", stamp: 1, type: "MyApp.Task"},
+          ],
+        },
+      ]);
+
+      try {
+        SyncStream.receiveFrame("synced", {
+          applied_seq: 3,
+          cursor: null,
+          scope: "types",
+          types: ["MyApp.Task"],
+        });
+
+        assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
+        assert.isTrue(Batches.pending[0].isLanded(0));
+      } finally {
+        Batches.reset();
+      }
+    });
+
+    it("rules out nothing on the marker for everything", () => {
+      const landing = sinon.stub(Batches, "landUnsent");
+
+      SyncStream.receiveFrame("synced", {cursor: "Nzc4LjA", scope: "all"});
+
+      sinon.assert.notCalled(landing);
+    });
+
     // A follower reaches this through the group rather than through a stream, and the page-load
     // half of a change of identity is posted to it exactly this way.
     it("starts over on a resync naming a change of identity", () => {

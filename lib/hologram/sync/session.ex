@@ -356,9 +356,10 @@ defmodule Hologram.Sync.Session do
       end)
 
     # The marker names the number too, even for a type with no rows to carry it. The client files a
-    # row its own batch created once the batch is answered, and no frame may ever name that row: a
-    # batch at or below the number was in this read, so a row of it the fill didn't send is one its
-    # user may not read. A batch above it committed after this read, so it reaches the session.
+    # row its own batch created once the batch is answered, and no frame is sure to name that row:
+    # a batch at or below the number was in this read, so a row of it the fill didn't send is gone
+    # or one its user may not read. A batch above it committed after this read, so it reaches the
+    # session.
     marked = tell_client(told, {:sync_synced, {:types, [entity_type], applied_seq}, nil})
 
     pot = Pot.hand_over(marked.pot, entity_type, Enum.map(rows, & &1.id))

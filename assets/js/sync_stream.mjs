@@ -354,6 +354,10 @@ export default class SyncStream {
         // speaks of the page it connected on, which is not a claim about any type.
         if (frame.scope === "types") {
           LocalDatabase.markTypesSynced(frame.types);
+
+          // Here rather than in the stream's listener, so every tab of the group rules them out of
+          // its own copy of the queue.
+          Batches.landUnsent(frame.types, frame.applied_seq);
         } else if (frame.scope === "all") {
           LocalDatabase.markAllSynced();
         }
