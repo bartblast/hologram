@@ -36,6 +36,8 @@ defmodule Hologram.MutationTest do
   alias Hologram.Test.Fixtures.Mutation.Module6, as: MutationModule6
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
+  alias Hologram.Test.Fixtures.Policy.Module58, as: ChangedProject
+  alias Hologram.Test.Fixtures.Policy.Module59, as: ChangedTask
 
   # A row whose author is the given user, whose writes `when: author_id == user_id()` grants that
   # user - write rules that need no role grant, on a multi-column type.
@@ -821,6 +823,162 @@ defmodule Hologram.MutationTest do
                run(envelope([write]), server())
 
       assert reason =~ "not allowed to create Hologram.Test.Fixtures.Mutation.Module1"
+    end
+
+    test "refuses a write whose lost value leaves a row its new() rule refuses" do
+      user = create_user("lost_signer@example.com")
+
+      task =
+        %{phase: "draft"}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      revisions = EntityOperations.get(ChangedTask, task.id).__meta__.revisions
+      newer = revisions.phase + 1_000_000
+
+      set_revisions(ChangedTask, task.id, %{"signer" => newer})
+
+      write =
+        update_write(ChangedTask, task.id, %{"phase" => "signed", "signer" => "ann"},
+          stamp: newer - 1
+        )
+
+      assert {:ok, %{"status" => "rejected", "write" => 0}} =
+               run(envelope([write]), server(user.id))
+
+      assert EntityOperations.get(ChangedTask, task.id).phase == "draft"
+    end
+
+    test "judges a new() rule on the values a write states before the merge" do
+      user = create_user("stated_signer@example.com")
+
+      task =
+        %{phase: "draft"}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      write = update_write(ChangedTask, task.id, %{"phase" => "signed"})
+
+      assert {:ok, %{"status" => "rejected", "write" => 0}} =
+               run(envelope([write]), server(user.id))
+    end
+
+    test "passes a write whose stated values satisfy its new() rule" do
+      user = create_user("signing@example.com")
+
+      task =
+        %{phase: "draft"}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      write = update_write(ChangedTask, task.id, %{"phase" => "signed", "signer" => "ann"})
+
+      assert {:ok, %{"status" => "confirmed"}} = run(envelope([write]), server(user.id))
+      assert EntityOperations.get(ChangedTask, task.id).signer == "ann"
+    end
+
+    test "refuses an invalid losing value by the rule read on the stored value" do
+      user = create_user("lost_invalid@example.com")
+
+      task =
+        %{code: "abc"}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      revisions = EntityOperations.get(ChangedTask, task.id).__meta__.revisions
+      newer = revisions.code + 1_000_000
+
+      set_revisions(ChangedTask, task.id, %{"code" => newer})
+
+      write = update_write(ChangedTask, task.id, %{"code" => "too long"}, stamp: newer - 1)
+
+      assert {:ok, %{"status" => "rejected", "write" => 0} = answer} =
+               run(envelope([write]), server(user.id))
+
+      refute Map.has_key?(answer, "kept")
+    end
+
+    test "keeps the stored value of a column whose losing value couldn't be judged out of the answer" do
+      user = create_user("lost_unjudged@example.com")
+
+      task =
+        %{phase: "draft", signer: "ann"}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      revisions = EntityOperations.get(ChangedTask, task.id).__meta__.revisions
+      newer = revisions.signer + 1_000_000
+
+      set_revisions(ChangedTask, task.id, %{"signer" => newer})
+
+      write =
+        update_write(ChangedTask, task.id, %{"signer" => "much too long"}, stamp: newer - 1)
+
+      assert {:ok,
+              %{
+                "status" => "confirmed",
+                "dropped" => %{"0" => %{"signer" => "much too long"}},
+                "kept" => kept
+              }} = run(envelope([write]), server(user.id))
+
+      assert kept == %{}
+    end
+
+    test "keeps the stored reference out of the answer when a losing one names no row" do
+      user = create_user("lost_reference@example.com")
+      project = DB.create!(ChangedProject.new())
+
+      task =
+        %{project_id: project.id}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      Auth.grant_role(user, :member, project)
+
+      revisions = EntityOperations.get(ChangedTask, task.id).__meta__.revisions
+      newer = revisions.project_id + 1_000_000
+
+      set_revisions(ChangedTask, task.id, %{"project_id" => newer})
+
+      write =
+        update_write(ChangedTask, task.id, %{"project_id" => Entity.generate_id()},
+          stamp: newer - 1
+        )
+
+      assert {:ok, %{"status" => "confirmed", "kept" => kept}} =
+               run(envelope([write]), server(user.id))
+
+      assert kept == %{}
+    end
+
+    test "answers a winning invalid value with its violations when its rule holds" do
+      user = create_user("won_invalid@example.com")
+
+      task =
+        %{phase: "draft"}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      write = update_write(ChangedTask, task.id, %{"signer" => "much too long"})
+
+      assert {:ok, %{"status" => "rejected", "write" => 0, "reason" => reason}} =
+               run(envelope([write]), server(user.id))
+
+      assert reason =~ "signer"
+    end
+
+    test "judges a new() rule on a counter's amount" do
+      user = create_user("moved_count@example.com")
+
+      task =
+        %{count: 9}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      write = update_write(ChangedTask, task.id, nil, deltas: %{"count" => 2})
+
+      assert {:ok, %{"status" => "rejected", "write" => 0}} =
+               run(envelope([write]), server(user.id))
     end
 
     test "refuses a denied write and names the write it refused" do

@@ -125,7 +125,11 @@ export default class Overlay {
   // base first - so the column goes straight from what this client wrote to the winning value,
   // with nothing shown in between. Without it the only thing left to show is the value the row
   // held before either writer touched it, which is a value nobody wrote.
-  static promote(batch, kept) {
+  //
+  // A column the server dropped and sent no value back for is left as the base holds it: the
+  // value lost, and the server doesn't say what stands there to someone whose rule couldn't judge
+  // it, so the winner's frame is what brings it.
+  static promote(batch, kept, dropped) {
     batch.writes.forEach((write, index) => {
       // A write whose frame has already arrived is in the base as the server resolved it, so
       // there is nothing left to move - and folding it in again would apply a moved counter a
@@ -137,8 +141,12 @@ export default class Overlay {
       // Optional because a batch can be answered by a node that predates the key - a rolling
       // deploy serves this bundle from one node and answers from another - and an answer that
       // names nothing kept is one this client simply cannot show early.
-      Overlay.#absorb(write, kept?.[String(index)]);
-      Overlay.#promoteWrite(write);
+      const writeKept = kept?.[String(index)];
+
+      Overlay.#absorb(write, writeKept);
+      Overlay.#promoteWrite(
+        Overlay.#withoutUnanswered(write, dropped?.[String(index)], writeKept),
+      );
     });
 
     Overlay.remove(batch);
@@ -507,6 +515,25 @@ export default class Overlay {
   // nothing can have moved past it. The same reading the server makes.
   static #wins(row, write, field) {
     return write.stamp > (row["$revisions"]?.[field] ?? 0);
+  }
+
+  // The write without the columns it lost and got no value back for.
+  static #withoutUnanswered(write, dropped, kept) {
+    const unanswered = Object.keys(dropped ?? {}).filter(
+      (field) => !(field in (kept ?? {})),
+    );
+
+    if (unanswered.length === 0) {
+      return write;
+    }
+
+    const data = Object.fromEntries(
+      Object.entries(write.data ?? {}).filter(
+        ([field]) => !unanswered.includes(field),
+      ),
+    );
+
+    return {...write, data};
   }
 
   // Every pending write naming one row, in the order they were made.

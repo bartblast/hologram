@@ -739,6 +739,43 @@ describe("Overlay", () => {
       assert.equal(LocalDatabase.baseRow(TODO, "t1").votes, 5);
     });
 
+    it("leaves a column that lost with no value sent back as the base holds it", () => {
+      LocalDatabase.putRow(TODO, base({title: "stored"}));
+
+      const batch = pushed(updateWrite({data: {title: "refused"}}));
+
+      Overlay.promote(batch, {}, {0: {title: "refused"}});
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "stored");
+    });
+
+    it("still promotes the columns of the write that weren't dropped", () => {
+      LocalDatabase.putRow(TODO, base({title: "stored", votes: 1}));
+
+      const batch = pushed(updateWrite({data: {title: "refused", votes: 2}}));
+
+      Overlay.promote(batch, {}, {0: {title: "refused"}});
+
+      const row = LocalDatabase.baseRow(TODO, "t1");
+
+      assert.equal(row.title, "stored");
+      assert.equal(row.votes, 2);
+    });
+
+    it("takes the value the server sent back for a dropped column", () => {
+      LocalDatabase.putRow(TODO, base({title: "stored"}));
+
+      const batch = pushed(updateWrite({data: {title: "lost"}}));
+
+      Overlay.promote(
+        batch,
+        {0: {title: "winner", $revisions: {title: Number.MAX_SAFE_INTEGER}}},
+        {0: {title: "lost"}},
+      );
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "winner");
+    });
+
     describe("of an edge an inverse of a to-many reads", () => {
       const LABEL = "MyApp.Label";
 

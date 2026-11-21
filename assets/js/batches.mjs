@@ -504,7 +504,7 @@ export default class Batches {
     Batches.#retryAttempts = 0;
 
     if (answer.status === "confirmed") {
-      Overlay.promote(batch, answer.kept);
+      Overlay.promote(batch, answer.kept, answer.dropped);
     } else {
       Batches.#reject(batch, answer);
     }

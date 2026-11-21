@@ -264,14 +264,16 @@ defmodule Hologram.Mutation do
     row = lock_row(write, index)
     edges = edge_ops(followers)
 
-    Writer.check_update!(row, write.data, write.deltas, edges, write.stamp)
+    unjudged = Writer.check_update!(row, write.data, write.deltas, edges, write.stamp)
 
     {changes, lost} =
       Merge.resolve(write.data, write.based_on, write.stamp, row.__meta__.revisions)
 
     apply_changes(write, changes, edges, index)
 
-    {lost_values(write, lost), kept_values(row, lost)}
+    # A column whose stated value no rule could judge doesn't come back: what stands in it was
+    # never shown to be this user's to read.
+    {lost_values(write, lost), kept_values(row, lost -- unjudged)}
   end
 
   # A revocation is judged against the grant as the store holds it, locked for the batch: the
