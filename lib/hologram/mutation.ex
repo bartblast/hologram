@@ -18,6 +18,8 @@ defmodule Hologram.Mutation do
   # beside its answer, for the session that sent it. So is a batch holding a date or datetime this
   # server can't read, which is refused before any transaction.
 
+  require Logger
+
   alias Hologram.Auth
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
@@ -52,6 +54,7 @@ defmodule Hologram.Mutation do
           | :clock
           | :forged_client
           | :not_found
+          | :unstorable
           | %Hologram.AccessDeniedError{}
           | map
 
@@ -412,8 +415,10 @@ defmodule Hologram.Mutation do
     # A denial is the one refusal the executor RAISES rather than returns, because on the server it
     # is a programming error to write what the acting user may not. Here it is an ordinary answer:
     # a client asking for something it may not have is the system working. Anything else raised
-    # propagates - the transaction rolls back and re-raises it, which is what a bug should do.
+    # propagates - the transaction rolls back and re-raises it, which is what a bug should do -
+    # except a data error from the database, which no retry can be counted on to land.
     error in Hologram.AccessDeniedError -> Connection.rollback({:rejected, index, error})
+    error in Postgrex.Error -> refuse_unstorable(error, write, index, __STACKTRACE__)
   end
 
   # A record answers as the batch first landed, and a grant row that answer carries may have been
@@ -635,6 +640,34 @@ defmodule Hologram.Mutation do
         {:ok, rejection(nil, :forged_client)}
     end
   end
+
+  # The safety net behind the validators. A data exception (SQLSTATE class 22) almost always means
+  # a value the database can't store, and answering 500 would have the browser retry the batch
+  # forever, with every later write from that device waiting behind it. Refused, it rolls back and
+  # the queue moves on, and a signed-in user's batch is kept. A trigger or a delete can raise one
+  # too, and that write is refused the same way.
+  #
+  # 22P02 is left out: on a write it means an enum label the Postgres type doesn't have, so the
+  # database is out of step with the app, and a deploy can fix that while the write waits.
+  #
+  # The log names the type and the code and not the error's message, which can quote the value.
+  @spec refuse_unstorable(Postgrex.Error.t(), Write.t(), non_neg_integer, Exception.stacktrace()) ::
+          no_return
+  defp refuse_unstorable(
+         %Postgrex.Error{postgres: %{pg_code: "22" <> _rest = code}},
+         write,
+         index,
+         _stacktrace
+       )
+       when code != "22P02" do
+    Logger.error(
+      "Hologram refused a browser write to #{inspect(write.entity_type)}: the database answered with a data error (SQLSTATE #{code})"
+    )
+
+    Connection.rollback({:rejected, index, :unstorable})
+  end
+
+  defp refuse_unstorable(error, _write, _index, stacktrace), do: reraise(error, stacktrace)
 
   # A batch holding a value this server can't read never reaches a transaction, and is kept like any
   # other refused batch, so a signed-in user's write can still be recovered. Its record is asked
