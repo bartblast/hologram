@@ -1617,6 +1617,76 @@ defmodule Hologram.DB.EntityOperationsTest do
   end
 
   describe "update/4" do
+    # The same inputs and messages as the browser's DB.update/3 tests.
+    test "names every refused key in the order of its printed text" do
+      {:ok, created_entity} =
+        %{a: true, c: "before"}
+        |> Module2.new()
+        |> create()
+
+      changes = %{
+        %{} => 1,
+        :nope => 2,
+        "x" => 3,
+        7 => 4,
+        {:t} => 5,
+        [1] => 6
+      }
+
+      expected_msg =
+        ~s(invalid changes for #{inspect(Module2)} - only declared attributes and to-one relationships can be updated: "x", %{}, 7, :nope, [1], {:t})
+
+      assert_error MisuseError, expected_msg, fn ->
+        update(Module2, created_entity.id, changes)
+      end
+    end
+
+    test "refuses an id that isn't a canonical UUID" do
+      expected_msg =
+        ~s(invalid id "constructor" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings)
+
+      assert_error MisuseError, expected_msg, fn ->
+        update(Module2, "constructor", c: "after")
+      end
+    end
+
+    test "prints a map id with its keys sorted" do
+      expected_msg =
+        "invalid id %{alpha: 2, zeta: 1} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+
+      assert_error MisuseError, expected_msg, fn ->
+        update(Module2, %{zeta: 1, alpha: 2}, c: "after")
+      end
+    end
+
+    test "refuses a nil id" do
+      expected_msg =
+        "invalid id nil - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+
+      assert_error MisuseError, expected_msg, fn -> update(Module2, nil, c: "after") end
+    end
+
+    test "judges the names before the id" do
+      expected_msg =
+        "invalid changes for #{inspect(Module2)} - only declared attributes and to-one relationships can be updated: :nope"
+
+      assert_error MisuseError, expected_msg, fn -> update(Module2, "constructor", nope: 1) end
+    end
+
+    test "orders refused keys equal as numbers by their printed text" do
+      {:ok, created_entity} =
+        %{a: true, c: "before"}
+        |> Module2.new()
+        |> create()
+
+      expected_msg =
+        "invalid changes for #{inspect(Module2)} - only declared attributes and to-one relationships can be updated: 1, 1.0"
+
+      assert_error MisuseError, expected_msg, fn ->
+        update(Module2, created_entity.id, %{1.0 => :a, 1 => :b})
+      end
+    end
+
     test "writes under a given clock reading when no stamp is given" do
       clock_stamp = 4_000_000_000_000_000
 

@@ -10,6 +10,7 @@ defmodule Hologram.DB.EntityOperations do
 
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Commons.KernelUtils
   alias Hologram.DB
   alias Hologram.DB.Clock
   alias Hologram.DB.Codec
@@ -319,6 +320,7 @@ defmodule Hologram.DB.EntityOperations do
     sorted_deltas = Enum.sort(deltas_map)
 
     validate_changes!(entity_type, sorted_changes, sorted_deltas, columns_by_field)
+    validate_id!(id)
 
     # Values are judged before the statement is built - nothing is written for changes the
     # declarations already refuse.
@@ -435,7 +437,7 @@ defmodule Hologram.DB.EntityOperations do
   def validate_id!(id) do
     if not Validator.attribute_value_valid?(id, :uuid) do
       raise MisuseError,
-            "invalid id #{inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+            "invalid id #{KernelUtils.inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
     end
 
     :ok
@@ -1309,7 +1311,14 @@ defmodule Hologram.DB.EntityOperations do
           "cannot update #{inspect(RoleGrant)} - a role grant is never changed in place, revoke the role and grant the new one instead"
   end
 
-  defp validate_changes!(entity_type, sorted_changes, sorted_deltas, columns_by_field) do
+  # The refusals below name keys in the order of their printed text, which the client reproduces
+  # for any key - their term order can turn on the VM's atom table and a large map's hash.
+  #
+  # WARNING: must match validateChangeNames in assets/js/elixir/hologram/db.mjs.
+  defp validate_changes!(entity_type, changes, deltas, columns_by_field) do
+    sorted_changes = sort_by_printed_key(changes)
+    sorted_deltas = sort_by_printed_key(deltas)
+
     if sorted_changes == [] and sorted_deltas == [] do
       raise MisuseError,
             "invalid changes for #{inspect(entity_type)} - at least one declared attribute or to-one relationship must be changed"
@@ -1355,13 +1364,17 @@ defmodule Hologram.DB.EntityOperations do
       |> Enum.reject(&Map.has_key?(columns_by_field, &1))
 
     if unknown_names != [] do
-      listed_names = Enum.map_join(unknown_names, ", ", &inspect/1)
+      listed_names = Enum.map_join(unknown_names, ", ", &KernelUtils.inspect/1)
 
       raise MisuseError,
             "invalid changes for #{inspect(entity_type)} - only declared attributes and to-one relationships can be updated: #{listed_names}"
     end
 
     :ok
+  end
+
+  defp sort_by_printed_key(entries) do
+    Enum.sort_by(entries, fn {key, _value} -> KernelUtils.inspect(key) end)
   end
 
   defp validate_entity!(entity_type, entity) do

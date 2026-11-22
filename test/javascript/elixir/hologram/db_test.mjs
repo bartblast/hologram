@@ -881,6 +881,23 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
+    it("raises for an id that isn't a canonical UUID", () => {
+      const invalid = Model.box(TASK, {
+        done: false,
+        id: "constructor",
+        title: "x",
+      });
+
+      assertBoxedError(
+        () =>
+          update(
+            putAttribute(invalid, pairs([["title", Type.bitstring("y")]])),
+          ),
+        "Hologram.MisuseError",
+        'invalid id "constructor" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+      );
+    });
+
     it("raises for a row this client does not hold", () => {
       const absent = Model.box(TASK, {done: false, id: ID_2, title: "x"});
 
@@ -995,6 +1012,290 @@ describe("Elixir_Hologram_DB", () => {
       );
 
       assert.equal(LocalDatabase.getRow(TASK, ID_1).title, "Ship it");
+    });
+
+    describe("changes the server would refuse", () => {
+      const invalid = (listed) =>
+        `invalid changes for ${TASK} - only declared attributes and to-one relationships can be updated: ${listed}`;
+
+      const pair = (name, value) => Type.tuple([name, value]);
+      const nope = Type.atom("nope");
+
+      const update = (given, id = ID_1) =>
+        updateById(task, Type.bitstring(id), given);
+
+      it("names a repeated unknown name once", () => {
+        assertBoxedError(
+          () =>
+            update(
+              Type.list([
+                pair(nope, Type.integer(1)),
+                pair(nope, Type.integer(2)),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          invalid(":nope"),
+        );
+      });
+
+      it("takes the last value of a repeated name", () => {
+        const title = Type.atom("title");
+
+        update(
+          Type.list([
+            pair(title, Type.bitstring("first")),
+            pair(title, Type.bitstring("last")),
+          ]),
+        );
+
+        assert.deepStrictEqual(Batches.current().writes[0].data, {
+          title: "last",
+        });
+      });
+
+      it("refuses an improper list as Map.new/1 does", () => {
+        const improper = Type.improperList([
+          pair(nope, Type.integer(1)),
+          pair(Type.atom("other"), Type.integer(2)),
+        ]);
+
+        assertBoxedError(
+          () => update(improper),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: not a proper list\n",
+        );
+      });
+
+      it("refuses a list holding something other than a pair as Map.new/1 does", () => {
+        assertBoxedError(
+          () => update(Type.list([Type.integer(1)])),
+          "ArgumentError",
+          "argument error",
+        );
+      });
+
+      it("reads a pair list whose key isn't an atom", () => {
+        assertBoxedError(
+          () => update(Type.list([pair(Type.bitstring("x"), Type.integer(1))])),
+          "Hologram.MisuseError",
+          invalid('"x"'),
+        );
+      });
+
+      it("names every refused key in the order of its printed text", () => {
+        assertBoxedError(
+          () =>
+            update(
+              Type.map([
+                [Type.map([]), Type.integer(1)],
+                [nope, Type.integer(2)],
+                [Type.bitstring("x"), Type.integer(3)],
+                [Type.integer(7), Type.integer(4)],
+                [Type.tuple([Type.atom("t")]), Type.integer(5)],
+                [Type.list([Type.integer(1)]), Type.integer(6)],
+              ]),
+            ),
+          "Hologram.MisuseError",
+          invalid('"x", %{}, 7, :nope, [1], {:t}'),
+        );
+      });
+
+      it("orders keys equal as numbers by their printed text", () => {
+        assertBoxedError(
+          () =>
+            update(
+              Type.map([
+                [Type.float(1.0), Type.atom("a")],
+                [Type.integer(1), Type.atom("b")],
+              ]),
+            ),
+          "Hologram.MisuseError",
+          invalid("1, 1.0"),
+        );
+      });
+
+      it("orders keys whatever their values are", () => {
+        const port = Type.port("nonode@nohost", [0, 11]);
+
+        assertBoxedError(
+          () =>
+            update(
+              Type.list([
+                pair(Type.atom("a"), Type.integer(1)),
+                pair(Type.integer(0), Type.integer(2)),
+                pair(Type.integer(1), port),
+                pair(Type.float(1.0), port),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          invalid("0, 1, 1.0, :a"),
+        );
+      });
+
+      it("refuses a bad value on a missing row with nobody signed in", () => {
+        assertBoxedError(
+          () => update(changes([["title", Type.integer(1)]]), ID_2),
+          "Hologram.MisuseError",
+          `cannot update ${TASK} - no entity with id "${ID_2}"`,
+        );
+      });
+
+      it("refuses a bad value on a missing row for a signed-in user", () => {
+        LocalDatabase.actorEntityId = ID_1;
+
+        try {
+          assertBoxedError(
+            () => update(changes([["title", Type.integer(1)]]), ID_2),
+            "Hologram.MisuseError",
+            `cannot update ${TASK} - no entity with id "${ID_2}"`,
+          );
+        } finally {
+          LocalDatabase.actorEntityId = null;
+        }
+      });
+
+      it("reads an enumerable that isn't a list or a plain map", () => {
+        const original = globalThis.Elixir_Enum;
+
+        globalThis.Elixir_Enum = {
+          "to_list/1": () =>
+            Type.list([pair(Type.atom("title"), Type.bitstring("Ship it"))]),
+        };
+
+        try {
+          update(Type.struct("MapSet", [[Type.atom("map"), Type.map([])]]));
+        } finally {
+          globalThis.Elixir_Enum = original;
+        }
+
+        assert.deepStrictEqual(Batches.current().writes[0].data, {
+          title: "Ship it",
+        });
+      });
+
+      it("answers no entity for a type the model doesn't carry", () => {
+        assertBoxedError(
+          () =>
+            updateById(
+              Type.alias("MyApp.Nothing"),
+              Type.bitstring(ID_1),
+              Type.map([[nope, Type.integer(1)]]),
+            ),
+          "Hologram.MisuseError",
+          `cannot update MyApp.Nothing - no entity with id "${ID_1}"`,
+        );
+      });
+
+      it("refuses an id that isn't a canonical UUID", () => {
+        assertBoxedError(
+          () =>
+            update(
+              changes([["title", Type.bitstring("Ship it")]]),
+              "constructor",
+            ),
+          "Hologram.MisuseError",
+          'invalid id "constructor" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+        );
+      });
+
+      it("refuses a bitstring id that isn't a binary", () => {
+        const id = Type.bitstring([1, 0, 1]);
+
+        assertBoxedError(
+          () =>
+            updateById(
+              task,
+              id,
+              changes([["title", Type.bitstring("Ship it")]]),
+            ),
+          "Hologram.MisuseError",
+          `invalid id ${Interpreter.inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
+        );
+      });
+
+      it("prints a map id with its keys sorted", () => {
+        const id = Type.map([
+          [Type.atom("zeta"), Type.integer(1)],
+          [Type.atom("alpha"), Type.integer(2)],
+        ]);
+
+        assertBoxedError(
+          () =>
+            updateById(
+              task,
+              id,
+              changes([["title", Type.bitstring("Ship it")]]),
+            ),
+          "Hologram.MisuseError",
+          "invalid id %{alpha: 2, zeta: 1} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings",
+        );
+      });
+
+      it("refuses a nil id", () => {
+        assertBoxedError(
+          () =>
+            updateById(
+              task,
+              Type.nil(),
+              changes([["title", Type.bitstring("Ship it")]]),
+            ),
+          "Hologram.MisuseError",
+          "invalid id nil - entity ids are canonical lowercase 8-4-4-4-12 UUID strings",
+        );
+      });
+
+      it("judges the names before the id", () => {
+        assertBoxedError(
+          () => update(Type.map([[nope, Type.integer(1)]]), "constructor"),
+          "Hologram.MisuseError",
+          invalid(":nope"),
+        );
+      });
+
+      it("reads no entry off the model object's prototype", () => {
+        assertBoxedError(
+          () =>
+            updateById(
+              Type.atom("constructor"),
+              Type.bitstring(ID_1),
+              Type.map([[nope, Type.integer(1)]]),
+            ),
+          "Hologram.MisuseError",
+          `cannot update constructor - no entity with id "${ID_1}"`,
+        );
+      });
+
+      it("judges the changes before looking up the row", () => {
+        assertBoxedError(
+          () => update(Type.map([[nope, Type.integer(1)]]), ID_2),
+          "Hologram.MisuseError",
+          invalid(":nope"),
+        );
+      });
+    });
+
+    it("names the given values in a refusal of update!/3 read as Map.new/1 reads them", () => {
+      const original = globalThis.Elixir_Enum;
+
+      globalThis.Elixir_Enum = {
+        "to_list/1": () =>
+          Type.list([Type.tuple([Type.atom("title"), Type.integer(1)])]),
+      };
+
+      try {
+        assertBoxedError(
+          () =>
+            Elixir_Hologram_DB["update!/3"](
+              task,
+              Type.bitstring(ID_1),
+              Type.struct("MapSet", [[Type.atom("map"), Type.map([])]]),
+            ),
+          "Hologram.WriteError",
+          `cannot update ${TASK} "${ID_1}":\n  * attribute :title must be of type :string, got: 1`,
+        );
+      } finally {
+        globalThis.Elixir_Enum = original;
+      }
     });
 
     it("takes a keyword list as well as a map", () => {
