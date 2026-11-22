@@ -30,9 +30,6 @@ defmodule HologramSyncBenchmark.Cases.Catchups do
   # node's listener, and the driver's own for its counters and its sampler.
   @connections_besides_pool 15
 
-  # The most of a failure's reason the figure line carries.
-  @reason_length 120
-
   @doc """
   Runs the case with the given options, writes its section into the README, and returns :ok.
   """
@@ -157,7 +154,7 @@ defmodule HologramSyncBenchmark.Cases.Catchups do
         {:stopped, memory}
     end
   catch
-    kind, reason -> {:failed, short_reason(kind, reason)}
+    kind, reason -> {:failed, Report.short_reason(kind, reason)}
   end
 
   # Sync's pool is sized to the number, as it is by default, through the env the next node copies.
@@ -220,15 +217,6 @@ defmodule HologramSyncBenchmark.Cases.Catchups do
 
   defp take_outcome({:failed, message}, _wave, limit) do
     %{limit: limit, line: "  FAILED: #{message}", note: message, wave: nil}
-  end
-
-  defp short_reason(kind, reason) do
-    kind
-    |> Exception.format_banner(reason)
-    |> String.split("\n", parts: 2)
-    |> hd()
-    |> String.trim_leading("** ")
-    |> String.slice(0, @reason_length)
   end
 
   defp options(wave, count, limits, opts) do

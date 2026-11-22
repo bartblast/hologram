@@ -34,9 +34,6 @@ defmodule HologramSyncBenchmark.Cases.SessionMemory do
 
   @poll_ms 50
 
-  # The most of a failure's reason the figure line carries.
-  @reason_length 120
-
   @rows [1_000, 10_000, 100_000]
 
   # How long a closed client's session may take to end, and a new one to settle after its
@@ -141,17 +138,7 @@ defmodule HologramSyncBenchmark.Cases.SessionMemory do
 
     Sweep.with_guarded_peer(memory_limit, &measure(&1, rows, opts))
   catch
-    kind, reason -> {:failed, short_reason(kind, reason)}
-  end
-
-  # One short line, since it goes into the section's figure line.
-  defp short_reason(kind, reason) do
-    kind
-    |> Exception.format_banner(reason)
-    |> String.split("\n", parts: 2)
-    |> hd()
-    |> String.trim_leading("** ")
-    |> String.slice(0, @reason_length)
+    kind, reason -> {:failed, Report.short_reason(kind, reason)}
   end
 
   defp measure(peer, rows, opts) do

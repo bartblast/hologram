@@ -13,6 +13,9 @@ defmodule HologramSyncBenchmark.Report do
 
   @readme_path "README.md"
 
+  # The most of a failure's reason a section's figure line carries.
+  @reason_length 120
+
   @results_end "<!-- /results -->"
 
   @results_start "<!-- results -->"
@@ -88,6 +91,19 @@ defmodule HologramSyncBenchmark.Report do
     new_results = put_section(old_results, name, section)
 
     File.write!(@readme_path, head <> @results_start <> new_results <> @results_end <> tail)
+  end
+
+  @doc """
+  Returns the given failure as one short line, for a section's figure line.
+  """
+  @spec short_reason(atom, term) :: String.t()
+  def short_reason(kind, reason) do
+    kind
+    |> Exception.format_banner(reason)
+    |> String.split("\n", parts: 2)
+    |> hd()
+    |> String.trim_leading("** ")
+    |> String.slice(0, @reason_length)
   end
 
   @doc """

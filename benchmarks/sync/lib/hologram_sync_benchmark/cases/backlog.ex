@@ -58,11 +58,6 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
 
   @page "HologramSyncBenchmark.BoardPage"
 
-  @poll_ms 20
-
-  # The most of a failure's reason the figure line carries.
-  @reason_length 120
-
   # Cards kept out of the writers' way: the timed writes' markers must not be overwritten.
   @reserved_cards 10
 
@@ -241,36 +236,15 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
     :ok
   end
 
+  # Numbered apart per size: the cards keep the markers an earlier size wrote, and a client filling
+  # them would take one as this size's write arriving before it was made.
   defp measure_all(conn, sizes, clients, memory_limit, opts) do
-    {results, stopped} =
-      sizes
-      |> Enum.with_index()
-      |> Enum.reduce_while({[], nil}, fn {size, index}, {results, nil} ->
-        IO.puts("Backlog: #{size} log rows")
-
-        # Numbered apart per size: the cards keep the markers an earlier size wrote, and a client
-        # filling them would take one as this size's write arriving before it was made.
-        first_marker = index * Sweep.markers_per_step()
-
-        case measure_size(conn, {size, first_marker}, clients, memory_limit, opts) do
-          {:ok, result} ->
-            result
-            |> summary()
-            |> IO.puts()
-
-            {:cont, {[result | results], nil}}
-
-          {:stopped, memory} ->
-            IO.puts("  STOPPED at the memory limit")
-            {:halt, {results, %{memory: memory, reason: :memory, size: size}}}
-
-          {:failed, message} ->
-            IO.puts("  FAILED: #{message}")
-            {:halt, {results, %{reason: message, size: size}}}
-        end
-      end)
-
-    {Enum.reverse(results), stopped}
+    Sweep.over_sizes(
+      sizes,
+      &"Backlog: #{&1} log rows",
+      &measure_size(conn, {&1, &2}, clients, memory_limit, opts),
+      &summary/1
+    )
   end
 
   # A failure at one size leaves the figures of the ones before it to be written.
@@ -280,16 +254,7 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
 
     Sweep.with_guarded_peer(memory_limit, &measure(&1, conn, sized, clients, opts))
   catch
-    kind, reason -> {:failed, short_reason(kind, reason)}
-  end
-
-  defp short_reason(kind, reason) do
-    kind
-    |> Exception.format_banner(reason)
-    |> String.split("\n", parts: 2)
-    |> hd()
-    |> String.trim_leading("** ")
-    |> String.slice(0, @reason_length)
+    kind, reason -> {:failed, Report.short_reason(kind, reason)}
   end
 
   defp measure(peer, conn, {size, first_marker}, count, opts) do
@@ -304,7 +269,7 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
       |> Clients.start_all()
 
     try do
-      :ok = fill!(clients, opts)
+      :ok = Clients.fill!(clients, Step.connect_concurrency(), opts[:fill_timeout] * 1_000)
 
       ordinary_ms = ordinary_write_ms(peer, clients, ids, first_marker)
       held = hold(peer, conn, {ids, clients}, {size, first_marker}, opts)
@@ -312,22 +277,6 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
       Map.merge(held, %{clients: count, ordinary_ms: ordinary_ms, size: size})
     after
       Clients.close_all(clients)
-    end
-  end
-
-  defp fill!(clients, opts) do
-    Clients.prepare_all!(clients, Step.connect_concurrency())
-
-    case Clients.connect_all(clients, Step.connect_concurrency()) do
-      [] -> :ok
-      [{_client, reason} | _more] -> raise "a client couldn't connect: #{inspect(reason)}"
-    end
-
-    reports = Clients.await_fills(clients, opts[:fill_timeout] * 1_000)
-
-    case Enum.find(reports, &(&1.synced_all_at == nil or &1.failure != nil)) do
-      nil -> :ok
-      report -> raise "a client never filled: #{inspect(report.failure)}"
     end
   end
 
@@ -339,43 +288,10 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
       args = [Card, elem(ids, offset), :title, Client.marker(number)]
       committed_at = Peer.rpc(peer, Writer, :update, args)
 
-      delivery_ms(clients, number, committed_at)
+      Clients.delivery_ms(clients, number, committed_at, @delivery_limit_ms)
     end)
     |> Enum.reject(&is_nil/1)
     |> Measure.percentile(50)
-  end
-
-  # From the commit to the marker at the last client, or nil when one never got it: past the limit,
-  # or for having lost its stream.
-  defp delivery_ms(clients, number, committed_at) do
-    deadline = now_ms() + @delivery_limit_ms
-
-    if await_marker(clients, number, deadline) do
-      last_at =
-        clients
-        |> Enum.map(&Map.fetch!(Client.report(&1).markers, number))
-        |> Enum.max()
-
-      (last_at - committed_at) / 1_000
-    end
-  end
-
-  # Returns whether every client has the marker. Waits on the others past a client that failed,
-  # which never gets it since it doesn't come back, so what the step reads next covers them too.
-  defp await_marker(clients, number, deadline) do
-    waiting = Enum.reject(clients, &Client.has_marker?(&1, number))
-
-    cond do
-      waiting == [] ->
-        true
-
-      Enum.all?(waiting, &Client.failed?/1) or now_ms() >= deadline ->
-        false
-
-      true ->
-        Process.sleep(@poll_ms)
-        await_marker(waiting, number, deadline)
-    end
   end
 
   # The two markers set while the dispatcher is held up go past the ordinary writes', on cards of
@@ -407,12 +323,15 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
 
       held_rise = Measure.start_memory_peak(peer)
       held_committed_at = commit_held_write(held_write)
-      held_ms = delivery_ms(clients, held_number, held_committed_at)
+      held_ms = Clients.delivery_ms(clients, held_number, held_committed_at, @delivery_limit_ms)
       held_rise_bytes = Measure.stop_memory_peak(held_rise)
 
       drain_rise = Measure.start_memory_peak(peer)
       released_at = release_blocker(blocker)
-      drain_ms = released_at && delivery_ms(clients, last_number, released_at)
+
+      drain_ms =
+        released_at && Clients.delivery_ms(clients, last_number, released_at, @delivery_limit_ms)
+
       drain_rise_bytes = Measure.stop_memory_peak(drain_rise)
 
       :ok = Peer.sync_log(peer)
@@ -647,6 +566,4 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
       if(result.dispatcher_restarted, do: "yes", else: "no")
     ]
   end
-
-  defp now_ms, do: System.monotonic_time(:millisecond)
 end

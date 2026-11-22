@@ -13,6 +13,8 @@ defmodule HologramSyncBenchmark.Clients do
 
   @fill_poll_ms 100
 
+  @marker_poll_ms 20
+
   @doc """
   Raises when the machine can't hold the given number of clients, and warns when the given
   burst of connects can overflow the listen backlog.
@@ -103,6 +105,63 @@ defmodule HologramSyncBenchmark.Clients do
         {:error, reason} -> [{client, reason}]
       end
     end)
+  end
+
+  @doc """
+  Waits for the marker with the given number to reach every given client, and returns the
+  milliseconds from the given commit to the last arrival, or nil when one never got it: past the
+  given limit, or for having lost its stream, since it doesn't come back. Waits on the others past
+  a client that failed, so what's read next covers them too.
+  """
+  @spec delivery_ms([pid], non_neg_integer, integer, pos_integer) :: float | nil
+  def delivery_ms(clients, number, committed_at, limit_ms) do
+    deadline = System.monotonic_time(:millisecond) + limit_ms
+
+    if await_marker(clients, number, deadline) do
+      last_at =
+        clients
+        |> Enum.map(&Map.fetch!(Client.report(&1).markers, number))
+        |> Enum.max()
+
+      (last_at - committed_at) / 1_000
+    end
+  end
+
+  defp await_marker(clients, number, deadline) do
+    waiting = Enum.reject(clients, &Client.has_marker?(&1, number))
+
+    cond do
+      waiting == [] ->
+        true
+
+      Enum.all?(waiting, &Client.failed?/1) or System.monotonic_time(:millisecond) >= deadline ->
+        false
+
+      true ->
+        Process.sleep(@marker_poll_ms)
+        await_marker(waiting, number, deadline)
+    end
+  end
+
+  @doc """
+  Prepares and connects the given clients, at most `concurrency` at a time, waits for their fills
+  and returns :ok, raising when one couldn't connect or fill within the given time.
+  """
+  @spec fill!([pid], pos_integer, non_neg_integer) :: :ok
+  def fill!(clients, concurrency, timeout_ms) do
+    prepare_all!(clients, concurrency)
+
+    case connect_all(clients, concurrency) do
+      [] -> :ok
+      [{_client, reason} | _more] -> raise "a client couldn't connect: #{inspect(reason)}"
+    end
+
+    reports = await_fills(clients, timeout_ms)
+
+    case Enum.find(reports, &(&1.synced_all_at == nil or &1.failure != nil)) do
+      nil -> :ok
+      report -> raise "a client never filled: #{inspect(report.failure)}"
+    end
   end
 
   @doc """

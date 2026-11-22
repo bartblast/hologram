@@ -226,6 +226,60 @@ defmodule HologramSyncBenchmark.Sweep do
   end
 
   @doc """
+  Measures each given size in turn, for a case stepping over sizes rather than client counts, and
+  returns the results with what ended the run early, or nil. `measure` gets a size and the first
+  marker number it may use, and answers `{:ok, result}`, `{:stopped, memory}` or `{:failed,
+  message}`. A size that doesn't answer `:ok` ends the run, keeping the results before it.
+  """
+  @spec over_sizes(
+          [pos_integer],
+          (pos_integer -> String.t()),
+          (pos_integer, non_neg_integer ->
+             {:ok, map} | {:stopped, non_neg_integer} | {:failed, String.t()}),
+          (map -> String.t())
+        ) :: {[map], map | nil}
+  def over_sizes(sizes, heading, measure, summary) do
+    if length(sizes) > @max_steps do
+      raise ArgumentError, "a run takes at most #{@max_steps} sizes"
+    end
+
+    {results, stopped} =
+      sizes
+      |> Enum.with_index()
+      |> Enum.reduce_while({[], nil}, fn {size, index}, {results, nil} ->
+        size
+        |> heading.()
+        |> IO.puts()
+
+        size
+        |> measure.(index * @markers_per_step)
+        |> take_size(size, results, summary)
+      end)
+
+    {Enum.reverse(results), stopped}
+  end
+
+  defp take_size({:ok, result}, _size, results, summary) do
+    result
+    |> summary.()
+    |> IO.puts()
+
+    {:cont, {[result | results], nil}}
+  end
+
+  defp take_size({:stopped, memory}, size, results, _summary) do
+    IO.puts("  STOPPED at the memory limit")
+
+    {:halt, {results, %{memory: memory, reason: :memory, size: size}}}
+  end
+
+  defp take_size({:failed, message}, size, results, _summary) do
+    IO.puts("  FAILED: #{message}")
+
+    {:halt, {results, %{reason: message, size: size}}}
+  end
+
+  @doc """
   Returns the case's clients-per-node figure from the given step results: the largest client
   count that passed, "at least" it when every step passed and none stopped, "below" the first one
   when none passed. Beside it, the fills the server cut short in the step it names, and the step
