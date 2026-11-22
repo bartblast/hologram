@@ -172,6 +172,13 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146 do
     |> Derived.lower()
   end
 
+  def __derived_definition__(:keyed_by_one) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.keyed_by_one()
+    |> Derived.lower()
+  end
+
   def __derived_locations__ do
     %{
       closure_making_field: {"lib/my_app/member.ex", 1},
@@ -193,7 +200,8 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146 do
       literal_param_matched: {"lib/my_app/member.ex", 17},
       repeated_param_equal: {"lib/my_app/member.ex", 18},
       map_equal_keys_literal_last: {"lib/my_app/member.ex", 19},
-      map_equal_keys_variable_last: {"lib/my_app/member.ex", 20}
+      map_equal_keys_variable_last: {"lib/my_app/member.ex", 20},
+      keyed_by_one: {"lib/my_app/member.ex", 21}
     }
   end
 end

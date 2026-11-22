@@ -552,6 +552,13 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert query.take == 3
     end
 
+    # The query reads nil on a row with no messages, and on that row it's the key read.
+    test "refuses a read of a map keyed by a query over the row's set", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :keyed_by_one in .+ reads nil off a map keyed by a field of the row/,
+                   fn -> derived_definition(Module146, :keyed_by_one, ir_plt) end
+    end
+
     test "takes the case clause a known value matches", %{ir_plt: ir_plt} do
       {definition, _read_modules} = derived_definition(Module142, :by_case, ir_plt)
 

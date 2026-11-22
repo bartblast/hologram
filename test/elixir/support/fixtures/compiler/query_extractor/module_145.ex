@@ -113,6 +113,12 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module145 do
     take(messages, 1)
   end
 
+  def keyed_by_one(messages) do
+    opts = %{nil => 1, one(messages) => 3}
+
+    take(messages, ^opts.nil)
+  end
+
   def literal_param(messages) do
     limit =
       [2]

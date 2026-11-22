@@ -999,6 +999,8 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp row_value?(%RowRef{}), do: true
 
+  defp row_value?(%Query{source: source}), do: source != nil
+
   defp row_value?(value), do: MapSet.member?(row_expressions(), value)
 
   # A dot on a set reads further through its rows, as a derived field's body reads a chain through a
