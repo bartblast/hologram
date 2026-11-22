@@ -20,7 +20,10 @@ config :hologram_sync_benchmark, HologramSyncBenchmarkWeb.Endpoint,
 
 # Named outright: the default name follows the env, and the server node runs as :test while the
 # driver runs as :dev. The pool keeps Hologram's default size, 10, as an app that doesn't set one.
-config :hologram, :database, database: "hologram_sync_benchmark"
+# BENCH_PG_PORT points it at a Postgres server of its own, which the backlog case needs.
+config :hologram, :database,
+  database: "hologram_sync_benchmark",
+  port: String.to_integer(System.get_env("BENCH_PG_PORT", "5432"))
 
 config :logger, level: :warning
 

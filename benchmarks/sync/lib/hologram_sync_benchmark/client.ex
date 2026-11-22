@@ -154,6 +154,15 @@ defmodule HologramSyncBenchmark.Client do
   end
 
   @doc """
+  Returns whether the client has failed, cheaper to ask than a whole report while a case waits on
+  a write.
+  """
+  @spec failed?(pid) :: boolean
+  def failed?(client) do
+    GenServer.call(client, :failed?, :infinity)
+  end
+
+  @doc """
   Closes the client's stream for good and marks it failed, returning :ok. For a client a step can't
   use, which would otherwise go on retrying.
   """
@@ -355,6 +364,10 @@ defmodule HologramSyncBenchmark.Client do
 
   def handle_call({:has_marker?, number}, _from, state) do
     {:reply, Map.has_key?(state.markers, number), state}
+  end
+
+  def handle_call(:failed?, _from, state) do
+    {:reply, state.failure != nil, state}
   end
 
   def handle_call({:has_markers?, numbers}, _from, state) do

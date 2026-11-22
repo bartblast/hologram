@@ -8,6 +8,7 @@ defmodule HologramSyncBenchmark.Driver do
   # Hologram's application, which would make it a second node syncing against the same database.
 
   alias HologramSyncBenchmark.Cases.Access
+  alias HologramSyncBenchmark.Cases.Backlog
   alias HologramSyncBenchmark.Cases.Board
   alias HologramSyncBenchmark.Cases.Deploy
   alias HologramSyncBenchmark.Cases.Lock
@@ -29,7 +30,7 @@ defmodule HologramSyncBenchmark.Driver do
   @board_page "HologramSyncBenchmark.BoardPage"
 
   @cases ~w(boot seed smoke board board_roles tenants access deploy deploy_tenants reconnect
-            reconnect_tenants session_memory lock)
+            reconnect_tenants session_memory backlog lock)
 
   # The options and their defaults: the board's size; the tenants, members per tenant and tasks
   # per tenant of the tenants case; the access case's docs and the seconds a change of access may
@@ -38,10 +39,10 @@ defmodule HologramSyncBenchmark.Driver do
   # with; how long in seconds a client may take to fill; how long in seconds the deploy cases'
   # clients may take to all hold their pots again; how many writes the reconnect cases make while
   # their clients are away, how long in seconds those clients take to come back and how long they
-  # may take to be caught up, and how many writes per second land while they do; how long in
-  # seconds the lock case runs each number of writers; and the server node's memory in GB past
-  # which a step is stopped, fixed rather than a share of the machine's, so a figure means the
-  # same on any machine.
+  # may take to be caught up, and how many writes per second land while they do; how many replicas
+  # write in the backlog case; how long in seconds the lock case runs each number of writers; and
+  # the server node's memory in GB past which a step is stopped, fixed rather than a share of the
+  # machine's, so a figure means the same on any machine.
   @defaults [
     access_limit: 10,
     cards: 2_000,
@@ -55,6 +56,7 @@ defmodule HologramSyncBenchmark.Driver do
     p99_limit: 1_000,
     rate: 2,
     refill_limit: 60,
+    replicas: 1_000,
     tasks: 100,
     tenants: 20,
     wave_limit: 120,
@@ -75,6 +77,7 @@ defmodule HologramSyncBenchmark.Driver do
 
   @switches [
     access_limit: :integer,
+    backlog_rows: :string,
     cards: :integer,
     docs: :integer,
     case: :string,
@@ -88,6 +91,7 @@ defmodule HologramSyncBenchmark.Driver do
     p99_limit: :integer,
     rate: :integer,
     refill_limit: :integer,
+    replicas: :integer,
     rows: :string,
     tasks: :integer,
     tenants: :integer,
@@ -131,6 +135,7 @@ defmodule HologramSyncBenchmark.Driver do
         |> Keyword.merge(opts)
         |> Keyword.update(:clients, nil, &parse_counts!(&1, "--clients"))
         |> Keyword.update(:rows, nil, &parse_counts!(&1, "--rows"))
+        |> Keyword.update(:backlog_rows, nil, &parse_counts!(&1, "--backlog-rows"))
         |> validate_options!()
 
       {_opts, args, invalid} ->
@@ -244,6 +249,8 @@ defmodule HologramSyncBenchmark.Driver do
   end
 
   defp run_case("session_memory", opts), do: SessionMemory.run(DB.connect!(), opts)
+
+  defp run_case("backlog", opts), do: Backlog.run(DB.connect!(), opts)
 
   # Writers rather than clients: --clients gives how many write at once.
   defp run_case("lock", opts), do: Lock.run(DB.connect!(), opts)
