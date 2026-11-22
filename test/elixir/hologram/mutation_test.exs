@@ -1957,6 +1957,71 @@ defmodule Hologram.MutationTest do
       assert EntityOperations.get(Channel, channel.id).name == "open"
     end
 
+    test "refuses a batch holding a date it can't read, naming the write and the field" do
+      write = create_write(MutationModule7, Entity.generate_id(), %{"held_on" => "-10000-01-01"})
+
+      assert run(envelope([write]), server()) == rejected(0, %{held_on: [{:type, :date}]})
+    end
+
+    test "refuses a batch holding a datetime it can't read, naming the write and the field" do
+      write =
+        create_write(MutationModule7, Entity.generate_id(), %{
+          "starts_at" => "10000-01-01T00:00:00.000000Z"
+        })
+
+      assert run(envelope([write]), server()) == rejected(0, %{starts_at: [{:type, :datetime}]})
+    end
+
+    test "keeps a signed-in user's batch holding a date it can't read" do
+      user = create_user("unread-date@example.com")
+      replica_id = Entity.generate_id()
+      write = create_write(MutationModule7, Entity.generate_id(), %{"held_on" => "-10000-01-01"})
+      raw = envelope([write], replica_id: replica_id)
+
+      assert {:ok, %{"status" => "rejected"} = answer} = run(raw, server(user.id))
+
+      assert Record.find(replica_id, 1) == %{actor_id: user.id, result: answer}
+      assert record_envelope(replica_id, 1) == raw
+    end
+
+    test "keeps nothing of a visitor's batch holding a date it can't read" do
+      replica_id = Entity.generate_id()
+      write = create_write(MutationModule7, Entity.generate_id(), %{"held_on" => "-10000-01-01"})
+
+      assert {:ok, %{"status" => "rejected"}} =
+               run(envelope([write], replica_id: replica_id), server())
+
+      assert Record.find(replica_id, 1) == nil
+    end
+
+    test "answers a repeat of a batch holding a date it can't read from its record" do
+      user = create_user("unread-repeat@example.com")
+      replica_id = Entity.generate_id()
+      write = create_write(MutationModule7, Entity.generate_id(), %{"held_on" => "-10000-01-01"})
+      raw = envelope([write], replica_id: replica_id)
+
+      assert {:ok, answer} = run(raw, server(user.id))
+
+      other_write =
+        create_write(MutationModule7, Entity.generate_id(), %{
+          "starts_at" => "10000-01-01T00:00:00Z"
+        })
+
+      assert run(envelope([other_write], replica_id: replica_id), server(user.id)) ==
+               {:ok, answer}
+    end
+
+    test "refuses another session's pair on a batch holding a date it can't read" do
+      user = create_user("unread-owner@example.com")
+      other = create_user("unread-other@example.com")
+      replica_id = Entity.generate_id()
+      write = create_write(MutationModule7, Entity.generate_id(), %{"held_on" => "-10000-01-01"})
+      raw = envelope([write], replica_id: replica_id)
+
+      assert {:ok, %{"status" => "rejected"}} = run(raw, server(user.id))
+      assert run(raw, server(other.id)) == rejected(nil, :forged_client)
+    end
+
     test "keeps a refused batch holding a NUL, with the NUL spelled as U+FFFD" do
       user = create_user("refused-nul@example.com")
       replica_id = Entity.generate_id()

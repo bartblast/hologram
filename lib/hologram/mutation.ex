@@ -15,7 +15,8 @@ defmodule Hologram.Mutation do
   # applies them: every field the call changes is judged against the row the call started from. A
   # refusal at any step rolls the whole batch back and names the write it refused, a call's by the
   # write it starts at - and a refusal the EVALUATOR made is then kept, the batch as it arrived
-  # beside its answer, for the session that sent it.
+  # beside its answer, for the session that sent it. So is a batch holding a date or datetime this
+  # server can't read, which is refused before any transaction.
 
   alias Hologram.Auth
   alias Hologram.Auth.Context
@@ -500,9 +501,10 @@ defmodule Hologram.Mutation do
   # is kept of it is written after the rollback, on its own statement: the batch as it arrived and
   # the answer it got, so that a change a browser made and then lost is somewhere, with the reason.
   #
-  # Only a refusal the EVALUATOR made reaches here. A batch refused before its transaction was
-  # refused for its build or its clock rather than for what it writes, and the server read nothing
-  # of it worth keeping - a stale one it could not parse at all.
+  # A refusal the EVALUATOR made reaches here, and so does a value this server couldn't read. Any
+  # other batch refused before its transaction was refused for its build or its clock rather than
+  # for what it writes, and the server read nothing of it worth keeping - a stale one it could not
+  # parse at all.
   #
   # Nothing is kept for an anonymous session either, nor for a user id no user entity can have: an
   # answer is replayed only to the session that earned it, and the record holds every such session
@@ -547,6 +549,7 @@ defmodule Hologram.Mutation do
   defp parse(raw) do
     case Envelope.parse(raw) do
       {:ok, envelope} -> {:ok, envelope}
+      {:refused, envelope, index, violations} -> {:refused, envelope, index, violations}
       {:error, message} -> {:invalid, message}
     end
   end
@@ -562,8 +565,14 @@ defmodule Hologram.Mutation do
          :ok <- check_clocks(envelope.writes) do
       apply_batch(envelope, raw, server_struct)
     else
-      {:invalid, message} -> {:invalid, message}
-      {:rejected, index, reason} -> {:ok, rejection(index, reason)}
+      {:invalid, message} ->
+        {:invalid, message}
+
+      {:rejected, index, reason} ->
+        {:ok, rejection(index, reason)}
+
+      {:refused, envelope, index, violations} ->
+        refuse_unread(envelope, raw, server_struct, index, violations)
     end
   end
 
@@ -624,6 +633,18 @@ defmodule Hologram.Mutation do
 
       _another_sessions ->
         {:ok, rejection(nil, :forged_client)}
+    end
+  end
+
+  # A batch holding a value this server can't read never reaches a transaction, and is kept like any
+  # other refused batch, so a signed-in user's write can still be recovered. Its record is asked
+  # first, which answers a repeat from it and refuses another session's pair as forged.
+  defp refuse_unread(envelope, raw, server_struct, index, violations) do
+    record_actor_id = Auth.canonical_id(server_struct.user_id)
+
+    case recorded_answer(envelope, record_actor_id) do
+      nil -> keep_refused(envelope, raw, record_actor_id, index, violations)
+      answer -> answer
     end
   end
 

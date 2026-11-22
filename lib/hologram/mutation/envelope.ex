@@ -11,6 +11,10 @@ defmodule Hologram.Mutation.Envelope do
   #
   # A refusal names the first thing wrong and stops. It is written for whoever is building a
   # client, so it says which write and which field rather than which guard.
+  #
+  # One value is answered differently: a date or datetime spelled as text that this server can't
+  # read. A browser could queue one before its own validator refused it, and a bad request would
+  # hold that browser's queue for good, so it's refused as a value of the write instead.
 
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
@@ -38,22 +42,32 @@ defmodule Hologram.Mutation.Envelope do
   @doc """
   Parses the given decoded JSON object into an envelope, or returns the first thing wrong with it
   as a message whoever is building a client can act on.
+
+  A date or datetime spelled as text this server can't read answers
+  `{:refused, envelope, index, violations}` instead: the envelope with its identity and no writes,
+  the position of the write holding the value, and the violation naming its field.
   """
-  @spec parse(map) :: {:ok, t} | {:error, String.t()}
+  @spec parse(map) ::
+          {:ok, t}
+          | {:refused, t, non_neg_integer, %{atom => list({:type, atom})}}
+          | {:error, String.t()}
   def parse(raw) do
     with {:ok, instance_id} <- string(raw, "instance_id"),
          {:ok, replica_id} <- string(raw, "replica_id"),
          {:ok, seq} <- non_negative_integer(raw, "seq"),
-         {:ok, model_hash} <- string(raw, "model_hash"),
-         {:ok, writes} <- writes(raw) do
-      {:ok,
-       %__MODULE__{
-         instance_id: instance_id,
-         model_hash: model_hash,
-         replica_id: replica_id,
-         seq: seq,
-         writes: writes
-       }}
+         {:ok, model_hash} <- string(raw, "model_hash") do
+      envelope = %__MODULE__{
+        instance_id: instance_id,
+        model_hash: model_hash,
+        replica_id: replica_id,
+        seq: seq
+      }
+
+      case writes(raw) do
+        {:ok, writes} -> {:ok, %{envelope | writes: writes}}
+        {:refused, index, violations} -> {:refused, envelope, index, violations}
+        {:error, message} -> {:error, message}
+      end
     end
   end
 
@@ -192,6 +206,7 @@ defmodule Hologram.Mutation.Envelope do
   defp decode_field_into({name, value}, {:ok, decoded}, fields, entity_type) do
     case decode_field(name, value, fields, entity_type) do
       {:ok, {field, value}} -> {:cont, {:ok, Map.put(decoded, field, value)}}
+      {:refused, violations} -> {:halt, {:refused, violations}}
       {:error, message} -> {:halt, {:error, message}}
     end
   end
@@ -218,8 +233,14 @@ defmodule Hologram.Mutation.Envelope do
 
   defp decode_value(name, value, field, type) do
     case Codec.decode_wire(value, type) do
-      {:ok, decoded} -> {:ok, {field, decoded}}
-      :error -> {:error, ~s("#{name}" is not a valid #{type_word(type)})}
+      {:ok, decoded} ->
+        {:ok, {field, decoded}}
+
+      :error when type in [:date, :datetime] and is_binary(value) ->
+        {:refused, %{field => [{:type, type}]}}
+
+      :error ->
+        {:error, ~s("#{name}" is not a valid #{type_word(type)})}
     end
   end
 
@@ -508,6 +529,7 @@ defmodule Hologram.Mutation.Envelope do
          :ok <- call_position(write, List.first(writes)) do
       {:cont, {:ok, [write | writes]}}
     else
+      {:refused, violations} -> {:halt, {:refused, index, violations}}
       {:error, message} -> {:halt, {:error, "write #{index}: #{message}"}}
     end
   end
@@ -520,6 +542,7 @@ defmodule Hologram.Mutation.Envelope do
 
     case result do
       {:ok, writes} -> {:ok, Enum.reverse(writes)}
+      {:refused, index, violations} -> {:refused, index, violations}
       {:error, message} -> {:error, message}
     end
   end

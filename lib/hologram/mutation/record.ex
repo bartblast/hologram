@@ -13,7 +13,8 @@ defmodule Hologram.Mutation.Record do
   # A batch the evaluator REFUSED is written afterwards instead, on its own statement - its claim
   # rolled back with everything else the transaction did - and it keeps the batch as it arrived,
   # each NUL spelled as U+FFFD, beside the answer, since its rows reached no log and exist nowhere
-  # else on the server.
+  # else on the server. So is a batch holding a value the server couldn't read, which never had a
+  # transaction to roll back.
   #
   # A landed batch's envelope is not kept: the rows it wrote are in the oplog under
   # mutation_ref, keyed by the same pair, so keeping it here would keep every write twice.
@@ -124,8 +125,8 @@ defmodule Hologram.Mutation.Record do
   """
   @spec refuse!(String.t(), non_neg_integer, String.t(), String.t(), map, map) :: :ok
   def refuse!(replica_id, seq, actor_id, model_hash, envelope, answer) do
-    # Outside any transaction by intent: the refusal already took the batch's transaction back,
-    # and this is the one statement that outlives it.
+    # Outside any transaction by intent: the refusal already took the batch's transaction back, if
+    # it got as far as having one, and this is the one statement that outlives it.
     statement = """
     INSERT INTO "#{Mapper.system_schema()}"."mutation"
       ("replica_id", "seq", "actor_id", "model_hash", "envelope", "result")
