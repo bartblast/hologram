@@ -6,6 +6,7 @@ defmodule Hologram.DB.Connection do
   # Hologram.DB - these functions back its delegates, which also carry the docs.
 
   alias Hologram.DB
+  alias Hologram.DB.EctoGuard
   alias Hologram.MisuseError
 
   @connection_key {__MODULE__, :connection}
@@ -42,6 +43,8 @@ defmodule Hologram.DB.Connection do
   @spec execute(Postgrex.Query.t(), list, keyword) ::
           {:ok, Postgrex.Query.t(), Postgrex.Result.t()} | {:error, Exception.t()}
   def execute(query, params, opts \\ []) do
+    refuse_nesting!()
+
     Postgrex.execute(current_connection(), query, params, with_timeout_opt(opts))
   end
 
@@ -63,12 +66,16 @@ defmodule Hologram.DB.Connection do
   @doc false
   @spec prepare(String.t(), keyword) :: {:ok, Postgrex.Query.t()} | {:error, Exception.t()}
   def prepare(statement, opts \\ []) do
+    refuse_nesting!()
+
     Postgrex.prepare(current_connection(), "", statement, with_timeout_opt(opts))
   end
 
   @doc false
   @spec query(String.t(), list, keyword) :: {:ok, Postgrex.Result.t()} | {:error, Exception.t()}
   def query(statement, params \\ [], opts \\ []) do
+    refuse_nesting!()
+
     Postgrex.query(current_connection(), statement, params, with_timeout_opt(opts))
   end
 
@@ -117,6 +124,8 @@ defmodule Hologram.DB.Connection do
   @doc false
   @spec snapshot((-> any)) :: {:ok, any} | {:error, any}
   def snapshot(fun) do
+    refuse_nesting!()
+
     case Process.get(@transaction_key) do
       nil ->
         run_transaction(
@@ -140,6 +149,8 @@ defmodule Hologram.DB.Connection do
   @doc false
   @spec transaction((-> any), keyword) :: {:ok, any} | {:error, any}
   def transaction(fun, opts \\ []) do
+    refuse_nesting!()
+
     opts = with_timeout_opt(opts)
 
     case Process.get(@transaction_key) do
@@ -210,6 +221,23 @@ defmodule Hologram.DB.Connection do
       {:sandbox, pool_name} -> pool_name
       {:sandbox_transaction, pool_name, _depth} -> pool_name
       {:transaction, connection, _depth} -> connection
+    end
+  end
+
+  # Ecto runs on a connection pool of its own, so a statement here would commit whatever becomes
+  # of the Ecto transaction around it. Savepoint and rollback statements don't come through here,
+  # so cleaning up after a refusal can't be refused too.
+  defp refuse_nesting! do
+    case EctoGuard.open_transaction_repo() do
+      nil ->
+        :ok
+
+      repo ->
+        raise MisuseError,
+              "cannot run a data layer statement inside a #{inspect(repo)} transaction - the " <>
+                "two commit separately, so a rollback on one side would keep the other side's " <>
+                "writes. Move the call outside the Ecto transaction. An Ecto migration runs " <>
+                "in one unless it sets @disable_ddl_transaction true."
     end
   end
 

@@ -3,8 +3,10 @@ defmodule Hologram.DB.ConnectionTest do
 
   import Hologram.DB.Connection
 
+  alias Ecto.Adapters.SQL.Sandbox
   alias Hologram.DB.Config
   alias Hologram.MisuseError
+  alias Hologram.Test.EctoRepo
 
   # Reaches the server outside the sandbox: this is the transaction machinery the sandbox
   # routes through, so it is tested on a real connection.
@@ -85,6 +87,79 @@ defmodule Hologram.DB.ConnectionTest do
              end) == {:ok, false}
 
       GenServer.stop(connection)
+    end
+  end
+
+  describe "inside an Ecto transaction" do
+    setup do
+      [repo_pid: EctoRepo.start_for_test!()]
+    end
+
+    defp assert_refused(fun) do
+      assert {:ok, :refused} =
+               EctoRepo.transaction(fn ->
+                 assert_raise MisuseError, ~r/inside a Hologram\.Test\.EctoRepo transaction/, fun
+
+                 :refused
+               end)
+    end
+
+    test "execute/3 is refused" do
+      {:ok, prepared} = prepare("SELECT 1")
+
+      assert_refused(fn -> execute(prepared, []) end)
+    end
+
+    test "prepare/2 is refused" do
+      assert_refused(fn -> prepare("SELECT 1") end)
+    end
+
+    test "query/3 is refused" do
+      assert_refused(fn -> query("SELECT 1") end)
+    end
+
+    test "retry_on_deadlock/1 is refused without running the function" do
+      assert_refused(fn -> retry_on_deadlock(fn -> flunk("the function ran") end) end)
+    end
+
+    test "snapshot/1 is refused without running the function" do
+      assert_refused(fn -> snapshot(fn -> flunk("the function ran") end) end)
+    end
+
+    test "transaction/2 is refused without running the function" do
+      assert_refused(fn -> transaction(fn -> flunk("the function ran") end) end)
+    end
+
+    test "a refused write leaves no row" do
+      id = :crypto.strong_rand_bytes(16)
+
+      assert_refused(fn -> query(@insert_given_id_sql, [id]) end)
+
+      assert count_by_id(id) == 0
+    end
+
+    test "a call works again once the Ecto transaction has ended" do
+      {:ok, :done} = EctoRepo.transaction(fn -> :done end)
+
+      assert {:ok, %Postgrex.Result{rows: [[1]]}} = query("SELECT 1")
+    end
+
+    test "a call under Hologram's sandbox with no transaction of its own isn't refused" do
+      task =
+        Task.async(fn ->
+          enter_sandbox()
+          query("SELECT 1")
+        end)
+
+      assert {:ok, %Postgrex.Result{rows: [[1]]}} = Task.await(task)
+    end
+
+    test "a call under Ecto's SQL sandbox with no transaction of its own isn't refused", %{
+      repo_pid: repo_pid
+    } do
+      :ok = Sandbox.checkout(repo_pid)
+
+      assert {:ok, %Postgrex.Result{rows: [[1]]}} = query("SELECT 1")
     end
   end
 

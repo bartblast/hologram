@@ -503,6 +503,11 @@ defmodule Hologram.DB do
   PostgreSQL caches 64 subtransactions per session - a transaction opening more than that, such
   as a loop of writes inside one transaction, slows every other session's visibility checks for
   as long as it runs. Split such batches into transactions of their own.
+
+  An Ecto repo runs on a connection pool of its own, so its transactions and the data layer's
+  commit separately. Any data layer call that runs a statement raises Hologram.MisuseError while
+  one of the app's Ecto repos has a transaction open in the calling process, reads included. A
+  transaction Ecto's SQL sandbox holds for a test doesn't count.
   """
   @spec transaction((-> any), keyword) :: {:ok, any} | {:error, any}
   defdelegate transaction(fun, opts \\ []), to: Connection

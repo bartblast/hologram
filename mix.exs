@@ -70,6 +70,7 @@ defmodule Hologram.MixProject do
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
       {:ecto, "~> 3.0", only: :test, runtime: false},
+      {:ecto_sql, "~> 3.0", only: :test, runtime: false},
       {:ex_check, "~> 0.15", only: [:dev, :test], runtime: false},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:file_system, "~> 1.0"},
@@ -131,6 +132,10 @@ defmodule Hologram.MixProject do
     ]
   end
 
+  # Ecto is a test-only dep, and the test env compiles a real repo (Hologram.Test.EctoRepo).
+  def plt_add_apps(:test), do: [:ecto, :ecto_sql | plt_add_apps(:dev)]
+  def plt_add_apps(_env), do: [:ex_unit, :iex, :inets, :mix, :wallaby]
+
   def project do
     [
       aliases: aliases(),
@@ -139,7 +144,7 @@ defmodule Hologram.MixProject do
       description:
         "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
       dialyzer: [
-        plt_add_apps: [:ex_unit, :iex, :inets, :mix, :wallaby],
+        plt_add_apps: plt_add_apps(Mix.env()),
         # Never in "priv": Mix links the build priv dir to the project's priv dir when it has one,
         # and only the CI job that holds the PLTs would have it, so the build caches of the CI jobs
         # would differ.
