@@ -3,6 +3,7 @@
 import Batches from "./batches.mjs";
 import Deltas from "./deltas.mjs";
 import Durability from "./durability.mjs";
+import IdentityTracker from "./identity_tracker.mjs";
 import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
 import ManuallyPortedElixirHologramAuth from "./elixir/hologram/auth.mjs";
@@ -45,6 +46,18 @@ export default class DataLayer {
     refusals: new Map(),
     syncedTypes: null,
   };
+
+  // The keys of the carried counts of the page on screen, which its snapshot saves. Those it arrived
+  // with, so that a save before its first render keeps them, and those its renders answered with.
+  static #shownCounts = new Set();
+
+  // The counts of a restored page that came too early to be filed, which its next save keeps.
+  static #unfiledCounts = [];
+
+  // Made public to make tests easier
+  //
+  // Whether this document has taken up what the store holds, so whether it holds a place is known.
+  static isStoreRestored = false;
 
   // Based on run_query!/4
   //
@@ -558,16 +571,37 @@ export default class DataLayer {
   // A bundle built before any of this existed carries neither field - it leaves the database as it
   // was.
   static ingestMountData(mountData) {
+    $.#shownCounts = new Set(Object.keys(mountData.syncCounts ?? {}));
+    $.#unfiledCounts = [];
+
     if (mountData.syncRows) {
+      // A number counted for one identity must never answer for another. The period tells apart
+      // what the ids can't, like two integer ids too large for the browser to hold exactly. The
+      // ids cover a server that tags no responses, where the period never moves.
+      //
+      // The period the page was rendered in rather than the one lasting now: the identity can
+      // change between a page arriving and its mount, and its numbers are still the old identity's.
+      const period = mountData.identityPeriod ?? IdentityTracker.period;
+
+      if (
+        period !== LocalDatabase.syncCountsPeriod ||
+        (mountData.actorUserId ?? null) !== (LocalDatabase.actorUserId ?? null)
+      ) {
+        LocalDatabase.dropCounts();
+      }
+
+      LocalDatabase.syncCountsPeriod = period;
       LocalDatabase.actorUserId = mountData.actorUserId;
       LocalDatabase.actorEntityId = mountData.actorEntityId ?? null;
       Deltas.apply(mountData.syncRows, {insertOnly: true});
 
       // A count has no rows behind it, so the rows cannot carry one - the numbers this render
-      // answered with travel beside them, and each page visit replaces them the way it replaces
-      // what its own props read.
-      LocalDatabase.syncCounts = mountData.syncCounts ?? {};
-      LocalDatabase.syncCountTypes = mountData.syncCountTypes ?? {};
+      // answered with travel beside them. They join the ones earlier visits carried rather than
+      // replace them: Back or Forward reads no mount data, so a page it returns to has only those.
+      LocalDatabase.carryCounts(
+        mountData.syncCounts ?? {},
+        mountData.syncCountTypes ?? {},
+      );
     }
   }
 
@@ -593,6 +627,11 @@ export default class DataLayer {
   // runs.
   static openBatch(target) {
     Batches.open(target);
+  }
+
+  // The carried counts the page on screen is showing, for its snapshot to keep (see restoreCounts).
+  static pageCounts() {
+    return [...LocalDatabase.countEntries($.#shownCounts), ...$.#unfiledCounts];
   }
 
   // Why the given normalized term can't be a derived field's query, or null (see QueryCheck): what it
@@ -670,6 +709,8 @@ export default class DataLayer {
   static restore() {
     const resumed = Durability.restore(Tabs.leader);
 
+    $.isStoreRestored = true;
+
     if (resumed === null) {
       return;
     }
@@ -691,6 +732,37 @@ export default class DataLayer {
     // Tabs.sends), so an action the mount ran flushed nothing, and the stream opens only after
     // this. Without it these batches would wait for the user to do something.
     Batches.flush();
+  }
+
+  // A page is back on screen from its snapshot, with the counts the snapshot saved. They are the
+  // page's until its first render, so a save before then keeps them. Filing them brings back the
+  // number of a page whose document has gone, and one this document let go of.
+  //
+  // Before this document has read its store, it can't tell whether it holds a place, so they wait
+  // unfiled. A client holding a place finished a fill, so its own count beats a number from before
+  // it, however old the snapshot is. And nothing comes back in a period the stream ended by saying
+  // somebody else signed in. A count the client has counted for itself isn't filed either (see
+  // LocalDatabase.restoreCountEntries).
+  static restoreCounts(entries) {
+    $.#shownCounts = new Set((entries ?? []).map(([key]) => key));
+    $.#unfiledCounts = [];
+
+    if (!entries) {
+      return;
+    }
+
+    if (!$.isStoreRestored) {
+      $.#unfiledCounts = entries;
+      return;
+    }
+
+    const isIdentityEnded =
+      LocalDatabase.identityEndedPeriod !== null &&
+      LocalDatabase.identityEndedPeriod === IdentityTracker.period;
+
+    if (SyncStream.syncCursor === null && !isIdentityEnded) {
+      LocalDatabase.restoreCountEntries(entries);
+    }
   }
 
   // Whether rows changed since the last render, which computed the derived fields from the rows it
@@ -737,8 +809,8 @@ export default class DataLayer {
     Batches.flush();
   }
 
-  // What the render that handed this page over counted, for as long as this client's own database
-  // cannot count for itself.
+  // What a render that handed a page over counted, for as long as this client's own database cannot
+  // count for itself.
   //
   // A count has no rows behind it, so carrying rows cannot answer one: until the fill is complete
   // for the rows it counts, counting locally would count a pot that is still filling and report a
@@ -767,20 +839,17 @@ export default class DataLayer {
 
     const key = `${module}/${name.value}/${QuerySpelling.spell(term)}`;
 
-    if ($.#countsLocally(key)) {
+    if (LocalDatabase.countsLocally(key)) {
       return null;
     }
 
-    return LocalDatabase.syncCounts[key] ?? null;
-  }
+    const carried = LocalDatabase.syncCounts[key] ?? null;
 
-  static #countsLocally(key) {
-    const types = LocalDatabase.syncCountTypes[key];
+    if (carried !== null) {
+      $.#shownCounts.add(key);
+    }
 
-    return (
-      types !== undefined &&
-      types.every((type) => LocalDatabase.isTypeSynced(type))
-    );
+    return carried;
   }
 }
 

@@ -303,6 +303,39 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Blocks until the gate `hold_sync_frames/2` armed holds a frame the given JavaScript condition on
+  `event` picks, then returns the `session`.
+  """
+  @spec await_held(Wallaby.Session.t(), String.t(), non_neg_integer) :: Wallaby.Session.t()
+  def await_held(session, condition, attempts_left \\ 100)
+
+  def await_held(_session, condition, 0) do
+    raise Wallaby.ExpectationNotMetError, "Timed out waiting for a held frame: #{condition}"
+  end
+
+  def await_held(session, condition, attempts_left) do
+    script = """
+    return globalThis.__hologramSyncGate?.parked.some(([_listener, event]) => #{condition});
+    """
+
+    if script_result(session, script) do
+      session
+    else
+      Process.sleep(50)
+      await_held(session, condition, attempts_left - 1)
+    end
+  end
+
+  @doc """
+  Blocks until the gate `hold_sync_frames/2` armed holds the marker saying the client holds
+  everything, then returns the `session`.
+  """
+  @spec await_held_all_marker(Wallaby.Session.t()) :: Wallaby.Session.t()
+  def await_held_all_marker(session) do
+    await_held(session, ~s|event.type === "synced" && JSON.parse(event.data).scope === "all"|)
+  end
+
+  @doc """
   Blocks until `count` tabs of this browser hold a tab group's leader lock (`:held`) or wait for
   it (`:pending`), then returns the `session`. Read from any tab of the browser, the one the
   session is looking at included, since locks are scoped to the origin.

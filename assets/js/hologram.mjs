@@ -1189,6 +1189,7 @@ export default class Hologram {
     Hologram.dataLayer?.ingestMountData({
       actorEntityId: $.#bootData.actorEntityId,
       actorUserId: $.#bootData.actorUserId,
+      identityPeriod: IdentityTracker.documentPeriod,
       syncCountTypes: $.#bootData.syncCountTypes,
       syncCounts: $.#bootData.syncCounts,
       syncRows: $.#bootData.syncRows,
@@ -2074,6 +2075,8 @@ export default class Hologram {
       // The snapshot was just found to be of the identity that lasts now, so the page belongs to
       // the period that lasts now, whichever document took it.
       $.#restorePageSnapshot(pageSnapshot, IdentityTracker.period);
+
+      Hologram.dataLayer?.restoreCounts(pageSnapshot.carriedCounts);
 
       $.#mountWhenReady(isPageModuleRegistered);
     };
@@ -3175,6 +3178,9 @@ export default class Hologram {
     }
 
     const pageSnapshot = {
+      // The server's numbers the page is showing, which a document loaded later has no other way
+      // to get back (see DataLayer.restoreCounts).
+      carriedCounts: Hologram.dataLayer?.pageCounts() ?? [],
       // Every chunk the tab has loaded, not only the ones this page's state needs: which of them
       // the state needs is not known here, and a chunk too many costs a restore one cached fetch.
       chunkDigests: Array.from($.#chunkDigests).filter((digest) =>

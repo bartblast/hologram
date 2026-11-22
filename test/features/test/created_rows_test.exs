@@ -9,8 +9,6 @@ defmodule HologramFeatureTests.CreatedRowsTest do
   alias HologramFeatureTests.Entities.Slip
   alias HologramFeatureTests.Policies.Page13
 
-  @all_marker ~s|event.type === "synced" && JSON.parse(event.data).scope === "all"|
-
   # The browser creates rows it shows at once, and keeps them once the server confirms their batch,
   # until the page reloads. Rows its user may not read leave it then, so its local queries don't
   # list them and its rules don't read them. A reload after the batch is confirmed isn't checked:
@@ -61,26 +59,6 @@ defmodule HologramFeatureTests.CreatedRowsTest do
     end
   end
 
-  # Waits for the sync gate to hold a frame the given JavaScript condition on `event` picks.
-  defp await_held(session, condition, attempts_left \\ 100)
-
-  defp await_held(_session, condition, 0) do
-    raise Wallaby.ExpectationNotMetError, "Timed out waiting for a held frame: #{condition}"
-  end
-
-  defp await_held(session, condition, attempts_left) do
-    script = """
-    return globalThis.__hologramSyncGate.parked.some(([_listener, event]) => #{condition});
-    """
-
-    if script_result(session, script) do
-      session
-    else
-      Process.sleep(50)
-      await_held(session, condition, attempts_left - 1)
-    end
-  end
-
   defp create_closed_locker do
     %{open: false}
     |> Locker.new()
@@ -119,7 +97,7 @@ defmodule HologramFeatureTests.CreatedRowsTest do
 
     clicked =
       filled
-      |> await_held(@all_marker)
+      |> await_held_all_marker()
       |> hold_sync_frames()
       |> hold_mutation_answers()
       |> click(button("Create slips"))
@@ -134,7 +112,7 @@ defmodule HologramFeatureTests.CreatedRowsTest do
 
     simulate_sse_disconnect(instance_id)
 
-    await_held(rearmed, @all_marker)
+    await_held_all_marker(rearmed)
   end
 
   defp visit_page(session) do
