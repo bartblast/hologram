@@ -9,7 +9,7 @@ defmodule HologramSyncBenchmark.Report do
   alias HologramSyncBenchmark.Measure
 
   @case_order ~w(board board_roles tenants access deploy deploy_tenants reconnect
-                 reconnect_tenants catchups session_memory backlog lock)
+                 reconnect_tenants catchups session_memory backlog big_set lock)
 
   @readme_path "README.md"
 

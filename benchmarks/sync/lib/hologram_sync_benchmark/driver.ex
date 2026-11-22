@@ -9,6 +9,7 @@ defmodule HologramSyncBenchmark.Driver do
 
   alias HologramSyncBenchmark.Cases.Access
   alias HologramSyncBenchmark.Cases.Backlog
+  alias HologramSyncBenchmark.Cases.BigSet
   alias HologramSyncBenchmark.Cases.Board
   alias HologramSyncBenchmark.Cases.Catchups
   alias HologramSyncBenchmark.Cases.Deploy
@@ -31,7 +32,7 @@ defmodule HologramSyncBenchmark.Driver do
   @board_page "HologramSyncBenchmark.BoardPage"
 
   @cases ~w(boot seed smoke board board_roles tenants access deploy deploy_tenants reconnect
-            reconnect_tenants catchups session_memory backlog lock)
+            reconnect_tenants catchups session_memory backlog big_set lock)
 
   # The options and their defaults: the board's size; the tenants, members per tenant and tasks
   # per tenant of the tenants case; the access case's docs and the seconds a change of access may
@@ -95,6 +96,7 @@ defmodule HologramSyncBenchmark.Driver do
     refill_limit: :integer,
     replicas: :integer,
     rows: :string,
+    set_sizes: :string,
     tasks: :integer,
     tenants: :integer,
     wave_limit: :integer,
@@ -139,6 +141,7 @@ defmodule HologramSyncBenchmark.Driver do
         |> Keyword.update(:rows, nil, &parse_counts!(&1, "--rows"))
         |> Keyword.update(:backlog_rows, nil, &parse_counts!(&1, "--backlog-rows"))
         |> Keyword.update(:catchups, nil, &parse_counts!(&1, "--catchups"))
+        |> Keyword.update(:set_sizes, nil, &parse_counts!(&1, "--set-sizes"))
         |> validate_options!()
 
       {_opts, args, invalid} ->
@@ -256,6 +259,8 @@ defmodule HologramSyncBenchmark.Driver do
   defp run_case("session_memory", opts), do: SessionMemory.run(DB.connect!(), opts)
 
   defp run_case("backlog", opts), do: Backlog.run(DB.connect!(), opts)
+
+  defp run_case("big_set", opts), do: BigSet.run(DB.connect!(), opts)
 
   # Writers rather than clients: --clients gives how many write at once.
   defp run_case("lock", opts), do: Lock.run(DB.connect!(), opts)
