@@ -179,6 +179,41 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146 do
     |> Derived.lower()
   end
 
+  def __derived_definition__(:refusal_rescued) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.refusal_rescued()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:refusal_replaced) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.refusal_replaced()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:refusal_thrown_over) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.refusal_thrown_over()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:erlang_error_caught) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.erlang_error_caught()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:formatted_error_caught) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.formatted_error_caught()
+    |> Derived.lower()
+  end
+
   def __derived_locations__ do
     %{
       closure_making_field: {"lib/my_app/member.ex", 1},
@@ -201,7 +236,12 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146 do
       repeated_param_equal: {"lib/my_app/member.ex", 18},
       map_equal_keys_literal_last: {"lib/my_app/member.ex", 19},
       map_equal_keys_variable_last: {"lib/my_app/member.ex", 20},
-      keyed_by_one: {"lib/my_app/member.ex", 21}
+      keyed_by_one: {"lib/my_app/member.ex", 21},
+      refusal_rescued: {"lib/my_app/member.ex", 22},
+      refusal_replaced: {"lib/my_app/member.ex", 23},
+      refusal_thrown_over: {"lib/my_app/member.ex", 24},
+      erlang_error_caught: {"lib/my_app/member.ex", 25},
+      formatted_error_caught: {"lib/my_app/member.ex", 26}
     }
   end
 end

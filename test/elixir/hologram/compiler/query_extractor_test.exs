@@ -559,6 +559,42 @@ defmodule Hologram.Compiler.QueryExtractorTest do
                    fn -> derived_definition(Module146, :keyed_by_one, ir_plt) end
     end
 
+    test "keeps a refusal inside a function when a helper the build runs rescues it", %{
+      ir_plt: ir_plt
+    } do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :refusal_rescued in .+ pattern-matches in its body/,
+                   fn -> derived_definition(Module146, :refusal_rescued, ir_plt) end
+    end
+
+    test "reports a refusal inside a function over the error a helper raises instead", %{
+      ir_plt: ir_plt
+    } do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :refusal_replaced in .+ pattern-matches in its body/,
+                   fn -> derived_definition(Module146, :refusal_replaced, ir_plt) end
+    end
+
+    # The first half pins that a raw Erlang error still reaches a helper's catch as it was raised,
+    # even when the error names a formatter that returns something unusable.
+    test "reports a refusal over a helper's throw, and leaves the errors it catches alone", %{
+      ir_plt: ir_plt
+    } do
+      {{:query, raw_error_query}, _read_modules} =
+        derived_definition(Module146, :erlang_error_caught, ir_plt)
+
+      assert raw_error_query.take == 1
+
+      {{:query, formatted_error_query}, _read_modules} =
+        derived_definition(Module146, :formatted_error_caught, ir_plt)
+
+      assert formatted_error_query.take == 2
+
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :refusal_thrown_over in .+ pattern-matches in its body/,
+                   fn -> derived_definition(Module146, :refusal_thrown_over, ir_plt) end
+    end
+
     test "takes the case clause a known value matches", %{ir_plt: ir_plt} do
       {definition, _read_modules} = derived_definition(Module142, :by_case, ir_plt)
 

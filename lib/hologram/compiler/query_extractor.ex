@@ -28,6 +28,10 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   @row_expression_functions [:concat, :condition, :if_value]
 
+  # The first refusal raised while a closure ran inside a call the build runs. That call is project
+  # code, which can rescue the refusal and carry on with a value the walk never decided.
+  @derived_refusal_key {__MODULE__, :derived_refusal}
+
   @doc """
   Resolves the definition of the given derived field of the given entity type by walking the
   field's clause of the type's `__derived_definition__/1` over its IR - the way a body calling a
@@ -81,6 +85,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     after
       Process.delete(@derived_reads_key)
       Process.delete(@row_expressions_key)
+      Process.delete(@derived_refusal_key)
     end
   end
 
@@ -793,6 +798,11 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
 
     value
+  rescue
+    error in Hologram.CompileError ->
+      record_refusal(error, __STACKTRACE__)
+
+      reraise error, __STACKTRACE__
   end
 
   defp interpret_call!(module, function, arg_values, state, context) do
@@ -882,16 +892,26 @@ defmodule Hologram.Compiler.QueryExtractor do
   # A call the build runs for real. Only the function it was asked to call is reported as missing:
   # one that exists and fails on a call of its own raises what it raises.
   defp known_call!(module, function, args, context) do
-    apply(module, function, args)
-  rescue
-    error in UndefinedFunctionError ->
-      if {error.module, error.function, error.arity} == {module, function, length(args)} do
+    value = apply(module, function, args)
+
+    raise_recorded_refusal!()
+
+    value
+  catch
+    kind, reason ->
+      stacktrace = __STACKTRACE__
+
+      # A refusal the call swallowed comes first, whatever the call raised, threw or exited with.
+      raise_recorded_refusal!()
+
+      if undefined_call?(kind, reason, stacktrace, {module, function, length(args)}) do
         message =
           undefined_function_message(context.subject, module, function, length(args))
 
         compile_error!(message, context)
       else
-        reraise error, __STACKTRACE__
+        # Rethrown as it came: project code up the stack can match on a raw Erlang reason.
+        :erlang.raise(kind, reason, stacktrace)
       end
   end
 
@@ -955,11 +975,30 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
+  defp raise_recorded_refusal! do
+    case Process.get(@derived_refusal_key) do
+      nil -> :ok
+      {error, stacktrace} -> reraise error, stacktrace
+    end
+  end
+
   # A project module whose function a derived field's walk follows or runs is one whose edit can
   # change the definition - Elixir's own modules never change between compiles of an app.
   defp record_derived_read(module) do
     if interpretable_module?(module) do
       Process.put(@derived_reads_key, MapSet.put(Process.get(@derived_reads_key), module))
+    end
+
+    :ok
+  end
+
+  # Only in the walk's own process, the one that clears the key when the walk ends. A record left in
+  # a process that outlives the walk would refuse a later field for this one's error.
+  defp record_refusal(error, stacktrace) do
+    walking? = Process.get(@derived_reads_key) != nil
+
+    if walking? and is_nil(Process.get(@derived_refusal_key)) do
+      Process.put(@derived_refusal_key, {error, stacktrace})
     end
 
     :ok
@@ -1080,6 +1119,24 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp relocated_stack([{module, function, arity, _location} | rest_frames], line) do
     [frame(module, function, arity, line) | rest_frames]
   end
+
+  # Only a raw :undef is normalized: normalizing any other raw error runs the formatter it names,
+  # which is project code that can raise something else in its place.
+  defp undefined_call?(:error, :undef, stacktrace, mfa) do
+    error = Exception.normalize(:error, :undef, stacktrace)
+
+    undefined_call?(:error, error, stacktrace, mfa)
+  end
+
+  defp undefined_call?(
+         :error,
+         %UndefinedFunctionError{module: module, function: function, arity: arity},
+         _stacktrace,
+         {module, function, arity}
+       ),
+       do: true
+
+  defp undefined_call?(_kind, _reason, _stacktrace, _mfa), do: false
 
   defp undefined_function_message(subject, module, function, arity) do
     "#{subject} calls undefined function #{inspect(module)}.#{function}/#{arity}"

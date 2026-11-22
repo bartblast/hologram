@@ -177,5 +177,94 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module145 do
     take(messages, ^limit)
   end
 
+  def refusal_rescued(messages) do
+    count =
+      [1, 2]
+      |> __MODULE__.rescuing(fn x ->
+        {y} = {x}
+        y
+      end)
+      |> length()
+
+    take(messages, ^count)
+  end
+
+  def refusal_replaced(messages) do
+    count =
+      [1, 2]
+      |> __MODULE__.raising_its_own(fn x ->
+        {y} = {x}
+        y
+      end)
+      |> length()
+
+    take(messages, ^count)
+  end
+
+  def refusal_thrown_over(messages) do
+    count =
+      [1, 2]
+      |> __MODULE__.throwing_its_own(fn x ->
+        {y} = {x}
+        y
+      end)
+      |> length()
+
+    take(messages, ^count)
+  end
+
+  def erlang_error_caught(messages) do
+    limit = __MODULE__.catching_badarg(["x"], fn x -> String.to_integer(x) end)
+
+    take(messages, ^limit)
+  end
+
+  def formatted_error_caught(messages) do
+    limit = __MODULE__.catching_reason([1], fn x -> __MODULE__.failing(x) end)
+
+    take(messages, ^limit)
+  end
+
+  def catching_reason(list, fun) do
+    _results = Enum.map(list, fun)
+
+    3
+  catch
+    :error, :my_reason -> 2
+    :error, _other -> 6
+  end
+
+  def failing(value),
+    do: :erlang.error(:my_reason, [value], error_info: %{function: :format_error})
+
+  def format_error(_reason, _stacktrace), do: "not a map"
+
+  def catching_badarg(list, fun) do
+    _results = Enum.map(list, fun)
+
+    3
+  catch
+    :error, :badarg -> 1
+    :error, _other -> 2
+  end
+
+  def throwing_its_own(list, fun) do
+    Enum.map(list, fun)
+  rescue
+    _error -> throw(:helper_throw)
+  end
+
+  def raising_its_own(list, fun) do
+    Enum.map(list, fun)
+  rescue
+    _error -> reraise ArgumentError, "the helper's own error", []
+  end
+
+  def rescuing(list, fun) do
+    Enum.map(list, fun)
+  rescue
+    _error -> []
+  end
+
   defp holding(value), do: fn _x -> value end
 end
