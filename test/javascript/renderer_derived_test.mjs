@@ -1802,6 +1802,12 @@ describe("Renderer derived fields", () => {
       );
     });
 
+    // Not covered by LocalDatabase.reset(), which leaves the acting user alone on purpose, so it
+    // would otherwise reach every suite that runs after this file.
+    afterEach(() => {
+      LocalDatabase.actorUserId = null;
+    });
+
     it("hands a from_context prop the session user's row as the database holds it", () => {
       renderUserPage();
 

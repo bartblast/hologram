@@ -64,6 +64,25 @@ defmodule Hologram.Test.SyncClientTest do
       assert params[:policy_hash] == "0123456789abcdef"
     end
 
+    test "names the entity types a bundle reads rows of, joined as the browser joins them" do
+      params =
+        greeting_params(page: "MyApp.BoardPage", synced_types: ["MyApp.Card", "MyApp.List"])
+
+      assert params[:synced_types] == "MyApp.Card,MyApp.List"
+    end
+
+    test "spells entity types given as modules the way the browser does" do
+      params = greeting_params(page: "MyApp.BoardPage", synced_types: [MyApp.Card, "MyApp.List"])
+
+      assert params[:synced_types] == "MyApp.Card,MyApp.List"
+    end
+
+    test "names no entity types unless told to" do
+      params = greeting_params(page: "MyApp.BoardPage")
+
+      refute Keyword.has_key?(params, :synced_types)
+    end
+
     test "names no place on a first visit" do
       params = greeting_params(page: "MyApp.BoardPage")
 
