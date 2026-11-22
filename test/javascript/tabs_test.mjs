@@ -19,6 +19,7 @@ import Replica from "../../assets/js/replica.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
+import Type from "../../assets/js/type.mjs";
 
 // Without this the file passes only when something else in the run has installed sessionStorage
 // first: a browser that cannot coordinate its tabs is told so through Logger, which writes there.
@@ -3653,6 +3654,37 @@ describe("Tabs", () => {
       Tabs.post({kind: "joined"});
 
       assert.deepStrictEqual(await hasReceived, {kind: "joined"});
+    });
+
+    it("carries a queued write's big integer to another tab as a BigInt", async () => {
+      const group = nextGroup();
+
+      await Tabs.join(group, stubs());
+
+      let received;
+
+      const hasReceived = new Promise((resolve) => {
+        received = resolve;
+      });
+
+      sibling(group).onmessage = (event) => received(event.data);
+
+      Tabs.post({
+        kind: "sealed",
+        record: {
+          writes: [
+            {
+              deltas: {
+                n: Model.unbox(Type.integer(9007199254740993n), "integer"),
+              },
+            },
+          ],
+        },
+      });
+
+      const message = await hasReceived;
+
+      assert.strictEqual(message.record.writes[0].deltas.n, 9007199254740993n);
     });
 
     it("says nothing outside a group", () => {

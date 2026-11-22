@@ -51,6 +51,9 @@ defmodule Hologram.DB.Codec do
   # The last day a Postgres date column holds.
   @last_column_date Date.new!(5_874_897, 12, 31)
 
+  # The largest integer a JavaScript number holds exactly.
+  @max_safe_integer 9_007_199_254_740_991
+
   @doc """
   Translates a value from its JSON form into the Elixir term held by entity structs, per attribute type - the inverse of encode_json/2, and the way a value written elsewhere is read back.
   Returns {:ok, value}, or :error for a value that is not the given type's JSON form.
@@ -115,6 +118,34 @@ defmodule Hologram.DB.Codec do
   def decode_json(value, :uuid) when is_binary(value), do: {:ok, value}
 
   def decode_json(_value, _type), do: :error
+
+  @doc """
+  Translates a value a browser sent into the Elixir term held by entity structs, per attribute type.
+  Returns {:ok, value}, or :error for a value that is not the given type's form on the wire.
+
+  A JavaScript number holds an integer exactly only within 2^53 - 1 either way, so an :integer past that travels as its decimal text, in the one spelling Integer.to_string/1 writes. A JSON number past it is refused, since a browser can't have sent it exactly, and so is text spelling an integer a number would have carried. Every other value reads as decode_json/2 reads it.
+  """
+  @spec decode_wire(any, atom) :: {:ok, any} | :error
+  def decode_wire(value, type)
+
+  def decode_wire(value, :integer) when is_integer(value) do
+    if abs(value) <= @max_safe_integer, do: {:ok, value}, else: :error
+  end
+
+  # No integer a column holds takes more bytes than this, so longer text isn't worth parsing.
+  def decode_wire(value, :integer) when is_binary(value) and byte_size(value) <= 20 do
+    case Integer.parse(value) do
+      {integer, ""} when abs(integer) > @max_safe_integer ->
+        if Integer.to_string(integer) == value, do: {:ok, integer}, else: :error
+
+      _other ->
+        :error
+    end
+  end
+
+  def decode_wire(value, :integer) when is_binary(value), do: :error
+
+  def decode_wire(value, type), do: decode_json(value, type)
 
   @doc """
   Translates an Elixir term held by entity structs into the value the Postgres driver exchanges, per attribute type.
@@ -204,6 +235,20 @@ defmodule Hologram.DB.Codec do
   end
 
   def encode_json(value, :uuid), do: value
+
+  @doc """
+  Translates an Elixir term held by entity structs into the JSON form a browser reads it from, per attribute type.
+
+  A JavaScript number holds an integer exactly only within 2^53 - 1 either way, so an :integer past that travels as its decimal text. Every other value is spelled as encode_json/2 spells it. The oplog stays on encode_json/2, since it matches stored values as JSON numbers.
+  """
+  @spec encode_wire(any, atom) :: boolean | map | number | String.t() | nil
+  def encode_wire(value, type)
+
+  def encode_wire(value, :integer) when is_integer(value) and abs(value) > @max_safe_integer do
+    Integer.to_string(value)
+  end
+
+  def encode_wire(value, type), do: encode_json(value, type)
 
   @doc """
   Translates an atom into its Postgres enum label - a module without its "Elixir." prefix, a plain atom as it is spelled.

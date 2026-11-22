@@ -136,6 +136,19 @@ describe("Utils", () => {
     assert.deepStrictEqual(clone, {a: 10, b: {c: 30, d: 4}});
   });
 
+  describe("stringify()", () => {
+    it("writes a BigInt as its digits", () => {
+      assert.equal(
+        Utils.stringify({a: [9007199254740993n], b: 1}),
+        '{"a":["9007199254740993"],"b":1}',
+      );
+    });
+
+    it("answers undefined for what JSON can't write", () => {
+      assert.isUndefined(Utils.stringify(undefined));
+    });
+  });
+
   // IMPORTANT!
   // Each test in this describe block has a related Elixir test in test/elixir/hologram/entity_test.exs (describe "generate_id/0")
   // Always update both together.

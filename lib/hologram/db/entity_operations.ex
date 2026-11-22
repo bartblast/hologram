@@ -320,9 +320,9 @@ defmodule Hologram.DB.EntityOperations do
     validate_changes!(entity_type, sorted_changes, sorted_deltas, columns_by_field)
 
     # Values are judged before the statement is built - nothing is written for changes the
-    # declarations already refuse.
+    # declarations already refuse, or for an amount the statement couldn't be handed.
     result =
-      case Entity.validate(entity_type, changes_map) do
+      case validate_update(entity_type, changes_map, deltas_map) do
         :ok ->
           change_entries =
             Enum.map(sorted_changes, fn {name, value} ->
@@ -1318,6 +1318,18 @@ defmodule Hologram.DB.EntityOperations do
           "cannot update #{inspect(RoleGrant)} - a role grant is never changed in place, revoke the role and grant the new one instead"
   end
 
+  # The driver raises on an amount its int8 parameter can't hold, before the statement runs, so
+  # one is refused here, in the words a move past what the column holds is refused in.
+  defp validate_amounts(deltas) do
+    violations =
+      for {name, amount} <- deltas,
+          not Validator.attribute_value_valid?(amount, :integer),
+          into: %{},
+          do: {name, [{:type, :integer}]}
+
+    if violations == %{}, do: :ok, else: {:error, violations}
+  end
+
   defp validate_changes!(entity_type, sorted_changes, sorted_deltas, columns_by_field) do
     if sorted_changes == [] and sorted_deltas == [] do
       raise MisuseError,
@@ -1401,6 +1413,17 @@ defmodule Hologram.DB.EntityOperations do
     if derived_name do
       raise MisuseError,
             "invalid #{kind} for #{inspect(entity_type)} - #{Derived.read_only_message(entity_type, derived_name)}"
+    end
+  end
+
+  # Both are asked whatever the other answers, because the questions asked after a refusal read
+  # the violations to tell which values can still be bound, and an amount the driver can't hold
+  # is one that can't. A field is never both changed and moved, so the two answers can't collide.
+  defp validate_update(entity_type, changes, deltas) do
+    case {Entity.validate(entity_type, changes), validate_amounts(deltas)} do
+      {:ok, amounts} -> amounts
+      {values, :ok} -> values
+      {{:error, values}, {:error, amounts}} -> {:error, Map.merge(values, amounts)}
     end
   end
 

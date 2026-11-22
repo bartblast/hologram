@@ -495,6 +495,27 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Polls the server until the one todo holds the given number of votes, and returns it.
+
+  While a batch's answer is held, nothing on the client says whether the server has applied it.
+  Knowing that it has is the starting point for making a later write whose arrival proves the
+  earlier one's frame has already been applied.
+  """
+  @spec await_server_votes(integer) :: struct | nil
+  def await_server_votes(expected_votes) do
+    Enum.reduce_while(1..100, nil, fn _attempt, _acc ->
+      case DB.read(Todo) do
+        [%Todo{votes: ^expected_votes} = todo] ->
+          {:halt, todo}
+
+        _not_yet ->
+          Process.sleep(50)
+          {:cont, nil}
+      end
+    end)
+  end
+
+  @doc """
   Blocks until a read of the whole local store, by any tab, is waiting behind what
   `block_store/1` holds, then returns the `session`. Run in the tab the block was armed in.
 

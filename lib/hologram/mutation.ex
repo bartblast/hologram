@@ -491,7 +491,7 @@ defmodule Hologram.Mutation do
     types = field_types(write.entity_type)
 
     Map.new(names, fn name ->
-      {Atom.to_string(name), Codec.encode_json(Map.get(write.data, name), types[name])}
+      {Atom.to_string(name), Codec.encode_wire(Map.get(write.data, name), types[name])}
     end)
   end
 

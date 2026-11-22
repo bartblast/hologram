@@ -2435,6 +2435,85 @@ defmodule Hologram.CompilerTest do
                ~s/globalThis.Hologram.sync = {expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
     end
 
+    defmodule BigFloatLiteral do
+      use Hologram.Entity
+
+      derived :cap, :float, fn -> 28_097_012_775_158_772_737 end
+    end
+
+    defmodule BigIntegerBoard do
+      use Hologram.Entity
+
+      attribute :n, :integer, in: 0..9_007_199_254_740_993
+
+      relationship :cards, [Hologram.CompilerTest.BigIntegerCard], inverse: board
+
+      derived :cap, :integer, fn -> 9_007_199_254_740_993 end
+
+      derived :many_cards, [Hologram.CompilerTest.BigIntegerCard], fn cards ->
+        take(cards, 9_007_199_254_740_993)
+      end
+
+      derived :over, :boolean, fn n -> n > 9_007_199_254_740_993 end
+
+      allow :read, when: n == 9_007_199_254_740_993
+    end
+
+    defmodule BigIntegerCard do
+      use Hologram.Entity
+
+      relationship :board, BigIntegerBoard, optional: true
+
+      allow :read
+    end
+
+    test "marks a big integer literal wherever a rule or a derived field holds one" do
+      put_derived_definitions([BigIntegerBoard])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BigIntegerBoard, BigIntegerCard])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"cap":{"definition":{"value":{"$integer":"9007199254740993"}}/
+             )
+
+      assert String.contains?(js, ~s/["n",">",{"$integer":"9007199254740993"}]/)
+      assert String.contains?(js, ~s/"take":{"$integer":"9007199254740993"}/)
+      assert String.contains?(js, ~s/["n","==",{"$integer":"9007199254740993"}]/)
+    end
+
+    test "spells a big integer bound of an in constraint as text" do
+      put_derived_definitions([BigIntegerBoard])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BigIntegerBoard, BigIntegerCard])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"n":{"in":{"first":0,"last":"9007199254740993","step":1}/)
+    end
+
+    # JavaScript and Erlang round this integer to different floats, so the build hands over the
+    # float the server compares with rather than the digits.
+    test "renders an integer a float derived field holds as the server's float" do
+      put_derived_definitions([BigFloatLiteral])
+
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([BigFloatLiteral])}
+
+      float_js = Jason.encode!(28_097_012_775_158_772_737 * 1.0)
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"cap":{"definition":{"value":#{float_js}},/)
+    end
+
     # A client computes a derived field itself, from the definition the build resolved - spelled in
     # the shapes its query kernel reads, values as the wire spells them.
     test "renders a derived field holding a value with its declared type and its definition" do
