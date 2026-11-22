@@ -2137,7 +2137,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module4,
         [a: "2026-01-01"],
-        ~s("2026-01-01" is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :date, which takes a Date from -4713-11-24 to 5874897-12-31)
+        ~s("2026-01-01" is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :date, which takes an ISO Date from -4713-11-24 to 5874897-12-31)
       )
     end
 
@@ -2153,7 +2153,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module22,
         [opens_at: "09:00"],
-        ~s("09:00" is not a value of attribute :opens_at in Hologram.Test.Fixtures.Entity.Module22 - the attribute has type :time, which takes a Time)
+        ~s("09:00" is not a value of attribute :opens_at in Hologram.Test.Fixtures.Entity.Module22 - the attribute has type :time, which takes an ISO Time)
       )
     end
 
@@ -2211,7 +2211,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module23,
         [{[:a, :opens_at], "09:00"}],
-        ~s("09:00" is not a value of attribute a.opens_at in Hologram.Test.Fixtures.Entity.Module23 - the attribute has type :time, which takes a Time)
+        ~s("09:00" is not a value of attribute a.opens_at in Hologram.Test.Fixtures.Entity.Module23 - the attribute has type :time, which takes an ISO Time)
       )
     end
 
@@ -2387,7 +2387,7 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on a filter date no date column holds" do
       expected_msg =
-        "~D[-5000-01-01] is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :date, which takes a Date from -4713-11-24 to 5874897-12-31"
+        "~D[-5000-01-01] is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :date, which takes an ISO Date from -4713-11-24 to 5874897-12-31"
 
       assert_error MisuseError, expected_msg, fn ->
         filter(Module4, a: ~D[-5000-01-01])

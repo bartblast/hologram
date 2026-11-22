@@ -30,12 +30,12 @@ defmodule Hologram.Query.Stage do
   # whose refusal names its declared values.
   @type_values %{
     boolean: "true or false",
-    date: "a Date from -4713-11-24 to 5874897-12-31",
+    date: "an ISO Date from -4713-11-24 to 5874897-12-31",
     datetime: "a DateTime from -4713-11-24T00:00:00Z to 9999-12-31T23:59:59.999999Z",
     float: "a float, or an integer that fits in 64 bits",
     integer: "an integer that fits in 64 bits",
     string: "a UTF-8 string with no NUL byte",
-    time: "a Time",
+    time: "an ISO Time",
     uuid: ~s(a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
   }
 

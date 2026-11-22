@@ -202,6 +202,10 @@ defmodule Hologram.Entity.ValidatorTest do
              )
     end
 
+    test "refuses a :time in a calendar the driver can't encode" do
+      refute attribute_value_valid?(%{~T[01:00:00] | calendar: AnyDayCalendar}, :time)
+    end
+
     test "refuses a :time whose fields are not integers" do
       refute attribute_value_valid?(
                %Time{hour: 11.5, minute: 0, second: 0, microsecond: {0, 0}},

@@ -172,7 +172,7 @@ defmodule Hologram.Entity.Validator do
   # Asked of the struct's own calendar, and guarded, for the reasons the :date clause gives.
   # valid_time?/4
   # judges the microsecond PRECISION beside the amount, so {0, 7} is refused as firmly as
-  # {1_000_000, 6}.
+  # {1_000_000, 6}. Only ISO, since the driver encodes no other calendar's Time.
   def attribute_value_valid?(
         %Time{
           calendar: calendar,
@@ -186,7 +186,7 @@ defmodule Hologram.Entity.Validator do
       )
       when is_integer(hour) and is_integer(minute) and is_integer(second) and
              is_integer(microsecond_amount) and is_integer(microsecond_precision) do
-    calendar.valid_time?(hour, minute, second, microsecond)
+    calendar == Calendar.ISO and calendar.valid_time?(hour, minute, second, microsecond)
   end
 
   def attribute_value_valid?(_value, :time, _opts), do: false
