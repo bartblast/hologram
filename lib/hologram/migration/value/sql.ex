@@ -76,6 +76,38 @@ defmodule Hologram.Migration.Value.SQL do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(column.sql_type)}"
   end
 
+  defp hop(name, scope) do
+    entry = Map.fetch!(scope.mapping, scope.entity)
+    reference = Enum.find(entry.columns, &(&1.source == {:relationship, name}))
+    target_entity = related_entity!(scope.mapping, reference.references)
+
+    {reference, %{scope | depth: scope.depth + 1, entity: target_entity}}
+  end
+
+  defp hop_subquery(inner_sql, reference, inner_scope, scope) do
+    target_table = scope.mapping[inner_scope.entity].table
+
+    "(SELECT #{inner_sql} FROM #{qualified_table(target_table)} AS #{row_alias(inner_scope)} " <>
+      "WHERE #{row_alias(inner_scope)}.\"id\" = #{column_sql(scope, reference)})"
+  end
+
+  # The id of the row a set hangs off, and the entity type it's of, read through the given to-one
+  # hops. The last hop's reference is that id, so it needs no read of the row it points at.
+  defp owner_id([], scope), do: {"#{row_alias(scope)}.\"id\"", scope.entity}
+
+  defp owner_id([hop], scope) do
+    {reference, inner_scope} = hop(hop, scope)
+
+    {column_sql(scope, reference), inner_scope.entity}
+  end
+
+  defp owner_id([hop | rest], scope) do
+    {reference, inner_scope} = hop(hop, scope)
+    {inner_sql, owner} = owner_id(rest, inner_scope)
+
+    {hop_subquery(inner_sql, reference, inner_scope, scope), owner}
+  end
+
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"
   end
@@ -88,11 +120,33 @@ defmodule Hologram.Migration.Value.SQL do
 
   defp row_alias(%{depth: depth}), do: Mapper.quote_identifier("$r#{depth}")
 
+  defp set_source(path, scope) do
+    {hops, [set_name]} = Enum.split(path, -1)
+    {owner_id_sql, owner} = owner_id(hops, scope)
+
+    join_table =
+      scope.mapping
+      |> Map.fetch!(owner)
+      |> Map.fetch!(:join_tables)
+      |> Enum.find(&(&1.relationship == set_name))
+
+    {owner_id_sql, join_table}
+  end
+
   defp slot(value, type, scope, reversed_params) do
     encoded = Codec.encode(value, encode_type(type))
     number = length(reversed_params) + 1
 
     {"$#{number}::#{sql_type(type, scope.mapping)}", [encoded | reversed_params]}
+  end
+
+  # A string orders by its sort key and then itself, the pair the query compiler orders by. Any
+  # other value orders by itself, an enum in its type's declared order.
+  defp sort_key_sql(entry, attribute, scope) do
+    case Enum.find(entry.columns, &(&1.source == {:sort_key, attribute})) do
+      nil -> nil
+      sort_key -> column_sql(scope, sort_key)
+    end
   end
 
   defp sql_type({:enum, owner, name, _values}, mapping), do: enum_sql_type(mapping, owner, name)
@@ -114,20 +168,11 @@ defmodule Hologram.Migration.Value.SQL do
   # One scalar subquery per hop, each with an alias of its own, so a self-relationship reads
   # another row rather than itself. A nil reference finds no row, which reads as NULL.
   defp term_sql({:name, [hop | rest], type}, scope, reversed_params) do
-    entry = Map.fetch!(scope.mapping, scope.entity)
-    reference = Enum.find(entry.columns, &(&1.source == {:relationship, hop}))
-    target_entity = related_entity!(scope.mapping, reference.references)
-    inner_scope = %{scope | depth: scope.depth + 1, entity: target_entity}
+    {reference, inner_scope} = hop(hop, scope)
 
     {inner_sql, new_params} = term_sql({:name, rest, type}, inner_scope, reversed_params)
 
-    target_table = scope.mapping[target_entity].table
-
-    sql =
-      "(SELECT #{inner_sql} FROM #{qualified_table(target_table)} AS #{row_alias(inner_scope)} " <>
-        "WHERE #{row_alias(inner_scope)}.\"id\" = #{column_sql(scope, reference)})"
-
-    {sql, new_params}
+    {hop_subquery(inner_sql, reference, inner_scope, scope), new_params}
   end
 
   defp term_sql({:concat, operands}, scope, reversed_params) do
@@ -151,6 +196,43 @@ defmodule Hologram.Migration.Value.SQL do
     {value_sqls, new_params} = terms_sql(values, scope, reversed_params)
 
     {WordSQL.coalesce(value_sqls), new_params}
+  end
+
+  defp term_sql({:count, {:relationship, path}}, scope, reversed_params) do
+    {owner_id_sql, join_table} = set_source(path, scope)
+    join_alias = Mapper.quote_identifier("$j#{scope.depth + 1}")
+
+    source =
+      "FROM #{qualified_table(join_table.name)} AS #{join_alias} " <>
+        "WHERE #{join_alias}.\"source_id\" = #{owner_id_sql}"
+
+    {WordSQL.count(source), reversed_params}
+  end
+
+  defp term_sql(
+         {:most_common, {:relationship, path}, attribute, _type, _ranks},
+         scope,
+         reversed_params
+       ) do
+    {owner_id_sql, join_table} = set_source(path, scope)
+    target_entity = related_entity!(scope.mapping, join_table.target_table)
+    target_entry = Map.fetch!(scope.mapping, target_entity)
+    join_alias = Mapper.quote_identifier("$j#{scope.depth + 1}")
+    row_scope = %{scope | depth: scope.depth + 1, entity: target_entity}
+    value_sql = column_sql(row_scope, QueryCompiler.name_column(target_entry, attribute))
+
+    row = row_alias(row_scope)
+
+    source =
+      ~s|FROM #{qualified_table(target_entry.table)} AS #{row} | <>
+        ~s|JOIN #{qualified_table(join_table.name)} AS #{join_alias} | <>
+        ~s|ON #{join_alias}."target_id" = #{row}."id" | <>
+        ~s|WHERE #{join_alias}."source_id" = #{owner_id_sql}|
+
+    sql =
+      WordSQL.most_common(value_sql, sort_key_sql(target_entry, attribute, row_scope), source)
+
+    {sql, reversed_params}
   end
 
   defp terms_sql(terms, scope, reversed_params) do

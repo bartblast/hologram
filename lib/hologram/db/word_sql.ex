@@ -31,4 +31,26 @@ defmodule Hologram.DB.WordSQL do
   """
   @spec concat(list(String.t())) :: String.t()
   def concat(operands), do: "(#{Enum.join(operands, " || ")})"
+
+  @doc """
+  Returns the SQL counting the rows of the given source, a `FROM` clause through its `WHERE`.
+  """
+  @spec count(String.t()) :: String.t()
+  def count(source), do: "(SELECT COUNT(*) #{source})"
+
+  @doc """
+  Returns the SQL of the value appearing most often among the given source's rows, a `FROM` clause
+  through its `WHERE`, skipping NULL and NULL when none is left. A tie goes to the smallest value,
+  by the given sort key column and then the value, or by the value alone given nil.
+
+  Rows group by the value alone: an upgrade can change the key computed for a value, so rows
+  written on either side of it hold one value under two keys, and they still count as one.
+  """
+  @spec most_common(String.t(), String.t() | nil, String.t()) :: String.t()
+  def most_common(value, sort_key, source) do
+    order = if sort_key, do: "MIN(#{sort_key}), #{value}", else: value
+
+    "(SELECT #{value} #{source} AND #{value} IS NOT NULL " <>
+      "GROUP BY #{value} ORDER BY COUNT(*) DESC, #{order} LIMIT 1)"
+  end
 end

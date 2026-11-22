@@ -16,7 +16,17 @@ defmodule Hologram.Migration.Value.SQLTest do
           {:state, :enum, [values: [:draft, :live]]},
           {:title, :string, []}
         ],
-        relationships: [{:owner, MyApp.User, []}, {:parent, MyApp.Trip, [optional: true]}],
+        relationships: [
+          {:owner, MyApp.User, []},
+          {:parent, MyApp.Trip, [optional: true]},
+          {:tags, [MyApp.Tag], []}
+        ],
+        roles: [],
+        uniques: []
+      },
+      MyApp.Tag => %{
+        attributes: [{:label, :string, []}, {:rank, :integer, []}],
+        relationships: [],
         roles: [],
         uniques: []
       },
@@ -136,6 +146,45 @@ defmodule Hologram.Migration.Value.SQLTest do
       assert rendered(term, :string) ==
                {~s|(CASE WHEN "$r0"."title" = '' THEN NULL::text | <>
                   ~s|ELSE (string_to_array("$r0"."title", $1::text))[2] END)|, [", "]}
+    end
+
+    test "counts a stored to-many through its join table" do
+      assert rendered({:count, {:relationship, [:tags]}}, :integer) ==
+               {~s|(SELECT COUNT(*) FROM "hologram_data"."my_app_trip_tags_$join" AS "$j1" | <>
+                  ~s|WHERE "$j1"."source_id" = "$r0"."id")|, []}
+    end
+
+    test "counts a to-many through a to-one by its reference" do
+      {sql, []} = rendered({:count, {:relationship, [:parent, :tags]}}, :integer)
+
+      assert sql =~ ~s("$j1"."source_id" = "$r0"."parent_id")
+    end
+
+    test "reads a to-many two hops away through a subquery" do
+      {sql, []} = rendered({:count, {:relationship, [:parent, :parent, :tags]}}, :integer)
+
+      assert sql =~ ~s|"$j1"."source_id" = (SELECT "$r1"."parent_id" |
+    end
+
+    test "orders the most common string by its sort key and then itself" do
+      term = {:most_common, {:relationship, [:tags]}, :label, :string, nil}
+
+      assert rendered(term, :string) ==
+               {~s|(SELECT "$r1"."label" FROM "hologram_data"."my_app_tag" AS "$r1" | <>
+                  ~s|JOIN "hologram_data"."my_app_trip_tags_$join" AS "$j1" | <>
+                  ~s|ON "$j1"."target_id" = "$r1"."id" WHERE "$j1"."source_id" = "$r0"."id" | <>
+                  ~s|AND "$r1"."label" IS NOT NULL | <>
+                  ~s|GROUP BY "$r1"."label" | <>
+                  ~s|ORDER BY COUNT(*) DESC, MIN("$r1"."label_$sort"), "$r1"."label" LIMIT 1)|,
+                []}
+    end
+
+    test "orders any other most common value by itself" do
+      term = {:most_common, {:relationship, [:tags]}, :rank, :integer, nil}
+
+      {sql, []} = rendered(term, :integer)
+
+      assert sql =~ ~s|GROUP BY "$r1"."rank" ORDER BY COUNT(*) DESC, "$r1"."rank" LIMIT 1|
     end
 
     test "casts an enum of another attribute to the target's type" do
