@@ -33,6 +33,13 @@ defmodule Hologram.Job.RunnerTest do
     free?
   end
 
+  # The wait is timed from when the outcome was written, which is after the operation began and
+  # before it returned, so the bounds are the operation's window plus the wait's own range.
+  defp assert_scheduled_between(scheduled_at, before, after_op, min_ms, max_ms) do
+    assert DateTime.compare(scheduled_at, DateTime.add(before, min_ms, :millisecond)) != :lt
+    assert DateTime.compare(scheduled_at, DateTime.add(after_op, max_ms, :millisecond)) != :gt
+  end
+
   defp create_user(email) do
     %{email: email}
     |> Module14.new()
@@ -291,12 +298,13 @@ defmodule Hologram.Job.RunnerTest do
 
       assert process(Module3, job.id, run_lock) == :failed
 
+      after_run = DateTime.utc_now()
       row = EntityOperations.get(Module3, job.id)
 
       assert row.status == :queued
       assert row.attempt == 1
       assert row.error =~ "** (RuntimeError) boom"
-      assert DateTime.diff(row.scheduled_at, before_run, :second) in 26..35
+      assert_scheduled_between(row.scheduled_at, before_run, after_run, 27_000, 33_000)
       assert lock_free?(job)
     end
 
@@ -308,10 +316,11 @@ defmodule Hologram.Job.RunnerTest do
 
       assert process(Module3, job.id, run_lock) == :failed
 
+      after_run = DateTime.utc_now()
       row = EntityOperations.get(Module3, job.id)
 
       assert row.attempt == 3
-      assert DateTime.diff(row.scheduled_at, before_run, :second) in 431..530
+      assert_scheduled_between(row.scheduled_at, before_run, after_run, 432_000, 528_000)
     end
 
     test "doesn't run a job again before its wait is over", %{run_lock: run_lock} do
@@ -639,18 +648,18 @@ defmodule Hologram.Job.RunnerTest do
 
     test "puts a job cut short with attempts left back to wait" do
       job = fresh_job(:ok)
-      before_sweep = DateTime.utc_now()
-
       :ok = EntityOperations.update(Module3, job.id, %{attempt: 1, status: :running})
 
+      before_sweep = DateTime.utc_now()
       assert sweep([Module3], MapSet.new()) == :ok
+      after_sweep = DateTime.utc_now()
 
       row = EntityOperations.get(Module3, job.id)
 
       assert row.status == :queued
       assert row.attempt == 1
       assert row.error =~ "the run was cut short before its outcome was recorded"
-      assert DateTime.diff(row.scheduled_at, before_sweep, :second) in 26..35
+      assert_scheduled_between(row.scheduled_at, before_sweep, after_sweep, 27_000, 33_000)
     end
 
     test "fails a running job whose run lock nobody holds" do
