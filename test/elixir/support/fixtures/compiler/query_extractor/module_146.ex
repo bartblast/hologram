@@ -158,6 +158,20 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146 do
     |> Derived.lower()
   end
 
+  def __derived_definition__(:map_equal_keys_literal_last) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.map_equal_keys_literal_last()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:map_equal_keys_variable_last) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.map_equal_keys_variable_last()
+    |> Derived.lower()
+  end
+
   def __derived_locations__ do
     %{
       closure_making_field: {"lib/my_app/member.ex", 1},
@@ -177,7 +191,9 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146 do
       guard_held: {"lib/my_app/member.ex", 15},
       guard_on_outer_value_held: {"lib/my_app/member.ex", 16},
       literal_param_matched: {"lib/my_app/member.ex", 17},
-      repeated_param_equal: {"lib/my_app/member.ex", 18}
+      repeated_param_equal: {"lib/my_app/member.ex", 18},
+      map_equal_keys_literal_last: {"lib/my_app/member.ex", 19},
+      map_equal_keys_variable_last: {"lib/my_app/member.ex", 20}
     }
   end
 end

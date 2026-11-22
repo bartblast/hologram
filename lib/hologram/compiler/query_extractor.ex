@@ -478,15 +478,14 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp evaluate!(%IR.MapType{data: data}, state, context) do
-    {pairs, new_state} =
-      Enum.reduce(data, {[], state}, fn {key_ir, value_ir}, {acc_pairs, acc_state} ->
-        {key, state_after_key} = evaluate!(key_ir, acc_state, context)
-        {value, state_after_value} = evaluate!(value_ir, state_after_key, context)
+    # Put in source order, so that of two keys that turn out equal the later one's value stays, as
+    # in Elixir.
+    Enum.reduce(data, {%{}, state}, fn {key_ir, value_ir}, {acc_map, acc_state} ->
+      {key, state_after_key} = evaluate!(key_ir, acc_state, context)
+      {value, state_after_value} = evaluate!(value_ir, state_after_key, context)
 
-        {[{key, value} | acc_pairs], state_after_value}
-      end)
-
-    {Map.new(pairs), new_state}
+      {Map.put(acc_map, key, value), state_after_value}
+    end)
   end
 
   defp evaluate!(

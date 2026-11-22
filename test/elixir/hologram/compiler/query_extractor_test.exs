@@ -534,6 +534,24 @@ defmodule Hologram.Compiler.QueryExtractorTest do
                    fn -> derived_definition(Module146, :repeated_param, ir_plt) end
     end
 
+    test "keeps the last value of equal map keys when the literal key is last", %{
+      ir_plt: ir_plt
+    } do
+      {{:query, query}, _read_modules} =
+        derived_definition(Module146, :map_equal_keys_literal_last, ir_plt)
+
+      assert query.take == 3
+    end
+
+    test "keeps the last value of equal map keys when the variable key is last", %{
+      ir_plt: ir_plt
+    } do
+      {{:query, query}, _read_modules} =
+        derived_definition(Module146, :map_equal_keys_variable_last, ir_plt)
+
+      assert query.take == 3
+    end
+
     test "takes the case clause a known value matches", %{ir_plt: ir_plt} do
       {definition, _read_modules} = derived_definition(Module142, :by_case, ir_plt)
 

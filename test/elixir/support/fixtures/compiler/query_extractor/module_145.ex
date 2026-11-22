@@ -139,6 +139,20 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module145 do
     take(messages, ^opts.limit)
   end
 
+  def map_equal_keys_literal_last(messages) do
+    key = wrap_term(:limit)
+    opts = %{key => 1, limit: 3}
+
+    take(messages, ^opts.limit)
+  end
+
+  def map_equal_keys_variable_last(messages) do
+    key = wrap_term(:limit)
+    opts = %{:limit => 1, key => 3}
+
+    take(messages, ^opts.limit)
+  end
+
   def repeated_param(messages) do
     limit =
       [1]
