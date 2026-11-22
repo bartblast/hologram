@@ -5,6 +5,7 @@ defmodule HologramFeatureTests.MultiTabTest do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias HologramFeatureTests.ActionWritesPage
   alias HologramFeatureTests.Entities.Todo
   alias HologramFeatureTests.WriteQueuePage
 
@@ -48,6 +49,33 @@ defmodule HologramFeatureTests.MultiTabTest do
       Process.sleep(50)
       await_leader(session, attempts_left - 1)
     end
+  end
+
+  # How long a page bundle the browser has not fetched yet is held, which is how long a tab opened
+  # on such a page is starting up: joined, with the store read, and not mounted.
+  @bundle_hold_ms 6_000
+
+  # A starting tab that leads its group, behind the one the test is on - which goes to a blank page
+  # first, where the slow bundle is armed, and so leaves the group to the starting tab. Answers the
+  # starting tab's handle and when it was opened.
+  defp open_starting_leader(session) do
+    session =
+      session
+      |> simulate_slow_page_bundle(@bundle_hold_ms)
+      |> await_leader_locks(:held, 0)
+
+    opened_at = System.monotonic_time(:millisecond)
+    handle = open_tab_behind(session, ActionWritesPage)
+
+    await_leader_locks(session, :held, 1)
+
+    {handle, opened_at}
+  end
+
+  # What a test proves happened while a tab was starting, it proves only if the tab was: mounted
+  # already, the tab behaves as it should with or without the fix.
+  defp assert_still_starting(opened_at) do
+    assert System.monotonic_time(:millisecond) - opened_at < @bundle_hold_ms
   end
 
   defp replica_id(session) do
@@ -342,5 +370,108 @@ defmodule HologramFeatureTests.MultiTabTest do
     starting
     |> assert_text(css("#todos"), "beta 0")
     |> assert_text(css("#todos"), "alpha 0")
+  end
+
+  # A tab that leads says what it holds only once it holds it. Before its mount it holds its page's
+  # identity, not the one the browser stored - and a tab that joined meanwhile would take that one
+  # from it and number its writes under an identity nothing in the store knows.
+  feature "keeps the stored identity while the leading tab is still starting", %{session: session} do
+    stored =
+      session
+      |> visit(WriteQueuePage)
+      |> await_durable_writes()
+      |> replica_id()
+
+    {_handle, opened_at} = open_starting_leader(session)
+
+    following = open_tab(session, WriteQueuePage)
+
+    refute leader?(following)
+
+    # Time for an answer to its request for the group's state, which the starting tab holds.
+    Process.sleep(500)
+
+    assert replica_id(following) == stored
+    assert_still_starting(opened_at)
+  end
+
+  # A batch another tab files wakes the tab that leads - which, still starting, has not taken up the
+  # identity the stored queue was numbered under, and would send it under its page's own. The
+  # server would then apply it again on the next page load that sends it under the right one.
+  feature "sends a stored write under the identity it was numbered under", %{session: session} do
+    writer =
+      session
+      |> visit(WriteQueuePage)
+      |> hold_mutation_requests()
+      |> click(button("Create alpha"))
+      |> await_pending_writes(1)
+      |> await_durable_writes()
+
+    stored = replica_id(writer)
+
+    {leading, opened_at} = open_starting_leader(writer)
+
+    following = open_tab(writer, WriteQueuePage)
+
+    refute leader?(following)
+
+    following
+    |> click(button("Create gamma"))
+    |> await_durable_writes()
+
+    assert_still_starting(opened_at)
+
+    following
+    |> focus_tab(leading)
+    |> await_page_mount(ActionWritesPage)
+
+    assert [%Todo{title: "alpha"}, %Todo{title: "gamma"}] = await_server_todos(2)
+
+    assert [%{seq: 1}, %{seq: 2}] = mutation_record_rows(stored)
+  end
+
+  # A batch is taken up only by a page mounted under the user who made it, and a starting tab is
+  # mounted under nobody yet - so one taken up before the mount would be passed over, and nothing
+  # would bring it back. Held until the tab has mounted, it is taken up under the user signed in.
+  #
+  # The write is held at the tab that sends, so nothing but the filed batch can show it. And it is
+  # filed after the starting tab's read of the store: the store block holds that read, and the
+  # write queues behind it, so the read cannot find the batch there.
+  feature "shows a write another tab made while this one was starting", %{session: session} do
+    # The slow bundle is armed on a blank page, so the tab comes back to its page afterwards -
+    # mounted under Alice now, and with a bundle the browser has, so at once.
+    writer =
+      session
+      |> visit(WriteQueuePage)
+      |> click(button("Log in as Alice"))
+      |> assert_text(css("#result"), "logged_in_alice")
+      |> simulate_slow_page_bundle(@bundle_hold_ms)
+      |> visit(WriteQueuePage)
+      |> await_page_mount(WriteQueuePage)
+      |> hold_mutation_requests()
+
+    # Signed in: an anonymous page takes up every batch whenever it does.
+    group = script_result(writer, "return globalThis.Hologram.durability.group();")
+
+    refute String.ends_with?(group, ".anonymous")
+
+    opened_at = System.monotonic_time(:millisecond)
+    second = open_tab_behind(block_store(writer), ActionWritesPage)
+
+    writer
+    |> await_store_read_waiting()
+    |> click(button("Create alpha"))
+    |> assert_text(css("#todos"), "alpha 0")
+    |> unblock_store()
+    |> await_durable_writes()
+
+    assert_still_starting(opened_at)
+
+    writer
+    |> focus_tab(second)
+    |> await_page_mount(ActionWritesPage)
+    |> assert_text(css("#todos"), "alpha 0")
+
+    assert DB.read(Todo) == []
   end
 end

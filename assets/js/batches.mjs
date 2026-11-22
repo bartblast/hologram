@@ -226,6 +226,22 @@ export default class Batches {
     Batches.pending = [];
   }
 
+  // The landed marks the store records, taken into the batches this tab holds - for a tab taking
+  // up rows from the store that a stored frame already wrote a batch's writes into (see
+  // Tabs.#takeStore). Only added, never taken away: a mark this tab set itself is as true as one
+  // the store holds. Nothing is written: the store holds these marks already.
+  static takeLanded(records) {
+    for (const {landed, seq} of records) {
+      const batch = Batches.pending.find((held) => held.seq === seq);
+
+      if (batch !== undefined) {
+        for (const index of landed) {
+          batch.landed.add(index);
+        }
+      }
+    }
+  }
+
   // Everything the action wrote goes away, which is what a raise has to mean: an action's writes
   // land together or not at all, and dropping the layer is the whole of putting them back.
   static discard() {
@@ -248,7 +264,12 @@ export default class Batches {
     // tab is filed in the one queue they share, so the leader's own reading of that queue is what
     // ships - and a follower that sent as well would put a second copy of every batch on the wire,
     // under the same replica and number, for the server to answer twice from one record.
-    if (!Tabs.leader || Batches.#sending) {
+    //
+    // And only once it is ready (see Tabs.sends): a tab that leads while still starting up has not
+    // taken up the identity, the counter and the batches the store held, so it would send the
+    // stored queue under its page's own identity rather than the one the batches were numbered
+    // under. The restore wakes the sender once it has, and so does the lead it takes.
+    if (!Tabs.sends() || Batches.#sending) {
       return;
     }
 
@@ -270,8 +291,10 @@ export default class Batches {
         }
 
         // Before anything leaves: a batch may not be answered under a number this browser could
-        // hand out again after a reload.
+        // hand out again after a reload, nor under an identity still on its way to the store (see
+        // Durability.replicaWritten).
         await batch.recorded;
+        await Durability.replicaWritten();
 
         // A tab the server stopped over its model holds its writes rather than sending them to be
         // refused: the server would roll back what the person did over a mismatch they did not

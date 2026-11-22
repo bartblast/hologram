@@ -17,6 +17,7 @@ import FDBKeyRange from "../../assets/node_modules/fake-indexeddb/build/esm/FDBK
 
 // Its prototype is where a test makes a read fail: the module's own connection is private.
 import FDBDatabase from "../../assets/node_modules/fake-indexeddb/build/esm/FDBDatabase.js";
+import FDBObjectStore from "../../assets/node_modules/fake-indexeddb/build/esm/FDBObjectStore.js";
 
 import {
   assert,
@@ -162,6 +163,19 @@ describe("Durability", () => {
       request.onerror = () => reject(request.error);
       request.onsuccess = () => resolve(request.result);
     });
+  };
+
+  // Whether a promise has settled, without waiting on it: a settled one runs its callback in the
+  // next microtask, and a store write does not complete before the next task.
+  const isSettled = async (promise) => {
+    let settled = false;
+
+    promise.then(() => (settled = true));
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    return settled;
   };
 
   const readMeta = async (key) => {
@@ -433,6 +447,32 @@ describe("Durability", () => {
       await Durability.persistFrame([unstorableRecord()], "place-2");
 
       sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
+    });
+
+    // The log line goes to session storage, whose own quota the log can fill. Thrown, it would
+    // reject the identity write every send waits on, and leave the store open and unwiped.
+    it("stops storing even when the failure cannot be logged", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      sinon
+        .stub(Logger, "debug")
+        .throws(new DOMException("full", "QuotaExceededError"));
+
+      // A pair the store cannot hold, so the write fails.
+      Durability.persistReplica({id: () => {}, token: "statement"});
+
+      await Durability.replicaWritten();
+
+      assert.equal(Durability.mode, "memory");
+      sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
+
+      assert.isUndefined(await readMeta("cursor"));
+      assert.isUndefined(await readMeta("replica"));
+      assert.isUndefined(await readMeta("seq"));
     });
 
     it("drops the identity and the counter, which have stopped being true", async () => {
@@ -1136,6 +1176,106 @@ describe("Durability", () => {
 
       assert.equal(await readMeta("seq"), 8);
     });
+
+    // Another tab heard more frames and stored more marks: a mark lost is a move a later read of
+    // the store promotes a second time.
+    it("keeps the marks the record already holds", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const batch = new Batch(null);
+
+      batch.actorUserId = "u1";
+      batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
+      batch.append({id: "t2", op: "delete", type: "MyApp.Task"});
+      batch.seal(7);
+
+      await writeBatches([{...batch.record(), landed: [1]}]);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await Durability.persistLanded(batch);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.landed),
+        [[0, 1]],
+      );
+    });
+
+    // The record's shape is frozen: a record an older bundle wrote has no marks at all.
+    it("takes a record with no marks as one with none landed", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const batch = new Batch(null);
+
+      batch.actorUserId = "u1";
+      batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
+      batch.seal(7);
+
+      const {landed: _landed, ...older} = batch.record();
+
+      await writeBatches([older]);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await Durability.persistLanded(batch);
+
+      assert.equal(Durability.mode, "indexeddb");
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.landed),
+        [[0]],
+      );
+    });
+
+    // A later frame's mark has its own write coming, behind that frame's rows: written here, it
+    // would go down ahead of them.
+    it("writes the marks as they stood when asked, not when the record answers", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const batch = new Batch(null);
+
+      batch.actorUserId = "u1";
+      batch.append({id: "t1", op: "delete", type: "MyApp.Task"});
+      batch.append({id: "t2", op: "delete", type: "MyApp.Task"});
+      batch.seal(7);
+
+      await writeBatches([batch.record()]);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      const writing = Durability.persistLanded(batch);
+
+      batch.land(new Set(["MyApp.Task t2"]));
+
+      await writing;
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.landed),
+        [[0]],
+      );
+    });
+
+    // The tab that sent it was answered and let go of it: written back, the next page load would
+    // send an answered batch again.
+    it("writes nothing for a batch the queue no longer holds", async () => {
+      await Durability.open();
+      await Durability.load();
+      await storeBatch(8);
+
+      const batch = sealedBatch(7);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await Durability.persistLanded(batch);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.seq),
+        [8],
+      );
+    });
   });
 
   describe("persistReplica()", () => {
@@ -1148,6 +1288,214 @@ describe("Durability", () => {
         id: "r1",
         token: "statement",
       });
+    });
+
+    // Writes to the store commit in the order they were made, so the last one settled is all of
+    // them settled.
+    it("answers the write for replicaWritten() to wait on", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      Durability.persistReplica({id: "r1", token: "statement"});
+
+      const writing = Durability.persistReplica({
+        id: "r2",
+        token: "statement-2",
+      });
+
+      assert.strictEqual(Durability.replicaWritten(), writing);
+      assert.isFalse(await isSettled(Durability.replicaWritten()));
+
+      await writing;
+
+      assert.isTrue(await isSettled(Durability.replicaWritten()));
+    });
+
+    it("leaves nothing for replicaWritten() to wait on in memory mode", async () => {
+      Durability.persistReplica({id: "r1", token: "statement"});
+
+      assert.isTrue(await isSettled(Durability.replicaWritten()));
+    });
+  });
+
+  describe("readBase()", () => {
+    it("answers the stored place and every row, when the place differs", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.deepStrictEqual(await Durability.readBase("place-0"), {
+        cursor: "place-1",
+        landed: [],
+        owner: "u1",
+        records: [taskRecord("t1", "Draft copy")],
+      });
+    });
+
+    // The same place is the same rows: every write of a place writes its rows with it.
+    it("answers the stored place and no rows, when the place is the one given", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.deepStrictEqual(await Durability.readBase("place-1"), {
+        cursor: "place-1",
+        owner: "u1",
+        records: null,
+      });
+    });
+
+    it("answers the stored place and every row, when the tab holds no place", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.deepStrictEqual(await Durability.readBase(null), {
+        cursor: "place-1",
+        landed: [],
+        owner: "u1",
+        records: [taskRecord("t1", "Draft copy")],
+      });
+    });
+
+    // Rows with no place are a fill that never finished, which nothing takes up.
+    it("answers no place and no rows, when the store holds no place", async () => {
+      await seedPreviousLoad({cursor: undefined});
+      await Durability.open();
+      await Durability.load();
+
+      assert.deepStrictEqual(await Durability.readBase("place-1"), {
+        cursor: null,
+        owner: "u1",
+        records: null,
+      });
+
+      assert.deepStrictEqual(await Durability.readBase(null), {
+        cursor: null,
+        owner: "u1",
+        records: null,
+      });
+    });
+
+    // What the tab that led wrote since this tab loaded.
+    it("reads the store as it is now, not as it was loaded", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([taskRecord("t2", "Later")], "place-2");
+
+      assert.deepStrictEqual(await Durability.readBase("place-1"), {
+        cursor: "place-2",
+        landed: [],
+        owner: "u1",
+        records: [taskRecord("t1", "Draft copy"), taskRecord("t2", "Later")],
+      });
+    });
+
+    // A write made right after the read began lands after the whole read, not between the place
+    // and its rows.
+    it("reads the place and its rows as one", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const reading = Durability.readBase("place-0");
+
+      const writing = Durability.persistFrame(
+        [taskRecord("t2", "Later")],
+        "place-2",
+      );
+
+      assert.equal(Durability.inFlight, 1);
+
+      assert.deepStrictEqual(await reading, {
+        cursor: "place-1",
+        landed: [],
+        owner: "u1",
+        records: [taskRecord("t1", "Draft copy")],
+      });
+
+      await writing;
+    });
+
+    // One store serves every user of the browser, each in a group of their own.
+    it("answers who the store belongs to", async () => {
+      await seedPreviousLoad({actorUserId: "u2"});
+      await Durability.open();
+      await Durability.load();
+
+      assert.equal((await Durability.readBase("place-1")).owner, "u2");
+    });
+
+    it("answers nobody as the owner of a store nobody signed in to", async () => {
+      await seedPreviousLoad({actorUserId: undefined});
+      await Durability.open();
+      await Durability.load();
+
+      assert.isNull((await Durability.readBase("place-1")).owner);
+    });
+
+    // A stored frame can have landed a batch a tab holds unlanded.
+    it("answers what the queue records as landed, with the rows", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const batch = sealedBatch(7);
+
+      batch.land(new Set(["MyApp.Task t1"]));
+
+      await writeBatches([batch.record()]);
+
+      assert.deepStrictEqual((await Durability.readBase("place-0")).landed, [
+        {landed: [0], seq: 7},
+      ]);
+    });
+
+    it("answers no marks for a stored batch that predates them", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const {landed: _landed, ...older} = sealedBatch(7).record();
+
+      await writeBatches([older]);
+
+      assert.deepStrictEqual((await Durability.readBase("place-0")).landed, [
+        {landed: [], seq: 7},
+      ]);
+    });
+
+    it("answers nothing in memory mode", async () => {
+      assert.isNull(await Durability.readBase("place-1"));
+      assert.equal(Durability.mode, "memory");
+    });
+
+    // Nothing has been lost, so it does not take the storage down the way a failed WRITE does.
+    it("answers nothing when the store cannot be read, and goes on storing", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      sinon
+        .stub(FDBDatabase.prototype, "transaction")
+        .throws(new DOMException("The read was refused.", "UnknownError"));
+
+      assert.isNull(await Durability.readBase("place-0"));
+      assert.equal(Durability.mode, "indexeddb");
+    });
+
+    it("answers nothing when the rows cannot be read", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      sinon
+        .stub(FDBObjectStore.prototype, "getAll")
+        .throws(new DOMException("The read was refused.", "UnknownError"));
+
+      assert.isNull(await Durability.readBase("place-0"));
+      assert.equal(Durability.inFlight, 0);
     });
   });
 
@@ -1635,7 +1983,10 @@ describe("Durability", () => {
 
       assert.equal(Replica.id, "r-fresh");
 
-      await Durability.persistReplica(Replica.current());
+      // The first send waits for it.
+      assert.isFalse(await isSettled(Durability.replicaWritten()));
+
+      await Durability.replicaWritten();
 
       assert.deepStrictEqual(await readMeta("replica"), {
         id: "r-fresh",
