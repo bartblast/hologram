@@ -3740,6 +3740,66 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    it("refuses values of the wrong shape for a type the model doesn't carry", () => {
+      defineModel();
+
+      assertBoxedError(
+        () => canChange(alice, update, entryless(), Type.integer(5)),
+        "Hologram.MisuseError",
+        "can? takes the values of a change as a keyword list or a map - got 5",
+      );
+    });
+
+    it("refuses an operation that isn't an update for a type the model doesn't carry", () => {
+      defineModel();
+
+      const operation = Type.tuple([
+        Type.atom("grant_role"),
+        Type.atom("editor"),
+      ]);
+
+      assertBoxedError(
+        () =>
+          canChange(
+            alice,
+            operation,
+            entryless(),
+            values({a: Type.integer(1)}),
+          ),
+        "Hologram.MisuseError",
+        "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got {:grant_role, :editor}",
+      );
+    });
+
+    it("refuses a struct with no metadata", () => {
+      defineUpdate("update:status", approving);
+
+      const entity = document();
+      const data = {...entity.data};
+
+      delete data[Type.encodeMapKey(Type.atom("__meta__"))];
+
+      assertBoxedError(
+        () => asks(update, {status: enumValue("published")}, {...entity, data}),
+        "Hologram.MisuseError",
+        `can? with values asks about a row as stored - ${DOCUMENT} "${DOC}" carries recorded changes, so its fields no longer hold the stored values`,
+      );
+    });
+
+    it("refuses an improper field list as an unknown operation", () => {
+      defineUpdate("update:status", approving);
+
+      const operation = updateOf(
+        Type.improperList([Type.atom("a"), Type.atom("b")]),
+      );
+
+      assertBoxedError(
+        () => asks(operation, {status: enumValue("published")}),
+        "Hologram.MisuseError",
+        `unknown operation ${Interpreter.inspect(operation)} for ${DOCUMENT} - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}`,
+      );
+    });
+
     it("names a repeated unknown name once", () => {
       defineUpdate("update:status", approving);
 
@@ -3782,6 +3842,45 @@ describe("Elixir_Hologram_Auth", () => {
         () => canChange(alice, update, document(), improper),
         "Hologram.MisuseError",
         `can? takes the values of a change as a keyword list or a map - got ${Interpreter.inspect(improper)}`,
+      );
+    });
+
+    it("refuses empty values for a type the model doesn't carry", () => {
+      defineModel();
+
+      assertBoxedError(
+        () => canChange(alice, update, entryless(), Type.keywordList([])),
+        "Hologram.MisuseError",
+        "invalid changes for MyApp.Nothing - at least one declared attribute or to-one relationship must be changed",
+      );
+    });
+
+    it("refuses a key that isn't an atom for a type the model doesn't carry", () => {
+      defineModel();
+
+      assertBoxedError(
+        () =>
+          canChange(
+            alice,
+            update,
+            entryless(),
+            Type.map([[Type.integer(1), Type.integer(2)]]),
+          ),
+        "Hologram.MisuseError",
+        "invalid changes for MyApp.Nothing - only declared attributes and to-one relationships can be updated: 1",
+      );
+    });
+
+    it("refuses a role grant", () => {
+      defineModel();
+
+      const grant = Model.box(GRANT, grantRow({role: "viewer"}));
+
+      assertBoxedError(
+        () =>
+          canChange(alice, update, grant, values({role: enumValue("owner")})),
+        "Hologram.MisuseError",
+        `cannot update ${GRANT} - a role grant is never changed in place, revoke the role and grant the new one instead`,
       );
     });
 
@@ -3854,6 +3953,37 @@ describe("Elixir_Hologram_Auth", () => {
         () => canChange(alice, update, document(), mixed),
         "Hologram.MisuseError",
         `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: "x", :nope`,
+      );
+    });
+
+    it("refuses a row carrying recorded changes", () => {
+      defineUpdate("update:status", approving);
+
+      const metadata = Type.map([
+        [
+          Type.atom("attribute_ops"),
+          Type.map([
+            [
+              Type.atom("status"),
+              Type.tuple([Type.atom("put"), enumValue("review")]),
+            ],
+          ]),
+        ],
+        [Type.atom("relationship_ops"), Type.map([])],
+      ]);
+
+      const key = Type.atom("__meta__");
+      const entity = document();
+
+      const changed = {
+        ...entity,
+        data: {...entity.data, [Type.encodeMapKey(key)]: [key, metadata]},
+      };
+
+      assertBoxedError(
+        () => asks(update, {status: enumValue("published")}, changed),
+        "Hologram.MisuseError",
+        `can? with values asks about a row as stored - ${DOCUMENT} "${DOC}" carries recorded changes, so its fields no longer hold the stored values`,
       );
     });
 

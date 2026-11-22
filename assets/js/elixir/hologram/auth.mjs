@@ -38,6 +38,9 @@ import Type from "../../type.mjs";
 // about, so the first render answers what the server answered.
 const GRANT_TYPE = "Hologram.Auth.RoleGrant";
 
+// The server's refusal of an update of a grant row, which can? with values gives too.
+const GRANT_UPDATE_MESSAGE = `cannot update ${GRANT_TYPE} - a role grant is never changed in place, revoke the role and grant the new one instead`;
+
 // The one spelling Hologram gives entity ids, the server validator's own pattern - without the
 // multiline flag, $ matches only at the very end, so a trailing newline is no match here either.
 const CANONICAL_ID =
@@ -1118,6 +1121,10 @@ function changeAnswer(
     return coversChange(entry, entityType, entity, fields, after, actorUserId);
   }
 
+  if (isImproperFieldsAsk(operation)) {
+    Model.validateOperation(entityType, operation);
+  }
+
   if (!Type.isAtom(operation)) {
     Interpreter.raiseMisuseError(changeOperationMessage(operation));
   }
@@ -1131,6 +1138,34 @@ function changeAnswer(
   return someHolds(policyRules(entry, operation.value), (rule) =>
     ruleHolds(rule, entityType, entity, actorUserId, after),
   );
+}
+
+// The struct's fields no longer hold the stored values once it carries recorded changes, and those
+// are what a rule's bare names read.
+function refuseRecordedChanges(entityType, entity) {
+  const metadata = entity.data[Type.encodeMapKey(Type.atom("__meta__"))]?.[1];
+
+  const clean =
+    metadata !== undefined &&
+    Type.isMap(metadata) &&
+    ["attribute_ops", "relationship_ops"].every((name) => {
+      const ops = metadata.data[Type.encodeMapKey(Type.atom(name))]?.[1];
+
+      return (
+        ops !== undefined &&
+        Type.isMap(ops) &&
+        Object.keys(ops.data).length === 0
+      );
+    });
+
+  if (!clean) {
+    const id =
+      entity.data[Type.encodeMapKey(Type.atom("id"))]?.[1] ?? Type.nil();
+
+    Interpreter.raiseMisuseError(
+      `can? with values asks about a row as stored - ${entityType} ${Interpreter.inspect(id)} carries recorded changes, so its fields no longer hold the stored values`,
+    );
+  }
 }
 
 // The pairs of a change's values, the last of a repeated name winning as a map's does, refused in the
@@ -1169,6 +1204,47 @@ function changeValues(entityType, pairs) {
   validateChangeNames(entityType, pairs);
 
   return new Map(pairs.map(([name, value]) => [name.value, value]));
+}
+
+// What can? with values answers for a type the build carries no entry for, which holds no line: no,
+// once the operation and the values are ones the server wouldn't refuse.
+function refuseChangeWithoutEntry(entityType, operation, pairs) {
+  const nonAtomPairs = pairs.filter(([name]) => !Type.isAtom(name));
+
+  if (pairs.length === 0 || nonAtomPairs.length > 0) {
+    validateChangeNames(entityType, nonAtomPairs);
+  }
+
+  if (Type.isAtom(operation) && operation.value === "update") {
+    return;
+  }
+
+  const asked = askedFields(operation);
+
+  if (asked !== null && asked.length > 0) {
+    return;
+  }
+
+  if (asked !== null || isImproperFieldsAsk(operation)) {
+    Model.validateOperation(entityType, operation);
+  }
+
+  if (Type.isAtom(operation)) {
+    Model.validateOperation(entityType, operation);
+  }
+
+  Interpreter.raiseMisuseError(changeOperationMessage(operation));
+}
+
+// An {:update, fields} ask whose list is improper, which the server refuses as an unknown operation.
+function isImproperFieldsAsk(operation) {
+  return (
+    Type.isTuple(operation) &&
+    operation.data.length === 2 &&
+    Type.isAtom(operation.data[0]) &&
+    operation.data[0].value === "update" &&
+    Type.isList(operation.data[1])
+  );
 }
 
 // The scope a rule reads the row after a change through: the entity with the given values on it,
@@ -1468,12 +1544,20 @@ const Elixir_Hologram_Auth = {
       entity.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
     );
 
+    refuseRecordedChanges(entityType, entity);
+
     const pairs = changePairs(values);
+
+    if (entityType === GRANT_TYPE) {
+      Interpreter.raiseMisuseError(GRANT_UPDATE_MESSAGE);
+    }
 
     const model = globalThis.Hologram.sync?.model ?? {};
     const entry = Object.hasOwn(model, entityType) ? model[entityType] : null;
 
     if (!entry) {
+      refuseChangeWithoutEntry(entityType, operation, pairs);
+
       return Type.boolean(false);
     }
 
