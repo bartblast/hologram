@@ -41,6 +41,10 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
 
   @drain_poll_ms 50
 
+  # How many clients fill at once on the first node. Those fills only set the wave up, and thousands
+  # at once would stop the step at the memory limit before the wave began.
+  @fill_group 20
+
   @doc """
   Returns the reconnect case on the given data, `:board` or `:tenants`, for the given options.
   """
@@ -200,8 +204,9 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
     try do
       Clients.prepare_all!(clients, Step.connect_concurrency())
 
-      connect_failures = Clients.connect_all(clients, Step.connect_concurrency())
-      fills = Clients.await_fills(clients, opts[:fill_timeout] * 1_000)
+      {connect_failures, fills} =
+        Clients.fill_in_groups(clients, @fill_group, opts[:fill_timeout] * 1_000)
+
       # Only once every fill is over: a session still filling can't answer being asked.
       if Enum.all?(fills, &(&1.synced_all_at != nil and &1.failure == nil)) do
         :ok = check_sessions_have_replicas!(peer)

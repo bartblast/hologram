@@ -157,6 +157,39 @@ defmodule HologramSyncBenchmark.Clients do
   end
 
   @doc """
+  Connects the given clients a group at a time, each group once the one before it is filled, and
+  returns the failures to connect and the reports in the clients' order. The given time covers all
+  of them, and a group whose turn comes after it isn't connected.
+
+  For a case whose fills aren't what it measures. A connect returns as soon as the stream's headers
+  are in, so connecting a limited number at a time doesn't limit how many fill at once, and each
+  holds its rows in memory while it sends them.
+  """
+  @spec fill_in_groups([pid], pos_integer, non_neg_integer) :: {[{pid, term}], [Client.report()]}
+  def fill_in_groups(clients, group_size, timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+
+    {failures, reports} =
+      clients
+      |> Enum.chunk_every(group_size)
+      |> Enum.map_reduce([], fn group, reports ->
+        remaining_ms = max(deadline - System.monotonic_time(:millisecond), 0)
+
+        # Past the deadline a group isn't connected at all: with no wait left to hold each back,
+        # the rest would all fill at once.
+        group_failures = if remaining_ms > 0, do: connect_all(group, group_size), else: []
+        remaining_ms = max(deadline - System.monotonic_time(:millisecond), 0)
+
+        {group_failures, [await_fills(group, remaining_ms) | reports]}
+      end)
+
+    {List.flatten(failures),
+     reports
+     |> Enum.reverse()
+     |> Enum.concat()}
+  end
+
+  @doc """
   Prepares and connects the given clients, at most `concurrency` at a time, waits for their fills
   and returns :ok, raising when one couldn't connect or fill within the given time.
   """
