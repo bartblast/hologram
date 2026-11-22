@@ -341,8 +341,12 @@ defmodule Hologram.Compiler.QueryExtractor do
   # Whether the walk stands in the derived field's own clause, where a builder is called from.
   defp derived_level?(context), do: context.derived.at_field?
 
+  # A closure keeps only the variables its clause names, as an Elixir function captures them - so
+  # what it holds tells whether it depends on the row (see stand_in?/1).
   defp evaluate!(%IR.AnonymousFunctionType{arity: arity, clauses: [clause]}, state, context) do
-    {anonymous_closure!(arity, clause, state.env, context), state}
+    closure_env = Map.take(state.env, ir_variables(clause))
+
+    {anonymous_closure!(arity, clause, closure_env, context), state}
   end
 
   defp evaluate!(%IR.AnonymousFunctionType{}, _state, context) do
@@ -747,6 +751,15 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     {value, _state} = evaluate!(clause.body, state, context)
 
+    # Only native code calls a closure, so a stand-in returned here would reach it unseen. One the
+    # closure holds is refused before the call, and this is one it made itself.
+    if stand_in?(value) do
+      compile_error!(
+        "#{context.subject} returns a field of the row from a function handed to another call - a field of the row reaches query stages and query builders only",
+        context
+      )
+    end
+
     value
   end
 
@@ -803,6 +816,25 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     {value, %{state_after_body | env: state_after_funs.env}}
   end
+
+  # The variables an IR term names at any depth, nested functions included.
+  defp ir_variables(%IR.Variable{name: name, version: version}), do: [{name, version}]
+
+  defp ir_variables([head | tail]), do: ir_variables(head) ++ ir_variables(tail)
+
+  defp ir_variables(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> ir_variables()
+  end
+
+  defp ir_variables(map) when is_map(map) do
+    map
+    |> Map.values()
+    |> ir_variables()
+  end
+
+  defp ir_variables(_term), do: []
 
   # Only application-owned Elixir modules outside the Elixir-shipped apps are followed into - their
   # IR is what the build follows a field of the row through, and their edits are what can change a
@@ -955,7 +987,15 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp stand_in?(%Query{source: source}), do: source != nil
 
-  defp stand_in?(list) when is_list(list), do: Enum.any?(list, &stand_in?/1)
+  # Walked cell by cell, since a value the build computed can be an improper list.
+  defp stand_in?([head | tail]), do: stand_in?(head) or stand_in?(tail)
+
+  # A function depends on the row when it holds a stand-in, called or only compared.
+  defp stand_in?(function) when is_function(function) do
+    {:env, env} = Function.info(function, :env)
+
+    stand_in?(env)
+  end
 
   defp stand_in?(tuple) when is_tuple(tuple) do
     tuple

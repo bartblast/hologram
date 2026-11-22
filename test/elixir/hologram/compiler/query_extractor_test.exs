@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Commons.PLT
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module142
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module55
@@ -409,6 +410,54 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert_raise Hologram.CompileError,
                    ~r/derived field :keyed_read in .+ reads nil off a map keyed by a field of the row/,
                    fn -> derived_definition(Module142, :keyed_read, ir_plt) end
+    end
+
+    test "refuses a function reading a field of the row handed to a call the build runs", %{
+      ir_plt: ir_plt
+    } do
+      fixture = "test/elixir/support/fixtures/compiler/query_extractor/module_145.ex"
+      line = source_line(fixture, "Enum.uniq_by(fn x -> if x == 1, do: first")
+
+      assert_raise Hologram.CompileError,
+                   ~r/#{fixture}:#{line}: derived field :closure_reading_fields in .+ passes a field of the row to Enum\.uniq_by\/2/,
+                   fn -> derived_definition(Module146, :closure_reading_fields, ir_plt) end
+    end
+
+    # Two functions holding equal values are equal, so the count depends on the row.
+    test "refuses functions holding fields of the row compared by a call the build runs", %{
+      ir_plt: ir_plt
+    } do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :closures_compared in .+ passes a field of the row to Enum\.uniq\/1/,
+                   fn -> derived_definition(Module146, :closures_compared, ir_plt) end
+    end
+
+    test "refuses a function naming a field of the row on a path it doesn't take", %{
+      ir_plt: ir_plt
+    } do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :field_on_path_not_taken in .+ passes a field of the row to Enum\.map\/2/,
+                   fn -> derived_definition(Module146, :field_on_path_not_taken, ir_plt) end
+    end
+
+    test "refuses a function returning a field of the row it made itself", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :closure_making_field in .+ returns a field of the row from a function handed to another call/,
+                   fn -> derived_definition(Module146, :closure_making_field, ir_plt) end
+    end
+
+    # The inner functions capture nothing, so they're equal, whatever x the outer one was given.
+    test "keeps only what a function names, so equal functions compare equal", %{ir_plt: ir_plt} do
+      {{:query, query}, _read_modules} =
+        derived_definition(Module146, :closures_from_one_fn, ir_plt)
+
+      assert query.take == 1
+    end
+
+    test "reads a value holding an improper list", %{ir_plt: ir_plt} do
+      {{:query, query}, _read_modules} = derived_definition(Module146, :improper_list, ir_plt)
+
+      assert query.take == 1
     end
 
     test "takes the case clause a known value matches", %{ir_plt: ir_plt} do
