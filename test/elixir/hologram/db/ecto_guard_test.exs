@@ -6,6 +6,9 @@ defmodule Hologram.DB.EctoGuardTest do
   alias Ecto.Adapters.SQL.Sandbox
   alias Hologram.Test.EctoRepo
 
+  # Created by the test that removes it again.
+  @compile {:no_warn_undefined, __MODULE__.RemovedRepo}
+
   @moduletag :database
 
   describe "open_transaction_repo/1" do
