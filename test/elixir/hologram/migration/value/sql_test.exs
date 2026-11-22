@@ -212,4 +212,68 @@ defmodule Hologram.Migration.Value.SQLTest do
       assert rendered({:name, [:state], @state}, @state, target) == {~s("$r0"."state"), []}
     end
   end
+
+  describe "enum_uses/4" do
+    setup do
+      [
+        target: %{
+          kind: :attribute,
+          line: 1,
+          name: :kind,
+          opts: [values: [:draft, :live, :old]],
+          type: :enum
+        }
+      ]
+    end
+
+    test "lists a literal under its own type, nested or not", %{target: target} do
+      term = {:coalesce, [{:name, [:title], :string}, {:value, :live, @state}]}
+
+      assert enum_uses(%{term: term, type: :string}, MyApp.Trip, mapping(), %{
+               target
+               | name: :title,
+                 type: :string
+             }) == [{"my_app_trip_state_$enum", "live"}]
+    end
+
+    test "lists every value a copy casts into the target's type", %{target: target} do
+      assert enum_uses(
+               %{term: {:name, [:state], @state}, type: @state},
+               MyApp.Trip,
+               mapping(),
+               target
+             ) ==
+               [{"my_app_trip_kind_$enum", "draft"}, {"my_app_trip_kind_$enum", "live"}]
+    end
+
+    test "lists nothing for a read of the target's own type", %{target: target} do
+      own = {:enum, MyApp.Trip, :kind, [:draft, :live, :old]}
+
+      assert enum_uses(%{term: {:name, [:kind], own}, type: own}, MyApp.Trip, mapping(), target) ==
+               []
+    end
+  end
+
+  describe "sort_keys/3" do
+    test "names the sort key a most_common of a string orders by" do
+      term = {:most_common, {:relationship, [:tags]}, :label, :string, nil}
+
+      assert sort_keys(%{term: term}, MyApp.Trip, mapping()) ==
+               [%{op: :add_column, table: "my_app_tag", column: "label_$sort"}]
+    end
+
+    test "finds it inside another word" do
+      term =
+        {:coalesce,
+         [{:most_common, {:relationship, [:tags]}, :label, :string, nil}, {:value, "x", :string}]}
+
+      assert [%{column: "label_$sort"}] = sort_keys(%{term: term}, MyApp.Trip, mapping())
+    end
+
+    test "names nothing for a value with no sort key" do
+      term = {:most_common, {:relationship, [:tags]}, :rank, :integer, nil}
+
+      assert sort_keys(%{term: term}, MyApp.Trip, mapping()) == []
+    end
+  end
 end

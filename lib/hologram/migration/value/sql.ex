@@ -42,6 +42,46 @@ defmodule Hologram.Migration.Value.SQL do
     {cast_to_target(sql, type, entity_type, mapping, target), Enum.reverse(reversed_params)}
   end
 
+  @doc """
+  Returns what the given resolved backfill needs its enum types to accept, as pairs of a type name
+  and a value: each literal, and every value of another attribute's enum it copies into the
+  target's type. PostgreSQL refuses a value in the transaction that added it to its type.
+  """
+  @spec enum_uses(
+          %{term: Resolver.resolved(), type: Resolver.type()},
+          module,
+          %{module => %{atom => any}},
+          Resolver.target()
+        ) :: list({String.t(), String.t()})
+  def enum_uses(%{term: term, type: type}, entity_type, mapping, target) do
+    literals =
+      for {:value, value, {:enum, owner, name, _values}} <- subterms(term) do
+        {attribute_column!(mapping, owner, name).sql_type, Codec.encode(value, :enum)}
+      end
+
+    literals ++ copied_enum_values(type, entity_type, mapping, target)
+  end
+
+  @doc """
+  Returns the sort key columns the given resolved backfill orders by, in the form the companion
+  fill takes.
+  """
+  @spec sort_keys(
+          %{required(:term) => Resolver.resolved(), optional(atom) => any},
+          module,
+          %{module => %{atom => any}}
+        ) :: list(%{op: :add_column, table: String.t(), column: String.t()})
+  def sort_keys(%{term: term}, entity_type, mapping) do
+    scope = %{depth: 0, entity: entity_type, mapping: mapping}
+
+    for {:most_common, {:relationship, path}, attribute, _type, _ranks} <- subterms(term),
+        {_owner_id_sql, join_table} = set_source(path, scope),
+        entry = Map.fetch!(mapping, related_entity!(mapping, join_table.target_table)),
+        sort_key = Enum.find(entry.columns, &(&1.source == {:sort_key, attribute})) do
+      %{op: :add_column, table: entry.table, column: sort_key.name}
+    end
+  end
+
   defp attribute_column!(mapping, owner, name) do
     mapping
     |> Map.fetch!(owner)
@@ -63,6 +103,19 @@ defmodule Hologram.Migration.Value.SQL do
   defp column_sql(scope, column) do
     "#{row_alias(scope)}.#{Mapper.quote_identifier(column.name)}"
   end
+
+  defp copied_enum_values({:enum, owner, name, values}, entity_type, mapping, %{
+         kind: :attribute,
+         name: target_name,
+         type: :enum
+       })
+       when {owner, name} != {entity_type, target_name} do
+    target_sql_type = attribute_column!(mapping, entity_type, target_name).sql_type
+
+    Enum.map(values, &{target_sql_type, Codec.encode(&1, :enum)})
+  end
+
+  defp copied_enum_values(_type, _entity_type, _mapping, _target), do: []
 
   defp encode_type({:enum, _owner, _name, _values}), do: :enum
 
@@ -154,6 +207,16 @@ defmodule Hologram.Migration.Value.SQL do
   defp sql_type({:reference, _target}, _mapping), do: "uuid"
 
   defp sql_type(type, _mapping), do: Map.fetch!(@plain_sql_types, type)
+
+  defp subterms({:at, {:split, text, separator}, position} = term) do
+    [term | Enum.flat_map([text, separator, position], &subterms/1)]
+  end
+
+  defp subterms({kind, terms} = term) when kind in [:coalesce, :concat] do
+    [term | Enum.flat_map(terms, &subterms/1)]
+  end
+
+  defp subterms(term), do: [term]
 
   defp term_sql({:value, value, type}, scope, reversed_params) do
     slot(value, type, scope, reversed_params)

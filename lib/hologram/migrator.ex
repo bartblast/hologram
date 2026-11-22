@@ -640,6 +640,28 @@ defmodule Hologram.Migrator do
     execute_statements(DDL.statements(op))
   end
 
+  defp apply_op(%{op: :fill_companions} = op, _later_ops) do
+    SchemaReconciler.backfill_companions!(op.columns, op.mapping)
+  end
+
+  # A fill of every row writes through every index taking writes, a fill of the NULLs only through
+  # those holding them - see drop_removed_indexes/3. The tightening after it needs to know no row
+  # was left NULL, and a declared default doesn't step in: the expression said what each row holds.
+  # sobelow_skip ["SQL.Query"]
+  defp apply_op(%{op: :fill_column} = op, later_ops) do
+    drop_removed_indexes(op.table, fill_change(op), later_ops)
+
+    {fragment, params} = op.sql
+    table = ~s("#{Mapper.data_schema()}".#{Mapper.quote_identifier(op.table)})
+    column = Mapper.quote_identifier(op.column)
+    only_nulls = if op.nulls_only, do: ~s| WHERE "$r0".#{column} IS NULL|, else: ""
+    statement = ~s|UPDATE #{table} AS "$r0" SET #{column} = #{fragment}#{only_nulls}|
+
+    {:ok, _result} = Connection.query(statement, params)
+
+    if op.required, do: check_filled!(op)
+  end
+
   # A type change asks about the unique indexes standing over its column right before it
   # applies: two values can convert to one, and the names a file's earlier ops leave behind
   # are the ones the database holds at this point. A tightening carrying a fill keeps its
@@ -1124,6 +1146,22 @@ defmodule Hologram.Migrator do
   defp execute_tail_ops(tail) do
     Enum.each(tail, &execute_tail_op/1)
   end
+
+  defp check_filled!(op) do
+    count = count_result(DDL.null_check_statement(op.table, op.column))
+
+    if count > 0 do
+      rows = if count == 1, do: "row", else: "rows"
+
+      raise ~s(the backfill of column "#{op.column}" on table "#{op.table}" leaves #{count} ) <>
+              "#{rows} without a value - give the expression a value for them, like " <>
+              "coalesce(..., <value>), or make the attribute optional: true"
+    end
+  end
+
+  defp fill_change(%{nulls_only: true, column: column}), do: {:fill, column}
+
+  defp fill_change(_op), do: :update
 
   defp fill_column(table, column, encoded_value) do
     fill_statement = DDL.fill_statement(table, column)

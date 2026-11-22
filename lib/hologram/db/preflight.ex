@@ -330,7 +330,8 @@ defmodule Hologram.DB.Preflight do
 
   defp refusable?(%{op: :alter_column} = op) do
     DDL.cast_class(op.before.type, op.after.type) != :safe or
-      (op.before.null and not op.after.null and not Map.has_key?(op, :fill))
+      (op.before.null and not op.after.null and not Map.has_key?(op, :fill) and
+         not Map.has_key?(op, :filled))
   end
 
   defp refusable?(%{op: :create_index, unique: true}), do: true
@@ -378,11 +379,12 @@ defmodule Hologram.DB.Preflight do
   end
 
   defp check_null_tightening!(op, actual, mapping) do
-    # A migration's tightening carries its fill, stamped by the renderer; schema
-    # reconciliation's is looked up in the mapping.
+    # A migration's tightening carries its fill, stamped by the renderer, or is marked filled
+    # when a computed fill counted its NULLs already; schema reconciliation's is looked up in the
+    # mapping.
     fillable? =
       op.before.type == op.after.type and
-        (Map.has_key?(op, :fill) or
+        (Map.has_key?(op, :fill) or Map.has_key?(op, :filled) or
            match?({:ok, _value}, fill_value(mapping, op.table, op.column)))
 
     checked? = op.before.null and not op.after.null and not fillable?

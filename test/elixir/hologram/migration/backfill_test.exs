@@ -20,6 +20,7 @@ defmodule Hologram.Migration.BackfillTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.SortKey
   alias Hologram.Entity.Model
+  alias Hologram.Migration.Value
 
   @context %{
     otp_app: "hologram",
@@ -500,6 +501,347 @@ defmodule Hologram.Migration.BackfillTest do
         assert run(chain, Model.fold(keyed_model, tighten.ops), @context) == :ok
 
         assert rows_of("my_app_task", ["title", "amount"]) == [["one", "0"], ["two", "0"]]
+      end)
+    end
+  end
+
+  describe "run/3, a computed backfill on an added attribute" do
+    setup %{chain: [create | _rest], first_model: first_model} do
+      [create: create, first_model: first_model]
+    end
+
+    defp computed_add(name, type, term, opts) do
+      %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: name,
+        type: type,
+        opts: Keyword.put(opts, :backfill, %Value{term: term}),
+        line: 3
+      }
+    end
+
+    defp apply_file(ops, create, first_model) do
+      file = migration("20260813142237", ops)
+
+      run([create, file], Model.fold(first_model, file.ops), @context)
+    end
+
+    test "fills a computed string and its sort key", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_task("Ann")
+        insert_task("Bob")
+
+        term = {:concat, [{:name, [:title]}, {:value, "!"}]}
+
+        assert apply_file(
+                 [computed_add(:shout, :string, term, optional: true)],
+                 create,
+                 first_model
+               ) ==
+                 :ok
+
+        assert rows_of("my_app_task", ["title", "shout", "shout_$sort"]) == [
+                 ["Ann", "Ann!", SortKey.compute("Ann!")],
+                 ["Bob", "Bob!", SortKey.compute("Bob!")]
+               ]
+      end)
+    end
+
+    test "fills a computed integer", %{create: create, first_model: first_model, scratch: scratch} do
+      add_priority = %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :priority,
+        type: :integer,
+        opts: [optional: true],
+        line: 2
+      }
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_task("one")
+
+        ops = [
+          add_priority,
+          computed_add(:copy, :integer, {:coalesce, [{:name, [:priority]}, {:value, 9}]},
+            optional: true
+          )
+        ]
+
+        assert apply_file(ops, create, first_model) == :ok
+        assert rows_of("my_app_task", ["title", "copy"]) == [["one", 9]]
+      end)
+    end
+
+    test "refuses a required attribute the expression leaves nil, schema unchanged", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      term = {:at, {:split, {:name, [:title]}, {:value, ", "}}, {:value, 1}}
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_task("Porto")
+        insert_task("Lyon")
+        insert_task("Paris, France")
+
+        assert_error RuntimeError,
+                     ~s(the backfill of column "country" on table "my_app_task" leaves 2 rows ) <>
+                       "without a value - give the expression a value for them, like " <>
+                       "coalesce(..., <value>), or make the attribute optional: true",
+                     fn ->
+                       apply_file(
+                         [computed_add(:country, :string, term, [])],
+                         create,
+                         first_model
+                       )
+                     end
+
+        {:ok, %{rows: [[count]]}} =
+          Connection.query(
+            "SELECT COUNT(*) FROM information_schema.columns " <>
+              "WHERE table_schema = 'hologram_data' AND table_name = 'my_app_task' " <>
+              "AND column_name = 'country'"
+          )
+
+        assert count == 0
+      end)
+    end
+
+    test "leaves an optional attribute nil where the expression gives none", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      term = {:at, {:split, {:name, [:title]}, {:value, ", "}}, {:value, 1}}
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_task("Paris, France")
+        insert_task("Porto")
+
+        assert apply_file(
+                 [computed_add(:country, :string, term, optional: true)],
+                 create,
+                 first_model
+               ) == :ok
+
+        assert rows_of("my_app_task", ["title", "country"]) == [
+                 ["Paris, France", "France"],
+                 ["Porto", nil]
+               ]
+      end)
+    end
+
+    test "applies computed adds in a row, each reading the one before it", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      ops =
+        for {name, source} <- [a: :title, b: :a, c: :b, d: :c, e: :d] do
+          computed_add(name, :string, {:name, [source]}, optional: true)
+        end
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_task("one")
+
+        assert apply_file(ops, create, first_model) == :ok
+
+        assert rows_of("my_app_task", ["a", "b", "c", "d", "e"]) ==
+                 [["one", "one", "one", "one", "one"]]
+      end)
+    end
+
+    test "doesn't let a declared default fill what the expression left nil", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      term = {:at, {:split, {:name, [:title]}, {:value, ", "}}, {:value, 1}}
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_task("Porto")
+
+        assert_error RuntimeError, ~r/leaves 1 row without a value/, fn ->
+          apply_file(
+            [computed_add(:country, :string, term, default: "Unknown")],
+            create,
+            first_model
+          )
+        end
+      end)
+    end
+
+    # "B" sorts before "a" by bytes and after it by sort key, so the tie below is decided by the key
+    # the file's own fill has to have written by then.
+    test "orders a most_common by a sort key the same file filled", %{scratch: scratch} do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Tag, line: 2},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Tag,
+            name: :raw,
+            type: :string,
+            opts: [],
+            line: 2
+          },
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            type: :string,
+            opts: [],
+            line: 4
+          },
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :tags,
+            type: [MyApp.Tag],
+            opts: [],
+            line: 5
+          }
+        ])
+
+      first_model = Model.fold(Model.empty(), create.ops)
+
+      file =
+        migration("20260813142237", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Tag,
+            name: :label,
+            type: :string,
+            opts: [optional: true, backfill: %Value{term: {:name, [:raw]}}],
+            line: 2
+          },
+          computed_add(
+            :top,
+            :string,
+            {:most_common, {:relationship, [:tags]}, :label},
+            optional: true
+          ),
+          %{op: :rename_attribute, entity: MyApp.Tag, from: :label, to: :name, line: 4}
+        ])
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_task("one")
+
+        {:ok, %{rows: [[task_id]]}} =
+          Connection.query(~s(SELECT "id" FROM "hologram_data"."my_app_task"))
+
+        for raw <- ["B", "a"] do
+          {:ok, %{rows: [[tag_id]]}} =
+            Connection.query(
+              ~s|INSERT INTO "hologram_data"."my_app_tag" ("id", "raw", "raw_$sort", | <>
+                ~s|"created_at", "server_created_at", "server_updated_at", "updated_at", | <>
+                ~s|"$revisions") VALUES (gen_random_uuid(), $1, $2, now(), now(), now(), now(), | <>
+                ~s|'{}') RETURNING "id"|,
+              [raw, SortKey.compute(raw)]
+            )
+
+          {:ok, _result} =
+            Connection.query(
+              ~s|INSERT INTO "hologram_data"."my_app_task_tags_$join" | <>
+                ~s|("source_id", "target_id") VALUES ($1, $2)|,
+              [task_id, tag_id]
+            )
+        end
+
+        assert run([create, file], Model.fold(first_model, file.ops), @context) == :ok
+        assert rows_of("my_app_task", ["title", "top"]) == [["one", "a"]]
+      end)
+    end
+  end
+
+  describe "run/3, deleting and adding one name in a file" do
+    setup %{chain: [create | _rest], first_model: first_model} do
+      add_old =
+        migration("20260813100000", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :note,
+            type: :string,
+            opts: [optional: true, backfill: "old"],
+            line: 3
+          }
+        ])
+
+      [add_old: add_old, create: create, first_model: first_model]
+    end
+
+    defp delete_note, do: %{op: :delete_attribute, entity: MyApp.Task, name: :note, line: 3}
+
+    defp add_note_again(type, opts) do
+      %{op: :add_attribute, entity: MyApp.Task, name: :note, type: type, opts: opts, line: 4}
+    end
+
+    defp replace_note(context, added) do
+      %{add_old: add_old, create: create, first_model: first_model} = context
+      old_model = Model.fold(first_model, add_old.ops)
+      file = migration("20260813142237", [delete_note(), added])
+
+      assert run([create], first_model, @context) == :ok
+
+      insert_task("one")
+
+      assert run([create, add_old], old_model, @context) == :ok
+      assert run([create, add_old, file], Model.fold(old_model, file.ops), @context) == :ok
+    end
+
+    test "drops the old values", %{scratch: scratch} = context do
+      route(scratch, fn ->
+        replace_note(context, add_note_again(:string, optional: true))
+
+        assert rows_of("my_app_task", ["title", "note", "note_$sort"]) == [["one", nil, nil]]
+      end)
+    end
+
+    test "applies a constant backfill", %{scratch: scratch} = context do
+      route(scratch, fn ->
+        replace_note(context, add_note_again(:string, optional: true, backfill: "new"))
+
+        assert rows_of("my_app_task", ["title", "note", "note_$sort"]) ==
+                 [["one", "new", SortKey.compute("new")]]
+      end)
+    end
+
+    test "applies a computed backfill", %{scratch: scratch} = context do
+      backfill = %Value{term: {:name, [:title]}}
+
+      route(scratch, fn ->
+        replace_note(context, add_note_again(:string, optional: true, backfill: backfill))
+
+        assert rows_of("my_app_task", ["title", "note"]) == [["one", "one"]]
+      end)
+    end
+
+    test "takes another type without converting the old values", %{scratch: scratch} = context do
+      route(scratch, fn ->
+        replace_note(context, add_note_again(:integer, optional: true, backfill: 5))
+
+        assert rows_of("my_app_task", ["title", "note"]) == [["one", 5]]
       end)
     end
   end

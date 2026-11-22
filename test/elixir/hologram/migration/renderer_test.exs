@@ -4,6 +4,7 @@ defmodule Hologram.Migration.RendererTest do
   import Hologram.Migration.Renderer
 
   alias Hologram.DB.Codec
+  alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
   alias Hologram.Migration.Value
   alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
@@ -83,6 +84,720 @@ defmodule Hologram.Migration.RendererTest do
     end
   end
 
+  describe "render/2, a computed backfill on an added attribute" do
+    setup do
+      pre_model =
+        model(%{
+          MyApp.Tag => %{attributes: [{:rank, :integer, []}]},
+          MyApp.Task => %{
+            attributes: [{:seats, :integer, []}, {:title, :string, []}],
+            relationships: [{:tags, [MyApp.Tag], []}]
+          }
+        })
+
+      [pre_model: pre_model]
+    end
+
+    defp add(name, opts, line \\ 7) do
+      %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: name,
+        type: :integer,
+        opts: opts,
+        line: line
+      }
+    end
+
+    defp computed(name, term, opts \\ [optional: true], line \\ 7) do
+      add(name, Keyword.put(opts, :backfill, %Value{term: term}), line)
+    end
+
+    test "gets a chunk of its own, cut before and after it", %{pre_model: pre_model} do
+      ops = [
+        add(:first, optional: true),
+        computed(:second, {:name, [:first]}),
+        add(:third, optional: true)
+      ]
+
+      assert %{transactional: transactional} = render(ops, pre_model)
+
+      assert Enum.map(transactional, &{&1.op, &1.column}) == [
+               {:add_column, "first"},
+               {:add_column, "second"},
+               {:fill_column, "second"},
+               {:add_column, "third"}
+             ]
+    end
+
+    test "renders over the row, leaving an optional column nullable", %{pre_model: pre_model} do
+      assert %{transactional: [add_op, fill_op]} =
+               render([computed(:copy, {:name, [:seats]})], pre_model)
+
+      assert add_op.definition.null
+      refute Map.has_key?(add_op, :backfill)
+
+      assert %{
+               op: :fill_column,
+               table: "my_app_task",
+               column: "copy",
+               entity: MyApp.Task,
+               member: :copy,
+               nulls_only: false,
+               required: false,
+               sql: {~s("$r0"."seats"), []}
+             } = fill_op
+
+      refute Map.has_key?(fill_op, :mapping)
+    end
+
+    test "adds a required column nullable and tightens it after the fill, with no default", %{
+      pre_model: pre_model
+    } do
+      op = computed(:copy, {:name, [:seats]}, default: 5)
+
+      assert %{transactional: [add_op, fill_op, tighten_op]} = render([op], pre_model)
+
+      assert add_op.definition.null
+      refute Map.has_key?(add_op, :backfill)
+      assert fill_op.required
+      assert fill_op.rules == [default: 5]
+
+      assert %{op: :alter_column, filled: true, before: %{null: true}, after: %{null: false}} =
+               tighten_op
+
+      refute Map.has_key?(tighten_op, :fill)
+      refute Map.has_key?(tighten_op, :fill_companions)
+    end
+
+    test "fills a sort key this file added ahead of a fill ordering by it", %{
+      pre_model: pre_model
+    } do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Tag,
+          name: :label,
+          type: :string,
+          opts: [optional: true],
+          line: 6
+        },
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :top,
+          type: :string,
+          opts: [
+            optional: true,
+            backfill: %Value{term: {:most_common, {:relationship, [:tags]}, :label}}
+          ],
+          line: 7
+        },
+        %{op: :rename_attribute, entity: MyApp.Tag, from: :label, to: :name, line: 8}
+      ]
+
+      %{transactional: transactional} = render(ops, pre_model)
+
+      position = Enum.find_index(transactional, &(&1.op == :fill_column))
+      companion_fill = Enum.at(transactional, position - 1)
+
+      assert %{
+               op: :fill_companions,
+               columns: [%{op: :add_column, table: "my_app_tag", column: "label_$sort"}]
+             } = companion_fill
+
+      assert Enum.any?(
+               companion_fill.mapping[MyApp.Tag].columns,
+               &(&1.name == "label_$sort")
+             )
+    end
+
+    test "doesn't fill a sort key that stood before the file", %{pre_model: pre_model} do
+      with_label =
+        put_in(pre_model, [:entities, MyApp.Tag, :attributes], [
+          {:label, :string, []},
+          {:rank, :integer, []}
+        ])
+
+      op = %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :top,
+        type: :string,
+        opts: [
+          optional: true,
+          backfill: %Value{term: {:most_common, {:relationship, [:tags]}, :label}}
+        ],
+        line: 7
+      }
+
+      refute Enum.any?(render([op], with_label).transactional, &(&1.op == :fill_companions))
+    end
+  end
+
+  describe "render/2, a cut leaving a delete apart from its cleanup" do
+    setup do
+      pre_model =
+        model(%{
+          MyApp.Place => %{},
+          MyApp.Task => %{
+            attributes: [{:seats, :integer, []}],
+            relationships: [{:place, MyApp.Place, [optional: true]}]
+          }
+        })
+
+      [pre_model: pre_model]
+    end
+
+    test "refuses a deleted target whose inbound relationship goes below the cut", %{
+      pre_model: pre_model
+    } do
+      ops = [
+        %{op: :delete_entity, entity: MyApp.Place, line: 5},
+        computed(:copy, {:name, [:seats]}),
+        %{op: :delete_relationship, entity: MyApp.Task, name: :place, line: 9}
+      ]
+
+      assert_raise Hologram.CompileError,
+                   ~r/apply apart from the ops around them: add_attribute :copy on MyApp.Task \(line 7\)/,
+                   fn -> render(ops, pre_model) end
+    end
+
+    test "accepts the same file with the cleanup moved above the cut", %{pre_model: pre_model} do
+      ops = [
+        %{op: :delete_relationship, entity: MyApp.Task, name: :place, line: 5},
+        %{op: :delete_entity, entity: MyApp.Place, line: 6},
+        computed(:copy, {:name, [:seats]})
+      ]
+
+      assert %{transactional: _transactional} = render(ops, pre_model)
+    end
+
+    test "refuses a designation moving apart from its grant deletes" do
+      pre_model =
+        model(%{
+          UserEntity => %{},
+          MyApp.Member => %{},
+          MyApp.Task => %{attributes: [{:seats, :integer, []}]}
+        })
+
+      ops = [
+        %{op: :delete_role_grants, line: 5},
+        computed(:copy, {:name, [:seats]}),
+        %{op: :designate_user_entity, entity: MyApp.Member, line: 9}
+      ]
+
+      assert_raise Hologram.CompileError, ~r/apply apart from the ops around them/, fn ->
+        render(ops, pre_model)
+      end
+
+      moved = [Enum.at(ops, 0), Enum.at(ops, 2), Enum.at(ops, 1)]
+
+      assert %{transactional: _transactional} = render(moved, pre_model)
+    end
+
+    test "refuses a computed add above the delete of the to-one holding its column", %{
+      pre_model: pre_model
+    } do
+      ops = [
+        computed(:place_id, {:name, [:seats]}),
+        %{op: :delete_relationship, entity: MyApp.Task, name: :place, line: 9}
+      ]
+
+      assert_raise Hologram.CompileError,
+                   ~r/apply apart from the ops around them: add_attribute :place_id.*colliding/s,
+                   fn -> render(ops, pre_model) end
+
+      assert %{transactional: _transactional} = render(Enum.reverse(ops), pre_model)
+    end
+
+    test "names every cut, since any of them may part the pair" do
+      pre_model =
+        model(%{
+          UserEntity => %{},
+          MyApp.Member => %{},
+          MyApp.Task => %{attributes: [{:seats, :integer, []}]}
+        })
+
+      ops = [
+        %{op: :delete_role_grants, line: 5},
+        computed(:copy, {:name, [:seats]}, [optional: true], 7),
+        %{op: :designate_user_entity, entity: MyApp.Member, line: 9},
+        computed(:other, {:name, [:seats]}, [optional: true], 11)
+      ]
+
+      assert_raise Hologram.CompileError, ~r/:copy on MyApp.Task \(line 7\), .*\(line 11\)/, fn ->
+        render(ops, pre_model)
+      end
+    end
+
+    test "refuses a relationship above a cut whose target is created below it", %{
+      pre_model: pre_model
+    } do
+      add_zone = %{
+        op: :add_relationship,
+        entity: MyApp.Task,
+        name: :zone,
+        type: MyApp.Zone,
+        opts: [optional: true],
+        line: 5
+      }
+
+      create_zone = %{op: :create_entity, entity: MyApp.Zone, line: 9}
+      fill = computed(:copy, {:name, [:seats]})
+
+      assert_raise Hologram.CompileError, ~r/:zone on MyApp.Task targets MyApp.Zone/, fn ->
+        render([add_zone, fill, create_zone], pre_model)
+      end
+
+      assert %{transactional: _transactional} =
+               render([create_zone, add_zone, fill], pre_model)
+    end
+
+    test "refuses a default the file adds to its enum after a cut", %{pre_model: pre_model} do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          type: :enum,
+          opts: [values: [:a], optional: true],
+          line: 3
+        },
+        computed(:copy, {:name, [:seats]}),
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :grade,
+          value: :fresh,
+          opts: [],
+          line: 8
+        },
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          changes: [optional: false, default: :fresh],
+          line: 9
+        }
+      ]
+
+      assert_raise Hologram.CompileError, ~r/the default "fresh" of column "grade".*#1687/, fn ->
+        render(ops, pre_model)
+      end
+    end
+  end
+
+  describe "render/2, deleting and adding one name in a file" do
+    setup do
+      pre_model =
+        model(%{
+          MyApp.Place => %{},
+          MyApp.Task => %{
+            attributes: [{:kind, :enum, [values: [:a, :b]]}, {:title, :string, []}],
+            relationships: [{:place, MyApp.Place, [optional: true]}, {:tags, [MyApp.Place], []}]
+          }
+        })
+
+      [pre_model: pre_model]
+    end
+
+    defp delete(kind, name), do: %{op: kind, entity: MyApp.Task, name: name, line: 5}
+
+    defp add_member(kind, name, type, opts) do
+      %{op: kind, entity: MyApp.Task, name: name, type: type, opts: opts, line: 6}
+    end
+
+    test "drops the attribute's column and adds a new one", %{pre_model: pre_model} do
+      ops = [
+        delete(:delete_attribute, :title),
+        add_member(:add_attribute, :title, :string, optional: true, backfill: "new")
+      ]
+
+      %{transactional: transactional} = render(ops, pre_model)
+      changes = for %{op: op, column: "title"} = change <- transactional, do: {op, change}
+
+      assert [{:drop_column, _dropped}, {:add_column, %{backfill: "new"}}] = changes
+    end
+
+    test "drops an enum's type along with its column", %{pre_model: pre_model} do
+      ops = [
+        delete(:delete_attribute, :kind),
+        add_member(:add_attribute, :kind, :enum, values: [:a, :b, :c], optional: true)
+      ]
+
+      kinds = op_kinds(render(ops, pre_model).transactional)
+
+      assert :drop_enum_type in kinds
+      assert :create_enum_type in kinds
+      refute :add_enum_value in kinds
+      refute :alter_column in kinds
+    end
+
+    test "drops a to-one's column and adds a new one", %{pre_model: pre_model} do
+      ops = [
+        delete(:delete_relationship, :place),
+        add_member(:add_relationship, :place, MyApp.Place, optional: true)
+      ]
+
+      changes =
+        for %{op: op, column: "place_id"} <- render(ops, pre_model).transactional,
+            op in [:add_column, :drop_column],
+            do: op
+
+      assert changes == [:drop_column, :add_column]
+    end
+
+    test "drops a to-many's join table and creates a new one", %{pre_model: pre_model} do
+      ops = [
+        delete(:delete_relationship, :tags),
+        add_member(:add_relationship, :tags, [MyApp.Place], [])
+      ]
+
+      kinds = op_kinds(render(ops, pre_model).transactional)
+
+      assert :drop_table in kinds
+      assert :create_table in kinds
+    end
+
+    test "treats an attribute taking a deleted to-one's column as the same name", %{
+      pre_model: pre_model
+    } do
+      ops = [
+        delete(:delete_relationship, :place),
+        add_member(:add_attribute, :place_id, :uuid, optional: true)
+      ]
+
+      changes =
+        for %{op: op, column: "place_id"} <- render(ops, pre_model).transactional, do: op
+
+      assert changes == [:drop_column, :add_column]
+    end
+
+    test "drops a recreated entity's table" do
+      pre_model = model(%{MyApp.Place => %{attributes: [{:name, :string, []}]}})
+
+      ops = [
+        %{op: :delete_entity, entity: MyApp.Place, line: 5},
+        %{op: :create_entity, entity: MyApp.Place, line: 6},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Place,
+          name: :name,
+          type: :string,
+          opts: [optional: true],
+          line: 7
+        }
+      ]
+
+      assert [:drop_table, :create_table] =
+               ops
+               |> render(pre_model)
+               |> Map.fetch!(:transactional)
+               |> op_kinds()
+               |> Enum.filter(&(&1 in [:drop_table, :create_table]))
+    end
+
+    test "drops and adds a shared column with the add written above the delete", %{
+      pre_model: pre_model
+    } do
+      ops = [
+        add_member(:add_attribute, :place_id, :uuid,
+          optional: true,
+          backfill: "018f0000-0000-7000-8000-000000000000"
+        ),
+        delete(:delete_relationship, :place)
+      ]
+
+      changes =
+        for %{op: op, column: "place_id"} <- render(ops, pre_model).transactional,
+            op in [:add_column, :alter_column, :drop_column],
+            do: op
+
+      assert changes == [:drop_column, :add_column]
+    end
+
+    test "finds the column of a to-one whose long name the mapper shortens" do
+      long_name =
+        "a"
+        |> String.duplicate(61)
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+        |> String.to_atom()
+
+      place = {long_name, MyApp.Place, [optional: true]}
+
+      pre_model =
+        model(%{MyApp.Place => %{}, MyApp.Task => %{relationships: [place]}})
+
+      column =
+        pre_model
+        |> Mapper.derive_from_model!()
+        |> Map.fetch!(MyApp.Task)
+        |> Map.fetch!(:columns)
+        |> Enum.find(&(&1.source == {:relationship, long_name}))
+        |> Map.fetch!(:name)
+
+      refute column == "#{long_name}_id"
+
+      ops = [
+        delete(:delete_relationship, long_name),
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+        add_member(:add_attribute, String.to_atom(column), :uuid, optional: true)
+      ]
+
+      changes =
+        for %{op: op, column: ^column} <- render(ops, pre_model).transactional,
+            op in [:add_column, :alter_column, :drop_column],
+            do: op
+
+      assert changes == [:drop_column, :add_column]
+    end
+
+    test "doesn't take a to-many for the holder of a column named like it", %{
+      pre_model: pre_model
+    } do
+      above = [
+        add_member(:add_attribute, :tags_id, :uuid, optional: true),
+        delete(:delete_relationship, :tags)
+      ]
+
+      below = Enum.reverse(above)
+
+      for ops <- [above, below] do
+        kinds = op_kinds(render(ops, pre_model).transactional)
+
+        assert :add_column in kinds
+        assert :drop_table in kinds
+      end
+    end
+
+    test "drops the table of an entity type another takes the table name of" do
+      pre_model = model(%{MyApp.TaskItem => %{attributes: [{:name, :string, []}]}})
+
+      ops = [
+        %{op: :delete_entity, entity: MyApp.TaskItem, line: 5},
+        %{op: :create_entity, entity: MyApp.Task.Item, line: 6},
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task.Item,
+          name: :name,
+          type: :string,
+          opts: [optional: true],
+          line: 7
+        }
+      ]
+
+      kinds = op_kinds(render(ops, pre_model).transactional)
+
+      assert Enum.filter(kinds, &(&1 in [:alter_column, :create_table, :drop_table])) ==
+               [:drop_table, :create_table]
+
+      assert_raise Hologram.CompileError, ~r/apply apart from the ops around them/, fn ->
+        render([Enum.at(ops, 1), Enum.at(ops, 2), Enum.at(ops, 0)], pre_model)
+      end
+    end
+
+    test "drops a join table another entity type's to-many takes the name of" do
+      pre_model =
+        model(%{
+          MyApp.Tag => %{},
+          MyApp.Task => %{relationships: [{:item_tags, [MyApp.Tag], []}]},
+          MyApp.Task.Item => %{}
+        })
+
+      ops = [
+        %{op: :delete_relationship, entity: MyApp.Task, name: :item_tags, line: 5},
+        %{
+          op: :add_relationship,
+          entity: MyApp.Task.Item,
+          name: :tags,
+          type: [MyApp.Tag],
+          opts: [],
+          line: 6
+        }
+      ]
+
+      kinds = op_kinds(render(ops, pre_model).transactional)
+
+      assert :drop_table in kinds
+      assert :create_table in kinds
+    end
+
+    test "leaves a delete and an add of different names in one chunk", %{pre_model: pre_model} do
+      ops = [
+        delete(:delete_attribute, :title),
+        add_member(:add_attribute, :subtitle, :string, optional: true)
+      ]
+
+      kinds = op_kinds(render(ops, pre_model).transactional)
+
+      assert :add_column in kinds
+      assert :drop_column in kinds
+    end
+  end
+
+  describe "render/2, a fill using an enum value the file adds" do
+    setup do
+      pre_model =
+        model(%{
+          MyApp.Task => %{
+            attributes: [
+              {:kind, :enum, [values: [:draft, :live]]},
+              {:state, :enum, [values: [:draft, :fresh]]}
+            ]
+          }
+        })
+
+      [pre_model: pre_model]
+    end
+
+    defp add_value(attribute, value) do
+      %{
+        op: :add_enum_value,
+        entity: MyApp.Task,
+        attribute: attribute,
+        value: value,
+        opts: [],
+        line: 5
+      }
+    end
+
+    defp enum_fill(name, term, values) do
+      %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: name,
+        type: :enum,
+        opts: [values: values, optional: true, backfill: %Value{term: term}],
+        line: 7
+      }
+    end
+
+    defp rename_attribute(from, to) do
+      %{op: :rename_attribute, entity: MyApp.Task, from: from, to: to, line: 6}
+    end
+
+    @refusal ~r/uses the enum value "fresh", which this file adds to its type .*#1687/
+
+    test "refuses a literal of the added value", %{pre_model: pre_model} do
+      ops = [
+        add_value(:kind, :fresh),
+        enum_fill(
+          :copy,
+          {:coalesce, [{:name, [:kind]}, {:value, :fresh}]},
+          [:draft, :live, :fresh]
+        )
+      ]
+
+      assert_raise Hologram.CompileError, @refusal, fn -> render(ops, pre_model) end
+    end
+
+    test "follows a value renamed after its add", %{pre_model: pre_model} do
+      ops = [
+        add_value(:kind, :temp),
+        %{
+          op: :rename_enum_value,
+          entity: MyApp.Task,
+          attribute: :kind,
+          from: :temp,
+          to: :fresh,
+          line: 6
+        },
+        enum_fill(:copy, {:coalesce, [{:name, [:kind]}, {:value, :fresh}]}, [
+          :draft,
+          :live,
+          :fresh
+        ])
+      ]
+
+      assert_raise Hologram.CompileError, @refusal, fn -> render(ops, pre_model) end
+    end
+
+    test "follows the type through an attribute rename", %{pre_model: pre_model} do
+      ops = [
+        add_value(:kind, :fresh),
+        rename_attribute(:kind, :sort),
+        enum_fill(:copy, {:coalesce, [{:name, [:sort]}, {:value, :fresh}]}, [
+          :draft,
+          :live,
+          :fresh
+        ])
+      ]
+
+      assert_raise Hologram.CompileError, @refusal, fn -> render(ops, pre_model) end
+    end
+
+    test "refuses a value added after a rename split the type's own chunk", %{
+      pre_model: pre_model
+    } do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          type: :enum,
+          opts: [values: [:a], optional: true],
+          line: 3
+        },
+        rename_attribute(:state, :status),
+        add_value(:grade, :fresh),
+        enum_fill(:copy, {:coalesce, [{:name, [:grade]}, {:value, :fresh}]}, [:a, :fresh])
+      ]
+
+      assert_raise Hologram.CompileError, @refusal, fn -> render(ops, pre_model) end
+    end
+
+    test "accepts a value on a type the same chunk created", %{pre_model: pre_model} do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          type: :enum,
+          opts: [values: [:a], optional: true],
+          line: 3
+        },
+        add_value(:grade, :fresh),
+        enum_fill(:copy, {:coalesce, [{:name, [:grade]}, {:value, :fresh}]}, [:a, :fresh])
+      ]
+
+      assert %{transactional: _transactional} = render(ops, pre_model)
+    end
+
+    test "accepts a value a rebuild has carried into a new type", %{pre_model: pre_model} do
+      ops = [
+        add_value(:kind, :fresh),
+        %{
+          op: :reorder_enum_values,
+          entity: MyApp.Task,
+          attribute: :kind,
+          values: [:fresh, :live, :draft],
+          line: 6
+        },
+        enum_fill(:copy, {:coalesce, [{:name, [:kind]}, {:value, :fresh}]}, [
+          :draft,
+          :live,
+          :fresh
+        ])
+      ]
+
+      assert %{transactional: _transactional} = render(ops, pre_model)
+    end
+
+    test "accepts a value that was on the type already", %{pre_model: pre_model} do
+      ops = [
+        add_value(:kind, :fresh),
+        enum_fill(:copy, {:coalesce, [{:name, [:kind]}, {:value, :live}]}, [
+          :draft,
+          :live,
+          :fresh
+        ])
+      ]
+
+      assert %{transactional: _transactional} = render(ops, pre_model)
+    end
+  end
+
   describe "render/2, a backfill that can't be applied yet" do
     setup do
       pre_model =
@@ -94,22 +809,6 @@ defmodule Hologram.Migration.RendererTest do
         })
 
       [pre_model: pre_model]
-    end
-
-    test "refuses a computed one on an added attribute", %{pre_model: pre_model} do
-      op = %{
-        op: :add_attribute,
-        entity: MyApp.Task,
-        name: :summary,
-        type: :string,
-        opts: [optional: true, backfill: %Value{term: {:name, [:notes]}}],
-        line: 7
-      }
-
-      assert_error Hologram.CompileError,
-                   "add_attribute :summary of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only a constant on add_attribute can for now",
-                   fn -> render([op], pre_model) end
     end
 
     test "refuses one on an added relationship", %{pre_model: pre_model} do
@@ -126,12 +825,12 @@ defmodule Hologram.Migration.RendererTest do
 
       assert_error Hologram.CompileError,
                    "add_relationship :parent of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only a constant on add_attribute can for now",
+                     "can't be applied yet - only one on add_attribute can for now",
                    fn -> render([computed_op], pre_model) end
 
       assert_error Hologram.CompileError,
                    "add_relationship :parent of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only a constant on add_attribute can for now",
+                     "can't be applied yet - only one on add_attribute can for now",
                    fn -> render([op], pre_model) end
     end
 
@@ -148,12 +847,12 @@ defmodule Hologram.Migration.RendererTest do
 
       assert_error Hologram.CompileError,
                    "change_attribute :notes of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only a constant on add_attribute can for now",
+                     "can't be applied yet - only one on add_attribute can for now",
                    fn -> render([computed_op], pre_model) end
 
       assert_error Hologram.CompileError,
                    "change_attribute :notes of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only a constant on add_attribute can for now",
+                     "can't be applied yet - only one on add_attribute can for now",
                    fn -> render([op], pre_model) end
     end
 
@@ -170,12 +869,12 @@ defmodule Hologram.Migration.RendererTest do
 
       assert_error Hologram.CompileError,
                    "change_relationship :owner of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only a constant on add_attribute can for now",
+                     "can't be applied yet - only one on add_attribute can for now",
                    fn -> render([computed_op], pre_model) end
 
       assert_error Hologram.CompileError,
                    "change_relationship :owner of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only a constant on add_attribute can for now",
+                     "can't be applied yet - only one on add_attribute can for now",
                    fn -> render([op], pre_model) end
     end
 
@@ -191,7 +890,7 @@ defmodule Hologram.Migration.RendererTest do
 
       assert_error Hologram.CompileError,
                    "add_relationship :parent of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only a constant on add_attribute can for now",
+                     "can't be applied yet - only one on add_attribute can for now",
                    fn -> render([op], pre_model) end
     end
 

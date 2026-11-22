@@ -207,6 +207,74 @@ defmodule Hologram.Migration.GeneratorTest do
     end
 
     @tag :database
+    test "writes a to-one replaced by an attribute taking its column" do
+      opts = opts!("takes_column")
+
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Place
+
+           create_entity MyApp.Task do
+             add_relationship :place, MyApp.Place, optional: true
+           end
+           """}
+        ])
+
+      current =
+        model(%{
+          MyApp.Place => %{},
+          MyApp.Task => %{attributes: [{:place_id, :uuid, [optional: true]}]}
+        })
+
+      assert {:ok, path, 0} = generate(migrations, current, @timestamp, opts)
+
+      written = File.read!(path)
+
+      assert written =~ "add_attribute :place_id, :uuid"
+      assert written =~ "delete_relationship :place"
+    end
+
+    # Only the final model is free of a required cycle, so the swap must not split the file into
+    # parts that each have to stand.
+    @tag :database
+    test "writes that replacement beside a required cycle moving to another side" do
+      opts = opts!("takes_column_cycle")
+
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Alpha
+           create_entity MyApp.Beta
+           create_entity MyApp.Place
+
+           change_entity MyApp.Alpha do
+             add_relationship :b, MyApp.Beta, optional: true
+           end
+
+           change_entity MyApp.Beta do
+             add_relationship :a, MyApp.Alpha
+             add_relationship :place, MyApp.Place, optional: true
+           end
+           """}
+        ])
+
+      current =
+        model(%{
+          MyApp.Alpha => %{relationships: [{:b, MyApp.Beta, []}]},
+          MyApp.Beta => %{
+            attributes: [{:place_id, :uuid, [optional: true]}],
+            relationships: [{:a, MyApp.Alpha, [optional: true]}]
+          },
+          MyApp.Place => %{}
+        })
+
+      assert {:ok, _path, _questions} = generate(migrations, current, @timestamp, opts)
+    end
+
+    @tag :database
     test "formats the file with the given formatter" do
       opts =
         "formatter"

@@ -35,6 +35,31 @@ defmodule Hologram.Migration.Value.Check do
     walk(ops, pre_model, final_model)
   end
 
+  @doc """
+  Validates that no fill among the given physical ops, one file's in order, uses an enum value an
+  earlier op added to a type standing before it with ALTER TYPE: PostgreSQL refuses such a value
+  until the transaction commits, so a copy would pass on an empty table and fail on real rows.
+
+  Read from the physical ops because a logical add doesn't always add a value that way: a value
+  arriving with its type is usable, as is one a rebuild has since carried into a new type.
+
+  A column turning required takes its declared default the same way, but one in a file rendered
+  in one piece only meets this on rows it has to fill, and applies on the others, so it's asked
+  about only in a file with a cut: there a value that would have arrived with its type no longer
+  does.
+
+  Raises Hologram.CompileError naming the column or the fill's line, and the value.
+  """
+  @spec validate_enum_uses!(list(%{atom => any}), boolean) :: :ok
+  def validate_enum_uses!(physical_ops, cut?) do
+    checked =
+      if cut?, do: physical_ops, else: Enum.reject(physical_ops, &Map.has_key?(&1, :fill))
+
+    _added = Enum.reduce(checked, MapSet.new(), &track_enum_values/2)
+
+    :ok
+  end
+
   defp byte_bound(name, entry) do
     entry.attributes
     |> Validator.unique_string_max_bytes(entry.uniques)
@@ -212,6 +237,61 @@ defmodule Hologram.Migration.Value.Check do
         opts
     end
   end
+
+  defp track_enum_values(%{op: :add_enum_value} = op, added) do
+    MapSet.put(added, {op.enum_type, op.value})
+  end
+
+  defp track_enum_values(%{op: :alter_column, fill: value} = op, added) do
+    if MapSet.member?(added, {op.after.type, value}) do
+      raise Hologram.CompileError,
+        message:
+          ~s(the default #{inspect(value)} of column "#{op.column}" on table "#{op.table}" is ) <>
+            "an enum value this file adds to its type - PostgreSQL can't use a value in the " <>
+            "transaction adding it (#1687), so move the change making the column required to " <>
+            "the next migration file"
+    end
+
+    added
+  end
+
+  defp track_enum_values(%{op: :fill_column} = op, added) do
+    case Enum.find(op.enum_uses, &MapSet.member?(added, &1)) do
+      {_enum_type, value} ->
+        refuse!(
+          %{entity: op.entity, line: op.line, name: op.member},
+          "uses the enum value #{inspect(value)}, which this file adds to its type - PostgreSQL " <>
+            "can't use a value in the transaction adding it (#1687), so move the backfill to " <>
+            "the next migration file"
+        )
+
+      nil ->
+        added
+    end
+  end
+
+  defp track_enum_values(%{op: kind, enum_type: enum_type}, added)
+       when kind in [:drop_enum_type, :rebuild_enum_type] do
+    added
+    |> Enum.reject(fn {type, _value} -> type == enum_type end)
+    |> MapSet.new()
+  end
+
+  defp track_enum_values(%{op: :rename_enum_type, from: from, to: to}, added) do
+    MapSet.new(added, fn
+      {^from, value} -> {to, value}
+      pair -> pair
+    end)
+  end
+
+  defp track_enum_values(%{op: :rename_enum_value, enum_type: type, from: from, to: to}, added) do
+    MapSet.new(added, fn
+      {^type, ^from} -> {type, to}
+      pair -> pair
+    end)
+  end
+
+  defp track_enum_values(_op, added), do: added
 
   defp unfit_rule(type, opts) do
     Enum.find(opts, &(not rule_fits?(&1, type)))
