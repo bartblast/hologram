@@ -34,6 +34,7 @@ defmodule Hologram.MutationTest do
   alias Hologram.Test.Fixtures.Mutation.Module4, as: MutationModule4
   alias Hologram.Test.Fixtures.Mutation.Module5, as: MutationModule5
   alias Hologram.Test.Fixtures.Mutation.Module6, as: MutationModule6
+  alias Hologram.Test.Fixtures.Mutation.Module7, as: MutationModule7
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
 
@@ -1855,6 +1856,105 @@ defmodule Hologram.MutationTest do
 
       assert Record.find(replica_id, 1) == %{actor_id: user.id, result: answer}
       assert record_envelope(replica_id, 1) == raw
+    end
+
+    test "refuses a create holding a NUL, for a signed-in user and a visitor" do
+      user = create_user("create-nul@example.com")
+
+      for session <- [server(user.id), server()] do
+        id = Entity.generate_id()
+        write = create_write(MutationModule5, id, %{"title" => "a\0b"})
+
+        assert run(envelope([write]), session) ==
+                 rejected(0, %{title: [{:type, :string}]})
+
+        assert EntityOperations.get(MutationModule5, id) == nil
+      end
+    end
+
+    test "refuses an update holding a NUL and leaves the row as it was" do
+      user = create_user("update-nul@example.com")
+
+      channel =
+        [name: "open"]
+        |> Channel.new()
+        |> DB.create!()
+
+      write =
+        update_write(Channel, channel.id, %{"name" => "a\0b"}, stamp: stamp_above(channel))
+
+      assert run(envelope([write]), server(user.id)) ==
+               rejected(0, %{name: [{:type, :string}]})
+
+      assert EntityOperations.get(Channel, channel.id).name == "open"
+    end
+
+    test "refuses a create holding a date or datetime that can't be stored" do
+      user = create_user("create-range@example.com")
+
+      for session <- [server(user.id), server()],
+          {name, value, type} <- [
+            {:held_on, "-5000-01-01", :date},
+            {:starts_at, "-5000-01-01T00:00:00.000000Z", :datetime}
+          ] do
+        id = Entity.generate_id()
+        write = create_write(MutationModule7, id, %{Atom.to_string(name) => value})
+
+        assert run(envelope([write]), session) == rejected(0, %{name => [{:type, type}]})
+        assert EntityOperations.get(MutationModule7, id) == nil
+      end
+    end
+
+    test "refuses an update holding a value that can't be stored" do
+      user = create_user("update-range@example.com")
+
+      row =
+        [title: "kept"]
+        |> MutationModule7.new()
+        |> DB.create!()
+
+      for session <- [server(user.id), server()],
+          {name, value, type} <- [
+            {:held_on, "-5000-01-01", :date},
+            {:starts_at, "-5000-01-01T00:00:00.000000Z", :datetime},
+            {:title, "a\0b", :string}
+          ] do
+        write =
+          update_write(MutationModule7, row.id, %{Atom.to_string(name) => value},
+            stamp: stamp_above(row)
+          )
+
+        assert run(envelope([write]), session) == rejected(0, %{name => [{:type, type}]})
+      end
+
+      assert %{held_on: nil, starts_at: nil, title: "kept"} =
+               EntityOperations.get(MutationModule7, row.id)
+    end
+
+    # The writer only sees the values that win, and a losing one goes into the answer, stored as
+    # jsonb, which can't hold a NUL.
+    test "refuses an update whose NUL would lose the merge" do
+      user = create_user("losing-nul@example.com")
+
+      channel =
+        [name: "open"]
+        |> Channel.new()
+        |> DB.create!()
+
+      newer = channel.__meta__.revisions.name + 1_000_000
+
+      set_revisions(Channel, channel.id, %{"name" => newer})
+
+      write =
+        update_write(Channel, channel.id, %{"name" => "a\0b"},
+          based_on: %{"name" => channel.__meta__.revisions.name},
+          stamp: newer - 1
+        )
+
+      assert run(envelope([write]), server(user.id)) ==
+               rejected(0, %{name: [{:type, :string}]})
+
+      assert EntityOperations.get(Channel, channel.id).name == "open"
     end
 
     test "keeps a refused batch holding a NUL, with the NUL spelled as U+FFFD" do

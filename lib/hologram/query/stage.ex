@@ -30,11 +30,11 @@ defmodule Hologram.Query.Stage do
   # whose refusal names its declared values.
   @type_values %{
     boolean: "true or false",
-    date: "a Date",
-    datetime: "a DateTime",
+    date: "a Date from -4713-11-24 to 5874897-12-31",
+    datetime: "a DateTime from -4713-11-24T00:00:00Z to 9999-12-31T23:59:59.999999Z",
     float: "a float, or an integer that fits in 64 bits",
     integer: "an integer that fits in 64 bits",
-    string: "a UTF-8 string",
+    string: "a UTF-8 string with no NUL byte",
     time: "a Time",
     uuid: ~s(a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001")
   }
@@ -1799,6 +1799,13 @@ defmodule Hologram.Query.Stage do
       raise MisuseError,
         message:
           "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect_name(name)} - a search term is a string"
+    end
+
+    # The database refuses a NUL in any text it's handed, so this can't simply match nothing.
+    if String.contains?(operand, <<0>>) do
+      raise MisuseError,
+        message:
+          "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect_name(name)} - a search term can't hold a NUL byte"
     end
 
     {name, operator, operand}

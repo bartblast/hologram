@@ -2081,7 +2081,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module2,
         [c: 5],
-        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte"
       )
     end
 
@@ -2089,7 +2089,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module2,
         [c: <<0xFF>>],
-        ~s(<<255>> is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string)
+        ~s(<<255>> is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte)
       )
     end
 
@@ -2137,7 +2137,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module4,
         [a: "2026-01-01"],
-        ~s("2026-01-01" is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :date, which takes a Date)
+        ~s("2026-01-01" is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :date, which takes a Date from -4713-11-24 to 5874897-12-31)
       )
     end
 
@@ -2145,7 +2145,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module4,
         [b: ~D[2026-01-01]],
-        "~D[2026-01-01] is not a value of attribute :b in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :datetime, which takes a DateTime"
+        "~D[2026-01-01] is not a value of attribute :b in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :datetime, which takes a DateTime from -4713-11-24T00:00:00Z to 9999-12-31T23:59:59.999999Z"
       )
     end
 
@@ -2219,7 +2219,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module2,
         [c: {:!=, 5}],
-        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte"
       )
     end
 
@@ -2235,7 +2235,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module2,
         [c: ["a", 5]],
-        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte"
       )
     end
 
@@ -2243,7 +2243,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module2,
         [c: {:in, ["a", 5]}],
-        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte"
       )
     end
 
@@ -2251,7 +2251,7 @@ defmodule Hologram.Query.StageTest do
       assert_value_refused(
         Module2,
         [c: {:not_in, ["a", 5]}],
-        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string"
+        "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte"
       )
     end
 
@@ -2364,6 +2364,33 @@ defmodule Hologram.Query.StageTest do
 
       assert_error MisuseError, expected_msg, fn ->
         filter(Module2, c: {:contains, <<0xFF>>})
+      end
+    end
+
+    test "raises on a search term holding a NUL" do
+      expected_msg =
+        ~s(invalid operand <<97, 0, 98>> for operator :contains on attribute :c - a search term can't hold a NUL byte)
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, c: {:contains, "a\0b"})
+      end
+    end
+
+    test "raises on a filter value holding a NUL" do
+      expected_msg =
+        "<<97, 0, 98>> is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module2, c: "a\0b")
+      end
+    end
+
+    test "raises on a filter date no date column holds" do
+      expected_msg =
+        "~D[-5000-01-01] is not a value of attribute :a in Hologram.Test.Fixtures.Entity.Module4 - the attribute has type :date, which takes a Date from -4713-11-24 to 5874897-12-31"
+
+      assert_error MisuseError, expected_msg, fn ->
+        filter(Module4, a: ~D[-5000-01-01])
       end
     end
 
@@ -4112,7 +4139,7 @@ defmodule Hologram.Query.StageTest do
     # filter is.
     test "refuses a mistyped value in a policy condition" do
       assert_error MisuseError,
-                   "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string",
+                   "5 is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module2 - the attribute has type :string, which takes a UTF-8 string with no NUL byte",
                    fn -> predicate_triples!(Module2, c: 5) end
     end
 

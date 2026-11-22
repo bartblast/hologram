@@ -26,6 +26,7 @@ defmodule Hologram.Mutation do
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Merge
   alias Hologram.DB.Writer
+  alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Mutation.Envelope
   alias Hologram.Mutation.Record
@@ -266,6 +267,7 @@ defmodule Hologram.Mutation do
     edge_fields = Enum.map(followers, & &1.relationship)
 
     Writer.check_update!(row, Map.keys(write.data) ++ Map.keys(write.deltas) ++ edge_fields)
+    check_values(write, index)
 
     {changes, lost} =
       Merge.resolve(write.data, write.based_on, write.stamp, row.__meta__.revisions)
@@ -357,6 +359,16 @@ defmodule Hologram.Mutation do
     end)
     |> Enum.reverse()
     |> Enum.map(fn {lead, index, followers} -> {lead, index, Enum.reverse(followers)} end)
+  end
+
+  # Every value of an update is judged, the ones about to lose the merge too. The writer only sees
+  # the values that win, and a losing one goes into the answer, stored as jsonb, which can't hold
+  # some of what a write can carry.
+  defp check_values(write, index) do
+    case Entity.validate(write.entity_type, write.data) do
+      :ok -> :ok
+      {:error, violations} -> Connection.rollback({:rejected, index, violations})
+    end
   end
 
   # Checked before anything runs, against the writes as a whole - a stamp the server cannot vouch
