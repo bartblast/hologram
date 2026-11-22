@@ -678,14 +678,15 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
       );
     }
 
-    // The grant store's own rule: a role held on the entity the grant row names.
+    // The grant store's own rule: a role held on the entity the grant row names, or on its whole
+    // type. A type-wide grant row names no entity, so this reference never admits it.
     case "named": {
       const [_kind, targetType, roles] = reference;
       const rowEntityId = entityValue(entityType, entity, "entity_id");
 
       return (
         rowEntityId !== null &&
-        grantExists(rows, actorUserId, roles, targetType, [rowEntityId])
+        grantExists(rows, actorUserId, roles, targetType, [rowEntityId, null])
       );
     }
 

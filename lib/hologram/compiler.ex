@@ -5586,8 +5586,8 @@ defmodule Hologram.Compiler do
   end
 
   # A grant reference names WHERE a role must be held: on the entity itself, on its whole type,
-  # on a related entity, on the entity a grant row names, or nowhere at all (a global role). The
-  # verdict context is the rule's type and operation.
+  # on a related entity, on the entity a grant row names or its whole type, or nowhere at all (a
+  # global role). The verdict context is the rule's type and operation.
   defp render_policy_references(_entity_type, nil, _verdict_context), do: "null"
 
   defp render_policy_references(entity_type, references, verdict_context) do

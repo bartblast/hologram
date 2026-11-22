@@ -229,7 +229,7 @@ defmodule Hologram.Policy do
   that row, one for a relationship and several for a path - and global role modules as
   {:global, role modules} - nil when the line has none. The grant store's framework-supplied rules
   carry a fifth kind no declaration can spell, {:named, entity type, role names}: roles held on
-  the entity a grant row names.
+  the entity a grant row names or on its whole type.
   A rule grants its operation when its predicates hold, one of its grant references is held, and the
   related row grants the operation its delegation names - and a policy grants its operation when any
   of its rules does.
@@ -615,7 +615,8 @@ defmodule Hologram.Policy do
 
   These are the extends-expanded own roles of its allow :read_roles rules together with every role
   qualifying to grant or revoke on it - a declared line adds readers, so nobody can change a list
-  they cannot see.
+  they cannot see. A holder sees the grants on the row they hold the role on, or on every row of
+  the type when they hold it on the whole type.
   """
   @spec read_roles_qualifying_roles(module) :: list(atom)
   def read_roles_qualifying_roles(entity_type) do
@@ -1660,8 +1661,8 @@ defmodule Hologram.Policy do
   defp reference_items(references), do: Enum.map(references, &{:to, &1})
 
   # Everyone sees the grants they hold. Seeing someone else's grants on an entity takes one of
-  # that entity type's read-grants roles, held on the very entity the grant row names - so
-  # the check reads grant rows through grant rows, never through this policy again.
+  # that entity type's read-grants roles, held on the entity the grant row names or on its whole
+  # type - so the check reads grant rows through grant rows, never through this policy again.
   # The source travels with the declaration rather than being recomputed here: a line taken
   # through several policies names the module whose BODY wrote it, not the last hop it came by.
   defp replay(module, declaration, source) do
@@ -1695,8 +1696,8 @@ defmodule Hologram.Policy do
     [%{predicates: [{:user_id, :==, {:actor}}], to: nil, via: nil} | named_rules]
   end
 
-  # Own readers hold their role on the very entity the grant row names, global readers hold
-  # theirs app-wide - one rule, since either reference satisfies it.
+  # Own readers hold their role on the entity the grant row names or on its whole type, global
+  # readers hold theirs app-wide - one rule, since either reference satisfies it.
   defp role_grant_named_rule({entity_type, role_names, role_modules}) do
     named_reference = if role_names == [], do: [], else: [{:named, entity_type, role_names}]
     global_reference = build_global_reference(role_modules)

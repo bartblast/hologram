@@ -37,6 +37,18 @@ defmodule Hologram.MutationTest do
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
 
+  # A repeated grant by a type-wide holder, already answered once, for a test to change the store
+  # before sending the batch again.
+  defp answered_repeat do
+    %{holder: holder, write: write} = context = repeated_grant()
+    batch = envelope([write])
+
+    {:ok, %{"status" => "confirmed", "kept" => %{"0" => %{"id" => _id}}}} =
+      run(batch, server(holder.id))
+
+    Map.put(context, :batch, batch)
+  end
+
   # A row whose author is the given user, whose writes `when: author_id == user_id()` grants that
   # user - write rules that need no role grant, on a multi-column type.
   defp create_authored(user, values) do
@@ -182,6 +194,30 @@ defmodule Hologram.MutationTest do
     id = RoleGrant.derive_id(user_id, entity_type, resource.id, role)
 
     create_write(RoleGrant, id, data, Keyword.delete(opts, :granted_by_id))
+  end
+
+  # A grant someone else made on a row, and the same grant as a holder of the role on the whole
+  # type would send it again.
+  defp repeated_grant do
+    holder = create_user("repeat-holder@example.com")
+    granter = create_user("repeat-granter@example.com")
+    user = create_user("repeat-grantee@example.com")
+    resource = create_shared()
+
+    Auth.grant_role(holder, :member, PolicyModule2)
+    Auth.grant_role(granter, :member, resource)
+
+    Context.with_actor(granter.id, fn ->
+      Auth.grant_role(user, :member, resource)
+    end)
+
+    %{
+      granter: granter,
+      holder: holder,
+      resource: resource,
+      user: user,
+      write: grant_write(user.id, resource, :member)
+    }
   end
 
   # A create anyone may make: Mutation.Module2 grants it for a public row.
@@ -1192,6 +1228,216 @@ defmodule Hologram.MutationTest do
 
       assert kept["0"]["id"] == write["id"]
       assert kept["0"]["granted_by_id"] == first_member.id
+    end
+
+    # The gate admits a role held on the whole type, so the read rule has to as well, or the answer
+    # hands over a row its user may not read.
+    test "answers a type-wide holder's repeated grant with a row that holder may read" do
+      %{granter: granter, holder: holder, write: write} = repeated_grant()
+
+      assert {:ok, %{"status" => "confirmed", "kept" => kept}} =
+               run(envelope([write]), server(holder.id))
+
+      assert kept["0"]["granted_by_id"] == granter.id
+      assert Auth.can?(holder.id, :read, EntityOperations.get(RoleGrant, write["id"]))
+    end
+
+    test "answers a resent repeated grant with the row as it stands" do
+      %{batch: batch, holder: holder, resource: resource, user: user} = answered_repeat()
+
+      Auth.revoke_role(user, :member, resource)
+
+      Context.with_actor(holder.id, fn ->
+        Auth.grant_role(user, :member, resource)
+      end)
+
+      assert {:ok, %{"status" => "confirmed", "kept" => %{"0" => row}}} =
+               run(batch, server(holder.id))
+
+      assert row["granted_by_id"] == holder.id
+    end
+
+    test "withholds a resent repeated grant revoked since" do
+      %{batch: batch, holder: holder, resource: resource, user: user} = answered_repeat()
+
+      Auth.revoke_role(user, :member, resource)
+
+      assert {:ok, %{"status" => "confirmed", "kept" => kept}} = run(batch, server(holder.id))
+
+      assert kept == %{"0" => %{"$withheld" => true}}
+    end
+
+    test "withholds a resent repeated grant its user may no longer read" do
+      %{batch: batch, holder: holder} = answered_repeat()
+
+      Auth.revoke_role(holder, :member, PolicyModule2)
+
+      assert {:ok, %{"status" => "confirmed", "kept" => kept}} = run(batch, server(holder.id))
+
+      assert kept == %{"0" => %{"$withheld" => true}}
+    end
+
+    # The record keeps no writes of a confirmed batch, so what a resend carries can't be what tells
+    # a grant row from any other.
+    test "judges a recorded grant whatever writes the resend carries" do
+      %{batch: batch, holder: holder} = answered_repeat()
+
+      Auth.revoke_role(holder, :member, PolicyModule2)
+
+      assert {:ok, %{"status" => "confirmed", "kept" => kept}} =
+               run(%{batch | "writes" => []}, server(holder.id))
+
+      assert kept == %{"0" => %{"$withheld" => true}}
+    end
+
+    test "withholds a resent stale revocation's row its user may no longer read" do
+      member = create_user("resend-revoker@example.com")
+      user = create_user("resend-regranted@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, :member, resource)
+      Auth.grant_role(user, :member, resource)
+
+      first_row = EntityOperations.get(RoleGrant, grant_id(user.id, resource, :member))
+
+      Auth.revoke_role(user, :member, resource)
+      Auth.grant_role(user, :member, resource)
+
+      write =
+        revocation_write(user.id, resource, :member,
+          based_on: based_on(first_row),
+          stamp: first_row.__meta__.revisions.role + 1
+        )
+
+      batch = envelope([write])
+
+      assert {:ok, %{"kept" => %{"0" => %{"id" => _id}}}} = run(batch, server(member.id))
+
+      Auth.revoke_role(member, :member, resource)
+
+      assert {:ok, %{"status" => "confirmed", "kept" => kept}} = run(batch, server(member.id))
+
+      assert kept == %{"0" => %{"$withheld" => true}}
+    end
+
+    # A revocation that won keeps nothing, so the browser would apply it over a grant made again
+    # since, whose revisions can sit below its stamp, with no frame to bring the row back.
+    test "answers a resent revocation with its grant only while it's made again and readable" do
+      member = create_user("won-revoker@example.com")
+      user = create_user("won-revoked@example.com")
+      resource = create_shared()
+
+      Auth.grant_role(member, :member, resource)
+      Auth.grant_role(user, :member, resource)
+
+      row = EntityOperations.get(RoleGrant, grant_id(user.id, resource, :member))
+
+      write =
+        revocation_write(user.id, resource, :member,
+          based_on: based_on(row),
+          stamp: stamp_above(row)
+        )
+
+      batch = envelope([write])
+
+      assert {:ok, %{"status" => "confirmed", "kept" => first_kept}} =
+               run(batch, server(member.id))
+
+      assert first_kept == %{}
+      assert {:ok, %{"kept" => not_remade}} = run(batch, server(member.id))
+      assert not_remade == %{}
+
+      Auth.grant_role(user, :member, resource)
+
+      assert {:ok, %{"kept" => %{"0" => remade}}} = run(batch, server(member.id))
+      assert remade["id"] == row.id
+
+      Auth.revoke_role(member, :member, resource)
+
+      assert {:ok, %{"kept" => unreadable}} = run(batch, server(member.id))
+      assert unreadable == %{}
+    end
+
+    test "answers a doctored resend's revocation only with a grant its sender may read" do
+      holder = create_user("doctored-holder@example.com")
+      user = create_user("doctored-grantee@example.com")
+      readable = create_shared()
+      hidden = create_shared()
+
+      Auth.grant_role(holder, :member, readable)
+      Auth.grant_role(user, :member, readable)
+      Auth.grant_role(user, :member, hidden)
+
+      batch = envelope([public_write(Entity.generate_id())])
+
+      assert {:ok, %{"status" => "confirmed"}} = run(batch, server(holder.id))
+
+      doctored = %{
+        batch
+        | "writes" => [
+            revocation_write(user.id, readable, :member),
+            revocation_write(user.id, hidden, :member)
+          ]
+      }
+
+      assert {:ok, %{"kept" => kept}} = run(doctored, server(holder.id))
+
+      assert Map.keys(kept) == ["0"]
+      assert kept["0"]["id"] == grant_id(user.id, readable, :member)
+    end
+
+    # A creator's grant always answers whole, since the create already wrote it, and withholding it
+    # would leave the creator without their role until a frame arrives.
+    test "answers a resent creator's grant with its row as it stands" do
+      user = create_user("resend-creator@example.com")
+      entity_id = Entity.generate_id()
+      resource = %MutationModule1{id: entity_id}
+
+      writes = [
+        create_write(MutationModule1, entity_id, %{"author_id" => user.id}),
+        grant_write(user.id, resource, :maintainer)
+      ]
+
+      batch = envelope(writes)
+
+      assert {:ok, %{"kept" => %{"1" => %{"granted_by_id" => granted_by_id}}}} =
+               run(batch, server(user.id))
+
+      assert granted_by_id == user.id
+
+      Auth.revoke_role(user, :maintainer, resource)
+      Auth.grant_role(user, :maintainer, resource)
+
+      assert {:ok, %{"kept" => %{"1" => row}}} = run(batch, server(user.id))
+
+      assert row["id"] == grant_id(user.id, resource, :maintainer)
+      assert row["granted_by_id"] == nil
+    end
+
+    test "withholds only the grant among what a resent batch kept" do
+      %{holder: holder, resource: resource, user: user, write: grant} = repeated_grant()
+
+      row = create_authored(holder, priority: 5)
+      newer = row.__meta__.revisions.priority + 1_000_000
+
+      set_revisions(MutationModule1, row.id, %{"priority" => newer})
+
+      update =
+        update_write(MutationModule1, row.id, %{"priority" => 9},
+          based_on: %{"priority" => row.__meta__.revisions.priority},
+          stamp: newer - 1
+        )
+
+      batch = envelope([update, grant])
+
+      assert {:ok, %{"kept" => %{"0" => update_kept, "1" => %{"id" => _id}}}} =
+               run(batch, server(holder.id))
+
+      Auth.revoke_role(user, :member, resource)
+
+      assert {:ok, %{"kept" => kept}} = run(batch, server(holder.id))
+
+      assert kept == %{"0" => update_kept, "1" => %{"$withheld" => true}}
     end
 
     test "rolls the batch back on a refused grant" do

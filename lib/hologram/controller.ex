@@ -1190,8 +1190,8 @@ defmodule Hologram.Controller do
   end
 
   # Transport only: what a batch becomes is Hologram.Mutation's, the spelling of its answer
-  # included - so that a repeated batch is answered with byte for byte what its first arrival
-  # produced.
+  # included - so that a repeated batch is answered with what its first arrival produced, only the
+  # grants it names read again.
   defp send_mutation_response(conn) do
     response =
       case Mutation.run(conn.body_params, Server.from(conn)) do
