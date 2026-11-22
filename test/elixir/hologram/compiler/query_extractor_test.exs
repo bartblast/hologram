@@ -487,6 +487,53 @@ defmodule Hologram.Compiler.QueryExtractorTest do
                    fn -> derived_definition(Module146, :computed_key, ir_plt) end
     end
 
+    test "decides an anonymous function's guard on its argument", %{ir_plt: ir_plt} do
+      {{:query, query}, _read_modules} = derived_definition(Module146, :guard_held, ir_plt)
+
+      assert query.take == 5
+
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :guard_on_argument in .+ calls an anonymous function with 1, which no clause matches - the code raises FunctionClauseError there/,
+                   fn -> derived_definition(Module146, :guard_on_argument, ir_plt) end
+    end
+
+    test "decides an anonymous function's guard on a value from outside it", %{ir_plt: ir_plt} do
+      {{:query, query}, _read_modules} =
+        derived_definition(Module146, :guard_on_outer_value_held, ir_plt)
+
+      assert query.take == 5
+
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :guard_on_outer_value in .+ calls an anonymous function with 1, which no clause matches/,
+                   fn -> derived_definition(Module146, :guard_on_outer_value, ir_plt) end
+    end
+
+    test "decides an anonymous function's literal parameter", %{
+      ir_plt: ir_plt
+    } do
+      {{:query, query}, _read_modules} =
+        derived_definition(Module146, :literal_param_matched, ir_plt)
+
+      assert query.take == 5
+
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :literal_param in .+ calls an anonymous function with 2, which no clause matches/,
+                   fn -> derived_definition(Module146, :literal_param, ir_plt) end
+    end
+
+    test "decides an anonymous function's repeated parameter", %{
+      ir_plt: ir_plt
+    } do
+      {{:query, query}, _read_modules} =
+        derived_definition(Module146, :repeated_param_equal, ir_plt)
+
+      assert query.take == 5
+
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :repeated_param in .+ calls an anonymous function with 1, 2, which no clause matches/,
+                   fn -> derived_definition(Module146, :repeated_param, ir_plt) end
+    end
+
     test "takes the case clause a known value matches", %{ir_plt: ir_plt} do
       {definition, _read_modules} = derived_definition(Module142, :by_case, ir_plt)
 

@@ -67,16 +67,94 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module145 do
     take(messages, ^hd(limits))
   end
 
+  def guard_on_argument(messages) do
+    limit =
+      [1]
+      |> Enum.map(fn x when x > 10 -> 5 end)
+      |> hd()
+
+    take(messages, ^limit)
+  end
+
+  def guard_held(messages) do
+    limit =
+      [20]
+      |> Enum.map(fn x when x > 10 -> 5 end)
+      |> hd()
+
+    take(messages, ^limit)
+  end
+
+  def guard_on_outer_value(messages) do
+    bound = wrap_term(10)
+
+    limit =
+      [1]
+      |> Enum.map(fn x when x > bound -> 5 end)
+      |> hd()
+
+    take(messages, ^limit)
+  end
+
+  def guard_on_outer_value_held(messages) do
+    bound = wrap_term(10)
+
+    limit =
+      [20]
+      |> Enum.map(fn x when x > bound -> 5 end)
+      |> hd()
+
+    take(messages, ^limit)
+  end
+
   def improper_list(messages) do
     _improper = wrap_term([1] ++ wrap_term(2))
 
     take(messages, 1)
   end
 
+  def literal_param(messages) do
+    limit =
+      [2]
+      |> wrap_term()
+      |> Enum.map(fn 1 -> 5 end)
+      |> hd()
+
+    take(messages, ^limit)
+  end
+
+  def literal_param_matched(messages) do
+    limit =
+      [1]
+      |> wrap_term()
+      |> Enum.map(fn 1 -> 5 end)
+      |> hd()
+
+    take(messages, ^limit)
+  end
+
   def keyed_by_computed(messages, key) do
     opts = %{:limit => 3, key => 1}
 
     take(messages, ^opts.limit)
+  end
+
+  def repeated_param(messages) do
+    limit =
+      [1]
+      |> wrap_term()
+      |> Enum.reduce(2, fn x, x -> 5 end)
+
+    take(messages, ^limit)
+  end
+
+  def repeated_param_equal(messages) do
+    limit =
+      [2]
+      |> wrap_term()
+      |> Enum.reduce(2, fn x, x -> 5 end)
+
+    take(messages, ^limit)
   end
 
   defp holding(value), do: fn _x -> value end

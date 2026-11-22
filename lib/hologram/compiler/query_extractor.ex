@@ -758,6 +758,24 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp interpret_anonymous!(clause, arg_values, closure_env, context) do
+    # The head decides as a named function's does, with a guard free to read what the closure holds.
+    candidates =
+      clause_candidates([clause], fn clause ->
+        clause_outcome(
+          clause.params,
+          clause.guards,
+          arg_values,
+          closure_env,
+          &call_binding!(&1, nil, context),
+          context
+        )
+      end)
+
+    no_match =
+      "#{context.subject} calls an anonymous function with #{Enum.map_join(arg_values, ", ", &inspect/1)}, which no clause matches - the code raises FunctionClauseError there"
+
+    choose_clause!(candidates, no_match, context)
+
     call_env = call_env!(clause.params, arg_values, closure_env, context)
 
     # A closure runs when the function it was given to calls it, after the walk that built it moved

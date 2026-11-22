@@ -102,6 +102,62 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146 do
     |> Derived.lower()
   end
 
+  def __derived_definition__(:guard_on_argument) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.guard_on_argument()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:guard_on_outer_value) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.guard_on_outer_value()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:literal_param) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.literal_param()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:repeated_param) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.repeated_param()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:guard_held) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.guard_held()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:guard_on_outer_value_held) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.guard_on_outer_value_held()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:literal_param_matched) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.literal_param_matched()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:repeated_param_equal) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.repeated_param_equal()
+    |> Derived.lower()
+  end
+
   def __derived_locations__ do
     %{
       closure_making_field: {"lib/my_app/member.ex", 1},
@@ -113,7 +169,15 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146 do
       computed_condition: {"lib/my_app/member.ex", 7},
       computed_joined: {"lib/my_app/member.ex", 8},
       computed_key: {"lib/my_app/member.ex", 9},
-      computed_picked: {"lib/my_app/member.ex", 10}
+      computed_picked: {"lib/my_app/member.ex", 10},
+      guard_on_argument: {"lib/my_app/member.ex", 11},
+      guard_on_outer_value: {"lib/my_app/member.ex", 12},
+      literal_param: {"lib/my_app/member.ex", 13},
+      repeated_param: {"lib/my_app/member.ex", 14},
+      guard_held: {"lib/my_app/member.ex", 15},
+      guard_on_outer_value_held: {"lib/my_app/member.ex", 16},
+      literal_param_matched: {"lib/my_app/member.ex", 17},
+      repeated_param_equal: {"lib/my_app/member.ex", 18}
     }
   end
 end
