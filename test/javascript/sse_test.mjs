@@ -715,6 +715,28 @@ describe("Sse", () => {
       sinon.assert.calledWith(globalRegistrySetSpy, "sseConnected?", false);
     });
 
+    // The log's session storage can be full, and the tab still has to get its stream back.
+    it("schedules a reconnect when the log can't be written", async () => {
+      loggerDebugStub.restore();
+
+      sinon
+        .stub(Object.getPrototypeOf(sessionStorage), "setItem")
+        .throws(new DOMException("full", "QuotaExceededError"));
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      setTimeoutSpy.resetHistory();
+
+      Sse.eventSource.onerror({type: "error"});
+
+      sinon.assert.calledWith(
+        setTimeoutSpy,
+        sinon.match.func,
+        Sse.BASE_RECONNECT_DELAY,
+      );
+    });
+
     it("increments reconnectAttempts and schedules a delayed reconnect", async () => {
       stubHandshakeResponse();
 

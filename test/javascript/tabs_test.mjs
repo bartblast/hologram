@@ -3880,7 +3880,9 @@ describe("Tabs", () => {
             return native.call(this, message);
           });
 
-        sinon.stub(Logger, "debug").throws(new Error("storage full"));
+        const logging = sinon
+          .stub(Object.getPrototypeOf(sessionStorage), "setItem")
+          .throws(new DOMException("full", "QuotaExceededError"));
 
         Tabs.post({kind: "frame"}, Promise.resolve());
         Tabs.post({kind: "frame", later: true}, write);
@@ -3888,9 +3890,37 @@ describe("Tabs", () => {
         await waitForEventLoop();
 
         sinon.assert.calledOnce(posting);
-        sinon.assert.calledOnce(Logger.debug);
+        sinon.assert.calledOnce(logging);
 
         const heard = await hear(group, 1, finishWrite);
+
+        assert.deepStrictEqual(heard, [{kind: "frame", later: true}]);
+      });
+
+      it("keeps posting after a post threw something that can't be logged", async () => {
+        const group = nextGroup();
+
+        await Tabs.join(group, stubs());
+
+        const native = BroadcastChannel.prototype.postMessage;
+
+        sinon
+          .stub(BroadcastChannel.prototype, "postMessage")
+          .onFirstCall()
+          .callsFake(() => {
+            throw Symbol("unprintable");
+          })
+          .callsFake(function (message) {
+            return native.call(this, message);
+          });
+
+        Tabs.post({kind: "frame"}, Promise.resolve());
+
+        await waitForEventLoop();
+
+        const heard = await hear(group, 1, () => {
+          Tabs.post({kind: "frame", later: true}, Promise.resolve());
+        });
 
         assert.deepStrictEqual(heard, [{kind: "frame", later: true}]);
       });

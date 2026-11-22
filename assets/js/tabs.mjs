@@ -390,14 +390,14 @@ export default class Tabs {
         try {
           channel.postMessage(message);
         } catch (error) {
-          try {
-            Logger.debug(
-              `Hologram: a message to the other tabs failed (${error})`,
-            );
-            // eslint-disable-next-line no-empty
-          } catch {}
+          Logger.debug(
+            `Hologram: a message to the other tabs failed (${error})`,
+          );
         }
-      });
+      })
+      // What a message's getter threw can be something a string can't hold, like a Symbol, so even
+      // saying it failed can throw.
+      .catch(() => {});
   }
 
   // This tab has everything it starts with - the rows its own page carried, and what a previous

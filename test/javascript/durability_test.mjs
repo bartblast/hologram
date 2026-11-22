@@ -462,7 +462,7 @@ describe("Durability", () => {
       await Durability.load();
 
       sinon
-        .stub(Logger, "debug")
+        .stub(Object.getPrototypeOf(sessionStorage), "setItem")
         .throws(new DOMException("full", "QuotaExceededError"));
 
       // A pair the store cannot hold, so the write fails.
