@@ -35,6 +35,7 @@ import LocalDatabase from "../../assets/js/local_database.mjs";
 import Logger from "../../assets/js/logger.mjs";
 import Model from "../../assets/js/model.mjs";
 import Replica from "../../assets/js/replica.mjs";
+import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -1859,12 +1860,9 @@ describe("Durability", () => {
       });
     });
 
-    // Spelled the way the SERVER spells a change of identity, because it is the same event
-    // noticed here rather than there - and the reader keeps its rows or drops them on that one
-    // word, where the sentence beside it is only ever read in a log.
-    it("tells the group somebody else is signed in the way the server would", async () => {
-      sinon.stub(Durability, "clear");
-
+    // Every tab of the group was mounted for this tab's user, so what it holds is its own page's.
+    // The word `identity` would drop those rows at once.
+    it("tells the group to refill in place when the store was somebody else's", async () => {
       const posting = sinon.stub(Tabs, "post");
 
       await seedPreviousLoad();
@@ -1875,10 +1873,63 @@ describe("Durability", () => {
 
       Durability.restore(true);
 
+      await Durability.replicaWritten();
+
       sinon.assert.calledOnceWithExactly(posting, {
         event: "sync_resync",
-        frame: {reason: "identity"},
+        frame: {reason: "somebody else is signed in"},
         kind: "frame",
+      });
+    });
+
+    it("leaves a tab of the same user the row its page carried", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      LocalDatabase.actorUserId = "u2";
+
+      Durability.restore(true);
+
+      await Durability.replicaWritten();
+
+      const {event, frame} = posting.firstCall.args[0];
+
+      // The other tab of the group, mounted for the same user.
+      LocalDatabase.reset();
+      LocalDatabase.putRow("MyApp.Task", {id: "t2", title: "Carried"});
+      LocalDatabase.markCarried("MyApp.Task", "t2");
+
+      SyncStream.receiveFrame(event, frame);
+
+      assert.deepStrictEqual(LocalDatabase.baseRow("MyApp.Task", "t2"), {
+        id: "t2",
+        title: "Carried",
+      });
+    });
+
+    it("makes somebody else's store this user's", async () => {
+      sinon.stub(Tabs, "post");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      LocalDatabase.actorUserId = "u2";
+
+      Durability.restore(true);
+
+      await Durability.replicaWritten();
+
+      assert.deepStrictEqual(await readAll("entities"), []);
+      assert.isUndefined(await readMeta("cursor"));
+      assert.equal(await readMeta("actorUserId"), "u2");
+
+      assert.deepStrictEqual(await readMeta("replica"), {
+        id: "r-fresh",
+        token: "statement-fresh",
       });
     });
 
@@ -1917,21 +1968,23 @@ describe("Durability", () => {
         assert.isFalse(clearing.called);
       });
 
-      it("takes the rows when somebody else is signed in, and clears nothing", async () => {
+      // Until the leader has judged the store, a query would answer from another person's rows.
+      it("takes no rows and no place from somebody else's store, and clears nothing", async () => {
         await seedPreviousLoad();
         await Durability.open();
         await Durability.load();
 
         LocalDatabase.actorUserId = "u2";
 
-        Durability.restore(false);
+        const resumed = Durability.restore(false);
 
-        assert.deepStrictEqual(LocalDatabase.baseRow("MyApp.Task", "t1"), {
-          id: "t1",
-          title: "Draft copy",
-        });
+        assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
+        assert.isNull(resumed.cursor);
+        assert.equal(Replica.id, "r-fresh");
 
         assert.equal((await readAll("entities")).length, 1);
+        assert.equal(await readMeta("cursor"), "place-1");
+        assert.equal(await readMeta("actorUserId"), "u1");
       });
 
       it("adopts a stored identity", async () => {
@@ -2097,6 +2150,84 @@ describe("Durability", () => {
       Durability.restore(true);
 
       assert.isNull(Durability.restore(true));
+    });
+  });
+
+  describe("claim()", () => {
+    const replica = {id: "r-claimed", token: "statement-claimed"};
+
+    it("wipes another owner's rows and place, and writes the owner and the pair", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      await Durability.claim("u2", replica);
+
+      assert.deepStrictEqual(await readAll("entities"), []);
+      assert.isUndefined(await readMeta("cursor"));
+      assert.equal(await readMeta("actorUserId"), "u2");
+      assert.deepStrictEqual(await readMeta("replica"), replica);
+    });
+
+    // A tab can have read the store before another tab of its group claimed it.
+    it("keeps the rows and the place of a store already this user's", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      await Durability.claim("u1", replica);
+
+      assert.equal((await readAll("entities")).length, 1);
+      assert.equal(await readMeta("cursor"), "place-1");
+      assert.equal(await readMeta("actorUserId"), "u1");
+      assert.deepStrictEqual(await readMeta("replica"), replica);
+    });
+
+    it("takes a store for a visitor", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      await Durability.claim(null, replica);
+
+      assert.deepStrictEqual(await readAll("entities"), []);
+      assert.isNull(await readMeta("actorUserId"));
+    });
+
+    it("leaves the queue alone", async () => {
+      await seedPreviousLoad();
+      await writeBatches([batchRecord(7)]);
+      await Durability.open();
+      await Durability.load();
+
+      await Durability.claim("u2", replica);
+
+      assert.equal((await readAll("queue")).length, 1);
+    });
+
+    // Apart, a tab reading between the two would find an empty store under the previous owner.
+    it("does it all in one transaction", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const transaction = sinon.spy(FDBDatabase.prototype, "transaction");
+
+      await Durability.claim("u2", replica);
+
+      sinon.assert.calledOnce(transaction);
+    });
+
+    it("is what a send waits for", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const claiming = Durability.claim("u2", replica);
+
+      assert.strictEqual(Durability.replicaWritten(), claiming);
+
+      await claiming;
     });
   });
 

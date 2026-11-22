@@ -1974,6 +1974,102 @@ describe("Tabs", () => {
         assert.isNull(SyncStream.syncCursor);
       });
 
+      // A frame gave it the place the state names, so the place alone would send it nowhere, and
+      // the state would mark everything complete over rows it never got.
+      it("goes back to the store on a state, when its restore found another user's", async () => {
+        const reading = sinon.stub(Durability, "readBase").resolves({
+          cursor: "place-2",
+          owner: "u2",
+          records: [record("t-stored", "stored")],
+        });
+
+        sinon.stub(Durability, "detach");
+        sinon.stub(Batches, "disown");
+
+        const group = nextGroup();
+
+        await holdLeaderLock(group);
+        await Tabs.join(group, {onLead: () => {}});
+
+        Tabs.ready(true);
+
+        SyncStream.syncCursor = "place-2";
+
+        Tabs.receive(state("place-2"));
+        await waitForEventLoop();
+
+        sinon.assert.calledOnce(reading);
+        sinon.assert.notCalled(LocalDatabase.markAllSynced);
+        assert.isNull(Tabs.name);
+      });
+
+      it("passes over a marker until the group has said what its foreign read means", async () => {
+        const marker = {cursor: "place-9", scope: "all"};
+        const resync = {reason: "somebody else is signed in"};
+        const group = nextGroup();
+
+        await holdLeaderLock(group);
+        await Tabs.join(group, {onLead: () => {}});
+
+        Tabs.ready(true);
+
+        Tabs.receive({event: "synced", frame: marker, kind: "frame"});
+
+        sinon.assert.notCalled(SyncStream.receiveFrame);
+
+        Tabs.receive({event: "sync_resync", frame: resync, kind: "frame"});
+        Tabs.receive({event: "synced", frame: marker, kind: "frame"});
+
+        sinon.assert.calledTwice(SyncStream.receiveFrame);
+        sinon.assert.calledWith(SyncStream.receiveFrame, "synced", marker);
+      });
+
+      // Leading from a place it never held, it would be told only what changed since.
+      it("holds no place a frame names until the group has said what its foreign read means", async () => {
+        SyncStream.receiveFrame.callsFake(() => {
+          SyncStream.syncCursor = "place-9";
+        });
+
+        const group = nextGroup();
+
+        await holdLeaderLock(group);
+        await Tabs.join(group, {onLead: () => {}});
+
+        Tabs.ready(true);
+
+        Tabs.receive({
+          event: "sync_deltas",
+          frame: {cursor: "place-9", deltas: {}},
+          kind: "frame",
+        });
+
+        assert.isNull(SyncStream.syncCursor);
+      });
+
+      // The leader refused that store too, so the whole fill reaches this tab as frames.
+      it("stays in the group when a start-over comes before the state", async () => {
+        const reading = sinon.stub(Durability, "readBase");
+
+        const group = nextGroup();
+
+        await holdLeaderLock(group);
+        await Tabs.join(group, {onLead: () => {}});
+
+        Tabs.ready(true);
+
+        Tabs.receive({
+          event: "sync_resync",
+          frame: {reason: "somebody else is signed in"},
+          kind: "frame",
+        });
+
+        Tabs.receive(state(null, {completeness: {all: false, types: []}}));
+        await waitForEventLoop();
+
+        sinon.assert.notCalled(reading);
+        assert.equal(Tabs.name, group);
+      });
+
       // Leading from nowhere would clear and fill another user's store.
       it("leaves the group when another user's tab filled the store, though handed the lead", async () => {
         let read;

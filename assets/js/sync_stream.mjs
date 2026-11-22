@@ -328,8 +328,7 @@ export default class SyncStream {
       //
       // Somebody else signing in is the exception, and the only one: those rows were another
       // person's and this person may not see them, so they go before anything can read them. Told
-      // apart by the reason the server itself spells for it - `durability.mjs` posts the same word
-      // for the page-load half of the same event, rather than the sentence it logs.
+      // apart by the reason the server itself spells for it.
       //
       // Nothing is repainted here on purpose: the refill's own frames schedule that, and the
       // marker ending the refill schedules one even when the refill is empty - which is what

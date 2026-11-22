@@ -717,8 +717,7 @@ describe("SyncStream", () => {
       sinon.assert.notCalled(landing);
     });
 
-    // A follower reaches this through the group rather than through a stream, and the page-load
-    // half of a change of identity is posted to it exactly this way.
+    // A follower reaches this through the group rather than through a stream.
     it("starts over on a resync naming a change of identity", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
       LocalDatabase.syncCounts = {"MyApp.Tasks/total/": 42};

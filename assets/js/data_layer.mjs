@@ -721,7 +721,7 @@ export default class DataLayer {
 
     // Everything this tab starts with is in place, so what the group has said since may land on it
     // - and whatever arrived while it was starting up is applied now, in the order it arrived.
-    Tabs.ready();
+    Tabs.ready(resumed.readForeign);
 
     // And what the store could not tell it is asked for: what is complete, which nothing
     // writes down, and the place and the identity as they stand in the tab that has them.

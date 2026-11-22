@@ -161,6 +161,39 @@ export default class Durability {
     return `hologram.${LAYOUT}.${sync.protocolVersion}.${sync.modelHash}`;
   }
 
+  // Makes the store the given user's, with the given replica pair. The stored rows and place go
+  // when they were somebody else's, and stay when the store is already this user's: a tab can have
+  // read it before another tab of its group claimed it.
+  //
+  // ONE transaction, with the owner read inside it. Cleared in one and owned in another, a tab
+  // reading between the two would find an empty store under the previous owner, and one reading
+  // after a frame landed there would find the new user's rows under the old name. The pair goes
+  // down with the owner, so a load can never take up the previous owner's pair as the new one's.
+  //
+  // The queue stays, as it does through every clear: the previous owner's batches wait there for a
+  // page mounted under them.
+  static claim(owner, replica) {
+    Durability.#replicaWrite = Durability.#write(
+      [ENTITIES, META],
+      (transaction) => {
+        const meta = transaction.objectStore(META);
+        const stored = meta.get("actorUserId");
+
+        stored.onsuccess = () => {
+          if ((stored.result ?? null) !== owner) {
+            Durability.#wipe(transaction);
+
+            meta.put(owner, "actorUserId");
+          }
+
+          meta.put(replica, "replica");
+        };
+      },
+    );
+
+    return Durability.#replicaWrite;
+  }
+
   // Lets go of the database without touching what it holds. For a tab told that ANOTHER tab of its
   // group could not write: that tab wiped what had to be wiped and closed, and this one has to stop
   // writing too - a leader that went on storing frames would be dating rows the store no longer
@@ -626,13 +659,17 @@ export default class Durability {
   // this page may send.
   //
   // `leader` says whether this tab is the one that speaks to the store for the group of tabs
-  // sharing it. A FOLLOWER TAKES WHAT THE STORE HOLDS AND JUDGES NOTHING: it refuses no rows,
-  // clears nothing, writes no identity and records no owner. Not because the judgements below are
-  // wrong for it - they are the same store, so they would come out the same - but because the
-  // leader makes them once for everyone, and tells the group to start over when it refuses (the
-  // same frame a server resync sends). A follower that read a stale store resets on that and takes
-  // the refill from the channel, and one that reads the store after the leader cleared it finds it
-  // empty. What that buys is the one case where a follower's own judgement WOULD be wrong: rows
+  // sharing it. A FOLLOWER ASKS ONE THING OF THE STORE: whose it is. One store serves every user of
+  // the browser, so rows of another user are never taken up, by any tab, not even until the leader
+  // has judged them: a query answered from them in that gap would show one person another's data.
+  // The follower takes no rows and no place then, and what its own leader stores from here reaches
+  // it as frames.
+  //
+  // Beyond that it refuses no rows, clears nothing, writes no identity and records no owner. The
+  // leader makes those calls once for everyone, and tells the group to start over when it refuses
+  // (the same frame a server resync sends). A follower that read a stale store refills on that and
+  // takes the fill from the channel, and one that reads the store after the leader cleared it finds
+  // it empty. What that buys is the one case where a follower's own judgement WOULD be wrong: rows
   // with no place because the leader is filling right now, which are half of a base the frames
   // are about to complete - refused, nothing would bring that half back.
   //
@@ -691,52 +728,57 @@ export default class Durability {
       loaded.actorUserId !== (LocalDatabase.actorUserId ?? null);
 
     const refusal = leader ? Durability.#refusal(loaded, ownerChanged) : null;
+    const takesRows = refusal === null && !ownerChanged;
+    const owner = LocalDatabase.actorUserId ?? null;
 
-    if (refusal === null) {
+    if (takesRows) {
       LocalDatabase.restore(loaded.records);
-    } else {
+    }
+
+    if (refusal !== null) {
       Logger.debug(
         `Hologram: the stored rows were dropped (${refusal}), this page fills from nothing`,
       );
 
-      Durability.clear();
+      // Somebody else's store becomes this user's, with the page's pair: the held one was minted
+      // for the previous owner, or for a session that is no longer theirs. Once for the group, and
+      // the first send waits for it (see replicaWritten).
+      if (ownerChanged) {
+        Durability.claim(owner, Replica.current());
+      } else {
+        Durability.clear();
+      }
 
-      // The other tabs of the group hold the same rows, read from the same store, and are told to
-      // let go of them the way a server resync tells everyone - AFTER the clear's transaction is
-      // created, so a tab that reads the store on hearing this reads it cleared.
+      // The other tabs of the group are told to start over the way a server resync tells everyone
+      // - AFTER the transaction is created, so a tab that reads the store on hearing this reads it
+      // as it now stands.
       //
-      // Somebody else signing in is spelled the way the SERVER spells it, because it is the same
-      // event noticed here rather than there, and the reader keeps rows or drops them on that one
-      // word. The sentence above stays what it is: a line to read in a log, free to be reworded.
+      // Never as `identity`, even over another user's rows, since that word drops what a tab holds
+      // at once. Every tab hearing this was mounted for this tab's user and took none of those
+      // rows (see above), so what it holds is its own page's, which a refill keeps readable.
       Tabs.post({
         event: "sync_resync",
-        frame: {reason: ownerChanged ? "identity" : refusal},
+        frame: {reason: refusal},
         kind: "frame",
       });
     }
 
     // A page load offers a fresh pair and a browser already holding one ignores it - re-minting per
     // load would abandon the numbering its batches are identified by. Somebody else signing in is
-    // the one case where the held pair goes too: it was minted for the previous owner, or for a
-    // session that is no longer theirs - and the leader writes the page's pair in its place, once
-    // for the group, which its first send waits for (see replicaWritten). A follower writes none:
-    // it presents no identity of its own to the server, and the pair the leader settled on reaches
-    // it with the group's state.
+    // the one case where the held pair goes too, and the claim above has written the page's in its
+    // place. With none stored, the leader writes the page's, once for the group. A follower writes
+    // none: it presents no identity of its own to the server, and the pair the leader settled on
+    // reaches it with the group's state.
     if (loaded.replica !== null && !ownerChanged) {
       Replica.adopt(loaded.replica);
-    } else if (leader) {
+    } else if (leader && !ownerChanged) {
       Durability.persistReplica(Replica.current());
     }
 
-    if (leader) {
-      Durability.#rememberOwner(loaded);
-    }
-
-    const owner = LocalDatabase.actorUserId ?? null;
-
     return {
       batches: loaded.queue.filter((record) => record.actorUserId === owner),
-      cursor: refusal === null ? loaded.cursor : null,
+      cursor: takesRows ? loaded.cursor : null,
+      readForeign: !leader && ownerChanged,
       seq: Math.max(loaded.seq, ...loaded.queue.map((record) => record.seq)),
     };
   }
@@ -954,20 +996,6 @@ export default class Durability {
     }
 
     return null;
-  }
-
-  // Who this page belongs to, so the next load can ask whether it still does. Written only when
-  // that has moved - a page load in a new session - never on the ordinary case.
-  static #rememberOwner(loaded) {
-    const actorUserId = LocalDatabase.actorUserId ?? null;
-
-    if (loaded.actorUserId === actorUserId) {
-      return;
-    }
-
-    Durability.#write([META], (transaction) => {
-      transaction.objectStore(META).put(actorUserId, "actorUserId");
-    });
   }
 
   static #request(request) {
