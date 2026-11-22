@@ -1857,6 +1857,18 @@ defmodule Hologram.MutationTest do
       assert record_envelope(replica_id, 1) == raw
     end
 
+    test "keeps a refused batch holding a NUL, with the NUL spelled as U+FFFD" do
+      user = create_user("refused-nul@example.com")
+      replica_id = Entity.generate_id()
+      id = Entity.generate_id()
+      write = update_write(MutationModule5, id, %{"title" => "a\0b"})
+      raw = envelope([write], replica_id: replica_id)
+
+      assert run(raw, server(user.id)) == rejected(0, :not_found)
+
+      assert [%{"data" => %{"title" => "a�b"}}] = record_envelope(replica_id, 1)["writes"]
+    end
+
     test "answers a refused batch sent again from its record without evaluating it again" do
       user = create_user("resender@example.com")
       id = Entity.generate_id()
