@@ -127,10 +127,12 @@ export default class DataLayer {
     // being read, leaves nothing to share - so the tab leads itself, as it would had the open
     // failed. A store failure another tab reported has already ended the group (see Tabs.dissolve).
     //
-    // And it lets go of every batch it holds. Before its mount a tab has made none of its own, so
-    // each came from the group - handed over while it was reading, or taken from the store by a
-    // tab that leads - and each was numbered under the group's identity, which this tab no longer
-    // sends under (see Batches.disown). The group's leader sends them, or the next page load does.
+    // And it lets go of every batch it holds, of which there should be none: before its mount a
+    // tab has made none of its own, and it takes up none from the group before its restore - a
+    // batch another tab filed is held until then, and a tab that leads sends nothing until then
+    // (see Tabs.ready). Any it did hold would be numbered under the group's identity, which this
+    // tab no longer sends under (see Batches.disown). The group's leader sends them, or the next
+    // page load does.
     if (Durability.mode === "memory" && Tabs.name !== null) {
       Tabs.leave();
       Batches.disown();
@@ -686,10 +688,12 @@ export default class DataLayer {
     ]).finally(() => clearTimeout(timer));
   }
 
-  // Whether the server stopped serving this tab, which a navigation answers by loading the page
-  // afresh: in-app, the next page would run the same code the server can no longer serve.
+  // Whether a navigation loads the next page afresh: the server stopped serving this tab, and
+  // in-app the next page would run the same code the server can no longer serve - or it serves the
+  // tab across models, and in-app the next page would run the new build's code over this tab's
+  // runtime and store (see SyncStream.servedAcrossModels). Only the first shows the reload notice.
   static stopped() {
-    return SyncStream.stopReason !== null;
+    return SyncStream.stopReason !== null || SyncStream.servedAcrossModels();
   }
 
   // Called by every render that finished: a tab the server stopped serving says so to the person
@@ -724,9 +728,9 @@ export default class DataLayer {
     Tabs.post({kind: "joined"});
 
     // The third thing that wakes the sender, beside an action finishing and the stream opening.
-    // It is needed rather than tidy: the stream is connected before the mount, so it can have
-    // opened - and flushed an empty queue - before these batches were taken up. Without this they
-    // would wait for the user to do something.
+    // It is needed rather than tidy: a tab that leads sends nothing before it is ready (see
+    // Tabs.sends), so an action the mount ran flushed nothing, and the stream opens only after
+    // this. Without it these batches would wait for the user to do something.
     Batches.flush();
   }
 

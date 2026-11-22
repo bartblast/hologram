@@ -81,6 +81,36 @@ describe("Batches", () => {
     Batches.current().append(write(id));
   };
 
+  describe("takeLanded()", () => {
+    beforeEach(() => {
+      sinon.stub(SyncStream, "scheduleRender");
+    });
+
+    const held = (seq, landed = []) => ({
+      actorUserId: null,
+      landed,
+      seq,
+      writes: [write("t1"), write("t2")],
+    });
+
+    // A stored frame landed it while this tab held it unlanded.
+    it("adds the marks the store records to a batch this tab holds", () => {
+      Batches.adopt([held(7, [1])]);
+
+      Batches.takeLanded([{landed: [0], seq: 7}]);
+
+      assert.deepStrictEqual(Batches.pending[0].record().landed, [0, 1]);
+    });
+
+    it("passes over a batch this tab does not hold", () => {
+      Batches.adopt([held(7)]);
+
+      Batches.takeLanded([{landed: [0], seq: 8}]);
+
+      assert.deepStrictEqual(Batches.pending[0].record().landed, []);
+    });
+  });
+
   describe("flush()", () => {
     const STAMP = 1_798_246_400_125_952;
 
@@ -138,6 +168,69 @@ describe("Batches", () => {
 
       assert.isFalse(sendStub.called);
       assert.equal(Batches.pending.length, 1);
+    });
+
+    // Before its restore a tab that leads holds its page's identity, not the one the stored queue
+    // was numbered under - and has not taken that queue up. Ready, it sends.
+    it("sends nothing from a tab that leads its group until it is ready", async () => {
+      const reading = sinon.stub(Durability, "batchesAbove").resolves([]);
+
+      sendStub.resolves(confirmed());
+
+      try {
+        assert.isTrue(
+          await Tabs.join("hologram.1.batches-flush.anonymous", {
+            onLead: () => {},
+            onMessage: () => {},
+          }),
+        );
+
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+
+        assert.isFalse(reading.called);
+        assert.isFalse(sendStub.called);
+        assert.equal(Batches.pending.length, 1);
+
+        Tabs.ready();
+
+        await Batches.flush();
+
+        assert.isTrue(reading.called);
+        assert.isTrue(sendStub.calledOnce);
+      } finally {
+        await Tabs.leave();
+      }
+    });
+
+    // The first tab's restore writes a fresh pair without waiting, and sends right after: a reload
+    // between the two would send the batch again under yet another pair.
+    it("sends nothing until the identity written before it is stored", async () => {
+      let written;
+
+      sinon
+        .stub(Durability, "replicaWritten")
+        .returns(new Promise((resolve) => (written = resolve)));
+
+      sendStub.resolves(confirmed());
+      sealed(creating("t1", "first"));
+
+      const flushing = Batches.flush();
+
+      // Let go of whatever an assertion does: a flush left waiting keeps the sender busy for every
+      // test after this one.
+      try {
+        await waitForEventLoop();
+
+        assert.isFalse(sendStub.called);
+        assert.equal(Batches.pending.length, 1);
+      } finally {
+        written();
+        await flushing;
+      }
+
+      assert.isTrue(sendStub.calledOnce);
     });
 
     // The server would refuse them over a mismatch the person did not cause, and roll back what

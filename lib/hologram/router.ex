@@ -21,7 +21,7 @@ defmodule Hologram.Router do
     cache_control_for_etags: "public, max-age=31536000, immutable",
     from: {:hologram, "priv/static"},
     gzip: true,
-    only_matching: ~w(chunk- page- runtime-)
+    only_matching: ~w(chunk- data-model- page- runtime-)
 
   plug :match
   plug :dispatch

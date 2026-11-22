@@ -212,7 +212,7 @@ defmodule Hologram.Sync.Carry do
   # in the order the normalizer put them in: the two tiers' normalizers sort by different keys. A
   # number whole and within a JavaScript Number's exact range is spelled as an integer, since the
   # client holds 3 and 3.0 as one Number, any other float by its bits, and an integer past that
-  # range in full, which the client never spells, since it holds no such integer exactly.
+  # range in full, as the client spells the BigInt it holds one as.
   #
   # Every way the two could still differ has to make the spellings differ, never agree: a count
   # whose key misses is counted on the client, one whose key hits wrongly shows a number for

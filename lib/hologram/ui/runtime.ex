@@ -22,6 +22,7 @@ defmodule Hologram.UI.Runtime do
         \}
       </script>
       <hologram-fill name="boot_data" />
+      <hologram-fill name="data_model_script_tag" />
       <script async src={asset_path("hologram/runtime.js")}></script>
       <hologram-fill name="chunk_script_tags" />
     {/if}

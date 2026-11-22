@@ -123,6 +123,168 @@ describe("Hologram", () => {
     });
   });
 
+  describe("defineDataModel()", () => {
+    let originalSync;
+
+    // The document's state is stubbed on the document itself, over the one jsdom's prototype gives.
+    const stubReadyState = (readyState) =>
+      Object.defineProperty(document, "readyState", {
+        configurable: true,
+        get: () => readyState,
+      });
+
+    const runBundle = (define) => {
+      globalThis.Hologram.pendingDataModel = define;
+      document.dispatchEvent(new CustomEvent("hologram:dataModelLoaded"));
+    };
+
+    beforeEach(() => {
+      originalSync = globalThis.Hologram.sync;
+      delete globalThis.Hologram.sync;
+    });
+
+    afterEach(() => {
+      delete document.readyState;
+      delete globalThis.Hologram.pendingDataModel;
+      globalThis.Hologram.sync = originalSync;
+    });
+
+    // A build without a data layer, whose runtime sets the constants to null itself.
+    it("resolves at once when the runtime set the constants to null", async () => {
+      globalThis.Hologram.sync = null;
+      globalThis.Hologram.pendingDataModel = sinon.spy();
+
+      await Hologram.defineDataModel();
+
+      assert.isNull(globalThis.Hologram.sync);
+      sinon.assert.notCalled(globalThis.Hologram.pendingDataModel);
+    });
+
+    it("resolves at once when the constants are set already", async () => {
+      const sync = {modelHash: "my_model_hash"};
+      globalThis.Hologram.sync = sync;
+
+      await Hologram.defineDataModel();
+
+      assert.equal(globalThis.Hologram.sync, sync);
+    });
+
+    it("defines the data model from a bundle that ran before the runtime", async () => {
+      stubReadyState("interactive");
+
+      const define = sinon.spy((deps) => {
+        globalThis.Hologram.sync = {model: {}, type: deps.Type};
+      });
+
+      globalThis.Hologram.pendingDataModel = define;
+
+      await Hologram.defineDataModel();
+
+      sinon.assert.calledOnce(define);
+      assert.equal(globalThis.Hologram.sync.type, Type);
+      assert.isUndefined(globalThis.Hologram.pendingDataModel);
+    });
+
+    // A bundle that ran before the document finished loading has left its function behind.
+    it("defines the data model from a bundle that ran before, once the document has loaded", async () => {
+      stubReadyState("complete");
+      globalThis.Hologram.pendingDataModel = () => {
+        globalThis.Hologram.sync = {modelHash: "my_model_hash"};
+      };
+
+      await Hologram.defineDataModel();
+
+      assert.deepStrictEqual(globalThis.Hologram.sync, {
+        modelHash: "my_model_hash",
+      });
+    });
+
+    it("waits for a bundle that runs after the runtime", async () => {
+      stubReadyState("interactive");
+
+      let isSettled = false;
+
+      const promise = Hologram.defineDataModel().then(() => {
+        isSettled = true;
+      });
+
+      await waitForEventLoop();
+
+      assert.isFalse(isSettled);
+      assert.isUndefined(globalThis.Hologram.sync);
+
+      runBundle((deps) => {
+        globalThis.Hologram.sync = {type: deps.Type};
+      });
+
+      await promise;
+
+      assert.equal(globalThis.Hologram.sync.type, Type);
+      assert.isUndefined(globalThis.Hologram.pendingDataModel);
+    });
+
+    it("stops listening once the data model is defined", async () => {
+      stubReadyState("interactive");
+
+      const promise = Hologram.defineDataModel();
+      runBundle(() => (globalThis.Hologram.sync = {}));
+      await promise;
+
+      const define = sinon.spy();
+      runBundle(define);
+      window.dispatchEvent(new Event("load"));
+
+      sinon.assert.notCalled(define);
+    });
+
+    // The bundle could not be fetched, or the document names none.
+    it("rejects when the document has loaded without the bundle", async () => {
+      stubReadyState("complete");
+
+      try {
+        await Hologram.defineDataModel();
+        assert.fail("expected a rejection");
+      } catch (error) {
+        assert.instanceOf(error, HologramRuntimeError);
+        assert.equal(error.message, "Failed to load the data model bundle");
+      }
+
+      assert.isUndefined(globalThis.Hologram.sync);
+    });
+
+    it("rejects when the document finishes loading before the bundle came", async () => {
+      stubReadyState("interactive");
+
+      const promise = Hologram.defineDataModel();
+      window.dispatchEvent(new Event("load"));
+
+      try {
+        await promise;
+        assert.fail("expected a rejection");
+      } catch (error) {
+        assert.instanceOf(error, HologramRuntimeError);
+        assert.equal(error.message, "Failed to load the data model bundle");
+      }
+    });
+
+    it("rejects with the error the bundle's function raises", async () => {
+      stubReadyState("interactive");
+
+      const error = new Error("my_error");
+
+      globalThis.Hologram.pendingDataModel = () => {
+        throw error;
+      };
+
+      try {
+        await Hologram.defineDataModel();
+        assert.fail("expected a rejection");
+      } catch (caught) {
+        assert.equal(caught, error);
+      }
+    });
+  });
+
   // A navigation that fails records its epoch dead for the rest of the session, and every later
   // dispatch stamped with that epoch is dropped. Left in place, a test's failed navigation would
   // decide the outcome of whichever test reuses the epoch next.
@@ -3432,6 +3594,7 @@ describe("Hologram", () => {
           .returns(Type.atom("Elixir.Hologram.Test.Fixtures.PageLeft"));
 
         globalThis.Hologram.assetManifest = {
+          "hologram/data-model.js": "/hologram/data-model-def.js",
           "hologram/runtime.js": "/hologram/runtime-abc.js",
         };
 
@@ -3487,9 +3650,10 @@ describe("Hologram", () => {
         // No page is mounted in these tests, so the tab holds no bundle for one.
         assert.isNull(snapshot.pageDigest);
         assert.equal(snapshot.runtimeDigest, "abc");
+        assert.equal(snapshot.dataModelDigest, "def");
       });
 
-      it("is stamped with no runtime digest when the asset manifest names no runtime bundle", async () => {
+      it("is stamped with no runtime or data model digest when the asset manifest names neither", async () => {
         globalThis.Hologram.assetManifest = {};
 
         await Hologram.loadNewPage("/target", payloadFor("new"));
@@ -3497,6 +3661,7 @@ describe("Hologram", () => {
         const snapshot = serializeStub.firstCall.args[0];
 
         assert.isNull(snapshot.runtimeDigest);
+        assert.isNull(snapshot.dataModelDigest);
       });
 
       // The state a snapshot holds can carry values of struct types whose protocol implementations
@@ -6872,6 +7037,36 @@ describe("Hologram", () => {
       globalThis.Hologram.initialPageDigest = "page-2";
 
       assert.isFalse(Hologram.isDocumentSnapshotRestorable(snapshot(), true));
+    });
+
+    // A data model edit leaves the page and runtime bundles as they are.
+    it("passes over a snapshot taken with another data model", () => {
+      const originalAssetManifest = globalThis.Hologram.assetManifest;
+
+      globalThis.Hologram.config.liveReload = true;
+      globalThis.Hologram.initialPageDigest = "page-1";
+
+      globalThis.Hologram.assetManifest = {
+        "hologram/data-model.js": "/hologram/data-model-NEWMODEL.js",
+      };
+
+      try {
+        assert.isFalse(
+          Hologram.isDocumentSnapshotRestorable(
+            snapshot({dataModelDigest: "OLDMODEL"}),
+            true,
+          ),
+        );
+
+        assert.isTrue(
+          Hologram.isDocumentSnapshotRestorable(
+            snapshot({dataModelDigest: "NEWMODEL"}),
+            true,
+          ),
+        );
+      } finally {
+        globalThis.Hologram.assetManifest = originalAssetManifest;
+      }
     });
   });
 
