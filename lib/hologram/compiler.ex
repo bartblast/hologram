@@ -58,6 +58,7 @@ defmodule Hologram.Compiler do
   # own types, filled first (first-render completeness), and, build-wide, that they sync at all.
   @permission_mfas [
     {Hologram.Auth, :can?, 3},
+    {Hologram.Auth, :can?, 4},
     {Hologram.Auth, :grant_role, 3},
     {Hologram.Auth, :has_role?, 2},
     {Hologram.Auth, :has_role?, 3},
@@ -82,7 +83,7 @@ defmodule Hologram.Compiler do
 
   # The calls an app spells an entity operation at, each with the position of the argument the
   # operation is read from.
-  @operation_asks %{{Hologram.Auth, :can?, 3} => 1}
+  @operation_asks %{{Hologram.Auth, :can?, 3} => 1, {Hologram.Auth, :can?, 4} => 1}
 
   # The modules the runtime entry file always imports, by class and file under the js dir.
   @runtime_imports [

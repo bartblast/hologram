@@ -2,7 +2,12 @@
 
 import Bitstring from "../../bitstring.mjs";
 import Clock from "../../clock.mjs";
-import {currentBatch, isServerOnlySentinel} from "./db.mjs";
+import {
+  currentBatch,
+  isServerOnlySentinel,
+  validateChangeNames,
+} from "./db.mjs";
+import Elixir_Hologram_Entity from "./entity.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
@@ -698,8 +703,19 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
 // an alternative that names nobody. A role is held by somebody, so a visitor holds none, and the
 // grant rows are not read. A delegating rule is evaluated as any other, because the type it
 // delegates to answers its own actor-referencing rules the same way.
-function ruleHolds(rule, entityType, entity, actorUserId) {
-  let result = predicatesHold(entityType, entity, rule.predicates, actorUserId);
+//
+// Given the row after a change, a rule reading it is judged by its clauses as written, with that row
+// one level above the rule's own.
+function ruleHolds(rule, entityType, entity, actorUserId, after = null) {
+  const exact = after !== null && Object.hasOwn(rule, "new");
+
+  let result = predicatesHold(
+    entityType,
+    entity,
+    exact ? rule.new.predicates : rule.predicates,
+    actorUserId,
+    exact ? [after] : [],
+  );
 
   if (result === false) {
     return false;
@@ -1023,6 +1039,165 @@ function coversFields(entry, entityType, entity, fields, actorUserId) {
   });
 }
 
+// Whether some update rule covering each of the given field names holds on the row after a change:
+// false when one can't be covered, UNKNOWN when none fails but one may. No verdict answers it, since
+// a verdict speaks for the rule's planned form, which says nothing about one specific change.
+function coversChange(entry, entityType, entity, fields, after, actorUserId) {
+  const matched = new Map();
+
+  const holds = (rule) => {
+    if (!matched.has(rule)) {
+      matched.set(
+        rule,
+        ruleHolds(rule, entityType, entity, actorUserId, after),
+      );
+    }
+
+    return matched.get(rule);
+  };
+
+  const wholeRowRules = policyRules(entry, "update");
+  let result = true;
+
+  for (const field of fields) {
+    const rules = policyRules(entry, `update:${field}`).concat(wholeRowRules);
+    const held = someHolds(rules, holds);
+
+    if (held === false) {
+      return false;
+    }
+
+    if (held === UNKNOWN) {
+      result = UNKNOWN;
+    }
+  }
+
+  return result;
+}
+
+// The given names of a write's values as allow lines name them, a to-one by its relationship - the
+// twin of Hologram.Policy.changed_field_names/2.
+function changedFieldNames(entityType, names) {
+  const references = new Map(
+    Object.entries(Model.relationships(entityType))
+      .filter(([_name, relationship]) => !relationship.toMany)
+      .map(([name]) => [`${name}_id`, name]),
+  );
+
+  return names.map((name) => references.get(name) ?? name);
+}
+
+function changeOperationMessage(operation) {
+  return `can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got ${Interpreter.inspect(operation)}`;
+}
+
+// What the operation answers for one specific change, three-valued - the twin of evaluate_change/5
+// in Hologram.Auth.
+function changeAnswer(
+  entry,
+  entityType,
+  entity,
+  operation,
+  names,
+  after,
+  actorUserId,
+) {
+  if (Type.isAtom(operation) && operation.value === "update") {
+    const fields = changedFieldNames(entityType, names);
+
+    return coversChange(entry, entityType, entity, fields, after, actorUserId);
+  }
+
+  const asked = askedFields(operation);
+
+  if (asked !== null) {
+    Model.validateOperation(entityType, operation);
+
+    const fields = asked.map((field) => field.value);
+
+    return coversChange(entry, entityType, entity, fields, after, actorUserId);
+  }
+
+  if (!Type.isAtom(operation)) {
+    Interpreter.raiseMisuseError(changeOperationMessage(operation));
+  }
+
+  Model.validateOperation(entityType, operation);
+
+  if (!(entry.updateNames ?? []).includes(operation.value)) {
+    Interpreter.raiseMisuseError(changeOperationMessage(operation));
+  }
+
+  return someHolds(policyRules(entry, operation.value), (rule) =>
+    ruleHolds(rule, entityType, entity, actorUserId, after),
+  );
+}
+
+// The pairs of a change's values, the last of a repeated name winning as a map's does, refused in the
+// server's words unless they're a keyword list or a map that isn't a struct.
+function changePairs(values) {
+  const listed =
+    Type.isProperList(values) && Type.isKeywordList(values)
+      ? values.data.map((pair) => pair.data)
+      : Type.isMap(values)
+        ? Object.values(values.data)
+        : null;
+
+  const pairs = listed && [
+    ...new Map(
+      listed.map((pair) => [Type.encodeMapKey(pair[0]), pair]),
+    ).values(),
+  ];
+
+  const struct = pairs?.some(
+    ([name, value]) =>
+      Type.isAtom(name) && name.value === "__struct__" && Type.isAtom(value),
+  );
+
+  if (pairs === null || struct) {
+    Interpreter.raiseMisuseError(
+      `can? takes the values of a change as a keyword list or a map - got ${Interpreter.inspect(values)}`,
+    );
+  }
+
+  return pairs;
+}
+
+// The values of a change by name, refused in the server's words unless they name what an update can
+// set.
+function changeValues(entityType, pairs) {
+  validateChangeNames(entityType, pairs);
+
+  return new Map(pairs.map(([name, value]) => [name.value, value]));
+}
+
+// The scope a rule reads the row after a change through: the entity with the given values on it,
+// bar one failing its declaration, which can't be on the row and so reads as stored.
+function rowAfterChange(entityType, entity, changes) {
+  const validation = Elixir_Hologram_Entity["validate/2"](
+    Type.alias(entityType),
+    Type.map([...changes].map(([name, value]) => [Type.atom(name), value])),
+  );
+
+  const invalid = new Set(
+    Type.isAtom(validation)
+      ? []
+      : Object.values(validation.data[1].data).map(([name]) => name.value),
+  );
+
+  const data = {...entity.data};
+
+  for (const [name, value] of changes) {
+    if (!invalid.has(name)) {
+      const key = Type.atom(name);
+
+      data[Type.encodeMapKey(key)] = [key, value];
+    }
+  }
+
+  return {entity: {...entity, data}, entityType};
+}
+
 // The key an entity operation is baked under: an atom as its name, a per-role grant lifecycle
 // operation as the two names joined by a colon. Policy.operation_key/1 is the twin on the server
 // (rendered by Compiler.render_policy/2), and the two must agree - a field of an update is keyed
@@ -1282,6 +1457,38 @@ const Elixir_Hologram_Auth = {
         operationName,
         rules,
         actorUserId,
+      ) === true,
+    );
+  },
+
+  // Whether the user may make one specific change - the twin of Hologram.Auth.can?/4. No is what an
+  // answer the held rows leave open comes to, since no verdict speaks for one change.
+  "can?/4": (userOrId, operation, entity, values) => {
+    const entityType = Interpreter.moduleExName(
+      entity.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
+    );
+
+    const pairs = changePairs(values);
+
+    const model = globalThis.Hologram.sync?.model ?? {};
+    const entry = Object.hasOwn(model, entityType) ? model[entityType] : null;
+
+    if (!entry) {
+      return Type.boolean(false);
+    }
+
+    const changes = changeValues(entityType, pairs);
+    const after = rowAfterChange(entityType, entity, changes);
+
+    return Type.boolean(
+      changeAnswer(
+        entry,
+        entityType,
+        entity,
+        operation,
+        [...changes.keys()],
+        after,
+        unboxActorUserId(userOrId),
       ) === true,
     );
   },

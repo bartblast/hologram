@@ -3518,9 +3518,402 @@ describe("Elixir_Hologram_Auth", () => {
     });
   });
 
-  // Cases this side alone has: no client holds a server-only attribute's value - a struct holds its
-  // sentinel and a held row nothing at all - so a rule reading one never decides on it, wherever the
-  // rule reads it, and only the server's verdict on the operation answers it.
+  // Mirrors "can?/4 for one specific change" of test/elixir/hologram/auth_test.exs.
+  describe("can?/4", () => {
+    const canChange = Elixir_Hologram_Auth["can?/4"];
+
+    afterEach(() => {
+      LocalDatabase.actorEntityId = null;
+    });
+
+    const update = Type.atom("update");
+    const alice = Type.bitstring(ALICE);
+
+    const values = (entries) =>
+      Type.keywordList(
+        Object.entries(entries).map(([name, value]) => [
+          Type.atom(name),
+          value,
+        ]),
+      );
+
+    const enumValue = (label) => Type.atom(label);
+
+    const approving = rule({
+      new: {predicates: [[{name: "status", outer: 1}, "==", "published"]]},
+    });
+
+    const defineUpdate = (key, updateRule, folderPolicy = {}) => {
+      defineModel({[key]: [updateRule]}, folderPolicy);
+      globalThis.Hologram.sync.model[DOCUMENT].constraints = {};
+      globalThis.Hologram.sync.model[DOCUMENT].defaults = {};
+      globalThis.Hologram.sync.model[DOCUMENT].frameworkAttributes = [];
+      globalThis.Hologram.sync.model[DOCUMENT].updateNames = ["archive"];
+      Model.reset();
+    };
+
+    const asks = (operation, entries, entity = document(), user = alice) =>
+      canChange(user, operation, entity, values(entries));
+
+    const entryless = () =>
+      Type.map([
+        [Type.atom("__meta__"), Model.emptyMetadata()],
+        [Type.atom("__struct__"), Type.alias("MyApp.Nothing")],
+      ]);
+
+    it("answers :update on the row the values leave", () => {
+      defineUpdate("update:status", approving);
+
+      assert.deepStrictEqual(
+        asks(update, {status: enumValue("published")}),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        asks(update, {status: enumValue("review")}),
+        Type.boolean(false),
+      );
+    });
+
+    it("needs every changed field covered for :update", () => {
+      defineUpdate("update:status", approving);
+
+      assert.deepStrictEqual(
+        asks(update, {
+          status: enumValue("published"),
+          title: Type.bitstring("x"),
+        }),
+        Type.boolean(false),
+      );
+    });
+
+    it("keeps a bare name reading the stored value", () => {
+      defineUpdate(
+        "update:status",
+        rule({
+          new: {
+            predicates: [
+              ["status", "==", "draft"],
+              [{name: "status", outer: 1}, "==", "published"],
+            ],
+          },
+        }),
+      );
+
+      const published = {status: enumValue("published")};
+
+      assert.deepStrictEqual(
+        asks(update, published, document({status: "draft"})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        asks(update, published, document({status: "review"})),
+        Type.boolean(false),
+      );
+    });
+
+    it("asks a name's rules", () => {
+      defineUpdate("archive", approving);
+
+      const archive = Type.atom("archive");
+
+      assert.deepStrictEqual(
+        asks(archive, {status: enumValue("published")}),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        asks(archive, {status: enumValue("review")}),
+        Type.boolean(false),
+      );
+    });
+
+    it("asks a field's rules whatever the values name", () => {
+      defineUpdate("update:status", approving);
+
+      assert.deepStrictEqual(
+        asks(updateOf(Type.atom("status")), {
+          status: enumValue("published"),
+          title: Type.bitstring("x"),
+        }),
+        Type.boolean(true),
+      );
+    });
+
+    it("takes the values as a map", () => {
+      defineUpdate("update:status", approving);
+
+      assert.deepStrictEqual(
+        canChange(
+          alice,
+          update,
+          document(),
+          Type.map([[Type.atom("status"), enumValue("published")]]),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("reads a value failing its declaration as stored", () => {
+      defineUpdate("update:status", approving);
+
+      assert.deepStrictEqual(
+        asks(
+          update,
+          {status: enumValue("bogus")},
+          document({status: "published"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        asks(update, {status: enumValue("bogus")}, document({status: "draft"})),
+        Type.boolean(false),
+      );
+    });
+
+    it("reads no verdict for a rule it can't decide", () => {
+      defineUpdate(
+        "update:title",
+        rule({
+          new: {predicates: [{server: true}]},
+          predicates: [{server: true}],
+        }),
+      );
+
+      globalThis.Hologram.sync.model[DOCUMENT].verdicts = {
+        "update:title": {reads: [], verdict: "v"},
+      };
+
+      LocalDatabase.actorEntityId = ALICE;
+
+      LocalDatabase.putRow(DOCUMENT, {
+        author_id: null,
+        count: null,
+        due_on: null,
+        folder_id: null,
+        held_at: null,
+        id: DOC,
+        priority: null,
+        public: false,
+        rating: null,
+        released_on: null,
+        stage: null,
+        status: null,
+        summary: null,
+        title: null,
+        $verdicts: {v: true},
+      });
+
+      assert.deepStrictEqual(
+        can(alice, updateOf(Type.atom("title")), document()),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        asks(update, {title: Type.bitstring("x")}),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers no for a type the model doesn't carry", () => {
+      defineModel();
+
+      assert.deepStrictEqual(
+        canChange(alice, update, entryless(), values({a: Type.integer(1)})),
+        Type.boolean(false),
+      );
+    });
+
+    it("reads no entry off the model object's prototype", () => {
+      defineModel();
+
+      const inherited = Type.map([
+        [Type.atom("__meta__"), Model.emptyMetadata()],
+        [Type.atom("__struct__"), Type.atom("constructor")],
+      ]);
+
+      assert.deepStrictEqual(
+        canChange(alice, update, inherited, values({a: Type.integer(1)})),
+        Type.boolean(false),
+      );
+    });
+
+    it("names a repeated unknown name once", () => {
+      defineUpdate("update:status", approving);
+
+      const repeated = Type.keywordList([
+        [Type.atom("nope"), Type.integer(1)],
+        [Type.atom("nope"), Type.integer(2)],
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), repeated),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: :nope`,
+      );
+    });
+
+    it("reads a repeated struct key by its last value", () => {
+      defineUpdate("update:status", approving);
+
+      const repeated = Type.keywordList([
+        [Type.atom("__struct__"), Type.atom("foo")],
+        [Type.atom("__struct__"), Type.integer(1)],
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), repeated),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: :__struct__`,
+      );
+    });
+
+    it("refuses an improper keyword list", () => {
+      defineUpdate("update:status", approving);
+
+      const improper = Type.improperList([
+        Type.tuple([Type.atom("title"), Type.bitstring("x")]),
+        Type.tuple([Type.atom("title"), Type.bitstring("y")]),
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), improper),
+        "Hologram.MisuseError",
+        `can? takes the values of a change as a keyword list or a map - got ${Interpreter.inspect(improper)}`,
+      );
+    });
+
+    it("orders keys equal as numbers by their printed text", () => {
+      defineUpdate("update:status", approving);
+
+      const mixed = Type.map([
+        [Type.integer(1), Type.atom("b")],
+        [Type.float(1.0), Type.atom("a")],
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), mixed),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: 1, 1.0`,
+      );
+    });
+
+    it("names a map key by its printed text among the refused keys", () => {
+      defineUpdate("update:status", approving);
+
+      const mixed = Type.map([
+        [Type.map([]), Type.integer(1)],
+        [Type.atom("nope"), Type.integer(2)],
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), mixed),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: %{}, :nope`,
+      );
+    });
+
+    it("refuses a key of a type the runtime can't order", () => {
+      defineUpdate("update:status", approving);
+
+      const mapKeyed = Type.map([[Type.map([]), Type.integer(1)]]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), mapKeyed),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: %{}`,
+      );
+    });
+
+    it("names refused keys in the order of their printed text", () => {
+      defineUpdate("update:status", approving);
+
+      const mixed = Type.map([
+        [Type.atom("nope"), Type.integer(1)],
+        [Type.integer(2), Type.integer(3)],
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), mixed),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: 2, :nope`,
+      );
+    });
+
+    it("names a key that isn't an atom beside an unknown name", () => {
+      defineUpdate("update:status", approving);
+
+      const mixed = Type.map([
+        [Type.bitstring("x"), Type.integer(1)],
+        [Type.atom("nope"), Type.integer(2)],
+      ]);
+
+      assertBoxedError(
+        () => canChange(alice, update, document(), mixed),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: "x", :nope`,
+      );
+    });
+
+    it("refuses values that are neither a keyword list nor a map", () => {
+      defineUpdate("update:status", approving);
+
+      assertBoxedError(
+        () =>
+          canChange(alice, update, document(), Type.list([Type.integer(1)])),
+        "Hologram.MisuseError",
+        "can? takes the values of a change as a keyword list or a map - got [1]",
+      );
+    });
+
+    it("refuses a value name an update can't set", () => {
+      defineUpdate("update:status", approving);
+
+      assertBoxedError(
+        () => asks(update, {nope: Type.integer(1)}),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - only declared attributes and to-one relationships can be updated: :nope`,
+      );
+    });
+
+    it("refuses empty values", () => {
+      defineUpdate("update:status", approving);
+
+      assertBoxedError(
+        () => asks(update, {}),
+        "Hologram.MisuseError",
+        `invalid changes for ${DOCUMENT} - at least one declared attribute or to-one relationship must be changed`,
+      );
+    });
+
+    it("refuses an operation that isn't an update", () => {
+      defineUpdate("update:status", approving);
+
+      assertBoxedError(
+        () => asks(Type.atom("read"), {status: enumValue("published")}),
+        "Hologram.MisuseError",
+        "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got :read",
+      );
+    });
+
+    it("refuses a role operation", () => {
+      defineUpdate("update:status", approving);
+
+      const operation = Type.tuple([
+        Type.atom("grant_role"),
+        Type.atom("editor"),
+      ]);
+
+      assertBoxedError(
+        () => asks(operation, {status: enumValue("published")}),
+        "Hologram.MisuseError",
+        "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got {:grant_role, :editor}",
+      );
+    });
+  });
+
   describe("a quantifier's condition holding the build's marker", () => {
     it("answers a visitor without reading the marker as a clause naming somebody", () => {
       defineModel({
@@ -3544,6 +3937,9 @@ describe("Elixir_Hologram_Auth", () => {
     });
   });
 
+  // Cases this side alone has: no client holds a server-only attribute's value - a struct holds its
+  // sentinel and a held row nothing at all - so a rule reading one never decides on it, wherever the
+  // rule reads it, and only the server's verdict on the operation answers it.
   describe("server-only attributes", () => {
     const KEY = "read:00112233aabbccdd";
 
