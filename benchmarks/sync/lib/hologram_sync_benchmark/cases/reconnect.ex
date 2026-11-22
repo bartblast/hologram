@@ -91,17 +91,26 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
 
   @doc """
   Returns what a case's section name ends with for the given options, so a run with the clients
-  arriving in a burst keeps its figures beside the gentler run's rather than replacing them.
+  arriving in a burst, or with writes during the wave, keeps its figures beside the plain run's
+  rather than replacing them.
   """
   @spec suffix(keyword) :: String.t()
-  def suffix(opts), do: if(opts[:wave_spread_ms] < 1_000, do: "_burst", else: "")
+  def suffix(opts) do
+    burst = if opts[:wave_spread_ms] < 1_000, do: "_burst", else: ""
+    writes = if opts[:wave_writes] > 0, do: "_writes", else: ""
+
+    burst <> writes
+  end
 
   @doc """
   Returns what a case's title ends with for the given options, for the same reason as `suffix/1`.
   """
   @spec title_suffix(keyword) :: String.t()
   def title_suffix(opts) do
-    if opts[:wave_spread_ms] < 1_000, do: ", arriving in a burst", else: ""
+    burst = if opts[:wave_spread_ms] < 1_000, do: ", arriving in a burst", else: ""
+    writes = if opts[:wave_writes] > 0, do: ", with writes during the wave", else: ""
+
+    burst <> writes
   end
 
   defp source(opts, :board) do
