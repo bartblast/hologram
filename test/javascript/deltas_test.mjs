@@ -702,7 +702,13 @@ describe("Deltas", () => {
 
     it("drops nothing for a row a frame of the same catch-up already dropped", () => {
       Deltas.apply(hashedDrop(TASK, ["t9"]));
-      Deltas.apply({unsync_entity: {[TASK]: ["t1"]}});
+
+      Deltas.apply({
+        del_relationship: {
+          [PROJECT]: [{id: "p1", relationship: "tasks", target_id: "t1"}],
+        },
+        unsync_entity: {[TASK]: ["t1"]},
+      });
 
       const written = Deltas.apply(hashedDrop(TASK, ["t1"]));
 
@@ -713,6 +719,168 @@ describe("Deltas", () => {
       const written = Deltas.apply(hashedDrop(TASK, ["t9"]));
 
       assert.deepEqual(written, new Set());
+    });
+
+    // A stream cut inside a batch or a catch-up can leave a pair naming a row that never arrived.
+    describe("a pair naming a row it doesn't hold", () => {
+      beforeEach(() => {
+        LocalDatabase.addFact(PROJECT, "tasks", "p1", "t3");
+      });
+
+      it("takes the pair out of the set", () => {
+        Deltas.apply(hashedDrop(TASK, ["t3"]));
+
+        assert.deepEqual(
+          LocalDatabase.baseTargetIds(PROJECT, "tasks", "p1"),
+          new Set(["t1", "t2"]),
+        );
+      });
+
+      // The row held here can come from a page older than its stored record.
+      it("answers no row as written", () => {
+        const written = Deltas.apply(hashedDrop(TASK, ["t3"]));
+
+        assert.deepEqual(written, new Set());
+      });
+
+      it("queues the pair to be taken out of the stored set", () => {
+        Deltas.apply(hashedDrop(TASK, ["t3"]));
+
+        assert.deepEqual(LocalDatabase.takeStoredFactRemovals(), [
+          {id: "p1", relationship: "tasks", targetIds: ["t3"], type: PROJECT},
+        ]);
+      });
+
+      it("takes a pair filed after the catch-up's hashes of its type were worked out", () => {
+        Deltas.apply(hashedDrop(TASK, ["t9"]));
+
+        LocalDatabase.addFact(PROJECT, "tasks", "p1", "t4");
+
+        Deltas.apply(hashedDrop(TASK, ["t4"]));
+
+        assert.deepEqual(
+          LocalDatabase.baseTargetIds(PROJECT, "tasks", "p1"),
+          new Set(["t1", "t2", "t3"]),
+        );
+      });
+
+      it("leaves the pair for a hash naming another id", () => {
+        Deltas.apply(hashedDrop(TASK, ["t9"]));
+
+        assert.isTrue(
+          LocalDatabase.baseTargetIds(PROJECT, "tasks", "p1").has("t3"),
+        );
+      });
+    });
+
+    // A page's set is the fresher, so restoring leaves it, and the pair stays in the stored copy.
+    describe("a pair only the stored copy of a set names", () => {
+      const storedProject = {
+        facts: {tasks: ["t1", "t2", "t3"]},
+        id: "p1",
+        row: {id: "p1", name: "Website"},
+        type: PROJECT,
+      };
+
+      beforeEach(() => {
+        LocalDatabase.restore([storedProject]);
+      });
+
+      it("takes the pair out of the stored set", () => {
+        Deltas.apply(hashedDrop(TASK, ["t3"]));
+
+        assert.deepEqual(LocalDatabase.takeStoredFactRemovals(), [
+          {id: "p1", relationship: "tasks", targetIds: ["t3"], type: PROJECT},
+        ]);
+      });
+
+      // The row held here can be older than the stored one.
+      it("doesn't write the holder over its stored record", () => {
+        const written = Deltas.apply(hashedDrop(TASK, ["t3"]));
+
+        assert.deepEqual(written, new Set());
+      });
+
+      it("takes the pair out once", () => {
+        Deltas.apply(hashedDrop(TASK, ["t3"]));
+        Deltas.apply(hashedDrop(TASK, ["t3"]));
+
+        assert.deepEqual(LocalDatabase.takeStoredFactRemovals(), []);
+      });
+
+      it("takes nothing out once a frame restated the set", () => {
+        Deltas.apply({
+          put_entity: {
+            [PROJECT]: [{id: "p1", name: "Website", tasks: ["t1", "t2"]}],
+          },
+        });
+
+        Deltas.apply(hashedDrop(TASK, ["t3"]));
+
+        assert.deepEqual(LocalDatabase.takeStoredFactRemovals(), []);
+      });
+
+      // A tab that doesn't store frames never takes them, and the pair can be told again since.
+      it("forgets what the frame before took out when the next one is applied", () => {
+        Deltas.apply(hashedDrop(TASK, ["t3"]));
+        Deltas.apply({put_entity: {[TASK]: [{id: "t3", title: "Back"}]}});
+
+        assert.deepEqual(LocalDatabase.takeStoredFactRemovals(), []);
+      });
+    });
+
+    it("walks no pairs for a hash of a row it already dropped", () => {
+      Deltas.apply(hashedDrop(TASK, ["t1"]));
+
+      const deleteFactsNaming = sinon.spy(LocalDatabase, "deleteFactsNaming");
+
+      try {
+        Deltas.apply(hashedDrop(TASK, ["t1"]));
+
+        assert.equal(deleteFactsNaming.callCount, 0);
+      } finally {
+        deleteFactsNaming.restore();
+      }
+    });
+
+    it("drops a row filed again after it was dropped", () => {
+      Deltas.apply(hashedDrop(TASK, ["t1"]));
+
+      Deltas.apply({
+        put_entity: {[TASK]: [{done: false, id: "t1", title: "Back"}]},
+      });
+
+      Deltas.apply(hashedDrop(TASK, ["t1"]));
+
+      assert.isNull(LocalDatabase.getRow(TASK, "t1"));
+    });
+
+    // New rules can give the model an inverse, which is a set that can name the type.
+    it("reads every id again when the model was read afresh", () => {
+      const heldOrNamedIds = sinon.spy(LocalDatabase, "heldOrNamedIds");
+
+      try {
+        Deltas.apply(hashedDrop(TASK, ["t9"]));
+        Model.reset();
+        Deltas.apply(hashedDrop(TASK, ["t8"]));
+
+        assert.equal(heldOrNamedIds.callCount, 2);
+      } finally {
+        heldOrNamedIds.restore();
+      }
+    });
+
+    it("doesn't read every id again when nothing was filed since", () => {
+      const heldOrNamedIds = sinon.spy(LocalDatabase, "heldOrNamedIds");
+
+      try {
+        Deltas.apply(hashedDrop(TASK, ["t9"]));
+        Deltas.apply(hashedDrop(TASK, ["t8"]));
+
+        assert.equal(heldOrNamedIds.callCount, 1);
+      } finally {
+        heldOrNamedIds.restore();
+      }
     });
   });
 
@@ -782,6 +950,64 @@ describe("Deltas", () => {
       const written = Deltas.apply(keepList(TASK, ["t2"]));
 
       assert.deepEqual(written, new Set([`${TASK} t1`, `${PROJECT} p1`]));
+    });
+
+    // A stream cut inside a batch or a catch-up can leave a pair naming a row that never arrived.
+    describe("a pair naming a row it doesn't hold", () => {
+      beforeEach(() => {
+        LocalDatabase.addFact(PROJECT, "tasks", "p1", "t3");
+      });
+
+      it("takes the pair when the list leaves the row out", () => {
+        Deltas.apply(keepList(TASK, ["t1", "t2"]));
+
+        assert.deepEqual(
+          LocalDatabase.baseTargetIds(PROJECT, "tasks", "p1"),
+          new Set(["t1", "t2"]),
+        );
+      });
+
+      it("keeps the pair when the list names the row", () => {
+        Deltas.apply(keepList(TASK, ["t1", "t2", "t3"]));
+
+        assert.deepEqual(
+          LocalDatabase.baseTargetIds(PROJECT, "tasks", "p1"),
+          new Set(["t1", "t2", "t3"]),
+        );
+      });
+
+      it("answers no row as written", () => {
+        const written = Deltas.apply(keepList(TASK, ["t1", "t2"]));
+
+        assert.deepEqual(written, new Set());
+      });
+
+      it("queues the pair to be taken out of the stored set", () => {
+        Deltas.apply(keepList(TASK, ["t1", "t2"]));
+
+        assert.deepEqual(LocalDatabase.takeStoredFactRemovals(), [
+          {id: "p1", relationship: "tasks", targetIds: ["t3"], type: PROJECT},
+        ]);
+      });
+
+      it("takes a pair only the stored set names when the list leaves its row out", () => {
+        LocalDatabase.deleteFact(PROJECT, "tasks", "p1", "t3");
+
+        LocalDatabase.restore([
+          {
+            facts: {tasks: ["t1", "t2", "t3"]},
+            id: "p1",
+            row: {id: "p1", name: "Website"},
+            type: PROJECT,
+          },
+        ]);
+
+        Deltas.apply(keepList(TASK, ["t1", "t2"]));
+
+        assert.deepEqual(LocalDatabase.takeStoredFactRemovals(), [
+          {id: "p1", relationship: "tasks", targetIds: ["t3"], type: PROJECT},
+        ]);
+      });
     });
   });
 

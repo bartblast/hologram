@@ -50,6 +50,8 @@ export default class Deltas {
   // screen: the fold would skip a write whose row the base does not carry, and nothing would put
   // it back until the answer arrived.
   static apply(deltas, opts = {}) {
+    LocalDatabase.takeStoredFactRemovals();
+
     const written = new Set();
 
     for (const [op, byType] of Object.entries(deltas)) {
@@ -126,21 +128,27 @@ export default class Deltas {
   //
   // A row it drops this way can be named by the sets of rows it still holds, and the server, not
   // knowing it was held, tells nothing of those pairs - so they go too, or a set would name a row
-  // the client was never told is back. Answers the key of every row it dropped and of every row the
-  // stream vouched for whose set it took one out of, both of which it wrote and storing keeps. The
-  // server sends these in frames claiming no number of the client's own batches, so naming a row
-  // whose set changed lands no pending write on it.
+  // the client was never told is back. So does a pair naming a row the client doesn't hold: a stream
+  // cut inside a batch or a catch-up can leave one, and this is the only word that reaches it. Such
+  // an id is one the client already has, so hashing it learns nothing. Answers the key of every row
+  // it dropped and of every row the stream vouched for whose set it took one out of, both of which
+  // it wrote and storing keeps. The server sends these in frames claiming no number of the client's
+  // own batches, so naming a row whose set changed lands no pending write on it.
   static #dropHashed(type, items) {
     const dropped = new Set();
 
     for (const {hashes, salt} of items) {
-      const held = Deltas.#hashedIds(type, salt);
+      const hashed = Deltas.#hashedIds(type, salt);
 
       for (const hash of hashes) {
-        const id = held.get(hash);
+        const id = hashed.byHash.get(hash);
 
-        if (id !== undefined && LocalDatabase.baseRow(type, id) !== null) {
+        // Forgotten once dropped, so a hash told again finds nothing and walks no pairs. Filed
+        // again, the id is hashed again.
+        if (id !== undefined) {
           dropped.add(id);
+          hashed.byHash.delete(hash);
+          hashed.ids.delete(id);
         }
       }
     }
@@ -151,15 +159,16 @@ export default class Deltas {
   // The server tells a client which rows of a type it may keep, by hash, when its user lost a grant
   // reaching every row of the type: the rows the grant hid can't be named, the rows still readable
   // can. So every held row of the type whose id hashes to none of them goes, as a hashed drop takes
-  // a row. Hashed here rather than looked up in the catch-up's hashes, which can miss rows filed
-  // since they were worked out - and every one of those has to be judged against the list.
+  // a row, and so does every pair naming an id off the list that the client holds no row of. Hashed
+  // here rather than looked up in the catch-up's hashes, which can miss rows filed since they were
+  // worked out - and every one of those has to be judged against the list.
   static #keepHashed(type, items) {
     const dropped = new Set();
 
     for (const {hashes, salt} of items) {
       const kept = new Set(hashes);
 
-      for (const id of Object.keys(LocalDatabase.baseTable(type))) {
+      for (const id of LocalDatabase.heldOrNamedIds(type)) {
         if (!kept.has(DropHash.hash(salt, id))) {
           dropped.add(id);
         }
@@ -169,18 +178,32 @@ export default class Deltas {
     return Deltas.#dropRows(type, dropped);
   }
 
+  // An id the client holds no row of is only taken out of the sets naming it, here and in storage.
+  // It isn't a row this frame wrote, and neither are the rows whose sets named it.
   static #dropRows(type, ids) {
     if (ids.size === 0) {
       return [];
     }
 
+    const held = new Set();
+    const unheld = new Set();
+
     for (const id of ids) {
-      LocalDatabase.deleteRow(type, id);
+      (LocalDatabase.baseRow(type, id) === null ? unheld : held).add(id);
     }
 
-    const written = Array.from(ids, (id) => `${type} ${id}`);
+    const written = [];
 
-    return written.concat(LocalDatabase.deleteFactsNaming(type, ids));
+    for (const id of held) {
+      LocalDatabase.deleteRow(type, id);
+      written.push(`${type} ${id}`);
+    }
+
+    return written
+      .concat(LocalDatabase.deleteFactsNaming(type, held))
+      .concat(
+        LocalDatabase.deleteFactsNaming(type, unheld, {writeHolders: false}),
+      );
   }
 
   static #hashedIds(type, salt) {
@@ -191,18 +214,29 @@ export default class Deltas {
     let hashed = Deltas.#hashes.byType.get(type);
 
     if (hashed === undefined) {
-      hashed = {byHash: new Map(), ids: new Set()};
+      hashed = {byHash: new Map(), ids: new Set(), readAt: null};
       Deltas.#hashes.byType.set(type, hashed);
     }
 
-    for (const id of Object.keys(LocalDatabase.baseTable(type))) {
+    // Reading every id walks every pair the client holds, and a big drop arrives over many frames
+    // in a row, so it's read again only when something was filed since, or new rules gave the model
+    // a set that can name the type.
+    const readAt = `${LocalDatabase.filings()} ${Model.generation()}`;
+
+    if (hashed.readAt === readAt) {
+      return hashed;
+    }
+
+    hashed.readAt = readAt;
+
+    for (const id of LocalDatabase.heldOrNamedIds(type)) {
       if (!hashed.ids.has(id)) {
         hashed.byHash.set(DropHash.hash(salt, id), id);
         hashed.ids.add(id);
       }
     }
 
-    return hashed.byHash;
+    return hashed;
   }
 
   // A patch names a row the client was told about, so one naming a row it does not hold is one

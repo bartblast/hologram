@@ -365,7 +365,11 @@ export default class Durability {
   // Not awaited by anything on the write path. The rows are already in memory and already on
   // screen, and what this buys is only whether they are still there after a reload. What waits for
   // it is telling the other tabs (see Tabs.post).
-  static persistFrame(records, cursor) {
+  //
+  // `factRemovals` are pairs to take out of stored sets, leaving the rest of each record as stored
+  // (see `LocalDatabase.takeStoredFactRemovals`). Read after the frame's own puts, which a
+  // transaction runs in order, so a record this frame wrote is judged as written.
+  static persistFrame(records, cursor, factRemovals = []) {
     return Durability.#write([ENTITIES, META], (transaction) => {
       const entities = transaction.objectStore(ENTITIES);
       const meta = transaction.objectStore(META);
@@ -377,6 +381,8 @@ export default class Durability {
           entities.put(record);
         }
       }
+
+      Durability.#removeStoredFacts(entities, factRemovals);
 
       // A frame sent mid-fill names no place, because a client holding part of a pot could not
       // honour the claim one makes. The place already stored still describes the rows that were
@@ -821,6 +827,45 @@ export default class Durability {
     Durability.#write([META], (transaction) => {
       transaction.objectStore(META).put(actorUserId, "actorUserId");
     });
+  }
+
+  // One read per record, applying all its removals at once: two reads of one record would both see
+  // it as stored, and the second put would undo the first.
+  static #removeStoredFacts(entities, factRemovals) {
+    const byRecord = new Map();
+
+    for (const removal of factRemovals) {
+      const key = JSON.stringify([removal.type, removal.id]);
+
+      byRecord.set(key, [...(byRecord.get(key) ?? []), removal]);
+    }
+
+    for (const removals of byRecord.values()) {
+      const {id, type} = removals[0];
+      const read = entities.get([type, id]);
+
+      read.onsuccess = () => {
+        const record = read.result;
+
+        if (record === undefined) {
+          return;
+        }
+
+        const facts = {...record.facts};
+
+        for (const {relationship, targetIds} of removals) {
+          if (facts[relationship] !== undefined) {
+            const removed = new Set(targetIds);
+
+            facts[relationship] = facts[relationship].filter(
+              (targetId) => !removed.has(targetId),
+            );
+          }
+        }
+
+        entities.put({...record, facts});
+      };
+    }
   }
 
   static #request(request) {

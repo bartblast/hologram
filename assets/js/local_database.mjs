@@ -43,6 +43,10 @@ export default class LocalDatabase {
   // type -> relationship -> source id -> Set of target ids
   static #facts = {};
 
+  // How many times anything was filed here, which lets a reader of every id skip reading them again
+  // (see `filings`). A reset leaves it: a reset adds no id, and whatever is filed after one moves it.
+  static #filings = 0;
+
   // The rows held on an earlier word of the server's - a page render's, or a stream's from before
   // a resync - until this fill confirms them. What is still here when the fill declares itself
   // complete was never the client's to hold, or is no longer: a grant revoked between a render
@@ -63,10 +67,22 @@ export default class LocalDatabase {
 
   static #syncedTypes = new Set();
 
+  // type -> relationship -> source id -> Set of the ids its stored set names and the set held here
+  // doesn't: a set a page filed is the fresher, so restoring leaves it and the stored one stays as
+  // it was. A pair a cut stream left there would come back on a later page load, so a drop naming
+  // one takes it out of the stored set too (see `takeStoredFactRemovals`). Only the pair: the
+  // holder held here can be older than the stored one, so it isn't written over it.
+  static #storedOnlyFacts = {};
+
+  // What the last frame took out of stored sets, each `{id, relationship, targetIds, type}`, until
+  // the tab storing that frame takes it.
+  static #storedFactRemovals = [];
+
   // type -> id -> row
   static #tables = {};
 
   static addFact(type, relationship, sourceId, targetId) {
+    LocalDatabase.#filings += 1;
     LocalDatabase.#targetIds(type, relationship, sourceId).add(targetId);
   }
 
@@ -121,33 +137,19 @@ export default class LocalDatabase {
   // Every pair filed under a held row that names one of the given rows of the given type: in a
   // to-many of that type, and in an inverse of a to-many whose source is of that type. Answers the
   // key of every row the stream vouched for whose set lost one, which storing keeps.
-  static deleteFactsNaming(type, ids) {
+  //
+  // Given `writeHolders: false`, for ids the client holds no row of, it answers none and queues each
+  // pair to be taken out of the stored set alone (see `takeStoredFactRemovals`). The holder held
+  // here can come from a page older than its stored record, and such a pair is no reason to write
+  // it over that record.
+  static deleteFactsNaming(type, ids, {writeHolders = true} = {}) {
+    if (ids.size === 0) {
+      return [];
+    }
+
     const written = [];
 
-    for (const holderType of Object.keys(
-      globalThis.Hologram.sync?.model ?? {},
-    )) {
-      const relationships = Object.entries(
-        Model.relationships(holderType) ?? {},
-      )
-        .filter(
-          ([_name, relationship]) =>
-            relationship.toMany && relationship.type === type,
-        )
-        .map(([name]) => name);
-
-      const inverses = Object.entries(Model.inverses(holderType) ?? {})
-        .filter(
-          ([_name, inverse]) => !inverse.reference && inverse.type === type,
-        )
-        .map(([name]) => name);
-
-      const names = relationships.concat(inverses);
-
-      if (names.length === 0) {
-        continue;
-      }
-
+    for (const [holderType, names] of LocalDatabase.#setsNaming(type)) {
       for (const holderId of Object.keys(LocalDatabase.baseTable(holderType))) {
         let changed = false;
 
@@ -162,10 +164,19 @@ export default class LocalDatabase {
             LocalDatabase.deleteFact(holderType, name, holderId, targetId);
             changed = true;
           }
+
+          LocalDatabase.#queueStoredRemoval(
+            holderType,
+            name,
+            holderId,
+            ids,
+            writeHolders ? [] : named,
+          );
         }
 
         // A row a page carried is never stored, so one whose set changed isn't written either.
         if (
+          writeHolders &&
           changed &&
           !LocalDatabase.#carried.has(`${holderType}${SEPARATOR}${holderId}`)
         ) {
@@ -193,6 +204,18 @@ export default class LocalDatabase {
         delete typeFacts[relationship][id];
       }
     }
+
+    for (const relationshipFacts of Object.values(
+      LocalDatabase.#storedOnlyFacts[type] ?? {},
+    )) {
+      delete relationshipFacts[id];
+    }
+  }
+
+  // Answers a number that moves whenever a row or a pair is filed, so a caller holding what it read
+  // of every id can tell whether reading them again could find a new one.
+  static filings() {
+    return LocalDatabase.#filings;
   }
 
   // Every READ passes through the overlay, so what a query, a policy check or an action sees is
@@ -223,6 +246,37 @@ export default class LocalDatabase {
   // answering an empty set for both.
   static hasFacts(type, relationship, sourceId) {
     return LocalDatabase.#facts[type]?.[relationship]?.[sourceId] !== undefined;
+  }
+
+  // The ids of the given type the client holds a row of, or finds in a set of a row it holds, here
+  // or in that set's stored copy. A set can name a row that never arrived or has already left: a
+  // stream cut inside a batch or a catch-up leaves such a pair, and only a drop by hash or a keep
+  // list can reach it afterwards, since the server doesn't know the client has it.
+  static heldOrNamedIds(type) {
+    const ids = new Set(Object.keys(LocalDatabase.baseTable(type)));
+
+    for (const [holderType, names] of LocalDatabase.#setsNaming(type)) {
+      for (const holderId of Object.keys(LocalDatabase.baseTable(holderType))) {
+        for (const name of names) {
+          for (const targetId of LocalDatabase.baseTargetIds(
+            holderType,
+            name,
+            holderId,
+          )) {
+            ids.add(targetId);
+          }
+
+          const storedOnly =
+            LocalDatabase.#storedOnlyFacts[holderType]?.[name]?.[holderId];
+
+          for (const targetId of storedOnly ?? []) {
+            ids.add(targetId);
+          }
+        }
+      }
+    }
+
+    return ids;
   }
 
   static isAllSynced() {
@@ -340,6 +394,8 @@ export default class LocalDatabase {
   }
 
   static putRow(type, row) {
+    LocalDatabase.#filings += 1;
+
     let table = LocalDatabase.#tables[type];
 
     if (!table) {
@@ -395,9 +451,24 @@ export default class LocalDatabase {
     return rowKeys;
   }
 
+  // Answers what the last frame took out of stored sets, for the tab storing it, and forgets it. A
+  // tab that doesn't store frames never takes it, so each frame starts by discarding what the one
+  // before left: kept, it could take out a pair a later frame told again.
+  static takeStoredFactRemovals() {
+    const removals = LocalDatabase.#storedFactRemovals;
+
+    LocalDatabase.#storedFactRemovals = [];
+
+    return removals;
+  }
+
   // The whole current target set for one (source, relationship) - the snapshot statement a row's
   // id list carries, replacing whatever pairs were held before.
   static replaceFacts(type, relationship, sourceId, targetIds) {
+    LocalDatabase.#filings += 1;
+
+    delete LocalDatabase.#storedOnlyFacts[type]?.[relationship]?.[sourceId];
+
     const targets = LocalDatabase.#targetIds(type, relationship, sourceId);
 
     targets.clear();
@@ -440,6 +511,8 @@ export default class LocalDatabase {
       for (const [relationship, targetIds] of Object.entries(facts)) {
         if (!LocalDatabase.hasFacts(type, relationship, id)) {
           LocalDatabase.replaceFacts(type, relationship, id, targetIds);
+        } else {
+          LocalDatabase.#noteStoredOnly(type, relationship, id, targetIds);
         }
       }
     }
@@ -454,9 +527,88 @@ export default class LocalDatabase {
     LocalDatabase.#carried = new Set();
     LocalDatabase.#facts = {};
     LocalDatabase.#promotedSeqs = new Map();
+    LocalDatabase.#storedFactRemovals = [];
+    LocalDatabase.#storedOnlyFacts = {};
     LocalDatabase.#syncedAll = false;
     LocalDatabase.#syncedTypes = new Set();
     LocalDatabase.#tables = {};
+  }
+
+  // Queues the given ids taken out of a set here, and those of the given ids only its stored copy
+  // names, to be taken out of the stored set when the frame is stored.
+  static #queueStoredRemoval(type, relationship, sourceId, ids, removedIds) {
+    const storedOnly =
+      LocalDatabase.#storedOnlyFacts[type]?.[relationship]?.[sourceId];
+
+    const storedOnlyIds = Array.from(storedOnly ?? []).filter((id) =>
+      ids.has(id),
+    );
+
+    for (const id of storedOnlyIds) {
+      storedOnly.delete(id);
+    }
+
+    const targetIds = removedIds.concat(storedOnlyIds);
+
+    if (targetIds.length === 0) {
+      return;
+    }
+
+    LocalDatabase.#storedFactRemovals.push({
+      id: sourceId,
+      relationship,
+      targetIds,
+      type,
+    });
+  }
+
+  static #noteStoredOnly(type, relationship, sourceId, storedIds) {
+    const held = LocalDatabase.baseTargetIds(type, relationship, sourceId);
+    const storedOnly = storedIds.filter((id) => !held.has(id));
+
+    if (storedOnly.length === 0) {
+      return;
+    }
+
+    LocalDatabase.#filings += 1;
+
+    const typeFacts = (LocalDatabase.#storedOnlyFacts[type] ??= {});
+    const relationshipFacts = (typeFacts[relationship] ??= {});
+
+    relationshipFacts[sourceId] = new Set(storedOnly);
+  }
+
+  // The sets that can name a row of the given type, as `[holder type, names]`: its to-manys pointing
+  // at the type, and its inverses of a to-many whose source is of the type.
+  static #setsNaming(type) {
+    const sets = [];
+
+    for (const holderType of Object.keys(
+      globalThis.Hologram.sync?.model ?? {},
+    )) {
+      const relationships = Object.entries(
+        Model.relationships(holderType) ?? {},
+      )
+        .filter(
+          ([_name, relationship]) =>
+            relationship.toMany && relationship.type === type,
+        )
+        .map(([name]) => name);
+
+      const inverses = Object.entries(Model.inverses(holderType) ?? {})
+        .filter(
+          ([_name, inverse]) => !inverse.reference && inverse.type === type,
+        )
+        .map(([name]) => name);
+
+      const names = relationships.concat(inverses);
+
+      if (names.length > 0) {
+        sets.push([holderType, names]);
+      }
+    }
+
+    return sets;
   }
 
   // What a marker makes of the rows answers filed while the given types were being filled. One

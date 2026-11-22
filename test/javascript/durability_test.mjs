@@ -1036,6 +1036,86 @@ describe("Durability", () => {
       ]);
     });
 
+    // The row held in memory can be older than the stored one, so only the pair goes.
+    it("takes a pair out of a stored set, leaving the rest of the record", async () => {
+      const stored = {
+        facts: {labels: ["l1"], tags: ["g1", "g2"]},
+        id: "t1",
+        row: {id: "t1", title: "Stored title"},
+        type: "MyApp.Task",
+      };
+
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([stored], "place-1");
+
+      await Durability.persistFrame([], "place-2", [
+        {id: "t1", relationship: "tags", targetIds: ["g2"], type: "MyApp.Task"},
+      ]);
+
+      assert.deepStrictEqual(await readAll("entities"), [
+        {...stored, facts: {labels: ["l1"], tags: ["g1"]}},
+      ]);
+    });
+
+    it("takes pairs out of two sets of one record", async () => {
+      const stored = {
+        facts: {labels: ["l1", "x"], tags: ["g1", "x"]},
+        id: "t1",
+        row: {id: "t1", title: "Stored title"},
+        type: "MyApp.Task",
+      };
+
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([stored], "place-1");
+
+      await Durability.persistFrame([], "place-2", [
+        {
+          id: "t1",
+          relationship: "labels",
+          targetIds: ["x"],
+          type: "MyApp.Task",
+        },
+        {id: "t1", relationship: "tags", targetIds: ["x"], type: "MyApp.Task"},
+      ]);
+
+      assert.deepStrictEqual(await readAll("entities"), [
+        {...stored, facts: {labels: ["l1"], tags: ["g1"]}},
+      ]);
+    });
+
+    it("judges a pair to take out against a record the same frame wrote", async () => {
+      const written = {
+        facts: {tags: ["g1", "g2"]},
+        id: "t1",
+        row: {id: "t1", title: "Written"},
+        type: "MyApp.Task",
+      };
+
+      await Durability.open();
+      await Durability.load();
+
+      await Durability.persistFrame([written], "place-1", [
+        {id: "t1", relationship: "tags", targetIds: ["g2"], type: "MyApp.Task"},
+      ]);
+
+      assert.deepStrictEqual(await readAll("entities"), [
+        {...written, facts: {tags: ["g1"]}},
+      ]);
+    });
+
+    it("passes over a pair to take out of a record it doesn't hold", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      await Durability.persistFrame([], "place-1", [
+        {id: "t9", relationship: "tags", targetIds: ["g1"], type: "MyApp.Task"},
+      ]);
+
+      assert.deepStrictEqual(await readAll("entities"), []);
+    });
+
     // The rows and the place go together, which is what stops a client naming a place it does not
     // hold the rows for - it would be told only what changed since, and the rows it never wrote
     // would be missing for good.
