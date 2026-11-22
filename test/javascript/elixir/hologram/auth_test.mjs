@@ -3538,10 +3538,20 @@ describe("Elixir_Hologram_Auth", () => {
       );
 
     const enumValue = (label) => Type.atom(label);
+    const ref = (id) => Type.bitstring(id);
 
     const approving = rule({
       new: {predicates: [[{name: "status", outer: 1}, "==", "published"]]},
     });
+
+    const putFolder = (id, overrides = {}) =>
+      LocalDatabase.putRow(FOLDER, {
+        archived: false,
+        id,
+        name: null,
+        parent_id: null,
+        ...overrides,
+      });
 
     const defineUpdate = (key, updateRule, folderPolicy = {}) => {
       defineModel({[key]: [updateRule]}, folderPolicy);
@@ -3655,6 +3665,175 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    it("follows a new reference along a path", () => {
+      defineUpdate(
+        "update:folder",
+        rule({
+          new: {
+            predicates: [
+              [{name: ["folder", "archived"], outer: 1}, "==", false],
+            ],
+          },
+        }),
+      );
+
+      putFolder(FOLDER_ID, {archived: false});
+      putFolder(PARENT_ID, {archived: true});
+
+      assert.deepStrictEqual(
+        asks(update, {folder_id: ref(FOLDER_ID)}),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        asks(update, {folder_id: ref(PARENT_ID)}),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers no for a path to a row this client doesn't hold", () => {
+      defineUpdate(
+        "update:folder",
+        rule({
+          new: {
+            predicates: [
+              [{name: ["folder", "archived"], outer: 1}, "==", false],
+            ],
+          },
+        }),
+      );
+
+      assert.deepStrictEqual(
+        asks(update, {folder_id: ref(FOLDER_ID)}),
+        Type.boolean(false),
+      );
+    });
+
+    describe("a role on the row after the change", () => {
+      const member = rule({
+        new: {predicates: [{hasRole: [["folder"], FOLDER, ["viewer"]]}]},
+      });
+
+      it("answers by the grant on the row the new reference names", () => {
+        defineUpdate("update:folder", member);
+        putFolder(FOLDER_ID);
+
+        LocalDatabase.putRow(
+          GRANT,
+          grantRow({entity_id: FOLDER_ID, entity_type: FOLDER}),
+        );
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(FOLDER_ID)}),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(PARENT_ID)}),
+          Type.boolean(false),
+        );
+      });
+
+      it("answers a visitor no", () => {
+        defineUpdate("update:folder", member);
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(FOLDER_ID)}, document(), Type.nil()),
+          Type.boolean(false),
+        );
+      });
+    });
+
+    describe("an operation on the row the row after the change leads to", () => {
+      const delegating = rule({
+        new: {predicates: [{can: ["read", ["folder"]]}]},
+      });
+
+      const openFolders = {
+        read: [rule({predicates: [["archived", "==", false]]})],
+      };
+
+      it("asks the row the new reference names", () => {
+        defineUpdate("update:folder", delegating, openFolders);
+        putFolder(FOLDER_ID, {archived: false});
+        putFolder(PARENT_ID, {archived: true});
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(FOLDER_ID)}),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(PARENT_ID)}),
+          Type.boolean(false),
+        );
+      });
+
+      it("answers no for an empty new reference", () => {
+        defineUpdate("update:folder", delegating, openFolders);
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: Type.nil()}),
+          Type.boolean(false),
+        );
+      });
+    });
+
+    describe("a quantifier over the row after the change", () => {
+      const tagged = (quantifier) =>
+        rule({
+          new: {
+            predicates: [
+              {
+                filter: [["name", "==", "urgent"]],
+                quantifier,
+                source: {name: ["tags"], outer: 1},
+              },
+            ],
+          },
+        });
+
+      const inFolder = (quantifier) =>
+        rule({
+          new: {
+            predicates: [
+              {
+                filter: [["title", "==", "x"]],
+                quantifier,
+                source: {name: ["folder", "documents"], outer: 1},
+              },
+            ],
+          },
+        });
+
+      it("decides on held rows of a set the change can't move a row into", () => {
+        defineUpdate("update:title", tagged("any"));
+        LocalDatabase.putRow(TAG, {id: TAG_ID, name: "urgent"});
+        LocalDatabase.addFact(DOCUMENT, "tags", DOC, TAG_ID);
+
+        assert.deepStrictEqual(
+          asks(update, {title: Type.bitstring("y")}),
+          Type.boolean(true),
+        );
+      });
+
+      it("answers no for a set whose hops land on the changed type", () => {
+        defineUpdate("update:folder", inFolder("any"));
+        putFolder(FOLDER_ID);
+
+        LocalDatabase.putRow(DOCUMENT, {
+          folder_id: FOLDER_ID,
+          id: OTHER_DOC,
+          title: "x",
+        });
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(FOLDER_ID)}),
+          Type.boolean(false),
+        );
+      });
+    });
+
     it("reads a value failing its declaration as stored", () => {
       defineUpdate("update:status", approving);
 
@@ -3669,6 +3848,27 @@ describe("Elixir_Hologram_Auth", () => {
 
       assert.deepStrictEqual(
         asks(update, {status: enumValue("bogus")}, document({status: "draft"})),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers no on a timestamp the write will move", () => {
+      defineUpdate(
+        "update:title",
+        rule({
+          new: {
+            predicates: [[{name: "updated_at", outer: 1}, "==", null]],
+          },
+        }),
+      );
+
+      globalThis.Hologram.sync.model[DOCUMENT].attributes.updated_at =
+        "datetime";
+
+      Model.reset();
+
+      assert.deepStrictEqual(
+        asks(update, {title: Type.bitstring("x")}),
         Type.boolean(false),
       );
     });
@@ -3713,6 +3913,169 @@ describe("Elixir_Hologram_Auth", () => {
 
       assert.deepStrictEqual(
         asks(update, {title: Type.bitstring("x")}),
+        Type.boolean(false),
+      );
+    });
+
+    describe("a chain leading back to the changed row", () => {
+      const folderRow = (overrides = {}) => ({
+        archived: false,
+        id: FOLDER_ID,
+        kind: null,
+        name: null,
+        opened_on: null,
+        parent_id: FOLDER_ID,
+        ...overrides,
+      });
+
+      const defineFolderUpdate = (updateRule, readRules = []) => {
+        defineModel({}, {"update:archived": [updateRule], read: readRules});
+
+        const entry = globalThis.Hologram.sync.model[FOLDER];
+
+        entry.constraints = {};
+        entry.defaults = {};
+        entry.frameworkAttributes = [];
+
+        Model.reset();
+      };
+
+      const archives = (archived, entity) =>
+        canChange(
+          alice,
+          update,
+          entity,
+          values({archived: Type.boolean(archived)}),
+        );
+
+      it("reads the row after the change on a path", () => {
+        defineFolderUpdate(
+          rule({
+            new: {
+              predicates: [
+                [{name: ["parent", "archived"], outer: 1}, "==", true],
+              ],
+            },
+          }),
+        );
+
+        LocalDatabase.putRow(FOLDER, folderRow());
+
+        assert.deepStrictEqual(
+          archives(true, Model.box(FOLDER, folderRow())),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          archives(false, Model.box(FOLDER, folderRow())),
+          Type.boolean(false),
+        );
+      });
+
+      it("answers no for a reference on it naming a row this client doesn't hold", () => {
+        defineFolderUpdate(
+          rule({
+            new: {
+              predicates: [
+                {hasRole: [["parent", "owner"], FOLDER, ["viewer"]]},
+              ],
+            },
+          }),
+        );
+
+        globalThis.Hologram.sync.model[FOLDER].relationships.owner = {
+          toMany: false,
+          type: FOLDER,
+        };
+
+        Model.reset();
+
+        LocalDatabase.putRow(FOLDER, folderRow());
+
+        LocalDatabase.putRow(
+          GRANT,
+          grantRow({entity_id: PARENT_ID, entity_type: FOLDER}),
+        );
+
+        assert.deepStrictEqual(
+          canChange(
+            alice,
+            update,
+            Model.box(FOLDER, {...folderRow(), owner_id: null}),
+            values({owner_id: ref(PARENT_ID), parent_id: ref(FOLDER_ID)}),
+          ),
+          Type.boolean(false),
+        );
+      });
+
+      it("leaves a field no rule reads unread when a hop lands on it", () => {
+        defineFolderUpdate(
+          rule({
+            new: {
+              predicates: [
+                [{name: ["parent", "archived"], outer: 1}, "==", true],
+              ],
+            },
+          }),
+        );
+
+        LocalDatabase.putRow(FOLDER, folderRow());
+
+        const key = Type.atom("opened_on");
+        const entity = Model.box(FOLDER, folderRow());
+
+        const malformed = {
+          ...entity,
+          data: {
+            ...entity.data,
+            [Type.encodeMapKey(key)]: [key, Type.integer(5)],
+          },
+        };
+
+        assert.deepStrictEqual(archives(true, malformed), Type.boolean(true));
+      });
+
+      it("asks a delegated rule about the stored row", () => {
+        defineFolderUpdate(
+          rule({new: {predicates: [{can: ["read", ["parent"]]}]}}),
+          [rule({predicates: [["archived", "==", false]]})],
+        );
+
+        const stored = folderRow({archived: true});
+
+        LocalDatabase.putRow(FOLDER, stored);
+
+        assert.deepStrictEqual(
+          archives(false, Model.box(FOLDER, stored)),
+          Type.boolean(false),
+        );
+      });
+    });
+
+    it("answers no for a quantifier over a derived set", () => {
+      defineUpdate(
+        "update:title",
+        rule({
+          new: {
+            predicates: [
+              {
+                filter: [],
+                quantifier: "any",
+                source: {name: ["folder", "recent_documents"], outer: 1},
+              },
+            ],
+          },
+        }),
+      );
+
+      putFolder(FOLDER_ID);
+
+      assert.deepStrictEqual(
+        asks(
+          update,
+          {title: Type.bitstring("x")},
+          document({folder_id: FOLDER_ID}),
+        ),
         Type.boolean(false),
       );
     });
@@ -3768,6 +4131,64 @@ describe("Elixir_Hologram_Auth", () => {
           ),
         "Hologram.MisuseError",
         "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got {:grant_role, :editor}",
+      );
+    });
+
+    describe("a new reference to a row this client doesn't hold", () => {
+      const named = rule({
+        new: {predicates: [[{name: "folder_id", outer: 1}, "!=", null]]},
+      });
+
+      it("answers no, since the server reads a missing row's reference as stored", () => {
+        defineUpdate("update:folder", named);
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(FOLDER_ID)}),
+          Type.boolean(false),
+        );
+      });
+
+      it("reads a reference to a held row as given", () => {
+        defineUpdate("update:folder", named);
+        putFolder(FOLDER_ID);
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: ref(FOLDER_ID)}),
+          Type.boolean(true),
+        );
+      });
+
+      it("reads the reference the row already stores as given", () => {
+        defineUpdate("update:folder", named);
+
+        assert.deepStrictEqual(
+          asks(
+            update,
+            {folder_id: ref(FOLDER_ID)},
+            document({folder_id: FOLDER_ID}),
+          ),
+          Type.boolean(true),
+        );
+      });
+    });
+
+    it("leaves a field the rule doesn't read unread", () => {
+      defineUpdate("update:status", approving);
+
+      const key = Type.atom("due_on");
+      const entity = document();
+
+      const malformed = {
+        ...entity,
+        data: {
+          ...entity.data,
+          [Type.encodeMapKey(key)]: [key, Type.integer(1)],
+        },
+      };
+
+      assert.deepStrictEqual(
+        asks(update, {status: enumValue("published")}, malformed),
+        Type.boolean(true),
       );
     });
 

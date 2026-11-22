@@ -55,6 +55,14 @@ const CANONICAL_ID =
 // is true.
 const UNKNOWN = Symbol("unknown");
 
+// The rows and boxed entities a rule reads as the database a change would leave, each with that
+// change - the twin of the marker Hologram.Auth.after_row/4 sets. A row read from a marked one is
+// marked in turn, and a row with no mark reads as stored, so a bare name keeps the stored value.
+const afterChanges = new WeakMap();
+
+// What every write of a value moves, to a moment only the write knows.
+const WRITE_TIMESTAMPS = ["server_updated_at", "updated_at"];
+
 // The sixteen bytes Hologram.Auth.RoleGrant derives every grant id under - drawn once, on
 // 2026-09-02, and fixed: change them and every grant in every store is renamed.
 const GRANT_ID_NAMESPACE = Uint8Array.from([
@@ -278,7 +286,62 @@ function clauseHolds(entityType, entity, clause, actorUserId, outer) {
     return quantifierHolds(entityType, entity, clause, actorUserId, outer);
   }
 
+  if (Object.hasOwn(clause, "hasRole")) {
+    return newRowRoleHolds(clause.hasRole, actorUserId, outer);
+  }
+
+  if (Object.hasOwn(clause, "can")) {
+    return newRowOperationHolds(clause.can, actorUserId, outer);
+  }
+
   return UNKNOWN;
+}
+
+// A role asked of the row the row after the change leads to, which the outermost scope holds.
+function newRowRoleHolds(
+  [relationshipNames, targetType, roles],
+  actorUserId,
+  outer,
+) {
+  if (actorUserId === null) {
+    return false;
+  }
+
+  const {entity, entityType} = outer.at(-1);
+  const targetId = chainTargetId(entityType, entity, relationshipNames);
+
+  if (targetId === UNKNOWN) {
+    return UNKNOWN;
+  }
+
+  return (
+    targetId !== null &&
+    grantExists(grantRows(), actorUserId, roles, targetType, [targetId])
+  );
+}
+
+// An operation asked of the row the row after the change leads to. It's judged as that row stands,
+// so a chain leading back to the changed row asks about its stored copy.
+function newRowOperationHolds(
+  [operation, relationshipNames],
+  actorUserId,
+  outer,
+) {
+  const {entity, entityType} = outer.at(-1);
+  const end = chainRow(entityType, entity, relationshipNames);
+
+  if (end === null || end === UNKNOWN) {
+    return end === null ? false : UNKNOWN;
+  }
+
+  const change = afterChanges.get(end.row);
+
+  const row =
+    end.type === change.type && end.row.id === change.id
+      ? LocalDatabase.getRow(end.type, change.id)
+      : end.row;
+
+  return row === null ? UNKNOWN : grants(end.type, row, operation, actorUserId);
 }
 
 // The row a chain of to-one relationships leads to, with its type, null at the first reference
@@ -288,7 +351,13 @@ function chainRow(entityType, entity, relationshipNames) {
   const [relationshipName, ...laterNames] = relationshipNames;
   const targetId = entityValue(entityType, entity, `${relationshipName}_id`);
 
-  return linkedRow(entityType, targetId, relationshipName, laterNames);
+  return linkedRow(
+    entityType,
+    targetId,
+    relationshipName,
+    laterNames,
+    afterChanges.get(entity),
+  );
 }
 
 // The chain followed from a plain held row, as chainRow/3 follows it from a boxed entity.
@@ -300,7 +369,13 @@ function chainRowFrom(entityType, row, relationshipNames) {
   const [relationshipName, ...laterNames] = relationshipNames;
   const targetId = row[`${relationshipName}_id`] ?? null;
 
-  return linkedRow(entityType, targetId, relationshipName, laterNames);
+  return linkedRow(
+    entityType,
+    targetId,
+    relationshipName,
+    laterNames,
+    afterChanges.get(row),
+  );
 }
 
 // The id the last reference of a chain holds, read off the row the relationships before it lead
@@ -319,7 +394,9 @@ function chainTargetId(entityType, entity, relationshipNames) {
     return end;
   }
 
-  return end.row[referenceField] ?? null;
+  return undecidedByChange(end.row, referenceField)
+    ? UNKNOWN
+    : (end.row[referenceField] ?? null);
 }
 
 // The type a name is declared with - an attribute's, or a derived field's holding a value - or
@@ -339,7 +416,10 @@ function declaredType(entityType, name) {
 // server-only attribute is UNKNOWN: no client is ever sent its value, so whatever a struct holds
 // there - the sentinel, or a value an action put in - is not the stored one.
 function entityValue(entityType, entity, name) {
-  if (Model.entry(entityType).serverOnly.has(name)) {
+  if (
+    Model.entry(entityType).serverOnly.has(name) ||
+    undecidedByChange(entity, name)
+  ) {
     return UNKNOWN;
   }
 
@@ -413,7 +493,10 @@ function evaluatedDefinition(entityType, entity, definition) {
 // A field's value off a held row as the wire spells it - a derived field computed on the row, as a
 // boxed entity of it. A server-only attribute is UNKNOWN: a held row carries no value for it.
 function fieldValue(entityType, row, name) {
-  if (Model.entry(entityType).serverOnly.has(name)) {
+  if (
+    Model.entry(entityType).serverOnly.has(name) ||
+    undecidedByChange(row, name)
+  ) {
     return UNKNOWN;
   }
 
@@ -425,9 +508,64 @@ function fieldValue(entityType, row, name) {
 
   return evaluatedDefinition(
     entityType,
-    Model.box(entityType, row),
+    boxedAs(entityType, row, afterChanges.get(row)),
     derived.definition,
   );
+}
+
+// A held row boxed, carrying the change it's read under. The changed row is its own boxed entity.
+function boxedAs(entityType, row, change) {
+  if (change === undefined) {
+    return Model.box(entityType, row);
+  }
+
+  if (change.builtRow === row) {
+    return change.entity;
+  }
+
+  const boxed = Model.box(entityType, row);
+
+  afterChanges.set(boxed, change);
+
+  return boxed;
+}
+
+// Whether the name is a field of the changed row this client can't tell the value of after the
+// change: a timestamp, which the write sets to a moment only it knows, or a reference to a row it
+// doesn't hold, which reads as stored on the server if no such row exists.
+function undecidedByChange(rowOrEntity, name) {
+  const change = afterChanges.get(rowOrEntity);
+
+  return (
+    change !== undefined &&
+    (change.entity === rowOrEntity || change.builtRow === rowOrEntity) &&
+    change.undecided.has(name)
+  );
+}
+
+// The changed row as a held row spells it, built when a hop first lands on it. An attribute is read
+// off the struct when a rule asks for it, as the server reads it, so a field no rule reads is never
+// unboxed.
+function changedRow(change) {
+  if (change.builtRow === null) {
+    const {entity, type} = change;
+    const entry = Model.entry(type);
+    const row = referenceRow(type, entity);
+
+    for (const name of Object.keys(entry.attributes)) {
+      if (!entry.serverOnly.has(name) && !Object.hasOwn(row, name)) {
+        Object.defineProperty(row, name, {
+          enumerable: true,
+          get: () => storedValue(type, entity, name),
+        });
+      }
+    }
+
+    change.builtRow = row;
+    afterChanges.set(row, change);
+  }
+
+  return change.builtRow;
 }
 
 // Whether the boxed entity holds a server-only attribute's sentinel - what it arrived with, since
@@ -439,16 +577,43 @@ function holdsServerOnlySentinel(entity, name) {
 }
 
 // The row one to-one relationship's reference names, then the chain after it from there - null for
-// an empty reference, UNKNOWN for a row this client does not hold.
-function linkedRow(entityType, targetId, relationshipName, laterNames) {
+// an empty reference, UNKNOWN for a row this client does not hold. Under a change, the changed row
+// is read as it will be and the rest are marked, so the hops after them read the same state.
+function linkedRow(entityType, targetId, relationshipName, laterNames, change) {
   if (targetId === null) {
     return null;
   }
 
+  if (targetId === UNKNOWN) {
+    return UNKNOWN;
+  }
+
   const type = Model.relationships(entityType)[relationshipName].type;
-  const row = LocalDatabase.getRow(type, targetId);
+
+  const row =
+    change === undefined
+      ? LocalDatabase.getRow(type, targetId)
+      : rowUnderChange(type, targetId, change);
 
   return row === null ? UNKNOWN : chainRowFrom(type, row, laterNames);
+}
+
+function rowUnderChange(type, id, change) {
+  if (type === change.type && id === change.id) {
+    return changedRow(change);
+  }
+
+  const held = LocalDatabase.getRow(type, id);
+
+  if (held === null) {
+    return null;
+  }
+
+  const row = {...held};
+
+  afterChanges.set(row, change);
+
+  return row;
 }
 
 // Whether the given clauses name the acting user anywhere - inside a disjunction's alternatives
@@ -596,6 +761,14 @@ function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
     return UNKNOWN;
   }
 
+  const change = afterChanges.get(start.entity);
+
+  // The held rows of a set the change moves a row into or out of are the stored ones, which could
+  // answer a definite no the row after the change doesn't.
+  if (change !== undefined && changeReachesSet(start, change)) {
+    return UNKNOWN;
+  }
+
   const relatedType = Model.pathTarget(start.entityType, start.hops);
   const innerOuter = [{entity, entityType}, ...outer];
 
@@ -608,7 +781,7 @@ function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
   const answers = related.map((row) =>
     predicatesHold(
       relatedType,
-      Model.box(relatedType, row),
+      boxedAs(relatedType, row, change),
       clause.filter,
       actorUserId,
       innerOuter,
@@ -616,6 +789,25 @@ function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
   );
 
   return heldAnswer(clause.quantifier, answers);
+}
+
+// Whether a set read under a change can hold a row the change affects: a hop lands on the changed
+// type, or the first one is a to-many of the changed type whose pairs the change adds or deletes.
+function changeReachesSet({entityType, hops}, change) {
+  if (entityType === change.type && change.edges.has(hops[0])) {
+    return true;
+  }
+
+  let type = entityType;
+
+  return hops.some((name) => {
+    type = (
+      Model.own(Model.relationships(type), name) ??
+      Model.own(Model.inverses(type), name)
+    ).type;
+
+    return type === change.type;
+  });
 }
 
 // The boxed entity's id and reference fields as a held row spells them - what a set's rows are
@@ -1247,9 +1439,31 @@ function isImproperFieldsAsk(operation) {
   );
 }
 
+// The references among the given values naming a row this client doesn't hold, other than the one
+// the entity already holds, which the store vouches for.
+function unheldReferences(entityType, entity, changes) {
+  return Object.entries(Model.relationships(entityType))
+    .filter(([_name, relationship]) => !relationship.toMany)
+    .flatMap(([name, relationship]) => {
+      const field = `${name}_id`;
+
+      if (!changes.has(field)) {
+        return [];
+      }
+
+      const id = Model.unbox(changes.get(field), "uuid");
+
+      return id === null ||
+        id === storedValue(entityType, entity, field) ||
+        LocalDatabase.getRow(relationship.type, id) !== null
+        ? []
+        : [field];
+    });
+}
+
 // The scope a rule reads the row after a change through: the entity with the given values on it,
 // bar one failing its declaration, which can't be on the row and so reads as stored.
-function rowAfterChange(entityType, entity, changes) {
+function rowAfterChange(entityType, entity, changes, edges = new Set()) {
   const validation = Elixir_Hologram_Entity["validate/2"](
     Type.alias(entityType),
     Type.map([...changes].map(([name, value]) => [Type.atom(name), value])),
@@ -1261,17 +1475,33 @@ function rowAfterChange(entityType, entity, changes) {
       : Object.values(validation.data[1].data).map(([name]) => name.value),
   );
 
+  const valid = new Map([...changes].filter(([name]) => !invalid.has(name)));
+
   const data = {...entity.data};
 
-  for (const [name, value] of changes) {
-    if (!invalid.has(name)) {
-      const key = Type.atom(name);
+  for (const [name, value] of valid) {
+    const key = Type.atom(name);
 
-      data[Type.encodeMapKey(key)] = [key, value];
-    }
+    data[Type.encodeMapKey(key)] = [key, value];
   }
 
-  return {entity: {...entity, data}, entityType};
+  const boxed = {...entity, data};
+
+  const change = {
+    builtRow: null,
+    edges,
+    entity: boxed,
+    id: storedValue(entityType, entity, "id"),
+    type: entityType,
+    undecided: new Set([
+      ...WRITE_TIMESTAMPS,
+      ...unheldReferences(entityType, entity, valid),
+    ]),
+  };
+
+  afterChanges.set(boxed, change);
+
+  return {entity: boxed, entityType};
 }
 
 // The key an entity operation is baked under: an atom as its name, a per-role grant lifecycle
