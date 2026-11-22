@@ -460,6 +460,33 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert query.take == 1
     end
 
+    test "refuses a branch on strings joined from fields of the row", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :computed_joined in .+ passes a field of the row to :erlang\.==\/2/,
+                   fn -> derived_definition(Module146, :computed_joined, ir_plt) end
+    end
+
+    test "refuses a branch on a value a condition on the row picks", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :computed_picked in .+ passes a field of the row to :erlang\.==\/2/,
+                   fn -> derived_definition(Module146, :computed_picked, ir_plt) end
+    end
+
+    test "refuses a branch on whether a condition on the row holds", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :computed_condition in .+ branches on a field of the row/,
+                   fn -> derived_definition(Module146, :computed_condition, ir_plt) end
+    end
+
+    # The picked key can be the one read, so the value depends on the row.
+    test "refuses a read of a map keyed by a value a condition on the row picks", %{
+      ir_plt: ir_plt
+    } do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :computed_key in .+ reads :limit off a map keyed by a field of the row/,
+                   fn -> derived_definition(Module146, :computed_key, ir_plt) end
+    end
+
     test "takes the case clause a known value matches", %{ir_plt: ir_plt} do
       {definition, _read_modules} = derived_definition(Module142, :by_case, ir_plt)
 

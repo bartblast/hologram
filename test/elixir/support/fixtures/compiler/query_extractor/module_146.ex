@@ -10,6 +10,48 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146 do
   # Some definitions are refused on purpose, so their calls fail.
   @dialyzer {:nowarn_function, __derived_definition__: 1}
 
+  def __derived_definition__(:computed_condition) do
+    condition = Derived.condition(Module36, last_read_at: nil)
+
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.by_computed_flag(condition)
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:computed_joined) do
+    joined =
+      Derived.concat([
+        Derived.field(Module36, [:last_read_at]),
+        Derived.field(Module36, [:channel_id])
+      ])
+
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.by_computed_key(joined)
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:computed_key) do
+    condition = Derived.condition(Module36, last_read_at: nil)
+    key = Derived.if_value(condition, :limit, :other)
+
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.keyed_by_computed(key)
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:computed_picked) do
+    condition = Derived.condition(Module36, last_read_at: nil)
+    picked = Derived.if_value(condition, "ab", "cd")
+
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.by_computed_key(picked)
+    |> Derived.lower()
+  end
+
   def __derived_definition__(:closure_making_field) do
     Module36
     |> Derived.field([:channel, :messages])
@@ -67,7 +109,11 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146 do
       closures_compared: {"lib/my_app/member.ex", 3},
       closures_from_one_fn: {"lib/my_app/member.ex", 4},
       field_on_path_not_taken: {"lib/my_app/member.ex", 5},
-      improper_list: {"lib/my_app/member.ex", 6}
+      improper_list: {"lib/my_app/member.ex", 6},
+      computed_condition: {"lib/my_app/member.ex", 7},
+      computed_joined: {"lib/my_app/member.ex", 8},
+      computed_key: {"lib/my_app/member.ex", 9},
+      computed_picked: {"lib/my_app/member.ex", 10}
     }
   end
 end

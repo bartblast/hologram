@@ -21,6 +21,13 @@ defmodule Hologram.Compiler.QueryExtractor do
   # closures it runs, which start from states of their own.
   @derived_reads_key {__MODULE__, :derived_reads}
 
+  # The expressions a derived field's walk built from the row: strings joined, a value a condition
+  # picks, whether a condition holds. Each is a plain tuple of lowered names, so nothing in its
+  # shape tells it from a tuple the builder wrote, and the walk remembers the ones it built.
+  @row_expressions_key {__MODULE__, :row_expressions}
+
+  @row_expression_functions [:concat, :condition, :if_value]
+
   @doc """
   Resolves the definition of the given derived field of the given entity type by walking the
   field's clause of the type's `__derived_definition__/1` over its IR - the way a body calling a
@@ -58,6 +65,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     clause = derived_clause!(entity_type, name, ir_plt)
 
     Process.put(@derived_reads_key, MapSet.new())
+    Process.put(@row_expressions_key, MapSet.new())
 
     try do
       # Every branch of a derived field's walk is decided or refused, so the walk builds one
@@ -72,6 +80,7 @@ defmodule Hologram.Compiler.QueryExtractor do
       {Derived.normalize(definition), read_modules}
     after
       Process.delete(@derived_reads_key)
+      Process.delete(@row_expressions_key)
     end
   end
 
@@ -116,7 +125,13 @@ defmodule Hologram.Compiler.QueryExtractor do
   # A Derived call builds a stand-in or a definition from others, so it runs natively - what it
   # refuses is the definition's to answer for, at the line the walk stood on.
   defp apply_derived!(function, arg_values, context) do
-    apply(Derived, function, arg_values)
+    result = apply(Derived, function, arg_values)
+
+    if function in @row_expression_functions do
+      Process.put(@row_expressions_key, MapSet.put(row_expressions(), result))
+    end
+
+    result
   rescue
     error in [ArgumentError, MisuseError] ->
       reraise Hologram.CompileError,
@@ -952,6 +967,9 @@ defmodule Hologram.Compiler.QueryExtractor do
     if Path.basename(path) == "nofile", do: nil, else: path
   end
 
+  # A closure can run in a process of a call the build runs, where the walk's key is unset.
+  defp row_expressions, do: Process.get(@row_expressions_key, MapSet.new())
+
   defp row_keyed?(map) when is_map(map) do
     map
     |> Map.keys()
@@ -964,7 +982,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp row_value?(%RowRef{}), do: true
 
-  defp row_value?(_value), do: false
+  defp row_value?(value), do: MapSet.member?(row_expressions(), value)
 
   # A dot on a set reads further through its rows, as a derived field's body reads a chain through a
   # set - only before a stage narrowed it, since the longer path is a set of its own.
@@ -998,9 +1016,10 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp stand_in?(tuple) when is_tuple(tuple) do
-    tuple
-    |> Tuple.to_list()
-    |> stand_in?()
+    row_value?(tuple) or
+      tuple
+      |> Tuple.to_list()
+      |> stand_in?()
   end
 
   defp stand_in?(map) when is_map(map) do

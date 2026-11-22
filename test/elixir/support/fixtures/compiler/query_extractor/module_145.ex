@@ -8,6 +8,18 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module145 do
   alias Hologram.Entity.Derived
   alias Hologram.Test.Fixtures.Entity.Module36
 
+  def by_computed_key(messages, key) do
+    limit = if key == "ab", do: 1, else: 2
+
+    take(messages, ^limit)
+  end
+
+  def by_computed_flag(messages, flag) do
+    limit = if flag, do: 1, else: 2
+
+    take(messages, ^limit)
+  end
+
   def closure_making_field(messages) do
     count =
       [1, 2]
@@ -59,6 +71,12 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module145 do
     _improper = wrap_term([1] ++ wrap_term(2))
 
     take(messages, 1)
+  end
+
+  def keyed_by_computed(messages, key) do
+    opts = %{:limit => 3, key => 1}
+
+    take(messages, ^opts.limit)
   end
 
   defp holding(value), do: fn _x -> value end
