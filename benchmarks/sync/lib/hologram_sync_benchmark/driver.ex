@@ -10,6 +10,7 @@ defmodule HologramSyncBenchmark.Driver do
   alias HologramSyncBenchmark.Cases.Access
   alias HologramSyncBenchmark.Cases.Backlog
   alias HologramSyncBenchmark.Cases.Board
+  alias HologramSyncBenchmark.Cases.Catchups
   alias HologramSyncBenchmark.Cases.Deploy
   alias HologramSyncBenchmark.Cases.Lock
   alias HologramSyncBenchmark.Cases.Reconnect
@@ -30,7 +31,7 @@ defmodule HologramSyncBenchmark.Driver do
   @board_page "HologramSyncBenchmark.BoardPage"
 
   @cases ~w(boot seed smoke board board_roles tenants access deploy deploy_tenants reconnect
-            reconnect_tenants session_memory backlog lock)
+            reconnect_tenants catchups session_memory backlog lock)
 
   # The options and their defaults: the board's size; the tenants, members per tenant and tasks
   # per tenant of the tenants case; the access case's docs and the seconds a change of access may
@@ -79,6 +80,7 @@ defmodule HologramSyncBenchmark.Driver do
     access_limit: :integer,
     backlog_rows: :string,
     cards: :integer,
+    catchups: :string,
     docs: :integer,
     case: :string,
     clients: :string,
@@ -136,6 +138,7 @@ defmodule HologramSyncBenchmark.Driver do
         |> Keyword.update(:clients, nil, &parse_counts!(&1, "--clients"))
         |> Keyword.update(:rows, nil, &parse_counts!(&1, "--rows"))
         |> Keyword.update(:backlog_rows, nil, &parse_counts!(&1, "--backlog-rows"))
+        |> Keyword.update(:catchups, nil, &parse_counts!(&1, "--catchups"))
         |> validate_options!()
 
       {_opts, args, invalid} ->
@@ -247,6 +250,8 @@ defmodule HologramSyncBenchmark.Driver do
   defp run_case("reconnect_tenants", opts) do
     run_sweep(opts, Reconnect.sweep_case(opts, :tenants))
   end
+
+  defp run_case("catchups", opts), do: Catchups.run(DB.connect!(), opts)
 
   defp run_case("session_memory", opts), do: SessionMemory.run(DB.connect!(), opts)
 

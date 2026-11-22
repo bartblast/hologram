@@ -125,24 +125,11 @@ defmodule HologramSyncBenchmark.Sweep do
   defp prepare_step(hooks, count, first_marker, memory_limit) do
     case Keyword.fetch(hooks, :before_step) do
       {:ok, before_step} ->
-        # Kept aside, since a node stopped just after the hook returned loses what it returned, and
-        # what it prepared still has to be cleaned up.
-        key = {__MODULE__, make_ref()}
-
-        prepared =
-          with_guarded_peer(memory_limit, fn peer ->
-            step_context = before_step.(peer, count, first_marker)
-            Process.put(key, step_context)
-            step_context
-          end)
-
-        step_context = Process.delete(key)
-
-        if match?({:stopped, _memory}, prepared) and step_context != nil do
-          call_after_step(hooks, step_context)
-        end
-
-        prepared
+        prepare_guarded(
+          memory_limit,
+          &before_step.(&1, count, first_marker),
+          &call_after_step(hooks, &1)
+        )
 
       :error ->
         {:ok, nil}
@@ -159,6 +146,43 @@ defmodule HologramSyncBenchmark.Sweep do
     case Keyword.fetch(hooks, :after_step) do
       {:ok, after_step} -> after_step.(step_context)
       :error -> :ok
+    end
+  end
+
+  @doc """
+  Calls the given function with a fresh server node as `with_guarded_peer/2` does, for one that
+  prepares something outliving the node, and calls `clean_up` with what it returned when it doesn't
+  reach the caller: the node passed the memory limit just after, or stopping it raised.
+  """
+  @spec prepare_guarded(pos_integer, (Peer.t() -> result), (result -> term)) ::
+          {:ok, result} | {:stopped, non_neg_integer}
+        when result: term
+  def prepare_guarded(memory_limit, prepare, clean_up) do
+    key = {__MODULE__, make_ref()}
+
+    try do
+      outcome =
+        with_guarded_peer(memory_limit, fn peer ->
+          prepared = prepare.(peer)
+          Process.put(key, prepared)
+          prepared
+        end)
+
+      prepared = Process.delete(key)
+
+      if match?({:stopped, _memory}, outcome) and prepared != nil do
+        clean_up.(prepared)
+      end
+
+      outcome
+    catch
+      kind, reason ->
+        case Process.delete(key) do
+          nil -> :ok
+          prepared -> clean_up.(prepared)
+        end
+
+        :erlang.raise(kind, reason, __STACKTRACE__)
     end
   end
 

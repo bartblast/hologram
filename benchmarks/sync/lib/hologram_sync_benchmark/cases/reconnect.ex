@@ -266,6 +266,7 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
       db: db,
       failed: Enum.count(reports, &(&1.failure != nil)),
       fill: prepared.fill,
+      after_last_return_ms: after_last_return_ms(reports),
       last_caught_up_ms: last_caught_up_ms(reports),
       leaked: Measure.leaks(writes, reports, prepared.expected),
       left_out: length(prepared.left_out),
@@ -428,10 +429,26 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
     end
   end
 
+  # From the last client coming back to the last one holding its whole pot, or nil when one never
+  # did. What the wave's spread can't hide: a node keeping up with the arrivals has this near zero,
+  # however long they took to arrive.
+  defp after_last_return_ms(reports) do
+    if Enum.all?(reports, &(&1.caught_up_at != nil)) do
+      last_back = Enum.max_by(reports, & &1.returned_at).returned_at
+      last_caught_up = Enum.max_by(reports, & &1.caught_up_at).caught_up_at
+
+      (last_caught_up - last_back) / 1_000
+    end
+  end
+
+  # Empty unless every client finished: the turns go first come, first served, so percentiles over
+  # the ones that did would leave out the ones that waited longest.
   defp waits_ms(reports) do
-    for %{caught_up_at: caught_up_at, returned_at: returned_at} <- reports,
-        caught_up_at != nil,
-        do: (caught_up_at - returned_at) / 1_000
+    if Enum.all?(reports, &(&1.caught_up_at != nil)) do
+      Enum.map(reports, &((&1.caught_up_at - &1.returned_at) / 1_000))
+    else
+      []
+    end
   end
 
   defp passed?(result, opts) do
@@ -483,6 +500,7 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
     "  #{if result.passed, do: "passed", else: "FAILED"}, " <>
       "#{result.caught_up}/#{result.clients} caught up, " <>
       "last #{Report.cell(result.last_caught_up_ms)} ms, " <>
+      "#{Report.cell(result.after_last_return_ms)} ms after the last return, " <>
       "own wait p99 #{Report.cell(Measure.percentile(result.waits_ms, 99))} ms, " <>
       "#{Report.cell(result.cpu_ms && result.cpu_ms / 1_000)} CPU s, " <>
       "#{Report.cell(result.db && result.db.active_ms)} DB ms, " <>
@@ -502,6 +520,7 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
       "Clients",
       "Caught up",
       "Last caught up ms",
+      "After the last return ms",
       "Own wait p50 ms",
       "Own wait p99 ms",
       "Return restarts",
@@ -527,6 +546,7 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
           result.clients,
           "#{result.caught_up}/#{result.clients}",
           result.last_caught_up_ms,
+          result.after_last_return_ms,
           Measure.percentile(result.waits_ms, 50),
           Measure.percentile(result.waits_ms, 99),
           result.return_restarts,
