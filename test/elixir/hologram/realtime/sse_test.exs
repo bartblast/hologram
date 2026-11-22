@@ -1429,6 +1429,47 @@ defmodule Hologram.Realtime.SSETest do
       assert_received {:sync_resync, :identity}
     end
 
+    # The rows are still this user's, so the client keeps them readable through the refill.
+    test "refills in place when only the session id changes" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      old_session = sync_session_stub()
+
+      send(self(), {:identity_changed, "session-2", 7})
+
+      {:cont, _conn, "session-2", 7, _sync_session} =
+        process_message(conn, "session-1", 7, sync_session: old_session)
+
+      assert_received {:sync_resync, :session}
+      refute_received {:sync_resync, :identity}
+    end
+
+    test "refills in place when a visitor gets a new session id" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      old_session = sync_session_stub()
+
+      send(self(), {:identity_changed, "session-2", nil})
+
+      {:cont, _conn, "session-2", nil, _sync_session} =
+        process_message(conn, "session-1", nil, sync_session: old_session)
+
+      assert_received {:sync_resync, :session}
+      refute_received {:sync_resync, :identity}
+    end
+
+    test "refills in place a stream waiting for a held data model when only the session id changes" do
+      on_exit(&Model.release/0)
+
+      conn = prepared_greeting_conn()
+      Model.hold()
+      send(self(), {:identity_changed, "session-2", 7})
+
+      assert {:cont, _conn, "session-2", 7, {:held, false}} =
+               process_message(conn, "session-1", 7, sync_session: {:held, true})
+
+      assert_received {:sync_resync, :session}
+      refute_received {:sync_resync, :identity}
+    end
+
     test "stops the session that was serving the identity it replaced" do
       conn = Plug.Conn.fetch_query_params(prepared_test_conn())
       old_session = sync_session_stub()

@@ -486,7 +486,7 @@ defmodule Hologram.Realtime.SSE do
         case maybe_drop_identity_change_bindings(conn, instance_id, user_id, new_user_id) do
           {:cont, conn} ->
             {conn, sync_session} =
-              restart_syncing(conn, Keyword.get(opts, :sync_session), new_user_id)
+              restart_syncing(conn, Keyword.get(opts, :sync_session), user_id, new_user_id)
 
             {:cont, conn, new_session_id, new_user_id, sync_session}
 
@@ -1239,23 +1239,30 @@ defmodule Hologram.Realtime.SSE do
   # down. It ends after the read it is in, and what it sends until then is dropped, since it is no
   # longer this stream's session. Unlinked first, so whatever it ends with is not this stream's
   # business.
-  defp restart_syncing(conn, nil, _new_user_id), do: {conn, nil}
+  defp restart_syncing(conn, nil, _old_user_id, _new_user_id), do: {conn, nil}
 
   # Nothing to stop yet, but the client may hold rows from before the hold as who it was.
-  defp restart_syncing(conn, {:held, _resume?}, new_user_id) do
-    send(self(), {:sync_resync, :identity})
+  defp restart_syncing(conn, {:held, _resume?}, old_user_id, new_user_id) do
+    send(self(), {:sync_resync, identity_resync_reason(old_user_id, new_user_id)})
 
     start_syncing(conn, new_user_id, false)
   end
 
-  defp restart_syncing(conn, session, new_user_id) do
-    send(self(), {:sync_resync, :identity})
+  defp restart_syncing(conn, session, old_user_id, new_user_id) do
+    send(self(), {:sync_resync, identity_resync_reason(old_user_id, new_user_id)})
 
     Process.unlink(session)
     send(session, :sync_stop)
 
     start_syncing(conn, new_user_id, false)
   end
+
+  # The client drops its rows at once only for `:identity`, since those were somebody else's. A new
+  # session id for the same user leaves the rows that user's, so they stay readable until the
+  # refill ends, as on any other resync.
+  defp identity_resync_reason(user_id, user_id), do: :session
+
+  defp identity_resync_reason(_old_user_id, _new_user_id), do: :identity
 
   # A term travels as a nested JSON value rather than as a JSON string holding one: the client then
   # parses the event's data once, and no quote inside the term is escaped on the way.
