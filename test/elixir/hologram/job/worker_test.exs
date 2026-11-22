@@ -949,6 +949,18 @@ defmodule Hologram.Job.WorkerTest do
 
     defp time_limit(_job_type), do: @time_limit_ms
 
+    # The worker clears a run when it handles the run's reply or DOWN, which the test process can't
+    # see. Asking the worker for its state can come before that, so wait until the state shows it.
+    defp await_run_cleared(worker) do
+      wait_until(fn ->
+        state = :sys.get_state(worker)
+
+        state.runs == %{} and state.timers == %{}
+      end)
+
+      :sys.get_state(worker)
+    end
+
     defp expire_run(worker, job_type, id) do
       %{runs: runs} = :sys.get_state(worker)
 
@@ -1092,7 +1104,7 @@ defmodule Hologram.Job.WorkerTest do
 
       assert_receive {:DOWN, ^monitor_ref, :process, ^run_pid, _reason}, @timeout_ms
 
-      state = :sys.get_state(worker)
+      state = await_run_cleared(worker)
 
       assert Process.read_timer(timer) == false
       assert state.timers == %{}
@@ -1134,7 +1146,7 @@ defmodule Hologram.Job.WorkerTest do
 
       :sys.resume(worker)
 
-      state = :sys.get_state(worker)
+      state = await_run_cleared(worker)
 
       assert state.runs == %{}
       assert state.timers == %{}
