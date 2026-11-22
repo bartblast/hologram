@@ -67,6 +67,12 @@ export default class Utils {
     return {...obj};
   }
 
+  static stringify(value) {
+    return JSON.stringify(value, (_key, item) =>
+      typeof item === "bigint" ? item.toString() : item,
+    );
+  }
+
   static uuidv7() {
     const bytes = new Uint8Array(16);
     crypto.getRandomValues(bytes);

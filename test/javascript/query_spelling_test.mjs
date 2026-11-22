@@ -743,16 +743,23 @@ describe("QuerySpelling", () => {
       assert.isTrue(QuerySpelling.spell(term).startsWith("!"));
     });
 
-    // The server spells the same integer in full, so the two miss each other: the Number here
-    // isn't the integer the server holds.
-    it("spells an integer past what a Number holds exactly by its bits", () => {
+    it("spells an integer past what a Number holds exactly in full, as the server does", () => {
       const query = count(
         filter(module(2), [["b", Type.integer(9007199254740993n)]]),
       );
 
       assert.equal(
         spell(query),
-        String.raw`{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["b","==",float:4340000000000000]],"include":{},"skip":null,"sort":[],"take":null}`,
+        String.raw`{"cardinality":"count","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["b","==",9007199254740993]],"include":{},"skip":null,"sort":[],"take":null}`,
+      );
+    });
+
+    it("spells a take past what a Number holds exactly in full, as the server does", () => {
+      const query = take(module(2), Type.integer(9007199254740992n));
+
+      assert.equal(
+        spell(query),
+        String.raw`{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[],"include":{},"skip":null,"sort":[["id","asc"]],"take":9007199254740992}`,
       );
     });
 
@@ -761,14 +768,30 @@ describe("QuerySpelling", () => {
     });
 
     it("spells a value JSON can't write so that no server spelling matches it", () => {
+      const cyclic = {};
+      cyclic.self = cyclic;
+
       const term = {
         ...Stage["normalize/1"](module(2)),
-        filter: [["c", "==", 1n]],
+        filter: [["c", "==", cyclic]],
       };
 
       assert.equal(
         QuerySpelling.spell(term),
-        String.raw`{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==",![object BigInt]]],"include":{},"skip":null,"sort":[["id","asc"]],"take":null}`,
+        String.raw`{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["c","==",![object Object]]],"include":{},"skip":null,"sort":[["id","asc"]],"take":null}`,
+      );
+    });
+
+    it("spells a BigInt in full, the way the server spells the integer", () => {
+      const term = {
+        ...Stage["normalize/1"](module(2)),
+        filter: [["b", "==", 9007199254740993n]],
+        take: 9007199254740992n,
+      };
+
+      assert.equal(
+        QuerySpelling.spell(term),
+        String.raw`{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module2","filter":[["b","==",9007199254740993]],"include":{},"skip":null,"sort":[["id","asc"]],"take":9007199254740992}`,
       );
     });
 

@@ -24,6 +24,19 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Runtime.Serializer
   alias Hologram.Sync.Frame
 
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity1, as: ImplEntity1
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity2, as: ImplEntity2
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity3, as: ImplEntity3
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity4, as: ImplEntity4
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity5, as: ImplEntity5
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page1, as: ImplPage1
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page2, as: ImplPage2
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page3, as: ImplPage3
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page4, as: ImplPage4
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page5, as: ImplPage5
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Protocol, as: ImplProtocol
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct1, as: ImplStruct1
+  alias Hologram.Test.Fixtures.Compiler.QueryChains.Module1, as: QueryChainsModule1
   alias Hologram.Test.Fixtures.Component.Module37, as: OtherContextComponent
   alias Hologram.Test.Fixtures.Entity.Derived.Module2, as: DerivedModule2
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
@@ -267,6 +280,29 @@ defmodule Hologram.CompilerTest do
     |> build_kept_page_reach(permission_checking_pages, module_info_plt, PLT.start())
   end
 
+  # What the data layer keeps of the given pages with the implementations they can dispatch to, as
+  # the compile task derives it: listed on the graph without the manually ported functions, with
+  # the permission checks asked of the unsplit one.
+  defp derive_impl_reach(pages, call_graph, module_info_plt) do
+    split_graph =
+      call_graph
+      |> CallGraph.clone()
+      |> CallGraph.remove_manually_ported_mfas()
+
+    listed_reach =
+      pages
+      |> list_reach_by_page(split_graph)
+      |> put_impl_mfas(split_graph)
+
+    checking_pages =
+      pages
+      |> list_reach_by_page(call_graph)
+      |> pages_checking_permissions()
+      |> Enum.concat(pages_checking_permissions_in_impls(listed_reach, call_graph))
+
+    build_kept_page_reach(listed_reach, checking_pages, module_info_plt, PLT.start())
+  end
+
   defp derive_sync_constants(pages, call_graph, module_info_plt, permission_checking_pages) do
     reach_by_page =
       derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages)
@@ -281,6 +317,7 @@ defmodule Hologram.CompilerTest do
       PageModule18 => %{
         atoms: MapSet.new(atoms),
         checks_permissions?: checks_permissions?,
+        impl_modules: MapSet.new(),
         modules: MapSet.new(modules),
         query_chains: [],
         reads_session_user?: reads_session_user?
@@ -2120,6 +2157,194 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "put_impl_mfas/2" do
+    test "adds what a page reaches through the implementations it can dispatch to", %{
+      call_graph: call_graph
+    } do
+      split_graph =
+        call_graph
+        |> CallGraph.clone()
+        |> CallGraph.remove_manually_ported_mfas()
+
+      [{ImplPage1, reach}] =
+        [ImplPage1]
+        |> list_reach_by_page(split_graph)
+        |> put_impl_mfas(split_graph)
+
+      assert {Module.safe_concat(ImplProtocol, ImplStruct1), :run, 1} in reach.impl_mfas
+    end
+
+    test "reads no graph for no page" do
+      assert put_impl_mfas([], nil) == []
+    end
+  end
+
+  describe "pages_checking_permissions_in_impls/2" do
+    setup %{call_graph: call_graph} do
+      split_graph =
+        call_graph
+        |> CallGraph.clone()
+        |> CallGraph.remove_manually_ported_mfas()
+
+      listed_reach =
+        [ImplPage1, ImplPage2]
+        |> list_reach_by_page(split_graph)
+        |> put_impl_mfas(split_graph)
+
+      [listed_reach: listed_reach]
+    end
+
+    test "names a page whose only permission check is in an implementation", %{
+      call_graph: call_graph,
+      listed_reach: listed_reach
+    } do
+      assert pages_checking_permissions_in_impls(listed_reach, call_graph) == [ImplPage2]
+    end
+
+    test "the page's own code doesn't reach that check", %{call_graph: call_graph} do
+      pages =
+        [ImplPage2]
+        |> list_reach_by_page(call_graph)
+        |> pages_checking_permissions()
+
+      assert pages == []
+    end
+  end
+
+  describe "the data layer's reach through protocol implementations" do
+    test "syncs a type only an implementation the page dispatches to names", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage1], call_graph, module_info_plt)
+      constants = build_sync_constants(reach_by_page, module_info_plt)
+
+      assert ImplEntity3 in constants.synced_types
+      assert ImplEntity3 in constants.page_types[ImplPage1]
+    end
+
+    test "follows a relationship name only an implementation spells", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage1], call_graph, module_info_plt)
+      constants = build_sync_constants(reach_by_page, module_info_plt)
+
+      assert ImplEntity4 in constants.page_types[ImplPage1]
+    end
+
+    test "an implementation doesn't name the type it's written for", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage3], call_graph, module_info_plt)
+      constants = build_sync_constants(reach_by_page, module_info_plt)
+
+      refute ImplEntity1 in constants.synced_types
+    end
+
+    test "a query written in one piece in an implementation names its own type", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage4], call_graph, module_info_plt)
+      constants = build_sync_constants(reach_by_page, module_info_plt)
+
+      assert ImplEntity2 in constants.synced_types
+    end
+
+    test "a protocol an implementation calls doesn't name the types implementing it", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage5], call_graph, module_info_plt)
+      constants = build_sync_constants(reach_by_page, module_info_plt)
+
+      refute ImplEntity5 in constants.synced_types
+    end
+
+    test "reads nothing from the generated dispatch functions", %{
+      module_info_plt: module_info_plt
+    } do
+      impl = Module.safe_concat(ImplProtocol, ImplStruct1)
+
+      reach = %{
+        mfas: [{ImplProtocol, :impl_for!, 1}],
+        types: [],
+        impl_mfas: [{impl, :__impl__, 1}]
+      }
+
+      reach_by_page =
+        build_kept_page_reach([{ImplPage1, reach}], [], module_info_plt, PLT.start())
+
+      assert reach_by_page[ImplPage1].atoms == MapSet.new()
+    end
+
+    test "counts a component only an implementation reaches for reading the session user", %{
+      module_info_plt: module_info_plt
+    } do
+      reach = %{mfas: [], types: [], impl_mfas: [{SessionUserComponent, :template, 0}]}
+
+      reach_by_page =
+        build_kept_page_reach([{ImplPage1, reach}], [], module_info_plt, PLT.start())
+
+      assert reach_by_page[ImplPage1].reads_session_user?
+    end
+
+    test "keeps the modules an implementation reaches apart from the ones the page names", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage3], call_graph, module_info_plt)
+      impl = Module.safe_concat(ImplProtocol, ImplEntity1)
+
+      assert impl in reach_by_page[ImplPage3].impl_modules
+      refute ImplEntity1 in reach_by_page[ImplPage3].modules
+    end
+
+    test "makes a page whose only permission check is in an implementation a checking one", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage2], call_graph, module_info_plt)
+
+      assert reach_by_page[ImplPage2].checks_permissions?
+    end
+
+    test "keeps the query an implementation writes", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage1], call_graph, module_info_plt)
+      impl = Module.safe_concat(ImplProtocol, ImplStruct1)
+
+      assert [%{line: 14, mfa: {^impl, :run, 1}, root: ImplEntity3}] =
+               reach_by_page[ImplPage1].query_chains
+    end
+
+    test "passes a valid query an implementation writes", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage1, ImplPage4], call_graph, module_info_plt)
+
+      assert validate_query_chains!(reach_by_page, module_info_plt) == :ok
+    end
+
+    test "a refused query in an implementation fails the check", %{
+      module_info_plt: module_info_plt
+    } do
+      reach = %{mfas: [], types: [], impl_mfas: [{QueryChainsModule1, :unknown_attribute, 0}]}
+
+      reach_by_page =
+        build_kept_page_reach([{ImplPage1, reach}], [], module_info_plt, PLT.start())
+
+      assert_raise Hologram.CompileError, ~r/nonexistent/, fn ->
+        validate_query_chains!(reach_by_page, module_info_plt)
+      end
+    end
+  end
+
   describe "validate_query_chains!/2" do
     test "passes every page of the suite", %{
       call_graph: call_graph,
@@ -2208,6 +2433,85 @@ defmodule Hologram.CompilerTest do
 
       assert build_sync_constants_js(sync_constants) ==
                ~s/globalThis.Hologram.sync = {expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
+    end
+
+    defmodule BigFloatLiteral do
+      use Hologram.Entity
+
+      derived :cap, :float, fn -> 28_097_012_775_158_772_737 end
+    end
+
+    defmodule BigIntegerBoard do
+      use Hologram.Entity
+
+      attribute :n, :integer, in: 0..9_007_199_254_740_993
+
+      relationship :cards, [Hologram.CompilerTest.BigIntegerCard], inverse: board
+
+      derived :cap, :integer, fn -> 9_007_199_254_740_993 end
+
+      derived :many_cards, [Hologram.CompilerTest.BigIntegerCard], fn cards ->
+        take(cards, 9_007_199_254_740_993)
+      end
+
+      derived :over, :boolean, fn n -> n > 9_007_199_254_740_993 end
+
+      allow :read, when: n == 9_007_199_254_740_993
+    end
+
+    defmodule BigIntegerCard do
+      use Hologram.Entity
+
+      relationship :board, BigIntegerBoard, optional: true
+
+      allow :read
+    end
+
+    test "marks a big integer literal wherever a rule or a derived field holds one" do
+      put_derived_definitions([BigIntegerBoard])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BigIntegerBoard, BigIntegerCard])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"cap":{"definition":{"value":{"$integer":"9007199254740993"}}/
+             )
+
+      assert String.contains?(js, ~s/["n",">",{"$integer":"9007199254740993"}]/)
+      assert String.contains?(js, ~s/"take":{"$integer":"9007199254740993"}/)
+      assert String.contains?(js, ~s/["n","==",{"$integer":"9007199254740993"}]/)
+    end
+
+    test "spells a big integer bound of an in constraint as text" do
+      put_derived_definitions([BigIntegerBoard])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BigIntegerBoard, BigIntegerCard])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"n":{"in":{"first":0,"last":"9007199254740993","step":1}/)
+    end
+
+    # JavaScript and Erlang round this integer to different floats, so the build hands over the
+    # float the server compares with rather than the digits.
+    test "renders an integer a float derived field holds as the server's float" do
+      put_derived_definitions([BigFloatLiteral])
+
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([BigFloatLiteral])}
+
+      float_js = Jason.encode!(28_097_012_775_158_772_737 * 1.0)
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"cap":{"definition":{"value":#{float_js}},/)
     end
 
     # A client computes a derived field itself, from the definition the build resolved - spelled in
@@ -3901,7 +4205,8 @@ defmodule Hologram.CompilerTest do
                  checks_permissions?: false,
                  modules: MapSet.new([Module1, Module2, Module3, Module4]),
                  query_chains: [],
-                 reads_session_user?: false
+                 reads_session_user?: false,
+                 impl_modules: MapSet.new()
                }
              }
     end
@@ -4007,14 +4312,16 @@ defmodule Hologram.CompilerTest do
                    checks_permissions?: false,
                    modules: MapSet.new(),
                    query_chains: [],
-                   reads_session_user?: false
+                   reads_session_user?: false,
+                   impl_modules: MapSet.new()
                  },
                  Module11 => %{
                    atoms: MapSet.new(),
                    checks_permissions?: false,
                    modules: MapSet.new(),
                    query_chains: [],
-                   reads_session_user?: false
+                   reads_session_user?: false,
+                   impl_modules: MapSet.new()
                  }
                }
     end

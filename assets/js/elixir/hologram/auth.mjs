@@ -86,15 +86,18 @@ function compare(left, right, ranks = null, type = null) {
 }
 
 function plainCompare(left, right) {
-  if (left === right) {
+  const leftValue = Model.widened(left, right);
+  const rightValue = Model.widened(right, left);
+
+  if (leftValue === rightValue) {
     return "eq";
   }
 
-  if (typeof left === "string" && typeof right === "string") {
-    return StringOrder.compare(left, right) < 0 ? "lt" : "gt";
+  if (typeof leftValue === "string" && typeof rightValue === "string") {
+    return StringOrder.compare(leftValue, rightValue) < 0 ? "lt" : "gt";
   }
 
-  return left < right ? "lt" : left > right ? "gt" : "eq";
+  return leftValue < rightValue ? "lt" : leftValue > rightValue ? "gt" : "eq";
 }
 
 // A missing value equals only another missing one. Left to the comparison, null compares as a
@@ -324,6 +327,15 @@ function declaredType(entityType, name) {
   );
 }
 
+// A derived field's value on a boxed entity, an integer a float field reads widened, the way the
+// database casts it.
+function derivedValue(entityType, entity, derived) {
+  return Model.widenedTo(
+    evaluatedDefinition(entityType, entity, derived.definition),
+    derived.type,
+  );
+}
+
 // The value a rule compares against, read off the boxed entity in the spelling the rules were
 // baked in - the rules travel wire-spelled, so what they are compared with must be too. A derived
 // field is computed from its definition over the row the entity holds, the way the query kernel
@@ -338,7 +350,7 @@ function entityValue(entityType, entity, name) {
   const derived = Model.derivedField(entityType, name);
 
   if (derived) {
-    return evaluatedDefinition(entityType, entity, derived.definition);
+    return derivedValue(entityType, entity, derived);
   }
 
   return storedValue(entityType, entity, name);
@@ -415,11 +427,7 @@ function fieldValue(entityType, row, name) {
     return row[name] ?? null;
   }
 
-  return evaluatedDefinition(
-    entityType,
-    Model.box(entityType, row),
-    derived.definition,
-  );
+  return derivedValue(entityType, Model.box(entityType, row), derived);
 }
 
 // Whether the boxed entity holds a server-only attribute's sentinel - what it arrived with, since
@@ -905,7 +913,9 @@ function viaHolds(rule, entityType, entity, actorUserId) {
 // The rules the build baked under the given key, or none. Only the policy's own keys count: it is
 // a plain object, so a name like constructor would otherwise read a property of Object.prototype.
 function policyRules(entry, key) {
-  return Object.hasOwn(entry.policy, key) ? entry.policy[key] : [];
+  const policy = Model.readPolicy(entry.policy);
+
+  return Object.hasOwn(policy, key) ? policy[key] : [];
 }
 
 // The verdict entry the build baked under the given key, or undefined - a hand-built entry may

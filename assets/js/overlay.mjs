@@ -228,7 +228,10 @@ export default class Overlay {
     // server wrote nothing. So the answer's row is filed as the row, whole - its sort keys are
     // computed by #promoteWrite, which re-files whatever the base holds under the id next.
     if (base === null && write.op === "create" && "id" in kept) {
-      LocalDatabase.putRow(write.type, kept);
+      LocalDatabase.putRow(
+        write.type,
+        Model.readIntegers(write.type, {...kept}),
+      );
 
       return;
     }
@@ -255,7 +258,10 @@ export default class Overlay {
 
     LocalDatabase.putRow(
       write.type,
-      Model.computeSortKeys(write.type, absorbed),
+      Model.computeSortKeys(
+        write.type,
+        Model.readIntegers(write.type, absorbed),
+      ),
     );
   }
 
@@ -528,7 +534,7 @@ export default class Overlay {
     }
 
     for (const [counter, amount] of deltas) {
-      updated[counter] = row[counter] + amount;
+      updated[counter] = Model.addIntegers(row[counter], amount);
     }
 
     return Model.computeSortKeys(type, updated);
