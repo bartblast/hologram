@@ -40,11 +40,11 @@ defmodule HologramSyncBenchmark.Driver do
   # per second and length in seconds; the slowest p99 delivery in milliseconds a step passes
   # with; how long in seconds a client may take to fill; how long in seconds the deploy cases'
   # clients may take to all hold their pots again; how many writes the reconnect cases make while
-  # their clients are away, how long in seconds those clients take to come back and how long they
-  # may take to be caught up, and how many writes per second land while they do; how many replicas
-  # write in the backlog case; how long in seconds the lock case runs each number of writers; and
-  # the server node's memory in GB past which a step is stopped, fixed rather than a share of the
-  # machine's, so a figure means the same on any machine.
+  # their clients are away, how long in milliseconds those clients take to come back and in seconds
+  # how long they may take to be caught up, and how many writes per second land while they do; how
+  # many replicas write in the backlog case; how long in seconds the lock case runs each number of
+  # writers; and the server node's memory in GB past which a step is stopped, fixed rather than a
+  # share of the machine's, so a figure means the same on any machine.
   @defaults [
     access_limit: 10,
     cards: 2_000,
@@ -62,7 +62,7 @@ defmodule HologramSyncBenchmark.Driver do
     tasks: 100,
     tenants: 20,
     wave_limit: 120,
-    wave_spread: 5,
+    wave_spread_ms: 5_000,
     wave_writes: 0
   ]
 
@@ -100,7 +100,7 @@ defmodule HologramSyncBenchmark.Driver do
     tasks: :integer,
     tenants: :integer,
     wave_limit: :integer,
-    wave_spread: :integer,
+    wave_spread_ms: :integer,
     wave_writes: :integer
   ]
 
@@ -154,12 +154,15 @@ defmodule HologramSyncBenchmark.Driver do
       raise ArgumentError, "--case must be one of: #{Enum.join(@cases, ", ")}"
     end
 
-    for {key, value} <- opts, key != :wave_writes, is_integer(value), value < 1 do
+    for {key, value} <- opts,
+        key not in [:wave_spread_ms, :wave_writes],
+        is_integer(value),
+        value < 1 do
       raise ArgumentError, "--#{String.replace(to_string(key), "_", "-")} must be at least 1"
     end
 
-    if opts[:wave_writes] < 0 do
-      raise ArgumentError, "--wave-writes can't be negative"
+    if opts[:wave_writes] < 0 or opts[:wave_spread_ms] < 0 do
+      raise ArgumentError, "--wave-writes and --wave-spread-ms can't be negative"
     end
 
     writes = Step.writes(opts[:rate], opts[:duration])
@@ -213,7 +216,7 @@ defmodule HologramSyncBenchmark.Driver do
   # sent - the check that clients connect, sync, report and catch up from where they were.
   defp run_case("smoke", opts) do
     conn = DB.connect!()
-    count = hd(opts[:clients] || [@default_smoke_clients])
+    count = Clients.single_count!(opts[:clients], @default_smoke_clients)
 
     :ok = Clients.check_limits!(count, Step.connect_concurrency())
     _seeded = Seeding.board!(conn, Card, opts[:cards])

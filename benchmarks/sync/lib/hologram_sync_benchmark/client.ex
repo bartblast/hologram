@@ -225,6 +225,9 @@ defmodule HologramSyncBenchmark.Client do
   `:policy_hash` is the hash of the rules the client's bundle was built with, absent for one
   holding the current ones.
 
+  `:replica` has the client greet with the replica identity its cookie page hands it, as a browser
+  does, which costs the server a query per connect. Off by default.
+
   `:count_type` names an entity type, as `inspect/1` spells its module, whose `put_entity` and
   `unsync_entity` deltas the client counts, decoding every `sync_deltas` frame for it. Costly, so
   only for a case that needs to know when every row of a big change has arrived.
@@ -276,6 +279,8 @@ defmodule HologramSyncBenchmark.Client do
       pending: [],
       port: uri.port,
       reconnect_attempt: 0,
+      replica: Keyword.get(opts, :replica, false),
+      replica_params: [],
       request_ref: nil,
       restarts: 0,
       return_restarts: 0,
@@ -291,8 +296,11 @@ defmodule HologramSyncBenchmark.Client do
   @impl GenServer
   def handle_call(:prepare, _from, state) do
     case fetch_cookie(state) do
-      {:ok, cookie} -> {:reply, :ok, %{state | cookie: cookie}}
-      {:error, reason} -> {:reply, {:error, reason}, %{state | failure: {:prepare, reason}}}
+      {:ok, cookie, replica_params} ->
+        {:reply, :ok, %{state | cookie: cookie, replica_params: replica_params}}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, %{state | failure: {:prepare, reason}}}
     end
   end
 
@@ -683,7 +691,8 @@ defmodule HologramSyncBenchmark.Client do
   defp fetch_cookie(state) do
     with {:ok, conn} <- open_connection(state),
          {:ok, conn, ref} <- Mint.HTTP.request(conn, "GET", state.cookie_path, [], nil),
-         {:ok, conn, %{status: 200, headers: headers}} <- receive_response(conn, ref) do
+         {:ok, conn, %{body: body, status: 200, headers: headers}} <-
+           receive_response(conn, ref) do
       Mint.HTTP.close(conn)
 
       cookies =
@@ -694,7 +703,10 @@ defmodule HologramSyncBenchmark.Client do
         end
 
       # Caught here rather than as the handshake's refusal later, which wouldn't say why.
-      if cookies == [], do: {:error, :no_session_cookie}, else: {:ok, Enum.join(cookies, "; ")}
+      with true <- cookies != [] || {:error, :no_session_cookie},
+           {:ok, replica_params} <- replica_params(state, body) do
+        {:ok, Enum.join(cookies, "; "), replica_params}
+      end
     else
       {:ok, conn, %{status: status}} ->
         Mint.HTTP.close(conn)
@@ -706,6 +718,19 @@ defmodule HologramSyncBenchmark.Client do
       {:error, conn, reason} ->
         Mint.HTTP.close(conn)
         {:error, reason}
+    end
+  end
+
+  # The identity the page hands its browser, in the data it boots from, which a real browser greets
+  # with on every stream.
+  defp replica_params(%{replica: false}, _body), do: {:ok, []}
+
+  defp replica_params(_state, body) do
+    with [_match, id] <- Regex.run(~r/"replicaId":"([^"]+)"/, body),
+         [_match, token] <- Regex.run(~r/"replicaToken":"([^"]+)"/, body) do
+      {:ok, [replica_id: id, replica_token: token]}
+    else
+      nil -> {:error, :no_replica_identity}
     end
   end
 
@@ -755,6 +780,7 @@ defmodule HologramSyncBenchmark.Client do
          {:ok, conn, handshake_id} <- redeem_handshake(conn, cookie_header, instance_id),
          params =
            state.greeting ++
+             state.replica_params ++
              cursor_param(state) ++ [handshake_id: handshake_id, instance_id: instance_id],
          {:ok, conn, ref, early_chunks} <- request_stream(conn, cookie_header, params) do
       received_at = now()

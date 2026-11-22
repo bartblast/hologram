@@ -53,15 +53,16 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
       before_step: &prepare(&1, &2, &3, &4, &5, opts, source),
       # Spread over the wave rather than all at once, so what reaches the listen backlog is about
       # one second's share.
-      burst: &max(div(Enum.max(&1), opts[:wave_spread]), 1),
+      burst: &burst(Enum.max(&1), opts[:wave_spread_ms]),
       check!: &check!(&1, opts, source),
       clients: "#{source.clients}, coming back with their places after a node restart",
       counts: source.counts,
-      name: if(data == :board, do: "reconnect", else: "reconnect_tenants"),
+      name: if(data == :board, do: "reconnect", else: "reconnect_tenants") <> suffix(opts),
       options: [
         source.data,
         "#{opts[:gap_writes]} writes made while the clients are away, each to a row of its own",
-        "each client comes back at a random moment within #{opts[:wave_spread]} s",
+        "each client comes back at a random moment within #{opts[:wave_spread_ms]} ms, greeting " <>
+          "with its replica identity as a browser does",
         "#{opts[:wave_writes]} writes per second while they do, each to a row of its own"
       ],
       passed?: &passed?(&1, opts),
@@ -74,9 +75,33 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
       ],
       summary: &summary/1,
       tables: &tables/1,
-      title: "Reconnect wave after a deploy, #{source.title}",
+      title: "Reconnect wave after a deploy, #{source.title}#{title_suffix(opts)}",
       why: &why_failed(&1, opts)
     }
+  end
+
+  @doc """
+  Returns how many of the given number of clients coming back within the given milliseconds reach
+  the listen backlog in about a second.
+  """
+  @spec burst(pos_integer, non_neg_integer) :: pos_integer
+  def burst(count, spread_ms) when spread_ms < 1_000, do: count
+
+  def burst(count, spread_ms), do: max(div(count * 1_000, spread_ms), 1)
+
+  @doc """
+  Returns what a case's section name ends with for the given options, so a run with the clients
+  arriving in a burst keeps its figures beside the gentler run's rather than replacing them.
+  """
+  @spec suffix(keyword) :: String.t()
+  def suffix(opts), do: if(opts[:wave_spread_ms] < 1_000, do: "_burst", else: "")
+
+  @doc """
+  Returns what a case's title ends with for the given options, for the same reason as `suffix/1`.
+  """
+  @spec title_suffix(keyword) :: String.t()
+  def title_suffix(opts) do
+    if opts[:wave_spread_ms] < 1_000, do: ", arriving in a burst", else: ""
   end
 
   defp source(opts, :board) do
@@ -160,6 +185,7 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
     clients =
       peer
       |> spec.client_opts.()
+      |> Enum.map(&Keyword.put(&1, :replica, true))
       |> Clients.start_all()
 
     try do
@@ -167,6 +193,11 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
 
       connect_failures = Clients.connect_all(clients, Step.connect_concurrency())
       fills = Clients.await_fills(clients, opts[:fill_timeout] * 1_000)
+      # Only once every fill is over: a session still filling can't answer being asked.
+      if Enum.all?(fills, &(&1.synced_all_at != nil and &1.failure == nil)) do
+        :ok = check_sessions_have_replicas!(peer)
+      end
+
       left_out = Clients.leave_all(clients)
 
       # One that couldn't leave has no place to come back with. Left to retry, it would run a cold
@@ -200,6 +231,28 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
       kind, reason ->
         Clients.close_all(clients)
         :erlang.raise(kind, reason, __STACKTRACE__)
+    end
+  end
+
+  @doc """
+  Returns whether the given sync session serves a replica. Runs on the server node.
+  """
+  @spec replica?(pid) :: boolean
+  def replica?(session), do: :sys.get_state(session).replica_id != nil
+
+  # A token the server doesn't accept reads as no identity at all, with nothing said about it, and
+  # the wave would quietly leave out the query a real one costs. Asked before the clients leave.
+  defp check_sessions_have_replicas!(peer) do
+    case Peer.rpc(peer, Hologram.Sync.Sessions, :list, []) do
+      [{session, _user} | _more] ->
+        if Peer.rpc(peer, __MODULE__, :replica?, [session]) do
+          :ok
+        else
+          raise "a client's session serves no replica, so its greeting wasn't accepted"
+        end
+
+      [] ->
+        :ok
     end
   end
 
@@ -240,7 +293,7 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
 
     wave_from = now_ms()
     returning = prepared.clients -- prepared.left_out
-    :ok = Clients.come_back_all(returning, opts[:wave_spread] * 1_000)
+    :ok = Clients.come_back_all(returning, opts[:wave_spread_ms])
     _reports = Clients.await_caught_up(returning, opts[:wave_limit] * 1_000)
 
     {wave_numbers, writer_error} = stop_wave_writer(writer)

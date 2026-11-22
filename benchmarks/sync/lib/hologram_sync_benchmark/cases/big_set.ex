@@ -54,7 +54,7 @@ defmodule HologramSyncBenchmark.Cases.BigSet do
   @spec run(pid, keyword) :: :ok
   def run(conn, opts) do
     sizes = opts[:set_sizes] || @default_sizes
-    count = hd(opts[:clients] || [@default_clients])
+    count = Clients.single_count!(opts[:clients], @default_clients)
     memory_limit = opts[:memory_limit] * 1_073_741_824
 
     :ok = Clients.check_limits!(count, Step.connect_concurrency())

@@ -36,13 +36,13 @@ defmodule HologramSyncBenchmark.Cases.Catchups do
   @spec run(pid, keyword) :: :ok
   def run(conn, opts) do
     limits = opts[:catchups] || @default_limits
-    count = hd(opts[:clients] || [@default_clients])
+    count = Clients.single_count!(opts[:clients], @default_clients)
     wave = Reconnect.sweep_case(opts, :board)
     memory_limit = opts[:memory_limit] * 1_073_741_824
 
     :ok = wave.check!.([count])
     :ok = check_connections!(conn, Enum.max(limits))
-    :ok = Clients.check_limits!(count, max(div(count, opts[:wave_spread]), 1))
+    :ok = Clients.check_limits!(count, Reconnect.burst(count, opts[:wave_spread_ms]))
     :ok = Report.check_readme!()
     run_line = Report.run_line(conn)
 
@@ -76,8 +76,8 @@ defmodule HologramSyncBenchmark.Cases.Catchups do
     IO.puts("Queue cleared after the last client came back: #{figure}")
 
     Report.write_case!(
-      "catchups",
-      "How many catch-ups a node runs at once",
+      "catchups" <> Reconnect.suffix(opts),
+      "How many catch-ups a node runs at once#{Reconnect.title_suffix(opts)}",
       run_line,
       options(wave, count, limits, opts),
       figure,
@@ -150,8 +150,8 @@ defmodule HologramSyncBenchmark.Cases.Catchups do
           wave.after_step.(prepared)
         end
 
-      {:stopped, memory} ->
-        {:stopped, memory}
+      {:stopped, _memory} ->
+        :stopped_filling
     end
   catch
     kind, reason -> {:failed, Report.short_reason(kind, reason)}
@@ -213,6 +213,12 @@ defmodule HologramSyncBenchmark.Cases.Catchups do
 
   defp take_outcome({:stopped, _memory}, _wave, limit) do
     %{limit: limit, line: "  STOPPED at the memory limit", note: "memory limit", wave: nil}
+  end
+
+  defp take_outcome(:stopped_filling, _wave, limit) do
+    note = "memory limit while filling on the first node, before the wave"
+
+    %{limit: limit, line: "  STOPPED at the #{note}", note: note, wave: nil}
   end
 
   defp take_outcome({:failed, message}, _wave, limit) do

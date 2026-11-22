@@ -13,6 +13,9 @@ defmodule HologramSyncBenchmark.Cases.SessionMemory do
   # and come back, and the returning sessions are read too, since those build what they hold
   # another way.
 
+  alias Hologram.DB.QueryCache
+  alias Hologram.Sync.Fill
+  alias Hologram.Sync.Pool
   alias Hologram.Sync.Sessions
   alias HologramSyncBenchmark.Clients
   alias HologramSyncBenchmark.Entities.Card
@@ -31,6 +34,8 @@ defmodule HologramSyncBenchmark.Cases.SessionMemory do
   @many_rows 100_000
 
   @page "HologramSyncBenchmark.BoardPage"
+
+  @id_reads 3
 
   @poll_ms 50
 
@@ -81,6 +86,28 @@ defmodule HologramSyncBenchmark.Cases.SessionMemory do
       [{"Per session, median", columns(), Enum.map(results, &row/1)}],
       figure_label: "Memory per session"
     )
+  end
+
+  @doc """
+  Times what a returning anonymous client's session reads to know what its client holds, the ids
+  of every synced type, through sync's pool as a session reads them, and returns the median of
+  three, in milliseconds. Runs on the server node.
+  """
+  @spec read_ids_ms :: float
+  def read_ids_ms do
+    synced_types = QueryCache.synced_types()
+
+    1..@id_reads
+    |> Enum.map(fn _read ->
+      {micros, :ok} = :timer.tc(fn -> Pool.run(fn -> read_all_ids(synced_types) end) end)
+
+      micros / 1_000
+    end)
+    |> Measure.percentile(50)
+  end
+
+  defp read_all_ids(synced_types) do
+    Enum.each(synced_types, &Fill.read_ids(&1, nil))
   end
 
   @doc """
@@ -196,20 +223,32 @@ defmodule HologramSyncBenchmark.Cases.SessionMemory do
     end
 
     :ok = await_sessions_gone(peer, now_ms() + @sessions_gone_ms)
-    :ok = Clients.come_back_all(clients, 0)
 
-    reports = Clients.await_caught_up(clients, opts[:fill_timeout] * 1_000)
+    # One at a time, so the time is the session reading its ids rather than queueing at the gate.
+    catchup_ms =
+      clients
+      |> Enum.map(&come_back_alone(&1, opts))
+      |> Measure.percentile(50)
 
-    case Enum.find(reports, &(&1.caught_up_at == nil or &1.failure != nil)) do
-      nil ->
-        :ok
+    peer
+    |> read_sessions(length(clients))
+    |> Map.merge(%{
+      catchup_ms: catchup_ms,
+      read_ids_ms: Peer.rpc(peer, __MODULE__, :read_ids_ms, [])
+    })
+  end
 
-      report ->
-        raise "a client never caught up within #{opts[:fill_timeout]} s, failure: " <>
-                inspect(report.failure)
+  defp come_back_alone(client, opts) do
+    :ok = Clients.come_back_all([client], 0)
+
+    [report] = Clients.await_caught_up([client], opts[:fill_timeout] * 1_000)
+
+    if report.caught_up_at == nil or report.failure != nil do
+      raise "a client never caught up within #{opts[:fill_timeout]} s, failure: " <>
+              inspect(report.failure)
     end
 
-    read_sessions(peer, length(clients))
+    (report.caught_up_at - report.returned_at) / 1_000
   end
 
   defp await_sessions_gone(peer, deadline) do
@@ -305,6 +344,8 @@ defmodule HologramSyncBenchmark.Cases.SessionMemory do
       "Returning KB",
       "Returning after collection KB",
       "Returning bytes of ids per row",
+      "Returning, back to caught up ms",
+      "Reading its ids ms",
       "Stream KB"
     ]
   end
@@ -323,6 +364,8 @@ defmodule HologramSyncBenchmark.Cases.SessionMemory do
       returning.standing / 1_024,
       returning.collected / 1_024,
       returning.collected_binaries / rows,
+      returning.catchup_ms,
+      returning.read_ids_ms,
       first.stream / 1_024
     ]
   end

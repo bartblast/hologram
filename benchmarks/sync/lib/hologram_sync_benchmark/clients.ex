@@ -66,6 +66,19 @@ defmodule HologramSyncBenchmark.Clients do
   end
 
   @doc """
+  Returns the one client count a case running at a single count was given, or the given default,
+  raising on several rather than quietly taking one of them.
+  """
+  @spec single_count!([pos_integer] | nil, pos_integer) :: pos_integer
+  def single_count!(nil, default), do: default
+
+  def single_count!([count], _default), do: count
+
+  def single_count!(counts, _default) do
+    raise ArgumentError, "this case runs at one client count, got: #{inspect(counts)}"
+  end
+
+  @doc """
   Closes the given clients and returns :ok.
   """
   @spec close_all([pid]) :: :ok

@@ -69,7 +69,7 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
   @spec run(pid, keyword) :: :ok
   def run(conn, opts) do
     sizes = opts[:backlog_rows] || @default_sizes
-    clients = hd(opts[:clients] || [@default_clients])
+    clients = Clients.single_count!(opts[:clients], @default_clients)
     memory_limit = opts[:memory_limit] * 1_073_741_824
 
     :ok = check_cards!(opts)
@@ -188,13 +188,18 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
     for batch <- 0..(batches - 1) do
       offset = rem(batch * @batch_size, slice - @batch_size + 1)
       replica = rem(batch * @writers + writer, replicas)
-      ref = %{replica_id: "bench-replica-#{replica}", seq: batch + 1}
+      ref = %{replica_id: replica_id(replica), seq: batch + 1}
       positions = (first_card + offset)..(first_card + offset + @batch_size - 1)
 
       {:ok, _written} = Ref.with_ref(ref, fn -> write_batch(ids, positions, batch) end)
     end
 
     :ok
+  end
+
+  # As long as a real one, a UUID, since the list's size is one of the figures.
+  defp replica_id(replica) do
+    "00000000-0000-4000-8000-" <> String.pad_leading(Integer.to_string(replica), 12, "0")
   end
 
   defp write_batch(ids, positions, batch) do

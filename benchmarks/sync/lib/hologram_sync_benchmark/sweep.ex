@@ -59,7 +59,14 @@ defmodule HologramSyncBenchmark.Sweep do
           (map -> String.t()),
           pos_integer,
           keyword
-        ) :: {[map], %{clients: pos_integer, memory: non_neg_integer} | nil}
+        ) ::
+          {[map],
+           %{
+             optional(:while_filling) => boolean,
+             clients: pos_integer,
+             memory: non_neg_integer
+           }
+           | nil}
   def run(conn, counts, step, passed?, summary, memory_limit, hooks \\ []) do
     if length(counts) > @max_steps do
       raise ArgumentError, "a sweep takes at most #{@max_steps} steps"
@@ -83,6 +90,15 @@ defmodule HologramSyncBenchmark.Sweep do
     IO.puts("  STOPPED at the memory limit, the server node held #{gigabytes(memory)} GB")
 
     {:halt, {results, %{clients: count, memory: memory}}}
+  end
+
+  defp take_step({:stopped_filling, memory}, count, results, _summary) do
+    IO.puts(
+      "  STOPPED at the memory limit while filling on the first node, which held " <>
+        "#{gigabytes(memory)} GB"
+    )
+
+    {:halt, {results, %{clients: count, memory: memory, while_filling: true}}}
   end
 
   defp take_step({:ok, result}, _count, results, summary) do
@@ -125,16 +141,20 @@ defmodule HologramSyncBenchmark.Sweep do
   defp prepare_step(hooks, count, first_marker, memory_limit) do
     case Keyword.fetch(hooks, :before_step) do
       {:ok, before_step} ->
-        prepare_guarded(
-          memory_limit,
-          &before_step.(&1, count, first_marker),
-          &call_after_step(hooks, &1)
-        )
+        memory_limit
+        |> prepare_guarded(&before_step.(&1, count, first_marker), &call_after_step(hooks, &1))
+        |> mark_filling()
 
       :error ->
         {:ok, nil}
     end
   end
+
+  # A stop here is the filling node's rather than the measured one's, so the figure mustn't read as
+  # the case's own limit.
+  defp mark_filling({:stopped, memory}), do: {:stopped_filling, memory}
+
+  defp mark_filling(prepared), do: prepared
 
   defp guarded_step(hooks, step_context, memory_limit, fun) do
     with_guarded_peer(memory_limit, fun)
@@ -324,8 +344,11 @@ defmodule HologramSyncBenchmark.Sweep do
         "#{named.fill.restarts} #{if named.fill.restarts == 1, do: "fill", else: "fills"} " <>
           "restarted",
       stopped &&
-        "#{stopped.clients} stopped at the #{memory_limit_gb} GB memory limit, the server node " <>
-          "holding #{gigabytes(stopped.memory)} GB"
+        "#{stopped.clients} stopped at the #{memory_limit_gb} GB memory limit" <>
+          if(Map.get(stopped, :while_filling, false),
+            do: " while filling on the first node, before the wave",
+            else: ""
+          ) <> ", the server node holding #{gigabytes(stopped.memory)} GB"
     ]
   end
 
