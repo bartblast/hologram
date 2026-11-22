@@ -974,11 +974,22 @@ defmodule Hologram.Job.WorkerTest do
     test "kills the run, gives up its lock and records it" do
       queues = start_queues(%{Module1 => ["a"]})
 
+      test_pid = self()
+
+      # Both report through one envelope, so the order they arrive in is the order they are read in.
       worker =
         start_worker_on!(queues,
-          release: release_stub(self()),
+          release: fn _job_type, id ->
+            send(test_pid, {:event, {:released, id}})
+
+            :ok
+          end,
           run: blocking_run_stub(self(), queues),
-          time_out: time_out_stub(self()),
+          time_out: fn job_type, id, timeout ->
+            send(test_pid, {:event, {:timed_out, job_type, id, timeout}})
+
+            :ok
+          end,
           timeout: &time_limit/1
         )
 
@@ -989,8 +1000,11 @@ defmodule Hologram.Job.WorkerTest do
       expire_run(worker, Module1, "a")
 
       assert_receive {:DOWN, ^monitor_ref, :process, ^run_pid, :killed}, @timeout_ms
-      assert_receive {:released, "a"}, @timeout_ms
-      assert_receive {:timed_out, Module1, "a", @time_limit_ms}, @timeout_ms
+      assert_receive {:event, first}, @timeout_ms
+      assert_receive {:event, second}, @timeout_ms
+
+      assert first == {:released, "a"}
+      assert second == {:timed_out, Module1, "a", @time_limit_ms}
     end
 
     test "kills a run that traps exits" do
