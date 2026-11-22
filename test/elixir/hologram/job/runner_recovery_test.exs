@@ -145,7 +145,16 @@ defmodule Hologram.Job.RunnerRecoveryTest do
     job = route(scratch, fn -> Job.create!(Module3, [outcome: :hang], trust: true) end)
     read = fn -> route(scratch, fn -> EntityOperations.get(Module3, job.id) end) end
 
-    run = spawn(fn -> route(scratch, fn -> process(Module3, job.id, worker_lock) end) end)
+    # Under the test's supervisor, so a failed wait below still ends the run with the test.
+    run =
+      start_supervised!(%{
+        id: make_ref(),
+        start:
+          {Task, :start_link,
+           [fn -> route(scratch, fn -> process(Module3, job.id, worker_lock) end) end]},
+        restart: :temporary,
+        shutdown: :brutal_kill
+      })
 
     wait_until(fn -> read.().status == :running end)
 
