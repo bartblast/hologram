@@ -86,6 +86,7 @@ defmodule HologramSyncBenchmark.Driver do
     case: :string,
     clients: :string,
     duration: :integer,
+    fill_group: :integer,
     fill_timeout: :integer,
     gap_writes: :integer,
     lock_duration: :integer,
@@ -344,12 +345,20 @@ defmodule HologramSyncBenchmark.Driver do
   defp sweep_hooks(_sweep_case, _conn, _context), do: []
 
   defp write_options(opts) do
-    [
-      "steady writes at #{opts[:rate]} per second for #{opts[:duration]} s",
-      "a step passes when every client fills within #{opts[:fill_timeout]} s and every " <>
-        "write reaches every client it should and no other, with the steady writes' p99 within " <>
-        "#{opts[:p99_limit]} ms"
-    ]
+    fill_note =
+      if opts[:fill_group],
+        do: [
+          "clients fill #{opts[:fill_group]} at a time, each group once the one before is done"
+        ],
+        else: []
+
+    fill_note ++
+      [
+        "steady writes at #{opts[:rate]} per second for #{opts[:duration]} s",
+        "a step passes when every client fills within #{opts[:fill_timeout]} s and every " <>
+          "write reaches every client it should and no other, with the steady writes' p99 within " <>
+          "#{opts[:p99_limit]} ms"
+      ]
   end
 
   defp step_tables(results) do

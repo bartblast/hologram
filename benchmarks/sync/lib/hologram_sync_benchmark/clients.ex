@@ -15,6 +15,10 @@ defmodule HologramSyncBenchmark.Clients do
 
   @marker_poll_ms 20
 
+  # The most a group connects at a time, what a step's connects are limited to, so a big group
+  # can't overflow a listen backlog the limits check took to be safe.
+  @most_connects_at_once 50
+
   @doc """
   Raises when the machine can't hold the given number of clients, and warns when the given
   burst of connects can overflow the listen backlog.
@@ -158,8 +162,9 @@ defmodule HologramSyncBenchmark.Clients do
 
   @doc """
   Connects the given clients a group at a time, each group once the one before it is filled, and
-  returns the failures to connect and the reports in the clients' order. The given time covers all
-  of them, and a group whose turn comes after it isn't connected.
+  returns the failures to connect, and the reports in the clients' order. Each group gets the given
+  time. After a group that ran out of it, the rest aren't connected: one stuck client mustn't hold
+  a step up once per group, and with no wait to hold them back they'd all fill at once.
 
   For a case whose fills aren't what it measures. A connect returns as soon as the stream's headers
   are in, so connecting a limited number at a time doesn't limit how many fill at once, and each
@@ -167,26 +172,29 @@ defmodule HologramSyncBenchmark.Clients do
   """
   @spec fill_in_groups([pid], pos_integer, non_neg_integer) :: {[{pid, term}], [Client.report()]}
   def fill_in_groups(clients, group_size, timeout_ms) do
-    deadline = System.monotonic_time(:millisecond) + timeout_ms
-
-    {failures, reports} =
+    {failures, reports, _stuck?} =
       clients
       |> Enum.chunk_every(group_size)
-      |> Enum.map_reduce([], fn group, reports ->
-        remaining_ms = max(deadline - System.monotonic_time(:millisecond), 0)
+      |> Enum.reduce({[], [], false}, &fill_group(&1, &2, group_size, timeout_ms))
 
-        # Past the deadline a group isn't connected at all: with no wait left to hold each back,
-        # the rest would all fill at once.
-        group_failures = if remaining_ms > 0, do: connect_all(group, group_size), else: []
-        remaining_ms = max(deadline - System.monotonic_time(:millisecond), 0)
-
-        {group_failures, [await_fills(group, remaining_ms) | reports]}
-      end)
-
-    {List.flatten(failures),
+    {failures
+     |> Enum.reverse()
+     |> Enum.concat(),
      reports
      |> Enum.reverse()
      |> Enum.concat()}
+  end
+
+  defp fill_group(group, {failures, reports, true}, _group_size, _timeout_ms) do
+    {failures, [await_fills(group, 0) | reports], true}
+  end
+
+  defp fill_group(group, {failures, reports, false}, group_size, timeout_ms) do
+    group_failures = connect_all(group, min(group_size, @most_connects_at_once))
+    group_reports = await_fills(group, timeout_ms)
+    stuck? = Enum.any?(group_reports, &(&1.synced_all_at == nil and &1.failure == nil))
+
+    {[group_failures | failures], [group_reports | reports], stuck?}
   end
 
   @doc """
