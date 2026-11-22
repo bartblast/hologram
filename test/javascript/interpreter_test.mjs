@@ -4896,7 +4896,13 @@ describe("Interpreter", () => {
         cyclic.self = cyclic;
 
         assert.equal(Interpreter.inspect(cyclic), "[object Object]");
-        assert.equal(Interpreter.inspect({count: 1n}), "[object Object]");
+      });
+
+      it("object holding a BigInt", () => {
+        assert.equal(
+          Interpreter.inspect({count: 9007199254740993n}),
+          '{"count":"9007199254740993"}',
+        );
       });
     });
   });

@@ -4,6 +4,7 @@ import Bitstring from "../../../bitstring.mjs";
 import Interpreter from "../../../interpreter.mjs";
 import Model from "../../../model.mjs";
 import Type from "../../../type.mjs";
+import Utils from "../../../utils.mjs";
 import {typeValid} from "../entity.mjs";
 
 // The query stages, hand-written for the client the way the low-level Erlang functions are.
@@ -147,7 +148,7 @@ function clauseKey(clause) {
   if ("quantifier" in clause) {
     return [
       clause.quantifier,
-      JSON.stringify([clause.source, clause.filter]),
+      Utils.stringify([clause.source, clause.filter]),
     ].join("\u0000");
   }
 
@@ -155,12 +156,12 @@ function clauseKey(clause) {
     const [name, operator, operand] = clause;
     const spelledName = typeof name === "string" ? name : JSON.stringify(name);
 
-    return [spelledName, operator, JSON.stringify(operand ?? null)].join(
+    return [spelledName, operator, Utils.stringify(operand ?? null)].join(
       "\u0000",
     );
   }
 
-  return ["or", JSON.stringify(clause.or)].join("\u0000");
+  return ["or", Utils.stringify(clause.or)].join("\u0000");
 }
 
 // A counter is an integer attribute that always holds a number: an optional one can be nil, and
@@ -1008,8 +1009,8 @@ function rangeTriples(name, range, entityType) {
   validateMembershipRange(range, name, entityType);
 
   return [
-    [nameValue(name), ">=", Number(field(range, "first").value)],
-    [nameValue(name), "<=", Number(field(range, "last").value)],
+    [nameValue(name), ">=", Model.unbox(field(range, "first"), "integer")],
+    [nameValue(name), "<=", Model.unbox(field(range, "last"), "integer")],
   ];
 }
 
@@ -1165,7 +1166,7 @@ function setViewBound(query, field, value) {
     );
   }
 
-  return {...term, [field]: Number(value.value)};
+  return {...term, [field]: Model.unbox(value, "integer")};
 }
 
 function sortHint(hints, name) {
@@ -1199,7 +1200,7 @@ function sortedClause(clause) {
   return {
     or: clause.or
       .map(sortedFilter)
-      .sort(byKey((alternative) => JSON.stringify(alternative))),
+      .sort(byKey((alternative) => Utils.stringify(alternative))),
   };
 }
 

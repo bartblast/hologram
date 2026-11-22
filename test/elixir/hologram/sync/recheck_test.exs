@@ -404,6 +404,26 @@ defmodule Hologram.Sync.RecheckTest do
                MapSet.new([context.alice, context.bob, context.carol])
     end
 
+    test "admits a role held on the whole type to the grants on a row, not to a type-wide grant",
+         context do
+      entity = create(PolicyModule2)
+
+      Auth.grant_role(context.alice, :member, PolicyModule2)
+      Auth.grant_role(context.bob, :member, entity)
+      Auth.grant_role(context.carol, :member, PolicyModule2)
+
+      grants = DB.read(RoleGrant)
+      readable = assert_answers_as_can(RoleGrant, grants, context.users)
+
+      bob_grant = Enum.find(grants, &(&1.user_id == context.bob))
+      alice_grant = Enum.find(grants, &(&1.user_id == context.alice))
+
+      assert readers_of(readable, bob_grant) ==
+               MapSet.new([context.alice, context.bob, context.carol])
+
+      assert readers_of(readable, alice_grant) == MapSet.new([context.alice])
+    end
+
     test "decides a rule admitting everyone once for every user", context do
       container = create(PolicyModule3)
 

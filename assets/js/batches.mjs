@@ -7,6 +7,7 @@ import Durability from "./durability.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
+import Model from "./model.mjs";
 import Mutations from "./mutations.mjs";
 import Overlay from "./overlay.mjs";
 import Replica from "./replica.mjs";
@@ -225,6 +226,22 @@ export default class Batches {
     Batches.pending = [];
   }
 
+  // The landed marks the store records, taken into the batches this tab holds - for a tab taking
+  // up rows from the store that a stored frame already wrote a batch's writes into (see
+  // Tabs.#takeStore). Only added, never taken away: a mark this tab set itself is as true as one
+  // the store holds. Nothing is written: the store holds these marks already.
+  static takeLanded(records) {
+    for (const {landed, seq} of records) {
+      const batch = Batches.pending.find((held) => held.seq === seq);
+
+      if (batch !== undefined) {
+        for (const index of landed) {
+          batch.landed.add(index);
+        }
+      }
+    }
+  }
+
   // Everything the action wrote goes away, which is what a raise has to mean: an action's writes
   // land together or not at all, and dropping the layer is the whole of putting them back.
   static discard() {
@@ -247,7 +264,12 @@ export default class Batches {
     // tab is filed in the one queue they share, so the leader's own reading of that queue is what
     // ships - and a follower that sent as well would put a second copy of every batch on the wire,
     // under the same replica and number, for the server to answer twice from one record.
-    if (!Tabs.leader || Batches.#sending) {
+    //
+    // And only once it is ready (see Tabs.sends): a tab that leads while still starting up has not
+    // taken up the identity, the counter and the batches the store held, so it would send the
+    // stored queue under its page's own identity rather than the one the batches were numbered
+    // under. The restore wakes the sender once it has, and so does the lead it takes.
+    if (!Tabs.sends() || Batches.#sending) {
       return;
     }
 
@@ -269,8 +291,10 @@ export default class Batches {
         }
 
         // Before anything leaves: a batch may not be answered under a number this browser could
-        // hand out again after a reload.
+        // hand out again after a reload, nor under an identity still on its way to the store (see
+        // Durability.replicaWritten).
         await batch.recorded;
+        await Durability.replicaWritten();
 
         // A tab the server stopped over its model holds its writes rather than sending them to be
         // refused: the server would roll back what the person did over a mismatch they did not
@@ -435,6 +459,57 @@ export default class Batches {
     }
   }
 
+  // What a type's fill marker says about the rows this client's own batches created. A batch at or
+  // below the marker's number was in what the fill read of the type, so a row of it the fill did
+  // not send is gone, or one its user may not read. No frame can be counted on to say so: a session
+  // passes over a batch that committed wholly before its fill place, and a batch dispatched before
+  // the session joined never reaches it. So the create is landed, and its answer files nothing, in
+  // this page load or, since the marks are stored with the batch, in the one that sends it again.
+  //
+  // Asked after the marker's sweep has run, so a copy of the row the page carried does not pass for
+  // one the fill delivered. Only of the marker's own types: each type is read at its own moment,
+  // and another type's number says nothing about this one.
+  //
+  // A batch above the number committed after the read, so its session judges it, and a marker
+  // naming no number makes no claim. Like `land`, this relies on the queue going out in number
+  // order (see its note on the sender).
+  //
+  // Every write of these batches naming such a row goes with it, and so does an edge pointing at
+  // one, which would otherwise leave a held row's set naming a row this client doesn't hold.
+  static landUnsent(types, appliedSeq) {
+    if (!Number.isInteger(appliedSeq)) {
+      return;
+    }
+
+    // A batch still waiting for its number has not been sent - `null <= appliedSeq` is true.
+    const read = Batches.pending.filter(
+      (batch) => batch.seq !== null && batch.seq <= appliedSeq,
+    );
+
+    const unsent = Batches.#unsentCreates(read, new Set(types));
+
+    if (unsent.size === 0) {
+      return;
+    }
+
+    for (const batch of read) {
+      const marked = batch.landed.size;
+
+      batch.writes.forEach((write, index) => {
+        if (
+          unsent.has(`${write.type} ${write.id}`) ||
+          Batches.#pointsAtAny(write, unsent)
+        ) {
+          batch.landed.add(index);
+        }
+      });
+
+      if (batch.landed.size > marked) {
+        Durability.persistLanded(batch);
+      }
+    }
+  }
+
   // The batch is in the overlay from the moment it opens, so a write is readable on the next line
   // of the action that made it.
   // How long the oldest unsent batch has been waiting, named by its sequence number - null when
@@ -504,7 +579,12 @@ export default class Batches {
     Batches.#retryAttempts = 0;
 
     if (answer.status === "confirmed") {
-      Overlay.promote(batch, answer.kept);
+      // No place and not everything marked is a client waiting for a fill or part way through one,
+      // or a tab the server stopped, whose row then just stays unstored.
+      Overlay.promote(batch, answer.kept, {
+        fillPending:
+          SyncStream.syncCursor === null && !LocalDatabase.isAllSynced(),
+      });
     } else {
       Batches.#reject(batch, answer);
     }
@@ -625,6 +705,42 @@ export default class Batches {
       clearTimeout(Batches.#retryTimer);
       Batches.#retryTimer = null;
     }
+  }
+
+  // The rows the given batches create of the given types that the base doesn't hold, each keyed
+  // "<type> <id>". A create a frame already landed counts too: the frame told the client to drop
+  // the row, or delivered it and the row has left since, and the batch's edges pointing at it have
+  // yet to be passed over.
+  static #unsentCreates(batches, types) {
+    const unsent = new Set();
+
+    for (const batch of batches) {
+      for (const write of batch.writes) {
+        if (
+          write.op === "create" &&
+          types.has(write.type) &&
+          LocalDatabase.baseRow(write.type, write.id) === null
+        ) {
+          unsent.add(`${write.type} ${write.id}`);
+        }
+      }
+    }
+
+    return unsent;
+  }
+
+  // Whether the write is an edge whose target is one of the given rows, keyed "<type> <id>".
+  static #pointsAtAny(write, rowKeys) {
+    if (write.target_id === undefined || !Model.isEntityType(write.type)) {
+      return false;
+    }
+
+    const relationship = Model.relationships(write.type)[write.relationship];
+
+    return (
+      relationship !== undefined &&
+      rowKeys.has(`${relationship.type} ${write.target_id}`)
+    );
   }
 
   // A refused batch takes its rows with it - a created row vanishes, an updated one reverts -

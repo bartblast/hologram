@@ -328,6 +328,58 @@ defmodule Hologram.DB.CodecTest do
     end
   end
 
+  describe "decode_wire/2" do
+    test "reads an integer a JavaScript number holds exactly" do
+      assert decode_wire(9_007_199_254_740_991, :integer) == {:ok, 9_007_199_254_740_991}
+      assert decode_wire(-9_007_199_254_740_991, :integer) == {:ok, -9_007_199_254_740_991}
+    end
+
+    test "reads the text of an integer past what a JavaScript number holds" do
+      assert decode_wire("9007199254740992", :integer) == {:ok, 9_007_199_254_740_992}
+      assert decode_wire("-9007199254740993", :integer) == {:ok, -9_007_199_254_740_993}
+      assert decode_wire("9223372036854775807", :integer) == {:ok, 9_223_372_036_854_775_807}
+    end
+
+    test "refuses a JSON number past what a JavaScript number holds exactly" do
+      assert decode_wire(9_007_199_254_740_992, :integer) == :error
+      assert decode_wire(-9_007_199_254_740_992, :integer) == :error
+    end
+
+    test "refuses text spelling an integer a number would carry" do
+      assert decode_wire("5", :integer) == :error
+      assert decode_wire("9007199254740991", :integer) == :error
+    end
+
+    test "refuses text that isn't the integer's one spelling" do
+      assert decode_wire("+9007199254740993", :integer) == :error
+      assert decode_wire("09007199254740993", :integer) == :error
+      assert decode_wire("9007199254740993.0", :integer) == :error
+      assert decode_wire("9007199254740993 ", :integer) == :error
+      assert decode_wire("abc", :integer) == :error
+    end
+
+    test "reads the longest text of an integer a column holds" do
+      assert decode_wire("-9223372036854775808", :integer) == {:ok, -9_223_372_036_854_775_808}
+    end
+
+    test "refuses text longer than any integer a column holds" do
+      assert decode_wire(String.duplicate("9", 21), :integer) == :error
+    end
+
+    test "reads nil as nil" do
+      assert decode_wire(nil, :integer) == {:ok, nil}
+    end
+
+    test "refuses a float for an integer" do
+      assert decode_wire(1.5, :integer) == :error
+    end
+
+    test "reads any other type as decode_json/2 does" do
+      assert decode_wire("2026-01-02", :date) == {:ok, ~D[2026-01-02]}
+      assert decode_wire(3, :float) == {:ok, 3.0}
+    end
+  end
+
   describe "encode_json/2" do
     test "passes nil through for any type" do
       assert encode_json(nil, :datetime) == nil
@@ -420,6 +472,35 @@ defmodule Hologram.DB.CodecTest do
 
       assert Jason.encode!(encoded) ==
                ~s([false,"2026-07-19","2026-07-18T08:30:00.123456Z","Hologram.Test.Fixtures.Role.Module1",2.5,11,{"title":3},"xyz","11:00:00.123456","#{@uuid_string}"])
+    end
+  end
+
+  describe "encode_wire/2" do
+    test "spells an integer a JavaScript number holds exactly as a number" do
+      assert encode_wire(9_007_199_254_740_991, :integer) == 9_007_199_254_740_991
+      assert encode_wire(-9_007_199_254_740_991, :integer) == -9_007_199_254_740_991
+    end
+
+    test "spells an integer past what a JavaScript number holds as its decimal text" do
+      assert encode_wire(9_007_199_254_740_992, :integer) == "9007199254740992"
+      assert encode_wire(-9_007_199_254_740_993, :integer) == "-9007199254740993"
+    end
+
+    test "is read back by decode_wire/2" do
+      for value <- [0, 9_007_199_254_740_991, 9_007_199_254_740_993, -9_223_372_036_854_775_808] do
+        encoded = encode_wire(value, :integer)
+
+        assert decode_wire(encoded, :integer) == {:ok, value}
+      end
+    end
+
+    test "passes nil through" do
+      assert encode_wire(nil, :integer) == nil
+    end
+
+    test "spells any other type as encode_json/2 does" do
+      assert encode_wire(~D[2026-01-02], :date) == "2026-01-02"
+      assert encode_wire(9_007_199_254_740_993, :float) == 9_007_199_254_740_993
     end
   end
 

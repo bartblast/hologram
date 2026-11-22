@@ -578,6 +578,23 @@ defmodule Hologram.Mutation.EnvelopeTest do
                {:error, ~s(write 0: "c_id" is not a valid entity id)}
     end
 
+    test "reads an integer past what a number holds exactly from its text" do
+      assert {:ok, %Envelope{writes: [write]}} =
+               parse(raw([create(Module2, %{"b" => "9007199254740993"})]))
+
+      assert write.data.b == 9_007_199_254_740_993
+    end
+
+    test "refuses an integer past what a number holds exactly, spelled as a number" do
+      assert parse(raw([create(Module2, %{"b" => 9_007_199_254_740_992})])) ==
+               {:error, ~s(write 0: "b" is not a valid integer)}
+    end
+
+    test "refuses an integer a number holds exactly, spelled as text" do
+      assert parse(raw([create(Module2, %{"b" => "5"})])) ==
+               {:error, ~s(write 0: "b" is not a valid integer)}
+    end
+
     # Membership in the declared values is Entity.validate's to judge, not this layer's: a label
     # naming an atom the build has decodes here and is refused at the write as a value violation,
     # which is what puts it on a form field rather than in a bad request.
@@ -637,23 +654,41 @@ defmodule Hologram.Mutation.EnvelopeTest do
 
       assert parse(raw([update(Module10, nil, deltas: %{"count" => "1"})])) ==
                {:error, ~s[write 0: deltas."count" must be a non-zero integer]}
+
+      assert parse(raw([update(Module10, nil, deltas: %{"count" => nil})])) ==
+               {:error, ~s[write 0: deltas."count" must be a non-zero integer]}
     end
 
     test "refuses a delta out of range for an integer attribute" do
       expected_msg = ~s[write 0: deltas."count" is out of range for an integer attribute]
 
-      assert parse(raw([update(Module10, nil, deltas: %{"count" => 9_223_372_036_854_775_808})])) ==
+      assert parse(raw([update(Module10, nil, deltas: %{"count" => "9223372036854775808"})])) ==
                {:error, expected_msg}
 
-      assert parse(raw([update(Module10, nil, deltas: %{"count" => -9_223_372_036_854_775_809})])) ==
+      assert parse(raw([update(Module10, nil, deltas: %{"count" => "-9223372036854775809"})])) ==
                {:error, expected_msg}
+    end
+
+    test "refuses a delta past what a number holds exactly, spelled as a number" do
+      assert parse(raw([update(Module10, nil, deltas: %{"count" => 9_007_199_254_740_992})])) ==
+               {:error, ~s[write 0: deltas."count" must be a non-zero integer]}
+    end
+
+    test "refuses a delta a number holds exactly, spelled as text" do
+      assert parse(raw([update(Module10, nil, deltas: %{"count" => "5"})])) ==
+               {:error, ~s[write 0: deltas."count" must be a non-zero integer]}
+    end
+
+    test "admits a delta past what a number holds exactly, spelled as text" do
+      assert {:ok, %Envelope{writes: [write]}} =
+               parse(raw([update(Module10, nil, deltas: %{"count" => "9007199254740993"})]))
+
+      assert write.deltas == %{count: 9_007_199_254_740_993}
     end
 
     test "admits a delta at the edge of an integer attribute's range" do
       assert {:ok, %Envelope{writes: [write]}} =
-               parse(
-                 raw([update(Module10, nil, deltas: %{"count" => -9_223_372_036_854_775_808})])
-               )
+               parse(raw([update(Module10, nil, deltas: %{"count" => "-9223372036854775808"})]))
 
       assert write.deltas == %{count: -9_223_372_036_854_775_808}
     end

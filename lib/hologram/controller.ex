@@ -6,6 +6,7 @@ defmodule Hologram.Controller do
   alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
+  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Auth
   alias Hologram.Auth.Context
   alias Hologram.Component.Action
@@ -618,11 +619,14 @@ defmodule Hologram.Controller do
           })
 
         csp_nonce = renderer_opts[:csp_nonce]
+        script_csp_nonce = script_csp_nonce(renderer_opts)
 
         fills = %{
           "boot_data" => Renderer.boot_data_element(boot_data, csp_nonce),
           "chunk_script_tags" =>
-            Renderer.chunk_script_tags(result.chunk_digests, chunk_csp_nonce(renderer_opts))
+            Renderer.chunk_script_tags(result.chunk_digests, script_csp_nonce),
+          "data_model_script_tag" =>
+            Renderer.data_model_script_tag(data_model_bundle_path(), script_csp_nonce)
         }
 
         # Printed here rather than by the renderer, since only now is every value the markers are
@@ -840,11 +844,13 @@ defmodule Hologram.Controller do
     end)
   end
 
-  # The chunk tags are script elements, so they carry the nonce only when scripts are stamped.
-  defp chunk_csp_nonce(renderer_opts) do
-    nonced_elements = renderer_opts[:csp_nonced_elements] || []
-
-    if "script" in nonced_elements, do: renderer_opts[:csp_nonce]
+  # The path the data model bundle is served from, or nil for a build that has none (see
+  # Hologram.Compiler.build_data_model_js/1).
+  defp data_model_bundle_path do
+    case AssetPathRegistry.lookup("hologram/data-model.js") do
+      {:ok, path} -> path
+      :error -> nil
+    end
   end
 
   # A page's policy belongs in the config. The policy Hologram sends names the page's nonce, which
@@ -1175,9 +1181,17 @@ defmodule Hologram.Controller do
     |> put_identity_tag_header()
   end
 
+  # The chunk tags and the data model bundle's tag are script elements, so they carry the nonce only
+  # when scripts are stamped.
+  defp script_csp_nonce(renderer_opts) do
+    nonced_elements = renderer_opts[:csp_nonced_elements] || []
+
+    if "script" in nonced_elements, do: renderer_opts[:csp_nonce]
+  end
+
   # Transport only: what a batch becomes is Hologram.Mutation's, the spelling of its answer
-  # included - so that a repeated batch is answered with byte for byte what its first arrival
-  # produced.
+  # included - so that a repeated batch is answered with what its first arrival produced, only the
+  # grants it names read again.
   defp send_mutation_response(conn) do
     response =
       case Mutation.run(conn.body_params, Server.from(conn)) do

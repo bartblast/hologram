@@ -629,7 +629,9 @@ defmodule Hologram.Auth do
     set_rows(entity, relationship_names, delegation_read_opts(source), source == :held)
   end
 
-  # The grant store's own policy: a role held on the entity this grant row names.
+  # The grant store's own policy: a role held on the entity this grant row names, or on its whole
+  # type, as the gates that change the row read one. A type-wide grant row names no entity, and
+  # only trusted code changes one, so this reference never admits it.
   defp check_requirement(
          {:named, target_type, role_names},
          entity,
@@ -641,7 +643,7 @@ defmodule Hologram.Auth do
         false
 
       entity_id ->
-        grant_exists?(actor_user_id, {:instance, target_type, entity_id}, role_names, source)
+        grant_exists?(actor_user_id, {:own, target_type, entity_id}, role_names, source)
     end
   end
 

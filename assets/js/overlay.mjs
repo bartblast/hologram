@@ -125,11 +125,19 @@ export default class Overlay {
   // base first - so the column goes straight from what this client wrote to the winning value,
   // with nothing shown in between. Without it the only thing left to show is the value the row
   // held before either writer touched it, which is a value nobody wrote.
-  static promote(batch, kept) {
+  //
+  // Given `fillPending`, a whole fill is on its way, so a create filed here is one nothing has
+  // vouched for yet (see LocalDatabase.markPromoted). Past its type's marker it is a batch the fill
+  // didn't read, since the marker landed the ones it did (see Batches.landUnsent), and it waits for
+  // its session. Asked of the base before the write, since #absorb can file the row itself. A
+  // create over a row the base holds files nothing.
+  static promote(batch, kept, {fillPending = false} = {}) {
     batch.writes.forEach((write, index) => {
       // A write whose frame has already arrived is in the base as the server resolved it, so
       // there is nothing left to move - and folding it in again would apply a moved counter a
-      // second time, which is exactly what the frame arriving first would otherwise cost.
+      // second time, which is exactly what the frame arriving first would otherwise cost. A create
+      // a fill's marker ruled out is passed over the same way: the row is gone or its user may not
+      // read it, so it is not this client's to file (see Batches.landUnsent).
       if (batch.isLanded(index)) {
         return;
       }
@@ -137,8 +145,38 @@ export default class Overlay {
       // Optional because a batch can be answered by a node that predates the key - a rolling
       // deploy serves this bundle from one node and answers from another - and an answer that
       // names nothing kept is one this client simply cannot show early.
-      Overlay.#absorb(write, kept?.[String(index)]);
+      const keptEntry = kept?.[String(index)];
+
+      // A resent batch's grant the server no longer stands behind: revoked since, or hidden from
+      // this user. Applying the write would file its own version of a row no frame ever corrects.
+      if (keptEntry?.$withheld === true) {
+        return;
+      }
+
+      const awaitsMarker =
+        fillPending &&
+        write.op === "create" &&
+        LocalDatabase.baseRow(write.type, write.id) === null;
+
+      Overlay.#absorb(write, keptEntry);
+
+      // A delete answered with a whole row leaves that row standing: the server dropped it, or a
+      // resent revocation's grant was made again since. Its stamp can't be weighed against that
+      // row: a replay answers the row as it is now, whose revisions can sit below the stamp when
+      // the clock that wrote them ran behind this one.
+      if (
+        write.op === "delete" &&
+        keptEntry !== undefined &&
+        "id" in keptEntry
+      ) {
+        return;
+      }
+
       Overlay.#promoteWrite(write);
+
+      if (awaitsMarker) {
+        LocalDatabase.markPromoted(write.type, write.id, batch.seq);
+      }
     });
 
     Overlay.remove(batch);
@@ -190,7 +228,10 @@ export default class Overlay {
     // server wrote nothing. So the answer's row is filed as the row, whole - its sort keys are
     // computed by #promoteWrite, which re-files whatever the base holds under the id next.
     if (base === null && write.op === "create" && "id" in kept) {
-      LocalDatabase.putRow(write.type, kept);
+      LocalDatabase.putRow(
+        write.type,
+        Model.readIntegers(write.type, {...kept}),
+      );
 
       return;
     }
@@ -217,7 +258,10 @@ export default class Overlay {
 
     LocalDatabase.putRow(
       write.type,
-      Model.computeSortKeys(write.type, absorbed),
+      Model.computeSortKeys(
+        write.type,
+        Model.readIntegers(write.type, absorbed),
+      ),
     );
   }
 
@@ -510,7 +554,7 @@ export default class Overlay {
     }
 
     for (const [counter, amount] of deltas) {
-      updated[counter] = row[counter] + amount;
+      updated[counter] = Model.addIntegers(row[counter], amount);
     }
 
     return Model.computeSortKeys(type, updated);

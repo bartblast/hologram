@@ -79,6 +79,19 @@ defmodule HologramFeatureTests.OptimisticGrantsTest do
     |> assert_text(css("#grants"), "#{role}:#{session_user().id}")
   end
 
+  # A role on the whole type passes the grant and revoke gates on every row, so its holder is
+  # filled with the grants on those rows.
+  defp sign_in_as_type_wide_owner(session) do
+    sign_in(session)
+
+    Auth.grant_role(session_user(), :owner, Document)
+
+    session
+    |> reload()
+    |> assert_page(OptimisticGrantsPage)
+    |> assert_text(css("#grants"), "owner:#{session_user().id}")
+  end
+
   # The operation the action asks about is computed, so no build check can read it - this is the
   # tier the runtime refusal exists for, and the assertion is that it reaches the browser rather
   # than being answered false and passed over.
@@ -253,6 +266,63 @@ defmodule HologramFeatureTests.OptimisticGrantsTest do
 
     session
     |> sign_in_as(document, :owner)
+    |> click(button("Revoke editor"))
+    |> assert_text(css("#result"), "revoke_editor_ok")
+    |> await_pending_writes(0)
+
+    assert grants(other_user.id) == []
+  end
+
+  feature "shows a type-wide owner the grants on a row", %{
+    session: session,
+    document: document,
+    other_user: other_user
+  } do
+    Auth.grant_role(other_user, :editor, document)
+
+    # The page render carries the row too, so the fill is awaited, and "Leave", which writes nothing
+    # for a user holding no editor row, renders what's left after the fill's sweep.
+    session
+    |> sign_in_as_type_wide_owner()
+    |> await_local_fill()
+    |> click(button("Leave"))
+    |> assert_text(css("#result"), "leave_ok")
+    |> assert_text(css("#grants"), "editor:#{other_user.id}")
+  end
+
+  feature "gives and takes a row's grants as a type-wide role comes and goes", %{
+    session: session,
+    document: document,
+    other_user: other_user
+  } do
+    Auth.grant_role(other_user, :editor, document)
+
+    session =
+      session
+      |> sign_in()
+      |> reload()
+      |> assert_page(OptimisticGrantsPage)
+      |> await_local_fill()
+
+    Auth.grant_role(session_user(), :owner, Document)
+
+    assert_text(session, css("#grants"), "editor:#{other_user.id}")
+
+    Auth.revoke_role(session_user(), :owner, Document)
+
+    refute_has(session, css("#grants", text: "editor:#{other_user.id}"))
+  end
+
+  feature "lets a type-wide owner revoke a role on a row", %{
+    session: session,
+    document: document,
+    other_user: other_user
+  } do
+    Auth.grant_role(other_user, :editor, document)
+
+    session
+    |> sign_in_as_type_wide_owner()
+    |> assert_text(css("#grants"), "editor:#{other_user.id}")
     |> click(button("Revoke editor"))
     |> assert_text(css("#result"), "revoke_editor_ok")
     |> await_pending_writes(0)

@@ -10,12 +10,15 @@ defmodule HologramFeatureTests.DerivedTest do
   alias HologramFeatureTests.Derived.Page5
   alias HologramFeatureTests.Derived.Page6
   alias HologramFeatureTests.Derived.Page7
+  alias HologramFeatureTests.Derived.Page8
+  alias HologramFeatureTests.Derived.Page9
   alias HologramFeatureTests.Entities.Bottle
   alias HologramFeatureTests.Entities.Crate
   alias HologramFeatureTests.Entities.Ticket
+  alias HologramFeatureTests.Entities.Waybill
 
   setup do
-    truncate_entity_tables([Bottle, Crate, Ticket])
+    truncate_entity_tables([Bottle, Crate, Ticket, Waybill])
 
     :ok
   end
@@ -28,6 +31,26 @@ defmodule HologramFeatureTests.DerivedTest do
     |> visit(Page1)
     |> assert_text(css("#tickets"), ~r/^alpha,foxtrot$/)
     |> assert_text(css("#summary"), ~r{^ALPHA/FOXTROT$})
+  end
+
+  # The page names the struct, and only the struct's protocol implementation names the entity type,
+  # so its rows reach the browser only if the build reads that implementation.
+  feature "renders a query written in a struct's protocol implementation", %{session: session} do
+    create_waybill("alpha", true)
+    create_waybill("bravo", false)
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> assert_text(css("#urgent_count"), ~r/^1$/)
+      |> mark_this_page_load()
+
+    create_waybill("charlie", true)
+
+    session
+    |> assert_text(css("#urgent_count"), ~r/^2$/)
+    |> assert_same_page_load()
   end
 
   # Init picks high, and the click switches to low - the value computed from the rows follows them.
@@ -110,29 +133,8 @@ defmodule HologramFeatureTests.DerivedTest do
   # place is one the log can no longer speak for, so it is told to start over.
   feature "counts the query it now runs rather than the one the page carried",
           %{session: session} do
-    create_tickets(alpha: :high, bravo: :high, charlie: :low, delta: :low, echo: :low)
-
-    session =
-      session
-      |> visit(Page3)
-      |> await_local_fill()
-      |> mark_this_page_load()
-      |> hold_sync_frames()
-
-    truncate_oplog()
-    simulate_sse_disconnect(current_instance_id(session))
-
     session
-    |> await_held_sync_frame()
-    |> assert_no_place()
-
-    create_tickets(foxtrot: :low, golf: :high)
-
-    session
-    |> click(link("Ticket counts link"))
-    |> assert_page(Page4)
-    |> assert_text(css("#same_priority"), ~r/^3$/)
-    |> assert_text(css("#others"), ~r/^6$/)
+    |> visit_counts_during_refill()
     |> click(button("Lower alpha"))
     |> assert_text(css("#same_priority"), ~r/^4$/)
     |> assert_text(css("#others"), ~r/^6$/)
@@ -145,6 +147,108 @@ defmodule HologramFeatureTests.DerivedTest do
 
     # The write settles before the next test empties the table it lands in.
     assert %Ticket{priority: :low} = await_server_ticket("alpha", :low)
+  end
+
+  # Another page's visit is what used to take the numbers away. Hotel, written after the Back, is
+  # counted only by the browser, so seeing it says the page let go of the server's numbers once the
+  # browser held every ticket.
+  feature "keeps the server's counts when Back returns to a page during a fill",
+          %{session: session} do
+    session
+    |> visit_counts_during_refill()
+    |> click(link("Away link"))
+    |> assert_page(Page3)
+    |> go_back()
+    |> assert_page(Page4)
+    |> assert_text(css("#same_priority"), ~r/^3$/)
+    |> assert_text(css("#others"), ~r/^6$/)
+    |> assert_no_place()
+
+    create_tickets(hotel: :high)
+
+    session
+    |> release_sync_frames()
+    |> assert_text(css("#same_priority"), ~r/^4$/)
+    |> assert_text(css("#others"), ~r/^7$/)
+    |> assert_same_page_load()
+  end
+
+  # The new stream's marker comes after its greeting, the point that used to take the numbers away.
+  # The render the click makes is what would show it.
+  feature "keeps the server's count through a reconnect during a fill", %{session: session} do
+    rearmed =
+      session
+      |> visit_counts_during_refill()
+      |> await_held_all_marker()
+      |> hold_sync_frames()
+
+    simulate_sse_disconnect(current_instance_id(rearmed))
+
+    rearmed
+    |> await_held_all_marker()
+    |> click(button("Lower alpha"))
+    |> assert_text(css("#same_priority"), ~r/^4$/)
+    |> assert_text(css("#others"), ~r/^6$/)
+    |> assert_no_place()
+    |> release_sync_frames()
+    |> assert_text(css("#same_priority"), ~r/^5$/)
+    |> assert_text(css("#others"), ~r/^6$/)
+    |> assert_same_page_load()
+
+    assert %Ticket{priority: :low} = await_server_ticket("alpha", :low)
+  end
+
+  # The first tab leads and holds the fill back, so the second, which follows, can reload without
+  # starting a fill of its own. Its reloaded document never received the page's count, and holds no
+  # tickets, so only the snapshot can bring the number back.
+  feature "keeps the server's count when Back returns to a page saved before a reload",
+          %{session: session} do
+    create_tickets(alpha: :high, bravo: :low)
+
+    leading =
+      session
+      |> visit(Page3)
+      |> await_local_fill()
+      |> await_durable_writes()
+      |> hold_sync_frames()
+
+    first = tab_handle(leading)
+
+    truncate_oplog()
+    simulate_sse_disconnect(current_instance_id(leading))
+
+    leading
+    |> await_held_sync_frame()
+    |> assert_no_place()
+
+    create_tickets(charlie: :low)
+
+    following =
+      leading
+      |> open_tab(Page9)
+      |> assert_text(css("#total"), ~r/^3$/)
+      |> click(link("Away link"))
+      |> assert_page(Page3)
+      |> mark_document()
+      |> reload()
+      |> wait_for_unmarked_document()
+      |> assert_page(Page3)
+      |> mark_this_page_load()
+      |> go_back()
+      |> assert_page(Page9)
+      |> assert_text(css("#total"), ~r/^3$/)
+      |> assert_no_place()
+      |> assert_same_page_load()
+
+    second = tab_handle(following)
+
+    create_tickets(delta: :low)
+
+    following
+    |> focus_tab(first)
+    |> release_sync_frames()
+    |> focus_tab(second)
+    |> assert_text(css("#total"), ~r/^4$/)
   end
 
   # Bravo and delta are the excluded titles. The build can't read either query - one is folded over
@@ -241,5 +345,39 @@ defmodule HologramFeatureTests.DerivedTest do
       |> Ticket.new()
       |> DB.create!()
     end)
+  end
+
+  defp create_waybill(code, urgent) do
+    %{code: code, urgent: urgent}
+    |> Waybill.new()
+    |> DB.create!()
+  end
+
+  # Page4 reached with the refill held back. The browser holds the five tickets of the first fill
+  # and not foxtrot and golf, written since, which only the server's numbers count.
+  defp visit_counts_during_refill(session) do
+    create_tickets(alpha: :high, bravo: :high, charlie: :low, delta: :low, echo: :low)
+
+    session =
+      session
+      |> visit(Page3)
+      |> await_local_fill()
+      |> mark_this_page_load()
+      |> hold_sync_frames()
+
+    truncate_oplog()
+    simulate_sse_disconnect(current_instance_id(session))
+
+    session
+    |> await_held_sync_frame()
+    |> assert_no_place()
+
+    create_tickets(foxtrot: :low, golf: :high)
+
+    session
+    |> click(link("Ticket counts link"))
+    |> assert_page(Page4)
+    |> assert_text(css("#same_priority"), ~r/^3$/)
+    |> assert_text(css("#others"), ~r/^6$/)
   end
 end

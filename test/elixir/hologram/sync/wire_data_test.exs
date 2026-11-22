@@ -56,6 +56,14 @@ defmodule Hologram.Sync.WireDataTest do
       assert patch(Module3, %{b_id: @target_id}) == %{b_id: @target_id}
     end
 
+    test "writes an integer past what a JavaScript number holds as its decimal text" do
+      assert patch(Module2, %{b: 9_007_199_254_740_993}) == %{b: "9007199254740993"}
+    end
+
+    test "writes an integer a JavaScript number holds as a number" do
+      assert patch(Module2, %{b: 9_007_199_254_740_991}) == %{b: 9_007_199_254_740_991}
+    end
+
     test "leaves out a value the client may not have" do
       changes = %{email: "user@test.com", password_hash: %ServerOnly{attribute: :password_hash}}
 
@@ -74,6 +82,10 @@ defmodule Hologram.Sync.WireDataTest do
   end
 
   describe "row/1" do
+    test "writes an integer past what a JavaScript number holds as its decimal text" do
+      assert row(module_2(%{b: -9_007_199_254_740_993})).b == "-9007199254740993"
+    end
+
     test "writes every attribute the row holds, its system ones included" do
       assert row(module_2()) == %{
                :a => true,

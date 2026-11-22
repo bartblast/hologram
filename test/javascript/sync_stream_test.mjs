@@ -82,6 +82,7 @@ describe("SyncStream", () => {
     SyncStream.rowsChangedSinceRender = false;
     SyncStream.rules = null;
     SyncStream.served = false;
+    SyncStream.servedModelHash = null;
     SyncStream.stopReason = null;
     SyncStream.syncCursor = null;
   });
@@ -292,6 +293,100 @@ describe("SyncStream", () => {
       });
     });
 
+    it("names the entity types the bundle reads rows of", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+        syncedTypes: ["MyApp.Card", "MyApp.List"],
+      };
+
+      assert.equal(
+        SyncStream.buildGreeting(pageModule).synced_types,
+        "MyApp.Card,MyApp.List",
+      );
+    });
+
+    it("names an empty list for a bundle reading rows of no type", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+        syncedTypes: [],
+      };
+
+      assert.equal(SyncStream.buildGreeting(pageModule).synced_types, "");
+    });
+
+    it("names no types for a bundle built before bundles named them", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      assert.isFalse(
+        Object.hasOwn(SyncStream.buildGreeting(pageModule), "synced_types"),
+      );
+    });
+
+    // Measured as the URL spells the list, with each comma taking three characters: a long label,
+    // a comma and a one-letter one fill the limit exactly.
+    it("names a list exactly as long as a greeting carries", () => {
+      const label = "MyApp.".padEnd(
+        SyncStream.MAX_SYNCED_TYPES_LENGTH - 4,
+        "x",
+      );
+
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+        syncedTypes: [label, "Y"],
+      };
+
+      assert.equal(
+        encodeURIComponent(globalThis.Hologram.sync.syncedTypes.join(","))
+          .length,
+        SyncStream.MAX_SYNCED_TYPES_LENGTH,
+      );
+
+      assert.equal(
+        SyncStream.buildGreeting(pageModule).synced_types,
+        `${label},Y`,
+      );
+
+      globalThis.Hologram.sync.syncedTypes = [label, "YZ"];
+
+      assert.isFalse(
+        Object.hasOwn(SyncStream.buildGreeting(pageModule), "synced_types"),
+      );
+    });
+
+    // The greeting rides the stream's URL, and one too long for the server takes the stream down.
+    it("names no types when the list is longer than a greeting carries", () => {
+      const label = "MyApp.Card".padEnd(100, "x");
+
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+        syncedTypes: Array.from(
+          {length: 40},
+          (_value, index) => `${label}${index}`,
+        ),
+      };
+
+      assert.ok(
+        globalThis.Hologram.sync.syncedTypes.join(",").length >
+          SyncStream.MAX_SYNCED_TYPES_LENGTH,
+      );
+
+      assert.isFalse(
+        Object.hasOwn(SyncStream.buildGreeting(pageModule), "synced_types"),
+      );
+    });
+
     // One sync session per browser: the tab that leads is served sync and hands what it receives
     // to the rest, so a follower greets the way a bundle with no sync at all does.
     it("says nothing for a tab that does not lead its group", () => {
@@ -310,6 +405,31 @@ describe("SyncStream", () => {
       } finally {
         Tabs.leader = true;
       }
+    });
+
+    // A first visit greets with no place right after the page filed the counts it was rendered
+    // with.
+    it("keeps a count the client can't count yet when it greets with no place", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      sinon.stub(Durability, "clear");
+      sinon.stub(Tabs, "post");
+
+      SyncStream.syncCursor = null;
+      LocalDatabase.syncCounts = {"MyApp.Tasks/total/": 42};
+      LocalDatabase.syncCountTypes = {"MyApp.Tasks/total/": ["MyApp.Task"]};
+
+      SyncStream.buildGreeting(pageModule);
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Tasks/total/": 42,
+      });
+
+      LocalDatabase.reset();
     });
 
     // A frame served while the tab settles where its lead starts from would land on a store about
@@ -540,15 +660,114 @@ describe("SyncStream", () => {
       assert.equal(animationFrames.length, 1);
     });
 
+    // Here rather than in the stream's listener, since a follower is handed the marker through
+    // this and holds its own copy of the queue.
+    it("rules out the creates a type's marker covers, after its sweep", () => {
+      const marking = sinon.spy(LocalDatabase, "markTypesSynced");
+      const landing = sinon.stub(Batches, "landUnsent");
+
+      SyncStream.receiveFrame("synced", {
+        applied_seq: 7,
+        cursor: null,
+        scope: "types",
+        types: ["MyApp.Task"],
+      });
+
+      sinon.assert.calledOnceWithExactly(landing, ["MyApp.Task"], 7);
+      sinon.assert.callOrder(marking, landing);
+    });
+
+    // The copy a page carried is what the sweep takes, and a create checked before it would pass
+    // for one the fill delivered, and be filed by its answer once the copy is gone.
+    it("rules out a create whose only copy the marker's sweep took away", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "carried"});
+      LocalDatabase.markCarried("MyApp.Task", "t1");
+
+      Batches.adopt([
+        {
+          actorUserId: null,
+          landed: [],
+          seq: 3,
+          writes: [
+            {data: {}, id: "t1", op: "create", stamp: 1, type: "MyApp.Task"},
+          ],
+        },
+      ]);
+
+      try {
+        SyncStream.receiveFrame("synced", {
+          applied_seq: 3,
+          cursor: null,
+          scope: "types",
+          types: ["MyApp.Task"],
+        });
+
+        assert.isNull(LocalDatabase.baseRow("MyApp.Task", "t1"));
+        assert.isTrue(Batches.pending[0].isLanded(0));
+      } finally {
+        Batches.reset();
+      }
+    });
+
+    it("rules out nothing on the marker for everything", () => {
+      const landing = sinon.stub(Batches, "landUnsent");
+
+      SyncStream.receiveFrame("synced", {cursor: "Nzc4LjA", scope: "all"});
+
+      sinon.assert.notCalled(landing);
+    });
+
     // A follower reaches this through the group rather than through a stream, and the page-load
     // half of a change of identity is posted to it exactly this way.
     it("starts over on a resync naming a change of identity", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
+      LocalDatabase.syncCounts = {"MyApp.Tasks/total/": 42};
+      LocalDatabase.syncCountTypes = {"MyApp.Tasks/total/": ["MyApp.Task"]};
 
       SyncStream.receiveFrame("sync_resync", {reason: "identity"});
 
       assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
       assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {});
+    });
+
+    it("tells the refill it gave up a place", () => {
+      const refilling = sinon.spy(LocalDatabase, "beginRefill");
+
+      SyncStream.syncCursor = "Nzc4LjA";
+
+      SyncStream.receiveFrame("sync_resync", {reason: "retention"});
+
+      sinon.assert.calledOnceWithExactly(refilling, {hadPlace: true});
+    });
+
+    it("tells the refill it held no place", () => {
+      const refilling = sinon.spy(LocalDatabase, "beginRefill");
+
+      SyncStream.syncCursor = null;
+
+      SyncStream.receiveFrame("sync_resync", {reason: "retention"});
+
+      sinon.assert.calledOnceWithExactly(refilling, {hadPlace: false});
+    });
+
+    // The path a server's resync takes, and a follower hearing the leader's.
+    it("keeps a count the client can't count yet on a resync of the same identity", () => {
+      LocalDatabase.syncCounts = {"MyApp.Tasks/total/": 42};
+      LocalDatabase.syncCountTypes = {"MyApp.Tasks/total/": ["MyApp.Task"]};
+
+      SyncStream.receiveFrame("sync_resync", {reason: "retention"});
+
+      assert.deepStrictEqual(LocalDatabase.syncCounts, {
+        "MyApp.Tasks/total/": 42,
+      });
+
+      assert.deepStrictEqual(LocalDatabase.syncCountTypes, {
+        "MyApp.Tasks/total/": ["MyApp.Task"],
+      });
+
+      LocalDatabase.reset();
     });
 
     // The rows the last render computed the derived fields from are gone, so an action run before
@@ -628,6 +847,94 @@ describe("SyncStream", () => {
       try {
         eventSource.listeners.synced(marker);
         eventSource.listeners.synced(marker);
+      } finally {
+        Tabs.name = null;
+      }
+
+      assert.isTrue(postingState.calledOnce);
+    });
+
+    // The frame itself reaches the other tabs only once it is stored, so the state the first frame
+    // tells them already names the model the server runs.
+    for (const [event, frame] of [
+      ["sync_deltas", {applied_seq: null, cursor: null, deltas: {}}],
+      ["synced", {cursor: null, scope: "all"}],
+    ]) {
+      it(`tells the group the server's model with the state a first ${event} frame tells it`, () => {
+        let toldModelHash;
+        postingState.callsFake(() => {
+          toldModelHash = SyncStream.servedModelHash;
+        });
+
+        sinon.stub(Durability, "persistFrame").resolves();
+        Tabs.name = "hologram.1.a3f9c2.anonymous";
+
+        try {
+          eventSource.listeners[event]({
+            data: JSON.stringify({
+              ...frame,
+              model_hash: "b7e1d4",
+              protocol_version: 1,
+            }),
+          });
+        } finally {
+          Tabs.name = null;
+        }
+
+        assert.equal(toldModelHash, "b7e1d4");
+      });
+    }
+
+    // A returning tab is first sent a resync, which names no model, and its refill's frames reach the
+    // other tabs only once they are stored.
+    it("tells the group a model the server names after the first frame", () => {
+      const toldModelHashes = [];
+      postingState.callsFake(() => {
+        toldModelHashes.push(SyncStream.servedModelHash);
+      });
+
+      sinon.stub(Durability, "persistFrame").returns(new Promise(() => {}));
+      sinon.stub(Durability, "clear");
+      Tabs.name = "hologram.1.a3f9c2.anonymous";
+
+      try {
+        eventSource.listeners.sync_resync({
+          data: JSON.stringify({protocol_version: 1, reason: "synced_types"}),
+        });
+
+        eventSource.listeners.sync_deltas({
+          data: JSON.stringify({
+            applied_seq: null,
+            cursor: null,
+            deltas: {},
+            model_hash: "b7e1d4",
+            protocol_version: 1,
+          }),
+        });
+      } finally {
+        Tabs.name = null;
+      }
+
+      assert.deepStrictEqual(toldModelHashes, [null, "b7e1d4"]);
+    });
+
+    it("tells the group nothing again for a model it told already", () => {
+      sinon.stub(Durability, "persistFrame").resolves();
+      Tabs.name = "hologram.1.a3f9c2.anonymous";
+
+      const frame = {
+        data: JSON.stringify({
+          applied_seq: null,
+          cursor: null,
+          deltas: {},
+          model_hash: "b7e1d4",
+          protocol_version: 1,
+        }),
+      };
+
+      try {
+        eventSource.listeners.sync_deltas(frame);
+        eventSource.listeners.sync_deltas(frame);
       } finally {
         Tabs.name = null;
       }
@@ -1036,6 +1343,69 @@ describe("SyncStream", () => {
     });
   });
 
+  describe("servedAcrossModels()", () => {
+    beforeEach(() => {
+      globalThis.Hologram.sync = {modelHash: "a3f9c2", model: {}};
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+    });
+
+    it("is false before a frame names the model the server runs", () => {
+      assert.isFalse(SyncStream.servedAcrossModels());
+    });
+
+    it("is false once a frame names this bundle's model", () => {
+      SyncStream.noteServedModel("a3f9c2");
+
+      assert.isFalse(SyncStream.servedAcrossModels());
+    });
+
+    it("is true once a frame names another model", () => {
+      SyncStream.noteServedModel("b7e1d4");
+
+      assert.isTrue(SyncStream.servedAcrossModels());
+    });
+
+    // A node of a build from before frames named it says nothing.
+    it("keeps what it knew when a frame names no model", () => {
+      SyncStream.noteServedModel("b7e1d4");
+      SyncStream.noteServedModel(undefined);
+
+      assert.isTrue(SyncStream.servedAcrossModels());
+    });
+
+    // Its writes still go: only a stop over the model holds them.
+    it("holds no writes", () => {
+      SyncStream.noteServedModel("b7e1d4");
+
+      assert.isFalse(SyncStream.holdsWrites());
+    });
+
+    it("notes the model a deltas frame names", () => {
+      SyncStream.receiveFrame("sync_deltas", {
+        applied_seq: null,
+        cursor: null,
+        deltas: {},
+        model_hash: "b7e1d4",
+      });
+
+      assert.equal(SyncStream.servedModelHash, "b7e1d4");
+    });
+
+    // A client caught up with nothing to be told receives only the marker.
+    it("notes the model a completeness marker names", () => {
+      SyncStream.receiveFrame("synced", {
+        cursor: null,
+        model_hash: "b7e1d4",
+        scope: "all",
+      });
+
+      assert.equal(SyncStream.servedModelHash, "b7e1d4");
+    });
+  });
+
   describe("holdsWrites()", () => {
     it("is false while the tab is served", () => {
       assert.isFalse(SyncStream.holdsWrites());
@@ -1329,6 +1699,57 @@ describe("SyncStream", () => {
 
       assert.isTrue(persisting.calledOnce);
       assert.deepStrictEqual(persisting.firstCall.args, [[], "Nzc4LjA"]);
+    });
+
+    // The holder's stored record names the row the sweep took, and a reload would read it back.
+    it("stores a held row whose set the marker's sweep changed, naming no place", () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+      const written = new Set(["MyApp.Task t1"]);
+      const records = [{id: "t1", row: {id: "t1"}, type: "MyApp.Task"}];
+
+      sinon.stub(LocalDatabase, "markTypesSynced").returns(written);
+
+      const reading = sinon.stub(LocalDatabase, "records").returns(records);
+
+      eventSource.listeners.synced({
+        data: JSON.stringify({
+          applied_seq: 3,
+          cursor: null,
+          scope: "types",
+          types: ["MyApp.Task"],
+        }),
+      });
+
+      sinon.assert.calledOnceWithExactly(reading, written);
+      sinon.assert.calledOnceWithExactly(persisting, records, null);
+    });
+
+    it("passes the marker's number on to what it settles", () => {
+      const marking = sinon.spy(LocalDatabase, "markTypesSynced");
+
+      SyncStream.receiveFrame("synced", {
+        applied_seq: 7,
+        cursor: null,
+        scope: "types",
+        types: ["MyApp.Task"],
+      });
+
+      sinon.assert.calledOnceWithExactly(marking, ["MyApp.Task"], 7);
+    });
+
+    it("answers what a types marker's sweep changed", () => {
+      const written = new Set(["MyApp.Task t1"]);
+
+      sinon.stub(LocalDatabase, "markTypesSynced").returns(written);
+
+      const answered = SyncStream.receiveFrame("synced", {
+        applied_seq: 7,
+        cursor: null,
+        scope: "types",
+        types: ["MyApp.Task"],
+      });
+
+      assert.strictEqual(answered, written);
     });
 
     // A first arrival's types markers are narrower than the claim a place makes, so they name
