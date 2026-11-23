@@ -309,7 +309,8 @@ defmodule HologramSyncBenchmark.Cases.SessionMemory do
         last ->
           "#{kb(last.first.standing)} KB as it sits idle, #{kb(last.first.collected)} KB after " <>
             "collection, for #{last.rows} rows, " <>
-            "#{Report.cell(last.first.collected_binaries / last.rows)} bytes of ids per row"
+            "#{Report.cell(last.first.collected_binaries / last.rows)} off-heap binary bytes " <>
+            "per row"
       end
 
     case stopped do
@@ -328,7 +329,8 @@ defmodule HologramSyncBenchmark.Cases.SessionMemory do
     "  #{result.clients} clients, first arrival #{kb(result.first.standing)} KB, " <>
       "#{kb(result.first.collected)} KB collected, returning #{kb(result.returning.standing)} " <>
       "KB, #{kb(result.returning.collected)} KB collected, " <>
-      "#{Report.cell(result.first.collected_binaries / result.rows)} bytes of ids per row, " <>
+      "#{Report.cell(result.first.collected_binaries / result.rows)} off-heap binary bytes " <>
+      "per row, " <>
       "stream #{kb(result.first.stream)} KB"
   end
 
@@ -338,12 +340,12 @@ defmodule HologramSyncBenchmark.Cases.SessionMemory do
       "Clients",
       "First arrival KB",
       "After collection KB",
-      "Of which ids KB",
+      "Of which off-heap binaries KB",
       "Rest KB",
-      "Bytes of ids per row",
+      "Off-heap binary bytes per row",
       "Returning KB",
       "Returning after collection KB",
-      "Returning bytes of ids per row",
+      "Returning off-heap binary bytes per row",
       "Returning, back to caught up ms",
       "Reading its ids ms",
       "Stream KB"
