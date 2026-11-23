@@ -508,6 +508,14 @@ defmodule Hologram.DB do
   commit separately. Any data layer call that runs a statement raises Hologram.MisuseError while
   one of the app's Ecto repos has a transaction open in the calling process, reads included. A
   transaction Ecto's SQL sandbox holds for a test doesn't count.
+
+  An Ecto query run inside this function makes the transaction fail with Hologram.MisuseError
+  naming the query, at the next data layer statement, at a rollback, or when the function
+  returns, and the data layer's writes roll back. Ecto can't be stopped at the call, so what it
+  wrote may already be committed. An exception the function raises itself propagates unchanged.
+  Keep every Ecto call outside the transaction: one made in another process isn't seen, nor is one
+  that overrides its telemetry event, and a preload of several associations may or may not be
+  caught, because Ecto runs it in parallel tasks when more than one association needs a query.
   """
   @spec transaction((-> any), keyword) :: {:ok, any} | {:error, any}
   defdelegate transaction(fun, opts \\ []), to: Connection
