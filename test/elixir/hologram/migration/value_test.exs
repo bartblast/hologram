@@ -1341,6 +1341,8 @@ defmodule Hologram.Migration.ValueTest do
       assert {:function, ^module, a, [:x]} = first.term
       assert {:function, ^module, b, [:x]} = second.term
       assert a != b
+      assert apply(module, a, ["MiXeD"]) == "MIXED"
+      assert apply(module, b, ["MiXeD"]) == "mixed"
     end
 
     test "reads a plain attribute's value at the op" do
