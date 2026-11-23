@@ -190,6 +190,15 @@ export default class Overlay {
     Overlay.#batches = Overlay.#batches.filter((held) => held !== batch);
   }
 
+  // Answers the batches it took out.
+  static removeWhere(predicate) {
+    const removed = Overlay.#batches.filter(predicate);
+
+    Overlay.#batches = Overlay.#batches.filter((held) => !predicate(held));
+
+    return removed;
+  }
+
   // Deliberately NOT called by LocalDatabase.reset(): a resync replaces what the server said, and
   // what this client has written and not yet sent is not the server's to take away.
   static reset() {

@@ -8,7 +8,7 @@
 // so the array folded over the base rows here is the array posted to the endpoint - there is one
 // spelling of a write in the system, and no step that could translate it wrongly.
 export default class Batch {
-  // Who was signed in on the page that sealed this batch, and nothing at all for a visitor.
+  // Who was signed in when the action opened this batch, and nothing at all for a visitor.
   //
   // A batch outlives the page that made it, so what is kept of one has to say whose work it is:
   // the server applies a batch under the user of the session that SENDS it, so a batch taken up

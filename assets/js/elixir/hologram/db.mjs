@@ -63,6 +63,14 @@ function currentBatch(verb) {
     );
   }
 
+  // The action was suspended across a change of user, so what it reads now is the new user's. A
+  // write built from that would go into the previous user's batch, and be sent as theirs.
+  if (batch.actorUserId !== (LocalDatabase.actorUserId ?? null)) {
+    Interpreter.raiseMisuseError(
+      `${verb} was called after the signed-in user changed while this action was suspended - writes made for the new user belong in a new action`,
+    );
+  }
+
   return batch;
 }
 

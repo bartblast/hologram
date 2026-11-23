@@ -5460,6 +5460,16 @@ describe("grant_role/3", () => {
       "grant_role was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
     );
   });
+
+  it("raises when the user changed while the action was suspended", () => {
+    LocalDatabase.actorUserId = "someone-else";
+
+    assertBoxedError(
+      () => grant(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
+      "Hologram.MisuseError",
+      "grant_role was called after the signed-in user changed while this action was suspended - writes made for the new user belong in a new action",
+    );
+  });
 });
 
 describe("grant_role/2", () => {
@@ -5660,6 +5670,16 @@ describe("revoke_role/3", () => {
       "revoke_role was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
     );
   });
+
+  it("raises when the user changed while the action was suspended", () => {
+    LocalDatabase.actorUserId = "someone-else";
+
+    assertBoxedError(
+      () => revoke(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
+      "Hologram.MisuseError",
+      "revoke_role was called after the signed-in user changed while this action was suspended - writes made for the new user belong in a new action",
+    );
+  });
 });
 
 describe("revoke_role/2", () => {
@@ -5744,8 +5764,10 @@ describe("a creator's own grant", () => {
   });
 
   it("lets the creator do what the role it takes gates", () => {
+    Batches.discard();
     LocalDatabase.actorUserId = OWNER;
     LocalDatabase.actorEntityId = OWNER;
+    Batches.open("notes");
 
     const created = create(note()).data[1];
 
