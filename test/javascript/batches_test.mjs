@@ -2398,6 +2398,108 @@ describe("Batches", () => {
       );
     });
 
+    // The batch holding the create can be the one that arrives late, and an update folded before
+    // the create it updates finds no row.
+    it("folds batches taken up out of order in number order", () => {
+      const updating = {
+        ...stored(4, "t1"),
+        writes: [
+          {
+            data: {title: "edited"},
+            id: "t1",
+            op: "update",
+            stamp: STAMP + 1,
+            type: TODO,
+          },
+        ],
+      };
+
+      Batches.adopt([updating]);
+      Batches.adopt([stored(3, "t1")]);
+
+      assert.equal(LocalDatabase.getRow(TODO, "t1").title, "edited");
+    });
+
+    // A batch takes its place when it opens and its number later, so the numbers in the overlay
+    // aren't in order: here the batch holding 10 sits ahead of 8.
+    it("folds a late batch after the one it builds on, past a higher number ahead of it", () => {
+      Durability.mode = "indexeddb";
+
+      sinon.stub(Durability, "fileBatch").returns(new Promise(() => {}));
+
+      Batches.open("todos");
+      Batches.current().append(stored(0, "t9").writes[0]);
+
+      const higher = Batches.close();
+
+      Batches.open("todos");
+      Batches.current().append(stored(0, "t1").writes[0]);
+
+      const lower = Batches.close();
+
+      lower.seal(8);
+      higher.seal(10);
+
+      Batches.adopt([
+        {
+          ...stored(9, "t1"),
+          writes: [
+            {
+              data: {title: "edited"},
+              id: "t1",
+              op: "update",
+              stamp: STAMP + 1,
+              type: TODO,
+            },
+          ],
+        },
+      ]);
+
+      assert.equal(LocalDatabase.getRow(TODO, "t1").title, "edited");
+    });
+
+    // It has never left this tab and ships after the late batch, so it can build on that batch.
+    it("folds a batch still open after a late batch whose row it updates", () => {
+      Batches.open("todos");
+      Batches.current().append(stored(0, "t9").writes[0]);
+
+      Batches.adopt([stored(3, "t2")]);
+
+      Batches.current().append({
+        data: {title: "edited"},
+        id: "t2",
+        op: "update",
+        stamp: STAMP + 1,
+        type: TODO,
+      });
+
+      assert.equal(LocalDatabase.getRow(TODO, "t2").title, "edited");
+    });
+
+    // A suspended action's batch has no number yet, and a later action wrote on top of what it
+    // showed, so a batch arriving now moves neither of them.
+    it("leaves a batch still open under the batch written on top of it", () => {
+      Batches.resumeFrom(5);
+
+      Batches.open("todos");
+      Batches.current().append(stored(0, "t1").writes[0]);
+      Batches.carryAcrossSuspension(new Promise(() => {}));
+
+      Batches.open("todos");
+      Batches.current().append({
+        data: {title: "edited"},
+        id: "t1",
+        op: "update",
+        stamp: STAMP + 1,
+        type: TODO,
+      });
+      Batches.close();
+
+      Batches.adopt([stored(3, "t2")]);
+
+      assert.equal(LocalDatabase.getRow(TODO, "t1").title, "edited");
+    });
+
     // Twice over the same record is what a tab gets when a message and the store both carry it -
     // and a batch held twice would be folded twice and sent twice.
     it("passes over a batch it already holds", () => {

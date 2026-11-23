@@ -126,7 +126,7 @@ export default class Batches {
       }
 
       Batches.pending.push(batch);
-      Overlay.push(batch);
+      Overlay.insert(batch);
 
       taken = true;
     }
