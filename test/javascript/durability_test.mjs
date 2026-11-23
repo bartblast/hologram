@@ -2180,6 +2180,62 @@ describe("Durability", () => {
     });
   });
 
+  describe("wasAnswered()", () => {
+    const restored = async () => {
+      await seedPreviousLoad();
+      await writeBatches([batchRecord(7), batchRecord(9)]);
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+    };
+
+    it("answers true for a number spent before the read and gone from the queue", async () => {
+      await restored();
+
+      assert.isTrue(Durability.wasAnswered(8));
+      assert.isTrue(Durability.wasAnswered(41));
+    });
+
+    it("answers false for a number still in the queue", async () => {
+      await restored();
+
+      assert.isFalse(Durability.wasAnswered(7));
+      assert.isFalse(Durability.wasAnswered(9));
+    });
+
+    it("answers false for a number above what the read saw", async () => {
+      await restored();
+
+      assert.isFalse(Durability.wasAnswered(42));
+    });
+
+    it("answers false before any restore", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      assert.isFalse(Durability.wasAnswered(8));
+    });
+
+    // The restore runs again on every client-side navigation, and takes up nothing after the first.
+    it("answers the same after a later restore that takes up nothing", async () => {
+      await restored();
+
+      assert.isNull(Durability.restore(true));
+
+      assert.isTrue(Durability.wasAnswered(8));
+      assert.isFalse(Durability.wasAnswered(9));
+    });
+
+    it("forgets what the read saw on reset", async () => {
+      await restored();
+      await Durability.reset();
+
+      assert.isFalse(Durability.wasAnswered(8));
+    });
+  });
+
   describe("reset()", () => {
     it("deletes the database", async () => {
       await Durability.open();

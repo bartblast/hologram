@@ -91,6 +91,10 @@ export default class Durability {
   // in one continuation, before an action could dispatch and write.
   static #loaded = null;
 
+  // What the restore's read saw of the queue: the highest number spent and the numbers still
+  // queued (see wasAnswered). Nothing until a restore has taken something up.
+  static #queueAtRestore = null;
+
   // Whether this page load has already put the question to the browser. Flipped BEFORE the asking
   // starts, which is what stops two batches stored in the same turn from both asking.
   static #persistenceAsked = false;
@@ -739,11 +743,15 @@ export default class Durability {
     }
 
     const owner = LocalDatabase.actorUserId ?? null;
+    const queued = loaded.queue.map((record) => record.seq);
+    const seq = Math.max(loaded.seq, ...queued);
+
+    Durability.#queueAtRestore = {highest: seq, numbers: new Set(queued)};
 
     return {
       batches: loaded.queue.filter((record) => record.actorUserId === owner),
       cursor: refusal === null ? loaded.cursor : null,
-      seq: Math.max(loaded.seq, ...loaded.queue.map((record) => record.seq)),
+      seq,
     };
   }
 
@@ -765,7 +773,18 @@ export default class Durability {
 
     Durability.#loaded = null;
     Durability.#persistenceAsked = false;
+    Durability.#queueAtRestore = null;
     Durability.#replicaWrite = Promise.resolve();
+  }
+
+  // Whether a batch was answered before this page read the store, which a tab that started later
+  // has no message to tell it. A number leaves the queue only by being answered, so one at or below
+  // the highest the read saw, and not in the queue it read, has been. That holds as long as the
+  // stored counter never falls back, which a storage failure can still do until #1683.
+  static wasAnswered(seq) {
+    const read = Durability.#queueAtRestore;
+
+    return read !== null && seq <= read.highest && !read.numbers.has(seq);
   }
 
   static #close() {

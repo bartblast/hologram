@@ -43,6 +43,12 @@ export default class Batches {
   // TODO: filled when the sender loop records a refusal.
   static rejected = [];
 
+  // The numbers of the batches this tab has heard answered, whether or not it held them: an answer
+  // can reach a tab before the message announcing the batch does. Kept for the life of the page,
+  // because that message can arrive after the store has let go of the batch, so the store can't
+  // say the batch was ever there.
+  static #answered = new Set();
+
   // The batch of the action running right now, and nothing when no action is - a write outside an
   // action has nowhere to belong.
   // The tries a batch nobody answered has had so far, which is what the next delay is computed
@@ -78,10 +84,12 @@ export default class Batches {
   // row an earlier one created.
   //
   // Passed over three ways. A batch this tab already holds - its own, or one adopted twice - would
-  // otherwise be folded and sent twice. A batch of ANOTHER user is left where it is, since the
-  // server applies a batch under the user of the session that sends it, and the page mounted under
-  // its owner is what will take it up. And in both cases the counter still follows it: `#seq` is
-  // what this tab has SEEN, so a number spent by another tab is a number this one will not spend.
+  // otherwise be folded and sent twice. A batch already answered would be too, and its writes
+  // promoted over a base that has them: the message announcing a batch can arrive after its answer.
+  // A batch of ANOTHER user is left where it is, since the server applies a batch under the user of
+  // the session that sends it, and the page mounted under its owner is what will take it up. And in
+  // every case the counter still follows it: `#seq` is what this tab has SEEN, so a number spent by
+  // another tab is a number this one will not spend.
   //
   // The CLOCK follows the writes it takes, for the same reason it follows a frame's revisions: a
   // batch this tab seals next may name a row one of these wrote, and its `based_on` for that column
@@ -100,7 +108,12 @@ export default class Batches {
 
       const held = Batches.pending.some((batch) => batch.seq === record.seq);
 
-      if (held || record.actorUserId !== owner) {
+      if (
+        held ||
+        record.actorUserId !== owner ||
+        Batches.#answered.has(record.seq) ||
+        Durability.wasAnswered(record.seq)
+      ) {
         continue;
       }
 
@@ -550,6 +563,7 @@ export default class Batches {
 
     Batches.pending = [];
     Batches.rejected = [];
+    Batches.#answered = new Set();
     Batches.#retryAttempts = 0;
     Batches.#running = null;
     Batches.#seq = 0;
@@ -561,11 +575,14 @@ export default class Batches {
   //
   // Written once and reached two ways: by the tab that sent the batch, and by every other tab of
   // the browser, which holds the same batch and is told the verdict. A tab that does not hold it -
-  // one that never took it up, or took it up and has already settled it - has nothing to do.
+  // one that never took it up, or took it up and has already settled it - only keeps the number,
+  // so the message announcing that batch doesn't bring it back if it arrives after this.
   //
   // Named by NUMBER rather than by the batch, because the batch a message reaches is not the object
   // the sender holds: it is that tab's own copy, built from the same record.
   static settle(seq, answer) {
+    Batches.#answered.add(seq);
+
     const batch = Batches.pending.find((held) => held.seq === seq);
 
     if (batch === undefined) {

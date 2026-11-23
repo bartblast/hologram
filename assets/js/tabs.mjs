@@ -281,7 +281,7 @@ export default class Tabs {
   static receive(message) {
     switch (message.kind) {
       // What the server said about a batch, on its way to every tab that is holding one. A tab
-      // that holds it promotes or rolls it back; a tab that does not has nothing to do.
+      // that holds it promotes or rolls it back; a tab that does not only keeps its number.
       case "answered":
         Batches.settle(message.seq, message.answer);
 
@@ -538,7 +538,8 @@ export default class Tabs {
   // opened together, a succession, an identity switch. Found by CodeRabbit on PR #1169.)
   //
   // An ANSWER names a batch this tab takes up in the same breath: settling before the batch is
-  // there settles nothing, and the batch is then folded for ever - nothing answers it twice.
+  // there settles nothing, what it says about those writes is lost, and the batch is then passed
+  // over as answered.
   //
   // A BATCH another tab filed is taken up into a queue the store has not handed over yet. Taken
   // before the mount, it is passed over for a signed-in user, since the mount is what says whose

@@ -450,6 +450,28 @@ describe("Batches", () => {
       assert.equal(sendStub.firstCall.args[0].seq, 3);
     });
 
+    // The tab that filed it can run late, so its message can arrive once the batch has been read
+    // from the store, sent and answered.
+    it("doesn't send a batch again when its message arrives after the answer", async () => {
+      const record = {
+        actorUserId: null,
+        landed: [],
+        seq: 3,
+        writes: [creating("t3", "filed elsewhere")],
+      };
+
+      sendStub.resolves(confirmed());
+
+      Batches.adopt([record]);
+      await Batches.flush();
+
+      Batches.adopt([record]);
+      await Batches.flush();
+
+      assert.isTrue(sendStub.calledOnce);
+      assert.deepStrictEqual(Batches.pending, []);
+    });
+
     it("tells the group what the server answered", async () => {
       const posting = sinon.stub(Tabs, "post");
       const answer = confirmed();
@@ -2391,6 +2413,52 @@ describe("Batches", () => {
       Batches.adopt([{...stored(3, "t1"), actorUserId: "u2"}]);
 
       assert.deepStrictEqual(Batches.pending, []);
+    });
+
+    describe("a batch already answered", () => {
+      const answer = {dropped: {}, kept: {}, status: "confirmed"};
+
+      it("passes over a batch it held when the answer came", () => {
+        Batches.adopt([stored(3, "t1")]);
+        Batches.settle(3, answer);
+
+        Batches.adopt([stored(3, "t1")]);
+
+        assert.deepStrictEqual(Batches.pending, []);
+      });
+
+      // The message announcing a batch and the answer to it can come from different tabs, so they
+      // can reach this one in either order.
+      it("passes over a batch whose answer arrived first", () => {
+        Batches.settle(3, answer);
+
+        Batches.adopt([stored(3, "t1")]);
+
+        assert.deepStrictEqual(Batches.pending, []);
+      });
+
+      it("counts past its number", () => {
+        Batches.settle(9, answer);
+
+        Batches.adopt([stored(9, "t1")]);
+
+        Batches.open("todos");
+        wrote("t2");
+
+        assert.equal(Batches.close().seq, 10);
+      });
+
+      // Answered before this tab read the store, so it never heard the answer.
+      it("passes over a batch the store says was answered", () => {
+        sinon.stub(Durability, "wasAnswered").withArgs(3).returns(true);
+
+        Batches.adopt([stored(3, "t1"), stored(4, "t2")]);
+
+        assert.deepStrictEqual(
+          Batches.pending.map((batch) => batch.seq),
+          [4],
+        );
+      });
     });
 
     // Even the ones it does not take. A number another tab has spent is a number this tab must not
