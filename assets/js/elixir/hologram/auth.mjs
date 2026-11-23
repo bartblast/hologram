@@ -1286,6 +1286,17 @@ function changeRulesAnswer(
     : held;
 }
 
+// Whether the server's verdict on the whole-row update rules grants the row. It speaks for one
+// specific change only when none of them reads the row after the change, whatever the field's own
+// rules read.
+function wholeRowVerdictGrants(entry, entityType, entity, rules, actorUserId) {
+  return (
+    rules.length > 0 &&
+    !rules.some(readsRowAfterChange) &&
+    verdictAnswers(entry, entityType, entity, ["update"], actorUserId)
+  );
+}
+
 // Whether some update rule covering each of the given field names holds on the row after a change:
 // false when one can't be covered, UNKNOWN when none fails but one may.
 function coversChange(entry, entityType, entity, fields, after, actorUserId) {
@@ -1309,7 +1320,7 @@ function coversChange(entry, entityType, entity, fields, after, actorUserId) {
     const key = `update:${field}`;
     const rules = policyRules(entry, key).concat(wholeRowRules);
 
-    const held = changeRulesAnswer(
+    const answer = changeRulesAnswer(
       someHolds(rules, holds),
       rules,
       entry,
@@ -1318,6 +1329,18 @@ function coversChange(entry, entityType, entity, fields, after, actorUserId) {
       [key, "update"],
       actorUserId,
     );
+
+    const held =
+      answer === UNKNOWN &&
+      wholeRowVerdictGrants(
+        entry,
+        entityType,
+        entity,
+        wholeRowRules,
+        actorUserId,
+      )
+        ? true
+        : answer;
 
     if (held === false) {
       return false;

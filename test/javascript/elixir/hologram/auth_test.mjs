@@ -4092,6 +4092,10 @@ describe("Elixir_Hologram_Auth", () => {
 
       const delegated = rule({via: ["read", ["folder"]]});
 
+      const neverTitle = rule({
+        new: {predicates: [[{name: "title", outer: 1}, "==", "never"]]},
+      });
+
       const stored = (verdict) => {
         LocalDatabase.actorEntityId = ALICE;
 
@@ -4127,6 +4131,42 @@ describe("Elixir_Hologram_Auth", () => {
         assert.deepStrictEqual(
           asks(updateOf(Type.atom("title")), title, stored(true)),
           Type.boolean(true),
+        );
+      });
+
+      it("answers from the whole-row verdict beside a field rule reading the change", () => {
+        defineUpdate("update:title", neverTitle);
+        globalThis.Hologram.sync.model[DOCUMENT].policy.update = [delegated];
+        putVerdict("update");
+        Model.reset();
+
+        assert.deepStrictEqual(
+          asks(update, title, stored(true)),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          asks(update, title, stored(false)),
+          Type.boolean(false),
+        );
+      });
+
+      it("takes no verdict from whole-row rules that read the change", () => {
+        defineUpdate("update:title", neverTitle);
+
+        globalThis.Hologram.sync.model[DOCUMENT].policy.update = [
+          rule({
+            new: {predicates: [{can: ["read", ["folder"]]}]},
+            via: ["read", ["folder"]],
+          }),
+        ];
+
+        putVerdict("update");
+        Model.reset();
+
+        assert.deepStrictEqual(
+          asks(update, title, stored(true)),
+          Type.boolean(false),
         );
       });
 
