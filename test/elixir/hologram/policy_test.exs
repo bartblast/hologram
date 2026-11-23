@@ -1944,6 +1944,7 @@ defmodule Hologram.PolicyTest do
 
     test "counts the rows a role check and an operation check read" do
       assert related_chains(NewCheckTask) == [[:project]]
+      assert related_chains(NewCheckTask, {:update, :project}) == [[:project]]
       assert held_chains(NewCheckTask, :lead) == [[:project]]
     end
 
