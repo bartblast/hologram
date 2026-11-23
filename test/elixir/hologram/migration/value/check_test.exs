@@ -74,6 +74,148 @@ defmodule Hologram.Migration.Value.CheckTest do
     end
   end
 
+  describe "validate_ops!/2, the default an op leaves" do
+    defp with_attribute(attribute) do
+      put_in(@model, [:entities, MyApp.Task, :attributes], [attribute])
+    end
+
+    defp default_refusal(ops, attribute) do
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          validate_ops!(ops, with_attribute(attribute))
+        end
+
+      error.message
+    end
+
+    test "refuses a type change keeping a default the new type can't hold" do
+      attribute = {:status, :enum, [default: :todo, optional: true, values: [:done, :todo]]}
+      op = change(:change_attribute, :status, type: :string)
+
+      assert default_refusal([op], attribute) ==
+               "the default of :status on MyApp.Task (line 7) holds :todo, which must be of " <>
+                 "type :string - state a default: that fits in this op, or default: nil"
+    end
+
+    test "refuses a stated default its type can't hold" do
+      attribute = {:title, :string, [optional: true]}
+      op = change(:change_attribute, :title, default: :todo, optional: false)
+
+      assert default_refusal([op], attribute) =~
+               "the default of :title on MyApp.Task (line 7) holds :todo"
+    end
+
+    test "refuses a stated default breaking a declared rule" do
+      attribute = {:title, :string, [max_length: 2, optional: true]}
+      op = change(:change_attribute, :title, default: "long")
+
+      assert default_refusal([op], attribute) =~ "must be at most 2 characters"
+    end
+
+    test "refuses a default on an added attribute that its type can't hold" do
+      op = add_attribute(:string, default: 1, optional: true)
+
+      assert refusal(op) =~ "the default of :value on MyApp.Task (line 7) holds 1"
+    end
+
+    test "refuses an enum default that no op of the file adds" do
+      attribute = {:status, :enum, [optional: true, values: [:done, :todo]]}
+      op = change(:change_attribute, :status, default: :archived)
+
+      assert default_refusal([op], attribute) =~ "must be one of [:done, :todo]"
+    end
+
+    test "refuses a default the database can't store" do
+      attribute = {:title, :string, [optional: true]}
+      op = change(:change_attribute, :title, default: "a\0b", optional: false)
+
+      assert default_refusal([op], attribute) =~ "the database can't store as a :string"
+    end
+
+    test "refuses a default naming a calendar that doesn't exist, without crashing" do
+      attribute = {:day, :date, [optional: true]}
+      default = %{~D[2026-01-01] | calendar: MyApp.MissingCalendar}
+      op = change(:change_attribute, :day, default: default)
+
+      assert default_refusal([op], attribute) =~ "the default of :day"
+    end
+
+    test "still applies the rules a type can take beside one it can't" do
+      attribute = {:code, :string, [max_length: 2, optional: true]}
+      op = change(:change_attribute, :code, type: :integer, default: 99, max: 10)
+
+      assert default_refusal([op], attribute) =~ "must be at most 10"
+    end
+
+    test "refuses a default too long for the attribute's unique index" do
+      attribute = {:code, :string, [optional: true, unique: true]}
+      op = change(:change_attribute, :code, default: String.duplicate("a", 3000))
+
+      assert default_refusal([op], attribute) =~ "(the most its unique index can carry)"
+    end
+
+    test "passes a datetime default in another calendar, stored as UTC ISO" do
+      attribute = {:at, :datetime, [optional: true]}
+      default = %{~U[2026-01-01 00:00:00Z] | calendar: Value.CheckTest.OtherCalendar}
+      op = change(:change_attribute, :at, default: default)
+
+      assert validate_ops!([op], with_attribute(attribute)) == :ok
+    end
+
+    test "passes a type change restating the default" do
+      attribute = {:status, :enum, [default: :todo, optional: true, values: [:done, :todo]]}
+      op = change(:change_attribute, :status, type: :string, default: "todo")
+
+      assert validate_ops!([op], with_attribute(attribute)) == :ok
+    end
+
+    test "passes a type change clearing the default" do
+      attribute = {:status, :enum, [default: :todo, optional: true, values: [:done, :todo]]}
+      op = change(:change_attribute, :status, type: :string, default: nil)
+
+      assert validate_ops!([op], with_attribute(attribute)) == :ok
+    end
+
+    test "passes an integer default kept on an attribute turning float" do
+      attribute = {:ratio, :integer, [default: 1, optional: true]}
+      op = change(:change_attribute, :ratio, type: :float)
+
+      assert validate_ops!([op], with_attribute(attribute)) == :ok
+    end
+
+    test "passes an enum default a later op of the file adds" do
+      attribute = {:status, :enum, [optional: true, values: [:done, :todo]]}
+
+      ops = [
+        change(:change_attribute, :status, default: :archived),
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :status,
+          value: :archived,
+          opts: [after: :todo],
+          line: 8
+        }
+      ]
+
+      assert validate_ops!(ops, with_attribute(attribute)) == :ok
+    end
+
+    test "leaves a rule the new type can't take to the declaration" do
+      attribute = {:code, :string, [default: "a", max_length: 2, optional: true]}
+      op = change(:change_attribute, :code, type: :integer, default: 1)
+
+      assert validate_ops!([op], with_attribute(attribute)) == :ok
+    end
+
+    test "doesn't judge an op stating neither a type nor a default" do
+      attribute = {:title, :string, [default: :todo, optional: true]}
+      op = change(:change_attribute, :title, optional: false)
+
+      assert validate_ops!([op], with_attribute(attribute)) == :ok
+    end
+  end
+
   describe "validate_ops!/2, where a backfill may be written" do
     test "takes one on a change turning an optional attribute required" do
       assert check(change(:change_attribute, :code, optional: false, backfill: "x")) == :ok

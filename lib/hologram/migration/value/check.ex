@@ -26,6 +26,9 @@ defmodule Hologram.Migration.Value.Check do
   its declared rules as they stand after the op, and fit the byte bound of any unique index over
   the member, at the op or later in the file, since the file builds those after it commits.
 
+  An op stating an attribute's type or default must also leave it a default that suits the type,
+  since a later fill would otherwise crash encoding it.
+
   Raises Hologram.CompileError naming the entity type, the member and the op's line.
   """
   @spec validate_ops!(list(%{atom => any}), %{atom => any}) :: :ok
@@ -158,6 +161,41 @@ defmodule Hologram.Migration.Value.Check do
     end
   end
 
+  # An enum is asked about its values at the file's end too, since a generated file changes the
+  # default above the op adding the value. A rule the type can't take is left to the declaration,
+  # since the validator can't run it, and the others still apply.
+  defp default_refusal(default, {_name, :enum, opts}, op, later_ops, _next_model, final_model) do
+    values = Keyword.fetch!(opts, :values)
+
+    if default not in (values ++ final_enum_values(op, later_ops, final_model)) do
+      {:values, values}
+    end
+  end
+
+  defp default_refusal(default, {name, type, opts}, op, later_ops, next_model, final_model) do
+    checked = widen(default, type)
+    stored = stored_form(checked)
+
+    cond do
+      not Resolver.storable?(stored) ->
+        if Resolver.fits_type?(checked, type), do: :unstorable, else: {:type, type}
+
+      not Validator.attribute_value_valid?(checked, type) ->
+        {:type, type}
+
+      true ->
+        runnable =
+          opts
+          |> Enum.filter(&rule_fits?(&1, type))
+          |> runnable_opts()
+
+        case Validator.value_errors(name, checked, type, runnable) do
+          [{^name, reason} | _rest] -> reason
+          [] -> byte_refusal(checked, op, later_ops, next_model, final_model)
+        end
+    end
+  end
+
   defp describe_refusal(_value, type, :unstorable) do
     "the database can't store as a #{inspect(type)}"
   end
@@ -174,6 +212,15 @@ defmodule Hologram.Migration.Value.Check do
 
   defp final_bound({entity, name}, final_model),
     do: byte_bound(name, final_model.entities[entity])
+
+  defp final_enum_values(op, later_ops, final_model) do
+    with {entity, name} <- final_member(op.entity, op.name, later_ops),
+         {_name, :enum, opts} <- List.keyfind(final_model.entities[entity].attributes, name, 0) do
+      Keyword.fetch!(opts, :values)
+    else
+      _gone_or_not_enum -> []
+    end
+  end
 
   # Where the given member ends up after the given ops, which may rename it or its entity type,
   # or nil once one deletes it: a later member under the same name is another column.
@@ -285,6 +332,19 @@ defmodule Hologram.Migration.Value.Check do
 
   defp rule_fits?(_rule, _type), do: true
 
+  # A datetime in another calendar is stored as UTC ISO, so that's the value to ask about.
+  defp stored_form(%DateTime{calendar: calendar} = value) when calendar != Calendar.ISO do
+    with true <- comparable_bound?(value, :datetime),
+         unix = DateTime.to_unix(value, :microsecond),
+         {:ok, iso} <- DateTime.from_unix(unix, :microsecond) do
+      iso
+    else
+      _unusable -> value
+    end
+  end
+
+  defp stored_form(value), do: value
+
   defp track_enum_values(%{op: :add_enum_value} = op, added) do
     MapSet.put(added, {op.enum_type, op.value})
   end
@@ -355,6 +415,8 @@ defmodule Hologram.Migration.Value.Check do
   end
 
   defp validate!(op, model, next_model, later_ops, final_model) do
+    validate_default!(op, next_model, later_ops, final_model)
+
     case Value.fetch_backfill(op) do
       {:ok, backfill} ->
         validate_present!(backfill, op)
@@ -369,6 +431,36 @@ defmodule Hologram.Migration.Value.Check do
         :ok
     end
   end
+
+  # A default fills rows when a column turns required, so one its type can't hold would crash there,
+  # possibly files later. Asked only of an op stating a type or a default.
+  defp validate_default!(%{op: kind} = op, next_model, later_ops, final_model)
+       when kind in [:add_attribute, :change_attribute] do
+    stated = if kind == :add_attribute, do: op.opts, else: op.changes
+
+    if Keyword.has_key?(stated, :type) or Keyword.has_key?(stated, :default) do
+      {_name, type, opts} =
+        member = List.keyfind!(next_model.entities[op.entity].attributes, op.name, 0)
+
+      default = opts[:default]
+
+      reason =
+        default != nil &&
+          default_refusal(default, member, op, later_ops, next_model, final_model)
+
+      if reason do
+        raise Hologram.CompileError,
+          message:
+            "the default of #{inspect(op.name)} on #{inspect(op.entity)}#{line(op)} holds " <>
+              "#{inspect(default)}, which #{describe_refusal(default, type, reason)} - state a " <>
+              "default: that fits in this op, or default: nil"
+      end
+    end
+
+    :ok
+  end
+
+  defp validate_default!(_op, _next_model, _later_ops, _final_model), do: :ok
 
   defp validate_present!(nil, op) do
     refuse!(op, "is nil - a backfill is the value rows receive, so it needs one")

@@ -386,6 +386,146 @@ defmodule Hologram.Migration.RendererTest do
         render(ops, pre_model)
       end
     end
+
+    test "refuses a tightening filling a value the file adds below a cut" do
+      pre_model =
+        model(%{
+          MyApp.Task => %{
+            attributes: [
+              {:grade, :enum, [optional: true, values: [:a]]},
+              {:seats, :integer, [optional: true]}
+            ]
+          }
+        })
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          changes: [optional: false, default: :fresh],
+          line: 3
+        },
+        computed(:copy, {:name, [:seats]}),
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :grade,
+          value: :fresh,
+          opts: [],
+          line: 8
+        }
+      ]
+
+      assert_raise Hologram.CompileError,
+                   ~r/the default "fresh" of column "grade".*doesn't hold yet/,
+                   fn -> render(ops, pre_model) end
+    end
+
+    test "refuses a tightening filling a value the file adds below a rename" do
+      pre_model =
+        model(%{
+          MyApp.Task => %{
+            attributes: [
+              {:grade, :enum, [optional: true, values: [:a]]},
+              {:seats, :integer, [optional: true]}
+            ]
+          }
+        })
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          changes: [optional: false, default: :fresh],
+          line: 3
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :seats, to: :places, line: 4},
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :grade,
+          value: :fresh,
+          opts: [],
+          line: 5
+        }
+      ]
+
+      assert_raise Hologram.CompileError,
+                   ~r/the default "fresh" of column "grade".*doesn't hold yet/,
+                   fn -> render(ops, pre_model) end
+    end
+
+    test "passes a fill of a value whose label a later rename frees and an add takes" do
+      pre_model =
+        model(%{
+          MyApp.Task => %{
+            attributes: [
+              {:grade, :enum, [optional: true, values: [:a, :b]]},
+              {:seats, :integer, [optional: true]}
+            ]
+          }
+        })
+
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          changes: [optional: false, default: :a],
+          line: 3
+        },
+        computed(:copy, {:name, [:seats]}),
+        %{
+          op: :rename_enum_value,
+          entity: MyApp.Task,
+          attribute: :grade,
+          from: :a,
+          to: :z,
+          line: 8
+        },
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :grade,
+          value: :a,
+          opts: [],
+          line: 9
+        }
+      ]
+
+      assert %{transactional: _transactional} = render(ops, pre_model)
+    end
+
+    test "refuses a required add filling a value the file adds below a cut" do
+      pre_model =
+        model(%{MyApp.Task => %{attributes: [{:seats, :integer, [optional: true]}]}})
+
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          type: :enum,
+          opts: [default: :fresh, values: [:a]],
+          line: 3
+        },
+        computed(:copy, {:name, [:seats]}),
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :grade,
+          value: :fresh,
+          opts: [],
+          line: 8
+        }
+      ]
+
+      assert_raise Hologram.CompileError,
+                   ~r/the default "fresh" of column "grade".*doesn't hold yet/,
+                   fn -> render(ops, pre_model) end
+    end
   end
 
   describe "render/2, deleting and adding one name in a file" do

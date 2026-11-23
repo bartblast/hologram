@@ -495,7 +495,8 @@ defmodule Hologram.Migration.Diff do
       new_value = Keyword.fetch(new_opts, key)
 
       cond do
-        old_value == new_value -> []
+        # Strict, since 1 == 1.0 would keep an integer default on an attribute turning float.
+        old_value === new_value -> []
         new_value == :error -> [{key, Model.neutral_value(key)}]
         true -> [{key, elem(new_value, 1)}]
       end
