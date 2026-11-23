@@ -438,17 +438,29 @@ defmodule Mix.Tasks.Compile.Hologram do
       # lists again, if it derives at all (see partition_kept_page_reach/4).
       impl_seeds = impl_seeds(cache.data_layer, call_graph, graph_unchanged?)
 
+      new_impls =
+        list_new_impls(
+          module_digests_diff,
+          new_module_info_plt,
+          old_module_info_plt,
+          previous_infos
+        )
+
+      data_layer_reaching_modules =
+        data_layer_reaching_modules(reaching_modules, new_impls, new_module_info_plt)
+
       {kept_page_reach, pages_to_list} =
         partition_kept_page_reach(
           cache.data_layer,
           page_modules,
           impl_seeds,
-          data_layer_reaching_modules(
-            reaching_modules,
-            module_digests_diff,
-            new_module_info_plt
-          )
+          data_layer_reaching_modules
         )
+
+      # The walks of the implementations of the types each kept page holds through rows that still
+      # hold (see keep_held_impl_walks/3).
+      kept_held_impl_walks =
+        keep_held_impl_walks(cache.data_layer, kept_page_reach, data_layer_reaching_modules)
 
       # Whether the vocabulary the queries and the operation asks are judged against can have moved
       # (see data_model_changed?/2).
@@ -477,6 +489,13 @@ defmodule Mix.Tasks.Compile.Hologram do
           %{
             data_model_changed?: data_model_changed?,
             derived_stale?: derived_stale?,
+            held_impls_changed?:
+              held_impls_changed?(
+                cache.data_layer,
+                Map.keys(kept_page_reach),
+                kept_held_impl_walks,
+                new_impls
+              ),
             kept_page_reach: kept_page_reach,
             own_dumps?: own_dumps?(before_dump_stamp, module_info_plt_dump_path),
             pages_to_list: pages_to_list,
@@ -486,8 +505,11 @@ defmodule Mix.Tasks.Compile.Hologram do
         )
 
       # The chunks' MFAs are listed on the runtime's copy too, and so is the data layer's reach of
-      # every page it lists again.
-      runtime_graph_kept? = Enum.all?([runtime_kept?, chunk_analysis_kept?, pages_to_list == []])
+      # every page it lists again, and of every page it walks for the types it holds through rows.
+      runtime_graph_kept? =
+        Enum.all?([runtime_kept?, chunk_analysis_kept?, pages_to_list == []]) and
+          held_impls_need_no_graph?(data_layer_kept?, new_module_info_plt)
+
       call_graph_for_runtime = build_runtime_graph(call_graph, runtime_graph_kept?, sup)
 
       templatable_modules = page_modules ++ component_modules
@@ -524,6 +546,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           impl_seeds: impl_seeds,
           ir_plt: ir_plt,
           kept_data_layer: cache.data_layer,
+          kept_held_impl_walks: kept_held_impl_walks,
           kept_page_reach: kept_page_reach,
           module_info_plt: new_module_info_plt,
           opts: opts,
@@ -1296,13 +1319,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # The modules whose edit can move what the data layer read of a page: the ones reaching the edit,
-  # and the protocols of the added implementations, since a page dispatching one of those can enter
-  # the new implementation, and no page holds a module that didn't exist.
-  defp data_layer_reaching_modules(reaching_modules, module_digests_diff, module_info_plt) do
-    module_digests_diff.added_modules
-    |> Enum.filter(
-      &match?({:ok, %{protocol_implementation?: true}}, PLT.get(module_info_plt, &1))
-    )
+  # and the protocols of the new implementations (see list_new_impls/4), since a page dispatching
+  # one of those can enter the implementation, and no page's read holds it yet.
+  defp data_layer_reaching_modules(reaching_modules, new_impls, module_info_plt) do
+    new_impls
     |> MapSet.new(&CallGraph.implemented_protocol(&1, module_info_plt))
     |> MapSet.union(reaching_modules)
   end
@@ -1314,12 +1334,21 @@ defmodule Mix.Tasks.Compile.Hologram do
   # wrote the module info dump since this VM's last one (see own_dumps?/2): one that did derived
   # against other module infos, and its data layer dumps may be the ones there. A page is gone when
   # the kept reach holds a page the build no longer has. A component or a protocol implementation is
-  # read only through the pages reaching it, so an edit of one lists those pages again.
+  # read through the pages reaching it, so an edit of one lists those pages again, or through the
+  # walks of the types a page holds through rows, which an edit makes stale without listing the page
+  # (see held_impls_changed?/4).
   defp data_layer_kept?(nil, _parts, _opts), do: false
 
   defp data_layer_kept?(kept_data_layer, parts, opts) do
-    parts.pages_to_list == [] and not parts.data_model_changed? and not parts.derived_stale? and
-      kept_data_layer[:query_shapes] == parts.query_shapes and
+    nothing_read_moved? =
+      not Enum.any?([
+        parts.pages_to_list != [],
+        parts.data_model_changed?,
+        parts.derived_stale?,
+        parts.held_impls_changed?
+      ])
+
+    nothing_read_moved? and kept_data_layer[:query_shapes] == parts.query_shapes and
       map_size(parts.kept_page_reach) == map_size(kept_data_layer.pages) and
       parts.own_dumps? and data_layer_dumps_exist?(opts)
   end
@@ -1382,10 +1411,21 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> Compiler.pages_checking_permissions()
       |> Enum.concat(Compiler.pages_checking_permissions_in_impls(listed_reach, call_graph))
 
-    reach_by_page =
+    base_reach_by_page =
       listed_reach
       |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt, ir_plt)
       |> then(&Map.merge(context.kept_page_reach, &1))
+
+    # Everything below counts the implementations of the types a page holds through rows. What's
+    # kept is the reach from before that, so that one removed takes what it named with it.
+    {reach_by_page, held_impl_walks} =
+      Compiler.fold_held_impls(
+        base_reach_by_page,
+        context.kept_held_impl_walks,
+        call_graph_for_runtime,
+        call_graph,
+        ir_plt
+      )
 
     # Checked on every derivation, the kept pages' queries too: a model change can make one that
     # was valid refused.
@@ -1450,8 +1490,9 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Cache.put_data_layer(%{
       derived: derived,
+      held_impl_walks: held_impl_walks,
       impl_seeds: context.impl_seeds,
-      pages: reach_by_page,
+      pages: base_reach_by_page,
       query_shapes: context.query_shapes,
       sync_constants_js: sync_constants_js
     })
@@ -1744,6 +1785,69 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp impl_seeds(_kept_data_layer, call_graph, _graph_unchanged?) do
     CallGraph.page_impl_seeds(call_graph)
   end
+
+  # A derivation walks the implementations of the types pages hold through rows on the graph without
+  # the manually ported functions, unless the app defines none.
+  defp held_impls_need_no_graph?(true, _module_info_plt), do: true
+
+  defp held_impls_need_no_graph?(false, module_info_plt) do
+    not Compiler.app_struct_impl?(module_info_plt)
+  end
+
+  # Whether the walks of the implementations of the types pages hold through rows can have moved
+  # though no page is listed again: a kept page's walk met the edit, or there is a new protocol
+  # implementation (see list_new_impls/4), which a page holding its type can enter though nothing it
+  # reaches was edited. One removed is among the modules of the walks that entered it.
+  defp held_impls_changed?(%{held_impl_walks: walks}, kept_pages, kept_walks, new_impls) do
+    new_impls != [] or Map.take(walks, kept_pages) != kept_walks
+  end
+
+  defp held_impls_changed?(_kept_data_layer, _kept_pages, _kept_walks, _new_impls), do: true
+
+  # The protocol implementations this compile brought: the added modules that are one, and the
+  # edited ones that implement another protocol than before or none did, since a walk dispatching
+  # their protocol can't have entered them. `defimpl A.B, for: C` and `defimpl A, for: B.C` are one
+  # module. What an edited module was is in the entries a warm compile replaced, or in the dump a
+  # cold one diffed against.
+  defp list_new_impls(module_digests_diff, module_info_plt, old_module_info_plt, previous_infos) do
+    edited_to_new_protocol =
+      Enum.filter(module_digests_diff.edited_modules, fn module ->
+        previous_info =
+          with :error <- Map.fetch(previous_infos, module) do
+            PLT.get(old_module_info_plt, module)
+          end
+
+        info_protocol(previous_info) != info_protocol(PLT.get(module_info_plt, module))
+      end)
+
+    Enum.filter(
+      module_digests_diff.added_modules ++ edited_to_new_protocol,
+      &impl_info?(PLT.get(module_info_plt, &1))
+    )
+  end
+
+  defp impl_info?({:ok, %{protocol_implementation?: true}}), do: true
+
+  defp impl_info?(_module_info), do: false
+
+  defp info_protocol({:ok, %{implemented_protocol: protocol}}), do: protocol
+
+  defp info_protocol(_module_info), do: nil
+
+  # The kept walks of the implementations of the types each kept page holds through rows (see
+  # Hologram.Compiler.fold_held_impls/5), without the walks of a page one of whose walks reached or
+  # named a module reaching the edit.
+  defp keep_held_impl_walks(%{held_impl_walks: walks}, kept_page_reach, reaching_modules) do
+    walks
+    |> Map.take(Map.keys(kept_page_reach))
+    |> Map.reject(fn {_page_module, walks_by_types} ->
+      Enum.any?(walks_by_types, fn {_types, walk} ->
+        not MapSet.disjoint?(walk.modules, reaching_modules)
+      end)
+    end)
+  end
+
+  defp keep_held_impl_walks(_kept_data_layer, _kept_page_reach, _reaching_modules), do: %{}
 
   # The page's kept reach when it still holds: the page has one, and neither the modules it names
   # nor the ones the implementations it can dispatch to reach meet the modules reaching the edit.

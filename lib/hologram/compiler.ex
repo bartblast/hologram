@@ -870,7 +870,8 @@ defmodule Hologram.Compiler do
   same way, since they run in the browser too. The modules they count as naming are the ones they
   spell, not the ones they reach, and an implementation doesn't name the type it's written for: a
   `to_string` matching `%AuditLog{}` doesn't make a type only server code names sync. A query
-  written in one piece in such a function does name its root, its own type included.
+  written in one piece in such a function does name its root, its own type included. The
+  implementations of the types a page holds only through rows are read by `fold_held_impls/5`.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_kept_page_reach_4/README.md
   """
@@ -969,6 +970,23 @@ defmodule Hologram.Compiler do
       }
 
       {key, read}
+    end)
+  end
+
+  @doc """
+  Returns whether a module of the app, rather than Elixir's or Hologram's, implements a protocol for
+  a struct type. Without one, no page holds an implementation to walk (see `fold_held_impls/5`).
+  """
+  @spec app_struct_impl?(PLT.t()) :: boolean
+  def app_struct_impl?(module_info_plt) do
+    elixir_lib_dir = elixir_lib_dir()
+    built_in_types = MapSet.new(CallGraph.built_in_protocol_types())
+
+    module_info_plt
+    |> PLT.keys(%{protocol_implementation?: true})
+    |> Enum.any?(fn impl ->
+      not MapSet.member?(built_in_types, implementation_type(impl, module_info_plt)) and
+        app_module?(impl, elixir_lib_dir)
     end)
   end
 
@@ -2596,8 +2614,9 @@ defmodule Hologram.Compiler do
   checks only rows of types it queries or mentions, and a rule's chains already follow its
   delegations. A chain's types stop before its first type no session may read (see
   `Hologram.Policy.readable_prefix/2`), since no client gets a row of it, nor any row reached
-  through it. Code in a protocol implementation the page can dispatch to counts as client code, but
-  an implementation doesn't name the type it's written for (see `build_kept_page_reach/4`). A type
+  through it. Code in a protocol implementation the page can dispatch to counts as client code,
+  that of a type it holds through rows once `fold_held_impls/5` has folded it into the given reach,
+  but an implementation doesn't name the type it's written for (see `build_kept_page_reach/4`). A type
   only server code names, like an audit log, is left out, rules or not, and never reaches a browser.
   A name the code only builds at run time names nothing here, and a derived query reading such a
   type is refused on its render (see
@@ -3396,19 +3415,6 @@ defmodule Hologram.Compiler do
   end
 
   defp collect_atoms(_ir, acc), do: acc
-
-  # Whether an app module implements a protocol for a struct type.
-  defp app_struct_impl?(module_info_plt) do
-    elixir_lib_dir = elixir_lib_dir()
-    built_in_types = MapSet.new(CallGraph.built_in_protocol_types())
-
-    module_info_plt
-    |> PLT.keys(%{protocol_implementation?: true})
-    |> Enum.any?(fn impl ->
-      not MapSet.member?(built_in_types, implementation_type(impl, module_info_plt)) and
-        app_module?(impl, elixir_lib_dir)
-    end)
-  end
 
   # Walks the pages whose held types are new, and puts what each walk read on the page's reach as
   # given to fold_held_impls/5, until no page's held types change. A later walk of a page holds more
