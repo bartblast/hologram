@@ -60,6 +60,43 @@ defmodule Hologram.Migration.Value.Check do
     :ok
   end
 
+  @doc """
+  Returns the given ops, one file's, with each computed fill of an attribute carrying :max_bytes,
+  the most its value may hold so that the unique indexes over the attribute can carry it, at the
+  op and at the file's end, or nil with none.
+  """
+  @spec put_byte_bounds(list(%{atom => any}), %{atom => any}) :: list(%{atom => any})
+  def put_byte_bounds(ops, pre_model) do
+    final_model = Enum.reduce(ops, pre_model, &Model.fold_op(&2, &1))
+
+    bound_ops(ops, pre_model, final_model)
+  end
+
+  @doc """
+  Returns the given declared options with a stored format compiled, as the validator takes it.
+  """
+  @spec runnable_opts(keyword) :: keyword
+  def runnable_opts(opts) do
+    case Keyword.fetch(opts, :format) do
+      {:ok, {:regex, source, regex_opts}} ->
+        Keyword.put(opts, :format, Regex.compile!(source, regex_opts))
+
+      _no_stored_format ->
+        opts
+    end
+  end
+
+  defp bound_ops([], _model, _final_model), do: []
+
+  defp bound_ops([op | later_ops], model, final_model) do
+    next_model = Model.fold_op(model, op)
+
+    [
+      put_byte_bound(op, later_ops, next_model, final_model)
+      | bound_ops(later_ops, next_model, final_model)
+    ]
+  end
+
   defp byte_bound(name, entry) do
     entry.attributes
     |> Validator.unique_string_max_bytes(entry.uniques)
@@ -67,23 +104,9 @@ defmodule Hologram.Migration.Value.Check do
   end
 
   defp byte_refusal(value, op, later_ops, next_model, final_model) when is_binary(value) do
-    at_op = byte_bound(op.name, next_model.entities[op.entity])
-
-    at_end =
-      op.entity
-      |> final_member(op.name, later_ops)
-      |> final_bound(final_model)
-
-    bounds = Enum.reject([at_op, at_end], &is_nil/1)
-
-    case bounds do
-      [] ->
-        nil
-
-      _bounds ->
-        max_bytes = Enum.min(bounds)
-
-        if byte_size(value) > max_bytes, do: {:max_bytes, max_bytes}
+    case max_bytes(op, later_ops, next_model, final_model) do
+      nil -> nil
+      bound -> if byte_size(value) > bound, do: {:max_bytes, bound}
     end
   end
 
@@ -190,6 +213,20 @@ defmodule Hologram.Migration.Value.Check do
     "the backfill of #{inspect(name)} on #{inspect(entity)}#{line(op)}"
   end
 
+  defp max_bytes(op, later_ops, next_model, final_model) do
+    at_op = byte_bound(op.name, next_model.entities[op.entity])
+
+    at_end =
+      op.entity
+      |> final_member(op.name, later_ops)
+      |> final_bound(final_model)
+
+    case Enum.reject([at_op, at_end], &is_nil/1) do
+      [] -> nil
+      bounds -> Enum.min(bounds)
+    end
+  end
+
   defp optional?(%{entity: entity, name: name, op: op}, model) do
     list_key = if op == :change_attribute, do: :attributes, else: :relationships
 
@@ -199,9 +236,31 @@ defmodule Hologram.Migration.Value.Check do
     end
   end
 
+  defp put_byte_bound(%{op: kind} = op, later_ops, next_model, final_model)
+       when kind in [:add_attribute, :change_attribute] do
+    case Value.fetch_backfill(op) do
+      {:ok, %Value{}} ->
+        Map.put(op, :max_bytes, max_bytes(op, later_ops, next_model, final_model))
+
+      _constant_or_none ->
+        op
+    end
+  end
+
+  defp put_byte_bound(op, _later_ops, _next_model, _final_model), do: op
+
   @spec refuse!(%{atom => any}, String.t()) :: no_return
   defp refuse!(op, message) do
     raise Hologram.CompileError, message: "#{location(op)} #{message}"
+  end
+
+  @spec refuse_unfit_rule!(%{atom => any}, {atom, any}, any) :: no_return
+  defp refuse_unfit_rule!(op, {key, rule_value}, type) do
+    refuse!(
+      op,
+      "fills an attribute declaring #{key}: #{inspect(rule_value)}, which a " <>
+        "#{inspect(type)} attribute can't take"
+    )
   end
 
   # A rule the declaration would refuse for this type. An op's options aren't checked as a
@@ -225,18 +284,6 @@ defmodule Hologram.Migration.Value.Check do
   end
 
   defp rule_fits?(_rule, _type), do: true
-
-  # The model keeps a format as its pattern and flags, since a compiled regex compares unequal
-  # from one read to the next. The validator takes it compiled.
-  defp runnable_opts(opts) do
-    case Keyword.fetch(opts, :format) do
-      {:ok, {:regex, source, regex_opts}} ->
-        Keyword.put(opts, :format, Regex.compile!(source, regex_opts))
-
-      _no_stored_format ->
-        opts
-    end
-  end
 
   defp track_enum_values(%{op: :add_enum_value} = op, added) do
     MapSet.put(added, {op.enum_type, op.value})
@@ -329,6 +376,15 @@ defmodule Hologram.Migration.Value.Check do
 
   defp validate_present!(_backfill, _op), do: :ok
 
+  # A computed fill's values are checked against the rules once it has run, so the rules have to
+  # be ones the validator can run.
+  defp validate_rules_fit!({_name, type, opts}, op) do
+    case unfit_rule(type, opts) do
+      nil -> :ok
+      rule -> refuse_unfit_rule!(op, rule, type)
+    end
+  end
+
   defp validate_tightening!(%{op: kind, changes: changes} = op, model, next_model)
        when kind in [:change_attribute, :change_relationship] do
     if Keyword.has_key?(changes, :type) do
@@ -361,6 +417,8 @@ defmodule Hologram.Migration.Value.Check do
   defp validate_to_one!(_kind, _member, _op), do: :ok
 
   defp validate_value!(%Value{} = value, kind, member, op, model, _next, _later, _final) do
+    if kind == :attribute, do: validate_rules_fit!(member, op)
+
     Value.resolve!(value, model, op.entity, Value.fill_target(kind, member, op))
 
     :ok
@@ -392,12 +450,8 @@ defmodule Hologram.Migration.Value.Check do
       nil ->
         :ok
 
-      {:unfit_rule, {key, rule_value}} ->
-        refuse!(
-          op,
-          "fills an attribute declaring #{key}: #{inspect(rule_value)}, which a " <>
-            "#{inspect(type)} attribute can't take"
-        )
+      {:unfit_rule, rule} ->
+        refuse_unfit_rule!(op, rule, type)
 
       reason ->
         refuse!(op, "holds #{inspect(value)}, which #{describe_refusal(value, type, reason)}")

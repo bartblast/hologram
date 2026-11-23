@@ -68,7 +68,10 @@ defmodule Hologram.Migration.Renderer do
 
     Enum.each(logical_ops, &validate_backfill_applies!/1)
 
-    chunks = chunks(logical_ops)
+    chunks =
+      logical_ops
+      |> Check.put_byte_bounds(pre_model)
+      |> chunks()
 
     {physical_ops, post_model} = render_chunks(chunks, pre_model)
 
@@ -669,7 +672,7 @@ defmodule Hologram.Migration.Renderer do
 
   defp fill_column_op(op, model, next_model, mapping, table, column) do
     [%{backfill: {:computed, value}, kind: kind}] = Value.fills([op], model)
-    {^kind, {_name, _type, rules} = member} = Value.fill_member(op, next_model)
+    {^kind, {_name, type, rules} = member} = Value.fill_member(op, next_model)
     target = Value.fill_target(kind, member, op)
 
     %{
@@ -680,11 +683,13 @@ defmodule Hologram.Migration.Renderer do
       enum_uses: SQL.enum_uses(value, op.entity, mapping, target),
       line: op.line,
       mapping: mapping,
+      max_bytes: Map.get(op, :max_bytes),
       member: op.name,
       nulls_only: false,
       rules: rules,
       sort_keys: SQL.sort_keys(value, op.entity, mapping),
-      sql: SQL.render(value, op.entity, mapping, target)
+      sql: SQL.render(value, op.entity, mapping, target),
+      type: type
     }
   end
 

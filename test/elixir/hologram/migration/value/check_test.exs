@@ -481,4 +481,34 @@ defmodule Hologram.Migration.Value.CheckTest do
       assert refusal(add_attribute(:float, min: 2.0, backfill: 1)) =~ "must be at least 2.0"
     end
   end
+
+  describe "validate_ops!/2, the rules of a computed fill" do
+    test "refuses a rule its type can't take" do
+      pre_model = %{
+        entities: %{
+          MyApp.Task => %{
+            attributes: [{:seats, :integer, []}],
+            relationships: [],
+            roles: [],
+            uniques: []
+          }
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      op = %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :copy,
+        type: :integer,
+        opts: [optional: true, format: ~r/x/, backfill: %Value{term: {:name, [:seats]}}],
+        line: 7
+      }
+
+      assert_raise Hologram.CompileError,
+                   ~r/fills an attribute declaring format: .*which a :integer attribute/,
+                   fn -> validate_ops!([op], pre_model) end
+    end
+  end
 end

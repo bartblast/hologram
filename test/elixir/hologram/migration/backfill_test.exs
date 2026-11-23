@@ -83,6 +83,17 @@ defmodule Hologram.Migration.BackfillTest do
     %{default: default, not_null: not_null}
   end
 
+  defp has_column?(table, column) do
+    {:ok, %{rows: [[count]]}} =
+      Connection.query(
+        "SELECT COUNT(*) FROM information_schema.columns " <>
+          "WHERE table_schema = 'hologram_data' AND table_name = $1 AND column_name = $2",
+        [table, column]
+      )
+
+    count == 1
+  end
+
   defp rows_of(table, columns) do
     select_list = Enum.map_join(columns, ", ", &~s("#{&1}"))
 
@@ -607,14 +618,7 @@ defmodule Hologram.Migration.BackfillTest do
                        )
                      end
 
-        {:ok, %{rows: [[count]]}} =
-          Connection.query(
-            "SELECT COUNT(*) FROM information_schema.columns " <>
-              "WHERE table_schema = 'hologram_data' AND table_name = 'my_app_task' " <>
-              "AND column_name = 'country'"
-          )
-
-        assert count == 0
+        refute has_column?("my_app_task", "country")
       end)
     end
 
@@ -770,6 +774,91 @@ defmodule Hologram.Migration.BackfillTest do
 
         assert run([create, file], Model.fold(first_model, file.ops), @context) == :ok
         assert rows_of("my_app_task", ["title", "top"]) == [["one", "a"]]
+      end)
+    end
+  end
+
+  describe "run/3, a computed fill breaking its member's declared rules" do
+    setup %{chain: [create | _rest], first_model: first_model} do
+      [create: create, first_model: first_model]
+    end
+
+    defp assert_fill_refused(context, titles, ops, message) do
+      %{create: create, first_model: first_model, scratch: scratch} = context
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        Enum.each(titles, &insert_task/1)
+
+        assert_error RuntimeError, message, fn -> apply_file(ops, create, first_model) end
+
+        refute has_column?("my_app_task", "copy")
+      end)
+    end
+
+    test "refuses a value over max_length", context do
+      op = computed_add(:copy, :string, {:name, [:title]}, optional: true, max_length: 2)
+
+      assert_fill_refused(
+        context,
+        ["ab", "long", "longer"],
+        [op],
+        ~s(the backfill of column "copy" on table "my_app_task" writes values breaking the ) <>
+          "attribute's declared rules: must be at most 2 characters (2 rows) - change the " <>
+          "expression or the rule"
+      )
+    end
+
+    test "refuses a value not matching format", context do
+      op = computed_add(:copy, :string, {:name, [:title]}, optional: true, format: ~r/^[a-z]+$/)
+
+      assert_fill_refused(context, ["ok", "Not ok"], [op], ~r/must match .*\(1 row\)/)
+    end
+
+    test "refuses a value outside in", context do
+      add_priority = %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :priority,
+        type: :integer,
+        opts: [optional: true, backfill: 7],
+        line: 2
+      }
+
+      op = computed_add(:copy, :integer, {:name, [:priority]}, optional: true, in: 1..3)
+
+      assert_fill_refused(context, ["one"], [add_priority, op], ~r/must be in 1\.\.3 \(1 row\)/)
+    end
+
+    test "refuses a value over a unique index's byte bound", context do
+      op = computed_add(:copy, :string, {:name, [:title]}, optional: true, unique: true)
+
+      assert_fill_refused(
+        context,
+        [String.duplicate("a", 3000)],
+        [op],
+        ~r/must hold at most \d+ bytes .*\(1 row\)/
+      )
+    end
+
+    test "leaves nil alone and accepts values within the rules", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      term = {:at, {:split, {:name, [:title]}, {:value, ", "}}, {:value, 1}}
+      op = computed_add(:copy, :string, term, optional: true, max_length: 2)
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_task("Paris, FR")
+        insert_task("Porto")
+
+        assert apply_file([op], create, first_model) == :ok
+
+        assert rows_of("my_app_task", ["title", "copy"]) == [["Paris, FR", "FR"], ["Porto", nil]]
       end)
     end
   end

@@ -18,6 +18,7 @@ defmodule Hologram.Migrator do
   alias Hologram.Entity.Model
   alias Hologram.Migration.Loader
   alias Hologram.Migration.Renderer
+  alias Hologram.Migration.Value.FillCheck
   alias Hologram.Reflection
 
   # The ops the boot applies when the database holds an object under a name the current naming
@@ -660,6 +661,8 @@ defmodule Hologram.Migrator do
     {:ok, _result} = Connection.query(statement, params)
 
     if op.required, do: check_filled!(op)
+
+    FillCheck.check!(op)
   end
 
   # A type change asks about the unique indexes standing over its column right before it
