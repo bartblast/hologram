@@ -236,8 +236,8 @@ function violationLine(entityType, values, pair) {
 
   const requirement = requirementDescription(reason);
 
-  // A field the values do not hold has no received value to show - a moved attribute is judged on
-  // the value the write arrives at, which the caller never held.
+  // A field the values do not hold has no received value to show - a move's amount is not among
+  // the values.
   return name.value in values
     ? `  * attribute ${spelled} ${requirement}, got: ${Interpreter.inspect(values[name.value])}`
     : `  * attribute ${spelled} ${requirement}`;
@@ -473,8 +473,10 @@ function refusedAmounts(deltas) {
     .map(([name, amount]) => [Type.atom(name), amount]);
 }
 
-// A moved counter is judged on the value the move ARRIVES AT, which is the only value that is
-// ever true of it - the same rule the server applies to what its statement returns.
+// Judges where the moves would land from the value this client holds. That value can be out of
+// date, so the answer is never grounds for refusing a write: only the server judges a move, on
+// what its statement returns.
+// eslint-disable-next-line no-unused-vars
 function validateMoves(entityType, held, deltas) {
   const moved = Object.entries(deltas).map(([name, amount]) => [
     Type.atom(name),
@@ -821,12 +823,6 @@ const Elixir_Hologram_DB = {
 
     if (!Type.isAtom(validation)) {
       return validation;
-    }
-
-    const movesValidation = validateMoves(entityType, held, deltas);
-
-    if (!Type.isAtom(movesValidation)) {
-      return movesValidation;
     }
 
     const data = Model.unboxChanges(entityType, changes);

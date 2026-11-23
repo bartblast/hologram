@@ -37,6 +37,7 @@ defmodule HologramFeatureTests.ActionWritesPage do
       <button $click={action: :read_own_write}> Read own write </button>
       <button $click={action: :refuse_empty_title}> Refuse an empty title </button>
       <button $click={action: :rename_todo}> Rename the todo </button>
+      <button $click={action: :retract_vote}> Retract a vote </button>
       <button $click={action: :vote}> Vote </button>
     </p>
     <Todos cid="todos" />
@@ -157,6 +158,17 @@ defmodule HologramFeatureTests.ActionWritesPage do
     |> DB.update!()
 
     put_state(component, :result, "renamed_beta")
+  end
+
+  def action(:retract_vote, _params, component) do
+    Todo
+    |> filter(title: "alpha")
+    |> one()
+    |> DB.read()
+    |> decrement(:votes, 1)
+    |> DB.update!()
+
+    put_state(component, :result, "retracted_1")
   end
 
   def action(:show_result, params, component) do

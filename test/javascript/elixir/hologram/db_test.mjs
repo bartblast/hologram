@@ -108,7 +108,7 @@ describe("Elixir_Hologram_DB", () => {
           relationships: {},
           serverOnly: ["api_token"],
         },
-        // A counter with a floor, so a move can be judged on the value it ARRIVES at.
+        // A counter with a floor, to show a move past it is still sent.
         [ITEM]: {
           attributes: {id: "uuid", stock: "integer"},
           constraints: {stock: {min: Type.integer(0)}},
@@ -948,7 +948,8 @@ describe("Elixir_Hologram_DB", () => {
       assert.notProperty(Batches.current().writes[0], "data");
     });
 
-    it("answers a refusal judging a move on the value it arrives at", () => {
+    // The value held here can be out of date, so where a move lands is the server's to judge.
+    it("sends a move the held value would take past a declared bound", () => {
       LocalDatabase.putRow(ITEM, {
         id: ID_2,
         stock: 0,
@@ -961,19 +962,48 @@ describe("Elixir_Hologram_DB", () => {
         decrement(item, Type.atom("stock"), Type.integer(1)),
       );
 
-      assert.deepStrictEqual(result.data[0], Type.atom("error"));
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      assert.deepStrictEqual(Batches.current().writes[0].deltas, {stock: -1});
+      assert.strictEqual(LocalDatabase.getRow(ITEM, ID_2).stock, -1);
+    });
 
-      assert.deepStrictEqual(
-        result.data[1],
-        Type.map([
-          [
-            Type.atom("stock"),
-            Type.list([Type.tuple([Type.atom("min"), Type.integer(0)])]),
-          ],
-        ]),
+    it("sends a move the held value would take past what a column holds", () => {
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 9223372036854775807n,
+        $revisions: {stock: 12},
+      });
+
+      const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+
+      const result = update(
+        increment(item, Type.atom("stock"), Type.integer(1)),
       );
 
-      assert.deepStrictEqual(Batches.current().writes, []);
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      assert.deepStrictEqual(Batches.current().writes[0].deltas, {stock: 1});
+
+      assert.strictEqual(
+        LocalDatabase.getRow(ITEM, ID_2).stock,
+        9223372036854775808n,
+      );
+    });
+
+    it("doesn't raise from update!/1 for a move the held value would take past a bound", () => {
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 0,
+        $revisions: {stock: 12},
+      });
+
+      const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+
+      const result = updateBang(
+        decrement(item, Type.atom("stock"), Type.integer(1)),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      assert.deepStrictEqual(Batches.current().writes[0].deltas, {stock: -1});
     });
 
     // What the entries carry is asserted above; these read the same write back through the

@@ -113,10 +113,11 @@ export default class Overlay {
     );
   }
 
-  // A confirmed batch's values ARE what the server stored, so they move out of the overlay and
-  // into the base, and the layer goes with them. What a reader sees does not change - the folded
-  // value and the promoted value are the same - which is why nothing flickers whichever arrives
-  // first, this answer or the frame carrying the same rows.
+  // A confirmed batch's put values ARE what the server stored, and a moved counter is an
+  // estimate until its patch frame lands, since the base it was added to can be out of date. Both
+  // move out of the overlay and into the base, and the layer goes with them. What a reader sees
+  // does not change - the folded value and the promoted value are the same - which is why nothing
+  // flickers whichever arrives first, this answer or the frame carrying the same rows.
   //
   // Applied against the BASE row rather than the folded one: a later batch may still be pending
   // over the same row, and its values are not the server's to store.
