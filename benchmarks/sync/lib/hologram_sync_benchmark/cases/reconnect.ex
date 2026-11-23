@@ -46,6 +46,12 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
   @fill_group 20
 
   @doc """
+  Returns how many seconds a wave's writes get to reach every client once the clients are back.
+  """
+  @spec drain_seconds :: pos_integer
+  def drain_seconds, do: div(@drain_ms, 1_000)
+
+  @doc """
   Returns the reconnect case on the given data, `:board` or `:tenants`, for the given options.
   """
   @spec sweep_case(keyword, :board | :tenants) :: map
@@ -74,8 +80,8 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
       step: &step(&1, &2, &3, &4, &5, opts),
       step_options: [
         "a step passes when every client is caught up within #{opts[:wave_limit]} s of the " <>
-          "first one coming back, holding every write it should and no other, with none told to " <>
-          "start over"
+          "first one coming back and holds every write it should within #{drain_seconds()} s " <>
+          "after that and no other, with none told to start over"
       ],
       summary: &summary/1,
       tables: &tables/1,
@@ -314,14 +320,19 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
     wave_from = now_ms()
     returning = prepared.clients -- prepared.left_out
     {wave_numbers, writer_error} = await_wave(returning, writer, opts)
-    :ok = await_wave_writes(prepared, wave_numbers)
+    drained? = await_wave_writes(prepared, wave_numbers)
     wave_to = now_ms()
 
     session_figures = sessions && Measure.stop_session_sampler(sessions)
     cpu_after = Measure.cpu_sample(peer)
     reports = Enum.map(prepared.clients, &Client.report/1)
 
-    {cpu_ms, db} = wave_cost(conn, peer, reports, {cpu_before, cpu_after}, stats_before)
+    {cpu_ms, db} =
+      if drained? do
+        wave_cost(conn, peer, reports, {cpu_before, cpu_after}, stats_before)
+      else
+        {nil, nil}
+      end
 
     samples = Probe.stop(probe)
     peak_backends = DB.stop_backend_sampler(backends)
@@ -334,6 +345,7 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
       clients: count,
       cpu_ms: cpu_ms,
       db: db,
+      drained: drained?,
       failed: Enum.count(reports, &(&1.failure != nil)),
       fill: prepared.fill,
       after_last_return_ms: after_last_return_ms(reports),
@@ -442,10 +454,12 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
     end
   end
 
-  # Waits until each client holds every write it should. A client's writes can arrive out of order
-  # across its catch-up's chunks, so every one is asked about. One that never arrives is counted as
-  # missing by the step.
-  defp await_wave_writes(_prepared, []), do: :ok
+  # Waits until each client holds every write it should, and returns whether they all do. A
+  # client's writes can arrive out of order across its catch-up's chunks, so every one is asked
+  # about. One that never arrives is counted as missing by the step, and the node may still be at
+  # work in the idle window, so the wave's costs are left out as for a client that never caught
+  # up.
+  defp await_wave_writes(_prepared, []), do: true
 
   defp await_wave_writes(prepared, numbers) do
     clients = List.to_tuple(prepared.clients)
@@ -463,14 +477,22 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
   end
 
   defp await_markers(pending, deadline) do
+    # Read first, so a client still unfinished below was asked at or after the deadline.
+    out_of_time? = now_ms() >= deadline
+
     unfinished =
       Enum.reject(pending, fn {client, numbers} -> Client.has_markers?(client, numbers) end)
 
-    if unfinished == [] or now_ms() >= deadline do
-      :ok
-    else
-      Process.sleep(@drain_poll_ms)
-      await_markers(unfinished, deadline)
+    cond do
+      unfinished == [] ->
+        true
+
+      out_of_time? ->
+        false
+
+      true ->
+        Process.sleep(@drain_poll_ms)
+        await_markers(unfinished, deadline)
     end
   end
 
@@ -564,6 +586,7 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
       result.caught_up < result.clients &&
         "#{result.clients - result.caught_up} never caught up",
       result.missing > 0 && "#{result.missing} deliveries missing",
+      (not result.drained and result.missing == 0) && "deliveries arrived after the drain limit",
       result.leaked > 0 && "#{result.leaked} deliveries leaked",
       slow_wave?(result, opts) && "the last client took #{round(result.last_caught_up_ms)} ms"
     ]
