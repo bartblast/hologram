@@ -54,6 +54,7 @@ export default class Deltas {
     LocalDatabase.takeStoredFactRemovals();
 
     const written = new Set();
+    const dropped = new Map();
 
     for (const [op, byType] of Object.entries(deltas)) {
       for (const [type, items] of Object.entries(byType)) {
@@ -77,7 +78,19 @@ export default class Deltas {
             written.add(`${type} ${id}`);
           }
         }
+
+        if (op === "del_entity" || op === "unsync_entity") {
+          dropped.set(type, new Set([...(dropped.get(type) ?? []), ...items]));
+        }
       }
+    }
+
+    // The server tells the pairs it knows of that name a row it drops, but the answer to one of
+    // this client's batches can have filed a pair after the server read them. The holders aren't
+    // written: this frame's number would land their pending writes, and a holder from a page can be
+    // older than its stored record. Only the pair leaves the stored set.
+    for (const [type, ids] of dropped) {
+      LocalDatabase.deleteFactsNaming(type, ids, {writeHolders: false});
     }
 
     return written;

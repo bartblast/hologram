@@ -626,6 +626,63 @@ describe("Deltas", () => {
         new Set(),
       );
     });
+
+    // The answer to a batch of this client's can file a pair after the server read the pairs it
+    // tells with this drop, so the frame says nothing of it.
+    describe("a pair naming the row, filed under a row still held", () => {
+      beforeEach(() => {
+        Deltas.apply({
+          put_entity: {
+            [PROJECT]: [{id: "p1", name: "Website", tasks: ["t1", "t2"]}],
+            [TASK]: [
+              {done: false, id: "t1", owners: ["p1"], title: "One"},
+              {done: false, id: "t2", owners: ["p1"], title: "Two"},
+            ],
+          },
+        });
+      });
+
+      it("takes the pair and leaves one naming another row", () => {
+        Deltas.apply({unsync_entity: {[TASK]: ["t1"]}});
+
+        assert.deepEqual(
+          LocalDatabase.baseTargetIds(PROJECT, "tasks", "p1"),
+          new Set(["t2"]),
+        );
+      });
+
+      it("takes the inverse pair when the source leaves", () => {
+        Deltas.apply({unsync_entity: {[PROJECT]: ["p1"]}});
+
+        assert.deepEqual(
+          LocalDatabase.baseTargetIds(TASK, "owners", "t1"),
+          new Set(),
+        );
+      });
+
+      it("takes the pairs of rows a frame both deleted and unsynced", () => {
+        Deltas.apply({
+          del_entity: {[TASK]: ["t1"]},
+          unsync_entity: {[TASK]: ["t2"]},
+        });
+
+        assert.deepEqual(
+          LocalDatabase.baseTargetIds(PROJECT, "tasks", "p1"),
+          new Set(),
+        );
+      });
+
+      // Naming the holder as written would have the frame's number land its pending writes.
+      it("queues the pair for the stored set without writing the holder", () => {
+        const written = Deltas.apply({unsync_entity: {[TASK]: ["t1"]}});
+
+        assert.deepEqual(LocalDatabase.takeStoredFactRemovals(), [
+          {id: "p1", relationship: "tasks", targetIds: ["t1"], type: PROJECT},
+        ]);
+
+        assert.deepEqual(written, new Set([`${TASK} t1`]));
+      });
+    });
   });
 
   describe("apply() - unsync_hashed", () => {

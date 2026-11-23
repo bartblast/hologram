@@ -1698,7 +1698,7 @@ describe("SyncStream", () => {
       eventSource.listeners.synced({data: envelope("all", "Nzc4LjA")});
 
       assert.isTrue(persisting.calledOnce);
-      assert.deepStrictEqual(persisting.firstCall.args, [[], "Nzc4LjA"]);
+      assert.deepStrictEqual(persisting.firstCall.args, [[], "Nzc4LjA", []]);
     });
 
     // The holder's stored record names the row the sweep took, and a reload would read it back.
@@ -1721,7 +1721,34 @@ describe("SyncStream", () => {
       });
 
       sinon.assert.calledOnceWithExactly(reading, written);
-      sinon.assert.calledOnceWithExactly(persisting, records, null);
+      sinon.assert.calledOnceWithExactly(persisting, records, null, []);
+    });
+
+    // A catch-up's marker can sweep a row a stored set names, with no row of its own to write. Only
+    // the tab storing a frame takes what it took out of stored sets, so a tab handed one still has
+    // it queued when it next hears a marker, by which time the pair may be back.
+    it("stores the pairs the marker's sweep took out, and none a relayed frame left", () => {
+      const persisting = sinon.stub(Durability, "persistFrame");
+
+      const removal = (id) => ({
+        id,
+        relationship: "tasks",
+        targetIds: ["t1"],
+        type: "MyApp.Project",
+      });
+
+      const taking = sinon.stub(LocalDatabase, "takeStoredFactRemovals");
+
+      taking.onFirstCall().returns([removal("relayed")]);
+      taking.onSecondCall().returns([removal("swept")]);
+
+      eventSource.listeners.synced({
+        data: JSON.stringify({cursor: null, scope: "all"}),
+      });
+
+      sinon.assert.calledOnceWithExactly(persisting, [], null, [
+        removal("swept"),
+      ]);
     });
 
     it("passes the marker's number on to what it settles", () => {
