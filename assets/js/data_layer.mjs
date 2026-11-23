@@ -709,11 +709,21 @@ export default class DataLayer {
 
     $.isStoreRestored = true;
 
+    if (resumed !== null) {
+      SyncStream.syncCursor = resumed.cursor;
+    }
+
+    // What a Back before the first mount brought with it, now that the place is known. Only then:
+    // filing trims the counts to the cap, and a page's own counts may go past it.
+    if ($.#unfiledCounts.length > 0) {
+      $.#fileCounts($.#unfiledCounts);
+      $.#unfiledCounts = [];
+    }
+
     if (resumed === null) {
       return;
     }
 
-    SyncStream.syncCursor = resumed.cursor;
     Batches.resumeFrom(resumed.seq);
     Batches.adopt(resumed.batches);
 
@@ -754,6 +764,10 @@ export default class DataLayer {
       return;
     }
 
+    $.#fileCounts(entries);
+  }
+
+  static #fileCounts(entries) {
     const isIdentityEnded =
       LocalDatabase.identityEndedPeriod !== null &&
       LocalDatabase.identityEndedPeriod === IdentityTracker.period;

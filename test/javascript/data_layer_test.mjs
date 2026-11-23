@@ -1316,6 +1316,84 @@ describe("DataLayer", () => {
 
         assert.deepStrictEqual(DataLayer.pageCounts(), []);
       });
+
+      // A Back before the first mount restores them while nothing has read the store yet.
+      describe("once the store is read", () => {
+        const restoreWith = (resumed) => {
+          sinon.stub(Durability, "restore").returns(resumed);
+          sinon.stub(Batches, "adopt");
+          sinon.stub(Batches, "flush");
+          sinon.stub(Batches, "resumeFrom");
+          sinon.stub(Tabs, "post");
+          sinon.stub(Tabs, "ready");
+
+          DataLayer.restore();
+        };
+
+        afterEach(() => {
+          SyncStream.syncCursor = null;
+        });
+
+        it("files them when the store held no place", () => {
+          DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+          restoreWith({batches: [], cursor: null, seq: 0});
+
+          assert.deepStrictEqual(LocalDatabase.syncCounts, {[key]: 42});
+        });
+
+        it("files them where there is no store to read", () => {
+          DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+          restoreWith(null);
+
+          assert.deepStrictEqual(LocalDatabase.syncCounts, {[key]: 42});
+        });
+
+        // A place says a fill finished, so a saved number is only older.
+        it("files nothing when the store held a place", () => {
+          DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+          restoreWith({batches: [], cursor: "Nzc4LjA", seq: 0});
+
+          assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+        });
+
+        it("files nothing in a period that ended with somebody else", () => {
+          const originalPeriod = IdentityTracker.period;
+
+          DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+          IdentityTracker.period = "period-1";
+          LocalDatabase.identityEndedPeriod = "period-1";
+
+          try {
+            restoreWith({batches: [], cursor: null, seq: 0});
+
+            assert.deepStrictEqual(LocalDatabase.syncCounts, {});
+          } finally {
+            IdentityTracker.period = originalPeriod;
+            LocalDatabase.identityEndedPeriod = null;
+          }
+        });
+
+        // Filing trims to the cap, and a page's own counts are kept past it.
+        it("leaves the page's own counts alone when none wait", () => {
+          const trimming = sinon.spy(LocalDatabase, "restoreCountEntries");
+
+          restoreWith({batches: [], cursor: null, seq: 0});
+
+          sinon.assert.notCalled(trimming);
+        });
+
+        it("holds them no longer", () => {
+          DataLayer.restoreCounts([[key, 42, [TASK]]]);
+
+          restoreWith({batches: [], cursor: "Nzc4LjA", seq: 0});
+
+          assert.deepStrictEqual(DataLayer.pageCounts(), []);
+        });
+      });
     });
 
     // A place says a fill finished, so the rows are whole and a saved number is only older.

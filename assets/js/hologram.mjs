@@ -198,12 +198,23 @@ export default class Hologram {
 
   static #pageModule = null;
   static #pageParams = null;
-  static #pendingJsInteropActions = [];
+  // Made public to make tests easier
+  static pendingJsInteropActions = [];
 
   // The popstates whose handler has not advanced the epoch yet. Until it does, the browser is on
   // the entry it went to while the history id still names the page being left, and nothing else
   // says a navigation is under way (see #isNavigationUnderWay).
   static #popstatesDeciding = 0;
+
+  // Moved only by a popstate, since only a popstate changes the entry the browser is on. The latest
+  // one is the one whose page the tab should end up showing.
+  static #popstateCount = 0;
+
+  // Made public to make tests easier
+  //
+  // Whether the stored ETS tables have been read. Tables saved before that would be the empty ones,
+  // written over the stored ones.
+  static isEtsRestored = false;
   static #registeredPageModules = new Set();
 
   // For each snapshot restore in flight, the chunks it waits for (see #loadSnapshotChunks).
@@ -1181,23 +1192,7 @@ export default class Hologram {
       globalThis.Hologram.initialPageDigest,
     );
 
-    // Nor does it ingest the data layer's part of the mount data, which belongs to the document
-    // rather than to the state: who the document was rendered for and the rows its render read. A
-    // new document's database starts with neither, so without them the restored page would act
-    // as nobody - its queries and checks answered for an anonymous session, its writes made by
-    // nobody - and read none of the rows the server just sent.
-    Hologram.dataLayer?.ingestMountData({
-      actorEntityId: $.#bootData.actorEntityId,
-      actorUserId: $.#bootData.actorUserId,
-      identityPeriod: IdentityTracker.documentPeriod,
-      syncCountTypes: $.#bootData.syncCountTypes,
-      syncCounts: $.#bootData.syncCounts,
-      syncRows: $.#bootData.syncRows,
-    });
-
-    // The data layer's boot may have read the actor through the whole mount data, which only a
-    // mount that reads it lets go of.
-    $.#mountData = null;
+    $.#ingestBootData();
   }
 
   // Made public to make tests easier
@@ -1205,61 +1200,65 @@ export default class Hologram {
   // Takes in the client ETS tables a document stored on leaving, when they were stored for the
   // identity this document was rendered for (see #adoptStoredEts).
   static async restoreEts() {
-    const storageKey = $.#ETS_STORAGE_KEY;
+    await $.#readStoredEts();
 
-    // Try OPFS first
-    try {
-      const root = await navigator.storage.getDirectory();
-      const fileHandle = await root.getFileHandle(storageKey, {create: false});
-      const file = await fileHandle.getFile();
-      const serialized = await file.text();
-      $.#adoptStoredEts(Deserializer.deserialize(serialized));
-      return;
-    } catch {
-      // Fall through to session storage
-    }
-
-    // Fallback to session storage if OPFS fails
-    const serialized = sessionStorage.getItem(storageKey);
-
-    if (serialized) {
-      try {
-        $.#adoptStoredEts(Deserializer.deserialize(serialized));
-      } catch (error) {
-        console.error("Failed to restore ETS from session storage:", error);
-        ERTS.ets = {}; // Reset to empty on deserialization failure
-      }
-    } else {
-      // No stored state found, keep current (likely empty) state
-    }
+    $.isEtsRestored = true;
   }
 
   static run() {
-    Hologram.#onReady(async () => {
-      if (!Hologram.#isInitiated) {
-        await Hologram.#init();
-      }
+    Hologram.#onReady(() => $.startDocument(() => Hologram.#init()));
+  }
 
-      // The document's own page bundle and chunks are what its mount waits for. Their script
-      // elements are in the document the server sent, so they are not requested here.
-      MountGate.require($.#initialScriptDigests());
+  // Made public to make tests easier
+  static async startDocument(init) {
+    // Read before the first await: the popstate listener goes up during the init.
+    const epoch = Math.max($.domEpoch, $.registryEpoch);
 
-      // A snapshot can need more chunks than the server rendered the page with. It is restored
-      // once they are in. When one cannot be had the snapshot is passed over, and the page mounts
-      // from the state the server has just rendered, which the document carries.
-      const pageSnapshot = $.#documentSnapshot;
+    if (!Hologram.#isInitiated) {
+      await init();
+    }
 
-      const isRestorable =
-        pageSnapshot !== null && (await $.#loadSnapshotChunks(pageSnapshot));
+    const pageSnapshot = $.#documentSnapshot;
+    $.#documentSnapshot = null;
 
-      $.#documentSnapshot = null;
+    await $.mountDocument(pageSnapshot, epoch);
+  }
 
-      if (isRestorable) {
-        $.restoreDocumentSnapshot(pageSnapshot);
-      }
+  // Made public to make tests easier
+  //
+  // The document's first mount. A snapshot can need more chunks than the server rendered the page
+  // with. It is restored once they are in. When one cannot be had the snapshot is passed over, and
+  // the page mounts from the state the server has just rendered, which the document carries.
+  static async mountDocument(pageSnapshot, epoch) {
+    // A Back or Forward that came in meanwhile decides what the document shows. Restoring this
+    // entry's snapshot would put its page under the other entry's URL and history id. Compared by
+    // epoch rather than navigation count, since a jump to a #fragment counts as a navigation and
+    // leaves this mount to run.
+    const isTakenOver = () =>
+      $.#popstatesDeciding > 0 ||
+      Math.max($.domEpoch, $.registryEpoch) !== epoch;
 
-      Hologram.#mountWhenReady(false);
-    });
+    // What the mount waits for may be that popstate's by now.
+    if (isTakenOver()) {
+      return;
+    }
+
+    // The document's own page bundle and chunks are what its mount waits for. Their script
+    // elements are in the document the server sent, so they are not requested here.
+    MountGate.require($.#initialScriptDigests());
+
+    const isRestorable =
+      pageSnapshot !== null && (await $.#loadSnapshotChunks(pageSnapshot));
+
+    if (isTakenOver()) {
+      return;
+    }
+
+    if (isRestorable) {
+      $.restoreDocumentSnapshot(pageSnapshot);
+    }
+
+    Hologram.#mountWhenReady(false);
   }
 
   // Made public to make tests easier
@@ -1743,8 +1742,8 @@ export default class Hologram {
   // page. A dispatch made once the runtime is up needs no buffer - it carries the epoch of the
   // page that made it and waits on that instead.
   static #enqueuePendingJsInteropActions() {
-    const actions = Hologram.#pendingJsInteropActions;
-    Hologram.#pendingJsInteropActions = [];
+    const actions = Hologram.pendingJsInteropActions;
+    Hologram.pendingJsInteropActions = [];
 
     actions.forEach(([actionName, target, params]) => {
       const action = Type.actionStruct({
@@ -1919,7 +1918,10 @@ export default class Hologram {
   // and may not finish before the document goes away.
   static handleBeforeunloadEvent() {
     $.#savePageSnapshot(true);
-    $.saveEts();
+
+    if ($.isEtsRestored) {
+      $.saveEts();
+    }
   }
 
   // Made public to make tests easier
@@ -1968,6 +1970,8 @@ export default class Hologram {
 
     $.#popstatesDeciding += 1;
 
+    const popstate = ++$.#popstateCount;
+
     try {
       await $.#savePageSnapshot();
 
@@ -1984,12 +1988,24 @@ export default class Hologram {
         (!$.#isSnapshotOfCurrentIdentity(pageSnapshot) ||
           (await $.#isSnapshotOutdated(pageSnapshot)));
 
+      // The reads above can finish in any order, and the browser is on a later popstate's entry.
+      if (popstate !== $.#popstateCount) {
+        return;
+      }
+
       // What the registry answers for is about to change either way: a restore swaps it for the
       // snapshot's, a snapshot that cannot be restored gives way to the page the server renders,
       // and with no snapshot the document is loaded afresh. So the epoch advances here -
       // otherwise an action armed before this point would settle against state that has been
       // replaced underneath it.
       $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
+    } catch (error) {
+      // The document's first mount stepped aside for this popstate (see mountDocument).
+      if (Hologram.virtualDocument === null && popstate === $.#popstateCount) {
+        Hologram.reloadBrowserLocation();
+      }
+
+      throw error;
     } finally {
       $.#popstatesDeciding -= 1;
     }
@@ -2005,7 +2021,9 @@ export default class Hologram {
     // answers - neither the answer nor the failure of a superseded wait says anything about the
     // navigation now in flight.
     const epoch = $.registryEpoch;
-    const isSuperseded = () => Math.max($.domEpoch, $.registryEpoch) !== epoch;
+    const isSuperseded = () =>
+      Math.max($.domEpoch, $.registryEpoch) !== epoch ||
+      popstate !== $.#popstateCount;
 
     // The history id stays the page being left's until the registry holds the page of the entry
     // the browser went to: a snapshot saved meanwhile is of the page still on screen, and belongs
@@ -2076,6 +2094,19 @@ export default class Hologram {
       // the period that lasts now, whichever document took it.
       $.#restorePageSnapshot(pageSnapshot, IdentityTracker.period);
 
+      // What the document's scripts dispatched before its first mount was for its own page.
+      // Emptied in the shim's array too, which the init may have yet to take over.
+      $.pendingJsInteropActions = [];
+      globalThis.Hologram._pendingJsInteropActions?.splice(0);
+
+      // A document that hasn't mounted yet learns who it is for from its boot data. The check above
+      // means its first period still lasts: no snapshot passes it once that period has ended,
+      // before this document has saved one of its own. Before the counts, which the ingest would
+      // otherwise let go of.
+      if ($.#isFirstMountPending()) {
+        $.#ingestBootData();
+      }
+
       Hologram.dataLayer?.restoreCounts(pageSnapshot.carriedCounts);
 
       $.#mountWhenReady(isPageModuleRegistered);
@@ -2087,31 +2118,48 @@ export default class Hologram {
       return mount(true, []);
     }
 
-    await Client.fetchPageDigest(
-      pageModule,
-      (pageDigest) => {
-        // The scripts required and the mount waiting are the later navigation's by now.
-        if (isSuperseded()) {
-          return null;
-        }
+    try {
+      await Client.fetchPageDigest(
+        pageModule,
+        (pageDigest) => {
+          // The scripts required and the mount waiting are the later navigation's by now.
+          if (isSuperseded()) {
+            return null;
+          }
 
-        LiveReload.recordPageBundle(pageModule, pageDigest);
+          LiveReload.recordPageBundle(pageModule, pageDigest);
 
-        MountGate.require([pageDigest]);
-        $.#requestPageBundle(pageModule, pageDigest);
+          MountGate.require([pageDigest]);
+          $.#requestPageBundle(pageModule, pageDigest);
 
-        return mount(false, [pageDigest]);
-      },
-      (_resp) => {
-        // The mount that would have closed this transition is never going to run.
-        $.deadEpochs.add(epoch);
+          return mount(false, [pageDigest]);
+        },
+        (_resp) => {
+          // This popstate cancelled the first mount, so a document that hasn't rendered would stay
+          // unmounted. Its socket may simply not be open yet.
+          if (Hologram.virtualDocument === null) {
+            if (!isSuperseded()) {
+              Hologram.reloadBrowserLocation();
+            }
 
-        throw new HologramRuntimeError(
-          "Failed to fetch page bundle path for: " +
-            Interpreter.inspect(pageModule),
-        );
-      },
-    );
+            return;
+          }
+
+          // The mount that would have closed this transition is never going to run.
+          $.deadEpochs.add(epoch);
+
+          throw new HologramRuntimeError(
+            "Failed to fetch page bundle path for: " +
+              Interpreter.inspect(pageModule),
+          );
+        },
+      );
+    } catch (error) {
+      // The failure callback above dealt with it: the request rejects as well.
+      if (Hologram.virtualDocument !== null) {
+        throw error;
+      }
+    }
   }
 
   // Hands a page to the browser: as a new history entry, or in place of the entry the tab is on
@@ -2135,6 +2183,14 @@ export default class Hologram {
   static #handleScriptFailure(digest) {
     if (MountGate.requires(digest)) {
       MountGate.cancel();
+
+      // A popstate cancelled the first mount for this script, so a document that hasn't rendered
+      // would stay unmounted. Its own scripts never come through here, so this can't reload forever.
+      if (Hologram.virtualDocument === null) {
+        Hologram.reloadBrowserLocation();
+        return true;
+      }
+
       $.deadEpochs.add(Math.max($.domEpoch, $.registryEpoch));
 
       return false;
@@ -2270,7 +2326,7 @@ export default class Hologram {
 
     console.inspect = (term) => console.log(Interpreter.inspect(term));
 
-    $.#pendingJsInteropActions = globalThis.Hologram._pendingJsInteropActions;
+    $.pendingJsInteropActions = globalThis.Hologram._pendingJsInteropActions;
     globalThis.Hologram.dispatchAction = $.dispatchAction;
 
     delete globalThis.Hologram._pendingJsInteropActions;
@@ -2437,6 +2493,13 @@ export default class Hologram {
     MountGate.cancel();
     MountGate.require([]);
 
+    // A document that hasn't rendered has no tree to patch a fetched page onto, and its memory can
+    // already hold rows of the user the snapshot was for. The server renders the entry afresh.
+    if (Hologram.virtualDocument === null) {
+      Hologram.reloadBrowserLocation();
+      return;
+    }
+
     // What the browser shows for the entry already, query string and fragment included.
     const {hash, pathname, search} = window.location;
     const pagePath = `${pathname}${search}${hash}`;
@@ -2477,6 +2540,35 @@ export default class Hologram {
 
       throw error;
     }
+  }
+
+  // The data layer's part of the mount data, for a document whose first mount restores a snapshot
+  // and so reads no mount data. It belongs to the document rather than to the state: who the
+  // document was rendered for and the rows its render read. A new document's database starts with
+  // neither, so without them the restored page would act as nobody - its queries and checks
+  // answered for an anonymous session, its writes made by nobody, and its stored rows cleared as
+  // somebody else's - and read none of the rows the server just sent.
+  static #ingestBootData() {
+    Hologram.dataLayer?.ingestMountData({
+      actorEntityId: $.#bootData.actorEntityId,
+      actorUserId: $.#bootData.actorUserId,
+      identityPeriod: IdentityTracker.documentPeriod,
+      syncCountTypes: $.#bootData.syncCountTypes,
+      syncCounts: $.#bootData.syncCounts,
+      syncRows: $.#bootData.syncRows,
+    });
+
+    // The data layer's boot may have read the actor through the whole mount data, which only a
+    // mount that reads it lets go of.
+    $.#mountData = null;
+  }
+
+  // Whether this document's data layer is still waiting for its first mount, which is what reads
+  // the store. Only a document with a boot data block has one to take in.
+  static #isFirstMountPending() {
+    return (
+      $.#bootData !== null && Hologram.dataLayer?.isStoreRestored === false
+    );
   }
 
   // A loaded document has no payload, so it carries the same values in its boot data block.
@@ -2797,7 +2889,7 @@ export default class Hologram {
     // page is being left too. The buffer predates stamping - a document load fills it before the
     // runtime exists - so it is the one queue the epoch cannot speak for, and it is emptied by
     // hand.
-    $.#pendingJsInteropActions = [];
+    $.pendingJsInteropActions = [];
 
     // This line is the last instant that is still only the page being left - nothing of the
     // destination is on screen, none of its listeners are attached, none of its scripts have run
@@ -3013,6 +3105,36 @@ export default class Hologram {
 
   static #registerPageModule(pageModule) {
     $.#registeredPageModules.add(pageModule.value);
+  }
+
+  static async #readStoredEts() {
+    const storageKey = $.#ETS_STORAGE_KEY;
+
+    // Try OPFS first
+    try {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle(storageKey, {create: false});
+      const file = await fileHandle.getFile();
+      const serialized = await file.text();
+      $.#adoptStoredEts(Deserializer.deserialize(serialized));
+      return;
+    } catch {
+      // Fall through to session storage
+    }
+
+    // Fallback to session storage if OPFS fails
+    const serialized = sessionStorage.getItem(storageKey);
+
+    if (serialized) {
+      try {
+        $.#adoptStoredEts(Deserializer.deserialize(serialized));
+      } catch (error) {
+        console.error("Failed to restore ETS from session storage:", error);
+        ERTS.ets = {}; // Reset to empty on deserialization failure
+      }
+    } else {
+      // No stored state found, keep current (likely empty) state
+    }
   }
 
   // Fetches a page's own code, which announces itself when it has run (see ScriptRegistry). A
