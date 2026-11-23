@@ -177,6 +177,28 @@ defmodule Hologram.Compiler do
         }
 
   @typedoc """
+  What the data layer reads of the MFAs a walk of protocol implementations lists (see
+  `read_impl_mfas/3`): the atoms they spell, the modules they name, the queries they write in one
+  piece, and whether they check permissions or read the session user.
+  """
+  @type impl_read :: %{
+          atoms: MapSet.t(atom),
+          checks_permissions?: boolean,
+          names: MapSet.t(module),
+          query_chains: [QueryChains.t()],
+          reads_session_user?: boolean
+        }
+
+  @typedoc """
+  The walks of each page's protocol implementations with the types it holds through rows (see
+  `fold_held_impls/5`), by page and by the held types of the walk: what it read, and the modules it
+  reached and named, an edit of which makes it stale.
+  """
+  @type held_impl_walks :: %{
+          module => %{MapSet.t(module) => %{modules: MapSet.t(module), read: impl_read}}
+        }
+
+  @typedoc """
   What the client's data layer is compiled with (see `build_sync_constants/2`).
   """
   @type sync_constants :: %{
@@ -897,6 +919,114 @@ defmodule Hologram.Compiler do
 
       {page_module, kept_reach}
     end)
+  end
+
+  @doc """
+  Returns what the data layer reads of each given list of MFAs a walk of protocol implementations
+  listed (see `CallGraph.list_page_impl_mfas/5`), by the rules `build_kept_page_reach/4` reads a
+  page's implementations with: the modules they name are the ones they spell, minus an
+  implementation's own type, plus the roots of the queries they write in one piece.
+
+  Give it the call graph BEFORE manually ported MFAs are removed, which says which of the MFAs call
+  a permission function (see `pages_checking_permissions_in_impls/2`).
+  """
+  @spec read_impl_mfas(%{key => [mfa]}, CallGraph.t(), PLT.t()) :: %{key => impl_read}
+        when key: term
+  def read_impl_mfas(mfas_by_key, _call_graph, _ir_plt) when mfas_by_key == %{}, do: %{}
+
+  def read_impl_mfas(mfas_by_key, call_graph, ir_plt) do
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+    callers = CallGraph.list_callers(call_graph, @permission_mfas)
+
+    read_by_mfa =
+      mfas_by_key
+      |> Enum.map(fn {key, mfas} -> {key, %{mfas: mfas}} end)
+      |> read_by_mfa(module_info_plt, ir_plt)
+
+    Map.new(mfas_by_key, fn {key, mfas} ->
+      reads =
+        mfas
+        |> Enum.map(&Map.get(read_by_mfa, &1))
+        |> Enum.reject(&is_nil/1)
+
+      names = impl_named_modules(reads)
+
+      components =
+        mfas
+        |> MapSet.new(fn {module, _function, _arity} -> module end)
+        |> MapSet.union(names)
+        |> reached_components(module_info_plt)
+
+      read = %{
+        atoms: Enum.reduce(reads, MapSet.new(), &MapSet.union(&2, &1.atoms)),
+        checks_permissions?: Enum.any?(mfas, &MapSet.member?(callers, &1)),
+        names: names,
+        query_chains:
+          reads
+          |> Enum.flat_map(& &1.chains)
+          |> Enum.uniq(),
+        reads_session_user?: Enum.any?(components, &reads_session_user?/1)
+      }
+
+      {key, read}
+    end)
+  end
+
+  @doc """
+  Folds into each page's kept reach what the protocol implementations of the types it holds through
+  rows read, so that the synced types, the page types, the permission check and the query check
+  count that code like the page's own. Returns the folded reach and the walks it took.
+
+  A page holds the types its code reaches by name, a relationship's target included, which the
+  page's own walk of the implementations doesn't count (see `CallGraph.list_page_impl_mfas/5`). So
+  the page is walked again with them as extra types, by the same rules: an implementation is
+  entered per protocol function the code reaches, and only for a type the page can hold. A type
+  only rules read isn't held: no code reads its rows by a name the build sees, and rules run with no
+  protocol dispatch. Nor is a type no session may read, since no row of it reaches a browser.
+
+  What an implementation names can bring more types, whose implementations can name more, so it
+  repeats until no page's held types change. Each read goes onto the page's reach as given, so a
+  reach kept from before folding holds no name of an implementation or relationship since removed.
+
+  A walk among the given kept ones, by page and held types, is reused. An app that defines no
+  implementation for a struct type walks nothing and reads no graph.
+
+  Give it the graph without the manually ported functions, as `CallGraph.list_page_impl_mfas/5`
+  asks, and the call graph before they are removed (see `read_impl_mfas/3`).
+  """
+  @spec fold_held_impls(
+          %{module => kept_page_reach},
+          held_impl_walks,
+          CallGraph.t() | nil,
+          CallGraph.t(),
+          PLT.t()
+        ) :: {%{module => kept_page_reach}, held_impl_walks}
+  def fold_held_impls(reach_by_page, kept_walks, split_graph, call_graph, ir_plt) do
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+
+    if app_struct_impl?(module_info_plt) do
+      analyses = PLT.start()
+
+      try do
+        CallGraph.with_shared_graph(split_graph, fn read_graph ->
+          context = %{
+            analyses: analyses,
+            call_graph: call_graph,
+            ir_plt: ir_plt,
+            kept_walks: kept_walks,
+            module_info_plt: module_info_plt,
+            read_graph: read_graph,
+            seeds: CallGraph.page_impl_seeds(read_graph.(), module_info_plt)
+          }
+
+          fold_held_impl_rounds(reach_by_page, reach_by_page, %{}, context)
+        end)
+      after
+        PLT.stop(analyses)
+      end
+    else
+      {reach_by_page, %{}}
+    end
   end
 
   @doc """
@@ -3266,6 +3396,119 @@ defmodule Hologram.Compiler do
   end
 
   defp collect_atoms(_ir, acc), do: acc
+
+  # Whether an app module implements a protocol for a struct type.
+  defp app_struct_impl?(module_info_plt) do
+    elixir_lib_dir = elixir_lib_dir()
+    built_in_types = MapSet.new(CallGraph.built_in_protocol_types())
+
+    module_info_plt
+    |> PLT.keys(%{protocol_implementation?: true})
+    |> Enum.any?(fn impl ->
+      not MapSet.member?(built_in_types, implementation_type(impl, module_info_plt)) and
+        app_module?(impl, elixir_lib_dir)
+    end)
+  end
+
+  # Walks the pages whose held types are new, and puts what each walk read on the page's reach as
+  # given to fold_held_impls/5, until no page's held types change. A later walk of a page holds more
+  # types, so what it read covers the earlier ones.
+  defp fold_held_impl_rounds(base_reach, reach, walks, context) do
+    to_walk =
+      for {page_module, types} <- held_types_by_page(reach, context.module_info_plt),
+          MapSet.size(types) > 0,
+          not is_map_key(Map.get(walks, page_module, %{}), types) do
+        {page_module, types}
+      end
+
+    if to_walk == [] do
+      {reach, walks}
+    else
+      new_walks = walk_held_impls(to_walk, context)
+
+      new_reach =
+        Enum.reduce(new_walks, reach, fn {page_module, _types, walk}, acc ->
+          Map.put(acc, page_module, put_impl_read(walk.read, base_reach[page_module]))
+        end)
+
+      all_walks =
+        Enum.reduce(new_walks, walks, fn {page_module, types, walk}, acc ->
+          Map.update(acc, page_module, %{types => walk}, &Map.put(&1, types, walk))
+        end)
+
+      fold_held_impl_rounds(base_reach, new_reach, all_walks, context)
+    end
+  end
+
+  # The types each page can hold rows of: the ones it reaches by name, without the ones only rules
+  # read and the ones no session may read, of which no row reaches a browser.
+  defp held_types_by_page(reach_by_page, module_info_plt) do
+    %{page_types: page_types} =
+      reach_by_page
+      |> Map.new(fn {page_module, reach} ->
+        {page_module, %{reach | checks_permissions?: false}}
+      end)
+      |> build_sync_constants(module_info_plt)
+
+    Map.new(reach_by_page, fn {page_module, _reach} ->
+      types =
+        page_types
+        |> Map.get(page_module, [])
+        |> Enum.filter(&Policy.readable_type?/1)
+        |> MapSet.new()
+
+      {page_module, types}
+    end)
+  end
+
+  # The walk of each given page with its held types as extra types: a kept one, or one taken now.
+  defp walk_held_impls(to_walk, context) do
+    {kept, missing} =
+      Enum.split_with(to_walk, fn {page_module, types} ->
+        context.kept_walks
+        |> Map.get(page_module, %{})
+        |> is_map_key(types)
+      end)
+
+    mfas_by_key =
+      missing
+      |> TaskUtils.map_concurrently(fn {page_module, types} = key ->
+        seeds = %{context.seeds | types: MapSet.union(context.seeds.types, types)}
+
+        mfas =
+          CallGraph.list_page_impl_mfas(
+            context.read_graph.(),
+            page_module,
+            context.analyses,
+            context.module_info_plt,
+            seeds
+          )
+
+        {key, mfas}
+      end)
+      |> Map.new()
+
+    reads = read_impl_mfas(mfas_by_key, context.call_graph, context.ir_plt)
+
+    new_walks =
+      Enum.map(mfas_by_key, fn {{page_module, types} = key, mfas} ->
+        read = Map.fetch!(reads, key)
+
+        modules =
+          mfas
+          |> MapSet.new(fn {module, _function, _arity} -> module end)
+          |> MapSet.union(read.names)
+
+        {page_module, types, %{modules: modules, read: read}}
+      end)
+
+    kept_walks =
+      Enum.map(kept, fn {page_module, types} ->
+        {page_module, types, context.kept_walks[page_module][types]}
+      end)
+
+    kept_walks ++ new_walks
+  end
 
   # The IR of the callers the module info PLT holds, built into the IR PLT when it lacks it. A graph
   # without a module info PLT (a test's) has nothing to build from, and the IR PLT is read as it is.
@@ -6194,6 +6437,17 @@ defmodule Hologram.Compiler do
 
   defp declared_roles_description(role_names) do
     "declared roles are: #{Enum.map_join(role_names, ", ", &inspect/1)}"
+  end
+
+  defp put_impl_read(read, reach) do
+    %{
+      reach
+      | atoms: MapSet.union(reach.atoms, read.atoms),
+        checks_permissions?: reach.checks_permissions? or read.checks_permissions?,
+        modules: MapSet.union(reach.modules, read.names),
+        query_chains: Enum.uniq(reach.query_chains ++ read.query_chains),
+        reads_session_user?: reach.reads_session_user? or read.reads_session_user?
+    }
   end
 
   defp put_page_user_type(entity_types, user_entity, %{reads_session_user?: true})

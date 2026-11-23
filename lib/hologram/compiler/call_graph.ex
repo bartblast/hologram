@@ -1444,65 +1444,6 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns what the protocol implementations of each of the given struct types reach, sorted, for the
-  types with an implementation of a client protocol (see `list_client_protocols/4`). A type with
-  none is not among the keys, even when a struct in one of its field defaults has one, so give it
-  every struct type the values in question can hold.
-
-  The walk is the one a type's chunks are listed with (see `list_chunk_mfas_by_type/4`), keeping the
-  runtime's MFAs, since what they name counts as well. It starts from the type's struct functions
-  too, since a struct held in a field's default can reach an implementation, and leaves the type's
-  own out of the result. Reads the graph without the manually ported functions, whose Elixir bodies
-  don't run on the client.
-
-  Give it a graph that holds the chunks' code (see `build_chunk_reach/4`) and the runtime's MFAs:
-  without them, the protocols only the runtime dispatches are no client protocols.
-  """
-  @spec list_struct_impl_mfas(t, [module], [module], [module]) :: %{module => [mfa]}
-  def list_struct_impl_mfas(_call_graph, [], _pages, _components), do: %{}
-
-  def list_struct_impl_mfas(
-        %{pid: pid, module_info_plt: module_info_plt},
-        types,
-        pages,
-        components
-      ) do
-    client_protocols =
-      read_graph(pid, fn graph ->
-        graph
-        |> Digraph.remove_vertices(@manually_ported_elixir_mfas)
-        |> list_client_protocols(pages, components, module_info_plt)
-      end)
-
-    entries_by_type =
-      client_protocols
-      |> list_chunk_entries(module_info_plt)
-      |> Map.take(types)
-      |> Map.filter(fn {type, entries} ->
-        Enum.any?(entries, &(not match?({^type, :__struct__, _arity}, &1)))
-      end)
-
-    walk = %{
-      client_protocols: client_protocols,
-      module_info_plt: module_info_plt,
-      runtime_mfa_set: MapSet.new()
-    }
-
-    read_graph(pid, fn graph ->
-      client_graph = Digraph.remove_vertices(graph, @manually_ported_elixir_mfas)
-
-      Map.new(entries_by_type, fn {type, entries} ->
-        mfas =
-          client_graph
-          |> list_chunk_mfas(type, entries, walk)
-          |> Enum.reject(&match?({^type, :__struct__, _arity}, &1))
-
-        {type, mfas}
-      end)
-    end)
-  end
-
-  @doc """
   Loads the graph, its modules and its reach from the given dump file and returns :ok, or returns
   :error and leaves the call graph as it is when the dump was written with another dump version (see
   dump/2), such as one written before the version existed.
