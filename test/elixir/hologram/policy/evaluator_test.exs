@@ -1105,8 +1105,9 @@ defmodule Hologram.Policy.EvaluatorTest do
 
     test "answers a role check no for a visitor without asking" do
       rule = exact_rule([{:has_role, {[:member], [:channel]}}])
+      checker = fn _requirement, _entity, _actor -> flunk("asked the checker") end
 
-      refute rule_matches?(rule, %Module28{}, %Module28{}, nil, &grant/3)
+      refute rule_matches?(rule, %Module28{}, %Module28{}, nil, checker)
     end
 
     test "asks an operation check about the new row" do
