@@ -942,6 +942,22 @@ defmodule Hologram.Migration.ValueTest do
                  "module - put the import at the top of the module"
     end
 
+    test "accepts a body reading one argument twice" do
+      module =
+        compile_migration(
+          "20260813091522",
+          op_with("fn title -> coalesce(title, title) end", "")
+        )
+
+      assert [%{opts: [backfill: %Value{args: [:title], term: {:coalesce, _terms}}]}] =
+               module.__hologram_migration__().ops
+    end
+
+    test "still names an unlisted field beside an argument read twice" do
+      assert refusal("fn title -> coalesce(name, title, title) end") =~
+               "a backfill fn reads name, which isn't among its arguments"
+    end
+
     test "compares a bare pipe target's import too" do
       body = """
       change_entity MyApp.Trip do

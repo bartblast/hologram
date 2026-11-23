@@ -1179,6 +1179,7 @@ defmodule Hologram.Migration.Value do
 
   # A term reading nothing of the row is a constant, and a name that isn't an argument, or an
   # argument pinned, would read the surrounding code.
+  # A body can read a field more than once, and list subtraction takes away only one copy.
   defp validate_fn_term!(term, inner, scope) do
     {names, values} = fn_reads(term)
 
@@ -1186,7 +1187,7 @@ defmodule Hologram.Migration.Value do
 
     if names == [], do: refuse_constant_fn(inner, scope)
 
-    case names -- scope.args do
+    case Enum.uniq(names) -- scope.args do
       [] ->
         :ok
 
