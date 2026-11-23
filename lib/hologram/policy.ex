@@ -1580,19 +1580,26 @@ defmodule Hologram.Policy do
     end)
   end
 
-  # The given clauses without those reading the row after the change, which no row answers until
-  # there is a change: each counts as holding. An alternative left with nothing holds, and so does
-  # its disjunction. A quantifier goes whole, since dropping a clause inside a none would narrow it
+  # The given clauses, nested in the given number of quantifiers, without those reading the row
+  # after the change, which no row answers until there is a change: each counts as holding. An
+  # alternative left with nothing holds, and so does its disjunction. An any over a stored set keeps
+  # the set, since no change can pass on an empty one, and what's left of its condition. Any other
+  # quantifier reading that row goes whole, since dropping a clause inside a none would narrow it
   # the wrong way.
-  defp planned_clauses(clauses) do
+  defp planned_clauses(clauses, depth \\ 0) do
     Enum.flat_map(clauses, fn
       {:or, alternatives} ->
-        planned = Enum.map(alternatives, &planned_clauses/1)
+        planned = Enum.map(alternatives, &planned_clauses(&1, depth))
 
         if [] in planned, do: [], else: [{:or, planned}]
 
+      {:any, {source, inner}} = clause ->
+        if new_row_name?(source, depth),
+          do: [],
+          else: [put_elem(clause, 1, {source, planned_clauses(inner, depth + 1)})]
+
       clause ->
-        if reads_new_row?([clause], 0), do: [], else: [clause]
+        if reads_new_row?([clause], depth), do: [], else: [clause]
     end)
   end
 

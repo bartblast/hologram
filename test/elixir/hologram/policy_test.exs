@@ -42,6 +42,7 @@ defmodule Hologram.PolicyTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Entity.Derived
   alias Hologram.MisuseError
+  alias Hologram.Policy.Evaluator
   alias Hologram.PolicyTest.HeldBoard
   alias Hologram.PolicyTest.HeldTask
   alias Hologram.PolicyTest.ServerOnlyReport
@@ -837,6 +838,65 @@ defmodule Hologram.PolicyTest do
 
       assert [%{exact: %{predicates: [{:none, {[:tags], _clauses}}]}, predicates: []}] =
                build(NewRowFixture5)[:update]
+    end
+
+    test "keeps an any's stored source when its condition reads the new row" do
+      defmodule NewRowFixture20 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: any(tag <- tags, tag.level > new(priority))
+      end
+
+      assert [
+               %{exact: %{predicates: [{:any, {[:tags], [_clause]}}]}, predicates: predicates} =
+                 rule
+             ] =
+               build(NewRowFixture20)[:update]
+
+      assert predicates == [{:any, {[:tags], []}}]
+
+      refute Evaluator.rule_matches?(
+               rule,
+               struct(NewRowFixture20),
+               nil,
+               fn _requirement, _entity, _actor_user_id -> [] end
+             )
+    end
+
+    test "keeps the clauses of an any that read only the stored rows" do
+      defmodule NewRowFixture21 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: any(tag <- tags, tag.level > 1 and tag.level > new(priority))
+      end
+
+      assert [%{predicates: [{:any, {[:tags], [{:level, :>, 1}]}}]}] =
+               build(NewRowFixture21)[:update]
+    end
+
+    test "counts an alternative of an any reading the new row as holding" do
+      defmodule NewRowFixture22 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: any(tag <- tags, tag.level > 1 or tag.level > new(priority))
+      end
+
+      assert [%{predicates: [{:any, {[:tags], []}}]}] = build(NewRowFixture22)[:update]
     end
 
     test "drops a quantifier over a source on the new row" do
