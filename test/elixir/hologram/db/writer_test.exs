@@ -1080,6 +1080,28 @@ defmodule Hologram.DB.WriterTest do
       end
     end
 
+    test "moves the timestamp a rule reads for a write that admits a value" do
+      user = create_user("marker@example.com")
+      task = create_changed_task()
+      Process.sleep(2)
+
+      assert as_user(user, fn -> update(put_attribute(task, :mark, "ok")) end) == :ok
+    end
+
+    test "leaves the timestamp a rule reads as stored when no value is admitted" do
+      user = create_user("invalid_marker@example.com")
+      task = create_changed_task()
+      Process.sleep(2)
+
+      expected_msg =
+        uncovered_message(task, :mark) <>
+          " (the value given for :mark is invalid, so its rule read the stored value)"
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn -> update(put_attribute(task, :mark, "too long")) end)
+      end
+    end
+
     test "reads a field the change doesn't touch as stored" do
       user = create_user("noter@example.com")
       archived = create_changed_project(true)

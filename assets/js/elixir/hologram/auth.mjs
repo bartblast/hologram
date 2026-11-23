@@ -1823,6 +1823,22 @@ function hasOtherCalendar(value, type) {
   );
 }
 
+// Whether a date's year is past what a number holds exactly, so the browser's validator can refuse
+// a date the server accepts.
+function hasInexactYear(value, type) {
+  if ((type !== "date" && type !== "datetime") || !Type.isMap(value)) {
+    return false;
+  }
+
+  const year = value.data[Type.encodeMapKey(Type.atom("year"))]?.[1];
+
+  return (
+    year !== undefined &&
+    Type.isInteger(year) &&
+    !Number.isSafeInteger(Number(year.value))
+  );
+}
+
 // Whether a validation reason is one both tiers give alike. A format goes through two regex engines,
 // and a bound on a date past what a JavaScript Date holds compares nothing here.
 function isSureRefusal(reason) {
@@ -1880,6 +1896,7 @@ function rowAfterChange(entityType, entity, changes) {
   }
 
   const boxed = {...entity, data};
+  const {attributes} = Model.entry(entityType);
 
   const change = {
     builtRow: null,
@@ -1892,7 +1909,8 @@ function rowAfterChange(entityType, entity, changes) {
       ...[...changes]
         .filter(
           ([name, value]) =>
-            hasOtherCalendar(value, Model.entry(entityType).attributes[name]) ||
+            hasOtherCalendar(value, attributes[name]) ||
+            hasInexactYear(value, attributes[name]) ||
             (!surelyInvalid.has(name) &&
               isUnjudgedValue(entityType, name, value)),
         )

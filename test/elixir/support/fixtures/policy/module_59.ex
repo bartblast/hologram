@@ -8,6 +8,7 @@ defmodule Hologram.Test.Fixtures.Policy.Module59 do
   attribute :code, :string, max_length: 3, optional: true
   attribute :count, :integer, default: 0
   attribute :handoff, :string, optional: true
+  attribute :mark, :string, max_length: 3, optional: true
   attribute :note, :string, optional: true
   attribute :phase, :string, optional: true
   attribute :signer, :string, max_length: 8, optional: true
@@ -36,6 +37,7 @@ defmodule Hologram.Test.Fixtures.Policy.Module59 do
   allow :update, only: [:count], when: new(count) <= 10
   allow :update, only: [:note], when: new(project.archived) == false
   allow :update, only: [:handoff], when: can(:read, new(project))
+  allow :update, only: [:mark], when: new(updated_at) > updated_at
   allow :update, only: [:labels], when: none(label <- new(labels), label.blocked == true)
 
   allow :update,

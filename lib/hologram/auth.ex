@@ -1235,9 +1235,13 @@ defmodule Hologram.Auth do
   # ranking a set by them reads what the write would.
   defp row_with_values(%entity_type{} = row, changes) do
     {values, _invalid, _missing} = judged_values(entity_type, changes, :stored)
-    timestamps = EntityOperations.written_timestamps(nil, Clock.stamp())
 
-    after_row(row, Map.merge(values, timestamps), %{}, %{})
+    written =
+      if values == %{},
+        do: values,
+        else: Map.merge(values, EntityOperations.written_timestamps(nil, Clock.stamp()))
+
+    after_row(row, written, %{}, %{})
   end
 
   defp validate_change_row!(%{__meta__: %{attribute_ops: attribute_ops, relationship_ops: edges}})

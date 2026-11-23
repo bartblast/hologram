@@ -2044,6 +2044,27 @@ defmodule Hologram.AuthTest do
     end
   end
 
+  describe "can?/4 for a rule reading the timestamp a write moves" do
+    setup do
+      task =
+        %{}
+        |> ChangedTask.new()
+        |> DB.create!()
+
+      Process.sleep(2)
+
+      [task: EntityOperations.get(ChangedTask, task.id)]
+    end
+
+    test "moves it for a value that can be on the row", %{task: task} do
+      assert can?(nil, {:update, :mark}, task, mark: "ok")
+    end
+
+    test "leaves it as stored when no value can be on the row", %{task: task} do
+      refute can?(nil, {:update, :mark}, task, mark: "too long")
+    end
+  end
+
   describe "judged_deltas/2" do
     test "keeps a move to a value the column can hold" do
       row = %ChangedTask{count: 5}

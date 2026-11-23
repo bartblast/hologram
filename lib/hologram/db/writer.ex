@@ -384,7 +384,7 @@ defmodule Hologram.DB.Writer do
       {values, invalid, missing} = Auth.judged_values(entity_type, change.values, :held)
       {deltas, unmovable} = Auth.judged_deltas(row, change.deltas)
       absent_edges = Auth.missing_edge_targets(entity_type, change.edges, :held)
-      written = values_written(change, values, clock_stamp)
+      written = values_written(change, values, deltas, clock_stamp)
       new_row = Auth.after_row(row, written, deltas, change.edges)
 
       %{
@@ -399,13 +399,13 @@ defmodule Hologram.DB.Writer do
     end
   end
 
-  # What an update sets on the row: its values, and the timestamps a value or an amount moves. An
-  # update of edges alone moves neither.
-  defp values_written(%{deltas: deltas, values: stated}, values, _clock_stamp)
-       when deltas == %{} and stated == %{},
+  # What an update sets on the row: the values and amounts that can be on it, and the timestamps
+  # one of them moves. An update of edges alone, or of nothing that can land, moves neither.
+  defp values_written(_change, values, deltas, _clock_stamp)
+       when deltas == %{} and values == %{},
        do: values
 
-  defp values_written(%{stamp: stamp}, values, clock_stamp) do
+  defp values_written(%{stamp: stamp}, values, _deltas, clock_stamp) do
     Map.merge(values, EntityOperations.written_timestamps(stamp, clock_stamp))
   end
 

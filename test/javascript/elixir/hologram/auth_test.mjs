@@ -3932,6 +3932,22 @@ describe("Elixir_Hologram_Auth", () => {
         );
       });
 
+      it("doesn't read a date with a year past what a number holds as the stored value", () => {
+        defineUpdate("update:due_on", newIs("due_on", "==", null));
+
+        const farDate = Type.struct("Date", [
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("month"), Type.integer(1)],
+          [Type.atom("year"), Type.integer(10n ** 309n)],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(update, {due_on: farDate}),
+          Type.boolean(false),
+        );
+      });
+
       it("reads a time on a date field as the stored value, whatever its calendar", () => {
         defineUpdate("update:due_on", newIs("due_on", "==", null));
 
@@ -3967,6 +3983,100 @@ describe("Elixir_Hologram_Auth", () => {
         assert.deepStrictEqual(
           asks(update, {title: Type.bitstring("ab")}),
           Type.boolean(true),
+        );
+      });
+    });
+
+    describe("the timestamp a write moves", () => {
+      const STORED_AT = "2026-01-01T00:00:00.000000Z";
+
+      const defineStamped = (constraint) => {
+        defineUpdate(
+          "update:title",
+          rule({
+            new: {
+              predicates: [
+                [
+                  {name: "updated_at", outer: 1},
+                  "==",
+                  {attribute: "updated_at"},
+                ],
+              ],
+            },
+          }),
+        );
+
+        const entry = globalThis.Hologram.sync.model[DOCUMENT];
+
+        entry.attributes.updated_at = "datetime";
+        entry.constraints.title = {...constraint, optional: true};
+
+        Model.reset();
+      };
+
+      const asksTitle = (text) =>
+        asks(
+          updateOf(Type.atom("title")),
+          {title: Type.bitstring(text)},
+          document({updated_at: STORED_AT}),
+        );
+
+      it("stays undecided when every value is one both tiers refuse", () => {
+        defineStamped({max_length: 3});
+
+        assert.deepStrictEqual(asksTitle("too long"), Type.boolean(false));
+      });
+
+      it("stays undecided for a value that can land", () => {
+        defineStamped({max_length: 3});
+
+        assert.deepStrictEqual(asksTitle("ok"), Type.boolean(false));
+      });
+
+      it("stays undecided for a value only a format refuses", () => {
+        defineStamped({format: {opts: Type.list([]), source: "^x$"}});
+
+        assert.deepStrictEqual(asksTitle("no"), Type.boolean(false));
+      });
+
+      it("stays undecided beside a value that can land", () => {
+        defineStamped({max_length: 3});
+
+        assert.deepStrictEqual(
+          asks(
+            update,
+            {
+              status: enumValue("published"),
+              title: Type.bitstring("too long"),
+            },
+            document({updated_at: STORED_AT}),
+          ),
+          Type.boolean(false),
+        );
+      });
+
+      it("stays undecided for a date in another calendar", () => {
+        defineStamped({max_length: 3});
+
+        globalThis.Hologram.sync.model[DOCUMENT].policy["update:due_on"] =
+          globalThis.Hologram.sync.model[DOCUMENT].policy["update:title"];
+
+        Model.reset();
+
+        const otherCalendar = Type.struct("Date", [
+          [Type.atom("calendar"), Type.alias("MyApp.Calendar")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("month"), Type.integer(13)],
+          [Type.atom("year"), Type.integer(2026)],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(
+            update,
+            {due_on: otherCalendar},
+            document({updated_at: STORED_AT}),
+          ),
+          Type.boolean(false),
         );
       });
     });
