@@ -1476,20 +1476,30 @@ defmodule Hologram.Query.Expression do
 
   defp predicate_list!(ast, names, env), do: unsupported!(ast, names, env)
 
-  # The call with its own operation or role and target when a plain atom and a row say what it asks,
-  # since suggesting other ones would change that, with the user Hologram.Auth's function takes
-  # first left out. Anything else, a pin among them, only the word's spelling can answer.
+  # The hint for a call of Hologram.Auth's function. A user it names first has no place in a
+  # condition, which asks about the acting user, so the hint says that.
   defp new_row_function_fix(word, args) do
     {replacement, example} = Map.fetch!(@new_row_functions, word)
 
-    case args do
-      [asked, target] -> new_row_function_fix(replacement, example, asked, target)
-      [_user, asked, target] -> new_row_function_fix(replacement, example, asked, target)
-      _other -> "write it like #{example}"
+    if names_user?(args) do
+      "a condition asks only about the acting user, so " <>
+        suggested_call(replacement, example, tl(args))
+    else
+      suggested_call(replacement, example, args)
     end
   end
 
-  defp new_row_function_fix(replacement, example, asked, target) do
+  # An operation or a role in second place means what stands first is the user.
+  defp names_user?([first, {:^, _meta, _args} | _rest]), do: not plain_atom?(first)
+
+  defp names_user?([first, second | _rest]), do: not plain_atom?(first) and plain_atom?(second)
+
+  defp names_user?(_args), do: false
+
+  # The call with its own operation or role and target when a plain atom and a row say what it asks,
+  # since suggesting other ones would change that. Anything else, a pin among them, only the word's
+  # spelling can answer.
+  defp suggested_call(replacement, example, [asked, target | _rest]) do
     cond do
       not plain_atom?(asked) -> "write it like #{example}"
       new_path?(target) -> "write #{Macro.to_string({replacement, [], [asked, target]})}"
@@ -1497,6 +1507,8 @@ defmodule Hologram.Query.Expression do
       true -> "write it like #{example}"
     end
   end
+
+  defp suggested_call(_replacement, example, _args), do: "write it like #{example}"
 
   # An atom that prints with a colon: not nil, a boolean or one spelled as a module.
   defp plain_atom?(value) do

@@ -326,10 +326,48 @@ defmodule Hologram.Policy.ExpressionTest do
                    fn -> lower_spec("[when: has_role?(:admin, new(project.owner))]") end
     end
 
-    test "leaves out the user can? takes first in the name it suggests" do
+    test "says a condition asks about the acting user when can? names a user" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write can(:read, new(project)), got: can?(user, :read, new(project))",
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - a condition asks only about the acting user, so write can(:read, new(project)), got: can?(user, :read, new(project))",
                    fn -> lower_spec("[when: can?(user, :read, new(project))]") end
+    end
+
+    test "says a condition asks about the acting user when has_role? names a user" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: has_role? isn't available in a condition - a condition asks only about the acting user, so write it like has_role(:member, new(project)), got: has_role?(user, :admin)",
+                   fn -> lower_spec("[when: has_role?(user, :admin)]") end
+    end
+
+    test "says a condition asks about the acting user when can? names a user and values" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - a condition asks only about the acting user, so write can(:update, new(project)), got: can?(user, :update, new(project), status: :done)",
+                   fn ->
+                     lower_spec("[when: can?(user, :update, new(project), status: :done)]")
+                   end
+    end
+
+    test "names no user when can? starts with the operation and has values" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write can(:update, new(project)), and the stored row goes in via: {:update, project}, got: can?(:update, project, status: :done)",
+                   fn -> lower_spec("[when: can?(:update, project, status: :done)]") end
+    end
+
+    test "says a condition asks about the acting user when can? names a pinned user" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - a condition asks only about the acting user, so write can(:read, new(project)), got: can?(^other_user, :read, new(project))",
+                   fn -> lower_spec("[when: can?(^other_user, :read, new(project))]") end
+    end
+
+    test "says a condition asks about the acting user when can? names a user and a pinned operation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - a condition asks only about the acting user, so write it like can(:update, new(project)), got: can?(user, ^operation, new(project))",
+                   fn -> lower_spec("[when: can?(user, ^operation, new(project))]") end
+    end
+
+    test "names no user when can? starts with a variable operation and has values" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write it like can(:update, new(project)), got: can?(operation, new(project), status: :done)",
+                   fn -> lower_spec("[when: can?(operation, new(project), status: :done)]") end
     end
 
     test "gives an example for a pinned operation" do
@@ -352,13 +390,13 @@ defmodule Hologram.Policy.ExpressionTest do
 
     test "leaves out the user when can? is asked of the stored row" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write can(:read, new(judge)), and the stored row goes in via: {:read, judge}, got: can?(user, :read, judge)",
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - a condition asks only about the acting user, so write can(:read, new(judge)), and the stored row goes in via: {:read, judge}, got: can?(user, :read, judge)",
                    fn -> lower_spec("[when: can?(user, :read, judge)]") end
     end
 
     test "keeps the role and the stored row in what it suggests for has_role?" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:12: has_role? isn't available in a condition - write has_role(:admin, new(project.owner)), and the stored row goes in to: {:admin, project.owner}, got: has_role?(user, :admin, project.owner)",
+                   "lib/my_app/policies.ex:12: has_role? isn't available in a condition - a condition asks only about the acting user, so write has_role(:admin, new(project.owner)), and the stored row goes in to: {:admin, project.owner}, got: has_role?(user, :admin, project.owner)",
                    fn -> lower_spec("[when: has_role?(user, :admin, project.owner)]") end
     end
 
