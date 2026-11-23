@@ -1116,7 +1116,11 @@ defmodule Hologram.Migration.RendererTest do
         line: 7
       }
 
-      assert %{transactional: [%{op: :add_column} | _rest]} = render([op], pre_model)
+      assert %{
+               transactional: [
+                 %{op: :add_column, column: "parent_id", definition: %{null: true}} | _rest
+               ]
+             } = render([op], pre_model)
     end
 
     test "still renders a constant one on an added attribute", %{pre_model: pre_model} do
