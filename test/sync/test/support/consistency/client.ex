@@ -388,7 +388,7 @@ defmodule HologramSyncTests.Consistency.Client do
       named = MapSet.new(hashes)
 
       dropped =
-        for id <- held_ids(acc, type),
+        for id <- held_or_named_ids(acc, type),
             MapSet.member?(named, Frame.drop_hash(salt, id)) == (op == "unsync_hashed"),
             do: id
 
@@ -459,14 +459,30 @@ defmodule HologramSyncTests.Consistency.Client do
   end
 
   # A row dropped by hash also takes every pair filed under a held row naming it, since the server,
-  # not knowing the client held it, tells nothing of those pairs - `Deltas.#dropRows`.
+  # not knowing the client held it, tells nothing of those pairs. An id the client holds no row of,
+  # which a stream cut inside a batch or a catch-up can leave in a set, loses only those pairs -
+  # `Deltas.#dropRows`.
   defp drop_rows(state, _type, [], _origin), do: state
 
   defp drop_rows(state, type, ids, _origin) do
-    dropped = Enum.reduce(ids, state, &delete_row(&2, type, &1))
+    held =
+      state
+      |> held_ids(type)
+      |> MapSet.new()
+
+    dropped =
+      ids
+      |> Enum.filter(&MapSet.member?(held, &1))
+      |> Enum.reduce(state, &delete_row(&2, type, &1))
+
+    delete_facts_naming(dropped, type, ids)
+  end
+
+  # `LocalDatabase.deleteFactsNaming`.
+  defp delete_facts_naming(state, type, ids) do
     named = MapSet.new(ids)
 
-    for {holder_type, name} <- facts_naming(type), reduce: dropped do
+    for {holder_type, name} <- facts_naming(type), reduce: state do
       acc ->
         acc
         |> held_ids(holder_type)
@@ -506,8 +522,8 @@ defmodule HologramSyncTests.Consistency.Client do
 
   defp mark_all_synced(state), do: sweep(%{state | synced_all: true}, fn _type -> true end)
 
-  # Each type marked for the first time sweeps its awaiting rows, unless everything already came -
-  # `LocalDatabase.markTypesSynced`.
+  # Each type marked for the first time sweeps its awaiting rows, and the pairs naming them, unless
+  # everything already came - `LocalDatabase.markTypesSynced`.
   defp mark_types_synced(state, types) do
     marked =
       types
@@ -516,7 +532,17 @@ defmodule HologramSyncTests.Consistency.Client do
 
     synced = %{state | synced_types: MapSet.union(state.synced_types, marked)}
 
-    if state.synced_all, do: synced, else: sweep(synced, &MapSet.member?(marked, &1))
+    if state.synced_all do
+      synced
+    else
+      swept = Enum.filter(synced.awaiting, fn {type, _id} -> MapSet.member?(marked, type) end)
+
+      swept
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+      |> Enum.reduce(sweep(synced, &MapSet.member?(marked, &1)), fn {type, ids}, acc ->
+        delete_facts_naming(acc, type, ids)
+      end)
+    end
   end
 
   defp sweep(state, picks?) do
@@ -667,6 +693,18 @@ defmodule HologramSyncTests.Consistency.Client do
     state.tables
     |> Map.get(type, %{})
     |> Map.keys()
+  end
+
+  # The rows of the type the client holds and the ids the sets of its held rows name -
+  # `LocalDatabase.heldOrNamedIds`.
+  defp held_or_named_ids(state, type) do
+    named =
+      for {holder_type, name} <- facts_naming(type),
+          holder_id <- held_ids(state, holder_type),
+          id <- filed_ids(state, holder_type, name, holder_id),
+          do: id
+
+    Enum.uniq(held_ids(state, type) ++ named)
   end
 
   defp model_type(type) do
