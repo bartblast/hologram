@@ -247,6 +247,35 @@ describe("Batches", () => {
       assert.equal(Overlay.durability(TODO, "t1"), "applied");
     });
 
+    // Sent now, it would go out under a pair another tab can hold.
+    it("holds every batch while the tab waits for an identity", async () => {
+      Replica.requestMint();
+
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      assert.isFalse(sendStub.called);
+      assert.equal(Batches.pending.length, 1);
+    });
+
+    it("sends once the identity has arrived", async () => {
+      sendStub.resolves(confirmed());
+
+      Replica.requestMint();
+
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      Replica.takeMinted({id: "r-minted", token: "statement"});
+
+      await Batches.flush();
+
+      assert.isTrue(sendStub.calledOnce);
+      assert.equal(Batches.pending.length, 0);
+    });
+
     // The write endpoint compares the model and nothing else, so these still land.
     it("sends while the server stopped the tab over its protocol", async () => {
       SyncStream.stopReason = "protocol_version";

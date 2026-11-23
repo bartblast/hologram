@@ -674,10 +674,12 @@ defmodule Hologram.Controller do
       session_id ->
         current_user_id = Session.get_user_id(conn)
 
-        %{instance_id: instance_id, receipts: receipts} =
+        payload =
           conn.body_params
           |> Map.get("_json")
           |> Deserializer.deserialize()
+
+        %{instance_id: instance_id, receipts: receipts} = payload
 
         {validated_bindings, refreshed_receipts} =
           verify_and_refresh_receipts(receipts, instance_id, session_id, current_user_id)
@@ -692,12 +694,19 @@ defmodule Hologram.Controller do
           expires_at
         )
 
+        response =
+          maybe_mint_replica(
+            %{
+              handshakeId: handshake_id,
+              heartbeatIntervalMs: SSE.heartbeat_interval_ms(conn),
+              refreshedReceipts: serialize_to_fragment(refreshed_receipts)
+            },
+            payload,
+            session_id
+          )
+
         conn
-        |> send_json(%{
-          handshakeId: handshake_id,
-          heartbeatIntervalMs: SSE.heartbeat_interval_ms(conn),
-          refreshedReceipts: serialize_to_fragment(refreshed_receipts)
-        })
+        |> send_json(response)
         |> Plug.Conn.halt()
     end
   end
@@ -964,6 +973,24 @@ defmodule Hologram.Controller do
   defp maybe_forbid_storing(conn, _server) do
     Plug.Conn.put_resp_header(conn, "cache-control", "no-store")
   end
+
+  # A tab that counts its batches in memory asks for an identity no other tab can hold. The one in
+  # its page can't be that, since a browser can serve one cached page to two tabs. Nothing is
+  # recorded: the signed statement is the whole of what makes the id usable.
+  #
+  # Bound to the session even for a signed-in user. The identity lives only as long as this page,
+  # and a session outlasts a sign-in or sign-out on it, where a statement about the user would be
+  # refused after the sign-out.
+  defp maybe_mint_replica(response, %{wants_replica: true}, session_id) do
+    replica_id = UUID.uuid4()
+
+    Map.put(response, :replica, %{
+      id: replica_id,
+      token: ReplicaIdentity.issue(replica_id, session_id, nil)
+    })
+  end
+
+  defp maybe_mint_replica(response, _payload, _session_id), do: response
 
   # In dev a live reload builds the pages open in tabs first, and the page a tab shows is the page
   # it rendered last. A first page also renders the tab's document, which loads the app's assets, so

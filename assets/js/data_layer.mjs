@@ -563,6 +563,17 @@ export default class DataLayer {
     Batches.flush();
   }
 
+  // Whether this tab holds writes only in its memory that it can still send, which a reload would
+  // lose. A tab stopped over its model is left out: only a reload moves it on.
+  static holdsUnsentWrites() {
+    return (
+      Durability.mode === "memory" &&
+      Batches.pendingCount() > 0 &&
+      Tabs.sends() &&
+      !SyncStream.holdsWrites()
+    );
+  }
+
   // Before the first render, so that a prop reading a query answers from the database rather than
   // from nothing - the rows the server read to render this page are the rows those queries need,
   // and they go in through the same ingest the stream uses. Every page visit carries again, which
@@ -807,6 +818,19 @@ export default class DataLayer {
   // no answer is still pending, and this is what wakes the queue that stopped behind it.
   static streamOpened() {
     Batches.flush();
+  }
+
+  // Takes up the identity a stream handshake brought, if this tab asked for one, and wakes the
+  // sender that was holding for it. Answers the sender's promise, so a page about to reload can let
+  // it finish.
+  static takeReplica(replica) {
+    return Replica.takeMinted(replica) ? Batches.flush() : null;
+  }
+
+  // Whether the next stream handshake should ask the server for an identity (see
+  // Replica.requestMint).
+  static wantsReplica() {
+    return Replica.awaitingMint;
   }
 
   // What a render that handed a page over counted, for as long as this client's own database cannot

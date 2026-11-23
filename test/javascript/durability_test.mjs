@@ -574,6 +574,28 @@ describe("Durability", () => {
   });
 
   describe("open()", () => {
+    // Its count lives in memory, and a browser can hand the page's pair to another tab.
+    it("asks the server for an identity when the browser has no store", async () => {
+      const indexedDB = globalThis.indexedDB;
+
+      globalThis.indexedDB = undefined;
+
+      try {
+        await Durability.open();
+      } finally {
+        globalThis.indexedDB = indexedDB;
+      }
+
+      assert.equal(Durability.mode, "memory");
+      assert.isTrue(Replica.awaitingMint);
+    });
+
+    it("asks for no identity when the store opens", async () => {
+      await Durability.open();
+
+      assert.isFalse(Replica.awaitingMint);
+    });
+
     // A bundle carrying another store layout, speaking another protocol or on another model, must
     // open a database of its own - which is what stops two tabs on different versions from ever
     // sharing one, or a group.
@@ -741,6 +763,85 @@ describe("Durability", () => {
   });
 
   describe("load()", () => {
+    it("asks for an identity when the group's store fails while it is being read", async () => {
+      await Durability.open();
+
+      const loading = Durability.load();
+
+      Durability.detach();
+      await loading;
+
+      assert.isTrue(Replica.awaitingMint);
+    });
+
+    it("asks for an identity when the store is taken for a new version while it is being read", async () => {
+      await Durability.open();
+
+      const loading = Durability.load();
+
+      const {db} = await rawOpen(2);
+
+      db.close();
+
+      await loading;
+
+      assert.equal(Durability.mode, "memory");
+      assert.isTrue(Replica.awaitingMint);
+    });
+
+    it("asks for no identity when the store is taken after a read that found one", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      // The seed's own connections would block the upgrade.
+      raw.forEach((connection) => connection.close());
+
+      const {db} = await rawOpen(2);
+
+      db.close();
+      Durability.restore(true);
+
+      assert.equal(Durability.mode, "memory");
+      assert.isFalse(Replica.awaitingMint);
+    });
+
+    it("asks for an identity when the store is taken after a read that found none", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const {db} = await rawOpen(2);
+
+      db.close();
+      Durability.restore(true);
+
+      assert.equal(Durability.mode, "memory");
+      assert.isTrue(Replica.awaitingMint);
+    });
+
+    it("asks for no identity when the store goes after the restore", async () => {
+      await Durability.open();
+      await Durability.load();
+      Durability.restore(true);
+
+      Durability.detach();
+
+      assert.isFalse(Replica.awaitingMint);
+    });
+
+    it("asks the server for an identity when the store can't be read", async () => {
+      await Durability.open();
+
+      sinon
+        .stub(FDBDatabase.prototype, "transaction")
+        .throws(new DOMException("broken", "UnknownError"));
+
+      await Durability.load();
+
+      assert.equal(Durability.mode, "memory");
+      assert.isTrue(Replica.awaitingMint);
+    });
+
     it("counts the stored batches", async () => {
       await createSchema();
       await writeBatches([batchRecord(1), batchRecord(2)]);

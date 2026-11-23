@@ -86,4 +86,60 @@ describe("Replica", () => {
       assert.equal(Replica.id, "replica-stored");
     });
   });
+
+  describe("requestMint()", () => {
+    it("marks the tab as waiting for a pair", () => {
+      Replica.requestMint();
+
+      assert.isTrue(Replica.awaitingMint);
+    });
+  });
+
+  describe("takeMinted()", () => {
+    const minted = {id: "replica-minted", token: "token-minted"};
+
+    it("puts the pair in use and stops waiting", () => {
+      Replica.offer(fresh);
+      Replica.requestMint();
+
+      assert.isTrue(Replica.takeMinted(minted));
+      assert.deepStrictEqual(Replica.current(), minted);
+      assert.isFalse(Replica.awaitingMint);
+    });
+
+    // A browser can hand the same cached page to another tab, so the page's pair is not safe to go
+    // back to.
+    it("leaves refresh() no way back to the page's pair", () => {
+      Replica.offer(fresh);
+      Replica.requestMint();
+      Replica.takeMinted(minted);
+
+      assert.isFalse(Replica.refresh());
+      assert.deepStrictEqual(Replica.current(), minted);
+    });
+
+    // Two handshakes can be out at once, and numbers may already be spent under the first pair.
+    it("passes over a pair when the tab is not waiting for one", () => {
+      Replica.offer(fresh);
+
+      assert.isFalse(Replica.takeMinted(minted));
+      assert.deepStrictEqual(Replica.current(), fresh);
+    });
+
+    it("keeps waiting when the handshake brought no pair", () => {
+      Replica.offer(fresh);
+      Replica.requestMint();
+
+      assert.isFalse(Replica.takeMinted(undefined));
+      assert.isTrue(Replica.awaitingMint);
+      assert.deepStrictEqual(Replica.current(), fresh);
+    });
+  });
+
+  it("reset() stops waiting for a pair", () => {
+    Replica.requestMint();
+    Replica.reset();
+
+    assert.isFalse(Replica.awaitingMint);
+  });
 });

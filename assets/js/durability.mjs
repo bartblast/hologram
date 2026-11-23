@@ -91,6 +91,10 @@ export default class Durability {
   // in one continuation, before an action could dispatch and write.
   static #loaded = null;
 
+  // Whether restore() has run, after which this tab holds what the store held or knows it held
+  // nothing.
+  static #restored = false;
+
   // Whether this page load has already put the question to the browser. Flipped BEFORE the asking
   // starts, which is what stops two batches stored in the same turn from both asking.
   static #persistenceAsked = false;
@@ -174,7 +178,7 @@ export default class Durability {
   static detach() {
     Durability.#loaded = null;
 
-    Durability.#close();
+    Durability.#letGo();
   }
 
   // A batch this browser has sealed, given the next number and written down - all three inside ONE
@@ -354,7 +358,7 @@ export default class Durability {
         "Hologram: another tab needs a new database version, the database lives in memory for this page",
       );
 
-      Durability.#close();
+      Durability.#letGo();
     };
 
     Durability.mode = "indexeddb";
@@ -678,6 +682,7 @@ export default class Durability {
     const loaded = Durability.#loaded;
 
     Durability.#loaded = null;
+    Durability.#restored = true;
 
     if (loaded === null) {
       return null;
@@ -722,8 +727,12 @@ export default class Durability {
     // for the group, which its first send waits for (see replicaWritten). A follower writes none:
     // it presents no identity of its own to the server, and the pair the leader settled on reaches
     // it with the group's state.
+    //
+    // A store let go after this read can't record that pair, so the tab asks for one of its own.
     if (loaded.replica !== null && !ownerChanged) {
       Replica.adopt(loaded.replica);
+    } else if (Durability.mode === "memory") {
+      Replica.requestMint();
     } else if (leader) {
       Durability.persistReplica(Replica.current());
     }
@@ -759,6 +768,7 @@ export default class Durability {
 
     Durability.#loaded = null;
     Durability.#persistenceAsked = false;
+    Durability.#restored = false;
     Durability.#replicaWrite = Promise.resolve();
   }
 
@@ -824,7 +834,7 @@ export default class Durability {
       // There is nothing further to try - this page stops storing either way.
     }
 
-    Durability.#close();
+    Durability.#letGo();
 
     // The other tabs of the group share this database and have just had the rows and the place
     // taken out from under them. They let go of it too rather than going on writing into a store
@@ -833,12 +843,23 @@ export default class Durability {
     Tabs.post({kind: "storage_failed"});
   }
 
+  // Closes the store for the rest of this page. A tab that has taken up nothing from it, and now
+  // never will, counts from 1 under whatever pair it presents, so it asks for one of its own. Every
+  // way a boot can end without a store comes through here.
+  static #letGo() {
+    Durability.#close();
+
+    if (Durability.#loaded === null && !Durability.#restored) {
+      Replica.requestMint();
+    }
+  }
+
   static #memoryMode(reason) {
     Logger.debug(
       `Hologram: no durable storage (${reason}), the database lives in memory for this page`,
     );
 
-    Durability.#close();
+    Durability.#letGo();
   }
 
   // Asks the browser to exempt this origin from eviction - and NEVER puts a dialog in front of

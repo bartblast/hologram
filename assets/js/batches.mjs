@@ -61,7 +61,8 @@ export default class Batches {
 
   // One batch is in flight at a time, and the loop that keeps it that way must not be entered
   // twice - every close calls flush, and an answer can arrive while another action is running.
-  static #sending = false;
+  // The sender while it runs, for a caller that has to know when it has finished.
+  static #drain = null;
 
   static #seq = 0;
 
@@ -259,7 +260,7 @@ export default class Batches {
   // Sends the pending batches, oldest first, ONE AT A TIME. The ordering is not politeness: a
   // later batch may name a row an earlier one created, and its based_on for a column an earlier
   // one wrote is that batch's own stamp - so overlapping them turns a sound chain into a refusal.
-  static async flush() {
+  static flush() {
     // ONE TAB OF A BROWSER SENDS, and it is the one holding the group's lock. A batch made in any
     // tab is filed in the one queue they share, so the leader's own reading of that queue is what
     // ships - and a follower that sent as well would put a second copy of every batch on the wire,
@@ -269,12 +270,16 @@ export default class Batches {
     // taken up the identity, the counter and the batches the store held, so it would send the
     // stored queue under its page's own identity rather than the one the batches were numbered
     // under. The restore wakes the sender once it has, and so does the lead it takes.
-    if (!Tabs.sends() || Batches.#sending) {
-      return;
+    if (!Tabs.sends()) {
+      return Promise.resolve();
     }
 
-    Batches.#sending = true;
+    Batches.#drain ??= Batches.#sendPending();
 
+    return Batches.#drain;
+  }
+
+  static async #sendPending() {
     try {
       while (true) {
         // The queue as the STORE holds it, before every send rather than once: any tab can file a
@@ -295,6 +300,12 @@ export default class Batches {
         // Durability.replicaWritten).
         await batch.recorded;
         await Durability.replicaWritten();
+
+        // Nothing goes out until the pair this tab asked for arrives (see Replica.requestMint). The
+        // handshake that brings it wakes the sender again.
+        if (Replica.awaitingMint) {
+          return;
+        }
 
         // A tab the server stopped over its model holds its writes rather than sending them to be
         // refused: the server would roll back what the person did over a mismatch they did not
@@ -406,7 +417,7 @@ export default class Batches {
         Batches.settle(batch.seq, answer);
       }
     } finally {
-      Batches.#sending = false;
+      Batches.#drain = null;
     }
   }
 

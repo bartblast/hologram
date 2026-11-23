@@ -12,6 +12,7 @@ import {
 import App from "../../assets/js/app.mjs";
 import Batches from "../../assets/js/batches.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import Config from "../../assets/js/config.mjs";
 import Deserializer from "../../assets/js/deserializer.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
@@ -65,6 +66,7 @@ describe("Sse", () => {
     heartbeatIntervalMs = 15_000,
     refreshedReceipts = Type.list(),
     ok = true,
+    replica = undefined,
     status = 200,
   } = {}) {
     const serializedRefreshedReceipts = serializedValue(refreshedReceipts);
@@ -76,6 +78,7 @@ describe("Sse", () => {
         handshakeId,
         heartbeatIntervalMs,
         refreshedReceipts: serializedRefreshedReceipts,
+        replica,
       }),
     });
   }
@@ -90,6 +93,7 @@ describe("Sse", () => {
     Sse.isSuspended = false;
     Sse.reconnectAttempts = 0;
     Sse.reconnectTimer = null;
+    Sse.reloadDeferrals = 0;
     Sse.runId = 0;
     Sse.stabilityTimer = null;
 
@@ -138,6 +142,7 @@ describe("Sse", () => {
     App.instanceId = originalInstanceId;
 
     ComponentRegistry.clear();
+    Replica.reset();
     SubscriptionReceiptRegistry.entries.clear();
   });
 
@@ -165,6 +170,21 @@ describe("Sse", () => {
           Type.atom("receipts"),
           Type.list([Type.bitstring("token-a"), Type.bitstring("token-b")]),
         ],
+      ]);
+
+      assert.deepStrictEqual(payload, expected);
+    });
+
+    it("asks for an identity while the tab is waiting for one", () => {
+      setDataLayer();
+      Replica.requestMint();
+
+      const payload = Sse.buildHandshakePayload();
+
+      const expected = Type.map([
+        [Type.atom("instance_id"), Type.bitstring("test-instance-id")],
+        [Type.atom("receipts"), Type.list()],
+        [Type.atom("wants_replica"), Type.boolean(true)],
       ]);
 
       assert.deepStrictEqual(payload, expected);
@@ -385,6 +405,313 @@ describe("Sse", () => {
       // setTimeoutSpy below only captures the reconnect timer.
       sinon.stub(Logger, "debug");
       setTimeoutSpy = sinon.stub(globalThis, "setTimeout");
+    });
+
+    describe("an identity the handshake brought", () => {
+      const minted = {id: "replica-minted", token: "token-minted"};
+
+      let flush, greetedWith;
+
+      beforeEach(() => {
+        greetedWith = null;
+        flush = sinon.stub(Batches, "flush").resolves();
+
+        setDataLayer();
+
+        sinon.stub(Hologram.dataLayer, "buildStreamGreeting").callsFake(() => {
+          greetedWith = Replica.id;
+
+          return {};
+        });
+
+        sinon.stub(Hologram.dataLayer, "listenToStream");
+
+        Replica.offer({id: "replica-page", token: "token-page"});
+      });
+
+      it("is taken before the stream is greeted", async () => {
+        Replica.requestMint();
+        stubHandshakeResponse({replica: minted});
+
+        await Sse.connect();
+
+        assert.equal(greetedWith, "replica-minted");
+        assert.isFalse(Replica.awaitingMint);
+      });
+
+      // A proxy can block the stream while writes still get through, so it can't wait for onopen.
+      it("wakes the sender before the stream has opened", async () => {
+        Replica.requestMint();
+        stubHandshakeResponse({replica: minted});
+
+        await Sse.connect();
+
+        sinon.assert.calledOnce(flush);
+      });
+
+      it("is passed over by a tab that is not waiting for one", async () => {
+        stubHandshakeResponse({replica: minted});
+
+        await Sse.connect();
+
+        assert.equal(greetedWith, "replica-page");
+        sinon.assert.notCalled(flush);
+      });
+
+      it("is not taken by a connect the page has left", async () => {
+        Replica.requestMint();
+        stubHandshakeResponse({replica: minted});
+
+        const connecting = Sse.connect();
+
+        Sse.suspend();
+        await connecting;
+
+        assert.equal(Replica.id, "replica-page");
+        assert.isTrue(Replica.awaitingMint);
+      });
+
+      // Only this tab's memory holds a write waiting for the identity, so a reload ahead of the
+      // send would lose it.
+      it("asks again when the answer brought no identity", async () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        Replica.requestMint();
+        stubHandshakeResponse();
+
+        await Sse.connect();
+
+        sinon.assert.notCalled(globalThis.EventSource);
+        assert.isTrue(Replica.awaitingMint);
+
+        stubHandshakeResponse({replica: minted});
+
+        timers.tick(Sse.MAX_RECONNECT_DELAY * 2);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        assert.equal(Replica.id, "replica-minted");
+        sinon.assert.calledOnce(globalThis.EventSource);
+      });
+
+      // The server matches on these exact encoded values, so the client's spelling is pinned here.
+      it("spells the request the way the server reads it", () => {
+        Replica.requestMint();
+
+        const serialized = Serializer.serialize(
+          Sse.buildHandshakePayload(),
+          "server",
+        );
+
+        assert.include(serialized, '["awants_replica","atrue"]');
+      });
+
+      it("lets the sender finish before a reload for expired receipts", async () => {
+        let finishSending;
+
+        flush.returns(
+          new Promise((resolve) => {
+            finishSending = resolve;
+          }),
+        );
+
+        SubscriptionReceiptRegistry.entries.set("key-a", receiptA);
+        Replica.requestMint();
+        stubHandshakeResponse({replica: minted});
+
+        const connecting = Sse.connect();
+
+        await new Promise((resolve) => setImmediate(resolve));
+
+        sinon.assert.calledOnce(flush);
+        sinon.assert.notCalled(globalThis.window.location.reload);
+
+        finishSending();
+        await connecting;
+
+        sinon.assert.calledOnce(globalThis.window.location.reload);
+      });
+
+      describe("a write still unsent when the receipts have expired", () => {
+        let holdsUnsentWrites, timers;
+
+        beforeEach(() => {
+          timers = sinon.useFakeTimers({
+            toFake: ["setTimeout", "clearTimeout"],
+          });
+
+          holdsUnsentWrites = sinon
+            .stub(Hologram.dataLayer, "holdsUnsentWrites")
+            .returns(true);
+
+          SubscriptionReceiptRegistry.entries.set("key-a", receiptA);
+          stubHandshakeResponse();
+        });
+
+        it("puts off the reload and tries the handshake again", async () => {
+          await Sse.connect();
+
+          sinon.assert.notCalled(globalThis.window.location.reload);
+          sinon.assert.notCalled(globalThis.EventSource);
+
+          timers.tick(Sse.MAX_RECONNECT_DELAY * 2);
+          await new Promise((resolve) => setImmediate(resolve));
+
+          sinon.assert.calledTwice(fetchStub);
+        });
+
+        it("reloads once the write has gone", async () => {
+          await Sse.connect();
+
+          holdsUnsentWrites.returns(false);
+
+          await Sse.connect();
+
+          sinon.assert.calledOnce(globalThis.window.location.reload);
+        });
+
+        // A write the server keeps refusing never leaves the queue.
+        it("reloads anyway once the limit is reached", async () => {
+          for (let i = 0; i < Sse.MAX_RELOAD_DEFERRALS; i++) {
+            await Sse.connect();
+          }
+
+          sinon.assert.notCalled(globalThis.window.location.reload);
+
+          await Sse.connect();
+
+          sinon.assert.calledOnce(globalThis.window.location.reload);
+        });
+
+        it("starts the count again after a handshake with live receipts", async () => {
+          await Sse.connect();
+
+          stubHandshakeResponse({
+            refreshedReceipts: Type.list([
+              Type.tuple([
+                Type.bitstring("key-a"),
+                Type.integer(1),
+                Type.bitstring("token-a"),
+              ]),
+            ]),
+          });
+
+          await Sse.connect();
+
+          assert.equal(Sse.reloadDeferrals, 0);
+        });
+
+        // Leaving the page resets the backoff too, so a count kept across it would spend what's
+        // left of the limit in moments and reload ahead of the sender's next try.
+        it("starts the count again when the page is left", async () => {
+          await Sse.connect();
+
+          assert.equal(Sse.reloadDeferrals, 1);
+
+          Sse.suspend();
+
+          assert.equal(Sse.reloadDeferrals, 0);
+        });
+
+        it("still decides when the sender failed", async () => {
+          flush.rejects(new Error("refused"));
+          Replica.requestMint();
+          stubHandshakeResponse({replica: minted});
+
+          await Sse.connect();
+
+          assert.equal(Sse.reloadDeferrals, 1);
+        });
+      });
+
+      it("does not reload a page left while the sender was finishing", async () => {
+        let finishSending;
+
+        flush.returns(
+          new Promise((resolve) => {
+            finishSending = resolve;
+          }),
+        );
+
+        SubscriptionReceiptRegistry.entries.set("key-a", receiptA);
+        Replica.requestMint();
+        stubHandshakeResponse({replica: minted});
+
+        const connecting = Sse.connect();
+
+        await new Promise((resolve) => setImmediate(resolve));
+
+        Sse.suspend();
+        finishSending();
+        await connecting;
+
+        sinon.assert.notCalled(globalThis.window.location.reload);
+      });
+
+      it("gives up on a handshake that never answers and asks again", async () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        Replica.requestMint();
+        stubHandshakeResponse({replica: minted});
+
+        fetchStub.onFirstCall().callsFake(
+          (_path, {signal}) =>
+            new Promise((_resolve, reject) => {
+              signal.addEventListener("abort", () =>
+                reject(new DOMException("aborted", "AbortError")),
+              );
+            }),
+        );
+
+        const connecting = Sse.connect();
+
+        timers.tick(Config.mutationTimeoutMs);
+        await connecting;
+
+        assert.isTrue(Replica.awaitingMint);
+
+        timers.tick(Sse.MAX_RECONNECT_DELAY * 2);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        sinon.assert.calledTwice(fetchStub);
+        assert.equal(Replica.id, "replica-minted");
+      });
+
+      it("keeps no deadline on a handshake once it has answered", async () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        Replica.requestMint();
+        stubHandshakeResponse({replica: minted});
+
+        await Sse.connect();
+
+        const {signal} = fetchStub.firstCall.args[1];
+
+        timers.tick(Config.mutationTimeoutMs);
+
+        assert.isFalse(signal.aborted);
+      });
+
+      it("sets no deadline on a handshake while no identity is wanted", async () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        fetchStub.returns(new Promise(() => {}));
+
+        Sse.connect();
+
+        const {signal} = fetchStub.firstCall.args[1];
+
+        timers.tick(Config.mutationTimeoutMs);
+
+        assert.isFalse(signal.aborted);
+      });
     });
 
     it("POSTs the handshake payload to the handshake endpoint before opening the EventSource", async () => {

@@ -873,6 +873,51 @@ describe("DataLayer", () => {
     });
   });
 
+  describe("holdsUnsentWrites()", () => {
+    let originalMode;
+
+    beforeEach(() => {
+      originalMode = Durability.mode;
+      Durability.mode = "memory";
+
+      sinon.stub(Batches, "pendingCount").returns(1);
+      sinon.stub(Tabs, "sends").returns(true);
+      sinon.stub(SyncStream, "holdsWrites").returns(false);
+    });
+
+    afterEach(() => {
+      Durability.mode = originalMode;
+    });
+
+    it("is true for a tab with no store that can still send a write", () => {
+      assert.isTrue(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false when the store holds the writes", () => {
+      Durability.mode = "indexeddb";
+
+      assert.isFalse(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false with nothing to send", () => {
+      Batches.pendingCount.returns(0);
+
+      assert.isFalse(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false for a tab that doesn't send", () => {
+      Tabs.sends.returns(false);
+
+      assert.isFalse(DataLayer.holdsUnsentWrites());
+    });
+
+    it("is false for a tab stopped over its model", () => {
+      SyncStream.holdsWrites.returns(true);
+
+      assert.isFalse(DataLayer.holdsUnsentWrites());
+    });
+  });
+
   describe("ingestMountData()", () => {
     let applying;
 
@@ -1875,6 +1920,51 @@ describe("DataLayer", () => {
       } finally {
         globalThis.Hologram.sync = sync;
       }
+    });
+  });
+
+  describe("takeReplica()", () => {
+    const minted = {id: "replica-minted", token: "token-minted"};
+
+    afterEach(() => {
+      Replica.reset();
+    });
+
+    it("takes the identity and answers the sender's promise when the tab asked for one", () => {
+      const sending = Promise.resolve();
+      const flush = sinon.stub(Batches, "flush").returns(sending);
+
+      Replica.requestMint();
+
+      assert.strictEqual(DataLayer.takeReplica(minted), sending);
+      assert.equal(Replica.id, "replica-minted");
+      sinon.assert.calledOnce(flush);
+
+      flush.restore();
+    });
+
+    it("wakes nothing when the tab did not ask", () => {
+      const flush = sinon.stub(Batches, "flush");
+
+      assert.isNull(DataLayer.takeReplica(minted));
+      assert.isNull(Replica.id);
+      sinon.assert.notCalled(flush);
+
+      flush.restore();
+    });
+  });
+
+  describe("wantsReplica()", () => {
+    afterEach(() => {
+      Replica.reset();
+    });
+
+    it("answers whether the tab is waiting for an identity", () => {
+      assert.isFalse(DataLayer.wantsReplica());
+
+      Replica.requestMint();
+
+      assert.isTrue(DataLayer.wantsReplica());
     });
   });
 

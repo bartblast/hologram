@@ -2,6 +2,7 @@
 
 import App from "./app.mjs";
 import ComponentRegistry from "./component_registry.mjs";
+import Config from "./config.mjs";
 import Deserializer from "./deserializer.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
@@ -22,6 +23,13 @@ export default class Sse {
   static HEARTBEAT_TIMEOUT_INTERVALS = 2;
 
   static MAX_RECONNECT_DELAY = 5_000;
+
+  // How many answered handshakes can put off a reload for expired receipts while a tab still holds
+  // unsent writes only in memory. On the reconnect backoff that's a little over 40 seconds, longer
+  // than one send's deadline. It's a limit because a write the server keeps refusing never leaves,
+  // and the tab has no live stream until it reloads.
+  static MAX_RELOAD_DEFERRALS = 12;
+
   static RECONNECT_BACKOFF_FACTOR = 2;
   static RECONNECT_JITTER = 0.25;
   static SSE_PATH = "/hologram/sse";
@@ -52,6 +60,9 @@ export default class Sse {
   static isSuspended = false;
 
   static reconnectAttempts = 0;
+
+  // How many handshakes in a row have put off a reload (see MAX_RELOAD_DEFERRALS).
+  static reloadDeferrals = 0;
 
   // The pending retry after a stream died, held so a deliberate restart can call it off - the same
   // bookkeeping `Connection` keeps for the websocket's.
@@ -96,10 +107,16 @@ export default class Sse {
       App.subscriptionReceiptRegistry.entries.values(),
     ).map((triple) => triple.data[2]);
 
-    return Type.map([
+    const entries = [
       [Type.atom("instance_id"), Type.bitstring(App.instanceId)],
       [Type.atom("receipts"), Type.list(receipts)],
-    ]);
+    ];
+
+    if (Hologram.dataLayer?.wantsReplica()) {
+      entries.push([Type.atom("wants_replica"), Type.boolean(true)]);
+    }
+
+    return Type.map(entries);
   }
 
   // Closes the stream there is, and stops the clocks it was keeping: the heartbeat watchdog, which
@@ -119,6 +136,14 @@ export default class Sse {
     const runId = $.runId;
     const isStale = () => runId !== $.runId;
 
+    // A tab waiting for the identity this handshake brings holds its writes until it arrives, so a
+    // handshake that never answers is given up on and tried again.
+    const controller = new AbortController();
+
+    const deadline = Hologram.dataLayer?.wantsReplica()
+      ? setTimeout(() => controller.abort(), Config.mutationTimeoutMs)
+      : null;
+
     try {
       const preHandshakeReceiptCount =
         App.subscriptionReceiptRegistry.entries.size;
@@ -127,6 +152,7 @@ export default class Sse {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: Serializer.serialize($.buildHandshakePayload(), "server"),
+        signal: controller.signal,
       });
 
       if (isStale()) return;
@@ -141,19 +167,50 @@ export default class Sse {
         handshakeId,
         heartbeatIntervalMs,
         refreshedReceipts: serializedRefreshed,
+        replica,
       } = await response.json();
 
       if (isStale()) return;
 
       const refreshed = Deserializer.deserialize(serializedRefreshed);
 
+      // Before the greeting, so the stream opens under the identity this tab will send with. The
+      // sender is woken here rather than when the stream opens: a proxy can block the stream while
+      // writes still get through.
+      const sending = Hologram.dataLayer?.takeReplica(replica);
+
       if (preHandshakeReceiptCount > 0 && refreshed.data.length === 0) {
+        // A write held for that identity exists only in this tab's memory, so it goes out before
+        // the page does. A sender that failed says so in the check below.
+        await sending?.catch(() => {});
+
+        if (isStale()) return;
+
+        if (
+          Hologram.dataLayer?.holdsUnsentWrites() &&
+          $.reloadDeferrals < $.MAX_RELOAD_DEFERRALS
+        ) {
+          $.reloadDeferrals++;
+          $.scheduleReconnect();
+          return;
+        }
+
         window.location.reload();
         return;
       }
 
+      $.reloadDeferrals = 0;
+
       App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
       $.heartbeatIntervalMs = heartbeatIntervalMs;
+
+      // Still waiting after an answer: it came from a node of an older build during a deploy, or
+      // from a handshake that started before this tab asked. Writes are held until one brings the
+      // identity, so this asks again.
+      if (Hologram.dataLayer?.wantsReplica()) {
+        $.scheduleReconnect();
+        return;
+      }
 
       // An app without a data model greets with nothing, the way a tab that does not lead does.
       const greeting =
@@ -282,6 +339,8 @@ export default class Sse {
 
       Logger.debug(`SSE handshake error: ${error}`);
       $.scheduleReconnect();
+    } finally {
+      clearTimeout(deadline);
     }
   }
 
@@ -372,6 +431,7 @@ export default class Sse {
     clearTimeout($.reconnectTimer);
 
     $.reconnectAttempts = 0;
+    $.reloadDeferrals = 0;
 
     $.closeStream();
   }

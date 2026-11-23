@@ -20,6 +20,9 @@ export default class Replica {
 
   static token = null;
 
+  // Whether this tab is waiting for the server to mint it a pair of its own (see requestMint).
+  static awaitingMint = false;
+
   static adopt(replica) {
     Replica.id = replica.id;
     Replica.token = replica.token;
@@ -57,7 +60,32 @@ export default class Replica {
     return true;
   }
 
+  // Asks for a pair no other tab can hold, for a tab that counts its batches in memory. The pair in
+  // its page can't be that: a browser can serve one cached page to two tabs, or again on Back, and
+  // each would count from 1 under it, so the server would answer one write from the record of
+  // another. The next stream handshake brings the pair, and nothing is sent until it has.
+  static requestMint() {
+    Replica.awaitingMint = true;
+  }
+
+  // The pair the server minted, put in use if this tab is still waiting for one, answering whether
+  // it was. The page's pair is let go of for good: refresh() going back to it would undo the point
+  // of asking.
+  static takeMinted(replica) {
+    if (!Replica.awaitingMint || !replica?.id) {
+      return false;
+    }
+
+    Replica.awaitingMint = false;
+    Replica.fresh = null;
+
+    Replica.adopt(replica);
+
+    return true;
+  }
+
   static reset() {
+    Replica.awaitingMint = false;
     Replica.fresh = null;
     Replica.id = null;
     Replica.token = null;
