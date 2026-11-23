@@ -144,7 +144,7 @@ defmodule Hologram.Auth do
           struct | Server.identity_id() | nil,
           atom | {atom, atom | list(atom)},
           struct,
-          list(struct) | :held
+          list(struct) | :held | :stored
         ) ::
           boolean
   def can_from?(user_or_id, operation, entity, source) do
