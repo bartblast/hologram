@@ -1453,6 +1453,60 @@ describe("Elixir_Hologram_DB", () => {
           );
         });
 
+        it("answers an amount that isn't an integer with its violation", () => {
+          defineCard({update: [rule()]});
+
+          const entity = increment(card(), Type.atom("count"), Type.integer(1));
+          const metaKey = Type.encodeMapKey(Type.atom("__meta__"));
+          const opsKey = Type.encodeMapKey(Type.atom("attribute_ops"));
+          const countKey = Type.encodeMapKey(Type.atom("count"));
+          const meta = entity.data[metaKey][1];
+          const ops = meta.data[opsKey][1];
+
+          const floatOp = Type.tuple([Type.atom("increment"), Type.float(1.5)]);
+
+          const malformed = {
+            ...entity,
+            data: {
+              ...entity.data,
+              [metaKey]: [
+                Type.atom("__meta__"),
+                {
+                  ...meta,
+                  data: {
+                    ...meta.data,
+                    [opsKey]: [
+                      Type.atom("attribute_ops"),
+                      {
+                        ...ops,
+                        data: {
+                          ...ops.data,
+                          [countKey]: [Type.atom("count"), floatOp],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          };
+
+          assert.deepStrictEqual(
+            update(malformed),
+            Type.tuple([
+              Type.atom("error"),
+              Type.map([
+                [
+                  Type.atom("count"),
+                  Type.list([
+                    Type.tuple([Type.atom("type"), Type.atom("integer")]),
+                  ]),
+                ],
+              ]),
+            ]),
+          );
+        });
+
         it("refuses it when this client holds no value for the counter", () => {
           const entity = increment(
             put(note("no")),
