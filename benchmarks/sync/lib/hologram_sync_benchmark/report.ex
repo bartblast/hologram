@@ -8,9 +8,16 @@ defmodule HologramSyncBenchmark.Report do
 
   alias HologramSyncBenchmark.Measure
 
-  @case_order ~w(board board_roles tenants access deploy deploy_tenants lock)
+  @case_order ~w(board board_groups board_roles board_roles_groups tenants tenants_groups access
+                 deploy deploy_tenants reconnect reconnect_burst reconnect_writes
+                 reconnect_burst_writes reconnect_tenants reconnect_tenants_burst
+                 reconnect_tenants_writes reconnect_tenants_burst_writes catchups catchups_burst
+                 catchups_writes catchups_burst_writes session_memory backlog big_set lock)
 
   @readme_path "README.md"
+
+  # The most of a failure's reason a section's figure line carries.
+  @reason_length 120
 
   @results_end "<!-- /results -->"
 
@@ -87,6 +94,19 @@ defmodule HologramSyncBenchmark.Report do
     new_results = put_section(old_results, name, section)
 
     File.write!(@readme_path, head <> @results_start <> new_results <> @results_end <> tail)
+  end
+
+  @doc """
+  Returns the given failure as one short line, for a section's figure line.
+  """
+  @spec short_reason(atom, term) :: String.t()
+  def short_reason(kind, reason) do
+    kind
+    |> Exception.format_banner(reason)
+    |> String.split("\n", parts: 2)
+    |> hd()
+    |> String.trim_leading("** ")
+    |> String.slice(0, @reason_length)
   end
 
   @doc """

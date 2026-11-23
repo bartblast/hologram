@@ -7,11 +7,16 @@ defmodule HologramSyncBenchmark.Seed do
 
   alias Hologram.Auth
   alias Hologram.DB
+  alias Hologram.DB.Codec
+  alias Hologram.DB.Connection
+  alias Hologram.Sync.Search
   alias HologramSyncBenchmark.Entities.Doc
   alias HologramSyncBenchmark.Entities.Member
   alias HologramSyncBenchmark.Entities.Project
   alias HologramSyncBenchmark.Entities.ProjectMember
   alias HologramSyncBenchmark.Entities.RoleBoard
+  alias HologramSyncBenchmark.Entities.SetPost
+  alias HologramSyncBenchmark.Entities.SetTag
   # Named apart from Elixir's Task, which seeding runs its writes with.
   alias HologramSyncBenchmark.Entities.Task, as: TenantTask
   alias HologramSyncBenchmark.Entities.Tenant
@@ -83,6 +88,63 @@ defmodule HologramSyncBenchmark.Seed do
     |> Stream.run()
 
     board.id
+  end
+
+  @doc """
+  Creates one tag with the given number of hidden posts in its set, and the given number of visible
+  posts outside it, and returns the tag's id and the visible posts' ids. Runs on the server node.
+
+  The hidden posts go in with one statement rather than through the Writer: at 300,000 they'd take
+  minutes that way, nothing reads their values, and no client may read them.
+  """
+  @spec big_set(pos_integer, pos_integer) :: %{post_ids: [String.t()], tag_id: String.t()}
+  def big_set(hidden, visible) do
+    tag =
+      [name: "tag"]
+      |> SetTag.new()
+      |> DB.create!()
+
+    posts =
+      0..(visible - 1)
+      |> Stream.map(&SetPost.new(position: &1, title: "visible #{&1}", visible: true))
+      |> create_all()
+
+    :ok = insert_hidden_posts(hidden, visible, tag.id)
+
+    %{post_ids: Enum.map(posts, & &1.id), tag_id: tag.id}
+  end
+
+  defp insert_hidden_posts(hidden, first_position, tag_id) do
+    posts =
+      SetPost
+      |> DB.table_name()
+      |> Search.qualified_table()
+
+    pairs =
+      DB.mapping()
+      |> Search.join_table(SetPost, :tags)
+      |> Search.qualified_table()
+
+    statement = """
+    WITH hidden AS (
+      INSERT INTO #{posts}
+        ("id", "position", "title", "visible", "created_at", "server_created_at",
+         "server_updated_at", "updated_at", "$revisions")
+      SELECT gen_random_uuid(), $1::bigint + number, 'hidden ' || number, false,
+             now(), now(), now(), now(), '{}'::jsonb
+      FROM generate_series(1, $2::bigint) AS number
+      RETURNING "id"
+    )
+    INSERT INTO #{pairs} ("source_id", "target_id")
+    SELECT "id", $3::uuid FROM hidden
+    """
+
+    {:ok, _result} =
+      Connection.with_timeout(:infinity, fn ->
+        Connection.query(statement, [first_position, hidden, Codec.encode(tag_id, :uuid)])
+      end)
+
+    :ok
   end
 
   @doc """
