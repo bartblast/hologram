@@ -443,19 +443,45 @@ describe("Durability", () => {
     // The rows and the place are gone for the whole browser, not for this tab - so a tab that goes
     // on writing frames into it would be dating rows the store no longer holds.
     it("tells the group it has stopped storing", async () => {
-      const posting = sinon.stub(Tabs, "post");
+      const losing = sinon.stub(Tabs, "storeLost");
 
       await Durability.open();
       await Durability.load();
       await Durability.persistFrame([unstorableRecord()], "place-2");
 
-      sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
+      sinon.assert.calledOnce(losing);
+    });
+
+    // The tab has left the group by then, so a second message would end a group it isn't in.
+    it("does nothing more for a write that fails after the store was let go", async () => {
+      const losing = sinon.stub(Tabs, "storeLost");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const starting = sinon.spy(FDBDatabase.prototype, "transaction");
+      const writing = Durability.persistFrame(
+        [taskRecord("t2", "second")],
+        "place-2",
+      );
+
+      const transaction = starting.lastCall.returnValue;
+
+      Durability.detach();
+      transaction.abort();
+
+      await writing;
+
+      sinon.assert.notCalled(losing);
+      assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
+      assert.equal(await readMeta("cursor"), "place-1");
     });
 
     // The log line goes to session storage, whose own quota the log can fill. Thrown, it would
     // reject the identity write every send waits on, and leave the store open and unwiped.
     it("stops storing even when the failure cannot be logged", async () => {
-      const posting = sinon.stub(Tabs, "post");
+      const losing = sinon.stub(Tabs, "storeLost");
 
       await seedPreviousLoad();
       await Durability.open();
@@ -471,9 +497,71 @@ describe("Durability", () => {
       await Durability.replicaWritten();
 
       assert.equal(Durability.mode, "memory");
-      sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
+      sinon.assert.calledOnce(losing);
 
       assert.isUndefined(await readMeta("cursor"));
+      assert.isUndefined(await readMeta("replica"));
+      assert.isUndefined(await readMeta("seq"));
+    });
+
+    // Only the tab that leads writes rows and a place, so a follower's failed write leaves them
+    // true. A wipe from it could land ahead of a frame the leader has already started, and the
+    // store would then name a place holding that frame's rows alone.
+    it("leaves the rows and the place alone in a tab that follows", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const batch = unfiledBatch();
+
+      batch.append({
+        held: () => {},
+        id: "t2",
+        op: "delete",
+        type: "MyApp.Task",
+      });
+
+      Tabs.leader = false;
+
+      try {
+        await Durability.fileBatch(batch);
+      } finally {
+        Tabs.leader = true;
+      }
+
+      assert.equal(Durability.mode, "memory");
+      assert.equal(await readMeta("cursor"), "place-1");
+      assert.equal((await readAll("entities")).length, 1);
+    });
+
+    // The tab that leads goes on counting in memory after hearing of this, so the stored counter
+    // stops being true whichever tab's write failed.
+    it("drops the identity and the counter in a tab that follows", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const batch = unfiledBatch();
+
+      batch.append({
+        held: () => {},
+        id: "t2",
+        op: "delete",
+        type: "MyApp.Task",
+      });
+
+      Tabs.leader = false;
+
+      try {
+        await Durability.fileBatch(batch);
+      } finally {
+        Tabs.leader = true;
+      }
+
       assert.isUndefined(await readMeta("replica"));
       assert.isUndefined(await readMeta("seq"));
     });
@@ -546,6 +634,26 @@ describe("Durability", () => {
       assert.equal(await readMeta("cursor"), "place-1");
       assert.equal(await readMeta("seq"), 41);
       assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
+    });
+
+    // A tab that leads and hears of another tab's failure: the frame it already started goes down
+    // whole, with its rows and its place together.
+    it("lets a frame still being written finish", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const writing = Durability.persistFrame(
+        [taskRecord("t2", "second")],
+        "place-2",
+      );
+
+      Durability.detach();
+
+      await writing;
+
+      assert.equal(await readMeta("cursor"), "place-2");
+      assert.equal((await readAll("entities")).length, 2);
     });
   });
 
@@ -745,9 +853,12 @@ describe("Durability", () => {
         "place-1",
       );
 
+      const dissolving = sinon.stub(Tabs, "dissolve");
+
       const {db} = await rawOpen(2);
 
       assert.equal(Durability.mode, "memory");
+      sinon.assert.calledOnce(dissolving);
 
       db.close();
 
@@ -789,7 +900,7 @@ describe("Durability", () => {
       assert.isTrue(Replica.awaitingMint);
     });
 
-    it("asks for no identity when the store is taken after a read that found one", async () => {
+    it("asks for an identity when the store is taken for a new version after the read", async () => {
       await seedPreviousLoad();
       await Durability.open();
       await Durability.load();
@@ -800,19 +911,32 @@ describe("Durability", () => {
       const {db} = await rawOpen(2);
 
       db.close();
+
+      assert.equal(Durability.mode, "memory");
+      assert.isTrue(Replica.awaitingMint);
+    });
+
+    it("asks for no identity when a write fails after a read that found one", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+      await Durability.persistFrame([unstorableRecord()], "place-2");
+
       Durability.restore(true);
 
       assert.equal(Durability.mode, "memory");
       assert.isFalse(Replica.awaitingMint);
     });
 
-    it("asks for an identity when the store is taken after a read that found none", async () => {
+    it("asks for an identity when a write fails after a read that found none", async () => {
+      sinon.stub(Tabs, "storeLost");
+
       await Durability.open();
       await Durability.load();
+      await Durability.persistFrame([unstorableRecord()], "place-2");
 
-      const {db} = await rawOpen(2);
-
-      db.close();
       Durability.restore(true);
 
       assert.equal(Durability.mode, "memory");
@@ -908,9 +1032,9 @@ describe("Durability", () => {
       assert.isNull(Durability.restore(true));
     });
 
-    // Another tab moving the database on makes nothing stored untrue, and this tab stays in its
-    // group - so what it read is taken up as it would have been.
-    it("keeps what it read when the database closes for a new version before the restore", async () => {
+    // Another tab moving the database on ends this tab's group, and the stored identity and queue
+    // are for whichever tab leads after the upgrade.
+    it("keeps nothing it read when the database closes for a new version before the restore", async () => {
       await seedPreviousLoad();
       await Durability.open();
       await Durability.load();
@@ -923,7 +1047,7 @@ describe("Durability", () => {
       db.close();
 
       assert.equal(Durability.mode, "memory");
-      assert.equal(Durability.restore(true).cursor, "place-1");
+      assert.isNull(Durability.restore(true));
     });
 
     // The group ends with a store failure another tab reported, and a follower that took a fresh
@@ -1824,7 +1948,7 @@ describe("Durability", () => {
 
     // Skipped, the repair would leave the store naming another place with nothing to say so.
     it("stops storing when the store cannot be read", async () => {
-      const posting = sinon.stub(Tabs, "post");
+      const losing = sinon.stub(Tabs, "storeLost");
 
       await seedPreviousLoad();
       await Durability.open();
@@ -1839,7 +1963,7 @@ describe("Durability", () => {
       );
 
       assert.equal(Durability.mode, "memory");
-      sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
+      sinon.assert.calledOnce(losing);
     });
 
     it("does nothing in memory mode", async () => {

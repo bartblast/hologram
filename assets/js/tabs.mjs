@@ -134,10 +134,14 @@ export default class Tabs {
   // Answers once the lock is really gone, the way leaving does - which is what lets anything
   // waiting on this tab's place in the group wait for it rather than for a moment.
   static dissolve() {
+    if (Tabs.name === null) {
+      return Promise.resolve();
+    }
+
     const followed = !Tabs.leader;
     const untaken = Tabs.#leadWhenReady;
 
-    if (Tabs.name !== null && !Tabs.#ready) {
+    if (!Tabs.#ready) {
       SyncStream.syncCursor = null;
     }
 
@@ -152,7 +156,25 @@ export default class Tabs {
       Sse.reconnect();
     }
 
+    // A tab that followed sends for itself from here on, and may hold a write the store never took.
+    Batches.flush();
+
     return released;
+  }
+
+  // This tab could not write to the store it shares. The other tabs are told, then the group ends
+  // for this tab too.
+  //
+  // Posted straight on the channel rather than through `post`: a message waiting behind a store
+  // write goes nowhere once the tab leaves, and this one has to arrive.
+  static storeLost() {
+    try {
+      Tabs.#channel?.postMessage({kind: "storage_failed"});
+    } catch {
+      // A channel that can't take it has nobody listening through it.
+    }
+
+    return Tabs.dissolve();
   }
 
   // Joins the group, answering whether this tab leads it.
@@ -327,10 +349,10 @@ export default class Tabs {
 
         return;
 
-      // Another tab could not write, and what it wiped it wiped for the whole browser: the rows
-      // and the place they were dated at are gone from a store every tab of the group shares. So
-      // this tab stops writing too - going on would date rows the store no longer holds - and the
-      // group ends, because what made it one was the store.
+      // Another tab could not write. If it led, what it wiped it wiped for the whole browser: the
+      // rows and the place they were dated at are gone from a store every tab of the group shares.
+      // So this tab stops writing too - going on could date rows the store no longer holds - and
+      // the group ends, because what made it one was the store.
       case "storage_failed":
         Durability.detach();
         Tabs.dissolve();
@@ -475,7 +497,6 @@ export default class Tabs {
     }
 
     Tabs.#held = [];
-    Tabs.#leadWhenReady = false;
     Tabs.#ready = true;
 
     for (const [index, message] of held.entries()) {
@@ -501,7 +522,10 @@ export default class Tabs {
       }
     }
 
+    // Cleared only now: a message above can lose the store and end the group, and the tab then
+    // needs a stream of its own, since it hasn't taken this lead (see dissolve).
     if (lead) {
+      Tabs.#leadWhenReady = false;
       Tabs.takingLead = false;
       Tabs.#onLead();
     } else if (Tabs.leader) {
@@ -1007,6 +1031,11 @@ export default class Tabs {
       Tabs.leader = true;
       Tabs.#unrecorded = true;
 
+      // Before the lead is taken, which can lose the store and leave the group on the spot. Leaving
+      // lets go of the lock through what this sets up, and with nothing set up yet the lock would
+      // stay held by a tab that's no longer in the group.
+      const held = Tabs.#hold();
+
       // Not ready, it holds a place it cannot vouch for yet - the one it is reading the store again
       // to check (see #takeStore) - so a stream that greets the server meanwhile, reconnecting on
       // its own, asks for no sync from it (see SyncStream.buildGreeting). The lead's own reconnect
@@ -1019,7 +1048,7 @@ export default class Tabs {
         Tabs.takingLead = true;
       }
 
-      return Tabs.#hold();
+      return held;
     });
   }
 }

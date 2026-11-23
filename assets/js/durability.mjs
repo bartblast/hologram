@@ -167,8 +167,9 @@ export default class Durability {
 
   // Lets go of the database without touching what it holds. For a tab told that ANOTHER tab of its
   // group could not write: that tab wiped what had to be wiped and closed, and this one has to stop
-  // writing too - a leader that went on storing frames would be dating rows the store no longer
-  // holds - but has nothing of its own to answer for.
+  // writing too - a leader that went on storing frames would be dating rows the store may no longer
+  // hold - but has nothing of its own to answer for. And for a tab another one needs a new database
+  // version from.
   //
   // What load() read goes too, when this comes before the restore. The group ends with this (see
   // Tabs.dissolve): a follower takes a fresh identity and lets its batches go, and taking up the
@@ -367,12 +368,16 @@ export default class Durability {
     // rows, the place and the counter are all still exactly what they were, and the bundle doing
     // the upgrading is the one that decides what to carry across. Wiping would block the upgrade
     // in order to throw away a store that the upgrading bundle wanted.
+    //
+    // The group ends with it, since a tab with no store can't lead one or follow it. Every tab of
+    // the group gets this event for its own connection, so none has to be told.
     Durability.#db.onversionchange = () => {
       Logger.debug(
         "Hologram: another tab needs a new database version, the database lives in memory for this page",
       );
 
-      Durability.#letGo();
+      Durability.detach();
+      Tabs.dissolve();
     };
 
     Durability.mode = "indexeddb";
@@ -827,18 +832,31 @@ export default class Durability {
   // come back round to this function, and it cannot: nothing in this block reports one. That is
   // also why there is no "already failing" flag to keep in step - the shape rules the case out
   // rather than catching it.
+  //
+  // Only the tab that leads wipes the rows and the place. It's the only one that writes them, so
+  // what it wipes lands behind its own frames. A tab that follows failed on the queue or the
+  // counter, which leaves them true, and a wipe from it could land ahead of a frame the leader has
+  // already started: the store would then name a place holding that frame's rows alone.
   static #fail(reason) {
+    // A write still running when this tab let go of the store. The tab has left its group, and what
+    // the store holds is no longer its to wipe.
+    if (Durability.#db === null) {
+      return;
+    }
+
     Logger.debug(
       `Hologram: durable storage stopped (${reason}), the database lives in memory for this page`,
     );
 
     try {
       const transaction = Durability.#db.transaction(
-        [ENTITIES, META],
+        Tabs.leader ? [ENTITIES, META] : [META],
         "readwrite",
       );
 
-      Durability.#wipe(transaction);
+      if (Tabs.leader) {
+        Durability.#wipe(transaction);
+      }
 
       const meta = transaction.objectStore(META);
 
@@ -850,11 +868,11 @@ export default class Durability {
 
     Durability.#letGo();
 
-    // The other tabs of the group share this database and have just had the rows and the place
-    // taken out from under them. They let go of it too rather than going on writing into a store
-    // whose place no longer describes what it holds - and they wipe nothing, since the wipe above
-    // is the whole of what had to happen and happened once.
-    Tabs.post({kind: "storage_failed"});
+    // The other tabs of the group share this database, and a store that refused this write can
+    // refuse theirs. They let go of it too, rather than going on writing into a store whose place
+    // may no longer describe what it holds. This tab leaves the group as well, so it can't inherit
+    // the lead with a counter nothing records.
+    Tabs.storeLost();
   }
 
   // Closes the store for the rest of this page. A tab that has taken up nothing from it, and now

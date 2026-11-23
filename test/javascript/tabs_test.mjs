@@ -316,6 +316,169 @@ describe("Tabs", () => {
 
       assert.isTrue(disowning.calledOnce);
     });
+
+    // Nobody else will send what it holds now.
+    it("wakes the sender", async () => {
+      const flushing = sinon.stub(Batches, "flush");
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      Tabs.dissolve();
+
+      assert.isTrue(flushing.calledOnce);
+      assert.isTrue(flushing.calledAfter(disowning));
+    });
+
+    it("does nothing outside a group", async () => {
+      const flushing = sinon.stub(Batches, "flush");
+
+      await Tabs.dissolve();
+
+      assert.isFalse(disowning.called);
+      assert.isFalse(reconnecting.called);
+      assert.isFalse(flushing.called);
+    });
+  });
+
+  // A tab whose own write failed.
+  describe("storeLost()", () => {
+    const heardBy = (channel) =>
+      new Promise((resolve) => {
+        channel.onmessage = (event) => resolve(event.data);
+      });
+
+    beforeEach(() => {
+      sinon.stub(Batches, "flush");
+      sinon.stub(Batches, "disown");
+      sinon.stub(Sse, "reconnect");
+    });
+
+    it("tells the group and leaves it", async () => {
+      const group = nextGroup();
+
+      await Tabs.join(group, stubs());
+
+      const listener = sibling(group);
+      const heard = heardBy(listener);
+
+      await Tabs.storeLost();
+
+      assert.deepStrictEqual(await heard, {kind: "storage_failed"});
+      assert.isNull(Tabs.name);
+    });
+
+    // Leaving drops the messages waiting behind a store write, and this one has to arrive.
+    it("tells the group ahead of a message waiting on a store write", async () => {
+      const group = nextGroup();
+
+      await Tabs.join(group, stubs());
+
+      Tabs.post({kind: "frame"}, new Promise(() => {}));
+
+      const listener = sibling(group);
+      const heard = heardBy(listener);
+
+      Tabs.storeLost();
+
+      assert.deepStrictEqual(await heard, {kind: "storage_failed"});
+    });
+
+    it("lets a later tab lead after the tab that led has failed", async () => {
+      const group = nextGroup();
+
+      await Tabs.join(group, stubs());
+      await Tabs.storeLost();
+
+      assert.isTrue(await isLockFree(group));
+    });
+
+    // Handed the lead later, it would send under the group's identity with a count of its own.
+    it("never takes the lead after failing as a follower", async () => {
+      const group = nextGroup();
+      const led = sinon.spy();
+      const release = await holdLeaderLock(group);
+
+      await Tabs.join(group, {onLead: led, onMessage: () => {}});
+      await Tabs.storeLost();
+
+      release();
+      await waitForEventLoop();
+
+      assert.isFalse(led.called);
+      assert.isTrue(await isLockFree(group));
+    });
+
+    // Kept, every tab opened later would follow a leader that doesn't exist.
+    it("lets the lock go when the store fails while the tab takes the lead", async () => {
+      const group = nextGroup();
+      const release = await holdLeaderLock(group);
+
+      await Tabs.join(group, {
+        onLead: () => Tabs.storeLost(),
+        onMessage: () => {},
+      });
+
+      Tabs.ready();
+
+      release();
+      await waitForEventLoop();
+
+      assert.isNull(Tabs.name);
+      assert.isTrue(await isLockFree(group));
+    });
+
+    // It hasn't taken the lead, so its stream is still the one a follower greeted the server with.
+    it("opens a stream of its own when a held message loses the store before a handed lead is taken", async () => {
+      const group = nextGroup();
+      const led = sinon.spy();
+      const release = await holdLeaderLock(group);
+      const wasStarted = Sse.isStarted;
+
+      await Tabs.join(group, {
+        onLead: led,
+        onMessage: () => Tabs.storeLost(),
+      });
+
+      sibling(group).postMessage({answer: {}, kind: "answered", seq: 1});
+      await waitForEventLoop();
+
+      release();
+      await waitForEventLoop();
+
+      Sse.isStarted = true;
+
+      try {
+        Tabs.ready();
+      } finally {
+        Sse.isStarted = wasStarted;
+      }
+
+      sinon.assert.calledOnce(Sse.reconnect);
+      assert.isFalse(led.called);
+      assert.isNull(Tabs.name);
+    });
+
+    it("leaves even when the channel can't take the message", async () => {
+      await Tabs.join(nextGroup(), stubs());
+
+      sinon
+        .stub(BroadcastChannel.prototype, "postMessage")
+        .throws(new DOMException("closed", "InvalidStateError"));
+
+      await Tabs.storeLost();
+
+      assert.isNull(Tabs.name);
+    });
+
+    it("says nothing outside a group", async () => {
+      const posting = sinon.spy(BroadcastChannel.prototype, "postMessage");
+
+      await Tabs.storeLost();
+
+      assert.isFalse(posting.called);
+    });
   });
 
   // What a tab does the moment the group becomes its to lead, with nothing handed over by the tab
