@@ -208,7 +208,8 @@ defmodule Hologram.Migration.AtomicityTest do
       route(scratch, fn ->
         expected_msg =
           ~s(cannot make column "title" on table "my_app_task" required - ) <>
-            "found 1 row with NULL - declare default: <value>, " <>
+            "found 1 row with NULL - add backfill: <value or expression> to the op, " <>
+            "declare default: <value>, " <>
             "keep the attribute optional: true, or fix the data"
 
         assert_error RuntimeError, expected_msg, fn ->

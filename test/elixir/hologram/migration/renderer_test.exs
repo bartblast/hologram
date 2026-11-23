@@ -1045,6 +1045,32 @@ defmodule Hologram.Migration.RendererTest do
       refute Map.has_key?(alter, :fill)
     end
 
+    test "renders a required retarget widened by the next op, which drops the column" do
+      pre_model =
+        model(%{
+          MyApp.Admin => %{},
+          MyApp.Task => %{relationships: [{:reviewer, MyApp.User, [optional: true]}]},
+          MyApp.User => %{}
+        })
+
+      change = fn changes, line ->
+        %{
+          op: :change_relationship,
+          entity: MyApp.Task,
+          name: :reviewer,
+          changes: changes,
+          line: line
+        }
+      end
+
+      ops = [
+        change.([type: MyApp.Admin, optional: false], 3),
+        change.([type: [MyApp.Admin]], 4)
+      ]
+
+      assert %{transactional: _transactional} = render(ops, pre_model)
+    end
+
     test "keeps a constant tightening apart from a type change beside it", %{
       pre_model: pre_model
     } do

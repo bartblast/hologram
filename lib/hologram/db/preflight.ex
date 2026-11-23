@@ -294,6 +294,10 @@ defmodule Hologram.DB.Preflight do
     Enum.each(ops, &check_op!(&1, actual, mapping))
   end
 
+  defp backfill_spelling(%{kind: :attribute}), do: "<value or expression>"
+
+  defp backfill_spelling(%{kind: :relationship}), do: "<id or expression>"
+
   defp check_op!(%{op: :add_column} = op, actual, mapping) do
     # An op carrying its own backfill needs no declared default - a migration states what
     # the rows that predate the column receive.
@@ -427,8 +431,7 @@ defmodule Hologram.DB.Preflight do
 
     if count > 0 do
       raise ~s(cannot make column "#{op.column}" on table "#{op.table}" required - ) <>
-              "found #{count} #{pluralize_rows(count)} with NULL - " <>
-              "declare default: <value>, keep the attribute optional: true, or fix the data"
+              "found #{count} #{pluralize_rows(count)} with NULL - #{null_ways_out(op)}"
     end
   end
 
@@ -541,6 +544,34 @@ defmodule Hologram.DB.Preflight do
 
   defp not_ready_invalid_indexes do
     for {index, %{ready?: false}} <- invalid_indexes(), into: MapSet.new(), do: index
+  end
+
+  # A migration's op can take a backfill, but not beside a type change, and only an attribute that
+  # isn't unique can declare a default. Schema reconciliation has no op to add a backfill to.
+  defp null_ways_out(%{tightening: %{type_stated: true} = tightening}) do
+    "change the type in an op of its own, then add backfill: " <>
+      "#{backfill_spelling(tightening)} to the op making it required, " <>
+      optional_ways_out(tightening)
+  end
+
+  defp null_ways_out(%{tightening: tightening}) do
+    "add backfill: #{backfill_spelling(tightening)} to the op, #{optional_ways_out(tightening)}"
+  end
+
+  defp null_ways_out(_op) do
+    "declare default: <value>, keep the attribute optional: true, or fix the data"
+  end
+
+  defp optional_ways_out(%{kind: :attribute, takes_default: true}) do
+    "declare default: <value>, keep the attribute optional: true, or fix the data"
+  end
+
+  defp optional_ways_out(%{kind: :attribute}) do
+    "keep the attribute optional: true, or fix the data"
+  end
+
+  defp optional_ways_out(%{kind: :relationship}) do
+    "keep the relationship optional: true, or fix the data"
   end
 
   defp raise_cast_duplicate_keys!(_op, _columns, 0), do: :ok

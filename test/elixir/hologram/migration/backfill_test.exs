@@ -1310,6 +1310,86 @@ defmodule Hologram.Migration.BackfillTest do
       end)
     end
 
+    test "offers no default to a unique attribute meeting a nil", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      op = %{
+        op: :change_attribute,
+        entity: MyApp.Task,
+        name: :slug,
+        changes: [optional: false],
+        line: 3
+      }
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_row("my_app_task", code: "a")
+
+        assert_error RuntimeError,
+                     ~s(cannot make column "slug" on table "my_app_task" required - ) <>
+                       "found 1 row with NULL - add backfill: <value or expression> to the op, " <>
+                       "keep the attribute optional: true, or fix the data",
+                     fn -> apply_file([op], create, first_model) end
+      end)
+    end
+
+    test "names a type stated without changing the column as a separate op too", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      op = %{
+        op: :change_attribute,
+        entity: MyApp.Task,
+        name: :title,
+        changes: [type: :string, optional: false],
+        line: 3
+      }
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_row("my_app_task", code: "a")
+
+        assert_error RuntimeError,
+                     ~s(cannot make column "title" on table "my_app_task" required - ) <>
+                       "found 1 row with NULL - change the type in an op of its own, then add " <>
+                       "backfill: <value or expression> to the op making it required, declare " <>
+                       "default: <value>, keep the attribute optional: true, or fix the data",
+                     fn -> apply_file([op], create, first_model) end
+      end)
+    end
+
+    test "names a separate op when a tightening beside a type change meets a nil", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      op = %{
+        op: :change_attribute,
+        entity: MyApp.Task,
+        name: :rank,
+        changes: [optional: false, type: :string],
+        line: 3
+      }
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_row("my_app_task", code: "a")
+
+        assert_error RuntimeError,
+                     ~s(cannot make column "rank" on table "my_app_task" required - ) <>
+                       "found 1 row with NULL - change the type in an op of its own, then add " <>
+                       "backfill: <value or expression> to the op making it required, keep the " <>
+                       "attribute optional: true, or fix the data",
+                     fn -> apply_file([op], create, first_model) end
+      end)
+    end
+
     test "applies a type change and a constant tightening of one attribute",
          %{scratch: scratch} = context do
       ops = [
@@ -1683,6 +1763,59 @@ defmodule Hologram.Migration.BackfillTest do
 
         assert apply_file(ops, create, first_model) == :ok
         assert ids_by_code("my_app_task", "note") == [nil]
+      end)
+    end
+
+    test "names backfill and no default when a plain tightening meets a nil", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      op = %{
+        op: :change_relationship,
+        entity: MyApp.Task,
+        name: :reviewer,
+        changes: [optional: false],
+        line: 3
+      }
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_row("my_app_task", code: "a")
+
+        assert_error RuntimeError,
+                     ~s(cannot make column "reviewer_id" on table "my_app_task" required - ) <>
+                       "found 1 row with NULL - add backfill: <id or expression> to the op, " <>
+                       "keep the relationship optional: true, or fix the data",
+                     fn -> apply_file([op], create, first_model) end
+      end)
+    end
+
+    test "names a separate op when a retarget beside a tightening meets a nil", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      op = %{
+        op: :change_relationship,
+        entity: MyApp.Task,
+        name: :reviewer,
+        changes: [type: MyApp.Tag, optional: false],
+        line: 3
+      }
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_row("my_app_task", code: "a")
+
+        assert_error RuntimeError,
+                     ~s(cannot make column "reviewer_id" on table "my_app_task" required - ) <>
+                       "found 1 row with NULL - change the type in an op of its own, then add " <>
+                       "backfill: <id or expression> to the op making it required, keep the " <>
+                       "relationship optional: true, or fix the data",
+                     fn -> apply_file([op], create, first_model) end
       end)
     end
 

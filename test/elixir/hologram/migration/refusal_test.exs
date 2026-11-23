@@ -282,7 +282,7 @@ defmodule Hologram.Migration.RefusalTest do
 
       expected_msg =
         ~s(cannot make column "amount" on table "my_app_task" required - ) <>
-          "found 1 row with NULL - " <>
+          "found 1 row with NULL - add backfill: <value or expression> to the op, " <>
           "declare default: <value>, keep the attribute optional: true, or fix the data"
 
       assert_refused(scratch, create, first_model, refused, expected_msg)

@@ -1576,7 +1576,7 @@ defmodule Hologram.Migration.IndexRecoveryTest do
       post_model = Enum.reduce(pending, extra_model, &Model.fold(&2, &1.ops))
 
       expected_msg =
-        ~s(cannot make column "total" on table "my_app_task" required - found 2 rows with NULL - declare default: <value>, keep the attribute optional: true, or fix the data)
+        ~s(cannot make column "total" on table "my_app_task" required - found 2 rows with NULL - add backfill: <value or expression> to the op, declare default: <value>, keep the attribute optional: true, or fix the data)
 
       route(scratch, fn ->
         drop_index(@slug_index)
@@ -1616,7 +1616,7 @@ defmodule Hologram.Migration.IndexRecoveryTest do
       post_model = Enum.reduce(pending, extra_model, &Model.fold(&2, &1.ops))
 
       expected_msg =
-        ~s(cannot make column "amount" on table "my_app_task" required - found 2 rows with NULL - declare default: <value>, keep the attribute optional: true, or fix the data)
+        ~s(cannot make column "amount" on table "my_app_task" required - found 2 rows with NULL - add backfill: <value or expression> to the op, declare default: <value>, keep the attribute optional: true, or fix the data)
 
       route(scratch, fn ->
         drop_index(@slug_index)

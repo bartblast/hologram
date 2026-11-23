@@ -724,9 +724,69 @@ defmodule Hologram.Migration.Renderer do
     Enum.reduce(chunks, {[], pre_model}, fn {_cut, chunk}, {acc, model} ->
       {ops, next_model} = render_chunk(chunk, model)
 
-      {acc ++ ops, next_model}
+      {acc ++ mark_tightenings(ops, chunk, model, next_model), next_model}
     end)
   end
+
+  # A tightening nothing fills is refused over rows holding nil, naming what the member can take.
+  defp mark_tightenings(ops, chunk, model, next_model) do
+    if Enum.any?(ops, &unfilled_tightening?/1) do
+      # The chunk's start, where a column being altered stands: a later op of the chunk can drop it.
+      mapping = Mapper.derive_from_model!(model)
+
+      Enum.map(ops, &mark_tightening(&1, chunk, mapping, next_model))
+    else
+      ops
+    end
+  end
+
+  defp mark_tightening(op, chunk, mapping, next_model) do
+    if unfilled_tightening?(op),
+      do: Map.put(op, :tightening, tightening(op, chunk, mapping, next_model)),
+      else: op
+  end
+
+  defp tightening(op, chunk, mapping, next_model) do
+    {entity_type, entry} = Enum.find(mapping, fn {_type, entry} -> entry.table == op.table end)
+    {kind, name} = Enum.find(entry.columns, &(&1.name == op.column)).source
+
+    # A declared default fills a tightening only when the column keeps its type.
+    takes_default =
+      kind == :attribute and op.before.type == op.after.type and
+        not unique_attribute?(next_model, entity_type, name)
+
+    %{
+      kind: kind,
+      takes_default: takes_default,
+      type_stated: Enum.any?(chunk, &states_type?(&1, entity_type, name))
+    }
+  end
+
+  defp states_type?(
+         %{op: kind, entity: entity_type, name: name, changes: changes},
+         entity_type,
+         name
+       )
+       when kind in [:change_attribute, :change_relationship] do
+    Keyword.has_key?(changes, :type)
+  end
+
+  defp states_type?(_op, _entity_type, _name), do: false
+
+  defp unique_attribute?(model, entity_type, name) do
+    case List.keyfind(model.entities[entity_type][:attributes] || [], name, 0) do
+      {^name, _type, opts} -> opts[:unique] == true
+      nil -> false
+    end
+  end
+
+  defp unfilled_tightening?(
+         %{op: :alter_column, before: %{null: true}, after: %{null: false}} = op
+       ) do
+    not Map.has_key?(op, :fill) and not Map.has_key?(op, :filled)
+  end
+
+  defp unfilled_tightening?(_op), do: false
 
   # Added nullable, filled, then tightened. The tightening is marked filled and takes no declared
   # default: the expression said what each row holds, so a NULL it left is refused rather than
