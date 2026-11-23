@@ -840,6 +840,38 @@ defmodule Hologram.PolicyTest do
                build(NewRowFixture5)[:update]
     end
 
+    test "keeps what a none's condition matches whatever the change" do
+      defmodule NewRowFixture24 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: none(tag <- tags, tag.level > 1 or tag.level > new(priority))
+      end
+
+      assert [%{predicates: [{:none, {[:tags], [{:or, [[{:level, :>, 1}]]}]}}]}] =
+               build(NewRowFixture24)[:update]
+    end
+
+    test "keeps what an all's condition needs whatever the change" do
+      defmodule NewRowFixture25 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: all(tag <- tags, tag.level > 1 and tag.level > new(priority))
+      end
+
+      assert [%{predicates: [{:all, {[:tags], [{:level, :>, 1}]}}]}] =
+               build(NewRowFixture25)[:update]
+    end
+
     test "keeps an any's stored source when its condition reads the new row" do
       defmodule NewRowFixture20 do
         use Hologram.Entity

@@ -1584,9 +1584,10 @@ defmodule Hologram.Policy do
   # The given clauses, nested in the given number of quantifiers, without those reading the row
   # after the change, which no row answers until there is a change: each counts as holding. An
   # alternative left with nothing holds, and so does its disjunction. An any over a stored set keeps
-  # the set, since no change can pass on an empty one, and what's left of its condition. Any other
-  # quantifier reading that row goes whole, since dropping a clause inside a none would narrow it
-  # the wrong way.
+  # the set, since no change can pass on an empty one, and what's left of its condition. An all
+  # keeps what's left of its condition too, since a row failing that fails it whatever the change.
+  # A none keeps only what matches a row whatever the change, since dropping a clause inside it
+  # would narrow it the wrong way. A quantifier over the row after the change goes whole.
   defp planned_clauses(clauses, depth \\ 0) do
     Enum.flat_map(clauses, fn
       {:or, alternatives} ->
@@ -1599,9 +1600,51 @@ defmodule Hologram.Policy do
           do: [],
           else: [put_elem(clause, 1, {source, planned_clauses(inner, depth + 1)})]
 
+      {quantifier, {source, inner}} = clause when quantifier in [:all, :none] ->
+        cond do
+          not reads_new_row?([clause], depth) -> [clause]
+          new_row_name?(source, depth) -> []
+          true -> planned_quantifier(quantifier, source, inner, depth)
+        end
+
       clause ->
         if reads_new_row?([clause], depth), do: [], else: [clause]
     end)
+  end
+
+  defp planned_quantifier(:all, source, inner, depth) do
+    case planned_clauses(inner, depth + 1) do
+      [] -> []
+      planned -> [{:all, {source, planned}}]
+    end
+  end
+
+  defp planned_quantifier(:none, source, inner, depth) do
+    case sure_clauses(inner, depth + 1) do
+      nil -> []
+      sure -> [{:none, {source, sure}}]
+    end
+  end
+
+  # The given clauses cut down to what matches a row whatever the change, or nil when nothing does:
+  # every clause has to, and of a disjunction one alternative is enough.
+  defp sure_clauses(clauses, depth) do
+    sure = Enum.map(clauses, &sure_clause(&1, depth))
+
+    if nil in sure, do: nil, else: sure
+  end
+
+  defp sure_clause({:or, alternatives}, depth) do
+    sure =
+      alternatives
+      |> Enum.map(&sure_clauses(&1, depth))
+      |> Enum.reject(&is_nil/1)
+
+    if sure == [], do: nil, else: {:or, sure}
+  end
+
+  defp sure_clause(clause, depth) do
+    if reads_new_row?([clause], depth), do: nil, else: clause
   end
 
   # Every clause a rule reads, those judging a change included, each as what it reads on a stored
