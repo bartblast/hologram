@@ -157,15 +157,14 @@ defmodule Hologram.DB.EntityOperations do
 
     transaction_result =
       Connection.transaction(fn ->
-        edge_effects = delete_outgoing_edges(entity_type, id, join_tables, encoded_id)
-
-        # Every edge the delete takes with it is recorded, ahead of the row. A reader learning the
-        # entity is gone knows its own edges went with it, but the targets don't: each one's
-        # inverse of the relationship lost a row, and what a read rule reads through that set may
-        # have moved. Once the delete commits, nothing else says which rows those were.
-        case delete_entity_row(entity_type, table, encoded_id) do
-          nil -> :ok
-          entity -> Oplog.append(Enum.concat(edge_effects, [delete_effect(entity)]))
+        # The row is locked before its edges go. An edge added from it meanwhile would otherwise
+        # commit between the two statements, and the join table's key on the source would refuse
+        # the row. Locked, a write adding one first is waited for, and its edge goes with the row;
+        # a new edge added after waits on the lock and fails once the row is gone. A type with no
+        # to-many has no edge to race, and the row's own delete takes the lock. The struct verb
+        # and the batch already hold the row, so this takes the locks in the order they do.
+        if join_tables == [] or lock_row?(table, encoded_id) do
+          delete_locked_row(entity_type, id, table, join_tables, encoded_id)
         end
 
         :ok
@@ -323,9 +322,9 @@ defmodule Hologram.DB.EntityOperations do
     validate_id!(id)
 
     # Values are judged before the statement is built - nothing is written for changes the
-    # declarations already refuse.
+    # declarations already refuse, or for an amount the statement couldn't be handed.
     result =
-      case Entity.validate(entity_type, changes_map) do
+      case validate_update(entity_type, changes_map, deltas_map) do
         :ok ->
           change_entries =
             Enum.map(sorted_changes, fn {name, value} ->
@@ -706,6 +705,24 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  defp delete_locked_row(entity_type, id, table, join_tables, encoded_id) do
+    edge_effects = delete_outgoing_edges(entity_type, id, join_tables, encoded_id)
+
+    # Every edge the delete takes with it is recorded, ahead of the row. A reader learning the
+    # entity is gone knows its own edges went with it, but the targets don't: each one's
+    # inverse of the relationship lost a row, and what a read rule reads through that set may
+    # have moved. Once the delete commits, nothing else says which rows those were.
+    case delete_entity_row(entity_type, table, encoded_id) do
+      nil ->
+        :ok
+
+      entity ->
+        edge_effects
+        |> Enum.concat([delete_effect(entity)])
+        |> Oplog.append()
+    end
+  end
+
   # The effects of the removed edges, each join table's ordered by target.
   # sobelow_skip ["SQL.Query"]
   defp delete_outgoing_edges(entity_type, id, join_tables, encoded_id) do
@@ -970,6 +987,18 @@ defmodule Hologram.DB.EntityOperations do
   defp lock_clause(:share), do: " FOR SHARE"
 
   defp lock_clause(:update), do: " FOR UPDATE"
+
+  # Whether a row holds the id, locking it FOR UPDATE when one does. An id no row holds locks
+  # nothing.
+  # sobelow_skip ["SQL.Query"]
+  defp lock_row?(table, encoded_id) do
+    statement = ~s|SELECT 1 FROM #{qualified_table(table)} WHERE "id" = $1 FOR UPDATE|
+
+    case Connection.query(statement, [encoded_id]) do
+      {:ok, %Postgrex.Result{num_rows: num_rows}} -> num_rows == 1
+      {:error, error} -> raise error
+    end
+  end
 
   # A delete says what the row WAS, the way a put says what it became - so a row that is gone
   # stays readable for as long as the log keeps its entry. No revisions: the stamps went with
@@ -1311,6 +1340,18 @@ defmodule Hologram.DB.EntityOperations do
           "cannot update #{inspect(RoleGrant)} - a role grant is never changed in place, revoke the role and grant the new one instead"
   end
 
+  # The driver raises on an amount its int8 parameter can't hold, before the statement runs, so
+  # one is refused here, in the words a move past what the column holds is refused in.
+  defp validate_amounts(deltas) do
+    violations =
+      for {name, amount} <- deltas,
+          not Validator.attribute_value_valid?(amount, :integer),
+          into: %{},
+          do: {name, [{:type, :integer}]}
+
+    if violations == %{}, do: :ok, else: {:error, violations}
+  end
+
   # The refusals below name keys in the order of their printed text, which the client reproduces
   # for any key - their term order can turn on the VM's atom table and a large map's hash.
   #
@@ -1405,6 +1446,17 @@ defmodule Hologram.DB.EntityOperations do
     if derived_name do
       raise MisuseError,
             "invalid #{kind} for #{inspect(entity_type)} - #{Derived.read_only_message(entity_type, derived_name)}"
+    end
+  end
+
+  # Both are asked whatever the other answers, because the questions asked after a refusal read
+  # the violations to tell which values can still be bound, and an amount the driver can't hold
+  # is one that can't. A field is never both changed and moved, so the two answers can't collide.
+  defp validate_update(entity_type, changes, deltas) do
+    case {Entity.validate(entity_type, changes), validate_amounts(deltas)} do
+      {:ok, amounts} -> amounts
+      {values, :ok} -> values
+      {{:error, values}, {:error, amounts}} -> {:error, Map.merge(values, amounts)}
     end
   end
 

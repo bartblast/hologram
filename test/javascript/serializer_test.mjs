@@ -529,6 +529,35 @@ describe("Serializer", () => {
           });
         });
 
+        describe("BigInt, to the client", () => {
+          it("top-level", () => {
+            assert.equal(
+              serialize(9007199254740993n, "client"),
+              '[4,"n9007199254740993"]',
+            );
+          });
+
+          it("nested", () => {
+            assert.equal(
+              serialize({a: -9007199254740993n}, "client"),
+              '[4,{"a":"n-9007199254740993"}]',
+            );
+          });
+        });
+
+        describe("boolean, to the client", () => {
+          it("top-level", () => {
+            assert.equal(serialize(true, "client"), "[4,true]");
+          });
+
+          it("nested", () => {
+            assert.equal(
+              serialize({a: [false]}, "client"),
+              '[4,{"a":[false]}]',
+            );
+          });
+        });
+
         describe("float", () => {
           it("top-level", () => {
             const term = 9.87;
@@ -649,7 +678,7 @@ describe("Serializer", () => {
       });
 
       describe("not supported", () => {
-        describe("BigInt", () => {
+        describe("BigInt, to the server", () => {
           it("top-level", () => {
             assert.throw(
               () => serialize(123n),
@@ -667,7 +696,7 @@ describe("Serializer", () => {
           });
         });
 
-        describe("boolean", () => {
+        describe("boolean, to the server", () => {
           it("top-level", () => {
             assert.throw(
               () => serialize(true),

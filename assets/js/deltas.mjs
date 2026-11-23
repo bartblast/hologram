@@ -180,70 +180,7 @@ export default class Deltas {
 
     const written = Array.from(ids, (id) => `${type} ${id}`);
 
-    return written.concat(Deltas.#deleteFactsNaming(type, ids));
-  }
-
-  // Every pair filed under a held row that names one of the given rows of the given type: in a
-  // to-many of that type, and in an inverse of a to-many whose source is of that type.
-  static #deleteFactsNaming(type, ids) {
-    const written = [];
-
-    // A row a page carried is never stored, so one whose set changed isn't written either.
-    const carried = new Set(
-      LocalDatabase.carriedEntries().map(
-        ([carriedType, id]) => `${carriedType} ${id}`,
-      ),
-    );
-
-    for (const holderType of Object.keys(
-      globalThis.Hologram.sync?.model ?? {},
-    )) {
-      const relationships = Object.entries(
-        Model.relationships(holderType) ?? {},
-      )
-        .filter(
-          ([_name, relationship]) =>
-            relationship.toMany && relationship.type === type,
-        )
-        .map(([name]) => name);
-
-      const inverses = Object.entries(Model.inverses(holderType) ?? {})
-        .filter(
-          ([_name, inverse]) => !inverse.reference && inverse.type === type,
-        )
-        .map(([name]) => name);
-
-      const names = relationships.concat(inverses);
-
-      if (names.length === 0) {
-        continue;
-      }
-
-      for (const holderId of Object.keys(LocalDatabase.baseTable(holderType))) {
-        let changed = false;
-
-        // Read through the set rather than through the dropped ids, which can be many more than
-        // a set holds.
-        for (const name of names) {
-          const named = Array.from(
-            LocalDatabase.baseTargetIds(holderType, name, holderId),
-          ).filter((targetId) => ids.has(targetId));
-
-          for (const targetId of named) {
-            LocalDatabase.deleteFact(holderType, name, holderId, targetId);
-            changed = true;
-          }
-        }
-
-        const key = `${holderType} ${holderId}`;
-
-        if (changed && !carried.has(key)) {
-          written.push(key);
-        }
-      }
-    }
-
-    return written;
+    return written.concat(LocalDatabase.deleteFactsNaming(type, ids));
   }
 
   static #hashedIds(type, salt) {
@@ -340,7 +277,7 @@ export default class Deltas {
       }
     }
 
-    Model.computeSortKeys(type, attributes);
+    Model.computeSortKeys(type, Model.readIntegers(type, attributes));
     LocalDatabase.putRow(type, attributes);
 
     // The whole target set of the relationship as it now stands, which is what a row states

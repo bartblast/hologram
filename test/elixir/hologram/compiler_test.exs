@@ -24,6 +24,19 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Runtime.Serializer
   alias Hologram.Sync.Frame
 
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity1, as: ImplEntity1
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity2, as: ImplEntity2
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity3, as: ImplEntity3
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity4, as: ImplEntity4
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity5, as: ImplEntity5
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page1, as: ImplPage1
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page2, as: ImplPage2
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page3, as: ImplPage3
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page4, as: ImplPage4
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page5, as: ImplPage5
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Protocol, as: ImplProtocol
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct1, as: ImplStruct1
+  alias Hologram.Test.Fixtures.Compiler.QueryChains.Module1, as: QueryChainsModule1
   alias Hologram.Test.Fixtures.Component.Module37, as: OtherContextComponent
   alias Hologram.Test.Fixtures.Entity.Derived.Module2, as: DerivedModule2
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
@@ -194,10 +207,6 @@ defmodule Hologram.CompilerTest do
     user_entity: nil
   }
 
-  # A statement setting the client's data layer constants, as the runtime script takes it rendered
-  # (see build_sync_constants_js/1), for the tests of what the script carries besides.
-  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "", policyHash: null, protocolVersion: 1, syncedTypes: [], userEntity: null};/
-
   @tmp_dir Reflection.tmp_dir()
 
   # The client's model a build bakes for the given entity types, as the client reads it.
@@ -273,6 +282,29 @@ defmodule Hologram.CompilerTest do
     |> build_kept_page_reach(permission_checking_pages, module_info_plt, PLT.start())
   end
 
+  # What the data layer keeps of the given pages with the implementations they can dispatch to, as
+  # the compile task derives it: listed on the graph without the manually ported functions, with
+  # the permission checks asked of the unsplit one.
+  defp derive_impl_reach(pages, call_graph, module_info_plt) do
+    split_graph =
+      call_graph
+      |> CallGraph.clone()
+      |> CallGraph.remove_manually_ported_mfas()
+
+    listed_reach =
+      pages
+      |> list_reach_by_page(split_graph)
+      |> put_impl_mfas(split_graph)
+
+    checking_pages =
+      pages
+      |> list_reach_by_page(call_graph)
+      |> pages_checking_permissions()
+      |> Enum.concat(pages_checking_permissions_in_impls(listed_reach, call_graph))
+
+    build_kept_page_reach(listed_reach, checking_pages, module_info_plt, PLT.start())
+  end
+
   defp derive_sync_constants(pages, call_graph, module_info_plt, permission_checking_pages) do
     reach_by_page =
       derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages)
@@ -287,6 +319,7 @@ defmodule Hologram.CompilerTest do
       PageModule18 => %{
         atoms: MapSet.new(atoms),
         checks_permissions?: checks_permissions?,
+        impl_modules: MapSet.new(),
         modules: MapSet.new(modules),
         query_chains: [],
         reads_session_user?: reads_session_user?
@@ -386,6 +419,12 @@ defmodule Hologram.CompilerTest do
 
       {entry_name, entry_file_path}
     end)
+  end
+
+  defp list_sorted_files(dir) do
+    dir
+    |> File.ls!()
+    |> Enum.sort()
   end
 
   # Reproduces what the compile Phoenix's reloader runs leaves behind: the protocol loaded from its
@@ -2120,6 +2159,194 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "put_impl_mfas/2" do
+    test "adds what a page reaches through the implementations it can dispatch to", %{
+      call_graph: call_graph
+    } do
+      split_graph =
+        call_graph
+        |> CallGraph.clone()
+        |> CallGraph.remove_manually_ported_mfas()
+
+      [{ImplPage1, reach}] =
+        [ImplPage1]
+        |> list_reach_by_page(split_graph)
+        |> put_impl_mfas(split_graph)
+
+      assert {Module.safe_concat(ImplProtocol, ImplStruct1), :run, 1} in reach.impl_mfas
+    end
+
+    test "reads no graph for no page" do
+      assert put_impl_mfas([], nil) == []
+    end
+  end
+
+  describe "pages_checking_permissions_in_impls/2" do
+    setup %{call_graph: call_graph} do
+      split_graph =
+        call_graph
+        |> CallGraph.clone()
+        |> CallGraph.remove_manually_ported_mfas()
+
+      listed_reach =
+        [ImplPage1, ImplPage2]
+        |> list_reach_by_page(split_graph)
+        |> put_impl_mfas(split_graph)
+
+      [listed_reach: listed_reach]
+    end
+
+    test "names a page whose only permission check is in an implementation", %{
+      call_graph: call_graph,
+      listed_reach: listed_reach
+    } do
+      assert pages_checking_permissions_in_impls(listed_reach, call_graph) == [ImplPage2]
+    end
+
+    test "the page's own code doesn't reach that check", %{call_graph: call_graph} do
+      pages =
+        [ImplPage2]
+        |> list_reach_by_page(call_graph)
+        |> pages_checking_permissions()
+
+      assert pages == []
+    end
+  end
+
+  describe "the data layer's reach through protocol implementations" do
+    test "syncs a type only an implementation the page dispatches to names", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage1], call_graph, module_info_plt)
+      constants = build_sync_constants(reach_by_page, module_info_plt)
+
+      assert ImplEntity3 in constants.synced_types
+      assert ImplEntity3 in constants.page_types[ImplPage1]
+    end
+
+    test "follows a relationship name only an implementation spells", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage1], call_graph, module_info_plt)
+      constants = build_sync_constants(reach_by_page, module_info_plt)
+
+      assert ImplEntity4 in constants.page_types[ImplPage1]
+    end
+
+    test "an implementation doesn't name the type it's written for", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage3], call_graph, module_info_plt)
+      constants = build_sync_constants(reach_by_page, module_info_plt)
+
+      refute ImplEntity1 in constants.synced_types
+    end
+
+    test "a query written in one piece in an implementation names its own type", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage4], call_graph, module_info_plt)
+      constants = build_sync_constants(reach_by_page, module_info_plt)
+
+      assert ImplEntity2 in constants.synced_types
+    end
+
+    test "a protocol an implementation calls doesn't name the types implementing it", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage5], call_graph, module_info_plt)
+      constants = build_sync_constants(reach_by_page, module_info_plt)
+
+      refute ImplEntity5 in constants.synced_types
+    end
+
+    test "reads nothing from the generated dispatch functions", %{
+      module_info_plt: module_info_plt
+    } do
+      impl = Module.safe_concat(ImplProtocol, ImplStruct1)
+
+      reach = %{
+        mfas: [{ImplProtocol, :impl_for!, 1}],
+        types: [],
+        impl_mfas: [{impl, :__impl__, 1}]
+      }
+
+      reach_by_page =
+        build_kept_page_reach([{ImplPage1, reach}], [], module_info_plt, PLT.start())
+
+      assert reach_by_page[ImplPage1].atoms == MapSet.new()
+    end
+
+    test "counts a component only an implementation reaches for reading the session user", %{
+      module_info_plt: module_info_plt
+    } do
+      reach = %{mfas: [], types: [], impl_mfas: [{SessionUserComponent, :template, 0}]}
+
+      reach_by_page =
+        build_kept_page_reach([{ImplPage1, reach}], [], module_info_plt, PLT.start())
+
+      assert reach_by_page[ImplPage1].reads_session_user?
+    end
+
+    test "keeps the modules an implementation reaches apart from the ones the page names", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage3], call_graph, module_info_plt)
+      impl = Module.safe_concat(ImplProtocol, ImplEntity1)
+
+      assert impl in reach_by_page[ImplPage3].impl_modules
+      refute ImplEntity1 in reach_by_page[ImplPage3].modules
+    end
+
+    test "makes a page whose only permission check is in an implementation a checking one", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage2], call_graph, module_info_plt)
+
+      assert reach_by_page[ImplPage2].checks_permissions?
+    end
+
+    test "keeps the query an implementation writes", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage1], call_graph, module_info_plt)
+      impl = Module.safe_concat(ImplProtocol, ImplStruct1)
+
+      assert [%{line: 14, mfa: {^impl, :run, 1}, root: ImplEntity3}] =
+               reach_by_page[ImplPage1].query_chains
+    end
+
+    test "passes a valid query an implementation writes", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = derive_impl_reach([ImplPage1, ImplPage4], call_graph, module_info_plt)
+
+      assert validate_query_chains!(reach_by_page, module_info_plt) == :ok
+    end
+
+    test "a refused query in an implementation fails the check", %{
+      module_info_plt: module_info_plt
+    } do
+      reach = %{mfas: [], types: [], impl_mfas: [{QueryChainsModule1, :unknown_attribute, 0}]}
+
+      reach_by_page =
+        build_kept_page_reach([{ImplPage1, reach}], [], module_info_plt, PLT.start())
+
+      assert_raise Hologram.CompileError, ~r/nonexistent/, fn ->
+        validate_query_chains!(reach_by_page, module_info_plt)
+      end
+    end
+  end
+
   describe "validate_query_chains!/2" do
     test "passes every page of the suite", %{
       call_graph: call_graph,
@@ -2208,6 +2435,85 @@ defmodule Hologram.CompilerTest do
 
       assert build_sync_constants_js(sync_constants) ==
                ~s/globalThis.Hologram.sync = {expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
+    end
+
+    defmodule BigFloatLiteral do
+      use Hologram.Entity
+
+      derived :cap, :float, fn -> 28_097_012_775_158_772_737 end
+    end
+
+    defmodule BigIntegerBoard do
+      use Hologram.Entity
+
+      attribute :n, :integer, in: 0..9_007_199_254_740_993
+
+      relationship :cards, [Hologram.CompilerTest.BigIntegerCard], inverse: board
+
+      derived :cap, :integer, fn -> 9_007_199_254_740_993 end
+
+      derived :many_cards, [Hologram.CompilerTest.BigIntegerCard], fn cards ->
+        take(cards, 9_007_199_254_740_993)
+      end
+
+      derived :over, :boolean, fn n -> n > 9_007_199_254_740_993 end
+
+      allow :read, when: n == 9_007_199_254_740_993
+    end
+
+    defmodule BigIntegerCard do
+      use Hologram.Entity
+
+      relationship :board, BigIntegerBoard, optional: true
+
+      allow :read
+    end
+
+    test "marks a big integer literal wherever a rule or a derived field holds one" do
+      put_derived_definitions([BigIntegerBoard])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BigIntegerBoard, BigIntegerCard])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"cap":{"definition":{"value":{"$integer":"9007199254740993"}}/
+             )
+
+      assert String.contains?(js, ~s/["n",">",{"$integer":"9007199254740993"}]/)
+      assert String.contains?(js, ~s/"take":{"$integer":"9007199254740993"}/)
+      assert String.contains?(js, ~s/["n","==",{"$integer":"9007199254740993"}]/)
+    end
+
+    test "spells a big integer bound of an in constraint as text" do
+      put_derived_definitions([BigIntegerBoard])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BigIntegerBoard, BigIntegerCard])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"n":{"in":{"first":0,"last":"9007199254740993","step":1}/)
+    end
+
+    # JavaScript and Erlang round this integer to different floats, so the build hands over the
+    # float the server compares with rather than the digits.
+    test "renders an integer a float derived field holds as the server's float" do
+      put_derived_definitions([BigFloatLiteral])
+
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([BigFloatLiteral])}
+
+      float_js = Jason.encode!(28_097_012_775_158_772_737 * 1.0)
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"cap":{"definition":{"value":#{float_js}},/)
     end
 
     # A client computes a derived field itself, from the definition the build resolved - spelled in
@@ -2379,6 +2685,1107 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | model_hash: nil}
 
       assert build_sync_constants_js(sync_constants) == "globalThis.Hologram.sync = null;"
+    end
+
+    # The verdict entry the build bakes for the given operation, reading the given types.
+    defp verdict_entry_js(entity_type, operation, read_types) do
+      reads_js = Enum.map_join(read_types, ",", &~s/"#{inspect(&1)}"/)
+      key = Hologram.Policy.verdict_key(entity_type, operation)
+
+      ~s/{"reads":[#{reads_js}],"verdict":"#{key}"}/
+    end
+
+    defp sync_constants_js_for(entity_type) do
+      build_sync_constants_js(%{@empty_sync_constants | entity_types: MapSet.new([entity_type])})
+    end
+
+    defmodule BakedBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.CompilerTest.BakedCard], inverse: board
+
+      derived :top_cards, [Hologram.CompilerTest.BakedCard], fn cards ->
+        cards
+        |> sort(rank: :desc)
+        |> take(2)
+      end
+
+      allow :read, when: any(card <- top_cards, card.rank == 1)
+    end
+
+    defmodule BakedCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+
+      relationship :board, BakedBoard, optional: true
+
+      allow :read
+    end
+
+    defmodule BakedProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+      attribute :starts_at, :datetime
+
+      relationship :members, [Hologram.CompilerTest.BakedMember], inverse: project
+
+      allow :read, when: any(member <- members, member.user_id == user_id())
+      allow :update, when: any(member <- members, any(label <- member.labels, label.name == name))
+
+      allow :update,
+        as: :archive,
+        only: [:name],
+        when:
+          none(
+            member <- members,
+            member.seat == :full and member.joined_at > ^~U[2026-01-01 00:00:00Z]
+          )
+
+      allow :update,
+        as: :publish,
+        only: [:name],
+        when:
+          any(
+            member <- members,
+            starts_at > ^~U[2026-01-01 00:00:00Z] and
+              member.user.created_at > ^~U[2026-01-01 00:00:00Z]
+          )
+
+      allow :update,
+        as: :close,
+        only: [:name],
+        when:
+          any(
+            member <- members,
+            any(other <- members, other.joined_at > ^~U[2026-01-01 00:00:00Z])
+          )
+
+      allow :delete, when: name == "draft" or none(members)
+
+      allow :update,
+        as: :share,
+        only: [:name],
+        when: any(member <- members, none(label <- member.labels, label.name == "x"))
+    end
+
+    defmodule BakedMember do
+      use Hologram.Entity
+
+      attribute :joined_at, :datetime
+      attribute :seat, :enum, values: [:viewer, :full]
+
+      relationship :labels, [Hologram.CompilerTest.BakedLabel]
+      relationship :project, BakedProject, optional: true
+      relationship :user, Hologram.Test.Fixtures.Entity.Module14, optional: true
+
+      allow :read
+    end
+
+    defmodule BakedLabel do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      allow :read
+    end
+
+    defmodule BakedReport do
+      use Hologram.Entity
+
+      attribute :reviewed, :boolean, server_only: true
+      attribute :title, :string
+
+      allow :read, when: reviewed == true or title == "x"
+    end
+
+    defmodule BakedReportNote do
+      use Hologram.Entity
+
+      relationship :report, BakedReport, optional: true
+
+      allow :read, when: report.reviewed == true
+    end
+
+    defmodule BakedSharedProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+      attribute :title, :string
+
+      relationship :labels, [Hologram.CompilerTest.BakedLabel]
+
+      allow :read
+      allow :update, except: [:name], when: none(labels)
+    end
+
+    defmodule BakedSecretBoard do
+      use Hologram.Entity
+
+      relationship :notes, [Hologram.CompilerTest.BakedSecretNote], inverse: board
+
+      allow :read, when: any(note <- notes, note.secret == "x")
+    end
+
+    defmodule BakedSecretNote do
+      use Hologram.Entity
+
+      attribute :secret, :string, server_only: true
+
+      relationship :board, BakedSecretBoard, optional: true
+
+      allow :read
+    end
+
+    defmodule BakedHiddenProject do
+      use Hologram.Entity
+
+      attribute :archived, :boolean
+
+      allow :update
+    end
+
+    defmodule BakedHiddenTask do
+      use Hologram.Entity
+
+      relationship :project, BakedHiddenProject, optional: true
+
+      allow :read, when: project.archived == false
+    end
+
+    # Every admitted attribute type in one entry, since a value's type is not recoverable from
+    # the value itself - the client reads a date, an enum and a uuid apart only by what this says.
+    test "injects the attribute types the client reads rows by" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
+                 ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
+                 ~s/"server_created_at":"datetime","server_updated_at":"datetime",/ <>
+                 ~s/"updated_at":"datetime"},"constraints":{},"creatorRoles":[],/ <>
+                 ~s/"defaults":{"c":Type.atom("x")},"derived":{},/ <>
+                 ~s/"enumValues":{"c":["x","y"]},"expandedRoles":{},"frameworkAttributes":[],"inverses":{},/ <>
+                 ~s/"operations":["create","delete","grant_role","read","read_roles",/ <>
+                 ~s/"revoke_role","update"],"policy":{},/ <>
+                 ~s/"relationships":{},"roles":[],"serverOnly":[],"verdicts":{}}}/
+             )
+    end
+
+    # The client refuses an undeclared role with the server's own sentence, from this list.
+    test "names a type's declared roles, sorted" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"roles":["editor","maintainer","owner","viewer"],/)
+    end
+
+    # A role check looks for every role carrying the one asked about, from this map - owner
+    # extends editor, so an owner holds editor and not the other way round.
+    test "names the roles carrying each declared role, sorted" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"expandedRoles":{"editor":["editor","owner"],"maintainer":["maintainer"],/ <>
+                 ~s/"owner":["owner"],"viewer":["viewer"]},/
+             )
+    end
+
+    # The client refuses an operation nothing declares with the server's own sentence, from this
+    # list - the framework's seven and the type's own, whether or not the build checks permissions
+    # (a type declaring nothing renders the seven alone, asserted with the whole entry in "injects
+    # the attribute types the client reads rows by").
+    test "names the operations a type can be asked about, sorted" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"operations":["archive","create","delete","grant_role","publish","read",/ <>
+                 ~s/"read_roles","revoke_role","update"],/
+             )
+    end
+
+    # A name is a key of the policy, as an operation is, so the client asks it the same way and
+    # refuses a name nothing carries with the same sentence.
+    test "bakes a named line under its name and names it among the operations" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([NamedChannel])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"operations":["archive","create","delete","grant_role","read","read_roles",/ <>
+                 ~s/"revoke_role","update"],/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"policy":{"archive":[{"predicates":[["owner_id","==",{"actor":true}]]/
+             )
+    end
+
+    test "bakes a rule reading the row after the change with its clauses as written" do
+      js = sync_constants_js_for(ChangedTask)
+
+      assert String.contains?(
+               js,
+               ~s/{"new":{"predicates":[["status","==","pending"],/ <>
+                 ~s/[{"name":"status","outer":1},"==","approved"]]},/ <>
+                 ~s/"predicates":[["status","==","pending"]],"to":/
+             )
+    end
+
+    test "bakes a role asked of the row after the change" do
+      js = sync_constants_js_for(ChangedTask)
+
+      assert String.contains?(
+               js,
+               ~s/{"new":{"predicates":[{"hasRole":[["project"],/ <>
+                 ~s/"#{inspect(ChangedProject)}",["member"]]}]},"predicates":[]/
+             )
+    end
+
+    test "bakes an operation asked of the row the row after the change leads to" do
+      js = sync_constants_js_for(ChangedTask)
+
+      assert String.contains?(
+               js,
+               ~s/{"new":{"predicates":[{"can":["read",["project"]]}]},"predicates":[]/
+             )
+    end
+
+    test "bakes the names update lines carry" do
+      js = sync_constants_js_for(ChangedTask)
+
+      assert String.contains?(js, ~s/"updateNames":["approve","move"]/)
+    end
+
+    test "bakes no update names for a type with none" do
+      js = sync_constants_js_for(ChangedProject)
+
+      refute String.contains?(js, ~s/"updateNames"/)
+    end
+
+    # A field key is spelled the way a per-role key is, so the client asks a field the way it asks a
+    # role.
+    test "bakes a field-limited line under each field it covers" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([LimitedChannel])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"update:tags":[{"predicates":[["archived","==",false]]/)
+      assert String.contains?(js, ~s/"update:topic":[{"predicates":[["archived","==",false]]/)
+    end
+
+    # The client writes a creator's grants itself as it creates the row, so the build names which
+    # roles those are - a type declaring none renders an empty list, asserted with the whole entry
+    # in "injects the attribute types the client reads rows by".
+    test "names the roles a creator takes, sorted" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"creatorRoles":["maintainer","owner"],/)
+    end
+
+    # The client judges a written value by these, so the name a violation is reported under is the
+    # name the build writes - min_length, not the camelCase of its neighbours.
+    test "injects the declared constraints under the option names a violation names" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"bio":{"max_length":10,"optional":true},/)
+      assert String.contains?(js, ~s/"country_code":{"length":2,"optional":true},/)
+      assert String.contains?(js, ~s/"username":{"max_length":8,"min_length":3,"optional":true}/)
+    end
+
+    # A bound is the literal the declaration wrote, and rating declares both spellings of the same
+    # number on one attribute - a float attribute takes `min: 0` beside `max: 5.0`, which the wire
+    # would spell alike and the term encoder keeps apart.
+    test "injects a numeric bound as the encoded term its literal builds" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"count":{"max":Type.integer(10n),"min":Type.integer(1n)},/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"rating":{"max":Type.float(5.0),"min":Type.integer(0n),"optional":true},/
+             )
+    end
+
+    test "injects a temporal bound as the encoded struct its literal builds" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"released_on":{"max":Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Date")], / <>
+                 ~s/[Type.atom("calendar"), Type.atom("Elixir.Calendar.ISO")], / <>
+                 ~s/[Type.atom("day"), Type.integer(31n)], [Type.atom("month"), Type.integer(12n)], / <>
+                 ~s/[Type.atom("year"), Type.integer(2030n)]]),"optional":true}/
+             )
+    end
+
+    # A compiled pattern exists only inside the runtime that compiled it, so what travels is what
+    # compiles into one - the source and the options it was written with.
+    test "injects a declared format as its source and its options" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"handle":{"format":{"opts":Type.list([]),"source":"^[a-z_]+$"},"min_length":3,"optional":true},/
+             )
+    end
+
+    # Not every compile option is a NAME: ~r/@/s reads back as [:dotall, {:newline, :anycrlf}],
+    # and a tuple has none to write - which is why the options travel as the term they are.
+    test "injects a declared format's options as the term the declaration held" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"email":{"format":{"opts":Type.list([Type.atom("dotall"), / <>
+                 ~s/Type.tuple([Type.atom("newline"), Type.atom("anycrlf")])]),"source":"@"},/ <>
+                 ~s/"optional":true},/
+             )
+    end
+
+    # The step travels with the ends: 0..100//5 admits 5 and refuses 7, so a client told only
+    # where the range starts and stops would answer differently from the server.
+    test "injects a declared range as its ends and its step" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"percent":{"in":{"first":0,"last":100,"step":5},"optional":true},/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"priority":{"in":{"first":1,"last":5,"step":1},"optional":true},/
+             )
+    end
+
+    test "injects the uniqueness a declaration asks for" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity19])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"constraints":{"code":{"max_bytes":2692,"optional":true,"unique":true},/ <>
+                 ~s/"slug":{"max_bytes":2692,"unique":true}}/
+             )
+    end
+
+    # The bound is no declaration option: the server works it out from the keys the type
+    # declares, so a key's string carries it whether or not it declares anything else.
+    test "injects the byte bound a key puts on its strings" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity52])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"constraints":{"position":{"optional":true},"slug":{"max_bytes":2665}}/
+             )
+    end
+
+    # A default is the literal the declaration wrote, so it travels as the term that literal
+    # becomes in transpiled code rather than as the way the wire spells the same value - a struct
+    # built on the client holds what was declared, and `default: 5` and `default: 5.0` are two
+    # different things to hold.
+    test "injects the declared defaults as encoded terms" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"defaults":{"c":Type.atom("x")}/)
+    end
+
+    # A construction naming two of them reports the FIRST, so the order is the refusal's rather
+    # than sorted - a client reporting the other would answer a question the server never got.
+    test "injects the framework-owned attribute names of a job type, in the order they are refused" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([JobModule1])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"frameworkAttributes":["actor_id","attempt","error","scheduled_at","status"]/
+             )
+    end
+
+    test "injects the relationships with their target types, cardinality and optionality" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity3])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"relationships":{"a":{"optional":false,"sort":[],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
+                 ~s/"b":{"optional":true,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
+                 ~s/"c":{"optional":false,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module1"}}/
+             )
+    end
+
+    test "injects a to-many's declared order" do
+      defmodule SortedToManyFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module28
+
+        relationship :messages, [Module28], sort: [position: :desc, body: :asc]
+      end
+
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([SortedToManyFixture])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"relationships":{"messages":{"optional":false,"sort":[["position","desc"],["body","asc"]],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module28"}}/
+             )
+    end
+
+    test "injects the inverses with what they reverse, their cardinality and their order" do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([Entity26, Entity29])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"inverses":{"messages":{"forward":"channel","reference":true,"sort":[["position","asc"]],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module28"},/ <>
+                 ~s/"topic":{"forward":"channel","reference":true,"sort":[],"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module27"}}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"inverses":{"messages":{"forward":"labels","reference":false,"sort":[],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module28"}}/
+             )
+    end
+
+    # The NAME travels while the value never does: a client that knows the attribute exists and
+    # is not for it can say so, where one that never heard of it would answer nil.
+    test "injects the names of the attributes a client may not have" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"serverOnly":["secret_note","token"]/)
+    end
+
+    # A bundle carries the model of the types its own queries reach and no others: a type a
+    # client can never hold is one it is told nothing about, its attribute names included.
+    test "injects nothing about a type the client can never hold" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      refute String.contains?(js, "Hologram.Test.Fixtures.Entity.Module15")
+      refute String.contains?(js, "secret_note")
+    end
+
+    # The rules a client checks permissions by, spelled the way the rows it checks them against
+    # are spelled - a predicate value travels as the wire spells it.
+    test "injects the rules a client checks permissions by" do
+      entity_types = MapSet.new([PolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      # A predicate rule, a grant reference on the entity itself, one on its whole type and one on
+      # a related row, and a delegating rule - one of each kind the evaluator has to read.
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[["public","==",true]],"to":null,"via":null}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"to":[["own",["viewer"]],["type","Hologram.Test.Fixtures.Policy.Module2",["admin"]]]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"delete":[{"predicates":[],"to":[["rel",["parent"],"Hologram.Test.Fixtures.Policy.Module2",["admin"]]],"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"publish":[{"predicates":[],"to":null,"via":["publish",["parent"]]}]/
+             )
+    end
+
+    # A member and its trailing comma, never a member plus whichever key follows it.
+    test "bakes a grant lifecycle rule under its per-role key beside the bare one" do
+      entity_types = MapSet.new([PolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      owner_rule = ~s/{"predicates":[],"to":[["own",["owner"]]],"via":null}/
+
+      assert String.contains?(js, ~s/"grant_role":[#{owner_rule},#{owner_rule}],/)
+      assert String.contains?(js, ~s/"grant_role:editor":[#{owner_rule}],/)
+      assert String.contains?(js, ~s/"grant_role:owner":[#{owner_rule}],/)
+    end
+
+    # The acting user is named rather than carried: the client binds its own id when it evaluates
+    # the rule.
+    test "names the acting user in a rule that references them" do
+      entity_types = MapSet.new([PolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"archive":[{"predicates":[["author_id","==",{"actor":true}]]/
+             )
+    end
+
+    # A disjunction rides beside the triples as an object holding its alternatives, which is how
+    # the evaluator tells it from a triple.
+    test "bakes a condition holding a disjunction as an or clause" do
+      entity_types = MapSet.new([DisjunctionPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"or":[[["author_id","==",{"actor":true}]],[["shared","==",true]]]}],"to":null,"via":null}]/
+             )
+    end
+
+    test "bakes quantified conditions in the shape the query kernel's filters take" do
+      entity_types =
+        MapSet.new([
+          BakedProject,
+          BakedMember,
+          BakedLabel,
+          Hologram.Test.Fixtures.Entity.Module14,
+          RoleGrant
+        ])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"filter":[["user_id","==",{"actor":true}]],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"update":[{"predicates":[{"filter":[{"filter":[["name","==",{"attribute":{"name":"name","outer":2}}]],"quantifier":"any","source":["labels"]}],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+             )
+    end
+
+    # A deciding quantifier renders as any other, since the rows a client holds of its set decide
+    # what one row can, and the server's verdict answers its operation whole: the key the verdict is
+    # sent under and the types whose unanswered writes make it stale. The read rule's any reads no
+    # none or all, and the whole-row update rule none either, and every member and label is read by
+    # everyone, so neither operation has a verdict. The publish line reads a member's user, which a
+    # reader may not hold, so it has one too.
+    test "bakes a deciding quantifier as it is and its operation's verdict key and reads" do
+      entity_types =
+        MapSet.new([
+          BakedProject,
+          BakedMember,
+          BakedLabel,
+          Hologram.Test.Fixtures.Entity.Module14,
+          RoleGrant
+        ])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"delete":[{"predicates":[{"or":[[["name","==","draft"]],[{"filter":[],"quantifier":"none","source":["members"]}]]}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"share":[{"predicates":[{"filter":[{"filter":[["name","==","x"]],"quantifier":"none","source":["labels"]}],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+             )
+
+      member_types = [BakedMember, BakedProject]
+      label_types = [BakedLabel, BakedMember, BakedProject]
+      user_types = [BakedMember, BakedProject, Hologram.Test.Fixtures.Entity.Module14]
+
+      field_types = [
+        BakedLabel,
+        BakedMember,
+        BakedProject,
+        Hologram.Test.Fixtures.Entity.Module14
+      ]
+
+      verdicts_js =
+        ~s/"verdicts":{"archive":#{verdict_entry_js(BakedProject, :archive, member_types)},/ <>
+          ~s/"delete":#{verdict_entry_js(BakedProject, :delete, member_types)},/ <>
+          ~s/"publish":#{verdict_entry_js(BakedProject, :publish, user_types)},/ <>
+          ~s/"share":#{verdict_entry_js(BakedProject, :share, label_types)},/ <>
+          ~s/"update:name":#{verdict_entry_js(BakedProject, {:update, :name}, field_types)}}/
+
+      assert String.contains?(js, verdicts_js)
+
+      assert String.contains?(
+               js,
+               ~s/"serverOnly":[],"verdicts":{}},"Hologram.CompilerTest.BakedProject"/
+             )
+    end
+
+    # Every field but the name is covered by the one line, so each field's entry names one verdict,
+    # which a row carries once.
+    test "bakes the fields of an update the same lines cover as entries naming one verdict" do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedSharedProject, BakedLabel, RoleGrant])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      entry_js =
+        verdict_entry_js(BakedSharedProject, {:update, :title}, [BakedLabel, BakedSharedProject])
+
+      assert String.contains?(
+               js,
+               ~s/"verdicts":{"update:labels":#{entry_js},"update:title":#{entry_js}}/
+             )
+
+      refute String.contains?(js, ~s/"update:name":/)
+    end
+
+    # Only a workshop's owner and members read it, its benches and its tools' permits, so each of
+    # the tool's operations reading one has a verdict, a create line only under its name.
+    test "bakes the verdicts of operations reading related rows a reader may not hold" do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types:
+            MapSet.new([
+              Hologram.Test.Fixtures.Policy.Module46,
+              Hologram.Test.Fixtures.Policy.Module47,
+              Hologram.Test.Fixtures.Policy.Module48,
+              Hologram.Test.Fixtures.Policy.Module49,
+              RoleGrant
+            ])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      tool = Hologram.Test.Fixtures.Policy.Module49
+      workshop_types = [Hologram.Test.Fixtures.Policy.Module46]
+      delegation_types = [RoleGrant, Hologram.Test.Fixtures.Policy.Module46]
+
+      permit_types = [
+        Hologram.Test.Fixtures.Policy.Module46,
+        Hologram.Test.Fixtures.Policy.Module48,
+        tool
+      ]
+
+      bench_types = [
+        RoleGrant,
+        Hologram.Test.Fixtures.Policy.Module46,
+        Hologram.Test.Fixtures.Policy.Module47
+      ]
+
+      verdicts_js =
+        ~s/"verdicts":{"delete":#{verdict_entry_js(tool, :delete, delegation_types)},/ <>
+          ~s/"draft":#{verdict_entry_js(tool, :draft, workshop_types)},/ <>
+          ~s/"read":#{verdict_entry_js(tool, :read, workshop_types)},/ <>
+          ~s/"update":#{verdict_entry_js(tool, :update, workshop_types)},/ <>
+          ~s/"update:bench":#{verdict_entry_js(tool, {:update, :bench}, permit_types)},/ <>
+          ~s/"update:label":#{verdict_entry_js(tool, {:update, :label}, bench_types)}}/
+
+      assert String.contains?(js, verdicts_js)
+    end
+
+    # A bounded set computed over the rows a client holds can hold rows the server's doesn't, so an
+    # any over one leaves its operation to the verdict, which reads the rows the set is taken from.
+    # What its condition compares stays off the bundle, since no client reads it.
+    test "bakes the verdict key and the types read of an operation with an any over a derived set" do
+      put_derived_definitions([BakedBoard])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedBoard, BakedCard, RoleGrant])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"server":true}],"to":null,"via":null}]/
+             )
+
+      read_js = verdict_entry_js(BakedBoard, :read, [BakedBoard, BakedCard])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
+    end
+
+    # No client holds a server-only value, so a predicate reading one is a marker the client answers
+    # as unknown, its compared value left off the bundle. A stored attribute beside it in an
+    # alternative stays a triple. The read verdict reads no type for the row's own attribute, which
+    # no write of the client's can move, and the types along a path, without the rule's own.
+    test "bakes a predicate on a server-only attribute as a marker" do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedReport, BakedReportNote, RoleGrant])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"or":[[{"server":true}],[["title","==","x"]]]}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"verdicts":{"read":#{verdict_entry_js(BakedReport, :read, [])}}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"server":true}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"verdicts":{"read":#{verdict_entry_js(BakedReportNote, :read, [BakedReport])}}/
+             )
+    end
+
+    # A quantifier's condition is read on the rows of its set, so one reading a server-only value
+    # stays a triple, which the client answers as unknown on each row.
+    test "bakes a quantifier's condition on a server-only attribute as its triple" do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedSecretBoard, BakedSecretNote, RoleGrant])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"filter":[["secret","==","x"]],"quantifier":"any","source":["notes"]}],"to":null,"via":null}]/
+             )
+    end
+
+    # No client holds a row of a type nobody may read, so a read rule's predicate reading one is its
+    # triple, which the client reads as unknown unless the project reference is empty, and the read
+    # verdict answers the rest.
+    test "bakes a read rule's predicate reading a type nobody may read as its triple" do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedHiddenProject, BakedHiddenTask, RoleGrant])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[[["project","archived"],"==",false]],"to":null,"via":null}]/
+             )
+
+      read_js = verdict_entry_js(BakedHiddenTask, :read, [BakedHiddenProject])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
+    end
+
+    # Readers.Module24 reads the team's id off its project, a type nobody may read, so the read
+    # rule's reference carries a fifth element the client answers as unknown, and the read verdict
+    # answers the rest. A reference one relationship away reads the team's id off the task itself.
+    test "bakes a read rule's role reference reading a type nobody may read with a marker" do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([ReadersProject, ReadersTask, ReadersTeam, RoleGrant])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      team_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module22"/
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[],"to":[["rel",["project","team"],#{team_js},["member"],true]],"via":null},{"predicates":[],"to":[["rel",["team"],#{team_js},["member"]]],"via":null}]/
+             )
+
+      read_js = verdict_entry_js(ReadersTask, :read, [RoleGrant, ReadersProject])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
+
+      assert String.contains?(
+               js,
+               ~s/"update":[{"predicates":[],"to":[["rel",["team"],#{team_js},["member"]]],"via":null}]/
+             )
+    end
+
+    # The parcel's vault and shelf have no read rule, so its read rule's delegations through them
+    # carry a third element the client answers as unknown, and the read verdict answers the rest.
+    # The one to the crate runs through readable types alone.
+    test "bakes a read rule's delegation through a type nobody may read with a marker" do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types:
+            MapSet.new([ReadersCrate, ReadersParcel, ReadersShelf, ReadersVault, RoleGrant])
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"via":["update",["vault"],true]/)
+      assert String.contains?(js, ~s/"via":["read",["shelf","crate"],true]/)
+      assert String.contains?(js, ~s/"via":["read",["crate"]]}/)
+
+      read_js =
+        verdict_entry_js(ReadersParcel, :read, [
+          RoleGrant,
+          ReadersVault,
+          ReadersCrate,
+          ReadersShelf
+        ])
+
+      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
+    end
+
+    # Each time is spelled by the type of the attribute it is compared with, on the row that
+    # attribute is read on: the members' join time, the project's start through an outer name, the
+    # user's creation through a path from a member, and the join time inside a quantifier whose set
+    # is read on the row above. Spelled as an id, a time would lose its microseconds.
+    test "bakes a value inside a quantifier spelled by the type of the row it is read on" do
+      entity_types =
+        MapSet.new([
+          BakedProject,
+          BakedMember,
+          BakedLabel,
+          Hologram.Test.Fixtures.Entity.Module14,
+          RoleGrant
+        ])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"archive":[{"predicates":[{"filter":[["seat","==","full"],["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"none","source":["members"]}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"publish":[{"predicates":[{"filter":[[{"name":"starts_at","outer":1},">","2026-01-01T00:00:00.000000Z"],[["user","created_at"],">","2026-01-01T00:00:00.000000Z"]],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"close":[{"predicates":[{"filter":[{"filter":[["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"any","source":{"name":["members"],"outer":1}}],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+             )
+    end
+
+    # The other attribute is named rather than carried, which is how the evaluator tells it from a
+    # value - the client reads it off the row.
+    test "bakes a condition comparing two attributes as an attribute operand" do
+      entity_types = MapSet.new([AttributeComparisonPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"update":[{"predicates":[["guests","<=",{"attribute":"capacity"}]],"to":null,"via":null}]/
+             )
+    end
+
+    test "bakes a delegation and a grant reference through a path" do
+      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"publish":[{"predicates":[],"to":null,"via":["publish",["parent","parent"]]}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"update":[{"predicates":[],"to":[["rel",["parent","parent"],"Hologram.Test.Fixtures.Policy.Module1",["viewer"]]],"via":null}]/
+             )
+    end
+
+    test "bakes a path in a condition" do
+      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[[["parent","parent","public"],"==",true]],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"archive":[{"predicates":[[["link","priority"],"==","high"]],"to":null,"via":null}]/
+             )
+    end
+
+    # A datetime spelled by its own type carries microseconds, which a value spelled as an id would
+    # not.
+    test "encodes a path's literal with the type of the attribute it ends at" do
+      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"triage":[{"predicates":[[["parent","parent","created_at"],">=","2026-01-01T00:00:00.000000Z"]],"to":null,"via":null}]/
+             )
+    end
+
+    test "bakes a path operand" do
+      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types
+      }
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"delete":[{"predicates":[["level","<=",{"attribute":["parent","parent","priority"]}]],"to":null,"via":null}]/
+             )
+    end
+
+    # The grant type has no server-only attributes and its relationships resolve to the app's
+    # designated user entity, so it bakes like any other type once the model names it - by the
+    # user entity type or by a query that reads grant rows, the entry being the same either way.
+    test "injects the grant type's model entry once the model names it" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([RoleGrant])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/model: {"Hologram.Auth.RoleGrant":{"attributes":{/)
+
+      assert String.contains?(
+               js,
+               ~s/"user":{"optional":false,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module14"}/
+             )
+    end
+
+    # An attribute declaring no constraint is left out of the map entirely, and a type whose
+    # attributes all declare none carries an empty one - the reader fetches the field without
+    # asking whether it is there.
+    test "injects an empty constraint map for a type declaring no constraint" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"constraints":{},/)
+    end
+
+    # A type declaring no default carries an empty map rather than nothing at all - the reader
+    # fetches the field without asking whether it is there.
+    test "injects an empty default map for a type declaring no default" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"defaults":{},/)
+    end
+
+    # A type holding no enum attribute carries an empty map rather than nothing at all - the
+    # reader fetches the field without asking whether it is there.
+    test "injects an empty enum-value map for a type with no enum attributes" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"enumValues":{},/)
+    end
+
+    # Every type carries the list, empty for anything that is not a job - which is what makes it a
+    # fact about the type rather than a rule the reader has to know jobs by.
+    test "injects an empty framework-attribute list for a type that is not a job" do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(js, ~s/"frameworkAttributes":[],/)
     end
   end
 
@@ -2703,6 +4110,54 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "build_data_model_js/1" do
+    test "leaves a function behind that runs the statement given the runtime's classes" do
+      expected = """
+      "use strict";
+
+      globalThis.Hologram ??= {};
+
+      globalThis.Hologram.pendingDataModel = (deps) => {
+        const {
+          Bitstring,
+          ERTS,
+          ElementRefRegistry,
+          HologramBoxedError,
+          HologramInterpreterError,
+          Interpreter,
+          MemoryStorage,
+          Type,
+          Utils,
+        } = deps;
+
+        globalThis.Hologram.sync = {model: {}};
+      };
+
+      document.dispatchEvent(new CustomEvent("hologram:dataModelLoaded"));\
+      """
+
+      result = build_data_model_js("globalThis.Hologram.sync = {model: {}};")
+
+      assert normalize_newlines(result) == normalize_newlines(expected)
+    end
+
+    # The runtime calls the function with these deps (see defineDataModel() in hologram.mjs).
+    test "takes from the deps the classes the runtime hands every script" do
+      [_full_match, deps_body] =
+        Regex.run(
+          ~r/static #deps = \{(.*?)\};/s,
+          File.read!(Path.join([@root_dir, "assets", "js", "hologram.mjs"]))
+        )
+
+      runtime_deps = Regex.scan(~r/(\w+):/, deps_body, capture: :all_but_first)
+
+      [_full_match, destructured] =
+        Regex.run(~r/const \{(.*?)\} = deps;/s, build_data_model_js(""))
+
+      assert Regex.scan(~r/(\w+),/, destructured, capture: :all_but_first) == runtime_deps
+    end
+  end
+
   describe "build_index_needs/3" do
     @entity2_table "test_fixtures_entity_module2"
     @entity41_table "test_fixtures_entity_module41"
@@ -2802,7 +4257,8 @@ defmodule Hologram.CompilerTest do
                  checks_permissions?: false,
                  modules: MapSet.new([Module1, Module2, Module3, Module4]),
                  query_chains: [],
-                 reads_session_user?: false
+                 reads_session_user?: false,
+                 impl_modules: MapSet.new()
                }
              }
     end
@@ -2908,14 +4364,16 @@ defmodule Hologram.CompilerTest do
                    checks_permissions?: false,
                    modules: MapSet.new(),
                    query_chains: [],
-                   reads_session_user?: false
+                   reads_session_user?: false,
+                   impl_modules: MapSet.new()
                  },
                  Module11 => %{
                    atoms: MapSet.new(),
                    checks_permissions?: false,
                    modules: MapSet.new(),
                    query_chains: [],
-                   reads_session_user?: false
+                   reads_session_user?: false,
+                   impl_modules: MapSet.new()
                  }
                }
     end
@@ -3218,185 +4676,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_runtime_js/7" do
-    defp sync_constants_js_for(entity_type, runtime_mfas, ir_plt) do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([entity_type])}
-
-      build_runtime_js(
-        runtime_mfas,
-        ir_plt,
-        PLT.start(),
-        MapSet.new(),
-        [],
-        build_sync_constants_js(sync_constants),
-        js_dir: @js_dir,
-        subsystems: [:data_layer]
-      )
-    end
-
-    defmodule BakedBoard do
-      use Hologram.Entity
-
-      relationship :cards, [Hologram.CompilerTest.BakedCard], inverse: board
-
-      derived :top_cards, [Hologram.CompilerTest.BakedCard], fn cards ->
-        cards
-        |> sort(rank: :desc)
-        |> take(2)
-      end
-
-      allow :read, when: any(card <- top_cards, card.rank == 1)
-    end
-
-    defmodule BakedCard do
-      use Hologram.Entity
-
-      attribute :rank, :integer
-
-      relationship :board, BakedBoard, optional: true
-
-      allow :read
-    end
-
-    defmodule BakedProject do
-      use Hologram.Entity
-
-      attribute :name, :string
-      attribute :starts_at, :datetime
-
-      relationship :members, [Hologram.CompilerTest.BakedMember], inverse: project
-
-      allow :read, when: any(member <- members, member.user_id == user_id())
-      allow :update, when: any(member <- members, any(label <- member.labels, label.name == name))
-
-      allow :update,
-        as: :archive,
-        only: [:name],
-        when:
-          none(
-            member <- members,
-            member.seat == :full and member.joined_at > ^~U[2026-01-01 00:00:00Z]
-          )
-
-      allow :update,
-        as: :publish,
-        only: [:name],
-        when:
-          any(
-            member <- members,
-            starts_at > ^~U[2026-01-01 00:00:00Z] and
-              member.user.created_at > ^~U[2026-01-01 00:00:00Z]
-          )
-
-      allow :update,
-        as: :close,
-        only: [:name],
-        when:
-          any(
-            member <- members,
-            any(other <- members, other.joined_at > ^~U[2026-01-01 00:00:00Z])
-          )
-
-      allow :delete, when: name == "draft" or none(members)
-
-      allow :update,
-        as: :share,
-        only: [:name],
-        when: any(member <- members, none(label <- member.labels, label.name == "x"))
-    end
-
-    defmodule BakedMember do
-      use Hologram.Entity
-
-      attribute :joined_at, :datetime
-      attribute :seat, :enum, values: [:viewer, :full]
-
-      relationship :labels, [Hologram.CompilerTest.BakedLabel]
-      relationship :project, BakedProject, optional: true
-      relationship :user, Hologram.Test.Fixtures.Entity.Module14, optional: true
-
-      allow :read
-    end
-
-    defmodule BakedLabel do
-      use Hologram.Entity
-
-      attribute :name, :string
-
-      allow :read
-    end
-
-    defmodule BakedReport do
-      use Hologram.Entity
-
-      attribute :reviewed, :boolean, server_only: true
-      attribute :title, :string
-
-      allow :read, when: reviewed == true or title == "x"
-    end
-
-    defmodule BakedReportNote do
-      use Hologram.Entity
-
-      relationship :report, BakedReport, optional: true
-
-      allow :read, when: report.reviewed == true
-    end
-
-    defmodule BakedSharedProject do
-      use Hologram.Entity
-
-      attribute :name, :string
-      attribute :title, :string
-
-      relationship :labels, [Hologram.CompilerTest.BakedLabel]
-
-      allow :read
-      allow :update, except: [:name], when: none(labels)
-    end
-
-    defmodule BakedSecretBoard do
-      use Hologram.Entity
-
-      relationship :notes, [Hologram.CompilerTest.BakedSecretNote], inverse: board
-
-      allow :read, when: any(note <- notes, note.secret == "x")
-    end
-
-    defmodule BakedSecretNote do
-      use Hologram.Entity
-
-      attribute :secret, :string, server_only: true
-
-      relationship :board, BakedSecretBoard, optional: true
-
-      allow :read
-    end
-
-    defmodule BakedHiddenProject do
-      use Hologram.Entity
-
-      attribute :archived, :boolean
-
-      allow :update
-    end
-
-    defmodule BakedHiddenTask do
-      use Hologram.Entity
-
-      relationship :project, BakedHiddenProject, optional: true
-
-      allow :read, when: project.archived == false
-    end
-
-    # The verdict entry the build bakes for the given operation, reading the given types.
-    defp verdict_entry_js(entity_type, operation, read_types) do
-      reads_js = Enum.map_join(read_types, ",", &~s/"#{inspect(&1)}"/)
-      key = Hologram.Policy.verdict_key(entity_type, operation)
-
-      ~s/{"reads":[#{reads_js}],"verdict":"#{key}"}/
-    end
-
+  describe "build_runtime_js/6" do
     setup do
       on_exit(fn ->
         Application.delete_env(:hologram, :client_error_overlay)
@@ -3422,7 +4702,6 @@ defmodule Hologram.CompilerTest do
             encode_plt,
             MapSet.new(),
             [],
-            @empty_sync_constants_js,
             js_dir: @js_dir,
             subsystems: [:data_layer]
           )
@@ -3436,7 +4715,6 @@ defmodule Hologram.CompilerTest do
             encode_plt,
             MapSet.new(),
             [],
-            @empty_sync_constants_js,
             js_dir: @js_dir,
             module_info_plt: module_info_plt,
             subsystems: [:data_layer]
@@ -3460,7 +4738,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3517,7 +4794,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3536,7 +4812,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3556,7 +4831,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3574,7 +4848,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3596,7 +4869,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3608,7 +4880,6 @@ defmodule Hologram.CompilerTest do
           PLT.start(),
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3625,7 +4896,7 @@ defmodule Hologram.CompilerTest do
       mfas = [{Enum, :hologram_undefined_fun, 9} | runtime_mfas]
 
       js_1 =
-        build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], @empty_sync_constants_js,
+        build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [],
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3643,7 +4914,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3663,7 +4933,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3688,7 +4957,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3708,7 +4976,7 @@ defmodule Hologram.CompilerTest do
     } do
       result =
         runtime_mfas
-        |> build_runtime_js(ir_plt, encode_plt, MapSet.new(), [], @empty_sync_constants_js,
+        |> build_runtime_js(ir_plt, encode_plt, MapSet.new(), [],
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3730,7 +4998,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3759,7 +5026,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3783,7 +5049,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: []
         )
@@ -3814,7 +5079,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3840,7 +5104,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3865,7 +5128,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3892,7 +5154,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           app_versions,
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3919,7 +5180,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           app_versions,
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -3927,1587 +5187,28 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(js, ~s/ERTS.appVersions = {"my-app": "9.8.7"};/)
     end
 
-    test "injects the model the bundle was built against", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
+    # The data model goes into the data model bundle (see build_data_model_js/1), so that a data
+    # model edit leaves the runtime bundle as it is.
+    test "sets no data layer constants for a build with the data layer" do
       js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(@empty_sync_constants),
+        build_runtime_js([], PLT.start(), PLT.start(), MapSet.new(), [],
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
 
-      assert String.contains?(js, ~s/modelHash: "my_model_hash", /)
+      refute String.contains?(js, "globalThis.Hologram.sync")
     end
 
-    # Every admitted attribute type in one entry, since a value's type is not recoverable from
-    # the value itself - the client reads a date, an enum and a uuid apart only by what this says.
-    test "injects the attribute types the client reads rows by", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
-
+    # So the runtime waits for no data model bundle (see defineDataModel() in hologram.mjs).
+    test "sets the data layer constants to null for a build without the data layer" do
       js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
+        build_runtime_js([], PLT.start(), PLT.start(), MapSet.new(), [],
           js_dir: @js_dir,
-          subsystems: [:data_layer]
+          subsystems: []
         )
 
-      assert String.contains?(
-               js,
-               ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
-                 ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
-                 ~s/"server_created_at":"datetime","server_updated_at":"datetime",/ <>
-                 ~s/"updated_at":"datetime"},"constraints":{},"creatorRoles":[],/ <>
-                 ~s/"defaults":{"c":Type.atom("x")},"derived":{},/ <>
-                 ~s/"enumValues":{"c":["x","y"]},"expandedRoles":{},"frameworkAttributes":[],"inverses":{},/ <>
-                 ~s/"operations":["create","delete","grant_role","read","read_roles",/ <>
-                 ~s/"revoke_role","update"],"policy":{},/ <>
-                 ~s/"relationships":{},"roles":[],"serverOnly":[],"verdicts":{}}}/
-             )
-    end
-
-    # The client refuses an undeclared role with the server's own sentence, from this list.
-    test "names a type's declared roles, sorted", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"roles":["editor","maintainer","owner","viewer"],/)
-    end
-
-    # A role check looks for every role carrying the one asked about, from this map - owner
-    # extends editor, so an owner holds editor and not the other way round.
-    test "names the roles carrying each declared role, sorted", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"expandedRoles":{"editor":["editor","owner"],"maintainer":["maintainer"],/ <>
-                 ~s/"owner":["owner"],"viewer":["viewer"]},/
-             )
-    end
-
-    # The client refuses an operation nothing declares with the server's own sentence, from this
-    # list - the framework's seven and the type's own, whether or not the build checks permissions
-    # (a type declaring nothing renders the seven alone, asserted with the whole entry in "injects
-    # the attribute types the client reads rows by").
-    test "names the operations a type can be asked about, sorted", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"operations":["archive","create","delete","grant_role","publish","read",/ <>
-                 ~s/"read_roles","revoke_role","update"],/
-             )
-    end
-
-    # A name is a key of the policy, as an operation is, so the client asks it the same way and
-    # refuses a name nothing carries with the same sentence.
-    test "bakes a named line under its name and names it among the operations", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([NamedChannel])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"operations":["archive","create","delete","grant_role","read","read_roles",/ <>
-                 ~s/"revoke_role","update"],/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"policy":{"archive":[{"predicates":[["owner_id","==",{"actor":true}]]/
-             )
-    end
-
-    test "bakes a rule reading the row after the change with its clauses as written", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      js = sync_constants_js_for(ChangedTask, runtime_mfas, ir_plt)
-
-      assert String.contains?(
-               js,
-               ~s/{"new":{"predicates":[["status","==","pending"],/ <>
-                 ~s/[{"name":"status","outer":1},"==","approved"]]},/ <>
-                 ~s/"predicates":[["status","==","pending"]],"to":/
-             )
-    end
-
-    test "bakes a role asked of the row after the change", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      js = sync_constants_js_for(ChangedTask, runtime_mfas, ir_plt)
-
-      assert String.contains?(
-               js,
-               ~s/{"new":{"predicates":[{"hasRole":[["project"],/ <>
-                 ~s/"#{inspect(ChangedProject)}",["member"]]}]},"predicates":[]/
-             )
-    end
-
-    test "bakes an operation asked of the row the row after the change leads to", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      js = sync_constants_js_for(ChangedTask, runtime_mfas, ir_plt)
-
-      assert String.contains?(
-               js,
-               ~s/{"new":{"predicates":[{"can":["read",["project"]]}]},"predicates":[]/
-             )
-    end
-
-    test "bakes the names update lines carry", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-      js = sync_constants_js_for(ChangedTask, runtime_mfas, ir_plt)
-
-      assert String.contains?(js, ~s/"updateNames":["approve","move"]/)
-    end
-
-    test "bakes no update names for a type with none", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      js = sync_constants_js_for(ChangedProject, runtime_mfas, ir_plt)
-
-      refute String.contains?(js, ~s/"updateNames"/)
-    end
-
-    # A field key is spelled the way a per-role key is, so the client asks a field the way it asks a
-    # role.
-    test "bakes a field-limited line under each field it covers", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([LimitedChannel])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"update:tags":[{"predicates":[["archived","==",false]]/)
-      assert String.contains?(js, ~s/"update:topic":[{"predicates":[["archived","==",false]]/)
-    end
-
-    # The client writes a creator's grants itself as it creates the row, so the build names which
-    # roles those are - a type declaring none renders an empty list, asserted with the whole entry
-    # in "injects the attribute types the client reads rows by".
-    test "names the roles a creator takes, sorted", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"creatorRoles":["maintainer","owner"],/)
-    end
-
-    # The client judges a written value by these, so the name a violation is reported under is the
-    # name the build writes - min_length, not the camelCase of its neighbours.
-    test "injects the declared constraints under the option names a violation names", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"bio":{"max_length":10,"optional":true},/)
-      assert String.contains?(js, ~s/"country_code":{"length":2,"optional":true},/)
-      assert String.contains?(js, ~s/"username":{"max_length":8,"min_length":3,"optional":true}/)
-    end
-
-    # A bound is the literal the declaration wrote, and rating declares both spellings of the same
-    # number on one attribute - a float attribute takes `min: 0` beside `max: 5.0`, which the wire
-    # would spell alike and the term encoder keeps apart.
-    test "injects a numeric bound as the encoded term its literal builds", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"count":{"max":Type.integer(10n),"min":Type.integer(1n)},/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"rating":{"max":Type.float(5.0),"min":Type.integer(0n),"optional":true},/
-             )
-    end
-
-    test "injects a temporal bound as the encoded struct its literal builds", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"released_on":{"max":Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Date")], / <>
-                 ~s/[Type.atom("calendar"), Type.atom("Elixir.Calendar.ISO")], / <>
-                 ~s/[Type.atom("day"), Type.integer(31n)], [Type.atom("month"), Type.integer(12n)], / <>
-                 ~s/[Type.atom("year"), Type.integer(2030n)]]),"optional":true}/
-             )
-    end
-
-    # A compiled pattern exists only inside the runtime that compiled it, so what travels is what
-    # compiles into one - the source and the options it was written with.
-    test "injects a declared format as its source and its options", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"handle":{"format":{"opts":Type.list([]),"source":"^[a-z_]+$"},"min_length":3,"optional":true},/
-             )
-    end
-
-    # Not every compile option is a NAME: ~r/@/s reads back as [:dotall, {:newline, :anycrlf}],
-    # and a tuple has none to write - which is why the options travel as the term they are.
-    test "injects a declared format's options as the term the declaration held", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"email":{"format":{"opts":Type.list([Type.atom("dotall"), / <>
-                 ~s/Type.tuple([Type.atom("newline"), Type.atom("anycrlf")])]),"source":"@"},/ <>
-                 ~s/"optional":true},/
-             )
-    end
-
-    # The step travels with the ends: 0..100//5 admits 5 and refuses 7, so a client told only
-    # where the range starts and stops would answer differently from the server.
-    test "injects a declared range as its ends and its step", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity10])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"percent":{"in":{"first":0,"last":100,"step":5},"optional":true},/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"priority":{"in":{"first":1,"last":5,"step":1},"optional":true},/
-             )
-    end
-
-    test "injects the uniqueness a declaration asks for", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity19])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"constraints":{"code":{"max_bytes":2692,"optional":true,"unique":true},/ <>
-                 ~s/"slug":{"max_bytes":2692,"unique":true}}/
-             )
-    end
-
-    # The bound is no declaration option: the server works it out from the keys the type
-    # declares, so a key's string carries it whether or not it declares anything else.
-    test "injects the byte bound a key puts on its strings", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity52])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"constraints":{"position":{"optional":true},"slug":{"max_bytes":2665}}/
-             )
-    end
-
-    # A default is the literal the declaration wrote, so it travels as the term that literal
-    # becomes in transpiled code rather than as the way the wire spells the same value - a struct
-    # built on the client holds what was declared, and `default: 5` and `default: 5.0` are two
-    # different things to hold.
-    test "injects the declared defaults as encoded terms", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"defaults":{"c":Type.atom("x")}/)
-    end
-
-    # A construction naming two of them reports the FIRST, so the order is the refusal's rather
-    # than sorted - a client reporting the other would answer a question the server never got.
-    test "injects the framework-owned attribute names of a job type, in the order they are refused",
-         %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([JobModule1])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"frameworkAttributes":["actor_id","error","status"]/)
-    end
-
-    test "injects the relationships with their target types, cardinality and optionality", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity3])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"relationships":{"a":{"optional":false,"sort":[],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
-                 ~s/"b":{"optional":true,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
-                 ~s/"c":{"optional":false,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module1"}}/
-             )
-    end
-
-    test "injects a to-many's declared order", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      defmodule SortedToManyFixture do
-        use Hologram.Entity
-
-        alias Hologram.Test.Fixtures.Entity.Module28
-
-        relationship :messages, [Module28], sort: [position: :desc, body: :asc]
-      end
-
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([SortedToManyFixture])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"relationships":{"messages":{"optional":false,"sort":[["position","desc"],["body","asc"]],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module28"}}/
-             )
-    end
-
-    test "injects the inverses with what they reverse, their cardinality and their order", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: MapSet.new([Entity26, Entity29])
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"inverses":{"messages":{"forward":"channel","reference":true,"sort":[["position","asc"]],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module28"},/ <>
-                 ~s/"topic":{"forward":"channel","reference":true,"sort":[],"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module27"}}/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"inverses":{"messages":{"forward":"labels","reference":false,"sort":[],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module28"}}/
-             )
-    end
-
-    # The NAME travels while the value never does: a client that knows the attribute exists and
-    # is not for it can say so, where one that never heard of it would answer nil.
-    test "injects the names of the attributes a client may not have", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"serverOnly":["secret_note","token"]/)
-    end
-
-    # A bundle carries the model of the types its own queries reach and no others: a type a
-    # client can never hold is one it is told nothing about, its attribute names included.
-    test "injects nothing about a type the client can never hold", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      refute String.contains?(js, "Hologram.Test.Fixtures.Entity.Module15")
-      refute String.contains?(js, "secret_note")
-    end
-
-    # The rules a client checks permissions by, spelled the way the rows it checks them against
-    # are spelled - a predicate value travels as the wire spells it.
-    test "injects the rules a client checks permissions by", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      entity_types = MapSet.new([PolicyEntity, RoleGrant])
-
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: entity_types
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      # A predicate rule, a grant reference on the entity itself, one on its whole type and one on
-      # a related row, and a delegating rule - one of each kind the evaluator has to read.
-      assert String.contains?(
-               js,
-               ~s/"read":[{"predicates":[["public","==",true]],"to":null,"via":null}/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"to":[["own",["viewer"]],["type","Hologram.Test.Fixtures.Policy.Module2",["admin"]]]/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"delete":[{"predicates":[],"to":[["rel",["parent"],"Hologram.Test.Fixtures.Policy.Module2",["admin"]]],"via":null}]/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"publish":[{"predicates":[],"to":null,"via":["publish",["parent"]]}]/
-             )
-    end
-
-    # A member and its trailing comma, never a member plus whichever key follows it.
-    test "bakes a grant lifecycle rule under its per-role key beside the bare one", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      entity_types = MapSet.new([PolicyEntity, RoleGrant])
-
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: entity_types
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      owner_rule = ~s/{"predicates":[],"to":[["own",["owner"]]],"via":null}/
-
-      assert String.contains?(js, ~s/"grant_role":[#{owner_rule},#{owner_rule}],/)
-      assert String.contains?(js, ~s/"grant_role:editor":[#{owner_rule}],/)
-      assert String.contains?(js, ~s/"grant_role:owner":[#{owner_rule}],/)
-    end
-
-    # The acting user is named rather than carried: the client binds its own id when it evaluates
-    # the rule.
-    test "names the acting user in a rule that references them", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      entity_types = MapSet.new([PolicyEntity, RoleGrant])
-
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: entity_types
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"archive":[{"predicates":[["author_id","==",{"actor":true}]]/
-             )
-    end
-
-    # A disjunction rides beside the triples as an object holding its alternatives, which is how
-    # the evaluator tells it from a triple.
-    test "bakes a condition holding a disjunction as an or clause", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      entity_types = MapSet.new([DisjunctionPolicyEntity, RoleGrant])
-
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: entity_types
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"read":[{"predicates":[{"or":[[["author_id","==",{"actor":true}]],[["shared","==",true]]]}],"to":null,"via":null}]/
-             )
-    end
-
-    test "bakes quantified conditions in the shape the query kernel's filters take", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      entity_types =
-        MapSet.new([
-          BakedProject,
-          BakedMember,
-          BakedLabel,
-          Hologram.Test.Fixtures.Entity.Module14,
-          RoleGrant
-        ])
-
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: entity_types
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"read":[{"predicates":[{"filter":[["user_id","==",{"actor":true}]],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"update":[{"predicates":[{"filter":[{"filter":[["name","==",{"attribute":{"name":"name","outer":2}}]],"quantifier":"any","source":["labels"]}],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
-             )
-    end
-
-    # A deciding quantifier renders as any other, since the rows a client holds of its set decide
-    # what one row can, and the server's verdict answers its operation whole: the key the verdict is
-    # sent under and the types whose unanswered writes make it stale. The read rule's any reads no
-    # none or all, and the whole-row update rule none either, and every member and label is read by
-    # everyone, so neither operation has a verdict. The publish line reads a member's user, which a
-    # reader may not hold, so it has one too.
-    test "bakes a deciding quantifier as it is and its operation's verdict key and reads", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      entity_types =
-        MapSet.new([
-          BakedProject,
-          BakedMember,
-          BakedLabel,
-          Hologram.Test.Fixtures.Entity.Module14,
-          RoleGrant
-        ])
-
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: entity_types
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"delete":[{"predicates":[{"or":[[["name","==","draft"]],[{"filter":[],"quantifier":"none","source":["members"]}]]}],"to":null,"via":null}]/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"share":[{"predicates":[{"filter":[{"filter":[["name","==","x"]],"quantifier":"none","source":["labels"]}],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
-             )
-
-      member_types = [BakedMember, BakedProject]
-      label_types = [BakedLabel, BakedMember, BakedProject]
-      user_types = [BakedMember, BakedProject, Hologram.Test.Fixtures.Entity.Module14]
-
-      field_types = [
-        BakedLabel,
-        BakedMember,
-        BakedProject,
-        Hologram.Test.Fixtures.Entity.Module14
-      ]
-
-      verdicts_js =
-        ~s/"verdicts":{"archive":#{verdict_entry_js(BakedProject, :archive, member_types)},/ <>
-          ~s/"delete":#{verdict_entry_js(BakedProject, :delete, member_types)},/ <>
-          ~s/"publish":#{verdict_entry_js(BakedProject, :publish, user_types)},/ <>
-          ~s/"share":#{verdict_entry_js(BakedProject, :share, label_types)},/ <>
-          ~s/"update:name":#{verdict_entry_js(BakedProject, {:update, :name}, field_types)}}/
-
-      assert String.contains?(js, verdicts_js)
-
-      assert String.contains?(
-               js,
-               ~s/"serverOnly":[],"verdicts":{}},"Hologram.CompilerTest.BakedProject"/
-             )
-    end
-
-    # Every field but the name is covered by the one line, so each field's entry names one verdict,
-    # which a row carries once.
-    test "bakes the fields of an update the same lines cover as entries naming one verdict", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: MapSet.new([BakedSharedProject, BakedLabel, RoleGrant])
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      entry_js =
-        verdict_entry_js(BakedSharedProject, {:update, :title}, [BakedLabel, BakedSharedProject])
-
-      assert String.contains?(
-               js,
-               ~s/"verdicts":{"update:labels":#{entry_js},"update:title":#{entry_js}}/
-             )
-
-      refute String.contains?(js, ~s/"update:name":/)
-    end
-
-    # Only a workshop's owner and members read it, its benches and its tools' permits, so each of
-    # the tool's operations reading one has a verdict, a create line only under its name.
-    test "bakes the verdicts of operations reading related rows a reader may not hold", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types:
-            MapSet.new([
-              Hologram.Test.Fixtures.Policy.Module46,
-              Hologram.Test.Fixtures.Policy.Module47,
-              Hologram.Test.Fixtures.Policy.Module48,
-              Hologram.Test.Fixtures.Policy.Module49,
-              RoleGrant
-            ])
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      tool = Hologram.Test.Fixtures.Policy.Module49
-      workshop_types = [Hologram.Test.Fixtures.Policy.Module46]
-      delegation_types = [RoleGrant, Hologram.Test.Fixtures.Policy.Module46]
-
-      permit_types = [
-        Hologram.Test.Fixtures.Policy.Module46,
-        Hologram.Test.Fixtures.Policy.Module48,
-        tool
-      ]
-
-      bench_types = [
-        RoleGrant,
-        Hologram.Test.Fixtures.Policy.Module46,
-        Hologram.Test.Fixtures.Policy.Module47
-      ]
-
-      verdicts_js =
-        ~s/"verdicts":{"delete":#{verdict_entry_js(tool, :delete, delegation_types)},/ <>
-          ~s/"draft":#{verdict_entry_js(tool, :draft, workshop_types)},/ <>
-          ~s/"read":#{verdict_entry_js(tool, :read, workshop_types)},/ <>
-          ~s/"update":#{verdict_entry_js(tool, :update, workshop_types)},/ <>
-          ~s/"update:bench":#{verdict_entry_js(tool, {:update, :bench}, permit_types)},/ <>
-          ~s/"update:label":#{verdict_entry_js(tool, {:update, :label}, bench_types)}}/
-
-      assert String.contains?(js, verdicts_js)
-    end
-
-    # A bounded set computed over the rows a client holds can hold rows the server's doesn't, so an
-    # any over one leaves its operation to the verdict, which reads the rows the set is taken from.
-    # What its condition compares stays off the bundle, since no client reads it.
-    test "bakes the verdict key and the types read of an operation with an any over a derived set",
-         %{
-           ir_plt: ir_plt,
-           runtime_mfas: runtime_mfas
-         } do
-      put_derived_definitions([BakedBoard])
-
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: MapSet.new([BakedBoard, BakedCard, RoleGrant])
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"read":[{"predicates":[{"server":true}],"to":null,"via":null}]/
-             )
-
-      read_js = verdict_entry_js(BakedBoard, :read, [BakedBoard, BakedCard])
-
-      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
-    end
-
-    # No client holds a server-only value, so a predicate reading one is a marker the client answers
-    # as unknown, its compared value left off the bundle. A stored attribute beside it in an
-    # alternative stays a triple. The read verdict reads no type for the row's own attribute, which
-    # no write of the client's can move, and the types along a path, without the rule's own.
-    test "bakes a predicate on a server-only attribute as a marker",
-         %{
-           ir_plt: ir_plt,
-           runtime_mfas: runtime_mfas
-         } do
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: MapSet.new([BakedReport, BakedReportNote, RoleGrant])
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"read":[{"predicates":[{"or":[[{"server":true}],[["title","==","x"]]]}],"to":null,"via":null}]/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"verdicts":{"read":#{verdict_entry_js(BakedReport, :read, [])}}/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"read":[{"predicates":[{"server":true}],"to":null,"via":null}]/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"verdicts":{"read":#{verdict_entry_js(BakedReportNote, :read, [BakedReport])}}/
-             )
-    end
-
-    # A quantifier's condition is read on the rows of its set, so one reading a server-only value
-    # stays a triple, which the client answers as unknown on each row.
-    test "bakes a quantifier's condition on a server-only attribute as its triple", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: MapSet.new([BakedSecretBoard, BakedSecretNote, RoleGrant])
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"read":[{"predicates":[{"filter":[["secret","==","x"]],"quantifier":"any","source":["notes"]}],"to":null,"via":null}]/
-             )
-    end
-
-    # No client holds a row of a type nobody may read, so a read rule's predicate reading one is its
-    # triple, which the client reads as unknown unless the project reference is empty, and the read
-    # verdict answers the rest.
-    test "bakes a read rule's predicate reading a type nobody may read as its triple",
-         %{
-           ir_plt: ir_plt,
-           runtime_mfas: runtime_mfas
-         } do
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: MapSet.new([BakedHiddenProject, BakedHiddenTask, RoleGrant])
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"read":[{"predicates":[[["project","archived"],"==",false]],"to":null,"via":null}]/
-             )
-
-      read_js = verdict_entry_js(BakedHiddenTask, :read, [BakedHiddenProject])
-
-      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
-    end
-
-    # Readers.Module24 reads the team's id off its project, a type nobody may read, so the read
-    # rule's reference carries a fifth element the client answers as unknown, and the read verdict
-    # answers the rest. A reference one relationship away reads the team's id off the task itself.
-    test "bakes a read rule's role reference reading a type nobody may read with a marker",
-         %{
-           ir_plt: ir_plt,
-           runtime_mfas: runtime_mfas
-         } do
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: MapSet.new([ReadersProject, ReadersTask, ReadersTeam, RoleGrant])
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      team_js = ~s/"Hologram.Test.Fixtures.Policy.Readers.Module22"/
-
-      assert String.contains?(
-               js,
-               ~s/"read":[{"predicates":[],"to":[["rel",["project","team"],#{team_js},["member"],true]],"via":null},{"predicates":[],"to":[["rel",["team"],#{team_js},["member"]]],"via":null}]/
-             )
-
-      read_js = verdict_entry_js(ReadersTask, :read, [RoleGrant, ReadersProject])
-
-      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
-
-      assert String.contains?(
-               js,
-               ~s/"update":[{"predicates":[],"to":[["rel",["team"],#{team_js},["member"]]],"via":null}]/
-             )
-    end
-
-    # The parcel's vault and shelf have no read rule, so its read rule's delegations through them
-    # carry a third element the client answers as unknown, and the read verdict answers the rest.
-    # The one to the crate runs through readable types alone.
-    test "bakes a read rule's delegation through a type nobody may read with a marker",
-         %{
-           ir_plt: ir_plt,
-           runtime_mfas: runtime_mfas
-         } do
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types:
-            MapSet.new([ReadersCrate, ReadersParcel, ReadersShelf, ReadersVault, RoleGrant])
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"via":["update",["vault"],true]/)
-      assert String.contains?(js, ~s/"via":["read",["shelf","crate"],true]/)
-      assert String.contains?(js, ~s/"via":["read",["crate"]]}/)
-
-      read_js =
-        verdict_entry_js(ReadersParcel, :read, [
-          RoleGrant,
-          ReadersVault,
-          ReadersCrate,
-          ReadersShelf
-        ])
-
-      assert String.contains?(js, ~s/"verdicts":{"read":#{read_js}}/)
-    end
-
-    # Each time is spelled by the type of the attribute it is compared with, on the row that
-    # attribute is read on: the members' join time, the project's start through an outer name, the
-    # user's creation through a path from a member, and the join time inside a quantifier whose set
-    # is read on the row above. Spelled as an id, a time would lose its microseconds.
-    test "bakes a value inside a quantifier spelled by the type of the row it is read on", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      entity_types =
-        MapSet.new([
-          BakedProject,
-          BakedMember,
-          BakedLabel,
-          Hologram.Test.Fixtures.Entity.Module14,
-          RoleGrant
-        ])
-
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: entity_types
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"archive":[{"predicates":[{"filter":[["seat","==","full"],["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"none","source":["members"]}],"to":null,"via":null}]/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"publish":[{"predicates":[{"filter":[[{"name":"starts_at","outer":1},">","2026-01-01T00:00:00.000000Z"],[["user","created_at"],">","2026-01-01T00:00:00.000000Z"]],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"close":[{"predicates":[{"filter":[{"filter":[["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"any","source":{"name":["members"],"outer":1}}],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
-             )
-    end
-
-    # The other attribute is named rather than carried, which is how the evaluator tells it from a
-    # value - the client reads it off the row.
-    test "bakes a condition comparing two attributes as an attribute operand", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      entity_types = MapSet.new([AttributeComparisonPolicyEntity, RoleGrant])
-
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: entity_types
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"update":[{"predicates":[["guests","<=",{"attribute":"capacity"}]],"to":null,"via":null}]/
-             )
-    end
-
-    test "bakes a delegation and a grant reference through a path", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
-
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: entity_types
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"publish":[{"predicates":[],"to":null,"via":["publish",["parent","parent"]]}]/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"update":[{"predicates":[],"to":[["rel",["parent","parent"],"Hologram.Test.Fixtures.Policy.Module1",["viewer"]]],"via":null}]/
-             )
-    end
-
-    test "bakes a path in a condition", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
-
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: entity_types
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"read":[{"predicates":[[["parent","parent","public"],"==",true]],"to":null,"via":null}]/
-             )
-
-      assert String.contains?(
-               js,
-               ~s/"archive":[{"predicates":[[["link","priority"],"==","high"]],"to":null,"via":null}]/
-             )
-    end
-
-    # A datetime spelled by its own type carries microseconds, which a value spelled as an id would
-    # not.
-    test "encodes a path's literal with the type of the attribute it ends at", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
-
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: entity_types
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"triage":[{"predicates":[[["parent","parent","created_at"],">=","2026-01-01T00:00:00.000000Z"]],"to":null,"via":null}]/
-             )
-    end
-
-    test "bakes a path operand", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
-
-      sync_constants = %{
-        @empty_sync_constants
-        | entity_types: entity_types
-      }
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/"delete":[{"predicates":[["level","<=",{"attribute":["parent","parent","priority"]}]],"to":null,"via":null}]/
-             )
-    end
-
-    # The grant type has no server-only attributes and its relationships resolve to the app's
-    # designated user entity, so it bakes like any other type once the model names it - by the
-    # user entity type or by a query that reads grant rows, the entry being the same either way.
-    test "injects the grant type's model entry once the model names it", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([RoleGrant])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/model: {"Hologram.Auth.RoleGrant":{"attributes":{/)
-
-      assert String.contains?(
-               js,
-               ~s/"user":{"optional":false,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module14"}/
-             )
-    end
-
-    # An attribute declaring no constraint is left out of the map entirely, and a type whose
-    # attributes all declare none carries an empty one - the reader fetches the field without
-    # asking whether it is there.
-    test "injects an empty constraint map for a type declaring no constraint", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity4])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"constraints":{},/)
-    end
-
-    # A type declaring no default carries an empty map rather than nothing at all - the reader
-    # fetches the field without asking whether it is there.
-    test "injects an empty default map for a type declaring no default", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"defaults":{},/)
-    end
-
-    # A type holding no enum attribute carries an empty map rather than nothing at all - the
-    # reader fetches the field without asking whether it is there.
-    test "injects an empty enum-value map for a type with no enum attributes", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"enumValues":{},/)
-    end
-
-    # Every type carries the list, empty for anything that is not a job - which is what makes it a
-    # fact about the type rather than a rule the reader has to know jobs by.
-    test "injects an empty framework-attribute list for a type that is not a job", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity15])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"frameworkAttributes":[],/)
-    end
-
-    test "injects the wire format the bundle speaks" do
-      js =
-        build_runtime_js([], PLT.start(), PLT.start(), MapSet.new(), [], @empty_sync_constants_js,
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(
-               js,
-               ~s/protocolVersion: #{Frame.protocol_version()}, syncedTypes: [], userEntity: null};/
-             )
+      assert normalize_newlines(js) =~
+               ~r/globalThis\.Hologram\.config = [^\n]*;\n\nglobalThis\.Hologram\.sync = null;\n\nERTS\.appVersions/
     end
 
     test "injects no application versions when client stacktraces are disabled", %{
@@ -5526,7 +5227,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           app_versions,
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -5549,7 +5249,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -5584,7 +5283,6 @@ defmodule Hologram.CompilerTest do
           encode_plt,
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -5596,7 +5294,7 @@ defmodule Hologram.CompilerTest do
       mfas = reject_js_import_mfas(runtime_mfas)
 
       js =
-        build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], @empty_sync_constants_js,
+        build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [],
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -5614,7 +5312,7 @@ defmodule Hologram.CompilerTest do
         reject_js_import_mfas(runtime_mfas) ++ [{Module18, :my_fun, 0}, {Module22, :my_fun, 0}]
 
       js =
-        build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [], @empty_sync_constants_js,
+        build_runtime_js(mfas, ir_plt, encode_plt, MapSet.new(), [],
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -5637,7 +5335,7 @@ defmodule Hologram.CompilerTest do
     test "imports the optional subsystems the build ships and hands each to the runtime" do
       js =
         []
-        |> build_runtime_js(PLT.start(), PLT.start(), MapSet.new(), [], @empty_sync_constants_js,
+        |> build_runtime_js(PLT.start(), PLT.start(), MapSet.new(), [],
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -5670,7 +5368,7 @@ defmodule Hologram.CompilerTest do
     test "imports no optional subsystem the build does not ship" do
       js =
         []
-        |> build_runtime_js(PLT.start(), PLT.start(), MapSet.new(), [], @empty_sync_constants_js,
+        |> build_runtime_js(PLT.start(), PLT.start(), MapSet.new(), [],
           js_dir: @js_dir,
           subsystems: []
         )
@@ -5701,7 +5399,7 @@ defmodule Hologram.CompilerTest do
 
     test "raises on an optional subsystem it does not know" do
       assert_error ArgumentError, "unknown optional runtime subsystem: :unknown", fn ->
-        build_runtime_js([], PLT.start(), PLT.start(), MapSet.new(), [], @empty_sync_constants_js,
+        build_runtime_js([], PLT.start(), PLT.start(), MapSet.new(), [],
           js_dir: @js_dir,
           subsystems: [:unknown]
         )
@@ -5819,7 +5517,6 @@ defmodule Hologram.CompilerTest do
           PLT.start(),
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [],
           tmp_dir: opts[:tmp_dir]
@@ -6931,7 +6628,6 @@ defmodule Hologram.CompilerTest do
           PLT.start(),
           MapSet.new(),
           [],
-          @empty_sync_constants_js,
           js_dir: @js_dir,
           subsystems: [:data_layer]
         )
@@ -7214,7 +6910,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  test "create_runtime_entry_file/7", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+  test "create_runtime_entry_file/6", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
     opts = [
       js_dir: @js_dir,
       subsystems: [:data_layer],
@@ -7230,7 +6926,6 @@ defmodule Hologram.CompilerTest do
         PLT.start(),
         MapSet.new(),
         [],
-        @empty_sync_constants_js,
         opts
       )
 
@@ -7239,6 +6934,52 @@ defmodule Hologram.CompilerTest do
     assert entry_file_path
            |> File.read!()
            |> String.contains?("Interpreter.defineElixirFunction")
+  end
+
+  describe "data_model_bundle/3" do
+    @static_dir "/my_static_dir"
+    @statement "globalThis.Hologram.sync = {model: {}};"
+
+    test "none for a build without the data layer" do
+      assert data_model_bundle(@statement, [], @static_dir) == nil
+    end
+
+    test "the bundle built from the statement, at a path in the static dir named by its hash" do
+      assert %{js: js, static_bundle_path: bundle_path} =
+               data_model_bundle(@statement, [:data_layer], @static_dir)
+
+      assert js == build_data_model_js(@statement)
+      assert bundle_path =~ ~r"^/my_static_dir/data-model-[A-Z2-7]{8}\.js$"
+    end
+
+    test "the same path for the same statement, and another one for another statement" do
+      bundle = data_model_bundle(@statement, [:data_layer], @static_dir)
+
+      other_bundle =
+        data_model_bundle("globalThis.Hologram.sync = {};", [:data_layer], @static_dir)
+
+      assert data_model_bundle(@statement, [:data_layer], @static_dir) == bundle
+      assert other_bundle.static_bundle_path != bundle.static_bundle_path
+    end
+
+    test "raises when the bundle exceeds the specified :max_bundle_size" do
+      Application.put_env(:hologram, :max_bundle_size, 10)
+      on_exit(fn -> Application.delete_env(:hologram, :max_bundle_size) end)
+
+      exception =
+        assert_raise RuntimeError, fn ->
+          data_model_bundle(@statement, [:data_layer], @static_dir)
+        end
+
+      assert exception.message =~ "Generated JavaScript bundle 'data-model'"
+    end
+
+    test "does not raise for a bundle within the specified :max_bundle_size" do
+      Application.put_env(:hologram, :max_bundle_size, 1_000_000)
+      on_exit(fn -> Application.delete_env(:hologram, :max_bundle_size) end)
+
+      assert %{} = data_model_bundle(@statement, [:data_layer], @static_dir)
+    end
   end
 
   describe "delete_module_encodings/2" do
@@ -9979,6 +9720,69 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "remove_data_model_bundles/2" do
+    setup do
+      static_dir = Path.join([@tmp_dir, "tests", "compiler", "remove_data_model_bundles_2"])
+      clean_dir(static_dir)
+
+      for file_name <- [
+            "data-model-AAAAAAAA.js",
+            "data-model-AAAAAAAA.js.gz",
+            "data-model-BBBBBBBB.js",
+            "data-model-BBBBBBBB.js.gz",
+            "runtime-CCCCCCCC.js",
+            "page-MyPage-DDDDDDDD.js"
+          ] do
+        static_dir
+        |> Path.join(file_name)
+        |> File.write!("content")
+      end
+
+      [static_dir: static_dir]
+    end
+
+    test "removes every data model bundle and leaves the other bundles", %{static_dir: static_dir} do
+      assert remove_data_model_bundles(static_dir) == true
+
+      assert list_sorted_files(static_dir) == ["page-MyPage-DDDDDDDD.js", "runtime-CCCCCCCC.js"]
+    end
+
+    test "keeps the bundle at the given path with its gzip copy", %{static_dir: static_dir} do
+      kept_bundle_path = Path.join(static_dir, "data-model-BBBBBBBB.js")
+      assert remove_data_model_bundles(static_dir, kept_bundle_path) == true
+
+      assert list_sorted_files(static_dir) == [
+               "data-model-BBBBBBBB.js",
+               "data-model-BBBBBBBB.js.gz",
+               "page-MyPage-DDDDDDDD.js",
+               "runtime-CCCCCCCC.js"
+             ]
+    end
+
+    test "removes nothing, and says so, when the only data model bundle is the kept one", %{
+      static_dir: static_dir
+    } do
+      remove_data_model_bundles(static_dir, Path.join(static_dir, "data-model-BBBBBBBB.js"))
+
+      refute remove_data_model_bundles(
+               static_dir,
+               Path.join(static_dir, "data-model-BBBBBBBB.js")
+             )
+    end
+
+    test "finds the bundles in a static dir whose path holds glob characters" do
+      static_dir = Path.join([@tmp_dir, "tests", "compiler", "remove_data_model_bundles_2[x]{y}"])
+      clean_dir(static_dir)
+
+      static_dir
+      |> Path.join("data-model-AAAAAAAA.js")
+      |> File.write!("content")
+
+      assert remove_data_model_bundles(static_dir) == true
+      assert File.ls!(static_dir) == []
+    end
+  end
+
   describe "render_rules/1" do
     # A client swaps these in for the rules its bundle was built with, so an entry reads the way the
     # bundle spells it.
@@ -11066,6 +10870,56 @@ defmodule Hologram.CompilerTest do
       assert_raise Hologram.CompileError, expected_msg, fn ->
         validate_page_modules([InlinePageModuleFixture4], plt)
       end
+    end
+  end
+
+  describe "write_data_model_bundle!/1" do
+    setup do
+      static_dir = Path.join([@tmp_dir, "tests", "compiler", "write_data_model_bundle_1"])
+      clean_dir(static_dir)
+
+      bundle = data_model_bundle("globalThis.Hologram.sync = {};", [:data_layer], static_dir)
+
+      [bundle: bundle, static_dir: static_dir]
+    end
+
+    test "writes the bundle and its gzip copy", %{bundle: bundle} do
+      assert write_data_model_bundle!(bundle) == true
+
+      assert File.read!(bundle.static_bundle_path) == bundle.js
+
+      gzip_copy =
+        bundle.static_bundle_path
+        |> gzip_path()
+        |> File.read!()
+
+      assert :zlib.gunzip(gzip_copy) == bundle.js
+    end
+
+    test "writes nothing when the bundle and its gzip copy are on disk", %{bundle: bundle} do
+      write_data_model_bundle!(bundle)
+      File.write!(bundle.static_bundle_path, "kept")
+
+      assert write_data_model_bundle!(bundle) == false
+      assert File.read!(bundle.static_bundle_path) == "kept"
+    end
+
+    test "writes the bundle again when its gzip copy is gone", %{bundle: bundle} do
+      write_data_model_bundle!(bundle)
+      gzip_path = gzip_path(bundle.static_bundle_path)
+      File.rm!(gzip_path)
+
+      assert write_data_model_bundle!(bundle) == true
+      assert File.exists?(gzip_path)
+    end
+
+    # The asset path registry names the old bundle until the compile tells it to reload.
+    test "leaves the data model bundles it replaces", %{bundle: bundle, static_dir: static_dir} do
+      old_bundle_path = Path.join(static_dir, "data-model-AAAAAAAA.js")
+      File.write!(old_bundle_path, "old")
+
+      assert write_data_model_bundle!(bundle) == true
+      assert File.read!(old_bundle_path) == "old"
     end
   end
 end

@@ -1357,8 +1357,8 @@ defmodule Hologram.Entity do
   end
 
   # A job is enqueued as queued, by whoever is acting, and what happens to it afterwards is the
-  # worker's to record - so the three attributes carrying that are refused here rather than
-  # silently overwritten at the write.
+  # worker's to record - so the attributes carrying that are refused here rather than silently
+  # overwritten at the write.
   defp validate_framework_values!(entity_type, values_map) do
     framework_name =
       if Reflection.job?(entity_type) do

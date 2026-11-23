@@ -126,14 +126,22 @@ export default class Overlay {
   // with nothing shown in between. Without it the only thing left to show is the value the row
   // held before either writer touched it, which is a value nobody wrote.
   //
-  // A column the server dropped and sent no value back for is left as the base holds it: the
-  // value lost, and the server doesn't say what stands there to someone whose rule couldn't judge
-  // it, so the winner's frame is what brings it.
-  static promote(batch, kept, dropped) {
+  // A column named in `dropped` that the server sent no value back for is left as the base holds
+  // it: the value lost, and the server doesn't say what stands there to someone whose rule couldn't
+  // judge it, so the winner's frame is what brings it.
+  //
+  // Given `fillPending`, a whole fill is on its way, so a create filed here is one nothing has
+  // vouched for yet (see LocalDatabase.markPromoted). Past its type's marker it is a batch the fill
+  // didn't read, since the marker landed the ones it did (see Batches.landUnsent), and it waits for
+  // its session. Asked of the base before the write, since #absorb can file the row itself. A
+  // create over a row the base holds files nothing.
+  static promote(batch, kept, {dropped, fillPending = false} = {}) {
     batch.writes.forEach((write, index) => {
       // A write whose frame has already arrived is in the base as the server resolved it, so
       // there is nothing left to move - and folding it in again would apply a moved counter a
-      // second time, which is exactly what the frame arriving first would otherwise cost.
+      // second time, which is exactly what the frame arriving first would otherwise cost. A create
+      // a fill's marker ruled out is passed over the same way: the row is gone or its user may not
+      // read it, so it is not this client's to file (see Batches.landUnsent).
       if (batch.isLanded(index)) {
         return;
       }
@@ -141,12 +149,40 @@ export default class Overlay {
       // Optional because a batch can be answered by a node that predates the key - a rolling
       // deploy serves this bundle from one node and answers from another - and an answer that
       // names nothing kept is one this client simply cannot show early.
-      const writeKept = kept?.[String(index)];
+      const keptEntry = kept?.[String(index)];
 
-      Overlay.#absorb(write, writeKept);
+      // A resent batch's grant the server no longer stands behind: revoked since, or hidden from
+      // this user. Applying the write would file its own version of a row no frame ever corrects.
+      if (keptEntry?.$withheld === true) {
+        return;
+      }
+
+      const awaitsMarker =
+        fillPending &&
+        write.op === "create" &&
+        LocalDatabase.baseRow(write.type, write.id) === null;
+
+      Overlay.#absorb(write, keptEntry);
+
+      // A delete answered with a whole row leaves that row standing: the server dropped it, or a
+      // resent revocation's grant was made again since. Its stamp can't be weighed against that
+      // row: a replay answers the row as it is now, whose revisions can sit below the stamp when
+      // the clock that wrote them ran behind this one.
+      if (
+        write.op === "delete" &&
+        keptEntry !== undefined &&
+        "id" in keptEntry
+      ) {
+        return;
+      }
+
       Overlay.#promoteWrite(
-        Overlay.#withoutUnanswered(write, dropped?.[String(index)], writeKept),
+        Overlay.#withoutUnanswered(write, dropped?.[String(index)], keptEntry),
       );
+
+      if (awaitsMarker) {
+        LocalDatabase.markPromoted(write.type, write.id, batch.seq);
+      }
     });
 
     Overlay.remove(batch);
@@ -198,7 +234,10 @@ export default class Overlay {
     // server wrote nothing. So the answer's row is filed as the row, whole - its sort keys are
     // computed by #promoteWrite, which re-files whatever the base holds under the id next.
     if (base === null && write.op === "create" && "id" in kept) {
-      LocalDatabase.putRow(write.type, kept);
+      LocalDatabase.putRow(
+        write.type,
+        Model.readIntegers(write.type, {...kept}),
+      );
 
       return;
     }
@@ -225,7 +264,10 @@ export default class Overlay {
 
     LocalDatabase.putRow(
       write.type,
-      Model.computeSortKeys(write.type, absorbed),
+      Model.computeSortKeys(
+        write.type,
+        Model.readIntegers(write.type, absorbed),
+      ),
     );
   }
 
@@ -288,7 +330,8 @@ export default class Overlay {
   // server's pair is nil: it is the moment the row reaches the server, which has not happened
   // yet, and the server's own row brings it.
   // Every settable field takes that stamp as its revision, which is what the server's insert does
-  // with the same number.
+  // with the same number. A job's framework attributes aren't in the write, so the ones with a
+  // default take it here: an absent attempt would box to nil, which compares above every number.
   //
   // Reached only while the base holds no such row - once one is there, it is the server's own
   // copy and stands on its own.
@@ -299,13 +342,18 @@ export default class Overlay {
       Model.settableFields(type).map((field) => [field, write.stamp]),
     );
 
-    const row = Object.assign({id: write.id}, write.data, {
-      created_at: timestamp,
-      server_created_at: null,
-      server_updated_at: null,
-      updated_at: timestamp,
-      $revisions: revisions,
-    });
+    const row = Object.assign(
+      {id: write.id},
+      Overlay.#frameworkDefaults(type),
+      write.data,
+      {
+        created_at: timestamp,
+        server_created_at: null,
+        server_updated_at: null,
+        updated_at: timestamp,
+        $revisions: revisions,
+      },
+    );
 
     return Model.computeSortKeys(type, row);
   }
@@ -365,6 +413,20 @@ export default class Overlay {
     }
 
     return sourceIds;
+  }
+
+  // The defaults of the given type's framework attributes, as a row spells them.
+  static #frameworkDefaults(type) {
+    const entry = Model.entry(type);
+
+    return Object.fromEntries(
+      entry.frameworkAttributes
+        .filter((name) => Object.hasOwn(entry.defaults, name))
+        .map((name) => [
+          name,
+          Model.unbox(entry.defaults[name], entry.attributes[name]),
+        ]),
+    );
   }
 
   // The inverse of a to-many the given relationship of the given type is, when it is one - an
@@ -498,7 +560,7 @@ export default class Overlay {
     }
 
     for (const [counter, amount] of deltas) {
-      updated[counter] = row[counter] + amount;
+      updated[counter] = Model.addIntegers(row[counter], amount);
     }
 
     return Model.computeSortKeys(type, updated);

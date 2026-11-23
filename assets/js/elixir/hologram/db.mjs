@@ -3,7 +3,7 @@
 import Batches from "../../batches.mjs";
 import Bitstring from "../../bitstring.mjs";
 import Clock from "../../clock.mjs";
-import Elixir_Hologram_Entity from "./entity.mjs";
+import Elixir_Hologram_Entity, {typeValid} from "./entity.mjs";
 import Erlang from "../../erlang/erlang.mjs";
 import Elixir_Hologram_Query_Stage from "./query/stage.mjs";
 // A cycle - auth.mjs takes currentBatch from here - and a safe one: neither module calls the
@@ -506,6 +506,15 @@ function settableFieldNames(entityType) {
   return [...declared, ...references];
 }
 
+// The amounts no column can hold, each under its counter's name, to be judged beside the values a
+// write puts - as the server judges them, before any move lands. It can't be handed one, and a
+// batch carrying one would never leave the queue.
+function refusedAmounts(deltas) {
+  return Object.entries(deltas)
+    .filter(([_name, amount]) => !typeValid(amount, "integer"))
+    .map(([name, amount]) => [Type.atom(name), amount]);
+}
+
 // A moved counter is judged on the value the move ARRIVES AT, which is the only value that is
 // ever true of it - the same rule the server applies to what its statement returns.
 function validateMoves(entityType, held, deltas) {
@@ -549,7 +558,7 @@ function updateEntry(entity, entityType, id, held, data, deltas) {
     entry.deltas = Object.fromEntries(
       Object.entries(deltas).map(([name, amount]) => [
         name,
-        Number(amount.value),
+        Model.unbox(amount, "integer"),
       ]),
     );
   }
@@ -862,7 +871,7 @@ const Elixir_Hologram_DB = {
 
     const validation = Elixir_Hologram_Entity["validate/2"](
       Type.alias(entityType),
-      Type.map(boxedChanges),
+      Type.map([...boxedChanges, ...refusedAmounts(deltas)]),
     );
 
     if (!Type.isAtom(validation)) {

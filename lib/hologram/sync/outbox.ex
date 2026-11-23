@@ -40,7 +40,7 @@ defmodule Hologram.Sync.Outbox do
 
   @type message ::
           {:sync_deltas, String.t() | nil, list(map), non_neg_integer | nil}
-          | {:sync_synced, :all | {:types, list(module)}, String.t() | nil}
+          | {:sync_synced, :all | {:types, list(module), non_neg_integer | nil}, String.t() | nil}
 
   @doc """
   Returns an outbox sending to the given client, which it monitors from the calling process - the

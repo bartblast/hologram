@@ -7,6 +7,7 @@ import Clock from "../../assets/js/clock.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
+import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
 
@@ -141,6 +142,46 @@ describe("Overlay", () => {
       });
     });
 
+    it("gives a created job the defaults of the framework's attributes", () => {
+      const JOB = "MyApp.Jobs.Notify";
+
+      globalThis.Hologram.sync.model[JOB] = {
+        attributes: {
+          actor_id: "uuid",
+          attempt: "integer",
+          created_at: "datetime",
+          error: "string",
+          id: "uuid",
+          scheduled_at: "datetime",
+          status: "enum",
+          updated_at: "datetime",
+        },
+        constraints: {},
+        defaults: {attempt: Type.integer(0), status: Type.atom("queued")},
+        enumValues: {status: ["queued", "running", "done", "failed"]},
+        frameworkAttributes: [
+          "actor_id",
+          "attempt",
+          "error",
+          "scheduled_at",
+          "status",
+        ],
+        relationships: {},
+        serverOnly: ["error"],
+      };
+
+      Model.reset();
+
+      pushed(createWrite({data: {}, id: "j1", type: JOB}));
+
+      const row = Overlay.foldRow(JOB, "j1", null);
+
+      assert.strictEqual(row.attempt, 0);
+      assert.strictEqual(row.status, "queued");
+      assert.notProperty(row, "scheduled_at");
+      assert.notProperty(row.$revisions, "attempt");
+    });
+
     it("timestamps a create from the moment its writer made it", () => {
       const daysAgo = (nowMs - 2 * 86_400_000) * 1024;
 
@@ -263,6 +304,22 @@ describe("Overlay", () => {
 
       assert.equal(row.votes, 5);
       assert.equal(row.$revisions.votes, 10);
+    });
+
+    it("moves a counter across what a Number holds exactly", () => {
+      pushed(updateWrite({deltas: {votes: 2}}));
+
+      const row = Overlay.foldRow(TODO, "t1", base({votes: 9007199254740991}));
+
+      assert.strictEqual(row.votes, 9007199254740993n);
+    });
+
+    it("moves a big counter back to a Number once a Number holds it", () => {
+      pushed(updateWrite({deltas: {votes: -2}}));
+
+      const row = Overlay.foldRow(TODO, "t1", base({votes: 9007199254740993n}));
+
+      assert.strictEqual(row.votes, 9007199254740991);
     });
 
     // A move is not a claim about the value, so there is nothing for it to lose and no revision to
@@ -724,6 +781,169 @@ describe("Overlay", () => {
       LocalDatabase.reset();
     });
 
+    describe("a delete the answer kept the row of", () => {
+      it("leaves the row standing when its revisions are below the delete's stamp", () => {
+        const row = base();
+
+        LocalDatabase.putRow(TODO, row);
+
+        const batch = pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+        Overlay.promote(batch, {0: row});
+
+        assert.deepEqual(LocalDatabase.baseRow(TODO, "t1"), row);
+        assert.isFalse(Overlay.names(TODO, "t1"));
+      });
+    });
+
+    describe("a write the answer withholds", () => {
+      const withheld = {0: {$withheld: true}};
+
+      it("leaves a held row standing under a delete", () => {
+        const row = base();
+
+        LocalDatabase.putRow(TODO, row);
+
+        const batch = pushed({id: "t1", op: "delete", stamp, type: TODO});
+
+        Overlay.promote(batch, withheld);
+
+        assert.deepEqual(LocalDatabase.baseRow(TODO, "t1"), row);
+        assert.isFalse(Overlay.names(TODO, "t1"));
+      });
+
+      it("files nothing, leaves a held row alone and takes the layer away", () => {
+        const held = base({id: "t2", title: "Held", title$sort: "held"});
+
+        LocalDatabase.putRow(TODO, held);
+
+        const batch = pushed(createWrite(), createWrite({id: "t2"}));
+
+        Overlay.promote(batch, {0: {$withheld: true}, 1: {$withheld: true}});
+
+        assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+        assert.deepEqual(LocalDatabase.baseRow(TODO, "t2"), held);
+        assert.isFalse(Overlay.names(TODO, "t1"));
+      });
+
+      it("records nothing for a pending fill", () => {
+        const batch = pushed(createWrite());
+
+        batch.seal(3);
+
+        Overlay.promote(batch, withheld, {fillPending: true});
+
+        assert.deepEqual(LocalDatabase.carriedEntries(), []);
+      });
+
+      it("still promotes the batch's other writes", () => {
+        const batch = pushed(createWrite(), createWrite({id: "t2"}));
+
+        Overlay.promote(batch, withheld);
+
+        assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+        assert.isNotNull(LocalDatabase.baseRow(TODO, "t2"));
+      });
+    });
+
+    describe("while a fill is pending", () => {
+      const sealedCreate = (seq, overrides = {}) => {
+        const batch = pushed(createWrite(overrides));
+
+        batch.seal(seq);
+
+        return batch;
+      };
+
+      it("leaves a filed create for its type's marker to judge", () => {
+        Overlay.promote(sealedCreate(3), {}, {fillPending: true});
+
+        assert.deepEqual(LocalDatabase.carriedEntries(), [[TODO, "t1"]]);
+
+        LocalDatabase.markTypesSynced([TODO], 3);
+
+        assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+      });
+
+      it("records the batch's number with the row", () => {
+        Overlay.promote(sealedCreate(4), {}, {fillPending: true});
+
+        LocalDatabase.markTypesSynced([TODO], 3);
+
+        assert.isNotNull(LocalDatabase.baseRow(TODO, "t1"));
+      });
+
+      // A role grant made twice is answered with the stored row, which the answer files itself.
+      it("leaves a create the answer filed whole for its marker", () => {
+        const kept = {0: base({$revisions: {}, title: "stored"})};
+
+        Overlay.promote(sealedCreate(3), kept, {fillPending: true});
+
+        assert.deepEqual(LocalDatabase.carriedEntries(), [[TODO, "t1"]]);
+      });
+
+      it("doesn't record a create over a row the base holds", () => {
+        LocalDatabase.putRow(TODO, base());
+        LocalDatabase.markCarried(TODO, "t1");
+
+        Overlay.promote(sealedCreate(4), {}, {fillPending: true});
+        LocalDatabase.markTypesSynced([TODO], 3);
+
+        assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+      });
+
+      // Past its marker, a batch the fill read was landed, so this one committed after the read and
+      // its session has yet to judge it. Nothing may store the row until then.
+      it("keeps a create answered after its type's marker carried until the fill ends", () => {
+        LocalDatabase.markTypesSynced([TODO], 3);
+
+        Overlay.promote(sealedCreate(4), {}, {fillPending: true});
+
+        assert.isNotNull(LocalDatabase.baseRow(TODO, "t1"));
+        assert.deepEqual(LocalDatabase.carriedEntries(), [[TODO, "t1"]]);
+
+        LocalDatabase.markAllSynced();
+
+        assert.isNotNull(LocalDatabase.baseRow(TODO, "t1"));
+        assert.deepEqual(LocalDatabase.carriedEntries(), []);
+      });
+
+      it("doesn't record a landed create", () => {
+        const batch = sealedCreate(3);
+
+        batch.land(new Set([`${TODO} t1`]));
+
+        Overlay.promote(batch, {}, {fillPending: true});
+
+        assert.isNull(LocalDatabase.baseRow(TODO, "t1"));
+        assert.deepEqual(LocalDatabase.carriedEntries(), []);
+      });
+
+      it("doesn't record a write that isn't a create", () => {
+        LocalDatabase.putRow(TODO, base());
+
+        const batch = pushed(updateWrite({data: {title: "changed"}}));
+
+        batch.seal(3);
+
+        Overlay.promote(batch, {}, {fillPending: true});
+
+        assert.deepEqual(LocalDatabase.carriedEntries(), []);
+      });
+    });
+
+    // A client coming back holds a place, and its session judges the batches it missed.
+    it("doesn't leave a filed create for a marker when no fill is pending", () => {
+      const batch = pushed(createWrite());
+
+      batch.seal(3);
+
+      Overlay.promote(batch, {});
+
+      assert.isNotNull(LocalDatabase.baseRow(TODO, "t1"));
+      assert.deepEqual(LocalDatabase.carriedEntries(), []);
+    });
+
     // The frame carrying this write has already been applied, so the base holds the row as the
     // server left it. Folding the write in again would add the move a second time and write that
     // number down for good - no later frame corrects it, because the server has nothing new to
@@ -744,7 +964,7 @@ describe("Overlay", () => {
 
       const batch = pushed(updateWrite({data: {title: "refused"}}));
 
-      Overlay.promote(batch, {}, {0: {title: "refused"}});
+      Overlay.promote(batch, {}, {dropped: {0: {title: "refused"}}});
 
       assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "stored");
     });
@@ -754,7 +974,7 @@ describe("Overlay", () => {
 
       const batch = pushed(updateWrite({data: {title: "refused", votes: 2}}));
 
-      Overlay.promote(batch, {}, {0: {title: "refused"}});
+      Overlay.promote(batch, {}, {dropped: {0: {title: "refused"}}});
 
       const row = LocalDatabase.baseRow(TODO, "t1");
 
@@ -770,7 +990,7 @@ describe("Overlay", () => {
       Overlay.promote(
         batch,
         {0: {title: "winner", $revisions: {title: Number.MAX_SAFE_INTEGER}}},
-        {0: {title: "lost"}},
+        {dropped: {0: {title: "lost"}}},
       );
 
       assert.equal(LocalDatabase.baseRow(TODO, "t1").title, "winner");
@@ -952,6 +1172,21 @@ describe("Overlay", () => {
       assert.equal(row.title, "Theirs");
       assert.equal(row.$revisions.title, stamp + 1);
       assert.equal(row.title$sort, "theirs");
+    });
+
+    it("holds a kept big integer as a BigInt", () => {
+      LocalDatabase.putRow(TODO, base());
+
+      const batch = pushed(updateWrite({data: {votes: 1}}));
+
+      Overlay.promote(batch, {
+        0: {votes: "9007199254740993", $revisions: {votes: stamp + 1}},
+      });
+
+      assert.strictEqual(
+        LocalDatabase.baseRow(TODO, "t1").votes,
+        9007199254740993n,
+      );
     });
 
     // A resend of a batch already applied is answered from the record, so an answer can be older

@@ -12,6 +12,7 @@ import Batches from "../../../../assets/js/batches.mjs";
 import Interpreter from "../../../../assets/js/interpreter.mjs";
 import Bitstring from "../../../../assets/js/bitstring.mjs";
 import Clock from "../../../../assets/js/clock.mjs";
+import Deltas from "../../../../assets/js/deltas.mjs";
 import Elixir_Hologram_DB from "../../../../assets/js/elixir/hologram/db.mjs";
 import Elixir_Hologram_Query_Stage from "../../../../assets/js/elixir/hologram/query/stage.mjs";
 import {deriveGrantId} from "../../../../assets/js/elixir/hologram/auth.mjs";
@@ -51,6 +52,7 @@ describe("Elixir_Hologram_DB", () => {
   const update = Elixir_Hologram_DB["update/1"];
   const updateById = Elixir_Hologram_DB["update/3"];
   const filter = Elixir_Hologram_Query_Stage["filter/2"];
+  const sort = Elixir_Hologram_Query_Stage["sort/2"];
   const one = Elixir_Hologram_Query_Stage["one/1"];
   const read = Elixir_Hologram_DB["read/1"];
   const readById = Elixir_Hologram_DB["read/2"];
@@ -126,7 +128,7 @@ describe("Elixir_Hologram_DB", () => {
           relationships: {},
           serverOnly: [],
         },
-        // A job type - the three attributes its framework fills are what tells one apart here.
+        // A job type - the attributes its framework fills are what tells one apart here.
         [NOTIFY]: {
           attributes: {
             actor_id: "uuid",
@@ -138,7 +140,13 @@ describe("Elixir_Hologram_DB", () => {
           constraints: {},
           defaults: {},
           enumValues: {},
-          frameworkAttributes: ["actor_id", "error", "status"],
+          frameworkAttributes: [
+            "actor_id",
+            "attempt",
+            "error",
+            "scheduled_at",
+            "status",
+          ],
           relationships: {},
           serverOnly: [],
         },
@@ -741,6 +749,152 @@ describe("Elixir_Hologram_DB", () => {
           type: ITEM,
         },
       ]);
+    });
+
+    it("records a move past what a Number holds exactly as a BigInt", () => {
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 3,
+        $revisions: {stock: 12},
+      });
+
+      const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+
+      update(
+        increment(item, Type.atom("stock"), Type.integer(9007199254740993n)),
+      );
+
+      assert.strictEqual(
+        Batches.current().writes[0].deltas.stock,
+        9007199254740993n,
+      );
+    });
+
+    it("writes a big integer exactly", () => {
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: 3,
+        $revisions: {stock: 12},
+      });
+
+      const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+
+      update(
+        putAttribute(
+          item,
+          Type.list([
+            Type.tuple([Type.atom("stock"), Type.integer(9007199254740995n)]),
+          ]),
+        ),
+      );
+
+      assert.strictEqual(
+        Batches.current().writes[0].data.stock,
+        9007199254740995n,
+      );
+    });
+
+    describe("an amount no column holds, beside another refusal", () => {
+      const typeError = (type) =>
+        Type.list([Type.tuple([Type.atom("type"), Type.atom(type)])]);
+
+      const heldItem = () => {
+        const entry = globalThis.Hologram.sync.model[ITEM];
+
+        entry.attributes = {
+          ...entry.attributes,
+          note: "string",
+          views: "integer",
+        };
+        Model.reset();
+
+        LocalDatabase.putRow(ITEM, {
+          id: ID_2,
+          note: null,
+          stock: 3,
+          views: 0,
+          $revisions: {note: 12, stock: 12, views: 12},
+        });
+
+        return Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+      };
+
+      it("answers for a refused put too, as the server does", () => {
+        const result = update(
+          increment(
+            putAttribute(
+              heldItem(),
+              Type.list([Type.tuple([Type.atom("note"), Type.integer(1)])]),
+            ),
+            Type.atom("stock"),
+            Type.integer(10000000000000000000n),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.tuple([
+            Type.atom("error"),
+            Type.map([
+              [Type.atom("note"), typeError("string")],
+              [Type.atom("stock"), typeError("integer")],
+            ]),
+          ]),
+        );
+      });
+
+      it("doesn't judge where another counter lands, as the server doesn't", () => {
+        const result = update(
+          increment(
+            decrement(heldItem(), Type.atom("stock"), Type.integer(5)),
+            Type.atom("views"),
+            Type.integer(10000000000000000000n),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.tuple([
+            Type.atom("error"),
+            Type.map([[Type.atom("views"), typeError("integer")]]),
+          ]),
+        );
+      });
+    });
+
+    it("refuses a move by an amount no column holds, even where it would land inside one", () => {
+      LocalDatabase.putRow(ITEM, {
+        id: ID_2,
+        stock: -5000000000000000000n,
+        $revisions: {stock: 12},
+      });
+
+      const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+
+      const result = update(
+        increment(
+          item,
+          Type.atom("stock"),
+          Type.integer(10000000000000000000n),
+        ),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([
+          Type.atom("error"),
+          Type.map([
+            [
+              Type.atom("stock"),
+              Type.list([
+                Type.tuple([Type.atom("type"), Type.atom("integer")]),
+              ]),
+            ],
+          ]),
+        ]),
+      );
+
+      assert.isUndefined(Batches.current()?.writes[0]);
     });
 
     // A delta is never merged, so there is nothing for it to be based on - and the entry says so
@@ -2368,6 +2522,52 @@ describe("Elixir_Hologram_DB", () => {
             "  * attribute :title is required",
         );
       }
+    });
+  });
+
+  describe("big integers, written and read", () => {
+    const ids = (rows) => rows.data.map((item) => field(item, "id"));
+
+    beforeEach(() => {
+      Deltas.apply({
+        put_entity: {
+          [ITEM]: [
+            {id: ID_1, stock: "9007199254740992"},
+            {id: ID_2, stock: "9007199254740993"},
+          ],
+        },
+      });
+    });
+
+    it("reads a row's big integer exactly", () => {
+      const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
+
+      assert.strictEqual(field(item, "stock").value, 9007199254740993n);
+    });
+
+    it("tells two neighbours apart in a filter", () => {
+      const result = read(
+        filter(
+          Type.alias(ITEM),
+          predicates([["stock", Type.integer(9007199254740993n)]]),
+        ),
+      );
+
+      assert.deepStrictEqual(ids(result), [Type.bitstring(ID_2)]);
+    });
+
+    it("orders two neighbours", () => {
+      const result = read(
+        sort(
+          Type.alias(ITEM),
+          Type.list([Type.tuple([Type.atom("stock"), Type.atom("desc")])]),
+        ),
+      );
+
+      assert.deepStrictEqual(ids(result), [
+        Type.bitstring(ID_2),
+        Type.bitstring(ID_1),
+      ]);
     });
   });
 

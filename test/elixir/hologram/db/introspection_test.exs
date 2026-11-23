@@ -17,6 +17,11 @@ defmodule Hologram.DB.IntrospectionTest do
 
       assert table_names == [
                "hologram_role_grant",
+               "test_fixtures_compiler_impl_reach_entity1",
+               "test_fixtures_compiler_impl_reach_entity2",
+               "test_fixtures_compiler_impl_reach_entity3",
+               "test_fixtures_compiler_impl_reach_entity4",
+               "test_fixtures_compiler_impl_reach_entity5",
                "test_fixtures_entity_module1",
                "test_fixtures_entity_module10",
                "test_fixtures_entity_module11",
@@ -536,6 +541,11 @@ defmodule Hologram.DB.IntrospectionTest do
     test "introspects enum types with their values" do
       assert schema().enum_types == %{
                "hologram_role_grant_entity_type_$enum" => [
+                 "Hologram.Test.Fixtures.Compiler.ImplReach.Entity1",
+                 "Hologram.Test.Fixtures.Compiler.ImplReach.Entity2",
+                 "Hologram.Test.Fixtures.Compiler.ImplReach.Entity3",
+                 "Hologram.Test.Fixtures.Compiler.ImplReach.Entity4",
+                 "Hologram.Test.Fixtures.Compiler.ImplReach.Entity5",
                  "Hologram.Test.Fixtures.Entity.Module1",
                  "Hologram.Test.Fixtures.Entity.Module10",
                  "Hologram.Test.Fixtures.Entity.Module11",
@@ -733,10 +743,14 @@ defmodule Hologram.DB.IntrospectionTest do
                  "error",
                  "exit",
                  "garbage",
+                 "hang",
                  "ok",
                  "ok_tuple",
                  "raise",
                  "record_actor",
+                 "recreated",
+                 "rescheduled",
+                 "superseded",
                  "swept",
                  "throw"
                ],

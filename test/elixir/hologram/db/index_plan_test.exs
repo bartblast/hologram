@@ -1147,11 +1147,11 @@ defmodule Hologram.DB.IndexPlanTest do
       assert grant_need in framework_needs(mapping)
     end
 
-    test "needs a job worker's lookup of a job type's jobs, by status and oldest first, for job types only" do
+    test "needs a job worker's lookup of a job type's jobs, by status and due time, for job types only" do
       mapping = Mapper.derive!([Module1, JobModule1], [])
 
       assert framework_needs(mapping) == [
-               need("test_fixtures_job_module1", ["status"], nil, ["created_at"])
+               need("test_fixtures_job_module1", ["status"], "scheduled_at", [])
              ]
     end
   end

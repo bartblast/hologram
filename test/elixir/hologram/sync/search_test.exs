@@ -943,7 +943,7 @@ defmodule Hologram.Sync.SearchTest do
       assert candidates(effects, edges) == %{rows: %{RoleGrant => grant_ids}, whole_types: %{}}
     end
 
-    test "lists nothing for a named role granted on the whole type" do
+    test "names the holder of a named role granted on the whole type" do
       user = create!(Module14, email: "a@b.c")
       other_user = create!(Module14, email: "d@e.f")
 
@@ -953,7 +953,25 @@ defmodule Hologram.Sync.SearchTest do
 
       effects = grant_effects(fn -> Auth.grant_role(user, :member, PolicyModule2) end)
 
-      assert candidates(effects, edges) == %{rows: %{}, whole_types: %{}}
+      assert candidates(effects, edges) == %{
+               rows: %{},
+               whole_types: %{RoleGrant => MapSet.new([user.id])}
+             }
+    end
+
+    test "names the holder of a named role revoked on the whole type" do
+      user = create!(Module14, email: "a@b.c")
+
+      Auth.grant_role(user, :member, PolicyModule2)
+
+      edges = %{{RoleGrant, :read} => [{:named_grants, PolicyModule2, [:admin, :member]}]}
+
+      effects = grant_effects(fn -> Auth.revoke_role(user, :member, PolicyModule2) end)
+
+      assert candidates(effects, edges) == %{
+               rows: %{},
+               whole_types: %{RoleGrant => MapSet.new([user.id])}
+             }
     end
 
     test "raises for a grant read without its data" do

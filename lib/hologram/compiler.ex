@@ -26,6 +26,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Job
   alias Hologram.Policy
   alias Hologram.Policy.Edges
+  alias Hologram.Query.Ordering
   alias Hologram.Query.Shape
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
@@ -99,6 +100,23 @@ defmodule Hologram.Compiler do
     {"Utils", "utils.mjs"}
   ]
 
+  # The name the data model bundle's file starts with, and the bundle's name in a size error.
+  @data_model_bundle_name "data-model"
+
+  # The runtime's classes a page bundle, a chunk or the data model bundle is defined with (see
+  # render_script_deps/1). The keys of Hologram.#deps in assets/js/hologram.mjs.
+  @script_deps ~w(
+    Bitstring
+    ERTS
+    ElementRefRegistry
+    HologramBoxedError
+    HologramInterpreterError
+    Interpreter
+    MemoryStorage
+    Type
+    Utils
+  )
+
   # The hand-written runtime modules a build ships only when it needs them, each with its file under
   # the js dir, its class, the handle the runtime reads it through and the Elixir modules whose
   # manually ported functions it defines. The handle is a public static of Hologram, null when the
@@ -133,23 +151,31 @@ defmodule Hologram.Compiler do
   @typedoc """
   What the data layer keeps of a page's reach between compiles: whether the page's client code
   reaches a permission check (see `pages_checking_permissions/1`), the atoms its client code spells
-  (see `build_kept_page_reach/4`), the modules it reaches, the struct types it names included,
-  whether one of the components among them reads the session user from the context, and the
-  queries its client code writes in one piece (see `Hologram.Compiler.QueryChains`).
+  (see `build_kept_page_reach/4`), the modules it names, which are the ones it reaches, the struct
+  types it names and the ones the implementations it can dispatch to spell, the modules those
+  implementations reach, which only say when an edit moves the page's reach, whether one of the
+  components among them reads the session user from the context, and the queries its client code
+  writes in one piece (see `Hologram.Compiler.QueryChains`).
   """
   @type kept_page_reach :: %{
           atoms: MapSet.t(atom),
           checks_permissions?: boolean,
+          impl_modules: MapSet.t(module),
           modules: MapSet.t(module),
           query_chains: [QueryChains.t()],
           reads_session_user?: boolean
         }
 
   @typedoc """
-  What a page's client code reaches (see `list_reach_by_page/2`): the MFAs reachable from it, and
-  the struct types it names, which carry no MFA of their own in the list.
+  What a page's client code reaches (see `list_reach_by_page/2`): the MFAs reachable from it, the
+  struct types it names, which carry no MFA of their own in the list, and, once `put_impl_mfas/2`
+  has added them, the MFAs it reaches through the protocol implementations for struct types.
   """
-  @type page_reach :: %{mfas: [mfa], types: [module]}
+  @type page_reach :: %{
+          required(:mfas) => [mfa],
+          required(:types) => [module],
+          optional(:impl_mfas) => [mfa]
+        }
 
   @typedoc """
   What the client's data layer is compiled with (see `build_sync_constants/2`).
@@ -420,6 +446,28 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the pages whose client code reaches a permission check only through a protocol
+  implementation for a struct type, from each page's reach with its implementation MFAs (see
+  `put_impl_mfas/2`).
+
+  Those MFAs are listed on the graph without the manually ported functions, which every permission
+  MFA is one of, so the given call graph, which still holds them, says which of the MFAs call one.
+  Asked this way because a walk of the implementations on that graph would follow the Elixir bodies
+  of the ported functions, which don't run on the client.
+  """
+  @spec pages_checking_permissions_in_impls([{module, page_reach}], CallGraph.t()) :: [module]
+  def pages_checking_permissions_in_impls(reach_by_page, call_graph) do
+    callers = CallGraph.list_callers(call_graph, @permission_mfas)
+
+    for {page_module, reach} <- reach_by_page,
+        reach
+        |> Map.get(:impl_mfas, [])
+        |> Enum.any?(&MapSet.member?(callers, &1)) do
+      page_module
+    end
+  end
+
+  @doc """
   Returns true when some page checks permissions on the client, or false otherwise - from what the
   data layer keeps of each page's reach (see `build_kept_page_reach/4`).
 
@@ -446,6 +494,40 @@ defmodule Hologram.Compiler do
   # bundle, down to a NIF. The two lists live in two modules for two reasons, and this is the
   # invariant that ties them.
   def permission_mfas, do: @permission_mfas
+
+  @doc """
+  Adds to each page's reach the MFAs its client code reaches through the protocol implementations
+  for struct types (see `CallGraph.list_page_impl_mfas/5`), one task per page through a shared
+  graph. Give it the graph without the manually ported functions.
+  """
+  @spec put_impl_mfas([{module, page_reach}], CallGraph.t()) :: [{module, page_reach}]
+  def put_impl_mfas([], _call_graph), do: []
+
+  def put_impl_mfas(reach_by_page, call_graph) do
+    module_info_plt = CallGraph.module_info_plt(call_graph)
+    analyses = PLT.start()
+
+    try do
+      CallGraph.with_shared_graph(call_graph, fn read_graph ->
+        seeds = CallGraph.page_impl_seeds(read_graph.(), module_info_plt)
+
+        TaskUtils.map_concurrently(reach_by_page, fn {page_module, reach} ->
+          impl_mfas =
+            CallGraph.list_page_impl_mfas(
+              read_graph.(),
+              page_module,
+              analyses,
+              module_info_plt,
+              seeds
+            )
+
+          {page_module, Map.put(reach, :impl_mfas, impl_mfas)}
+        end)
+      end)
+    after
+      PLT.stop(analyses)
+    end
+  end
 
   @doc false
   @spec server_only_mfas() :: list(mfa)
@@ -621,6 +703,33 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Builds the JavaScript source of the data model bundle from the given statement, which sets the
+  client's data layer constants (see `build_sync_constants_js/1`).
+
+  The statement cannot run when the bundle does: the terms it builds need the runtime's classes,
+  and the bundle can run before the runtime has. So the bundle leaves a function behind that runs
+  the statement given the runtime's classes, and dispatches `hologram:dataModelLoaded`, and the
+  runtime calls the function before it boots (see `defineDataModel()` in
+  `assets/js/hologram.mjs`).
+  """
+  @spec build_data_model_js(String.t()) :: String.t()
+  def build_data_model_js(sync_constants_js) do
+    """
+    "use strict";
+
+    globalThis.Hologram ??= {};
+
+    globalThis.Hologram.pendingDataModel = (deps) => {
+      #{render_script_deps(2)}
+
+      #{sync_constants_js}
+    };
+
+    document.dispatchEvent(new CustomEvent("hologram:dataModelLoaded"));\
+    """
+  end
+
+  @doc """
   Returns the access needs of the statements the server runs that the build knows of (see
   `Hologram.DB.IndexPlan.needs/3`), given the shapes of the queries the code writes (see
   `list_query_shapes/1`):
@@ -736,6 +845,12 @@ defmodule Hologram.Compiler do
   their module declares. Kept whole, not narrowed to the names the model declares now: a model
   change derives again without listing the pages again. A function many pages reach is read once.
 
+  The functions a page reaches through protocol implementations (see `put_impl_mfas/2`) are read the
+  same way, since they run in the browser too. The modules they count as naming are the ones they
+  spell, not the ones they reach, and an implementation doesn't name the type it's written for: a
+  `to_string` matching `%AuditLog{}` doesn't make a type only server code names sync. A query
+  written in one piece in such a function does name its root, its own type included.
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_kept_page_reach_4/README.md
   """
   @spec build_kept_page_reach([{module, page_reach}], [module], PLT.t(), PLT.t()) :: %{
@@ -744,16 +859,26 @@ defmodule Hologram.Compiler do
   def build_kept_page_reach(reach_by_page, permission_checking_pages, module_info_plt, ir_plt) do
     checking_pages = MapSet.new(permission_checking_pages)
     read_by_mfa = read_by_mfa(reach_by_page, module_info_plt, ir_plt)
+    read_of = &Map.get(read_by_mfa, &1, %{atoms: MapSet.new(), chains: [], names: MapSet.new()})
 
     Map.new(reach_by_page, fn {page_module, reach} ->
-      modules = list_reached_modules(reach)
+      impl_mfas = Map.get(reach, :impl_mfas, [])
+      impl_reads = Enum.map(impl_mfas, read_of)
+      reads = Enum.map(reach.mfas, read_of) ++ impl_reads
+
+      modules =
+        reach
+        |> list_reached_modules()
+        |> MapSet.new()
+        |> MapSet.union(impl_named_modules(impl_reads))
+
+      impl_modules = MapSet.new(impl_mfas, fn {module, _function, _arity} -> module end)
 
       components =
         modules
+        |> MapSet.union(impl_modules)
         |> reached_components(module_info_plt)
         |> Enum.concat([page_module])
-
-      reads = Enum.map(reach.mfas, &Map.get(read_by_mfa, &1, %{atoms: MapSet.new(), chains: []}))
 
       atoms = Enum.reduce(reads, MapSet.new(), &MapSet.union(&2, &1.atoms))
 
@@ -765,7 +890,8 @@ defmodule Hologram.Compiler do
       kept_reach = %{
         atoms: atoms,
         checks_permissions?: MapSet.member?(checking_pages, page_module),
-        modules: MapSet.new(modules),
+        impl_modules: impl_modules,
+        modules: modules,
         query_chains: query_chains,
         reads_session_user?: Enum.any?(components, &reads_session_user?/1)
       }
@@ -964,9 +1090,10 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Builds Hologram runtime JavaScript source code. The given statement sets the client's data layer
-  constants (see `build_sync_constants_js/1`); it is taken rendered, since the compile task keeps
-  it with the runtime bundle it built.
+  Builds Hologram runtime JavaScript source code. A build that ships the data layer sets the
+  client's data layer constants in the data model bundle (see `build_data_model_js/1`), so the
+  runtime script carries none of the app's data model and a data model edit leaves it as it is. A
+  build that does not sets them to null here, and loads no data model bundle.
 
   The script starts the runtime once it has run. It waits for no page script: the runtime mounts
   the page when the scripts the page needs have announced themselves (see
@@ -991,24 +1118,17 @@ defmodule Hologram.Compiler do
           PLT.t(),
           MapSet.t(mfa),
           keyword(String.t()),
-          String.t(),
           T.opts()
         ) :: String.t()
-  def build_runtime_js(
-        runtime_mfas,
-        ir_plt,
-        encode_plt,
-        async_mfas,
-        app_versions,
-        sync_constants_js,
-        opts
-      ) do
+  def build_runtime_js(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, opts) do
     js_dir = Keyword.fetch!(opts, :js_dir)
+    subsystem_keys = Keyword.fetch!(opts, :subsystems)
+    subsystems = Enum.map(subsystem_keys, &fetch_optional_runtime_subsystem!/1)
 
-    subsystems =
-      opts
-      |> Keyword.fetch!(:subsystems)
-      |> Enum.map(&fetch_optional_runtime_subsystem!/1)
+    # Set here only by a build without the data layer, so that the runtime does not wait for a data
+    # model bundle (see defineDataModel() in assets/js/hologram.mjs).
+    sync_constants_js =
+      if :data_layer in subsystem_keys, do: "", else: "\n\nglobalThis.Hologram.sync = null;"
 
     runtime_import_statements =
       subsystems
@@ -1067,9 +1187,7 @@ defmodule Hologram.Compiler do
 
     const startTime = PerformanceTimer.start();
 
-    globalThis.Hologram.config = #{client_config()};
-
-    #{sync_constants_js}
+    globalThis.Hologram.config = #{client_config()};#{sync_constants_js}
 
     ERTS.appVersions = #{render_app_versions(app_versions)};#{module_metadata_registration}#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}#{manually_ported_clause_heads}#{subsystem_handles}
 
@@ -1437,7 +1555,7 @@ defmodule Hologram.Compiler do
   Creates runtime bundle entry file. Requires the `:subsystems` option: the keys of the optional
   runtime subsystems to render.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_7/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_6/README.md
   """
   @spec create_runtime_entry_file(
           list(mfa),
@@ -1445,26 +1563,46 @@ defmodule Hologram.Compiler do
           PLT.t(),
           MapSet.t(mfa),
           keyword(String.t()),
-          String.t(),
           T.opts()
         ) :: T.file_path()
-  def create_runtime_entry_file(
-        runtime_mfas,
-        ir_plt,
-        encode_plt,
-        async_mfas,
-        app_versions,
-        sync_constants_js,
-        opts
-      ) do
+  def create_runtime_entry_file(runtime_mfas, ir_plt, encode_plt, async_mfas, app_versions, opts) do
     runtime_mfas
-    |> build_runtime_js(ir_plt, encode_plt, async_mfas, app_versions, sync_constants_js,
+    |> build_runtime_js(ir_plt, encode_plt, async_mfas, app_versions,
       js_dir: opts[:js_dir],
       module_info_plt: opts[:module_info_plt],
       module_metadata: opts[:module_metadata],
       subsystems: Keyword.fetch!(opts, :subsystems)
     )
     |> create_entry_file("runtime", opts[:tmp_dir])
+  end
+
+  @doc """
+  Returns the data model bundle a build with the given runtime subsystems serves from the given
+  static dir: its JavaScript source, built from the given statement (see `build_data_model_js/1`),
+  and the path it goes to, `data-model-<hash>.js` named by the hash of its content like every
+  bundle. `nil` when the subsystems leave out the data layer: the runtime script sets the client's
+  data layer constants to null itself then, and the page loads no data model bundle.
+
+  Asked of the subsystems rather than of the statement, so that the runtime script and the data
+  model bundle are decided by one fact: a kept statement can be older than the subsystems.
+
+  Raises when the bundle is bigger than the `:max_bundle_size` config value, on every compile,
+  whether or not its file is written: a bundle an earlier compile left in place still fails.
+  """
+  @spec data_model_bundle(String.t(), [atom], T.file_path()) ::
+          %{js: String.t(), static_bundle_path: T.file_path()} | nil
+  def data_model_bundle(sync_constants_js, subsystems, static_dir) do
+    if :data_layer in subsystems do
+      js = build_data_model_js(sync_constants_js)
+
+      if Application.get_env(:hologram, :max_bundle_size) do
+        ensure_bundle_size_within_limit!(@data_model_bundle_name, byte_size(js))
+      end
+
+      file_name = "#{@data_model_bundle_name}-#{data_model_digest(js)}.js"
+
+      %{js: js, static_bundle_path: Path.join(static_dir, file_name)}
+    end
   end
 
   @doc """
@@ -1973,7 +2111,8 @@ defmodule Hologram.Compiler do
   `CallGraph.list_page_chunk_types/4`), which the MFAs do not show, since a type's struct functions
   ship in its chunks rather than in the page's bundle. Both are listed one task per page, through
   the reader of a graph shared with the page tasks (see `CallGraph.with_shared_graph/2`) and the
-  server callback analyses they compute, for this call. With no page, the graph is not read.
+  server callback analyses they compute, for this call. With no page, the graph is not read. The
+  code a page reaches through protocol implementations is added by `put_impl_mfas/2`.
 
   What the data layer derives per page reads it: what the data layer keeps of the page's reach (see
   `build_kept_page_reach/4`) and whether the page checks permissions (see
@@ -2328,12 +2467,15 @@ defmodule Hologram.Compiler do
   checks only rows of types it queries or mentions, and a rule's chains already follow its
   delegations. A chain's types stop before its first type no session may read (see
   `Hologram.Policy.readable_prefix/2`), since no client gets a row of it, nor any row reached
-  through it. A type only server code names, like an audit log, is left out, rules or not, and
-  never reaches a browser. A name the code only builds at run time names nothing here, and a
-  derived query reading such a type is refused on its render (see
+  through it. Code in a protocol implementation the page can dispatch to counts as client code, but
+  an implementation doesn't name the type it's written for (see `build_kept_page_reach/4`). A type
+  only server code names, like an audit log, is left out, rules or not, and never reaches a browser.
+  A name the code only builds at run time names nothing here, and a derived query reading such a
+  type is refused on its render (see
   `Hologram.Template.Renderer`). The server reads the list (see
-  `Hologram.DB.QueryCache.synced_types/0`), and the client is told it, refusing a query that reads
-  another type the same way (see `build_sync_constants_js/1`).
+  `Hologram.DB.QueryCache.synced_types/0`). The client is told it, refusing a query that reads
+  another type the same way (see `build_sync_constants_js/1`), and names it when it greets, so a
+  server running a newer model can tell which types a tab built with this one reads.
 
   `:page_types` are each page's share of those, sorted by name: the types its own client code
   reaches the same way, with the user type when it reads the session user, and the types its rules
@@ -2442,17 +2584,21 @@ defmodule Hologram.Compiler do
   protocol version, the entity types sync sends rows of - which a query the browser answers may
   only read - and the user entity type.
 
-  What the runtime bundle was built against, said by the bundle itself. It has to be baked in
-  rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
+  The statement goes into the data model bundle (see `build_data_model_js/1`), which the build
+  writes next to the runtime bundle, so a data model edit leaves the runtime bundle as it is. The
+  constants say what the bundles were built against, said by a bundle itself. They have to be baked
+  in rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
   is stale, and a value the current server puts in the page would always agree with the current
   server.
 
   `null` when the APPLICATION declares no entity type - the sync constants carry no model hash
   then (see `build_sync_constants/2`) - which is the fact `application.ex` gates the database
   children on and `Handshake.check/1` refuses sync by. The three answer alike on purpose: the
-  bundle claims a data layer exactly when the server has one. Null rather than nothing, so a client reads one unambiguous value instead of
-  probing for a missing global - and rather than `{}`, which is truthy, so every "does this
-  bundle sync?" check would pass on a bundle that never syncs.
+  bundle claims a data layer exactly when the server has one. Null rather than nothing, so a
+  client reads one unambiguous value instead of probing for a missing global - and rather than
+  `{}`, which is truthy, so every "does this bundle sync?" check would pass on a bundle that never
+  syncs. Such a build ships no data layer, so the runtime script sets the null itself (see
+  `build_runtime_js/6`) and no data model bundle is written.
 
   This is NOT the same as the build's own `:entity_types` being empty, which says only that no
   page reaches a query, no type declares a rule or a role, and the model has no user entity type. Such an app HAS a database
@@ -2461,7 +2607,7 @@ defmodule Hologram.Compiler do
   can.
 
   The model is rendered from what the entity types declare when this is called, which is why the
-  compile task keeps the statement with the runtime bundle it built, and builds the constants and
+  compile task keeps the statement with the data layer it derived, and builds the constants and
   the statement together: the rules the model renders are the ones the policy hash was taken over
   only while nothing between the two moved them.
 
@@ -2654,12 +2800,37 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Removes the data model bundles in the given static dir, each with its gzip copy, except the one
+  at the given path, if any, and returns whether it removed any file. A data model bundle is found
+  by scanning the static dir rather than through a registry, so a replaced one must go before the
+  asset path registry next scans it, or the scan can pick it over its successor.
+  """
+  @spec remove_data_model_bundles(T.file_path(), T.file_path() | nil) :: boolean
+  def remove_data_model_bundles(static_dir, kept_bundle_path \\ nil) do
+    kept_paths =
+      if kept_bundle_path, do: [kept_bundle_path, gzip_path(kept_bundle_path)], else: []
+
+    # Listed rather than matched with Path.wildcard/1, which would read glob characters in the
+    # static dir's own path, a project dir named like "[work]" say, as a pattern and match nothing.
+    removed_paths =
+      static_dir
+      |> File.ls!()
+      |> Enum.filter(&String.starts_with?(&1, "#{@data_model_bundle_name}-"))
+      |> Enum.map(&Path.join(static_dir, &1))
+      |> Enum.reject(&(&1 in kept_paths))
+
+    Enum.each(removed_paths, &File.rm/1)
+
+    removed_paths != []
+  end
+
+  @doc """
   Renders, as a JSON object keyed by label, the client's model entry of every entity type a build
   bakes whatever the pages reach, out of the given ones - those declaring a rule or a role, the
   types their rules read through relationships, and the grant store when the model has one - and of
   every type the derived fields and inverses of those entries lead to, each the way that build
   bakes it, but for the terms among its defaults and constraints, which are serialized (see
-  `Hologram.Runtime.Serializer`) where the runtime script spells them as JavaScript.
+  `Hologram.Runtime.Serializer`) where the data model bundle spells them as JavaScript.
 
   What a server sends a client whose bundle was built with other rules but the same model, so it
   answers permission checks the way the server does without reloading. A whole entry rather than
@@ -2890,6 +3061,28 @@ defmodule Hologram.Compiler do
     end)
   end
 
+  @doc """
+  Writes the given data model bundle (see `data_model_bundle/3`) with its gzip copy, unless both are
+  on disk already, and returns whether it wrote them. The bundles it replaces stay: the asset path
+  registry names one of them until the compile tells it to reload, so the compile task removes them
+  then (see `remove_data_model_bundles/2`).
+
+  The gzip copy goes first, and each file is written under a temporary name and renamed, so that a
+  served bundle always has its gzip copy and is never half written.
+  """
+  @spec write_data_model_bundle!(%{js: String.t(), static_bundle_path: T.file_path()}) :: boolean
+  def write_data_model_bundle!(%{js: js, static_bundle_path: bundle_path}) do
+    gzip_path = gzip_path(bundle_path)
+    written? = not (File.exists?(bundle_path) and File.exists?(gzip_path))
+
+    if written? do
+      FileUtils.write_atomically!(gzip_path, :zlib.gzip(js))
+      FileUtils.write_atomically!(bundle_path, js)
+    end
+
+    written?
+  end
+
   defp ask_location(%{mfa: {module, function, arity}, line: nil}) do
     "#{inspect(module)}.#{function}/#{arity}"
   end
@@ -2958,17 +3151,20 @@ defmodule Hologram.Compiler do
 
   defp collect_operation_asks(_ir, _mfa, acc), do: acc
 
-  # What each MFA the given pages reach writes, keyed by MFA: the atom literals it spells and the
-  # query chains it writes (see Hologram.Compiler.QueryChains) - for every function but Elixir's and
-  # Hologram's (see build_kept_page_reach/4), each read once however many pages reach it. The IR of
-  # their modules is built into the PLT first, in one go. Module aliases are left out of the atoms:
-  # they name modules, which the pages' reach already lists, and no relationship or derived field.
+  # What each MFA the given pages reach writes, keyed by MFA: the atom literals it spells, the
+  # modules it spells, and the query chains it writes (see Hologram.Compiler.QueryChains) - for every
+  # function but Elixir's and Hologram's (see build_kept_page_reach/4), each read once however many
+  # pages reach it. The IR of their modules is built into the PLT first, in one go. Module aliases
+  # are kept apart from the atoms: they name modules, and no relationship or derived field. An
+  # implementation's own type is left out of its modules.
   defp read_by_mfa(reach_by_page, module_info_plt, ir_plt) do
     elixir_lib_dir = elixir_lib_dir()
 
     mfas_by_module =
       reach_by_page
-      |> Enum.flat_map(fn {_page_module, reach} -> reach.mfas end)
+      |> Enum.flat_map(fn {_page_module, reach} ->
+        reach.mfas ++ Map.get(reach, :impl_mfas, [])
+      end)
       |> Enum.uniq()
       |> Enum.group_by(fn {module, _function, _arity} -> module end)
       |> Enum.filter(fn {module, _mfas} ->
@@ -2980,30 +3176,62 @@ defmodule Hologram.Compiler do
     mfas_by_module
     |> Enum.flat_map(fn {module, module_mfas} ->
       funs = module_funs(ir_plt, module)
+      own_type = implementation_type(module, module_info_plt)
 
       # An entity type's and an Ecto schema's generated functions name every relationship, field
       # and derived field they declare. A component's or a page's hold what the app wrote, its prop
-      # and state defaults among them, so they are read like the rest of its code.
+      # and state defaults among them, so they are read like the rest of its code. A protocol's and
+      # an implementation's dispatch functions are generated whole, and spell every implementing
+      # type and their own option and error keys.
       declares_model? =
         Reflection.entity?(module, module_info_plt) or
           Reflection.ecto_schema?(module, module_info_plt)
 
       module_mfas
-      |> Enum.reject(fn {_module, function, _arity} ->
-        declares_model? and generated?(function)
+      |> Enum.reject(fn {_module, function, _arity} = mfa ->
+        (declares_model? and generated?(function)) or
+          CallGraph.protocol_metadata_mfa?(mfa, module_info_plt)
       end)
       |> Enum.map(fn {_module, function, arity} = mfa ->
         {_visibility, clauses} = Map.get(funs, {function, arity}, {:public, []})
 
-        atoms =
-          clauses
-          |> collect_atoms(MapSet.new())
-          |> MapSet.reject(&Reflection.alias?/1)
-
-        {mfa, %{atoms: atoms, chains: QueryChains.collect(clauses, mfa)}}
+        {mfa, read_function(clauses, mfa, own_type)}
       end)
     end)
     |> Map.new()
+  end
+
+  # What the given function's clauses write: see read_by_mfa/3.
+  defp read_function(clauses, mfa, own_type) do
+    spelled = collect_atoms(clauses, MapSet.new())
+
+    %{
+      atoms: MapSet.reject(spelled, &Reflection.alias?/1),
+      chains: QueryChains.collect(clauses, mfa),
+      names: MapSet.filter(spelled, &(Reflection.alias?(&1) and &1 != own_type))
+    }
+  end
+
+  # The struct type the given module implements a protocol for, or nil for any other module.
+  defp implementation_type(module, module_info_plt) do
+    case PLT.get(module_info_plt, module) do
+      {:ok, %{protocol_implementation?: true} = info} ->
+        Map.get(info, :implementation_for) || module.__impl__(:for)
+
+      _fallback ->
+        nil
+    end
+  end
+
+  # The modules what a page reaches through implementations names: the ones those functions spell,
+  # and the roots of the queries they write in one piece.
+  defp impl_named_modules(impl_reads) do
+    Enum.reduce(impl_reads, MapSet.new(), fn read, acc ->
+      read.chains
+      |> MapSet.new(& &1.root)
+      |> MapSet.union(read.names)
+      |> MapSet.union(acc)
+    end)
   end
 
   # The functions of the given module the IR PLT holds, by name and arity, or none for a module it
@@ -3986,26 +4214,40 @@ defmodule Hologram.Compiler do
     |> Enum.sort()
   end
 
+  # The hash a data model bundle is named by: 8 characters of the base32 alphabet, like the hash
+  # esbuild names the other bundles by, which is what the asset path registry reads a bundle's hash
+  # as.
+  defp data_model_digest(js) do
+    :sha256
+    |> :crypto.hash(js)
+    |> Base.encode32()
+    |> binary_part(0, 8)
+  end
+
   defp maybe_ensure_bundle_within_size_limit!("chunk", _entry_name, _bundle_path), do: :ok
 
   defp maybe_ensure_bundle_within_size_limit!(_bundle_name, entry_name, bundle_path) do
-    max_bundle_size = Application.get_env(:hologram, :max_bundle_size)
+    if Application.get_env(:hologram, :max_bundle_size) do
+      ensure_bundle_size_within_limit!(entry_name, File.stat!(bundle_path).size)
+    end
+  end
 
-    if max_bundle_size do
-      bundle_size = File.stat!(bundle_path).size
+  # Raises when the given size of the named bundle is over the :max_bundle_size config value, which
+  # must be set.
+  defp ensure_bundle_size_within_limit!(entry_name, bundle_size) do
+    max_bundle_size = Application.fetch_env!(:hologram, :max_bundle_size)
 
-      if bundle_size > max_bundle_size do
-        raise RuntimeError,
-          message: """
-          Generated JavaScript bundle '#{entry_name}' is #{bundle_size} bytes, which exceeds the configured maximum of #{max_bundle_size} bytes.
+    if bundle_size > max_bundle_size do
+      raise RuntimeError,
+        message: """
+        Generated JavaScript bundle '#{entry_name}' is #{bundle_size} bytes, which exceeds the configured maximum of #{max_bundle_size} bytes.
 
-          This limit acts as an early warning system to surface abnormally large bundles before they reach your app (e.g., accidentally pulling in too many modules or dependencies).
+        This limit acts as an early warning system to surface abnormally large bundles before they reach your app (e.g., accidentally pulling in too many modules or dependencies).
 
-          You can change this limit by setting the [:hologram, :max_bundle_size] config value (in bytes). For example:
+        You can change this limit by setting the [:hologram, :max_bundle_size] config value (in bytes). For example:
 
-              config :hologram, max_bundle_size: 2 * 1024 * 1024\
-          """
-      end
+            config :hologram, max_bundle_size: 2 * 1024 * 1024\
+        """
     end
   end
 
@@ -4641,7 +4883,7 @@ defmodule Hologram.Compiler do
   # reported in - one spelling, written by the build and read back in the answer.
   #
   # The terms among them - a bound, a pattern's options - are written by the given function: as
-  # JavaScript for the runtime script, and serialized for a sync frame, which carries JSON.
+  # JavaScript for the data model bundle, and serialized for a sync frame, which carries JSON.
   defp render_constraints(entity_type, encode_term) do
     max_bytes = Validator.unique_string_max_bytes(entity_type)
 
@@ -4686,7 +4928,7 @@ defmodule Hologram.Compiler do
 
   # A pattern travels as its source and its options rather than as a compiled one: a compiled
   # pattern exists only inside the runtime that compiled it, and the encoded form of a Regex is a
-  # struct wrapping a :re.import/1 CALL, which this line sits above in the runtime script. The
+  # struct wrapping a :re.import/1 CALL, which this line sits above in the data model bundle. The
   # client compiles it once instead, which is what the import would have done anyway.
   #
   # The options travel as an ENCODED TERM rather than as their names, because not all of them are
@@ -4710,13 +4952,35 @@ defmodule Hologram.Compiler do
   # 7, so a client told only the ends would answer differently from the server.
   defp render_constraint_value(:in, value, _encode_term) do
     render_json_object([
-      {"first", Jason.encode!(value.first)},
-      {"last", Jason.encode!(value.last)},
-      {"step", Jason.encode!(value.step)}
+      {"first", render_range_part(value.first)},
+      {"last", render_range_part(value.last)},
+      {"step", render_range_part(value.step)}
     ])
   end
 
   defp render_constraint_value(_key, value, _encode_term), do: Jason.encode!(value)
+
+  defp render_range_part(integer) do
+    integer
+    |> Codec.encode_wire(:integer)
+    |> Jason.encode!()
+  end
+
+  # A value of a compiled rule or derived field. These travel as JSON, in a frame as well as in the
+  # bundle, and nothing beside a literal says it's an integer the way a row's attribute does - so
+  # one a JavaScript number can't hold exactly is marked, and Model reads it back as a BigInt.
+  defp render_wire_value(value, :integer) when is_integer(value) do
+    case Codec.encode_wire(value, :integer) do
+      text when is_binary(text) -> render_json_object([{"$integer", Jason.encode!(text)}])
+      number -> Jason.encode!(number)
+    end
+  end
+
+  defp render_wire_value(value, type) do
+    value
+    |> Codec.encode_json(type)
+    |> Jason.encode!()
+  end
 
   # A set's declared order, spelled the way a term spells one - each entry a name and a direction.
   defp render_declared_order(target, sort) do
@@ -4834,11 +5098,13 @@ defmodule Hologram.Compiler do
     render_json_object([{"query", render_derived_term(term, [term.entity, entity_type])}])
   end
 
+  # An integer a float field holds is rendered as the float the server reads it as, because the two
+  # runtimes round an integer past 64 bits differently.
   defp render_derived_definition({:value, value}, _entity_type, type) do
     value_js =
       value
-      |> Codec.encode_json(type)
-      |> Jason.encode!()
+      |> Ordering.widened(type)
+      |> render_wire_value(type)
 
     render_json_object([{"value", value_js}])
   end
@@ -4905,11 +5171,7 @@ defmodule Hologram.Compiler do
     |> then(&"[#{&1}]")
   end
 
-  defp render_derived_operand(value, type) do
-    value
-    |> Codec.encode_json(type)
-    |> Jason.encode!()
-  end
+  defp render_derived_operand(value, type), do: render_wire_value(value, type)
 
   # A term as stage.mjs builds one, with the owning type and the chain from its row when it is a
   # derived field's query.
@@ -4944,9 +5206,9 @@ defmodule Hologram.Compiler do
       {"entity", render_entity_type_label(term.entity)},
       {"filter", render_derived_clauses(term.filter, types)},
       {"include", render_derived_include(term.include)},
-      {"skip", Jason.encode!(term.skip)},
+      {"skip", render_wire_value(term.skip, :integer)},
       {"sort", Jason.encode!(sort)},
-      {"take", Jason.encode!(term.take)}
+      {"take", render_wire_value(term.take, :integer)}
       | source_members
     ])
   end
@@ -5388,14 +5650,12 @@ defmodule Hologram.Compiler do
   # A value is spelled by the type of the attribute it is compared with, on the row that attribute
   # is read on.
   defp render_policy_value(types, name, value) do
-    value
-    |> Codec.encode_json(name_type(name, types))
-    |> Jason.encode!()
+    render_wire_value(value, name_type(name, types))
   end
 
   # A grant reference names WHERE a role must be held: on the entity itself, on its whole type,
-  # on a related entity, on the entity a grant row names, or nowhere at all (a global role). The
-  # verdict context is the rule's type and operation.
+  # on a related entity, on the entity a grant row names or its whole type, or nowhere at all (a
+  # global role). The verdict context is the rule's type and operation.
   defp render_policy_references(_entity_type, nil, _verdict_context), do: "null"
 
   defp render_policy_references(entity_type, references, verdict_context) do
@@ -5779,22 +6039,23 @@ defmodule Hologram.Compiler do
     globalThis.Hologram.pendingScripts.push({
       digest: new URL(document.currentScript.src).pathname.match(/-([^-]+)\\.js$/)[1],
       define: (deps) => {
-        const {
-          Bitstring,
-          ERTS,
-          ElementRefRegistry,
-          HologramBoxedError,
-          HologramInterpreterError,
-          Interpreter,
-          MemoryStorage,
-          Type,
-          Utils,
-        } = deps;#{defs}
+        #{render_script_deps(4)}#{defs}
       },
     });
 
     document.dispatchEvent(new CustomEvent("hologram:scriptLoaded"));\
     """
+  end
+
+  # The statement a script's define function takes the runtime's classes from its deps with, its
+  # lines after the first indented by the given number of spaces: the first one goes where the
+  # caller puts it.
+  defp render_script_deps(indent) do
+    padding = String.duplicate(" ", indent)
+
+    names = Enum.map_join(@script_deps, fn name -> "#{padding}  #{name},\n" end)
+
+    String.trim_leading("#{padding}const {\n#{names}#{padding}} = deps;")
   end
 
   # What a script holding the given MFAs is made of besides its wrapper: the import statements of

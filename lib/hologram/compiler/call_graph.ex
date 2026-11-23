@@ -23,6 +23,13 @@ defmodule Hologram.Compiler.CallGraph do
 
   @type edge :: {vertex, vertex}
 
+  # What every page's walk of the implementations it can dispatch to starts with besides its own code
+  # (see page_impl_seeds/2).
+  @type page_impl_seeds :: %{
+          runtime_protocol_vertices: [mfa],
+          types: MapSet.t(module)
+        }
+
   # A call of a reflection function on a module the code does not name, found in a function's
   # definition (see Hologram.Compiler.DynamicCallSites): a vertex the function has an edge to, so
   # that a walk reaching the function reaches the call.
@@ -687,20 +694,11 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec broadcast_caller_analysis(Digraph.t(), PLT.t() | nil) :: broadcast_caller_analysis
   def broadcast_caller_analysis(graph, module_info_plt) do
-    caller_vertices =
-      for broadcast_mfa <- Reflection.broadcast_mfas(),
-          {caller_vertex, _broadcast_mfa} <- Digraph.incoming_edges(graph, broadcast_mfa) do
-        caller_vertex
-      end
-
-    broadcast_vertices =
-      Digraph.reachable(graph, caller_vertices,
-        opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt)
-      )
-
     %{
       referenced_components:
-        extract_component_module_vertices(broadcast_vertices, module_info_plt)
+        graph
+        |> broadcast_vertices(module_info_plt)
+        |> extract_component_module_vertices(module_info_plt)
     }
   end
 
@@ -1081,6 +1079,29 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the protocol the given implementation implements, from the module info PLT or, when it
+  holds no literal, from the implementation itself.
+  """
+  @spec implemented_protocol(module, PLT.t() | nil) :: module
+  def implemented_protocol(impl, module_info_plt) do
+    fact(module_info_plt, impl, :implemented_protocol) || impl.__impl__(:protocol)
+  end
+
+  @doc """
+  Returns the vertices with an edge to one of the given vertices.
+  """
+  @spec list_callers(t, [vertex]) :: MapSet.t(vertex)
+  def list_callers(%{pid: pid}, vertices) do
+    read_graph(pid, fn graph ->
+      for vertex <- vertices,
+          {caller, _vertex} <- Digraph.incoming_edges(graph, vertex),
+          into: MapSet.new() do
+        caller
+      end
+    end)
+  end
+
+  @doc """
   Returns the entry vertices of each struct type's chunks, sorted: the type's own `__struct__/0`
   and `__struct__/1`, and `__impl__/1` and the protocol's functions of each of its implementations
   of the given protocols. The types are read from the module info PLT, so a type no code names is
@@ -1283,6 +1304,68 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the sorted list of MFAs the given page's client code can reach through the protocol
+  implementations for struct types, which `list_page_mfas/5` leaves out because they ship in chunks.
+  The data layer reads them, since that code runs in the browser too. The bundles don't.
+
+  An implementation is entered when the page can dispatch its protocol, from its own client code or
+  through the runtime, and its type is one the page can hold: named by its client code, its
+  templatables' server callbacks, an implementation already entered, or the seeds (see
+  `page_impl_seeds/2`). What the page reaches without entering any is left out. The rest is listed:
+  the implementations and what they call, struct functions of any type included, and what the
+  runtime's protocol functions add: those functions, their dispatch helpers, and their
+  implementations for the built-in types with what those call.
+
+  A type the page reaches only through a relationship or derived field name is not one it can hold
+  here: its rows sync, but its implementations are not listed and the page doesn't preload them. The
+  browser gets them when the server sends it a struct or the module of that type.
+
+  Give it the graph without the manually ported functions, as `list_client_protocols/4` asks, or the
+  walk follows their Elixir bodies, which don't run on the client. `analyses` is taken as
+  `list_page_mfas/5` takes it.
+  """
+  @spec list_page_impl_mfas(Digraph.t(), module, PLT.t(), PLT.t() | nil, page_impl_seeds) :: [mfa]
+  def list_page_impl_mfas(graph, page_module, analyses, module_info_plt, seeds) do
+    {client_state, templatables} =
+      page_client_state(graph, page_module, analyses, module_info_plt)
+
+    server_types = server_dispatch_types(graph, templatables, analyses, module_info_plt)
+
+    page_state =
+      expand_reachable_state_with_types(graph, client_state, server_types, module_info_plt)
+
+    seeded_state =
+      expand_reachable_state(
+        graph,
+        page_state,
+        seeds.runtime_protocol_vertices,
+        module_info_plt
+      )
+
+    entered_state =
+      expand_reachable_state_with_types(
+        graph,
+        %{seeded_state | enter_struct_impls?: true},
+        seeds.types,
+        module_info_plt
+      )
+
+    impl_state =
+      expand_impl_state(graph, entered_state, templatables, analyses, module_info_plt)
+
+    page_mfas =
+      graph
+      |> finalize_reachable_mfas(page_state, module_info_plt)
+      |> MapSet.new()
+
+    graph
+    |> finalize_reachable_mfas(impl_state, module_info_plt)
+    |> reject_hex_mfas()
+    |> Enum.reject(&MapSet.member?(page_mfas, &1))
+    |> Enum.sort()
+  end
+
+  @doc """
   Returns the sorted list of MFAs that are reachable by the given page.
   Server dispatch types and server-referenced components of
   the page's templatables come from their server callback analyses (see
@@ -1317,11 +1400,7 @@ defmodule Hologram.Compiler.CallGraph do
     {expanded_state, templatables} =
       page_client_state(graph, page_module, analyses, module_info_plt)
 
-    server_types =
-      Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
-        analysis = server_callback_analysis(graph, templatable, analyses, module_info_plt)
-        MapSet.union(acc, analysis.dispatch_types)
-      end)
+    server_types = server_dispatch_types(graph, templatables, analyses, module_info_plt)
 
     final_state =
       expand_reachable_state_with_types(graph, expanded_state, server_types, module_info_plt)
@@ -1449,6 +1528,63 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns `page_impl_seeds/2` of the given call graph, read inside its agent so that the graph is
+  not copied out.
+  """
+  @spec page_impl_seeds(t) :: page_impl_seeds
+  def page_impl_seeds(%{pid: pid, module_info_plt: module_info_plt}) do
+    read_graph(pid, &page_impl_seeds(&1, module_info_plt))
+  end
+
+  @doc """
+  Returns what every page's walk of `list_page_impl_mfas/5` starts with besides the page's own code:
+
+    * `:types` - the struct types any page can hold whatever its own code names: the ones broadcast
+      callers' code names, since a broadcast can deliver such a struct to any connected page, the
+      ones the runtime's code names, whose chunks every page preloads, and the ones the server
+      callbacks of the runtime's components name.
+
+    * `:runtime_protocol_vertices` - the protocol functions the runtime's code reaches, the
+      components broadcast callers reference included. It dispatches them on a page's values with no
+      call in the page's code, like the renderer turning a struct into text.
+
+  Read from the graph without the manually ported functions, whose Elixir bodies don't run on the
+  client (see `build_chunk_reach/4`).
+  """
+  @spec page_impl_seeds(Digraph.t(), PLT.t() | nil) :: page_impl_seeds
+  def page_impl_seeds(graph, module_info_plt) do
+    client_graph = Digraph.remove_vertices(graph, @manually_ported_elixir_mfas)
+    analyses = PLT.start()
+
+    try do
+      {runtime_state, runtime_templatables} =
+        runtime_client_state(client_graph, analyses, module_info_plt)
+
+      broadcast_types =
+        client_graph
+        |> broadcast_vertices(module_info_plt)
+        |> protocol_dispatch_types(module_info_plt)
+
+      server_types =
+        server_dispatch_types(client_graph, runtime_templatables, analyses, module_info_plt)
+
+      runtime_protocol_vertices =
+        runtime_state.reached_vertices
+        |> Enum.filter(&protocol_function_mfa?(&1, module_info_plt))
+        |> Enum.sort()
+
+      types =
+        broadcast_types
+        |> MapSet.union(runtime_state.types)
+        |> MapSet.union(server_types)
+
+      %{runtime_protocol_vertices: runtime_protocol_vertices, types: types}
+    after
+      PLT.stop(analyses)
+    end
+  end
+
+  @doc """
   Given a diff of changes, updates the call graph
   by deleting the graph paths of modules that have been removed,
   rebuilding the graph paths of modules that have been edited,
@@ -1506,6 +1642,25 @@ defmodule Hologram.Compiler.CallGraph do
     |> MapSet.new()
     |> put_protocol_dispatch_types(vertices, module_info_plt)
   end
+
+  @doc """
+  Returns true when the given vertex is a generated dispatch function that holds metadata rather
+  than code the app wrote: `__protocol__/1`, `impl_for/1`, `impl_for!/1` or `struct_impl_for/1` of a
+  protocol, or `__impl__/1` of a protocol implementation. What these spell (implementing modules,
+  dispatch target types, the protocol itself, option and error keys) names nothing the app's code
+  depends on.
+  """
+  @spec protocol_metadata_mfa?(vertex | nil, PLT.t() | nil) :: boolean
+  def protocol_metadata_mfa?({module, function, 1}, module_info_plt)
+      when function in [:__protocol__, :impl_for, :impl_for!, :struct_impl_for] do
+    flag?(module_info_plt, module, :protocol?)
+  end
+
+  def protocol_metadata_mfa?({module, :__impl__, 1}, module_info_plt) do
+    flag?(module_info_plt, module, :protocol_implementation?)
+  end
+
+  def protocol_metadata_mfa?(_vertex, _module_infos), do: false
 
   @doc """
   Replaces the graph of the underlying Agent process with the given graph, keeping the modules.
@@ -1927,6 +2082,20 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
+  # What the callers of the functions that broadcast actions reach. Protocol function vertices are
+  # opaque, so code referenced only in an implementation doesn't count.
+  defp broadcast_vertices(graph, module_info_plt) do
+    caller_vertices =
+      for broadcast_mfa <- Reflection.broadcast_mfas(),
+          {caller_vertex, _broadcast_mfa} <- Digraph.incoming_edges(graph, broadcast_mfa) do
+        caller_vertex
+      end
+
+    Digraph.reachable(graph, caller_vertices,
+      opaque_vertex?: &protocol_function_mfa?(&1, module_info_plt)
+    )
+  end
+
   # Walks a round from the given entries of the struct types (see list_chunk_entries/2), builds the
   # modules it asks for, and goes on until a round asks for none. Returns the modules built.
   defp build_chunk_reach_rounds(
@@ -1998,6 +2167,37 @@ defmodule Hologram.Compiler.CallGraph do
       module_info_plt != nil and PLT.member?(module_info_plt, module)
     else
       Reflection.module?(module)
+    end
+  end
+
+  # Takes in the components the implementations entered reached (see list_page_impl_mfas/5): what
+  # their server callbacks name and reference, which can open further implementations, until no new
+  # component turns up.
+  defp expand_impl_state(graph, state, templatables, analyses, module_info_plt) do
+    new_components =
+      state.reached_vertices
+      |> Enum.filter(&is_tuple/1)
+      |> extract_uniq_components(module_info_plt)
+      |> Kernel.--(templatables)
+
+    if new_components == [] do
+      state
+    else
+      {expanded_state, expanded_templatables} =
+        expand_reachable_state_with_server_referenced_components(
+          graph,
+          state,
+          templatables ++ new_components,
+          analyses,
+          module_info_plt
+        )
+
+      server_types =
+        server_dispatch_types(graph, expanded_templatables, analyses, module_info_plt)
+
+      graph
+      |> expand_reachable_state_with_types(expanded_state, server_types, module_info_plt)
+      |> then(&expand_impl_state(graph, &1, expanded_templatables, analyses, module_info_plt))
     end
   end
 
@@ -2281,10 +2481,6 @@ defmodule Hologram.Compiler.CallGraph do
       MapSet.member?(graph_modules, implemented_protocol(module, module_info_plt))
   end
 
-  defp implemented_protocol(impl, module_info_plt) do
-    fact(module_info_plt, impl, :implemented_protocol) || impl.__impl__(:protocol)
-  end
-
   defp incoming_edges(%{pid: pid}, vertex) do
     read_graph(pid, &Digraph.incoming_edges(&1, vertex))
   end
@@ -2327,10 +2523,11 @@ defmodule Hologram.Compiler.CallGraph do
     graph
     |> Digraph.reaching(target_vertices, opaque_vertex?: protocol_function_mfa?)
     # A protocol's dispatch function is where the reverse walk stops, and it is dropped with the
-    # walk: a page that calls the protocol carries only the implementations of its own types, and
-    # it holds each of those modules in its kept modules, so the pages an edited implementation
-    # affects are found by that intersection rather than through the dispatch edges. Editing a
-    # protocol module itself still reaches its callers, since the target modules are unioned back in.
+    # walk: a page that calls the protocol depends only on the implementations for its own types.
+    # Its page state holds the ones for built-in types, and the data layer's kept reach the ones for
+    # struct types (see list_page_impl_mfas/5), so the pages an edited implementation affects are
+    # found by that intersection rather than through the dispatch edges. Editing a protocol module
+    # itself still reaches its callers, since the target modules are unioned back in.
     |> Enum.reject(protocol_function_mfa?)
     |> MapSet.new(&vertex_module/1)
     |> MapSet.union(target_modules)
@@ -2552,20 +2749,6 @@ defmodule Hologram.Compiler.CallGraph do
       MapSet.member?(types, implementation_for(impl, module_info_plt))
   end
 
-  # Bodies of functions generated by defprotocol (__protocol__/1, impl_for/1, impl_for!/1,
-  # struct_impl_for/1) and defimpl (__impl__/1) enumerate module atoms (implementation
-  # modules, dispatch target types, the protocol itself) that are metadata, not dependencies.
-  defp protocol_metadata_mfa?({module, function, 1}, module_info_plt)
-       when function in [:__protocol__, :impl_for, :impl_for!, :struct_impl_for] do
-    flag?(module_info_plt, module, :protocol?)
-  end
-
-  defp protocol_metadata_mfa?({module, :__impl__, 1}, module_info_plt) do
-    flag?(module_info_plt, module, :protocol_implementation?)
-  end
-
-  defp protocol_metadata_mfa?(_vertex, _module_infos), do: false
-
   # Records the module as one whose definition is built into the graph (see modules/1).
   defp put_module(%{pid: pid} = call_graph, module) do
     Agent.cast(pid, fn state -> %{state | modules: MapSet.put(state.modules, module)} end)
@@ -2700,6 +2883,28 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp runtime_analysis_in_graph(graph, module_info_plt) do
+    # The runtime lists against a PLT of its own, filled on demand and stopped once the MFAs are
+    # listed: its analyses are taken on the graph that still holds the runtime's functions, so they
+    # must not mix with the pages'.
+    analyses = PLT.start()
+
+    {final_state, _templatables} = runtime_client_state(graph, analyses, module_info_plt)
+
+    PLT.stop(analyses)
+
+    mfas =
+      graph
+      |> finalize_reachable_mfas(final_state, module_info_plt)
+      |> reject_hex_mfas()
+      |> Enum.sort()
+
+    types = MapSet.difference(final_state.types, MapSet.new(@built_in_protocol_types))
+
+    %{mfas: mfas, types: types}
+  end
+
+  # The walk of the runtime's client code. Returns its state and its templatables.
+  defp runtime_client_state(graph, analyses, module_info_plt) do
     entry_mfas = list_runtime_entry_mfas()
 
     # A component module referenced in broadcast caller code can be delivered to any
@@ -2725,32 +2930,14 @@ defmodule Hologram.Compiler.CallGraph do
 
     # The same server-referenced component expansion as in list_page_mfas/5, so chains
     # like a broadcast-referenced component whose own server callbacks reference
-    # further components end up in the runtime bundle too. The runtime lists against a PLT
-    # of its own, filled on demand and stopped once the MFAs are listed: its analyses are
-    # taken on the graph that still holds the runtime's functions, so they must not mix
-    # with the pages'.
-    analyses = PLT.start()
-
-    {final_state, _templatables} =
-      expand_reachable_state_with_server_referenced_components(
-        graph,
-        initial_state,
-        initial_templatables,
-        analyses,
-        module_info_plt
-      )
-
-    PLT.stop(analyses)
-
-    mfas =
-      graph
-      |> finalize_reachable_mfas(final_state, module_info_plt)
-      |> reject_hex_mfas()
-      |> Enum.sort()
-
-    types = MapSet.difference(final_state.types, MapSet.new(@built_in_protocol_types))
-
-    %{mfas: mfas, types: types}
+    # further components end up in the runtime bundle too.
+    expand_reachable_state_with_server_referenced_components(
+      graph,
+      initial_state,
+      initial_templatables,
+      analyses,
+      module_info_plt
+    )
   end
 
   # A templatable's server callback analysis, from the PLT when it holds one, else computed and
@@ -2769,6 +2956,14 @@ defmodule Hologram.Compiler.CallGraph do
         PLT.put(analyses, templatable, analysis)
         analysis
     end
+  end
+
+  # The struct types the server callbacks of the given templatables name.
+  defp server_dispatch_types(graph, templatables, analyses, module_info_plt) do
+    Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
+      analysis = server_callback_analysis(graph, templatable, analyses, module_info_plt)
+      MapSet.union(acc, analysis.dispatch_types)
+    end)
   end
 
   defp server_entries(module), do: [{module, :command, 3}, {module, :init, 3}]

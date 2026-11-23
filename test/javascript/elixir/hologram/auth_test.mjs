@@ -122,6 +122,12 @@ describe("Elixir_Hologram_Auth", () => {
           // Module42's derived fields, renamed onto this model, read in a rule as the reference
           // reads them - late is this side's own, for a string ordered inside a definition.
           derived: {
+            count_ratio: {
+              definition: {name: "count"},
+              kind: "scalar",
+              type: "float",
+              values: null,
+            },
             either: {
               definition: {
                 condition: [
@@ -246,6 +252,7 @@ describe("Elixir_Hologram_Auth", () => {
             kind: "enum",
             name: "string",
             opened_on: "date",
+            size: "integer",
           },
           // Shout stands in for Module42's origin row, the server's path end, and late is this side's
           // own, for a string ordered inside a delegated row's definition. Recent documents is a
@@ -280,6 +287,12 @@ describe("Elixir_Hologram_Auth", () => {
               definition: {concat: [{name: "name"}, {value: "!!"}]},
               kind: "scalar",
               type: "string",
+              values: null,
+            },
+            size_ratio: {
+              definition: {name: "size"},
+              kind: "scalar",
+              type: "float",
               values: null,
             },
           },
@@ -1827,6 +1840,54 @@ describe("Elixir_Hologram_Auth", () => {
         Type.boolean(false),
       );
     });
+
+    describe("the grant store's own rule", () => {
+      const grantOf = (entityId) =>
+        Model.box(GRANT, {
+          entity_id: entityId,
+          entity_type: DOCUMENT,
+          id: "grant-of-bob",
+          role: "editor",
+          user_id: BOB,
+        });
+
+      beforeEach(() => {
+        defineModel();
+
+        globalThis.Hologram.sync.model[GRANT].policy = {
+          read: [rule({to: [["named", DOCUMENT, ["viewer"]]]})],
+        };
+
+        Model.reset();
+      });
+
+      it("grants through a role on the named entity or its whole type, not on a type-wide row", () => {
+        LocalDatabase.putRow(
+          GRANT,
+          grantRow({entity_id: DOC, entity_type: DOCUMENT}),
+        );
+
+        LocalDatabase.putRow(
+          GRANT,
+          grantRow({entity_id: null, entity_type: DOCUMENT, user_id: BOB}),
+        );
+
+        assert.deepStrictEqual(
+          can(Type.bitstring(ALICE), Type.atom("read"), grantOf(DOC)),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          can(Type.bitstring(BOB), Type.atom("read"), grantOf(DOC)),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          can(Type.bitstring(BOB), Type.atom("read"), grantOf(null)),
+          Type.boolean(false),
+        );
+      });
+    });
   });
 
   describe("delegation", () => {
@@ -2525,6 +2586,23 @@ describe("Elixir_Hologram_Auth", () => {
 
       return can(userOrId, Type.atom("read"), entity);
     };
+
+    it("keeps the verdict of a row holding a big integer", () => {
+      LocalDatabase.putRow(FOLDER, {
+        archived: false,
+        id: FOLDER_ID,
+        kind: null,
+        name: null,
+        parent_id: null,
+        size: 9007199254740993n,
+        $verdicts: {[KEY]: true},
+      });
+
+      assert.deepStrictEqual(
+        folderReads([noPublic], Type.nil(), folder({size: 9007199254740993n})),
+        Type.boolean(true),
+      );
+    });
 
     const pendingWrite = (type, id) => {
       const batch = Batches.open("verdicts");
@@ -5063,6 +5141,96 @@ describe("Elixir_Hologram_Auth", () => {
       assert.deepStrictEqual(
         can(Type.nil(), Type.atom("read"), entity),
         Type.boolean(true),
+      );
+    });
+  });
+
+  // Cases this side alone has: a rule carries a big integer as JSON, and JavaScript holds it as a
+  // BigInt beside the Numbers it compares with.
+  describe("big integers", () => {
+    const reads = (rules, entity) => {
+      defineModel({read: rules});
+
+      return can(Type.nil(), Type.atom("read"), entity);
+    };
+
+    it("compares a big integer with a float the way the database does", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["rating", "==", 9007199254740993n]]})],
+          document({rating: 9007199254740992}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("tells two big neighbours apart", () => {
+      const rules = [rule({predicates: [["count", "==", 9007199254740992n]]})];
+
+      assert.deepStrictEqual(
+        reads(rules, document({count: 9007199254740993n})),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({count: 9007199254740992n})),
+        Type.boolean(true),
+      );
+    });
+
+    it("widens a big integer a float derived field reads", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count_ratio", "==", 9007199254740992n]]})],
+          document({count: 9007199254740993n}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("widens a big integer a float derived field reads on a related row", () => {
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, size: 9007199254740993n});
+
+      assert.deepStrictEqual(
+        reads(
+          [
+            rule({
+              predicates: [[["folder", "size_ratio"], "==", 9007199254740992n]],
+            }),
+          ],
+          document({folder_id: FOLDER_ID}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("reads a rule's big integer literal as the integer it stands for", () => {
+      const literal = {$integer: "9007199254740993"};
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", "==", literal]]})],
+          document({count: 5}),
+        ),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["count", "<", literal]]})],
+          document({count: 5}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("compares an integer no column can hold with a float exactly", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["rating", "==", 18446744073709551617n]]})],
+          document({rating: 18446744073709551616}),
+        ),
+        Type.boolean(false),
       );
     });
   });
