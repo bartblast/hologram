@@ -90,7 +90,7 @@ function basedOn(held, changes) {
 
   return Object.fromEntries(
     Object.keys(changes)
-      .filter((name) => name in revisions)
+      .filter((name) => Object.hasOwn(revisions, name))
       .map((name) => [name, revisions[name]]),
   );
 }

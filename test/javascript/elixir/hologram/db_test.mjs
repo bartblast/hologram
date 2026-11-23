@@ -603,6 +603,20 @@ describe("Elixir_Hologram_DB", () => {
       });
     });
 
+    it("says it was based on nothing for a field named like an inherited property", () => {
+      const entry = globalThis.Hologram.sync.model[TASK];
+
+      entry.attributes.constructor = "string";
+      entry.constraints = {...entry.constraints, constructor: {optional: true}};
+      Model.reset();
+
+      update(
+        putAttribute(held(), pairs([["constructor", Type.bitstring("x")]])),
+      );
+
+      assert.deepStrictEqual(Batches.current().writes[0].based_on, {});
+    });
+
     it("answers :ok", () => {
       assert.deepStrictEqual(
         update(putAttribute(held(), pairs([["title", Type.bitstring("x")]]))),

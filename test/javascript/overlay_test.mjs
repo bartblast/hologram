@@ -995,6 +995,35 @@ describe("Overlay", () => {
       assert.equal(LocalDatabase.baseRow(TODO, "t1").constructor, "stored");
     });
 
+    it("lands a write on a column named like an inherited property", () => {
+      LocalDatabase.putRow(TODO, base({constructor: "stored"}));
+
+      const batch = pushed(updateWrite({data: {constructor: "written"}}));
+
+      Overlay.promote(batch, {});
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").constructor, "written");
+    });
+
+    it("takes a value sent back for a column named like an inherited property", () => {
+      LocalDatabase.putRow(TODO, base({constructor: "stored"}));
+
+      const batch = pushed(updateWrite({data: {constructor: "lost"}}));
+
+      Overlay.promote(
+        batch,
+        {
+          0: {
+            constructor: "winner",
+            $revisions: {constructor: Number.MAX_SAFE_INTEGER},
+          },
+        },
+        {dropped: {0: {constructor: "lost"}}},
+      );
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").constructor, "winner");
+    });
+
     it("takes the value the server sent back for a dropped column", () => {
       LocalDatabase.putRow(TODO, base({title: "stored"}));
 

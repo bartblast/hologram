@@ -254,9 +254,9 @@ export default class Overlay {
     );
 
     for (const [field, value] of columns) {
-      const revision = revisions[field] ?? 0;
+      const revision = Overlay.#revision(revisions, field);
 
-      if (revision > (absorbed["$revisions"][field] ?? 0)) {
+      if (revision > Overlay.#revision(absorbed["$revisions"], field)) {
         absorbed[field] = value;
         absorbed["$revisions"][field] = revision;
       }
@@ -576,7 +576,15 @@ export default class Overlay {
   // A column the base holds no revision for reads as revision zero: never set by anyone, so
   // nothing can have moved past it. The same reading the server makes.
   static #wins(row, write, field) {
-    return write.stamp > (row["$revisions"]?.[field] ?? 0);
+    return write.stamp > Overlay.#revision(row["$revisions"], field);
+  }
+
+  // The revision recorded for a column, or zero. Only an own property counts, since a column can
+  // be named like something every object inherits, such as constructor.
+  static #revision(revisions, field) {
+    return (
+      (Object.hasOwn(revisions ?? {}, field) ? revisions[field] : null) ?? 0
+    );
   }
 
   // The write without the columns it lost and got no value back for.
