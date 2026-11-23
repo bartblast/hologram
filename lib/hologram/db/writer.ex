@@ -32,7 +32,7 @@ defmodule Hologram.DB.Writer do
   alias Hologram.Reflection
 
   # What a write no rule reading the row after the change covers is judged with.
-  @not_judged %{clock_stamp: nil, invalid: [], new_row: nil, unjudged: []}
+  @not_judged %{absent: [], clock_stamp: nil, invalid: [], new_row: nil, unjudged: []}
 
   @doc false
   @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
@@ -129,8 +129,8 @@ defmodule Hologram.DB.Writer do
 
         judged = evaluate_update!(entity, row, fields, change)
 
-        apply_update(
-          entity_type,
+        entity_type
+        |> apply_update(
           entity.id,
           attribute_changes,
           attribute_deltas,
@@ -138,6 +138,7 @@ defmodule Hologram.DB.Writer do
           stamp,
           judged.clock_stamp
         )
+        |> refuse_unjudged_targets!(row, judged)
       end)
 
     applied
@@ -164,7 +165,9 @@ defmodule Hologram.DB.Writer do
 
           judged = check_fields!(row, fields, change)
 
-          EntityOperations.update(entity_type, id, changes, clock_opts(judged.clock_stamp))
+          entity_type
+          |> EntityOperations.update(id, changes, clock_opts(judged.clock_stamp))
+          |> refuse_unjudged_targets!(row, judged)
         end)
 
       applied
@@ -305,10 +308,24 @@ defmodule Hologram.DB.Writer do
         judged
 
       uncovered ->
-        raise Hologram.AccessDeniedError,
-          message:
-            "not allowed to update #{inspect(row.__struct__)} #{inspect(row.id)} - no allow line that holds covers #{Enum.map_join(uncovered, ", ", &inspect/1)}#{invalid_value_hint(uncovered, judged.invalid)}"
+        raise_uncovered!(row, uncovered, judged.invalid)
     end
+  end
+
+  # A target the rules read as absent can be committed by another transaction before the write's
+  # foreign key check, and no lock can hold a row that isn't there. A write that went through with
+  # one lands on a row no rule judged, so it's refused and rolled back. Worded as any refusal,
+  # since whether a row exists isn't something a refusal may say.
+  defp refuse_unjudged_targets!(:ok, row, %{absent: [_field | _rest] = absent}) do
+    raise_uncovered!(row, Enum.sort(absent), [])
+  end
+
+  defp refuse_unjudged_targets!(result, _row, _judged), do: result
+
+  defp raise_uncovered!(row, uncovered, invalid) do
+    raise Hologram.AccessDeniedError,
+      message:
+        "not allowed to update #{inspect(row.__struct__)} #{inspect(row.id)} - no allow line that holds covers #{Enum.map_join(uncovered, ", ", &inspect/1)}#{invalid_value_hint(uncovered, invalid)}"
   end
 
   # A refused field whose given value was invalid was judged on the stored one, which reads as a
@@ -365,10 +382,12 @@ defmodule Hologram.DB.Writer do
     if Policy.judges_change?(entity_type, fields) do
       clock_stamp = Clock.stamp()
       {values, invalid, missing} = Auth.judged_values(entity_type, change.values, :held)
+      absent_edges = Auth.missing_edge_targets(entity_type, change.edges, :held)
       written = values_written(change, values, clock_stamp)
       new_row = Auth.after_row(row, written, change.deltas, change.edges)
 
       %{
+        absent: changed_fields(entity_type, missing, absent_edges),
         clock_stamp: clock_stamp,
         invalid: changed_fields(entity_type, invalid, []),
         new_row: new_row,

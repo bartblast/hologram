@@ -738,6 +738,25 @@ defmodule Hologram.Auth do
     {Map.drop(valid, missing), invalid, missing}
   end
 
+  # The edges among the given ones that add a target with no row, which a rule reads as left out of
+  # the set. A target found under :held stays locked, as a reference's does.
+  @doc false
+  @spec missing_edge_targets(
+          module,
+          %{{atom, Entity.id()} => :add | :delete},
+          list(struct) | :held | :stored
+        ) :: list({atom, Entity.id()})
+  def missing_edge_targets(entity_type, edges, source) do
+    read_opts = delegation_read_opts(source)
+
+    for {{name, target_id} = edge, :add} <- edges,
+        Validator.attribute_value_valid?(target_id, :uuid),
+        target_type = Entity.related_type(entity_type, name),
+        EntityOperations.get(target_type, target_id, read_opts) == nil do
+      edge
+    end
+  end
+
   defp missing_references(entity_type, values, read_opts) do
     entity_type.__relationships__()
     |> Enum.reject(fn {_name, target, _opts} -> is_list(target) end)
