@@ -228,16 +228,19 @@ export default class SyncStream {
       $.markServedBy(frame.model_hash);
 
       const written = $.receiveFrame("synced", frame);
+      const factRemovals = LocalDatabase.takeStoredFactRemovals();
 
       // Written down through the same call a frame's rows go down by. A marker carries no rows, but
-      // the sweep can take a row out of a set a stored row holds, and that row goes down again -
-      // which also takes the clock down beside it. The same truthiness the memory half tests, for
-      // the same reason: a marker naming no place says nothing about where this client stands.
+      // the sweep can take a row out of a set a stored row holds, and that row or that pair goes
+      // down again - which also takes the clock down beside it. The same truthiness the memory half
+      // tests, for the same reason: a marker naming no place says nothing about where this client
+      // stands.
       const stored =
-        frame.cursor || written?.size > 0
+        frame.cursor || written?.size > 0 || factRemovals.length > 0
           ? Durability.persistFrame(
               LocalDatabase.records(written ?? []),
               frame.cursor || null,
+              factRemovals,
             )
           : null;
 
@@ -379,6 +382,10 @@ export default class SyncStream {
       // front of an old node.
       case "synced": {
         $.noteServedModel(frame.model_hash);
+
+        // What a frame relayed to this tab left, which only the tab storing that frame takes. Kept,
+        // it could take out a pair told again since (see LocalDatabase.takeStoredFactRemovals).
+        LocalDatabase.takeStoredFactRemovals();
 
         if (frame.cursor) {
           $.syncCursor = frame.cursor;

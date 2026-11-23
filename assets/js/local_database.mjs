@@ -264,10 +264,10 @@ export default class LocalDatabase {
   // to-many of that type, and in an inverse of a to-many whose source is of that type. Answers the
   // key of every row the stream vouched for whose set lost one, which storing keeps.
   //
-  // Given `writeHolders: false`, for ids the client holds no row of, it answers none and queues each
-  // pair to be taken out of the stored set alone (see `takeStoredFactRemovals`). The holder held
-  // here can come from a page older than its stored record, and such a pair is no reason to write
-  // it over that record.
+  // Given `writeHolders: false`, for ids the client no longer holds a row of or never did, it answers
+  // none and queues each pair to be taken out of the stored set alone (see
+  // `takeStoredFactRemovals`). The holder held here can come from a page older than its stored
+  // record, and such a pair is no reason to write it over that record.
   static deleteFactsNaming(type, ids, {writeHolders = true} = {}) {
     if (ids.size === 0) {
       return [];
@@ -473,7 +473,13 @@ export default class LocalDatabase {
 
     LocalDatabase.#promotedSeqs = new Map();
 
-    LocalDatabase.#sweepCarried(() => true);
+    // This marker also ends a catch-up, whose store was never cleared, so a pair naming a swept row
+    // can be stored. Only the pair leaves it, as for a row dropped by id (see Deltas.apply).
+    const swept = LocalDatabase.#sweepCarried(() => true);
+
+    for (const [type, ids] of swept) {
+      LocalDatabase.deleteFactsNaming(type, ids, {writeHolders: false});
+    }
   }
 
   // A type's marker says the same of that type's rows: the fill sends every row of a type the
