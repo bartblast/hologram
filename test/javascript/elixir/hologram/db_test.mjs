@@ -1472,10 +1472,8 @@ describe("Elixir_Hologram_DB", () => {
           );
         });
 
-        it("answers an amount that isn't an integer with its violation", () => {
-          defineCard({update: [rule()]});
-
-          const entity = increment(card(), Type.atom("count"), Type.integer(1));
+        // A move carrying a float, which only a hand-edited struct can.
+        const withFloatAmount = (entity) => {
           const metaKey = Type.encodeMapKey(Type.atom("__meta__"));
           const opsKey = Type.encodeMapKey(Type.atom("attribute_ops"));
           const countKey = Type.encodeMapKey(Type.atom("count"));
@@ -1484,7 +1482,7 @@ describe("Elixir_Hologram_DB", () => {
 
           const floatOp = Type.tuple([Type.atom("increment"), Type.float(1.5)]);
 
-          const malformed = {
+          return {
             ...entity,
             data: {
               ...entity.data,
@@ -1509,9 +1507,15 @@ describe("Elixir_Hologram_DB", () => {
               ],
             },
           };
+        };
+
+        it("answers an amount that isn't an integer with its violation", () => {
+          defineCard({update: [rule()]});
+
+          const entity = increment(card(), Type.atom("count"), Type.integer(1));
 
           assert.deepStrictEqual(
-            update(malformed),
+            update(withFloatAmount(entity)),
             Type.tuple([
               Type.atom("error"),
               Type.map([
@@ -1523,6 +1527,20 @@ describe("Elixir_Hologram_DB", () => {
                 ],
               ]),
             ]),
+          );
+        });
+
+        it("says an amount that isn't an integer was invalid when it refuses", () => {
+          const entity = increment(
+            put(note("no")),
+            Type.atom("count"),
+            Type.integer(1),
+          );
+
+          assertBoxedError(
+            () => update(withFloatAmount(entity)),
+            "Hologram.AccessDeniedError",
+            denied(":count, :note", INVALID_COUNT),
           );
         });
 
