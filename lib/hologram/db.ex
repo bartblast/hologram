@@ -488,8 +488,9 @@ defmodule Hologram.DB do
   A nested call opens a savepoint: its own abort or exception undoes what it wrote and nothing
   more, and the enclosing transaction continues. The write verbs answer the
   same way inside a transaction as outside it - a refused write returns {:error,
-  violations} or raises through its bang, and the transaction stays usable. An exception
-  rolls the transaction back and re-raises. A write verb called inside it is not run again when
+  violations} or raises through its bang, and the transaction stays usable. The exception is a
+  counter move in the browser, which answers :ok whatever it lands on, as update/1 says. An
+  exception rolls the transaction back and re-raises. A write verb called inside it is not run again when
   PostgreSQL aborts the transaction as a deadlock victim - the error propagates, and this
   transaction is the one to retry.
 
@@ -604,7 +605,8 @@ defmodule Hologram.DB do
 
   Returns {:error, violations} for a refused value exactly as update/3 does. A moved attribute is
   judged on the value the write leaves, so a move that would cross a declared bound is reported
-  the same way.
+  the same way. In the browser only the server can judge that value: the call answers :ok and the
+  move applies at once, and if the server refuses it, all of the action's writes roll back.
   """
   @spec update(Entity.t()) :: :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity) when is_struct(entity) do
