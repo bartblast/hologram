@@ -1189,12 +1189,13 @@ defmodule Hologram.Migration.BackfillTest do
       apply_scenario(context, rows, [tighten(:title, copy_of(:code))])
 
       route(scratch, fn ->
-        {:ok, %{rows: [[wrong]]}} =
+        {:ok, %{rows: [[total, wrong]]}} =
           Connection.query(
-            ~s|SELECT COUNT(*) FROM "hologram_data"."my_app_task" | <>
-              ~s|WHERE "title" IS DISTINCT FROM "code" OR "title_$sort" IS NULL|
+            ~s|SELECT COUNT(*), COUNT(*) FILTER (WHERE "title" IS DISTINCT FROM "code" OR "title_$sort" IS NULL) | <>
+              ~s|FROM "hologram_data"."my_app_task"|
           )
 
+        assert total == 1005
         assert wrong == 0
       end)
     end
@@ -2083,12 +2084,13 @@ defmodule Hologram.Migration.BackfillTest do
       apply_scenario(context, rows, [add_filled(:copy, :string, value, optional: true)])
 
       route(scratch, fn ->
-        {:ok, %{rows: [[wrong]]}} =
+        {:ok, %{rows: [[total, wrong]]}} =
           Connection.query(
-            ~s|SELECT COUNT(*) FROM "hologram_data"."my_app_task" | <>
-              ~s|WHERE "copy" IS DISTINCT FROM lower("title") OR "copy_$sort" IS NULL|
+            ~s|SELECT COUNT(*), COUNT(*) FILTER (WHERE "copy" IS DISTINCT FROM lower("title") OR "copy_$sort" IS NULL) | <>
+              ~s|FROM "hologram_data"."my_app_task"|
           )
 
+        assert total == 1005
         assert wrong == 0
 
         {:ok, %{rows: keys}} =
