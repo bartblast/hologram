@@ -2051,7 +2051,14 @@ defmodule Hologram.AuthTest do
         |> ChangedTask.new()
         |> DB.create!()
 
-      Process.sleep(2)
+      table = Map.fetch!(DB.mapping(), ChangedTask).table
+
+      {:ok, _result} =
+        Connection.query(
+          ~s|UPDATE "hologram_data"."#{table}" SET "updated_at" = "updated_at" - interval '1 hour' | <>
+            ~s|WHERE "id" = $1|,
+          [Codec.encode(task.id, :uuid)]
+        )
 
       [task: EntityOperations.get(ChangedTask, task.id)]
     end
