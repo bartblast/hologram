@@ -9,6 +9,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
+  alias Hologram.DB.Oplog
   alias Hologram.Entity
   alias Hologram.MisuseError
   alias Hologram.Policy
@@ -45,6 +46,11 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module28, as: ReadersModule28
   alias Hologram.Test.Fixtures.Policy.Readers.Module5, as: ReadersModule5
   alias Hologram.Test.Fixtures.Role
+
+  # Built at runtime, so the compiler's type checker doesn't flag a deliberately bad option list.
+  defp computed_opts(opts) do
+    Enum.map(opts, & &1)
+  end
 
   defp create_user(email) do
     %{email: email}
@@ -1687,7 +1693,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_23@example.com")
 
       expected_msg =
-        "global roles are granted only by trusted code running without an acting user"
+        "global roles are granted only by server code claiming trust: true or running outside a session"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(granter.id, fn -> grant_role(user, Role.Module1) end)
@@ -1698,7 +1704,7 @@ defmodule Hologram.AuthTest do
       user = create_user("foreign_actor_1@example.com")
 
       expected_msg =
-        "global roles are granted only by trusted code running without an acting user"
+        "global roles are granted only by server code claiming trust: true or running outside a session"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(7, fn -> grant_role(user, Role.Module1) end)
@@ -1709,7 +1715,7 @@ defmodule Hologram.AuthTest do
       user = create_user("signed_out_grant_1@example.com")
 
       expected_msg =
-        "global roles are granted only by trusted code running without an acting user"
+        "global roles are granted only by server code claiming trust: true or running outside a session"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(nil, fn -> grant_role(user, Role.Module1) end)
@@ -1719,7 +1725,197 @@ defmodule Hologram.AuthTest do
     end
   end
 
+  describe "grant_role/4" do
+    test "grants on a row with a trust claim in a signed-out session" do
+      user = create_user("trust_grant_1@example.com")
+      resource = create_resource()
+
+      result =
+        Context.with_actor(nil, fn -> grant_role(user, :owner, resource, trust: true) end)
+
+      assert result == :ok
+      assert [%{entity_id: entity_id, granted_by_id: nil}] = grant_rows(user.id)
+      assert entity_id == resource.id
+    end
+
+    test "grants past the gate with a trust claim, recording no granter" do
+      actor = create_user("trust_grant_2@example.com")
+      user = create_user("trust_grant_3@example.com")
+      resource = create_resource()
+
+      result =
+        Context.with_actor(actor.id, fn -> grant_role(user, :owner, resource, trust: true) end)
+
+      assert result == :ok
+      assert [%{granted_by_id: nil}] = grant_rows(user.id)
+    end
+
+    test "a trust claim leaves the session's user deletable" do
+      actor = create_user("trust_grant_13@example.com")
+      user = create_user("trust_grant_14@example.com")
+      resource = create_resource()
+
+      Context.with_actor(actor.id, fn -> grant_role(user, :owner, resource, trust: true) end)
+
+      assert DB.delete(actor) == :ok
+    end
+
+    # A trust grant records no granter because the oplog already says whose request it was.
+    test "a trust claim keeps the session's user in the oplog as the actor" do
+      actor = create_user("trust_grant_16@example.com")
+      user = create_user("trust_grant_17@example.com")
+      resource = create_resource()
+
+      Context.with_actor(actor.id, fn -> grant_role(user, :owner, resource, trust: true) end)
+
+      assert [%{actor_id: actor_id, data: %{"granted_by_id" => nil}}] =
+               Oplog.read_type_after(RoleGrant, 0, 0, %{"user_id" => user.id})
+
+      assert actor_id == actor.id
+    end
+
+    test "grants on a row with a trust claim from a session whose user has no row" do
+      user = create_user("trust_grant_12@example.com")
+      resource = create_resource()
+
+      assert Context.with_actor("00000000-0000-4000-8000-000000000042", fn ->
+               grant_role(user, :owner, resource, trust: true)
+             end) == :ok
+
+      assert [%{granted_by_id: nil}] = grant_rows(user.id)
+    end
+
+    test "grants a global role with a trust claim from a session whose user has no row" do
+      user = create_user("trust_grant_15@example.com")
+
+      assert Context.with_actor("00000000-0000-4000-8000-000000000042", fn ->
+               grant_role(user, Role.Module1, :global, trust: true)
+             end) == :ok
+
+      assert [%{granted_by_id: nil}] = grant_rows(user.id)
+    end
+
+    test "grants on a whole type with a trust claim in a session" do
+      user = create_user("trust_grant_4@example.com")
+
+      assert Context.with_actor(nil, fn -> grant_role(user, :owner, Module1, trust: true) end) ==
+               :ok
+
+      assert [%{entity_id: nil, role: "owner"}] = grant_rows(user.id)
+    end
+
+    test "keeps the gate with no options" do
+      user = create_user("trust_grant_5@example.com")
+      resource = create_resource()
+
+      expected_msg = "a role is granted only by a signed-in user - nobody is signed in"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(nil, fn -> grant_role(user, :owner, resource, []) end)
+      end
+
+      assert grant_rows(user.id) == []
+    end
+
+    test "raises on any option other than trust: true" do
+      user = create_user("trust_grant_6@example.com")
+      resource = create_resource()
+
+      expected_msg = "grant_role takes trust: true as its only option, got: [trust: false]"
+
+      assert_error MisuseError, expected_msg, fn ->
+        grant_role(user, :owner, resource, trust: false)
+      end
+
+      assert grant_rows(user.id) == []
+    end
+
+    test "grants a global role with a trust claim in a signed-out session" do
+      user = create_user("trust_grant_7@example.com")
+
+      assert Context.with_actor(nil, fn ->
+               grant_role(user, Role.Module1, :global, trust: true)
+             end) == :ok
+
+      assert [%{entity_id: nil, granted_by_id: nil, role: "Hologram.Test.Fixtures.Role.Module1"}] =
+               grant_rows(user.id)
+    end
+
+    test "grants a global role with a trust claim under a signed-in user" do
+      granter = create_user("trust_grant_8@example.com")
+      user = create_user("trust_grant_9@example.com")
+
+      assert Context.with_actor(granter.id, fn ->
+               grant_role(user, Role.Module1, :global, trust: true)
+             end) == :ok
+
+      assert [%{granted_by_id: nil}] = grant_rows(user.id)
+    end
+
+    test "keeps the global gate with an empty option list" do
+      user = create_user("trust_grant_10@example.com")
+
+      expected_msg =
+        "global roles are granted only by server code claiming trust: true or running outside a session"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(nil, fn -> grant_role(user, Role.Module1, :global, []) end)
+      end
+
+      assert grant_rows(user.id) == []
+    end
+
+    test "raises on a global grant given an option other than trust: true" do
+      user = create_user("trust_grant_11@example.com")
+
+      expected_msg = "grant_role takes trust: true as its only option, got: [nope: true]"
+
+      assert_error MisuseError, expected_msg, fn ->
+        grant_role(user, Role.Module1, :global, computed_opts(nope: true))
+      end
+
+      assert grant_rows(user.id) == []
+    end
+  end
+
   describe "grant_role/3" do
+    test "grants a global role given :global" do
+      user = create_user("global_scope_1@example.com")
+
+      assert grant_role(user, Role.Module1, :global) == :ok
+
+      assert [%{entity_id: nil, entity_type: nil, granted_by_id: nil}] = grant_rows(user.id)
+    end
+
+    test "keeps the global gate given :global in a session" do
+      user = create_user("global_scope_2@example.com")
+
+      expected_msg =
+        "global roles are granted only by server code claiming trust: true or running outside a session"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(nil, fn -> grant_role(user, Role.Module1, :global) end)
+      end
+
+      assert grant_rows(user.id) == []
+    end
+
+    # A command can forward browser params as the entity, so a list there must never claim trust.
+    test "refuses a trust claim in the entity's place" do
+      user = create_user("global_scope_3@example.com")
+
+      expected_msg =
+        "grant_role takes an entity, an entity type or :global as its third argument, got: [trust: true] - options go fourth"
+
+      assert_error MisuseError, expected_msg, fn ->
+        Context.with_actor(nil, fn ->
+          grant_role(user, Role.Module1, computed_opts(trust: true))
+        end)
+      end
+
+      assert grant_rows(user.id) == []
+    end
+
     test "raises on a grant on a row issued in a signed-out session" do
       user = create_user("signed_out_grant_2@example.com")
       resource = create_resource()
@@ -1737,7 +1933,7 @@ defmodule Hologram.AuthTest do
       user = create_user("signed_out_grant_3@example.com")
 
       expected_msg =
-        "type-wide roles are granted only by trusted code running without an acting user"
+        "type-wide roles are granted only by server code claiming trust: true or running outside a session"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(nil, fn -> grant_role(user, :owner, Module1) end)
@@ -1960,7 +2156,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_21@example.com")
 
       expected_msg =
-        "type-wide roles are granted only by trusted code running without an acting user"
+        "type-wide roles are granted only by server code claiming trust: true or running outside a session"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(granter.id, fn -> grant_role(user, :owner, Module1) end)
@@ -2068,7 +2264,7 @@ defmodule Hologram.AuthTest do
       grant = grant_struct(entity_type: Module1, role: :owner, user_id: user.id)
 
       expected_msg =
-        "type-wide roles are granted only by trusted code running without an acting user"
+        "type-wide roles are granted only by server code claiming trust: true or running outside a session"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         apply_grant_write(grant, granter.id, MapSet.new())
@@ -2082,7 +2278,7 @@ defmodule Hologram.AuthTest do
       grant = grant_struct(role: Role.Module1, user_id: user.id)
 
       expected_msg =
-        "global roles are granted only by trusted code running without an acting user"
+        "global roles are granted only by server code claiming trust: true or running outside a session"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         apply_grant_write(grant, granter.id, MapSet.new())
@@ -2541,7 +2737,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_27@example.com")
 
       expected_msg =
-        "global roles are revoked only by trusted code running without an acting user"
+        "global roles are revoked only by server code claiming trust: true or running outside a session"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(granter.id, fn -> revoke_role(user, Role.Module1) end)
@@ -2554,7 +2750,7 @@ defmodule Hologram.AuthTest do
       grant_role(user, Role.Module1)
 
       expected_msg =
-        "global roles are revoked only by trusted code running without an acting user"
+        "global roles are revoked only by server code claiming trust: true or running outside a session"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(nil, fn -> revoke_role(user, Role.Module1) end)
@@ -2564,7 +2760,172 @@ defmodule Hologram.AuthTest do
     end
   end
 
+  describe "revoke_role/4" do
+    test "revokes on a row with a trust claim in a signed-out session" do
+      user = create_user("trust_revoke_1@example.com")
+      resource = create_resource()
+
+      grant_role(user, :owner, resource)
+
+      assert Context.with_actor(nil, fn -> revoke_role(user, :owner, resource, trust: true) end) ==
+               :ok
+
+      assert grant_rows(user.id) == []
+    end
+
+    test "revokes past the gate with a trust claim under a signed-in user" do
+      actor = create_user("trust_revoke_2@example.com")
+      user = create_user("trust_revoke_3@example.com")
+      resource = create_resource()
+
+      grant_role(user, :owner, resource)
+
+      assert Context.with_actor(actor.id, fn ->
+               revoke_role(user, :owner, resource, trust: true)
+             end) == :ok
+
+      assert grant_rows(user.id) == []
+    end
+
+    test "revokes on a whole type with a trust claim in a session" do
+      user = create_user("trust_revoke_4@example.com")
+
+      grant_role(user, :owner, Module1)
+
+      assert Context.with_actor(nil, fn -> revoke_role(user, :owner, Module1, trust: true) end) ==
+               :ok
+
+      assert grant_rows(user.id) == []
+    end
+
+    test "keeps the gate with no options" do
+      user = create_user("trust_revoke_5@example.com")
+      resource = create_resource()
+
+      grant_role(user, :owner, resource)
+
+      expected_msg = "a role is revoked only by a signed-in user - nobody is signed in"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(nil, fn -> revoke_role(user, :owner, resource, []) end)
+      end
+
+      assert [_grant] = grant_rows(user.id)
+    end
+
+    test "raises on any option other than trust: true" do
+      user = create_user("trust_revoke_6@example.com")
+      resource = create_resource()
+
+      grant_role(user, :owner, resource)
+
+      expected_msg = "revoke_role takes trust: true as its only option, got: [trust: false]"
+
+      assert_error MisuseError, expected_msg, fn ->
+        revoke_role(user, :owner, resource, trust: false)
+      end
+
+      assert [_grant] = grant_rows(user.id)
+    end
+
+    test "revokes a global role with a trust claim in a signed-out session" do
+      user = create_user("trust_revoke_7@example.com")
+
+      grant_role(user, Role.Module1)
+
+      assert Context.with_actor(nil, fn ->
+               revoke_role(user, Role.Module1, :global, trust: true)
+             end) == :ok
+
+      assert grant_rows(user.id) == []
+    end
+
+    test "revokes a global role with a trust claim under a signed-in user" do
+      actor = create_user("global_scope_4@example.com")
+      user = create_user("global_scope_5@example.com")
+
+      grant_role(user, Role.Module1)
+
+      assert Context.with_actor(actor.id, fn ->
+               revoke_role(user, Role.Module1, :global, trust: true)
+             end) == :ok
+
+      assert grant_rows(user.id) == []
+    end
+
+    test "keeps the global gate with an empty option list" do
+      user = create_user("trust_revoke_8@example.com")
+
+      grant_role(user, Role.Module1)
+
+      expected_msg =
+        "global roles are revoked only by server code claiming trust: true or running outside a session"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(nil, fn -> revoke_role(user, Role.Module1, :global, []) end)
+      end
+
+      assert [_grant] = grant_rows(user.id)
+    end
+
+    test "raises on a global revocation given an option other than trust: true" do
+      user = create_user("global_scope_7@example.com")
+
+      grant_role(user, Role.Module1)
+
+      expected_msg = "revoke_role takes trust: true as its only option, got: [nope: true]"
+
+      assert_error MisuseError, expected_msg, fn ->
+        revoke_role(user, Role.Module1, :global, computed_opts(nope: true))
+      end
+
+      assert [_grant] = grant_rows(user.id)
+    end
+  end
+
   describe "revoke_role/3" do
+    test "revokes a global role given :global" do
+      user = create_user("global_scope_6@example.com")
+
+      grant_role(user, Role.Module1)
+
+      assert revoke_role(user, Role.Module1, :global) == :ok
+      assert grant_rows(user.id) == []
+    end
+
+    test "keeps the global gate given :global in a session" do
+      user = create_user("global_scope_9@example.com")
+
+      grant_role(user, Role.Module1)
+
+      expected_msg =
+        "global roles are revoked only by server code claiming trust: true or running outside a session"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(nil, fn -> revoke_role(user, Role.Module1, :global) end)
+      end
+
+      assert [_grant] = grant_rows(user.id)
+    end
+
+    # A command can forward browser params as the entity, so a list there must never claim trust.
+    test "refuses a trust claim in the entity's place" do
+      user = create_user("global_scope_8@example.com")
+
+      grant_role(user, Role.Module1)
+
+      expected_msg =
+        "revoke_role takes an entity, an entity type or :global as its third argument, got: [trust: true] - options go fourth"
+
+      assert_error MisuseError, expected_msg, fn ->
+        Context.with_actor(nil, fn ->
+          revoke_role(user, Role.Module1, computed_opts(trust: true))
+        end)
+      end
+
+      assert [_grant] = grant_rows(user.id)
+    end
+
     test "raises on a revocation on a row issued in a signed-out session" do
       user = create_user("signed_out_revoke_2@example.com")
       resource = create_resource()
@@ -2586,7 +2947,7 @@ defmodule Hologram.AuthTest do
       grant_role(user, :owner, Module1)
 
       expected_msg =
-        "type-wide roles are revoked only by trusted code running without an acting user"
+        "type-wide roles are revoked only by server code claiming trust: true or running outside a session"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(nil, fn -> revoke_role(user, :owner, Module1) end)
@@ -2759,7 +3120,7 @@ defmodule Hologram.AuthTest do
       user = create_user("user_40@example.com")
 
       expected_msg =
-        "type-wide roles are revoked only by trusted code running without an acting user"
+        "type-wide roles are revoked only by server code claiming trust: true or running outside a session"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         Context.with_actor(granter.id, fn -> revoke_role(user, :owner, Module1) end)
@@ -2827,7 +3188,7 @@ defmodule Hologram.AuthTest do
       grant = held_grant(user.id)
 
       expected_msg =
-        "type-wide roles are revoked only by trusted code running without an acting user"
+        "type-wide roles are revoked only by server code claiming trust: true or running outside a session"
 
       assert_error Hologram.AccessDeniedError, expected_msg, fn ->
         apply_revocation_write(grant, actor.id)

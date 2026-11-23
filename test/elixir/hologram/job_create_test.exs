@@ -151,7 +151,7 @@ defmodule Hologram.JobCreateTest do
 
     test "raises on a job type that declares no allow lines in a signed-out session" do
       expected_msg =
-        "cannot create Hologram.Test.Fixtures.Job.Module2 as a user - it declares no allow lines, so no rule can grant the create. Add \"allow :create, ...\" to enqueue it from an action, or create it from server code, where there is no acting user."
+        "cannot create Hologram.Test.Fixtures.Job.Module2 in a session - it declares no allow lines, so no rule can grant the create. Add \"allow :create, ...\" to enqueue it from an action, or create it from server code with trust: true."
 
       assert_error AccessDeniedError, expected_msg, fn ->
         as_user(nil, fn -> create(Module2) end)
@@ -164,7 +164,7 @@ defmodule Hologram.JobCreateTest do
       user = create_user("blocked@example.com")
 
       expected_msg =
-        "cannot create Hologram.Test.Fixtures.Job.Module2 as a user - it declares no allow lines, so no rule can grant the create. Add \"allow :create, ...\" to enqueue it from an action, or create it from server code, where there is no acting user."
+        "cannot create Hologram.Test.Fixtures.Job.Module2 in a session - it declares no allow lines, so no rule can grant the create. Add \"allow :create, ...\" to enqueue it from an action, or create it from server code with trust: true."
 
       assert_error AccessDeniedError, expected_msg, fn ->
         as_user(user, fn -> create(Module2) end)

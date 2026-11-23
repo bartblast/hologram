@@ -334,7 +334,7 @@ defmodule Hologram.Job do
          Policy.dead_entity_types([job_type]) != [] do
       raise Hologram.AccessDeniedError,
         message:
-          "cannot create #{inspect(job_type)} as a user - it declares no allow lines, so no rule can grant the create. Add \"allow :create, ...\" to enqueue it from an action, or create it from server code, where there is no acting user."
+          "cannot create #{inspect(job_type)} in a session - it declares no allow lines, so no rule can grant the create. Add \"allow :create, ...\" to enqueue it from an action, or create it from server code with trust: true."
     end
 
     :ok

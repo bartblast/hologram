@@ -1544,6 +1544,33 @@ defmodule Hologram.CompilerTest do
       assert PageModule7 in pages_checking_permissions(page_reach(graph))
     end
 
+    test "names a page whose client code grants a role with options", %{call_graph: call_graph} do
+      graph = CallGraph.clone(call_graph)
+      CallGraph.remove_vertex(graph, {Hologram.Auth, :can?, 3})
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :grant_role, 4})
+
+      assert PageModule7 in pages_checking_permissions(page_reach(graph))
+    end
+
+    test "names a page whose client code revokes a role with options", %{call_graph: call_graph} do
+      graph = CallGraph.clone(call_graph)
+      CallGraph.remove_vertex(graph, {Hologram.Auth, :can?, 3})
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :revoke_role, 4})
+
+      assert PageModule7 in pages_checking_permissions(page_reach(graph))
+    end
+
+    # The two-argument verbs only ever refuse in a browser, so they have no grant rows to sync.
+    test "leaves out a page whose client code only calls the two-argument grant verbs", %{
+      call_graph: call_graph
+    } do
+      graph = CallGraph.clone(call_graph)
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :grant_role, 2})
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :revoke_role, 2})
+
+      refute PageModule7 in pages_checking_permissions(page_reach(graph))
+    end
+
     # A role check reads grant rows without going through the permission check, so nothing is
     # taken out of the clone.
     test "names a page whose client code asks about a global role", %{call_graph: call_graph} do

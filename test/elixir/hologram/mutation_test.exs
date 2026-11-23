@@ -1530,7 +1530,8 @@ defmodule Hologram.MutationTest do
       id = RoleGrant.derive_id(user.id, entity_type, nil, :member)
       write = create_write(RoleGrant, id, data)
 
-      message = "type-wide roles are granted only by trusted code running without an acting user"
+      message =
+        "type-wide roles are granted only by server code claiming trust: true or running outside a session"
 
       assert run(envelope([write]), server(admin.id)) ==
                rejected(0, %Hologram.AccessDeniedError{message: message})
