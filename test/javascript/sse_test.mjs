@@ -927,6 +927,67 @@ describe("Sse", () => {
           sinon.assert.calledOnce(globalThis.window.location.reload);
         });
 
+        it("gives up on a later handshake that never answers", async () => {
+          const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+          await Sse.connect();
+
+          holdsUnsentWrites.returns(false);
+
+          fetchStub.onSecondCall().callsFake(
+            (_path, {signal}) =>
+              new Promise((_resolve, reject) => {
+                signal.addEventListener("abort", () =>
+                  reject(new DOMException("aborted", "AbortError")),
+                );
+              }),
+          );
+
+          timers.tick(Sse.MAX_RECONNECT_DELAY);
+          await settle();
+
+          sinon.assert.calledTwice(fetchStub);
+
+          timers.tick(Config.mutationTimeoutMs);
+          await settle();
+
+          timers.tick(Sse.MAX_RECONNECT_DELAY);
+          await settle();
+
+          sinon.assert.calledThrice(fetchStub);
+          sinon.assert.calledOnce(globalThis.window.location.reload);
+        });
+
+        it("sets a deadline on the first handshake that could put it off", () => {
+          fetchStub.returns(new Promise(() => {}));
+
+          Sse.connect();
+
+          const {signal} = fetchStub.firstCall.args[1];
+
+          timers.tick(Config.mutationTimeoutMs);
+
+          assert.isTrue(signal.aborted);
+        });
+
+        // Leaving the page starts the count again, while the write is still here.
+        it("sets a deadline on the handshake after the page comes back", async () => {
+          await Sse.connect();
+
+          Sse.isStarted = true;
+          Sse.suspend();
+
+          fetchStub.returns(new Promise(() => {}));
+
+          Sse.resume();
+
+          const {signal} = fetchStub.secondCall.args[1];
+
+          timers.tick(Config.mutationTimeoutMs);
+
+          assert.isTrue(signal.aborted);
+        });
+
         // A write the server keeps refusing never leaves the queue.
         it("reloads anyway once the limit is reached", async () => {
           for (let i = 0; i < Sse.MAX_RELOAD_DEFERRALS; i++) {
@@ -1051,6 +1112,26 @@ describe("Sse", () => {
         timers.tick(Config.mutationTimeoutMs);
 
         assert.isFalse(signal.aborted);
+      });
+
+      // Its writes wait for a handshake to bring an identity, and only a stream can tell it to ask.
+      it("sets a deadline on the handshake of a refused tab", () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        Replica.requestMint();
+        Replica.refuseMint();
+
+        fetchStub.returns(new Promise(() => {}));
+
+        Sse.connect();
+
+        const {signal} = fetchStub.firstCall.args[1];
+
+        timers.tick(Config.mutationTimeoutMs);
+
+        assert.isTrue(signal.aborted);
       });
 
       it("sets no deadline on a handshake while no identity is wanted", async () => {

@@ -213,13 +213,18 @@ export default class Sse {
     const runId = $.runId;
     const isStale = () => runId !== $.runId;
 
-    // A tab waiting for the identity this handshake brings holds its writes until it arrives, so a
-    // handshake that never answers is given up on and tried again.
+    // A tab with no identity to send under, waiting for one or refused one, holds its writes until
+    // a handshake brings it. One holding unsent writes may have to put off a reload over this
+    // answer, and one that already has needs the answer to decide it. For those, a handshake that
+    // never answers is given up on and tried again.
     const controller = new AbortController();
 
-    const deadline = Hologram.dataLayer?.wantsReplica()
-      ? setTimeout(() => controller.abort(), Config.mutationTimeoutMs)
-      : null;
+    const deadline =
+      Hologram.dataLayer?.replicaToReplace() ||
+      Hologram.dataLayer?.holdsUnsentWrites() ||
+      $.reloadDeferrals > 0
+        ? setTimeout(() => controller.abort(), Config.mutationTimeoutMs)
+        : null;
 
     try {
       const preHandshakeReceiptCount =
