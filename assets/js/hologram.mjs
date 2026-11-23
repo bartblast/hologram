@@ -71,6 +71,7 @@ import ManuallyPortedElixirURI from "./elixir/uri.mjs";
 // TODO: test
 export default class Hologram {
   static #ETS_STORAGE_KEY = "hologram_ets";
+  static #HISTORY_RELOAD_STORAGE_KEY = "hologram_history_reload";
 
   // A redirect can point at a page that redirects again, so a cycle would fetch forever without a
   // limit. Browsers stop at 20; this is lower because these hops are page renders, not lookups.
@@ -209,6 +210,12 @@ export default class Hologram {
   // Moved only by a popstate, since only a popstate changes the entry the browser is on. The latest
   // one is the one whose page the tab should end up showing.
   static #popstateCount = 0;
+
+  // Made public to make tests easier
+  //
+  // The path and query string this document was rendered for, once the runtime listens for Back
+  // and Forward.
+  static documentUrl = null;
 
   // Made public to make tests easier
   //
@@ -1042,6 +1049,44 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
+  //
+  // Reloads a document a Back or Forward reached before it rendered. The browser records this as a
+  // plain reload, which renders the page afresh, and leaving that page would then save it over the
+  // entry's snapshot. So the entry is noted for the next document (see wasReloadedForHistoryEntry).
+  static reloadHistoryEntry() {
+    try {
+      if (typeof history.state === "string") {
+        sessionStorage.setItem(
+          $.#HISTORY_RELOAD_STORAGE_KEY,
+          $.#historyReloadMarker(),
+        );
+      }
+    } catch {
+      // Without storage the entry's page renders afresh.
+    }
+
+    Hologram.reloadBrowserLocation();
+  }
+
+  // Made public to make tests easier
+  //
+  // Whether the document before this one reloaded into the entry the tab is on, for a Back or
+  // Forward it couldn't show itself. The URL has to match too: a server that answered the reload
+  // with a redirect keeps the entry's id, and the snapshot is of the page it moved away from.
+  // Answers once.
+  static wasReloadedForHistoryEntry() {
+    try {
+      const entry = sessionStorage.getItem($.#HISTORY_RELOAD_STORAGE_KEY);
+
+      sessionStorage.removeItem($.#HISTORY_RELOAD_STORAGE_KEY);
+
+      return entry !== null && entry === $.#historyReloadMarker();
+    } catch {
+      return false;
+    }
+  }
+
+  // Made public to make tests easier
   static render() {
     const startTime = performance.now();
 
@@ -1214,14 +1259,51 @@ export default class Hologram {
     // Read before the first await: the popstate listener goes up during the init.
     const epoch = Math.max($.domEpoch, $.registryEpoch);
 
-    if (!Hologram.#isInitiated) {
-      await init();
+    // An init that answers false is reloading the document.
+    if (!Hologram.#isInitiated && (await init()) === false) {
+      return;
     }
 
     const pageSnapshot = $.#documentSnapshot;
     $.#documentSnapshot = null;
 
     await $.mountDocument(pageSnapshot, epoch);
+  }
+
+  // Made public to make tests easier
+  //
+  // Takes over Back and Forward from the listener in the document's inline script, which covers the
+  // time before this code has loaded. If the browser moved to another entry in that time, this
+  // document is the wrong one for the URL, so it is reloaded instead of booted. Answers whether the
+  // boot goes on.
+  static listenForPopstate() {
+    const shim = globalThis.Hologram._popstateShim;
+
+    if (shim !== undefined) {
+      window.removeEventListener("popstate", shim);
+      delete globalThis.Hologram._popstateShim;
+    }
+
+    if (globalThis.Hologram._missedPopstate) {
+      // This document never boots, so a further Back only has to reload into its own entry. So
+      // does a return from the back/forward cache, when another navigation cancelled the reload.
+      window.addEventListener("popstate", () => $.reloadHistoryEntry());
+
+      window.addEventListener("pageshow", (event) => {
+        if (event.persisted) {
+          $.reloadHistoryEntry();
+        }
+      });
+
+      $.reloadHistoryEntry();
+
+      return false;
+    }
+
+    $.documentUrl = $.#entryUrl();
+    window.addEventListener("popstate", Hologram.handlePopstateEvent);
+
+    return true;
   }
 
   // Made public to make tests easier
@@ -1942,6 +2024,23 @@ export default class Hologram {
     // to it the same way. One under another path is another page's, and takes the path below,
     // where it is reloaded, since nothing was saved for it.
     if (!$.#isNavigationUnderWay()) {
+      const staysOnPage =
+        (event.state === null && window.location.pathname === $.pagePath) ||
+        event.state === $.historyId;
+
+      // Those entries can differ in their query string, which the page's first render can depend
+      // on. Before that render nothing has handled the change, so the server renders the entry.
+      // A plain reload: entries of one page can share an id, so a snapshot may be the other's.
+      if (
+        staysOnPage &&
+        Hologram.virtualDocument === null &&
+        $.documentUrl !== null &&
+        $.#entryUrl() !== $.documentUrl
+      ) {
+        Hologram.reloadBrowserLocation();
+        return;
+      }
+
       if (event.state === null && window.location.pathname === $.pagePath) {
         history.replaceState($.historyId, null);
         return;
@@ -2002,7 +2101,7 @@ export default class Hologram {
     } catch (error) {
       // The document's first mount stepped aside for this popstate (see mountDocument).
       if (Hologram.virtualDocument === null && popstate === $.#popstateCount) {
-        Hologram.reloadBrowserLocation();
+        $.reloadHistoryEntry();
       }
 
       throw error;
@@ -2139,7 +2238,7 @@ export default class Hologram {
           // unmounted. Its socket may simply not be open yet.
           if (Hologram.virtualDocument === null) {
             if (!isSuperseded()) {
-              Hologram.reloadBrowserLocation();
+              $.reloadHistoryEntry();
             }
 
             return;
@@ -2187,7 +2286,7 @@ export default class Hologram {
       // A popstate cancelled the first mount for this script, so a document that hasn't rendered
       // would stay unmounted. Its own scripts never come through here, so this can't reload forever.
       if (Hologram.virtualDocument === null) {
-        Hologram.reloadBrowserLocation();
+        $.reloadHistoryEntry();
         return true;
       }
 
@@ -2238,7 +2337,9 @@ export default class Hologram {
 
     window.addEventListener("beforeunload", Hologram.handleBeforeunloadEvent);
 
-    window.addEventListener("popstate", Hologram.handlePopstateEvent);
+    if (!$.listenForPopstate()) {
+      return false;
+    }
 
     // The page is being left, for good or into the browser's back/forward cache.
     window.addEventListener("pagehide", () => Sse.suspend());
@@ -2283,12 +2384,20 @@ export default class Hologram {
 
     // The entry carries an id when the tab has been on it before: gone back or forward to,
     // reloaded, or, in Chrome, loaded again under the same URL. Its snapshot is restored only for
-    // Back and Forward (see isDocumentSnapshotRestorable).
+    // Back and Forward (see isDocumentSnapshotRestorable), which includes the reload a document
+    // makes for a Back or Forward that reached it before it rendered.
+    const isHistoryReload = $.wasReloadedForHistoryEntry();
+
     if (history.state) {
       $.historyId = history.state;
       const pageSnapshot = await $.#getPageSnapshot(history.state);
 
-      if ($.isDocumentSnapshotRestorable(pageSnapshot, $.isBackForwardLoad())) {
+      if (
+        $.isDocumentSnapshotRestorable(
+          pageSnapshot,
+          isHistoryReload || $.isBackForwardLoad(),
+        )
+      ) {
         $.#documentSnapshot = pageSnapshot;
       }
     } else {
@@ -2347,6 +2456,15 @@ export default class Hologram {
     Hologram.#defineLoadedScripts();
 
     Hologram.#isInitiated = true;
+  }
+
+  static #entryUrl() {
+    return `${window.location.pathname}${window.location.search}`;
+  }
+
+  // What names the entry a document reloads into: its id and the URL it is under.
+  static #historyReloadMarker() {
+    return `${history.state} ${$.#entryUrl()}`;
   }
 
   // The digests of the scripts the document the server sent carries script elements for, besides
