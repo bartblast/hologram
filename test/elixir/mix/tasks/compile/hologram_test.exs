@@ -2276,6 +2276,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
       end
     end
 
+    test "holds the structs of a synced row's fields", %{opts: opts} do
+      run(opts)
+
+      assert DateTime in cache_state().chunks.held_types
+    end
+
     test "puts each function in one chunk when the held types' chunks merge", %{opts: opts} do
       run(opts)
 

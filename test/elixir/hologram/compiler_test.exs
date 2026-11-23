@@ -28,12 +28,14 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity10, as: ImplEntity10
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity11, as: ImplEntity11
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity12, as: ImplEntity12
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity13, as: ImplEntity13
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity14, as: ImplEntity14
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity15, as: ImplEntity15
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity2, as: ImplEntity2
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity3, as: ImplEntity3
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity4, as: ImplEntity4
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity5, as: ImplEntity5
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity6, as: ImplEntity6
-  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity7, as: ImplEntity7
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity8, as: ImplEntity8
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity9, as: ImplEntity9
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Page1, as: ImplPage1
@@ -43,6 +45,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Page5, as: ImplPage5
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Page7, as: ImplPage7
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Page8, as: ImplPage8
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page9, as: ImplPage9
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Protocol, as: ImplProtocol
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct1, as: ImplStruct1
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct2, as: ImplStruct2
@@ -2420,22 +2423,6 @@ defmodule Hologram.CompilerTest do
       [split_graph: split_graph]
     end
 
-    test "walks nothing when no app module implements a protocol for a struct type", %{
-      call_graph: call_graph,
-      ir_plt: ir_plt,
-      module_info_plt: module_info_plt
-    } do
-      items =
-        module_info_plt
-        |> PLT.get_all()
-        |> Enum.reject(fn {_module, info} -> info[:protocol_implementation?] end)
-
-      call_graph = %{call_graph | module_info_plt: PLT.start(items: items)}
-      reach_by_page = mentioning_reach([ImplEntity7], false)
-
-      assert fold_held_impls(reach_by_page, %{}, nil, call_graph, ir_plt) == {reach_by_page, %{}}
-    end
-
     test "syncs what the implementation of a type reached only by a relationship name names", %{
       call_graph: call_graph,
       ir_plt: ir_plt,
@@ -2450,6 +2437,37 @@ defmodule Hologram.CompilerTest do
 
       assert ImplEntity8 in constants.synced_types
       assert ImplEntity8 in constants.page_types[ImplPage7]
+    end
+
+    test "syncs what an app's implementation for the struct of a held row's field names", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      split_graph: split_graph
+    } do
+      base_reach = derive_impl_reach([ImplPage9], call_graph, module_info_plt)
+
+      {reach, walks} = fold_held_impls(base_reach, %{}, split_graph, call_graph, ir_plt)
+
+      # This app's fixtures name Date in code every page gets, so the page's own walk enters the
+      # implementation too. The walk's types are what an app without that relies on.
+      for {types, _walk} <- walks[ImplPage9] do
+        assert Date in types
+      end
+
+      assert ImplEntity15 in build_sync_constants(reach, module_info_plt).synced_types
+    end
+
+    test "reads nothing of an implementation Hologram ships for its own type", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt
+    } do
+      mfa = {Inspect.Hologram.Entity.Metadata, :inspect, 2}
+
+      assert %{key: read} = read_impl_mfas(%{key: [mfa]}, call_graph, ir_plt)
+
+      assert read.atoms == MapSet.new()
+      assert read.names == MapSet.new()
     end
 
     test "follows implementations until nothing new is named", %{
@@ -7889,6 +7907,35 @@ defmodule Hologram.CompilerTest do
       entries_by_type = %{Date => [{Date, :__struct__, 0}, {Date, :__struct__, 1}]}
 
       assert list_impl_types(entries_by_type) == MapSet.new()
+    end
+  end
+
+  describe "list_row_types/1" do
+    test "holds the given entity types, their system attributes' struct and what every row holds" do
+      assert list_row_types([ImplEntity15]) ==
+               MapSet.new([
+                 DateTime,
+                 Hologram.Entity.Metadata,
+                 Hologram.Entity.NotIncluded,
+                 Hologram.Entity.ServerOnly,
+                 ImplEntity15
+               ])
+    end
+
+    test "holds the struct of an attribute's type" do
+      assert Date in list_row_types([ImplEntity13])
+    end
+
+    test "leaves out the struct of a server-only attribute's type" do
+      refute Time in list_row_types([ImplEntity13])
+    end
+
+    test "holds the struct of a derived field's type" do
+      assert Time in list_row_types([ImplEntity14])
+    end
+
+    test "holds nothing for no entity types" do
+      assert list_row_types([]) == MapSet.new()
     end
   end
 

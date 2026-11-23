@@ -102,6 +102,18 @@ defmodule Hologram.Compiler do
   # The name the data model bundle's file starts with, and the bundle's name in a size error.
   @data_model_bundle_name "data-model"
 
+  # The struct a field of each attribute type is in the browser (see Model.boxValue in
+  # assets/js/model.mjs).
+  @field_struct_types %{date: Date, datetime: DateTime, time: Time}
+
+  # The structs a row holds whatever its type declares (see Model.box in assets/js/model.mjs): its
+  # metadata, and what stands in for a field it wasn't given.
+  @row_struct_types [
+    Hologram.Entity.Metadata,
+    Hologram.Entity.NotIncluded,
+    Hologram.Entity.ServerOnly
+  ]
+
   # The runtime's classes a page bundle, a chunk or the data model bundle is defined with (see
   # render_script_deps/1). The keys of Hologram.#deps in assets/js/hologram.mjs.
   @script_deps ~w(
@@ -975,23 +987,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns whether a module of the app, rather than Elixir's or Hologram's, implements a protocol for
-  a struct type. Without one, no page holds an implementation to walk (see `fold_held_impls/5`).
-  """
-  @spec app_struct_impl?(PLT.t()) :: boolean
-  def app_struct_impl?(module_info_plt) do
-    elixir_lib_dir = elixir_lib_dir()
-    built_in_types = MapSet.new(CallGraph.built_in_protocol_types())
-
-    module_info_plt
-    |> PLT.keys(%{protocol_implementation?: true})
-    |> Enum.any?(fn impl ->
-      not MapSet.member?(built_in_types, implementation_type(impl, module_info_plt)) and
-        app_module?(impl, elixir_lib_dir)
-    end)
-  end
-
-  @doc """
   Folds into each page's kept reach what the protocol implementations of the types it holds through
   rows read, so that the synced types, the page types, the permission check and the query check
   count that code like the page's own. Returns the folded reach and the walks it took.
@@ -1001,14 +996,15 @@ defmodule Hologram.Compiler do
   the page is walked again with them as extra types, by the same rules: an implementation is
   entered per protocol function the code reaches, and only for a type the page can hold. A type
   only rules read isn't held: no code reads its rows by a name the build sees, and rules run with no
-  protocol dispatch. Nor is a type no session may read, since no row of it reaches a browser.
+  protocol dispatch. Nor is a type no session may read, since no row of it reaches a browser. The
+  structs a held row's fields are count as held too (see `list_row_types/1`), so an implementation
+  an app writes for `Date` is read like one for an entity type.
 
   What an implementation names can bring more types, whose implementations can name more, so it
   repeats until no page's held types change. Each read goes onto the page's reach as given, so a
   reach kept from before folding holds no name of an implementation or relationship since removed.
 
-  A walk among the given kept ones, by page and held types, is reused. An app that defines no
-  implementation for a struct type walks nothing and reads no graph.
+  A walk among the given kept ones, by page and held types, is reused.
 
   Give it the graph without the manually ported functions, as `CallGraph.list_page_impl_mfas/5`
   asks, and the call graph before they are removed (see `read_impl_mfas/3`).
@@ -1016,35 +1012,31 @@ defmodule Hologram.Compiler do
   @spec fold_held_impls(
           %{module => kept_page_reach},
           held_impl_walks,
-          CallGraph.t() | nil,
+          CallGraph.t(),
           CallGraph.t(),
           PLT.t()
         ) :: {%{module => kept_page_reach}, held_impl_walks}
   def fold_held_impls(reach_by_page, kept_walks, split_graph, call_graph, ir_plt) do
     module_info_plt = CallGraph.module_info_plt(call_graph)
 
-    if app_struct_impl?(module_info_plt) do
-      analyses = PLT.start()
+    analyses = PLT.start()
 
-      try do
-        CallGraph.with_shared_graph(split_graph, fn read_graph ->
-          context = %{
-            analyses: analyses,
-            call_graph: call_graph,
-            ir_plt: ir_plt,
-            kept_walks: kept_walks,
-            module_info_plt: module_info_plt,
-            read_graph: read_graph,
-            seeds: CallGraph.page_impl_seeds(read_graph.(), module_info_plt)
-          }
+    try do
+      CallGraph.with_shared_graph(split_graph, fn read_graph ->
+        context = %{
+          analyses: analyses,
+          call_graph: call_graph,
+          ir_plt: ir_plt,
+          kept_walks: kept_walks,
+          module_info_plt: module_info_plt,
+          read_graph: read_graph,
+          seeds: CallGraph.page_impl_seeds(read_graph.(), module_info_plt)
+        }
 
-          fold_held_impl_rounds(reach_by_page, reach_by_page, %{}, context)
-        end)
-      after
-        PLT.stop(analyses)
-      end
-    else
-      {reach_by_page, %{}}
+        fold_held_impl_rounds(reach_by_page, reach_by_page, %{}, context)
+      end)
+    after
+      PLT.stop(analyses)
     end
   end
 
@@ -2132,6 +2124,19 @@ defmodule Hologram.Compiler do
 
       Map.put(other_chunks, signature, mfas)
     end
+  end
+
+  @doc """
+  Returns the struct types a synced row of the given entity types can hold: the entity types, the
+  structs their fields are in the browser, for the attributes a browser gets, the system attributes
+  and the derived fields, and the structs every row holds, its metadata and the stand-ins for a
+  field it wasn't given. A server-only attribute's value never reaches a browser.
+  """
+  @spec list_row_types(Enumerable.t(module)) :: MapSet.t(module)
+  def list_row_types(entity_types) do
+    entity_types
+    |> Enum.flat_map(&[&1 | @row_struct_types ++ field_struct_types(&1)])
+    |> MapSet.new()
   end
 
   @doc """
@@ -3382,7 +3387,7 @@ defmodule Hologram.Compiler do
   # are kept apart from the atoms: they name modules, and no relationship or derived field. An
   # implementation's own type is left out of its modules.
   defp read_by_mfa(reach_by_page, module_info_plt, ir_plt) do
-    elixir_lib_dir = elixir_lib_dir()
+    lib_dirs = lib_dirs()
 
     mfas_by_module =
       reach_by_page
@@ -3392,7 +3397,7 @@ defmodule Hologram.Compiler do
       |> Enum.uniq()
       |> Enum.group_by(fn {module, _function, _arity} -> module end)
       |> Enum.filter(fn {module, _mfas} ->
-        PLT.member?(module_info_plt, module) and app_module?(module, elixir_lib_dir)
+        PLT.member?(module_info_plt, module) and app_module?(module, lib_dirs, module_info_plt)
       end)
 
     build_missing_ir!(ir_plt, Enum.map(mfas_by_module, fn {module, _mfas} -> module end))
@@ -3522,8 +3527,9 @@ defmodule Hologram.Compiler do
     end
   end
 
-  # The types each page can hold rows of: the ones it reaches by name, without the ones only rules
-  # read and the ones no session may read, of which no row reaches a browser.
+  # The types each page can hold through rows: the ones it reaches by name, without the ones only
+  # rules read and the ones no session may read, of which no row reaches a browser, and the structs
+  # those rows' fields are.
   defp held_types_by_page(reach_by_page, module_info_plt) do
     %{page_types: page_types} =
       reach_by_page
@@ -3537,7 +3543,7 @@ defmodule Hologram.Compiler do
         page_types
         |> Map.get(page_module, [])
         |> Enum.filter(&Policy.readable_type?/1)
-        |> MapSet.new()
+        |> list_row_types()
 
       {page_module, types}
     end)
@@ -4278,6 +4284,17 @@ defmodule Hologram.Compiler do
         MapSet.disjoint?(candidate, held_types)
     end)
     |> Enum.min_by(&{MapSet.size(&1), Enum.sort(&1)}, fn -> nil end)
+  end
+
+  defp field_struct_types(entity_type) do
+    server_only_names = Entity.server_only_attribute_names(entity_type)
+
+    entity_type.__attributes__()
+    |> Enum.reject(fn {name, _type, _opts} -> name in server_only_names end)
+    |> Enum.concat(entity_type.__system_attributes__())
+    |> Enum.concat(entity_type.__derived__())
+    |> Enum.map(fn {_name, type, _opts} -> @field_struct_types[type] end)
+    |> Enum.reject(&is_nil/1)
   end
 
   defp function_encoded?(encode_plt, module, {function, arity}) do
@@ -6087,14 +6104,38 @@ defmodule Hologram.Compiler do
   # module's name and where its code is rather than by the application holding it, which need not
   # be loaded while the app compiles. Asked only of a module the module info PLT records, which is
   # an Elixir module: nothing here reads its BEAM file.
-  defp app_module?(module, elixir_lib_dir) do
+  defp app_module?(module, lib_dirs, module_info_plt) do
     name = Atom.to_string(module)
 
     cond do
       String.starts_with?(name, "Elixir.Hologram.Test.") -> true
       String.starts_with?(name, "Elixir.Hologram.") -> false
-      true -> not loaded_from?(module, elixir_lib_dir)
+      hologram_impl?(module, lib_dirs.hologram, module_info_plt) -> false
+      true -> not loaded_from?(module, lib_dirs.elixir)
     end
+  end
+
+  # Whether the module is an implementation Hologram ships for one of its own types, like
+  # Inspect.Hologram.Entity.Metadata, whose name starts with the protocol's. One an app writes for
+  # such a type is the app's code, and lives in the app's build dir.
+  defp hologram_impl?(module, hologram_lib_dir, module_info_plt) do
+    type_name =
+      module
+      |> implementation_type(module_info_plt)
+      |> Atom.to_string()
+
+    String.starts_with?(type_name, "Elixir.Hologram.") and
+      not String.starts_with?(type_name, "Elixir.Hologram.Test.") and
+      loaded_from?(module, hologram_lib_dir)
+  end
+
+  defp lib_dirs do
+    hologram_lib_dir =
+      :hologram
+      |> :code.lib_dir()
+      |> to_string()
+
+    %{elixir: elixir_lib_dir(), hologram: hologram_lib_dir <> "/"}
   end
 
   # The directory Elixir's own applications are installed under, elixir, eex, ex_unit, iex, logger
@@ -6114,14 +6155,23 @@ defmodule Hologram.Compiler do
   end
 
   defp loaded_from?(module, dir) do
-    case :code.which(module) do
+    case beam_path(module) do
       path when is_list(path) ->
         path
         |> to_string()
         |> String.starts_with?(dir)
 
-      _cover_compiled_or_missing ->
+      _missing ->
         false
+    end
+  end
+
+  # Where the module's BEAM file is, for a cover-compiled module too, which :code.which/1 gives no
+  # path for.
+  defp beam_path(module) do
+    case :code.which(module) do
+      :cover_compiled -> :code.where_is_file(~c"#{module}.beam")
+      path -> path
     end
   end
 

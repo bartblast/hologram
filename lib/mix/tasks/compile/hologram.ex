@@ -507,8 +507,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # The chunks' MFAs are listed on the runtime's copy too, and so is the data layer's reach of
       # every page it lists again, and of every page it walks for the types it holds through rows.
       runtime_graph_kept? =
-        Enum.all?([runtime_kept?, chunk_analysis_kept?, pages_to_list == []]) and
-          held_impls_need_no_graph?(data_layer_kept?, new_module_info_plt)
+        Enum.all?([runtime_kept?, chunk_analysis_kept?, pages_to_list == [], data_layer_kept?])
 
       call_graph_for_runtime = build_runtime_graph(call_graph, runtime_graph_kept?, sup)
 
@@ -1559,7 +1558,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     # built together (see Hologram.Compiler.build_sync_constants_js/1).
     sync_constants_js = Compiler.build_sync_constants_js(sync_constants)
 
-    row_types = MapSet.new(sync_constants.synced_types)
+    # Not narrowed to the types a session may read, unlike what the data layer folds: a deploy that
+    # adds a read rule can hand an open tab rows of such a type, and code that never runs is harmless.
+    row_types = Compiler.list_row_types(sync_constants.synced_types)
 
     # The dumps once everything above passed, so that a derivation that raises leaves the dumps of
     # the last one that did not, which the kept data layer state describes.
@@ -1865,14 +1866,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp impl_seeds(_kept_data_layer, call_graph, _graph_unchanged?) do
     CallGraph.page_impl_seeds(call_graph)
-  end
-
-  # A derivation walks the implementations of the types pages hold through rows on the graph without
-  # the manually ported functions, unless the app defines none.
-  defp held_impls_need_no_graph?(true, _module_info_plt), do: true
-
-  defp held_impls_need_no_graph?(false, module_info_plt) do
-    not Compiler.app_struct_impl?(module_info_plt)
   end
 
   # Whether the walks of the implementations of the types pages hold through rows can have moved
