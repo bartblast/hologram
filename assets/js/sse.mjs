@@ -219,8 +219,10 @@ export default class Sse {
     // never answers is given up on and tried again.
     const controller = new AbortController();
 
+    const presented = Hologram.dataLayer?.replicaToReplace();
+
     const deadline =
-      Hologram.dataLayer?.replicaToReplace() ||
+      presented ||
       Hologram.dataLayer?.holdsUnsentWrites() ||
       $.reloadDeferrals > 0
         ? setTimeout(() => controller.abort(), Config.mutationTimeoutMs)
@@ -263,6 +265,7 @@ export default class Sse {
       const sending = Hologram.dataLayer?.takeReplica(
         replica,
         replicaRefused === true,
+        presented?.id,
       );
 
       if (preHandshakeReceiptCount > 0 && refreshed.data.length === 0) {
@@ -491,6 +494,10 @@ export default class Sse {
   // and the post-open EventSource onerror handler so a failure anywhere in the
   // connect lifecycle backs off identically instead of leaving realtime down.
   static scheduleReconnect() {
+    // Overlapping handshakes can each ask for a retry. One timer is kept, so that suspend() and
+    // reconnect() can call it off.
+    clearTimeout($.reconnectTimer);
+
     $.reconnectAttempts++;
     const delay = $.computeReconnectDelay($.reconnectAttempts);
 

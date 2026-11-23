@@ -110,6 +110,25 @@ describe("Replica", () => {
       assert.isFalse(Replica.mintRefused);
     });
 
+    // Two handshakes can overlap, both showing the stored pair.
+    it("ignores a refusal of a pair the tab has moved on from", () => {
+      Replica.offer({id: "r-page", token: "statement-page"});
+      Replica.adopt({id: "r-stored", token: "statement-stored"});
+      Replica.requestMint();
+
+      Replica.refuseMint("r-stored");
+      Replica.refuseMint("r-stored");
+
+      assert.equal(Replica.id, "r-page");
+      assert.isTrue(Replica.awaitingMint);
+      assert.isFalse(Replica.mintRefused);
+
+      Replica.refuseMint("r-page");
+
+      assert.isFalse(Replica.awaitingMint);
+      assert.isTrue(Replica.mintRefused);
+    });
+
     // The refused pair can be a stored one from a session that has ended.
     it("gives the page's own pair a turn first", () => {
       Replica.offer({id: "r-page", token: "statement-page"});

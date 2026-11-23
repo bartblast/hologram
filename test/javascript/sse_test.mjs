@@ -803,6 +803,49 @@ describe("Sse", () => {
         assert.equal(Replica.id, "replica-minted");
       });
 
+      it("still asks with the page's pair after two overlapping refusals", async () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        Replica.adopt({id: "replica-stored", token: "token-stored"});
+        Replica.requestMint();
+        stubHandshakeResponse({replicaRefused: true});
+
+        await Promise.all([Sse.connect(), Sse.connect()]);
+
+        assert.equal(Replica.id, "replica-page");
+        assert.isTrue(Replica.awaitingMint);
+        assert.isFalse(Replica.mintRefused);
+
+        stubHandshakeResponse({replica: minted});
+
+        timers.tick(Sse.MAX_RECONNECT_DELAY * 2);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        assert.equal(Replica.id, "replica-minted");
+      });
+
+      it("leaves no retry running after overlapping refusals and a suspend", async () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        Replica.adopt({id: "replica-stored", token: "token-stored"});
+        Replica.requestMint();
+        stubHandshakeResponse({replicaRefused: true});
+
+        await Promise.all([Sse.connect(), Sse.connect()]);
+
+        Sse.suspend();
+
+        timers.tick(Sse.MAX_RECONNECT_DELAY * 2);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        sinon.assert.calledTwice(fetchStub);
+        sinon.assert.notCalled(globalThis.EventSource);
+      });
+
       it("takes an identity a later handshake brings after a refusal", async () => {
         Replica.requestMint();
         stubHandshakeResponse({replicaRefused: true});

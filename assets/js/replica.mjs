@@ -98,8 +98,15 @@ export default class Replica {
   // somebody else holds the session: nothing goes out, since the writes this tab holds are its
   // owner's. It stops asking, and later handshakes still show the pair, so it recovers if its owner
   // signs back in.
-  static refuseMint() {
-    if (!Replica.awaitingMint || Replica.refresh()) {
+  //
+  // Only a refusal of the pair in use counts. Two handshakes can overlap and both show the stored
+  // pair, and the second refusal would otherwise end the asking before the page's pair was tried.
+  static refuseMint(presentedId = Replica.id) {
+    if (
+      !Replica.awaitingMint ||
+      presentedId !== Replica.id ||
+      Replica.refresh()
+    ) {
       return;
     }
 

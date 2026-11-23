@@ -839,10 +839,10 @@ export default class DataLayer {
 
   // Takes up the identity a stream handshake brought, if this tab asked for one, and wakes the
   // sender that was holding for it. Answers the sender's promise, so a page about to reload can let
-  // it finish. A handshake that refused one ends the asking, so the stream can open.
-  static takeReplica(replica, refused = false) {
+  // it finish. A handshake that refused the pair it showed ends the asking, so the stream can open.
+  static takeReplica(replica, refused = false, presentedId = undefined) {
     if (refused) {
-      Replica.refuseMint();
+      Replica.refuseMint(presentedId);
 
       return null;
     }
