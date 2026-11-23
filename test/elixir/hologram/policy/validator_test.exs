@@ -1898,7 +1898,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         allow :read
         allow :update, only: [:priority], when: new(priority) >= 3
-        allow :update, except: [:priority]
+        allow :update, as: :edit, except: [:priority]
       end
 
       defmodule NewRowValidatorFixture16 do
@@ -1907,7 +1907,7 @@ defmodule Hologram.Policy.ValidatorTest do
         relationship :task, Hologram.Policy.ValidatorTest.NewRowValidatorFixture15
 
         allow :read
-        allow :update, via: task
+        allow :update, via: {:edit, task}
       end
 
       assert validate_model!([NewRowValidatorFixture15, NewRowValidatorFixture16], []) == :ok
