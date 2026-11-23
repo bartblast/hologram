@@ -391,6 +391,8 @@ describe("Durability", () => {
         seq: 41,
       });
 
+      LocalDatabase.actorUserId = "u1";
+
       await Durability.clear();
 
       assert.deepStrictEqual(await readAll("entities"), []);
@@ -538,8 +540,12 @@ describe("Durability", () => {
 
       LocalDatabase.actorUserId = "u2";
 
-      await Durability.persistFrame([unstorableRecord()], "place-1");
+      // A pair the store cannot hold, so the write fails.
+      Durability.persistReplica({id: () => {}, token: "statement"});
 
+      await Durability.replicaWritten();
+
+      assert.equal(Durability.mode, "memory");
       assert.isUndefined(await readPair("u1"));
       assert.equal((await readPair("u2")).id, "r-u2");
     });
@@ -2338,6 +2344,39 @@ describe("Durability", () => {
       assert.deepStrictEqual(await readPair("u2"), replica);
     });
 
+    it("writes a new claim id when the owner changes", async () => {
+      await seedPreviousLoad({claim: "claim-before"});
+      await Durability.open();
+      await Durability.load();
+
+      await Durability.claim("u2", replica);
+
+      const claim = await readMeta("claim");
+
+      assert.isString(claim);
+      assert.notEqual(claim, "claim-before");
+    });
+
+    it("keeps the claim id when the store is already this user's", async () => {
+      await seedPreviousLoad({claim: "claim-before"});
+      await Durability.open();
+      await Durability.load();
+
+      await Durability.claim("u1", replica);
+
+      assert.equal(await readMeta("claim"), "claim-before");
+    });
+
+    it("writes a claim id when a visitor takes the store", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      await Durability.claim(null, replica);
+
+      assert.isString(await readMeta("claim"));
+    });
+
     // They come back to it, with batches numbered under it.
     it("leaves the previous owner's pair", async () => {
       await seedPreviousLoad();
@@ -2411,6 +2450,401 @@ describe("Durability", () => {
       assert.strictEqual(Durability.replicaWritten(), claiming);
 
       await claiming;
+    });
+  });
+
+  // One store serves every user of a browser, and the last page load to claim it owns it. A tab of
+  // anyone else goes on from memory, and what it stores must not land among the owner's rows.
+  describe("a store another user owns", () => {
+    const replica = {id: "r-u2", token: "statement-u2"};
+
+    const expectOwnerUntouched = async () => {
+      assert.deepStrictEqual(await readAll("entities"), [
+        taskRecord("t1", "Draft copy"),
+      ]);
+
+      assert.equal(await readMeta("cursor"), "place-1");
+      assert.equal(await readMeta("actorUserId"), "u1");
+    };
+
+    beforeEach(async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      LocalDatabase.actorUserId = "u2";
+    });
+
+    it("takes no frame's rows or place", async () => {
+      await Durability.persistFrame(
+        [
+          taskRecord("t2", "Not theirs"),
+          {id: "t1", row: null, type: "MyApp.Task"},
+        ],
+        "place-2",
+      );
+
+      await expectOwnerUntouched();
+    });
+
+    it("still records where the clock stands", async () => {
+      Clock.observe(1_756_100_000_999_000);
+
+      await Durability.persistFrame([], "place-2");
+
+      assert.equal(await readMeta("clock"), Clock.last());
+    });
+
+    it("is not cleared", async () => {
+      await Durability.clear();
+
+      await expectOwnerUntouched();
+    });
+
+    it("is not repaired, and does not read as placeless", async () => {
+      assert.isFalse(
+        await Durability.repair([taskRecord("t2", "Not theirs")], "place-2"),
+      );
+
+      await expectOwnerUntouched();
+    });
+
+    it("does not read as placeless with no place of its own", async () => {
+      await writeMeta({actorUserId: "u1"});
+
+      const {db} = await rawOpen();
+
+      await new Promise((resolve) => {
+        const transaction = db.transaction("meta", "readwrite");
+
+        transaction.objectStore("meta").delete("cursor");
+        transaction.oncomplete = resolve;
+      });
+
+      assert.isFalse(
+        await Durability.repair([taskRecord("t2", "Not theirs")], "place-2"),
+      );
+
+      assert.isUndefined(await readMeta("cursor"));
+    });
+
+    it("keeps its rows through this tab's storage failure", async () => {
+      await writeMeta({"replica:u2": replica});
+
+      Replica.owner = "u2";
+
+      // A pair the store cannot hold, so the write fails.
+      Durability.persistReplica({id: () => {}, token: "statement"});
+
+      await Durability.replicaWritten();
+
+      assert.equal(Durability.mode, "memory");
+      await expectOwnerUntouched();
+      assert.isUndefined(await readPair("u2"));
+      assert.equal((await readPair("u1")).id, "r-stored");
+    });
+
+    it("leaves this tab's queue and pair writable", async () => {
+      Replica.owner = "u2";
+
+      await Durability.persistFrame([], "place-2");
+      await Durability.persistReplica(replica);
+
+      const batch = unfiledBatch("u2");
+
+      await Durability.fileBatch(batch);
+
+      assert.deepStrictEqual(await readPair("u2"), replica);
+
+      assert.deepStrictEqual(
+        (await readAll("queue")).map((record) => record.actorUserId),
+        ["u2"],
+      );
+
+      await expectOwnerUntouched();
+    });
+
+    // Back under this user through another tab, it holds rows this tab never saw, and a frame on
+    // top would date them at a place they are not at.
+    it("stays closed to a tab that lost it, when it comes back to that tab's user", async () => {
+      await Durability.persistFrame([], "place-2");
+
+      await writeMeta({
+        actorUserId: "u2",
+        claim: "claim-of-another-tab",
+        cursor: "place-3",
+      });
+
+      await Durability.persistFrame(
+        [taskRecord("t2", "Missed the frames before it")],
+        "place-4",
+      );
+
+      assert.equal(await readMeta("cursor"), "place-3");
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t1"],
+      );
+    });
+
+    // The tab wrote nothing while the store was someone else's, so only the claim can tell it.
+    it("stays closed to an idle tab when the store went away and came back", async () => {
+      LocalDatabase.actorUserId = "u1";
+
+      await writeMeta({
+        actorUserId: "u1",
+        claim: "claim-of-another-tab",
+        cursor: "place-9",
+      });
+
+      await Durability.persistFrame(
+        [taskRecord("t2", "One frame of many")],
+        "place-10",
+      );
+
+      assert.equal(await readMeta("cursor"), "place-9");
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t1"],
+      );
+    });
+
+    // A follower can have read the store before its leader claimed it, and takes the lead later.
+    it("takes up a newer claim of its own user through a repair", async () => {
+      LocalDatabase.actorUserId = "u1";
+
+      await writeMeta({claim: "claim-of-the-leader"});
+
+      await Durability.repair([taskRecord("t2", "From memory")], "place-2");
+      await Durability.persistFrame([taskRecord("t3", "Next")], "place-3");
+
+      assert.equal(await readMeta("cursor"), "place-3");
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t2", "t3"],
+      );
+    });
+
+    it("takes up a newer claim of its own user through a clear", async () => {
+      LocalDatabase.actorUserId = "u1";
+
+      await writeMeta({claim: "claim-of-the-leader"});
+
+      await Durability.clear();
+      await Durability.persistFrame([taskRecord("t2", "Refilled")], "place-2");
+
+      assert.equal(await readMeta("cursor"), "place-2");
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t2"],
+      );
+    });
+
+    it("takes up no claim through a clear it was refused", async () => {
+      await writeMeta({claim: "claim-of-the-owner"});
+
+      await Durability.clear();
+
+      await writeMeta({actorUserId: "u2"});
+
+      await Durability.persistFrame(
+        [taskRecord("t2", "Not theirs")],
+        "place-2",
+      );
+
+      assert.equal(await readMeta("cursor"), "place-1");
+    });
+
+    it("opens again once this tab claims it", async () => {
+      await Durability.persistFrame([], "place-2");
+      await Durability.claim("u2", replica);
+
+      await Durability.persistFrame(
+        [taskRecord("t2", "Theirs now")],
+        "place-3",
+      );
+
+      assert.equal(await readMeta("cursor"), "place-3");
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t2"],
+      );
+    });
+
+    // Transactions run in the order they were created, so the frame started before the claim is
+    // refused and the one after it lands.
+    it("takes a frame started right after this tab's claim", async () => {
+      const refused = Durability.persistFrame(
+        [taskRecord("t2", "Before the claim")],
+        "place-2",
+      );
+
+      const claimed = Durability.claim("u2", replica);
+
+      const taken = Durability.persistFrame(
+        [taskRecord("t3", "After the claim")],
+        "place-3",
+      );
+
+      await Promise.all([refused, claimed, taken]);
+
+      assert.equal(await readMeta("cursor"), "place-3");
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t3"],
+      );
+    });
+  });
+
+  // The frame refused while the actor was away is missing from the store, so a place stored after
+  // it would claim rows that were never written.
+  describe("a tab whose user changed and changed back", () => {
+    beforeEach(async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+      await Durability.replicaWritten();
+
+      LocalDatabase.actorUserId = "u2";
+
+      await Durability.persistFrame(
+        [taskRecord("t2", "The frame refused")],
+        "place-2",
+      );
+
+      LocalDatabase.actorUserId = "u1";
+    });
+
+    it("stores no frame past the one it was refused", async () => {
+      await Durability.persistFrame(
+        [taskRecord("t3", "The frame after it")],
+        "place-3",
+      );
+
+      assert.equal(await readMeta("cursor"), "place-1");
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t1"],
+      );
+    });
+
+    it("stores frames again after a clear", async () => {
+      await Durability.clear();
+
+      await Durability.persistFrame(
+        [taskRecord("t3", "The refill")],
+        "place-3",
+      );
+
+      assert.equal(await readMeta("cursor"), "place-3");
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t3"],
+      );
+    });
+
+    it("stores frames again after a repair", async () => {
+      await Durability.repair([taskRecord("t4", "From memory")], "place-4");
+
+      await Durability.persistFrame(
+        [taskRecord("t5", "The next frame")],
+        "place-5",
+      );
+
+      assert.equal(await readMeta("cursor"), "place-5");
+
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t4", "t5"],
+      );
+    });
+  });
+
+  // A navigation moves the actor while the tab still holds the previous user's rows and place.
+  describe("a tab whose user changed at a navigation", () => {
+    const expectNewUserUntouched = async () => {
+      assert.deepStrictEqual(
+        (await readAll("entities")).map((record) => record.id),
+        ["t2"],
+      );
+
+      assert.equal(await readMeta("cursor"), "place-of-u2");
+      assert.equal(await readMeta("actorUserId"), "u2");
+    };
+
+    beforeEach(async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+      await Durability.replicaWritten();
+
+      // A page load of the new user takes the store and fills it.
+      const {db} = await rawOpen();
+
+      await new Promise((resolve) => {
+        const transaction = db.transaction("entities", "readwrite");
+        const entities = transaction.objectStore("entities");
+
+        entities.clear();
+        entities.put(taskRecord("t2", "The new user's"));
+        transaction.oncomplete = resolve;
+      });
+
+      await writeMeta({
+        actorUserId: "u2",
+        claim: "claim-of-u2",
+        cursor: "place-of-u2",
+      });
+
+      LocalDatabase.actorUserId = "u2";
+    });
+
+    it("does not repair the new user's store with the previous user's rows", async () => {
+      assert.isFalse(
+        await Durability.repair(
+          [taskRecord("t1", "The old user's")],
+          "place-1",
+        ),
+      );
+
+      await expectNewUserUntouched();
+    });
+
+    it("does not clear the new user's store", async () => {
+      await Durability.clear();
+
+      await expectNewUserUntouched();
+    });
+
+    it("stores no frame in the new user's store", async () => {
+      await Durability.persistFrame(
+        [taskRecord("t3", "The old user's")],
+        "place-2",
+      );
+
+      await expectNewUserUntouched();
+    });
+
+    it("does not wipe the new user's store on a storage failure", async () => {
+      // A pair the store cannot hold, so the write fails.
+      Durability.persistReplica({id: () => {}, token: "statement"});
+
+      await Durability.replicaWritten();
+
+      assert.equal(Durability.mode, "memory");
+      await expectNewUserUntouched();
     });
   });
 

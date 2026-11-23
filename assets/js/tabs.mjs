@@ -124,8 +124,8 @@ export default class Tabs {
   // greets the server as the replica of its own it now is, and opening one before the mount would
   // greet it with none of the page's subscriptions (see where the page starts it, in hologram.mjs).
   //
-  // The group can hand the lead to a tab that has not taken it yet - one still starting, or
-  // reading the store again (see #takeStore). It holds the lock, so it is the tab that sends the
+  // The group can hand the lead to a tab that has not taken it yet - one still starting, reading
+  // the store again (see #takeStore), or waiting on the store's answer (see #lead). It holds the lock, so it is the tab that sends the
   // queue, and keeps it with the identity (a tab still starting holds neither yet: the stored
   // queue waits for the next page load, see Durability.detach); but its stream is still a
   // follower's, which the server serves no sync on, so it opens one of its own as a follower
@@ -139,7 +139,7 @@ export default class Tabs {
   // waiting on this tab's place in the group wait for it rather than for a moment.
   static dissolve() {
     const followed = !Tabs.leader;
-    const untaken = Tabs.#leadWhenReady;
+    const untaken = Tabs.#leadWhenReady || Tabs.takingLead;
 
     if (Tabs.name !== null && !Tabs.#ready) {
       SyncStream.syncCursor = null;
@@ -699,7 +699,15 @@ export default class Tabs {
             SyncStream.syncCursor,
           );
         } finally {
-          Tabs.takingLead = false;
+          if (Tabs.#token === token) {
+            Tabs.takingLead = false;
+          }
+        }
+
+        // The tab left this group while the store answered, so the answer is about a lead it no
+        // longer holds, and starting over would throw away what its next group gave it.
+        if (Tabs.#token !== token) {
+          return;
         }
 
         if (placeless) {

@@ -5,6 +5,7 @@ import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Replica from "./replica.mjs";
 import Tabs from "./tabs.mjs";
+import Utils from "./utils.mjs";
 
 // What this browser keeps between page loads, and where it keeps it.
 //
@@ -110,6 +111,15 @@ export default class Durability {
   // The last identity write started, for a send to wait on (see replicaWritten).
   static #replicaWrite = Promise.resolve();
 
+  // The id of the last claim this tab knows of. Every change of owner writes a new one, so a tab
+  // holding an older id knows the store was wiped since, even when it is back under this tab's user
+  // and holds rows this tab never saw. A frame written over them would date them at a place they
+  // are not at.
+  //
+  // Moved only inside a transaction (see #whileOwned), because transactions on one store run in the
+  // order they were created, so a write started after a claim always sees that claim.
+  static #claimId = null;
+
   // The batches this browser has filed above a number, oldest first - what a tab reads before it
   // sends, so that what it ships is the queue as the DATABASE holds it rather than as messages
   // happened to reach it.
@@ -145,9 +155,14 @@ export default class Durability {
 
   // Drops what the SERVER said and keeps what this browser did: the rows go, the place they were
   // dated at goes with them, and the identity, the counter and the clock stay. Called when a
-  // resync replaces the whole pot, and when what is stored cannot be read by this page.
+  // resync replaces the whole pot, and when what is stored cannot be read by this page. Never over
+  // another user's rows.
   static clear() {
-    return Durability.#write([ENTITIES, META], Durability.#wipe);
+    return Durability.#write([ENTITIES, META], (transaction) =>
+      Durability.#whileOwned(transaction, () => Durability.#wipe(transaction), {
+        settlesStore: true,
+      }),
+    );
   }
 
   // `hologram.<layout>.<protocol version>.<model hash>` - a bundle carrying another store layout,
@@ -191,17 +206,25 @@ export default class Durability {
   // The queue stays, as it does through every clear: the previous owner's batches wait there for a
   // page mounted under them.
   static claim(owner, replica) {
+    const claimId = Utils.uuidv7();
+
     Durability.#replicaWrite = Durability.#write(
       [ENTITIES, META],
       (transaction) => {
         const meta = transaction.objectStore(META);
         const stored = meta.get("actorUserId");
+        const storedClaim = meta.get("claim");
 
-        stored.onsuccess = () => {
-          if ((stored.result ?? null) !== owner) {
+        storedClaim.onsuccess = () => {
+          if ((stored.result ?? null) === owner) {
+            Durability.#claimId = storedClaim.result ?? null;
+          } else {
             Durability.#wipe(transaction);
 
             meta.put(owner, "actorUserId");
+            meta.put(claimId, "claim");
+
+            Durability.#claimId = claimId;
           }
 
           Durability.#writePair(transaction, owner, replica);
@@ -342,6 +365,7 @@ export default class Durability {
       return;
     }
 
+    Durability.#claimId = loaded.claim;
     Durability.#loaded = loaded;
     Durability.storedBatches = loaded.queue.length;
   }
@@ -418,26 +442,31 @@ export default class Durability {
   // Not awaited by anything on the write path. The rows are already in memory and already on
   // screen, and what this buys is only whether they are still there after a reload. What waits for
   // it is telling the other tabs (see Tabs.post).
+  //
+  // Only into a store this tab's user owns. The clock goes down either way, since it is what this
+  // browser did rather than anything about the rows.
   static persistFrame(records, cursor) {
     return Durability.#write([ENTITIES, META], (transaction) => {
       const entities = transaction.objectStore(ENTITIES);
       const meta = transaction.objectStore(META);
 
-      for (const record of records) {
-        if (record.row === null) {
-          entities.delete([record.type, record.id]);
-        } else {
-          entities.put(record);
+      Durability.#whileOwned(transaction, () => {
+        for (const record of records) {
+          if (record.row === null) {
+            entities.delete([record.type, record.id]);
+          } else {
+            entities.put(record);
+          }
         }
-      }
 
-      // A frame sent mid-fill names no place, because a client holding part of a pot could not
-      // honour the claim one makes. The place already stored still describes the rows that were
-      // there before this fill started, so it is left standing rather than cleared - which is what
-      // lets a client cut off mid-fill come back asking for what it can still honour.
-      if (cursor !== null) {
-        meta.put(cursor, "cursor");
-      }
+        // A frame sent mid-fill names no place, because a client holding part of a pot could not
+        // honour the claim one makes. The place already stored still describes the rows that were
+        // there before this fill started, so it is left standing rather than cleared - which is
+        // what lets a client cut off mid-fill come back asking for what it can still honour.
+        if (cursor !== null) {
+          meta.put(cursor, "cursor");
+        }
+      });
 
       meta.put(Clock.last(), "clock");
     });
@@ -629,36 +658,48 @@ export default class Durability {
   // So a read that fails is a write that fails, and stops the storage the way any failed write
   // does (see #fail) - rather than skipping the repair, which would leave the store naming another
   // place than this tab with nothing to say so.
+  //
+  // Over a store another user owns it writes nothing and answers false. What that store holds or
+  // lacks says nothing about this tab's rows, so the tab keeps its place and works from memory.
+  // Over this user's store it takes up the current claim, since it leaves the store matching this
+  // tab, or starts over from it.
   static async repair(records, cursor) {
     let placeless = false;
 
     await Durability.#write([ENTITIES, META], (transaction) => {
       const entities = transaction.objectStore(ENTITIES);
       const meta = transaction.objectStore(META);
-      const stored = meta.get("cursor");
 
-      stored.onsuccess = () => {
-        const place = stored.result ?? null;
+      Durability.#whileOwned(
+        transaction,
+        () => {
+          const stored = meta.get("cursor");
 
-        if (place === null) {
-          placeless = true;
+          stored.onsuccess = () => {
+            const place = stored.result ?? null;
 
-          return;
-        }
+            if (place === null) {
+              placeless = true;
 
-        if (place === cursor) {
-          return;
-        }
+              return;
+            }
 
-        entities.clear();
+            if (place === cursor) {
+              return;
+            }
 
-        for (const record of records) {
-          entities.put(record);
-        }
+            entities.clear();
 
-        meta.put(cursor, "cursor");
-        meta.put(Clock.last(), "clock");
-      };
+            for (const record of records) {
+              entities.put(record);
+            }
+
+            meta.put(cursor, "cursor");
+            meta.put(Clock.last(), "clock");
+          };
+        },
+        {settlesStore: true},
+      );
     });
 
     return placeless;
@@ -823,6 +864,7 @@ export default class Durability {
     Durability.#loaded = null;
     Durability.#persistenceAsked = false;
     Durability.#replicaWrite = Promise.resolve();
+    Durability.#claimId = null;
   }
 
   static #close() {
@@ -847,7 +889,8 @@ export default class Durability {
   //
   // The rows go because a base missing one frame's is worse than no base at all - the next startup
   // cannot tell the two apart, and would resume from a place claiming rows that were never
-  // written. What this browser DID is left alone, as everywhere else: a number reused and a clock
+  // written. Only this tab's user's rows: a store another user took holds nothing this failure made
+  // untrue. What this browser DID is left alone, as everywhere else: a number reused and a clock
   // restarted low cost more than a re-download.
   //
   // This user's identity goes too, and this is the ONE place it does. It survives a resync, a
@@ -885,7 +928,8 @@ export default class Durability {
         "readwrite",
       );
 
-      Durability.#wipe(transaction);
+      Durability.#whileOwned(transaction, () => Durability.#wipe(transaction));
+
       transaction
         .objectStore(META)
         .delete(Durability.#pairKey(Durability.#pairOwner()));
@@ -981,6 +1025,7 @@ export default class Durability {
 
     const [
       actorUserId,
+      claim,
       clock,
       cursor,
       queued,
@@ -990,6 +1035,7 @@ export default class Durability {
       seq,
     ] = await Promise.all([
       Durability.#request(meta.get("actorUserId")),
+      Durability.#request(meta.get("claim")),
       Durability.#request(meta.get("clock")),
       Durability.#request(meta.get("cursor")),
       Durability.#request(queue.getAll()),
@@ -1001,6 +1047,7 @@ export default class Durability {
 
     return {
       actorUserId: actorUserId ?? null,
+      claim: claim ?? null,
       clock: clock ?? 0,
       cursor: cursor ?? null,
       queue: queued ?? [],
@@ -1084,6 +1131,47 @@ export default class Durability {
     db.createObjectStore(ENTITIES, {keyPath: ["type", "id"]});
     db.createObjectStore(META);
     db.createObjectStore(QUEUE, {keyPath: "seq"});
+  }
+
+  // Runs the given write only if the store is this tab's user's and has not been claimed since this
+  // tab last knew it, both read inside the write's own transaction, so another tab's claim lands
+  // wholly before it or wholly after it.
+  //
+  // A write that leaves the whole store matching this tab settles it, and takes up a newer claim of
+  // the same user: a follower can have read the store before its leader claimed it.
+  //
+  // The tab's user has to be the one its document took the store up for too. A navigation can move
+  // the actor to another user while the tab still holds the previous user's rows and place, and
+  // those must not land under the new user's name.
+  //
+  // A tab refused here goes on from memory. Its queue and its pair stay writable, since both are
+  // kept per user.
+  static #whileOwned(transaction, write, {settlesStore = false} = {}) {
+    const owner = LocalDatabase.actorUserId ?? null;
+    const meta = transaction.objectStore(META);
+    const storedOwner = meta.get("actorUserId");
+    const storedClaim = meta.get("claim");
+
+    storedClaim.onsuccess = () => {
+      const claim = storedClaim.result ?? null;
+
+      if (
+        Durability.#pairOwner() !== owner ||
+        (storedOwner.result ?? null) !== owner ||
+        (claim !== Durability.#claimId && !settlesStore)
+      ) {
+        // What was refused is missing from the store, so no later frame may date the rows at a
+        // place past it, even once the owner matches again. No stored id equals undefined, so only
+        // a write that settles the whole store, or this tab's own claim, opens it again.
+        Durability.#claimId = undefined;
+
+        return;
+      }
+
+      Durability.#claimId = claim;
+
+      write();
+    };
   }
 
   // What is stored ON BEHALF OF THE SERVER, gone: the rows and the place they are dated at. Shared

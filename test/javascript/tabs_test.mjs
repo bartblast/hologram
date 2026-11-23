@@ -730,6 +730,77 @@ describe("Tabs", () => {
       assert.isTrue(flushing.calledOnce);
     });
 
+    it("does not start over for a group it left while the store answered", async () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      let repaired;
+
+      repairing.returns(new Promise((resolve) => (repaired = resolve)));
+      SyncStream.syncCursor = "place-1";
+
+      await succeed(nextGroup());
+
+      Tabs.leave();
+
+      repaired(true);
+      await waitForEventLoop();
+
+      assert.equal(SyncStream.syncCursor, "place-1");
+      assert.isFalse(clearing.called);
+      assert.isFalse(reconnecting.called);
+      assert.isFalse(Tabs.postState.called);
+      assert.isFalse(posting.called);
+    });
+
+    // The lead that would have replaced its follower's stream stops when it finds the group gone.
+    it("opens a stream of its own when the group ends while the store answers", async () => {
+      let repaired;
+
+      repairing.returns(new Promise((resolve) => (repaired = resolve)));
+      SyncStream.syncCursor = "place-1";
+
+      await succeed(nextGroup());
+
+      assert.isTrue(Tabs.takingLead);
+
+      Tabs.dissolve();
+
+      assert.isTrue(reconnecting.calledOnce);
+
+      repaired(false);
+      await waitForEventLoop();
+
+      assert.isTrue(reconnecting.calledOnce);
+    });
+
+    it("leaves the next group's lead being taken when an older one answers", async () => {
+      const answers = [];
+
+      repairing.callsFake(
+        () => new Promise((resolve) => answers.push(resolve)),
+      );
+
+      SyncStream.syncCursor = "place-1";
+
+      await succeed(nextGroup());
+
+      Tabs.leave();
+
+      await succeed(nextGroup());
+
+      assert.isTrue(Tabs.takingLead);
+
+      answers[0](false);
+      await waitForEventLoop();
+
+      assert.isTrue(Tabs.takingLead);
+
+      answers[1](false);
+      await waitForEventLoop();
+
+      assert.isFalse(Tabs.takingLead);
+    });
+
     it("settles its lead even when the check fails", async () => {
       const persisting = sinon.stub(Durability, "persistReplica").resolves();
 
