@@ -1437,6 +1437,62 @@ defmodule Hologram.Entity.ModelTest do
       assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
     end
 
+    test "raises when a required to-one is added to a type the file didn't create" do
+      ops = [
+        %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :owner,
+          type: MyApp.Task,
+          opts: [],
+          line: 3
+        }
+      ]
+
+      expected_msg =
+        "required to-one relationships added without a value for existing rows - " <>
+          ":owner on MyApp.Task - declare backfill: <id> for a one-time value, or " <>
+          "optional: true to leave them empty"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(task_model(%{}), ops) end
+    end
+
+    test "accepts a to-one that is optional, carries a backfill or is a to-many" do
+      for {type, opts} <- [
+            {MyApp.Task, [optional: true]},
+            {MyApp.Task, [backfill: "018f0000-0000-7000-8000-000000000000"]},
+            {[MyApp.Task], []}
+          ] do
+        op = %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :owner,
+          type: type,
+          opts: opts,
+          line: 3
+        }
+
+        assert %{entities: %{MyApp.Task => %{relationships: [{:owner, ^type, _opts}]}}} =
+                 fold(task_model(%{}), [op])
+      end
+    end
+
+    test "accepts a required to-one on a type the file creates" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Job, line: 2},
+        %{
+          op: :add_relationship,
+          entity: MyApp.Job,
+          name: :task,
+          type: MyApp.Task,
+          opts: [],
+          line: 3
+        }
+      ]
+
+      assert %{entities: %{MyApp.Job => _entry}} = fold(task_model(%{}), ops)
+    end
+
     test "raises when a required attribute is added with a default carrying no value" do
       ops = [
         %{

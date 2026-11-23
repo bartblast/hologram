@@ -322,7 +322,9 @@ defmodule Hologram.Migration.Diff do
       }
     end
 
-    class_plan(add_ops, change_ops, delete_ops, deleted, added, question_fun)
+    add_ops
+    |> class_plan(change_ops, delete_ops, deleted, added, question_fun)
+    |> withhold_unfilled_adds(entity_type)
   end
 
   # A created entity type whose attribute name set equals a deleted one's looks like a
@@ -589,6 +591,10 @@ defmodule Hologram.Migration.Diff do
     op.opts[:optional] != true and not Keyword.has_key?(op.opts, :default)
   end
 
+  defp unfilled_add?(%{op: :add_relationship, type: type} = op) when not is_list(type) do
+    op.opts[:optional] != true
+  end
+
   defp unfilled_add?(_op), do: false
 
   defp withhold_key_ops(%{kind: kind} = question, delete_ops, add_ops)
@@ -607,7 +613,7 @@ defmodule Hologram.Migration.Diff do
 
   defp withhold_key_ops(question, _delete_ops, _add_ops), do: {question, []}
 
-  # An attribute added to an entity the history already carries meets rows that predate
+  # An attribute or to-one added to an entity the history already carries meets rows that predate
   # it, and a required one leaves them without a value. Which value is the author's to
   # know - the model cannot hold it, and the database it will meet is not the one being
   # generated against - so the op is withheld and asked about, the same way an ambiguous
@@ -622,7 +628,7 @@ defmodule Hologram.Migration.Diff do
         kind: :fill,
         entity: entity_type,
         attributes: Enum.map(unfilled, & &1.name),
-        members: Enum.map(unfilled, &{&1.name, &1.type, &1.opts}),
+        members: Enum.map(unfilled, &{&1.op, &1.name, &1.type, &1.opts}),
         withheld_ops: unfilled
       }
 

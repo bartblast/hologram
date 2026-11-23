@@ -88,6 +88,16 @@ defmodule Hologram.Migration do
       set's rows, skipping nil, a tie going to the smallest in `sort` order, and nil when no
       row holds a value
 
+  A to-one relationship takes the id of a row of its target, as a constant or an expression:
+
+      add_relationship :owner, Offgrid.User, backfill: ^@admin_id
+      add_relationship :owner, Offgrid.User, backfill: coalesce(creator_id, ^@admin_id)
+      add_relationship :owner, Offgrid.User, backfill: trip.owner_id
+
+  An id no row of the target holds is refused, naming the id and the type. Adding a required
+  to-one to a type that already exists needs a `backfill:` or `optional: true`, since a
+  relationship takes no `default:`.
+
   Every backfill reads the rows as the ops above it left them, so deleting a field it reads
   goes below it. Types are strict: the expression's type must be the member's. A required
   member an expression leaves nil refuses with the count of rows, the filled values are

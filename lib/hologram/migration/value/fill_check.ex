@@ -100,9 +100,21 @@ defmodule Hologram.Migration.Value.FillCheck do
         ~s|WHERE "$r0".#{column} IS NULL RETURNING "$r0"."id") | <>
         ~s|INSERT INTO #{@filled_ids} SELECT "id" FROM "$filled"|
 
-    {:ok, _result} = Connection.query(statement, params)
+    query_fill!(op, statement, params)
+  end
 
-    :ok
+  @doc """
+  Runs the given statement writing or validating the given op's filled column, and returns :ok.
+
+  Raises naming the id and the type when a filled to-one holds an id no row of its target has.
+  """
+  @spec query_fill!(%{atom => any}, String.t(), list) :: :ok
+  def query_fill!(op, statement, params \\ []) do
+    case Connection.query(statement, params) do
+      {:ok, _result} -> :ok
+      {:error, %{postgres: %{code: :foreign_key_violation} = error}} -> raise_missing!(op, error)
+      {:error, error} -> raise error
+    end
   end
 
   defp byte_reasons(value, max_bytes)
@@ -157,6 +169,18 @@ defmodule Hologram.Migration.Value.FillCheck do
     raise ~s(the backfill of column "#{op.column}" on table "#{op.table}" writes values ) <>
             "breaking the attribute's declared rules: #{rules} - change the expression or " <>
             "the rule"
+  end
+
+  @spec raise_missing!(%{atom => any}, %{atom => any}) :: no_return
+  defp raise_missing!(op, error) do
+    id =
+      case Regex.run(~r/\)=\(([^)]+)\)/, error[:detail] || "") do
+        [_detail, id] -> id
+        nil -> "an id"
+      end
+
+    raise ~s(the backfill of column "#{op.column}" on table "#{op.table}" writes #{id}, which ) <>
+            "no #{inspect(op.fill_target)} holds - change the backfill or add that row"
   end
 
   # The id comes back under another name so that ORDER BY reads the uuid column, through its

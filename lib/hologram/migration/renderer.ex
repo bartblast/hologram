@@ -66,8 +66,6 @@ defmodule Hologram.Migration.Renderer do
     # that tightens in a later release must not stop a database that already applied the file.
     Check.validate_ops!(logical_ops, pre_model)
 
-    Enum.each(logical_ops, &validate_backfill_applies!/1)
-
     chunks =
       logical_ops
       |> Check.put_byte_bounds(pre_model)
@@ -84,16 +82,19 @@ defmodule Hologram.Migration.Renderer do
 
   # A backfill rides its logical op, never the model - the physical column it fills is
   # found by the name the mapper derives for that attribute.
-  defp attach_backfills(physical_ops, logical_ops, next_model) do
+  defp attach_backfills(physical_ops, logical_ops, next_model, next_mapping) do
     backfills =
-      for %{op: kind} = op <- logical_ops,
-          kind in [:add_attribute, :change_attribute],
+      for {op, index} <- Enum.with_index(logical_ops),
           {:ok, value} <- [Value.fetch_backfill(op)],
+          not deleted_later?(op, Enum.drop(logical_ops, index + 1)),
+          %{} = entry <- [next_mapping[op.entity]],
+          %{} = column <- [member_column(entry, op)],
           into: %{} do
         type = filled_type(op, next_model)
         normalized = Value.normalize_constant(value, type)
 
-        {{Mapper.table_name(op.entity), Atom.to_string(op.name)}, Codec.encode(normalized, type)}
+        {{entry.table, column.name},
+         {Codec.encode(normalized, type), fill_target(op, next_model)}}
       end
 
     Enum.map(physical_ops, &put_backfill(&1, backfills))
@@ -166,11 +167,16 @@ defmodule Hologram.Migration.Renderer do
     {_entity_type, entity_mapping} =
       Enum.find(mapping, fn {_entity_type, entry} -> entry.table == op.table end)
 
-    {:attribute, name} = Enum.find(entity_mapping.columns, &(&1.name == op.column)).source
+    # A relationship's column holds an id, which has no companions.
+    case Enum.find(entity_mapping.columns, &(&1.name == op.column)).source do
+      {:attribute, name} ->
+        for %{source: {kind, ^name}} = column <- entity_mapping.columns,
+            kind in [:search_key, :sort_key],
+            do: {kind, column.name}
 
-    for %{source: {kind, ^name}} = column <- entity_mapping.columns,
-        kind in [:search_key, :sort_key],
-        do: {kind, column.name}
+      {:relationship, _name} ->
+        []
+    end
   end
 
   # The renamed member's derivations live under its new name afterwards, so the pairing
@@ -205,28 +211,65 @@ defmodule Hologram.Migration.Renderer do
 
   defp corresponding_source(source, _entity_type, _op), do: source
 
-  defp computed?(%{op: :add_attribute, opts: opts}), do: match?(%Value{}, opts[:backfill])
+  defp computed?(%{op: kind, opts: opts}) when kind in [:add_attribute, :add_relationship] do
+    match?(%Value{}, opts[:backfill])
+  end
 
-  defp computed?(%{op: :change_attribute, changes: changes}) do
+  defp computed?(%{op: kind, changes: changes})
+       when kind in [:change_attribute, :change_relationship] do
     match?(%Value{}, changes[:backfill])
   end
 
   defp computed?(_op), do: false
 
+  # A member added again under the name is another one, which the deleted add's backfill mustn't
+  # reach.
+  defp deleted_later?(%{entity: entity, name: name, op: kind}, later_ops) do
+    delete =
+      if kind in [:add_attribute, :change_attribute],
+        do: :delete_attribute,
+        else: :delete_relationship
+
+    Enum.any?(later_ops, &(&1.op == delete and &1.entity == entity and &1.name == name))
+  end
+
   # A tightening's backfill, even a constant, fills the rows as the ops above it left them, so it
   # never merges with a type change of the same attribute in the op next to it.
-  defp fills_apart?(%{op: :change_attribute, changes: changes}) do
-    Keyword.has_key?(changes, :backfill)
+  defp fills_apart?(%{op: kind, changes: changes})
+       when kind in [:change_attribute, :change_relationship] do
+    carries_backfill?(changes)
   end
 
   defp fills_apart?(op), do: computed?(op)
 
+  # The type a to-one's id must exist in, nil for an attribute.
+  defp fill_target(%{op: kind} = op, next_model)
+       when kind in [:add_relationship, :change_relationship] do
+    {:relationship, {_name, target, _opts}} = Value.fill_member(op, next_model)
+
+    target
+  end
+
+  defp fill_target(_op, _next_model), do: nil
+
   defp filled_type(%{op: :add_attribute, type: type}, _next_model), do: type
+
+  defp filled_type(%{op: kind}, _next_model)
+       when kind in [:add_relationship, :change_relationship] do
+    :uuid
+  end
 
   defp filled_type(op, next_model) do
     {_name, type, _opts} = List.keyfind!(next_model.entities[op.entity].attributes, op.name, 0)
 
     type
+  end
+
+  defp member_column(entry, %{op: kind, name: name}) do
+    source_kind =
+      if kind in [:add_attribute, :change_attribute], do: :attribute, else: :relationship
+
+    Enum.find(entry.columns, &(&1.source == {source_kind, name}))
   end
 
   defp entity_after(entity_type, %{op: :rename_entity, from: entity_type} = op), do: op.to
@@ -458,14 +501,26 @@ defmodule Hologram.Migration.Renderer do
 
   defp put_backfill(%{op: :add_column} = op, backfills) do
     case Map.fetch(backfills, {op.table, op.column}) do
-      {:ok, value} -> Map.put(op, :backfill, value)
+      {:ok, {value, _target}} -> Map.put(op, :backfill, value)
       :error -> op
     end
   end
 
   defp put_backfill(%{op: :alter_column} = op, backfills) do
     case Map.fetch(backfills, {op.table, op.column}) do
-      {:ok, value} -> Map.merge(op, %{fill: value, fill_source: :backfill})
+      {:ok, {value, target}} ->
+        Map.merge(op, %{fill: value, fill_source: :backfill, fill_target: target})
+
+      :error ->
+        op
+    end
+  end
+
+  # The constant is already in the column when the key is added, so the add is what meets an id
+  # no row holds.
+  defp put_backfill(%{op: :add_foreign_key} = op, backfills) do
+    case Map.fetch(backfills, {op.table, op.column}) do
+      {:ok, {_value, target}} -> Map.put(op, :fill_target, target)
       :error -> op
     end
   end
@@ -625,18 +680,24 @@ defmodule Hologram.Migration.Renderer do
   end
 
   defp render_chunk([%{op: :change_relationship} = first | _rest] = chunk, model) do
-    if retarget?(first) do
-      Enum.reduce(chunk, {[], model}, fn op, {acc, current_model} ->
-        next_model = Model.fold(current_model, [op])
+    cond do
+      retarget?(first) ->
+        Enum.reduce(chunk, {[], model}, fn op, {acc, current_model} ->
+          next_model = Model.fold(current_model, [op])
 
-        {acc ++ retarget_ops_for(op, current_model, next_model), next_model}
-      end)
-    else
-      render_plain_chunk(chunk, model)
+          {acc ++ retarget_ops_for(op, current_model, next_model), next_model}
+        end)
+
+      computed?(first) ->
+        render_computed_tightening(first, model)
+
+      true ->
+        render_plain_chunk(chunk, model)
     end
   end
 
-  defp render_chunk([%{op: :add_attribute} = op] = chunk, model) do
+  defp render_chunk([%{op: kind} = op] = chunk, model)
+       when kind in [:add_attribute, :add_relationship] do
     if computed?(op), do: render_computed_add(op, model), else: render_plain_chunk(chunk, model)
   end
 
@@ -673,7 +734,7 @@ defmodule Hologram.Migration.Renderer do
     next_model = Model.fold(model, [op], validate_filled_adds: false)
     next_mapping = Mapper.derive_from_model!(next_model)
     entry = Map.fetch!(next_mapping, op.entity)
-    column = Enum.find(entry.columns, &(&1.source == {:attribute, op.name}))
+    column = member_column(entry, op)
 
     diff_ops =
       model
@@ -724,7 +785,7 @@ defmodule Hologram.Migration.Renderer do
     next_mapping = Mapper.derive_from_model!(next_model)
     entry = Map.fetch!(next_mapping, op.entity)
     table = entry.table
-    column = Enum.find(entry.columns, &(&1.source == {:attribute, op.name})).name
+    column = member_column(entry, op).name
 
     fill_op =
       op
@@ -766,6 +827,7 @@ defmodule Hologram.Migration.Renderer do
       companions: [],
       entity: op.entity,
       enum_uses: SQL.enum_uses(value, op.entity, mapping, target),
+      fill_target: fill_target(op, next_model),
       line: op.line,
       mapping: mapping,
       max_bytes: Map.get(op, :max_bytes),
@@ -793,7 +855,7 @@ defmodule Hologram.Migration.Renderer do
       pre_term
       |> Schema.diff(cleared_term, renames: false)
       |> Enum.concat(Schema.diff(cleared_term, Schema.from_mapping(next_mapping), renames: false))
-      |> attach_backfills(chunk, next_model)
+      |> attach_backfills(chunk, next_model, next_mapping)
       |> Enum.map(&put_declared_default(&1, next_mapping))
       |> prepend_grant_deletes(chunk)
 
@@ -1165,25 +1227,6 @@ defmodule Hologram.Migration.Renderer do
   defp relationship_target([target]), do: target
 
   defp relationship_target(target), do: target
-
-  # A backfill the ops below can't apply is refused rather than dropped without a word.
-  defp validate_backfill_applies!(%{op: :add_relationship, opts: opts} = op) do
-    if carries_backfill?(opts), do: raise_unapplied_backfill!(op)
-  end
-
-  defp validate_backfill_applies!(%{op: :change_relationship, changes: changes} = op) do
-    if carries_backfill?(changes), do: raise_unapplied_backfill!(op)
-  end
-
-  defp validate_backfill_applies!(_op), do: :ok
-
-  @spec raise_unapplied_backfill!(%{atom => any}) :: no_return
-  defp raise_unapplied_backfill!(op) do
-    raise Hologram.CompileError,
-      message:
-        "#{op.op} #{inspect(op.name)} of #{inspect(op.entity)} on line #{op.line} carries a " <>
-          "backfill that can't be applied yet - only one on an attribute can for now"
-  end
 
   @spec raise_apart!(list(%{atom => any}), String.t()) :: no_return
   defp raise_apart!(cuts, reason) do

@@ -288,7 +288,7 @@ defmodule Hologram.Migration.DiffTest do
                    kind: :fill,
                    entity: MyApp.Task,
                    attributes: [:title],
-                   members: [{:title, :string, []}],
+                   members: [{:add_attribute, :title, :string, []}],
                    withheld_ops: [
                      %{
                        op: :add_attribute,
@@ -418,6 +418,46 @@ defmodule Hologram.Migration.DiffTest do
                ],
                questions: []
              }
+    end
+
+    test "withholds a required to-one added to a surviving entity type into a question" do
+      replayed = model(%{MyApp.Task => %{}, MyApp.User => %{}})
+
+      current =
+        model(%{MyApp.Task => %{relationships: [{:owner, MyApp.User, []}]}, MyApp.User => %{}})
+
+      op = %{op: :add_relationship, entity: MyApp.Task, name: :owner, type: MyApp.User, opts: []}
+
+      assert diff(replayed, current) == %{
+               ops: [],
+               questions: [
+                 %{
+                   kind: :fill,
+                   entity: MyApp.Task,
+                   attributes: [:owner],
+                   members: [{:add_relationship, :owner, MyApp.User, []}],
+                   withheld_ops: [op]
+                 }
+               ]
+             }
+    end
+
+    test "emits an optional to-one and a to-many without a question" do
+      replayed = model(%{MyApp.Task => %{}, MyApp.User => %{}})
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            relationships: [
+              {:owner, MyApp.User, [optional: true]},
+              {:watchers, [MyApp.User], []}
+            ]
+          },
+          MyApp.User => %{}
+        })
+
+      assert %{ops: [%{op: :add_relationship}, %{op: :add_relationship}], questions: []} =
+               diff(replayed, current)
     end
 
     test "restates a default equal in value when an attribute turns float" do
@@ -717,7 +757,7 @@ defmodule Hologram.Migration.DiffTest do
         model(%{
           MyApp.Task => %{
             attributes: [{:slug, :string, []}],
-            relationships: [{:owner, MyApp.User, []}],
+            relationships: [{:owner, MyApp.User, [optional: true]}],
             uniques: [[:owner, :slug]]
           }
         })

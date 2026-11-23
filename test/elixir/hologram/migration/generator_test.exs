@@ -649,6 +649,27 @@ defmodule Hologram.Migration.GeneratorTest do
       assert rendered =~ "resolve! :user_entity, from: MyApp.User, to: nil"
     end
 
+    test "renders a fill question for a to-one, which takes no default" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :fill,
+            entity: MyApp.Task,
+            attributes: [:owner],
+            members: [{:add_relationship, :owner, MyApp.User, []}],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      rendered = render(plan, @module)
+
+      assert rendered =~ "#   add_relationship :owner, MyApp.User, backfill: <id>"
+      assert rendered =~ "#   add_relationship :owner, MyApp.User, optional: true"
+      refute rendered =~ "default:"
+    end
+
     test "renders a fill question with the op spelled out three ways" do
       plan = %{
         ops: [],
@@ -657,7 +678,7 @@ defmodule Hologram.Migration.GeneratorTest do
             kind: :fill,
             entity: MyApp.Task,
             attributes: [:title],
-            members: [{:title, :string, []}],
+            members: [{:add_attribute, :title, :string, []}],
             withheld_ops: []
           }
         ]
@@ -942,7 +963,7 @@ defmodule Hologram.Migration.GeneratorTest do
             kind: :fill,
             entity: MyApp.Task,
             attributes: [:owner],
-            members: [{:owner, :string, []}],
+            members: [{:add_attribute, :owner, :string, []}],
             withheld_ops: []
           }
         ]

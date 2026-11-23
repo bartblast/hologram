@@ -641,6 +641,13 @@ defmodule Hologram.Migrator do
     execute_statements(DDL.statements(op))
   end
 
+  # Validating the key is what meets a constant backfill's id when no row of the target holds it.
+  defp apply_op(%{op: :add_foreign_key, fill_target: _target} = op, _later_ops) do
+    op
+    |> DDL.statements()
+    |> Enum.each(&FillCheck.query_fill!(op, &1))
+  end
+
   defp apply_op(%{op: :fill_companions} = op, _later_ops) do
     SchemaReconciler.backfill_companions!(op.columns, op.mapping)
   end
@@ -672,7 +679,7 @@ defmodule Hologram.Migrator do
     column = Mapper.quote_identifier(op.column)
     statement = ~s|UPDATE #{table} AS "$r0" SET #{column} = #{fragment}|
 
-    {:ok, _result} = Connection.query(statement, params)
+    FillCheck.query_fill!(op, statement, params)
 
     if op.required, do: check_filled!(op)
 
@@ -1219,7 +1226,7 @@ defmodule Hologram.Migrator do
     column = Mapper.quote_identifier(op.column)
     statement = "UPDATE #{table} SET #{set_sql} WHERE #{column} IS NULL"
 
-    {:ok, _result} = Connection.query(statement, Enum.map(assignments, &elem(&1, 1)))
+    FillCheck.query_fill!(op, statement, Enum.map(assignments, &elem(&1, 1)))
   end
 
   # One page of the rows a fill of NULLs wrote, as [id, value] lists: their sort and search keys,

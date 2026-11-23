@@ -288,12 +288,11 @@ defmodule Hologram.Migration.RefusalTest do
       assert_refused(scratch, create, first_model, refused, expected_msg)
     end
 
-    # A relationship declares no default, so the rows refusal is all that stands between the
-    # add and a NOT NULL column over rows without a value - checked where the add sits, under
-    # the name the rename takes away afterwards, and not satisfied by the attribute that takes
-    # the name over and declares a default of its own.
-    test "refuses a required relationship added to a populated table before the same file renames it",
-         %{create: create, first_model: first_model, scratch: scratch} do
+    # A relationship declares no default, so it needs a backfill or optional: true - asked of the
+    # add where it sits, under the name the rename takes away afterwards, and not satisfied by
+    # the attribute that takes the name over and declares a default of its own.
+    test "refuses a required relationship added before the same file renames it",
+         %{first_model: first_model, scratch: scratch} do
       refused =
         migration("20260813142237", [
           %{op: :create_entity, entity: MyApp.User, line: 3},
@@ -317,11 +316,15 @@ defmodule Hologram.Migration.RefusalTest do
         ])
 
       expected_msg =
-        ~s(cannot add required column "author_id" to table "my_app_task" - ) <>
-          "2 existing rows would have no value - " <>
-          "declare default: <value>, make the attribute optional: true, or clear the rows"
+        "required to-one relationships added without a value for existing rows - " <>
+          ":author on MyApp.Task - declare backfill: <id> for a one-time value, or " <>
+          "optional: true to leave them empty"
 
-      assert_refused(scratch, create, first_model, refused, expected_msg)
+      route(scratch, fn ->
+        assert_error Hologram.CompileError, expected_msg, fn ->
+          Model.fold(first_model, refused.ops)
+        end
+      end)
     end
 
     # The third row repeats the first one's amount and status under a title of its own, so

@@ -1135,10 +1135,11 @@ defmodule Hologram.Entity.Model do
   defp validate_filled_adds!(ops) do
     {unfilled, _created_types} =
       Enum.reduce(ops, {[], MapSet.new()}, fn
-        %{op: :add_attribute} = op, {unfilled, created_types} ->
+        %{op: kind} = op, {unfilled, created_types}
+        when kind in [:add_attribute, :add_relationship] ->
           if MapSet.member?(created_types, op.entity) or filled?(op),
             do: {unfilled, created_types},
-            else: {["#{inspect(op.name)} on #{inspect(op.entity)}" | unfilled], created_types}
+            else: {[op | unfilled], created_types}
 
         %{op: :create_entity, entity: entity_type}, {unfilled, created_types} ->
           {unfilled, MapSet.put(created_types, entity_type)}
@@ -1153,19 +1154,43 @@ defmodule Hologram.Entity.Model do
           acc
       end)
 
-    if unfilled != [] do
+    {relationships, attributes} = Enum.split_with(unfilled, &(&1.op == :add_relationship))
+
+    if attributes != [] do
       raise Hologram.CompileError,
         message:
           "required attributes added without a value for existing rows - " <>
-            "#{Enum.join(Enum.sort(unfilled), ", ")} - declare backfill: <value> for a " <>
+            "#{unfilled_names(attributes)} - declare backfill: <value> for a " <>
             "one-time value, default: <value> to give every row one, or optional: true " <>
             "to leave them empty"
     end
+
+    if relationships != [] do
+      raise Hologram.CompileError,
+        message:
+          "required to-one relationships added without a value for existing rows - " <>
+            "#{unfilled_names(relationships)} - declare backfill: <id> for a one-time value, " <>
+            "or optional: true to leave them empty"
+    end
+  end
+
+  # A to-many stores no column on the row, so existing rows simply hold none.
+  defp filled?(%{op: :add_relationship, type: type}) when is_list(type), do: true
+
+  defp filled?(%{op: :add_relationship} = op) do
+    op.opts[:optional] == true or not is_nil(op.opts[:backfill])
   end
 
   defp filled?(op) do
     op.opts[:optional] == true or not is_nil(op.opts[:default]) or
       not is_nil(op.opts[:backfill])
+  end
+
+  defp unfilled_names(ops) do
+    ops
+    |> Enum.map(&"#{inspect(&1.name)} on #{inspect(&1.entity)}")
+    |> Enum.sort()
+    |> Enum.join(", ")
   end
 
   defp rename_created(created_types, op) do

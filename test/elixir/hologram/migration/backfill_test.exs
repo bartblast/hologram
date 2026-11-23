@@ -1355,6 +1355,362 @@ defmodule Hologram.Migration.BackfillTest do
     end
   end
 
+  describe "run/3, a backfill on a to-one relationship" do
+    @missing_id "018f0000-0000-7000-8000-00000000dead"
+
+    setup do
+      attribute = fn entity, name, line ->
+        %{
+          op: :add_attribute,
+          entity: entity,
+          name: name,
+          type: :string,
+          opts: [optional: true],
+          line: line
+        }
+      end
+
+      relationship = fn entity, name, type, line ->
+        %{
+          op: :add_relationship,
+          entity: entity,
+          name: name,
+          type: type,
+          opts: [optional: true],
+          line: line
+        }
+      end
+
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.User, line: 2},
+          %{op: :create_entity, entity: MyApp.Tag, line: 3},
+          relationship.(MyApp.Tag, :owner, MyApp.User, 4),
+          %{op: :create_entity, entity: MyApp.Task, line: 5},
+          attribute.(MyApp.Task, :code, 6),
+          relationship.(MyApp.Task, :creator, MyApp.User, 7),
+          relationship.(MyApp.Task, :reviewer, MyApp.User, 8),
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :tags,
+            type: [MyApp.Tag],
+            opts: [],
+            line: 9
+          },
+          %{op: :create_entity, entity: MyApp.Stop, line: 10},
+          attribute.(MyApp.Stop, :code, 11),
+          relationship.(MyApp.Stop, :task, MyApp.Task, 12)
+        ])
+
+      [create: create, first_model: Model.fold(Model.empty(), create.ops)]
+    end
+
+    defp add_to_one(entity \\ MyApp.Task, backfill, opts \\ []) do
+      %{
+        op: :add_relationship,
+        entity: entity,
+        name: :owner,
+        type: MyApp.User,
+        opts: Keyword.put(opts, :backfill, backfill),
+        line: 3
+      }
+    end
+
+    defp tighten_reviewer(backfill) do
+      %{
+        op: :change_relationship,
+        entity: MyApp.Task,
+        name: :reviewer,
+        changes: [optional: false, backfill: backfill],
+        line: 3
+      }
+    end
+
+    defp user_id do
+      {:ok, %{rows: [[id]]}} =
+        Connection.query(
+          ~s|INSERT INTO "hologram_data"."my_app_user" ("id", "created_at", | <>
+            ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
+            ~s|VALUES (gen_random_uuid(), now(), now(), now(), now(), '{}') RETURNING "id"::text|
+        )
+
+      id
+    end
+
+    defp uuid(text), do: Ecto.UUID.dump!(text)
+
+    defp ids_by_code(table, column) do
+      {:ok, %{rows: rows}} =
+        Connection.query(
+          ~s|SELECT "#{column}"::text FROM "hologram_data"."#{table}" ORDER BY "code"|
+        )
+
+      List.flatten(rows)
+    end
+
+    defp owner_column_required? do
+      column_flags("my_app_task", "owner_id").not_null
+    end
+
+    test "fills a required to-one with a constant id", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        admin = user_id()
+        insert_row("my_app_task", code: "a")
+
+        assert apply_file([add_to_one(admin)], create, first_model) == :ok
+        assert ids_by_code("my_app_task", "owner_id") == [admin]
+        assert owner_column_required?()
+      end)
+    end
+
+    test "fills a to-one from a reference of the row, falling back to a pinned id", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        admin = user_id()
+        creator = user_id()
+
+        insert_row("my_app_task", code: "a", creator_id: uuid(creator))
+        insert_row("my_app_task", code: "b")
+
+        term = {:coalesce, [{:name, [:creator_id]}, {:value, admin}]}
+
+        assert apply_file([add_to_one(%Value{term: term})], create, first_model) == :ok
+        assert ids_by_code("my_app_task", "owner_id") == [creator, admin]
+        assert owner_column_required?()
+      end)
+    end
+
+    test "fills a to-one through a to-one path", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        creator = user_id()
+        task_id = insert_row("my_app_task", code: "a", creator_id: uuid(creator))
+        insert_row("my_app_stop", code: "s", task_id: task_id)
+
+        op = add_to_one(MyApp.Stop, %Value{term: {:name, [:task, :creator_id]}})
+
+        assert apply_file([op], create, first_model) == :ok
+        assert ids_by_code("my_app_stop", "owner_id") == [creator]
+      end)
+    end
+
+    test "fills a to-one with the most common reference of a set", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        common = user_id()
+        rare = user_id()
+        task_id = insert_row("my_app_task", code: "a")
+
+        for owner <- [rare, common, common] do
+          tag_id = insert_row("my_app_tag", owner_id: uuid(owner))
+
+          {:ok, _result} =
+            Connection.query(
+              ~s|INSERT INTO "hologram_data"."my_app_task_tags_$join" | <>
+                ~s|("source_id", "target_id") VALUES ($1, $2)|,
+              [task_id, tag_id]
+            )
+        end
+
+        term = {:most_common, {:relationship, [:tags]}, :owner_id}
+
+        assert apply_file([add_to_one(%Value{term: term})], create, first_model) == :ok
+        assert ids_by_code("my_app_task", "owner_id") == [common]
+      end)
+    end
+
+    for {label, backfill} <- [
+          {"constant", "018f0000-0000-7000-8000-00000000dead"},
+          {"computed", quote(do: %Value{term: {:value, "018f0000-0000-7000-8000-00000000dead"}})}
+        ] do
+      test "refuses a #{label} id no row holds on an add, schema unchanged", %{
+        create: create,
+        first_model: first_model,
+        scratch: scratch
+      } do
+        route(scratch, fn ->
+          assert run([create], first_model, @context) == :ok
+
+          insert_row("my_app_task", code: "a")
+
+          assert_error RuntimeError,
+                       ~s(the backfill of column "owner_id" on table "my_app_task" writes ) <>
+                         "#{@missing_id}, which no MyApp.User holds - change the backfill " <>
+                         "or add that row",
+                       fn ->
+                         apply_file([add_to_one(unquote(backfill))], create, first_model)
+                       end
+
+          refute has_column?("my_app_task", "owner_id")
+        end)
+      end
+
+      test "refuses a #{label} id no row holds on a tightening, rows unchanged", %{
+        create: create,
+        first_model: first_model,
+        scratch: scratch
+      } do
+        route(scratch, fn ->
+          assert run([create], first_model, @context) == :ok
+
+          insert_row("my_app_task", code: "a")
+
+          assert_error RuntimeError,
+                       ~s(the backfill of column "reviewer_id" on table "my_app_task" writes ) <>
+                         "#{@missing_id}, which no MyApp.User holds - change the backfill " <>
+                         "or add that row",
+                       fn ->
+                         apply_file([tighten_reviewer(unquote(backfill))], create, first_model)
+                       end
+
+          assert ids_by_code("my_app_task", "reviewer_id") == [nil]
+        end)
+      end
+    end
+
+    test "fills only the rows holding nil on a constant tightening", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        admin = user_id()
+        kept = user_id()
+
+        insert_row("my_app_task", code: "a", reviewer_id: uuid(kept))
+        insert_row("my_app_task", code: "b")
+
+        assert apply_file([tighten_reviewer(admin)], create, first_model) == :ok
+        assert ids_by_code("my_app_task", "reviewer_id") == [kept, admin]
+        assert column_flags("my_app_task", "reviewer_id").not_null
+      end)
+    end
+
+    test "fills only the rows holding nil on a computed tightening", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        creator = user_id()
+        kept = user_id()
+
+        insert_row("my_app_task", code: "a", creator_id: uuid(creator), reviewer_id: uuid(kept))
+        insert_row("my_app_task", code: "b", creator_id: uuid(creator))
+
+        op = tighten_reviewer(%Value{term: {:name, [:creator_id]}})
+
+        assert apply_file([op], create, first_model) == :ok
+        assert ids_by_code("my_app_task", "reviewer_id") == [kept, creator]
+      end)
+    end
+
+    test "doesn't give a deleted to-one's backfill to the one added again", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        admin = user_id()
+        insert_row("my_app_task", code: "a")
+
+        ops = [
+          add_to_one(admin),
+          %{op: :delete_relationship, entity: MyApp.Task, name: :owner, line: 4},
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :owner,
+            type: MyApp.User,
+            opts: [optional: true],
+            line: 5
+          }
+        ]
+
+        assert apply_file(ops, create, first_model) == :ok
+        assert ids_by_code("my_app_task", "owner_id") == [nil]
+      end)
+    end
+
+    test "doesn't give a deleted attribute's backfill to the one added again", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      add_note = fn opts ->
+        %{op: :add_attribute, entity: MyApp.Task, name: :note, type: :string, opts: opts, line: 3}
+      end
+
+      ops = [
+        add_note.(backfill: "old"),
+        %{op: :delete_attribute, entity: MyApp.Task, name: :note, line: 4},
+        add_note.(optional: true)
+      ]
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_row("my_app_task", code: "a")
+
+        assert apply_file(ops, create, first_model) == :ok
+        assert ids_by_code("my_app_task", "note") == [nil]
+      end)
+    end
+
+    test "applies a chain with a pinned id to an empty database", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        assert apply_file([add_to_one(@missing_id)], create, first_model) == :ok
+        assert column_flags("my_app_task", "owner_id").not_null
+      end)
+    end
+
+    test "refuses a constant that isn't an id", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        assert_error Hologram.CompileError,
+                     ~r/holds "nope", which isn't the id of a MyApp.User/,
+                     fn ->
+                       apply_file([add_to_one("nope")], create, first_model)
+                     end
+      end)
+    end
+  end
+
   describe "run/3, a computed fill breaking its member's declared rules" do
     setup %{chain: [create | _rest], first_model: first_model} do
       [create: create, first_model: first_model]

@@ -1065,7 +1065,7 @@ defmodule Hologram.Migration.RendererTest do
     end
   end
 
-  describe "render/2, a backfill that can't be applied yet" do
+  describe "render/2, an added relationship's options" do
     setup do
       pre_model =
         model(%{
@@ -1076,67 +1076,6 @@ defmodule Hologram.Migration.RendererTest do
         })
 
       [pre_model: pre_model]
-    end
-
-    test "refuses one on an added relationship", %{pre_model: pre_model} do
-      op = %{
-        op: :add_relationship,
-        entity: MyApp.Task,
-        name: :parent,
-        type: MyApp.Task,
-        opts: [optional: true, backfill: "018f0000-0000-7000-8000-000000000000"],
-        line: 7
-      }
-
-      computed_op = put_in(op, [:opts, :backfill], %Value{term: {:name, [:owner_id]}})
-
-      assert_error Hologram.CompileError,
-                   "add_relationship :parent of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only one on an attribute can for now",
-                   fn -> render([computed_op], pre_model) end
-
-      assert_error Hologram.CompileError,
-                   "add_relationship :parent of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only one on an attribute can for now",
-                   fn -> render([op], pre_model) end
-    end
-
-    test "refuses one on a changed relationship", %{pre_model: pre_model} do
-      op = %{
-        op: :change_relationship,
-        entity: MyApp.Task,
-        name: :owner,
-        changes: [optional: false, backfill: "018f0000-0000-7000-8000-000000000000"],
-        line: 7
-      }
-
-      computed_op = put_in(op, [:changes, :backfill], %Value{term: {:name, [:id]}})
-
-      assert_error Hologram.CompileError,
-                   "change_relationship :owner of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only one on an attribute can for now",
-                   fn -> render([computed_op], pre_model) end
-
-      assert_error Hologram.CompileError,
-                   "change_relationship :owner of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only one on an attribute can for now",
-                   fn -> render([op], pre_model) end
-    end
-
-    test "refuses one in an added relationship's options given as a map", %{pre_model: pre_model} do
-      op = %{
-        op: :add_relationship,
-        entity: MyApp.Task,
-        name: :parent,
-        type: MyApp.Task,
-        opts: %{optional: true, backfill: "018f0000-0000-7000-8000-000000000000"},
-        line: 7
-      }
-
-      assert_error Hologram.CompileError,
-                   "add_relationship :parent of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only one on an attribute can for now",
-                   fn -> render([op], pre_model) end
     end
 
     test "still renders an added relationship whose options are a map", %{pre_model: pre_model} do

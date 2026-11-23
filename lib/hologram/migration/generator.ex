@@ -173,17 +173,29 @@ defmodule Hologram.Migration.Generator do
   # Written out per attribute with its own name and type, so the answer is an edit of a
   # line rather than a recall of the option's spelling.
   defp fill_entries(members) do
-    Enum.flat_map(members, fn {name, type, opts} ->
+    Enum.flat_map(members, fn {kind, name, type, opts} ->
       declared_opts = render_opts(opts)
       suffix = if declared_opts == "", do: "", else: ", " <> declared_opts
-      call = "add_attribute #{inspect(name)}, #{inspect(type)}#{suffix}"
+      call = "#{kind} #{inspect(name)}, #{inspect(type)}#{suffix}"
 
-      [
-        "#{call}, backfill: <value>  - existing rows receive it, once",
-        "#{call}, default: <value>   - every row created without one, from now on",
-        "#{call}, optional: true     - existing rows stay empty"
-      ]
+      fill_lines(kind, call)
     end)
+  end
+
+  # A to-one takes no default, since a default id would point every new row at one target.
+  defp fill_lines(:add_relationship, call) do
+    [
+      "#{call}, backfill: <id>   - existing rows receive it, once",
+      "#{call}, optional: true   - existing rows stay empty"
+    ]
+  end
+
+  defp fill_lines(_kind, call) do
+    [
+      "#{call}, backfill: <value>  - existing rows receive it, once",
+      "#{call}, default: <value>   - every row created without one, from now on",
+      "#{call}, optional: true     - existing rows stay empty"
+    ]
   end
 
   defp format(text) do
