@@ -71,6 +71,27 @@ defmodule Hologram.Migration.Value.FillCheck do
   end
 
   @doc """
+  Creates the temporary table a fill of NULLs keeps the ids it writes in, for the current
+  transaction at most, and returns :ok.
+
+  Raises naming the grant when the role may not create temporary tables.
+  """
+  @spec create_filled_ids!() :: :ok
+  def create_filled_ids! do
+    statement = ~s|CREATE TEMP TABLE #{@filled_ids} (id uuid PRIMARY KEY) ON COMMIT DROP|
+
+    case Connection.query(statement) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, %{postgres: %{code: :insufficient_privilege}}} ->
+        raise "a backfill filling the rows holding nil needs a temporary table, which this " <>
+                "database role may not create - run GRANT TEMPORARY ON DATABASE <database> TO " <>
+                "<role>"
+    end
+  end
+
+  @doc """
   Drops the ids fill_nulls!/1 kept, so another fill of the same file can keep its own.
   """
   @spec drop_filled_ids!() :: :ok
@@ -101,6 +122,20 @@ defmodule Hologram.Migration.Value.FillCheck do
       ~s|WITH "$filled" AS (#{update}) INSERT INTO #{@filled_ids} SELECT "id" FROM "$filled"|
 
     query_fill!(op, statement, params)
+  end
+
+  @doc """
+  Keeps the given ids, as text, among the rows a fill of NULLs wrote, and returns :ok.
+  """
+  @spec keep_filled_ids!(list(String.t())) :: :ok
+  def keep_filled_ids!(ids) do
+    {:ok, _result} =
+      Connection.query(
+        ~s|INSERT INTO #{@filled_ids} SELECT unnest($1::text[])::uuid|,
+        [ids]
+      )
+
+    :ok
   end
 
   @doc """
@@ -136,20 +171,6 @@ defmodule Hologram.Migration.Value.FillCheck do
     Enum.reduce(rule_reasons ++ byte_reasons(value, op.max_bytes), broken, fn reason, counts ->
       Map.update(counts, reason, 1, &(&1 + 1))
     end)
-  end
-
-  defp create_filled_ids! do
-    statement = ~s|CREATE TEMP TABLE #{@filled_ids} (id uuid PRIMARY KEY) ON COMMIT DROP|
-
-    case Connection.query(statement) do
-      {:ok, _result} ->
-        :ok
-
-      {:error, %{postgres: %{code: :insufficient_privilege}}} ->
-        raise "a backfill filling the rows holding nil needs a temporary table, which this " <>
-                "database role may not create - run GRANT TEMPORARY ON DATABASE <database> TO " <>
-                "<role>"
-    end
   end
 
   defp pluralize_rows(1), do: "1 row"

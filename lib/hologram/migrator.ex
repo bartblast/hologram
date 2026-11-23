@@ -19,6 +19,7 @@ defmodule Hologram.Migrator do
   alias Hologram.Migration.Loader
   alias Hologram.Migration.Renderer
   alias Hologram.Migration.Value.FillCheck
+  alias Hologram.Migration.Value.RowFill
   alias Hologram.Migration.Value.SQL
   alias Hologram.Reflection
 
@@ -482,7 +483,9 @@ defmodule Hologram.Migrator do
   whatever the role or the database sets - an index build over a big table takes as long as it
   takes, and one cut short is left invalid, to be built again. Set by the session's first
   statement rather than as startup parameters, which a pooler may refuse, and only the ones the
-  server knows: `transaction_timeout` is PostgreSQL 17's.
+  server knows: `transaction_timeout` is PostgreSQL 17's. A pooler's own limit on an idle
+  transaction isn't one of them, so it has to be off or longer than the slowest page of an Elixir
+  backfill, during which the transaction sits idle.
 
   It also runs with the pool's keepalives and user timeout (see
   Hologram.DB.Config.keepalive_statement/0): a node that vanishes holding the migration lock or the
@@ -510,7 +513,12 @@ defmodule Hologram.Migrator do
           Connection.query("""
           SELECT set_config(name, '0', false)
           FROM pg_catalog.pg_settings
-          WHERE name IN ('lock_timeout', 'statement_timeout', 'transaction_timeout')
+          WHERE name IN (
+            'idle_in_transaction_session_timeout',
+            'lock_timeout',
+            'statement_timeout',
+            'transaction_timeout'
+          )
           """)
 
         apply_keepalives()
@@ -651,6 +659,33 @@ defmodule Hologram.Migrator do
 
   defp apply_op(%{op: :fill_companions} = op, _later_ops) do
     SchemaReconciler.backfill_companions!(op.columns, op.mapping)
+  end
+
+  # An Elixir fn has no SQL, so it can't be asked about beforehand: what it writes meets the
+  # column's indexes page by page, and the rules are read back after, as for any computed fill.
+  defp apply_op(%{op: :fill_column, function: _function, nulls_only: true} = op, later_ops) do
+    if count_result(DDL.null_check_statement(op.table, op.column)) > 0 do
+      drop_removed_indexes(op.table, {:fill, op.column}, later_ops)
+      FillCheck.create_filled_ids!()
+
+      count = RowFill.run!(op)
+
+      check_filled!(op)
+      FillCheck.check!(op, on_page: fill_companions_writer(op))
+      FillCheck.drop_filled_ids!()
+      log_row_fill(op, count)
+    end
+  end
+
+  defp apply_op(%{op: :fill_column, function: _function} = op, later_ops) do
+    drop_removed_indexes(op.table, :update, later_ops)
+
+    count = RowFill.run!(op)
+
+    if op.required, do: check_filled!(op)
+
+    FillCheck.check!(op)
+    log_row_fill(op, count)
   end
 
   # Only the rows holding nil take the expression, so the ones that already hold a value keep it,
@@ -1174,10 +1209,21 @@ defmodule Hologram.Migrator do
     if count > 0 do
       rows = if count == 1, do: "row", else: "rows"
 
+      fix =
+        if Map.has_key?(op, :function),
+          do: "return a value from the fn for them",
+          else: "give the expression a value for them, like coalesce(..., <value>)"
+
       raise ~s(the backfill of column "#{op.column}" on table "#{op.table}" leaves #{count} ) <>
-              "#{rows} without a value - give the expression a value for them, like " <>
-              "coalesce(..., <value>), or make the attribute optional: true"
+              "#{rows} without a value - #{fix}, or make the attribute optional: true"
     end
+  end
+
+  defp log_row_fill(op, count) do
+    Logger.info(
+      ~s(Hologram: filled #{count} rows of column "#{op.column}" on table "#{op.table}" row by ) <>
+        "row with the backfill on line #{op.line}"
+    )
   end
 
   defp fill_companions_writer(%{companions: []}), do: nil

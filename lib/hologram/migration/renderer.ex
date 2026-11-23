@@ -5,6 +5,7 @@ defmodule Hologram.Migration.Renderer do
   alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
   alias Hologram.DB.Preflight
+  alias Hologram.DB.QueryCompiler
   alias Hologram.DB.Schema
   alias Hologram.Entity.Model
   alias Hologram.Migration.Value
@@ -817,33 +818,55 @@ defmodule Hologram.Migration.Renderer do
     [%{backfill: {:computed, value}, kind: kind, nulls_only: nulls_only}] =
       Value.fills([op], model)
 
-    if match?({:function, _module, _function, _args}, value.term) do
-      raise Hologram.CompileError,
-        message:
-          "the backfill of #{inspect(op.name)} on #{inspect(op.entity)} (line #{op.line}) is an " <>
-            "Elixir fn, which can't apply yet"
-    end
-
     {^kind, {_name, type, rules} = member} = Value.fill_member(op, next_model)
     target = Value.fill_target(kind, member, op)
 
+    Map.merge(
+      %{
+        op: :fill_column,
+        table: table,
+        column: column,
+        companions: [],
+        entity: op.entity,
+        fill_target: fill_target(op, next_model),
+        line: op.line,
+        mapping: mapping,
+        max_bytes: Map.get(op, :max_bytes),
+        member: op.name,
+        nulls_only: nulls_only,
+        rules: rules,
+        type: type
+      },
+      fill_source(value, op, mapping, column, target)
+    )
+  end
+
+  # An Elixir fn has no SQL, so the op names what the row-by-row fill reads and writes. It can
+  # return any value of an enum, so all of them count as used.
+  defp fill_source(%{term: {:function, module, function, args}}, op, mapping, column, _target) do
+    entry = Map.fetch!(mapping, op.entity)
+    filled = Enum.find(entry.columns, &(&1.name == column))
+
     %{
-      op: :fill_column,
-      table: table,
-      column: column,
-      companions: [],
-      entity: op.entity,
+      arg_columns:
+        Enum.map(args, fn name ->
+          arg_column = QueryCompiler.name_column(entry, name)
+
+          {arg_column.name, arg_column.type}
+        end),
+      column_sql_type: filled.sql_type,
+      column_type: filled.type,
+      enum_uses: Enum.map(filled.enum_values || [], &{filled.sql_type, &1}),
+      function: {module, function},
+      sort_keys: []
+    }
+  end
+
+  defp fill_source(value, op, mapping, _column, target) do
+    %{
       enum_uses: SQL.enum_uses(value, op.entity, mapping, target),
-      fill_target: fill_target(op, next_model),
-      line: op.line,
-      mapping: mapping,
-      max_bytes: Map.get(op, :max_bytes),
-      member: op.name,
-      nulls_only: nulls_only,
-      rules: rules,
       sort_keys: SQL.sort_keys(value, op.entity, mapping),
-      sql: SQL.render(value, op.entity, mapping, target),
-      type: type
+      sql: SQL.render(value, op.entity, mapping, target)
     }
   end
 

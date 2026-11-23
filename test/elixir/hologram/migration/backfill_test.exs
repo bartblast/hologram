@@ -1859,6 +1859,381 @@ defmodule Hologram.Migration.BackfillTest do
     end
   end
 
+  describe "run/3, an Elixir fn" do
+    setup do
+      attribute = fn name, type, opts, line ->
+        %{op: :add_attribute, entity: MyApp.Task, name: name, type: type, opts: opts, line: line}
+      end
+
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.User, line: 2},
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          attribute.(:code, :string, [optional: true], 4),
+          attribute.(:title, :string, [optional: true], 5),
+          attribute.(:rank, :integer, [optional: true], 6),
+          attribute.(:slug, :string, [optional: true, unique: true], 7),
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :creator,
+            type: MyApp.User,
+            opts: [optional: true],
+            line: 8
+          }
+        ])
+
+      [create: create, first_model: Model.fold(Model.empty(), create.ops)]
+    end
+
+    # The function a compiled migration's fn becomes, with the term its op would carry.
+    defp elixir_fn(body) do
+      module =
+        compile_migration("20260813091599", """
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: #{body}
+        end
+        """)
+
+      [op] = module.__hologram_migration__().ops
+
+      op.opts[:backfill]
+    end
+
+    defp add_filled(name, type, value, opts \\ []) do
+      %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: name,
+        type: type,
+        opts: Keyword.put(opts, :backfill, value),
+        line: 3
+      }
+    end
+
+    defp tighten_title(value) do
+      %{
+        op: :change_attribute,
+        entity: MyApp.Task,
+        name: :title,
+        changes: [optional: false, backfill: value],
+        line: 3
+      }
+    end
+
+    defp assert_row_fill_refused(context, rows, ops, message) do
+      %{create: create, first_model: first_model, scratch: scratch} = context
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        rows.()
+
+        assert_error RuntimeError, message, fn -> apply_file(ops, create, first_model) end
+      end)
+    end
+
+    test "fills over more rows than a page, each with its keys",
+         %{scratch: scratch} = context do
+      rows = fn ->
+        {:ok, _result} =
+          Connection.query(
+            ~s|INSERT INTO "hologram_data"."my_app_task" ("id", "title", "created_at", | <>
+              ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
+              ~s|SELECT gen_random_uuid(), 'Title ' \|\| n, now(), now(), now(), now(), '{}' | <>
+              ~s|FROM generate_series(1, 1005) AS n|
+          )
+      end
+
+      value = elixir_fn("fn title -> String.downcase(title) end")
+
+      apply_scenario(context, rows, [add_filled(:copy, :string, value, optional: true)])
+
+      route(scratch, fn ->
+        {:ok, %{rows: [[wrong]]}} =
+          Connection.query(
+            ~s|SELECT COUNT(*) FROM "hologram_data"."my_app_task" | <>
+              ~s|WHERE "copy" IS DISTINCT FROM lower("title") OR "copy_$sort" IS NULL|
+          )
+
+        assert wrong == 0
+
+        {:ok, %{rows: keys}} =
+          Connection.query(~s|SELECT "copy", "copy_$sort" FROM "hologram_data"."my_app_task"|)
+
+        assert Enum.all?(keys, fn [copy, sort_key] -> sort_key == SortKey.compute(copy) end)
+      end)
+    end
+
+    test "reads several fields, decoded", %{scratch: scratch} = context do
+      value = elixir_fn(~s|fn code, rank -> code <> ":" <> Integer.to_string(rank) end|)
+
+      rows = fn -> insert_row("my_app_task", code: "a", rank: 5) end
+
+      apply_scenario(context, rows, [add_filled(:label, :string, value, optional: true)])
+
+      route(scratch, fn ->
+        assert rows_by_code(["label"]) == [["a:5"]]
+      end)
+    end
+
+    test "names the row when the function raises", context do
+      value = elixir_fn("fn title -> String.upcase(title) end")
+      rows = fn -> insert_row("my_app_task", code: "a") end
+
+      assert_row_fill_refused(
+        context,
+        rows,
+        [add_filled(:copy, :string, value, optional: true)],
+        ~r/column "copy" on table "my_app_task" \(line 3\) raised on row [0-9a-f-]{36}: .*FunctionClauseError/s
+      )
+    end
+
+    test "refuses a result of the wrong type, naming the row", context do
+      value = elixir_fn("fn title -> String.length(title) end")
+      rows = fn -> insert_row("my_app_task", code: "a", title: "abc") end
+
+      assert_row_fill_refused(
+        context,
+        rows,
+        [add_filled(:copy, :string, value, optional: true)],
+        ~r/returned 3 for row [0-9a-f-]{36}, which isn't a value of type :string/
+      )
+    end
+
+    test "refuses nil on a required attribute", context do
+      term = elixir_fn(~s|fn title -> if title == "x", do: title end|)
+      rows = fn -> insert_row("my_app_task", code: "a", title: "abc") end
+
+      assert_row_fill_refused(
+        context,
+        rows,
+        [add_filled(:copy, :string, term)],
+        ~r/leaves 1 row without a value - return a value from the fn for them/
+      )
+    end
+
+    test "fills only the rows holding nil on a tightening", %{scratch: scratch} = context do
+      rows = fn ->
+        insert_row("my_app_task", [{"code", "a"}, {"title", "kept"}, {"title_$sort", "kept-key"}])
+        insert_row("my_app_task", code: "b")
+      end
+
+      value = elixir_fn("fn code -> String.upcase(code) end")
+
+      apply_scenario(context, rows, [tighten_title(value)])
+
+      route(scratch, fn ->
+        assert rows_by_code(["title", "title_$sort"]) ==
+                 [["kept", "kept-key"], ["B", SortKey.compute("B")]]
+      end)
+    end
+
+    test "refuses a unique value repeating, naming the key and the rows", context do
+      value = elixir_fn("fn title -> String.upcase(title) end")
+
+      rows = fn ->
+        insert_row("my_app_task", code: "a", title: "same")
+        insert_row("my_app_task", code: "b", title: "same")
+      end
+
+      op = %{
+        op: :change_attribute,
+        entity: MyApp.Task,
+        name: :slug,
+        changes: [optional: false, backfill: value],
+        line: 3
+      }
+
+      assert_row_fill_refused(
+        context,
+        rows,
+        [op],
+        ~r/repeats the key "SAME" of a unique index, on rows including [0-9a-f-]{36}/
+      )
+    end
+
+    test "names a repeated key holding a newline", context do
+      value = elixir_fn(~S|fn code -> String.replace(code, "-", "\n") end|)
+
+      rows = fn ->
+        insert_row("my_app_task", code: "x-y", title: "a")
+        insert_row("my_app_task", code: "x-y", title: "b")
+      end
+
+      op = %{
+        op: :change_attribute,
+        entity: MyApp.Task,
+        name: :slug,
+        changes: [optional: false, backfill: value],
+        line: 3
+      }
+
+      assert_row_fill_refused(
+        context,
+        rows,
+        [op],
+        ~r/repeats the key "x\\ny" of a unique index, on rows including [0-9a-f-]{36}/
+      )
+    end
+
+    test "names the page when a value only looks like a key over several columns", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      keyed =
+        migration("20260813100000", [
+          %{op: :add_unique, entity: MyApp.Task, fields: [:title, :rank], line: 2}
+        ])
+
+      keyed_model = Model.fold(first_model, keyed.ops)
+      value = elixir_fn("fn code -> String.trim(code) end")
+
+      tighten =
+        migration("20260813142237", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :title,
+            changes: [optional: false, backfill: value],
+            line: 3
+          }
+        ])
+
+      route(scratch, fn ->
+        assert run([create, keyed], keyed_model, @context) == :ok
+
+        insert_row("my_app_task", code: "X", rank: 7)
+        insert_row("my_app_task", code: "X", rank: 7)
+        insert_row("my_app_task", code: "X, 7", rank: 1)
+
+        assert_error RuntimeError, ~r/in the page of rows from /, fn ->
+          run([create, keyed, tighten], Model.fold(keyed_model, tighten.ops), @context)
+        end
+      end)
+    end
+
+    test "names the page for a repeated key that isn't one column's text", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      key = %{op: :add_unique, entity: MyApp.Task, fields: [:title, :rank], line: 2}
+      keyed = migration("20260813100000", [key])
+      keyed_model = Model.fold(first_model, keyed.ops)
+      value = elixir_fn("fn code -> String.upcase(String.first(code)) end")
+
+      op = %{
+        op: :change_attribute,
+        entity: MyApp.Task,
+        name: :title,
+        changes: [optional: false, backfill: value],
+        line: 3
+      }
+
+      tighten = migration("20260813142237", [op])
+
+      route(scratch, fn ->
+        assert run([create, keyed], keyed_model, @context) == :ok
+
+        insert_row("my_app_task", code: "a1", rank: 7)
+        insert_row("my_app_task", code: "a2", rank: 7)
+
+        assert_error RuntimeError,
+                     ~r/in the page of rows from [0-9a-f-]{36} to [0-9a-f-]{36}/,
+                     fn ->
+                       run(
+                         [create, keyed, tighten],
+                         Model.fold(keyed_model, tighten.ops),
+                         @context
+                       )
+                     end
+      end)
+    end
+
+    test "fills a relationship with an id from the row", %{scratch: scratch} = context do
+      creator = Ecto.UUID.generate()
+
+      rows = fn ->
+        {:ok, _result} =
+          Connection.query(
+            ~s|INSERT INTO "hologram_data"."my_app_user" ("id", "created_at", | <>
+              ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
+              ~s|VALUES ($1::text::uuid, now(), now(), now(), now(), '{}')|,
+            [creator]
+          )
+
+        insert_row("my_app_task", code: "a", creator_id: Ecto.UUID.dump!(creator))
+      end
+
+      value = elixir_fn("fn creator_id -> String.upcase(creator_id) end")
+
+      op = %{
+        op: :add_relationship,
+        entity: MyApp.Task,
+        name: :owner,
+        type: MyApp.User,
+        opts: [backfill: value],
+        line: 3
+      }
+
+      apply_scenario(context, rows, [op])
+
+      route(scratch, fn ->
+        {:ok, %{rows: [[owner]]}} =
+          Connection.query(~s|SELECT "owner_id"::text FROM "hologram_data"."my_app_task"|)
+
+        assert owner == creator
+      end)
+    end
+
+    test "refuses an id no row holds, naming the row", context do
+      missing = "018f0000-0000-7000-8000-00000000dead"
+      value = elixir_fn(~s|fn code -> code <> "018f0000-0000-7000-8000-00000000dead" end|)
+      rows = fn -> insert_row("my_app_task", code: "") end
+
+      op = %{
+        op: :add_relationship,
+        entity: MyApp.Task,
+        name: :owner,
+        type: MyApp.User,
+        opts: [optional: true, backfill: value],
+        line: 3
+      }
+
+      assert_row_fill_refused(
+        context,
+        rows,
+        [op],
+        ~r/writes #{missing} on row [0-9a-f-]{36}, which no MyApp.User holds/
+      )
+    end
+
+    test "logs how many rows it filled", %{scratch: scratch} = context do
+      value = elixir_fn("fn title -> String.upcase(title) end")
+      rows = fn -> insert_row("my_app_task", code: "a", title: "x") end
+
+      level = Logger.level()
+      Logger.configure(level: :info)
+
+      log =
+        try do
+          ExUnit.CaptureLog.capture_log([level: :info], fn ->
+            apply_scenario(context, rows, [add_filled(:copy, :string, value, optional: true)])
+          end)
+        after
+          Logger.configure(level: level)
+        end
+
+      assert log =~ ~s(filled 1 rows of column "copy" on table "my_app_task" row by row)
+
+      route(scratch, fn ->
+        assert rows_by_code(["copy"]) == [["X"]]
+      end)
+    end
+  end
+
   describe "run/3, a computed fill breaking its member's declared rules" do
     setup %{chain: [create | _rest], first_model: first_model} do
       [create: create, first_model: first_model]
