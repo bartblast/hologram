@@ -582,7 +582,7 @@ export default class Overlay {
   // The write without the columns it lost and got no value back for.
   static #withoutUnanswered(write, dropped, kept) {
     const unanswered = Object.keys(dropped ?? {}).filter(
-      (field) => !(field in (kept ?? {})),
+      (field) => !Object.hasOwn(kept ?? {}, field),
     );
 
     if (unanswered.length === 0) {

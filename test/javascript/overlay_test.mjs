@@ -982,6 +982,19 @@ describe("Overlay", () => {
       assert.equal(row.votes, 2);
     });
 
+    it("leaves out a dropped column named like an inherited property", () => {
+      LocalDatabase.putRow(
+        TODO,
+        base({$revisions: {constructor: 1}, constructor: "stored"}),
+      );
+
+      const batch = pushed(updateWrite({data: {constructor: "refused"}}));
+
+      Overlay.promote(batch, {}, {dropped: {0: {constructor: "refused"}}});
+
+      assert.equal(LocalDatabase.baseRow(TODO, "t1").constructor, "stored");
+    });
+
     it("takes the value the server sent back for a dropped column", () => {
       LocalDatabase.putRow(TODO, base({title: "stored"}));
 
