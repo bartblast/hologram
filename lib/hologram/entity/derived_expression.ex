@@ -60,6 +60,9 @@ defmodule Hologram.Entity.DerivedExpression do
 
   @quantifiers [:all, :any, :none]
 
+  # The two-argument functions use Hologram.DB reserves for query words.
+  @reserved_names [:average, :inverse, :most_common, :sum]
+
   @search_operators [:contains, :starts_with]
 
   # The query stages a derived body reads its rows with, by the number of arguments each takes.
@@ -146,6 +149,23 @@ defmodule Hologram.Entity.DerivedExpression do
 
       Macro.prewalk(body, &validate_own_builder!(&1, module, state))
     end)
+  end
+
+  # A reserved name another import also brings in can't be called, so the refusal says which
+  # import to change. Any other clash reads as the module's own call and is refused there.
+  defp ambiguous_module(name, arity, meta, modules, state) do
+    if name in @reserved_names and Hologram.Query in modules do
+      others =
+        modules
+        |> List.delete(Hologram.Query)
+        |> Enum.map_join(", ", &inspect/1)
+
+      compile_error!(
+        "#{state.field} calls #{name}/#{arity}, imported from #{others}, which is reserved for a query word by use Hologram.DB - rename the function or leave it out of the import",
+        {name, meta, []},
+        state
+      )
+    end
   end
 
   # The whole body: a condition, which makes a boolean field, or anything an Elixir position takes.
@@ -439,7 +459,7 @@ defmodule Hologram.Entity.DerivedExpression do
   # A name use Hologram.DB reserves says so itself, since the module's own function of that name
   # has to be renamed, which the refusal of a call into Hologram.Query wouldn't tell.
   defp expand_reserved(Hologram.Query, {name, _meta, [_left, _right]} = ast, state)
-       when name in [:inverse, :most_common] do
+       when name in @reserved_names do
     Macro.expand(ast, %{state.env | line: line(ast, state)})
   end
 
@@ -475,6 +495,7 @@ defmodule Hologram.Entity.DerivedExpression do
     case Macro.Env.expand_import(state.env, meta, name, arity, allow_locals: false) do
       {:function, module, _name} -> module
       {:macro, module, _expander} -> module
+      {:error, {:ambiguous, modules}} -> ambiguous_module(name, arity, meta, modules, state)
       {:error, _reason} -> nil
     end
   end

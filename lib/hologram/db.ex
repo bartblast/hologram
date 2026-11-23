@@ -65,6 +65,7 @@ defmodule Hologram.DB do
       import Hologram.Query,
         only: [
           add_relationship: 3,
+          average: 2,
           count: 1,
           decrement: 3,
           delete_relationship: 3,
@@ -79,6 +80,7 @@ defmodule Hologram.DB do
           put_attribute: 3,
           skip: 2,
           sort: 2,
+          sum: 2,
           take: 2,
           trust: 1
         ]

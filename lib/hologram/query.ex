@@ -127,6 +127,17 @@ defmodule Hologram.Query do
   @spec add_relationship(Entity.t(), atom, Entity.id()) :: Entity.t()
   defdelegate add_relationship(entity, relationship_name, target_id), to: Stage
 
+  # TODO(#1438): replace this with the real aggregate. Importing it now means a function of this
+  # name that an app calls fails today rather than when the aggregate arrives.
+  @doc false
+  @spec average(Macro.t(), Macro.t()) :: no_return
+  defmacro average(_query, _attribute) do
+    reserved_error!(
+      "average/2 is reserved for a query word Hologram doesn't have yet",
+      __CALLER__
+    )
+  end
+
   @doc """
   Marks the given query as counting and returns the resulting query term.
 
@@ -643,6 +654,14 @@ defmodule Hologram.Query do
           Stage.sort(unquote(query), unquote(lowered), unquote(Macro.escape(hints)))
         end
     end
+  end
+
+  # TODO(#1438): replace this with the real aggregate. Importing it now means a function of this
+  # name that an app calls fails today rather than when the aggregate arrives.
+  @doc false
+  @spec sum(Macro.t(), Macro.t()) :: no_return
+  defmacro sum(_query, _attribute) do
+    reserved_error!("sum/2 is reserved for a query word Hologram doesn't have yet", __CALLER__)
   end
 
   @doc """
