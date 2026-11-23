@@ -318,4 +318,75 @@ defmodule HologramFeatureTests.ActionWritesTest do
 
     assert [%Todo{votes: 6}] = await_server_todos(1)
   end
+
+  # The browser holds 0 votes while the server holds 6, so the move looks like it crosses the
+  # floor from here and doesn't from there. The server's answer carries no moved value, so the
+  # browser keeps its estimate until the move's frame arrives.
+  feature "sends a move the value it holds would refuse, and the server lands it", %{
+    session: session
+  } do
+    session =
+      session
+      |> visit(ActionWritesPage)
+      |> click(button("Add one todo"))
+      |> assert_text(css("#todos"), "alpha 0")
+      |> await_pending_writes(0)
+
+    [%Todo{id: todo_id}] = await_server_todos(1)
+
+    hold_sync_frames(session)
+
+    session
+    |> current_instance_id()
+    |> simulate_sse_disconnect()
+
+    :ok = update(Todo, todo_id, %{votes: 6})
+
+    session
+    |> click(button("Retract a vote"))
+    |> assert_text(css("#result"), "retracted_1")
+    |> assert_text(css("#todos"), "alpha -1")
+
+    await_server_votes(5)
+
+    await_pending_writes(session, 0)
+
+    # The answer's render waits for an animation frame, so the value read next is the promoted one.
+    assert script_result(session, """
+           return new Promise((resolve) =>
+             requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)))
+           );
+           """)
+
+    session
+    |> assert_text(css("#todos"), "alpha -1")
+    |> release_sync_frames()
+    |> assert_text(css("#todos"), "alpha 5")
+
+    assert script_result(session, "return globalThis.Hologram.writes.rejected();") == []
+
+    assert [%Todo{votes: 5}] = await_server_todos(1)
+  end
+
+  feature "rolls back a move the server refuses", %{session: session} do
+    session =
+      session
+      |> visit(ActionWritesPage)
+      |> click(button("Add one todo"))
+      |> assert_text(css("#todos"), "alpha 0")
+      |> await_pending_writes(0)
+
+    session
+    |> hold_mutation_requests()
+    |> click(button("Retract a vote"))
+    |> assert_text(css("#result"), "retracted_1")
+    |> assert_text(css("#todos"), "alpha -1")
+    |> release_mutations()
+
+    assert [%{"seq" => 2, "write" => 0}] = await_rejected_writes(session)
+
+    assert_text(session, css("#todos"), "alpha 0")
+
+    assert [%Todo{votes: 0}] = DB.read(Todo)
+  end
 end
