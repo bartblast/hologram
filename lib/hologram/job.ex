@@ -226,13 +226,13 @@ defmodule Hologram.Job do
   reference that broke its declaration - the same answers, and the same checks, as writing any
   other row.
 
-  With an acting user set, the write is evaluated for :create. The :trust option claims the
+  In a session, signed in or not, the write is evaluated for :create. The :trust option claims the
   server's own authority instead, which is what a webhook, a seed or a job enqueuing another job
   does. It is the only option.
 
   Raises Hologram.MisuseError for a module that is not a job type, for an unknown option, and for a
-  value of an attribute the framework sets. Raises Hologram.AccessDeniedError when a user is acting
-  and the job type declares no allow lines, since no rule can then grant the write, and when the
+  value of an attribute the framework sets. Raises Hologram.AccessDeniedError in a session when
+  the job type declares no allow lines, since no rule can then grant the write, and when the
   acting user id is one no user entity can have, unless the call claims trust: true - such a job
   would run with no user, skipping every rule.
   """
@@ -325,12 +325,12 @@ defmodule Hologram.Job do
       message: "Job.create takes trust: true as its only option, got: #{inspect(opts)}"
   end
 
-  # A job type declaring nothing is server-side work: no rule grants its create, so a user acting
+  # A job type declaring nothing is server-side work: no rule grants its create, so a session
   # cannot enqueue it and would otherwise be told they lack a permission, when the state is that
   # no permission exists. Claiming the server's authority is how one is enqueued under an actor,
   # so a trust claim skips the check rather than meeting it.
   defp validate_creatable!(job_type, claim) do
-    if claim != :trust and Context.actor_user_id() != nil and
+    if claim != :trust and Context.session?() and
          Policy.dead_entity_types([job_type]) != [] do
       raise Hologram.AccessDeniedError,
         message:

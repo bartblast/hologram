@@ -180,7 +180,7 @@ defmodule Hologram.Auth do
   a global role is held without an entity, so it applies everywhere.
   Granting a role the user already holds keeps the original grant, metadata included.
 
-  Trusted-only: raises when an acting user is set, since no role qualifies its holder to hand
+  Trusted-only: raises in a session, signed in or not, since no role qualifies its holder to hand
   out powers that span the whole app.
   """
   @spec grant_role(struct | String.t(), module) :: :ok
@@ -201,10 +201,11 @@ defmodule Hologram.Auth do
   on every row of the type. Granting a role the user already holds on the same entity keeps the
   original grant, metadata included.
 
-  An acting user must be allowed to grant the role by the entity type's allow :grant_role rules,
+  A signed-in user must be allowed to grant the role by the entity type's allow :grant_role rules,
   the same answer can?/3 gives for {:grant_role, role} - by default their own role and every role
-  it extends, so nobody hands out more than they hold, or a global role the line names. Trusted
-  code running without an acting user grants whatever it needs, and a type-wide grant is
+  it extends, so nobody hands out more than they hold, or a global role the line names. A
+  signed-out visitor grants nothing. Code outside a session, like a seed, a Mix task, a console or
+  an app's own plug or controller, grants whatever it needs, and a type-wide grant is
   trusted-only. The gate's answer holds until the grant lands: a revocation of the role it rests
   on waits for the grant to commit rather than slipping in between the two.
   """
@@ -232,7 +233,7 @@ defmodule Hologram.Auth do
   # grant_role/3's twin for a grant made in a browser: the same gate, asked about the actor the
   # request authenticated rather than about anything the batch carried.
   #
-  # Where the verb reads an absent actor as trusted code, this reads it as an anonymous session -
+  # Where the verb reads an absent session as trusted code, this reads it as an anonymous one -
   # a client is never the trusted tier, so both shapes trusted code writes are refused outright and
   # nobody signed in grants nothing. The row is already built and its granter already overwritten
   # by Hologram.Mutation.Write.to_entity/1, so what is left is the gate and the insert.
@@ -333,7 +334,7 @@ defmodule Hologram.Auth do
   Takes the user entity or a bare user id. The role is a module defined with use Hologram.Role.
   Revoking a role the user does not hold is a no-op.
 
-  Trusted-only: raises when an acting user is set, as its granting counterpart does.
+  Trusted-only: raises in a session, signed in or not, as its granting counterpart does.
   """
   @spec revoke_role(struct | String.t(), module) :: :ok
   def revoke_role(user_or_id, role) do
@@ -351,13 +352,14 @@ defmodule Hologram.Auth do
   Takes the user entity or a bare user id, the role name, and an entity struct or entity type
   module for the entity. Revoking a role the user does not hold is a no-op.
 
-  Under an acting user: revoking one's own role is always allowed, which is how a member leaves
+  For a signed-in user: revoking one's own role is always allowed, which is how a member leaves
   an entity - revoking someone else's requires being allowed to revoke that role by the entity
   type's allow :revoke_role rules, the same answer can?/3 gives for {:revoke_role, role}.
   Whether an entity may lose its last manager is the app's rule, not the framework's: a global
   role the gate names, or trusted code, can always grant on an entity nobody administers.
-  Trusted code running without an acting user is subject to neither gate, and is how an entity's
-  roles are set up and torn down. A type-wide revocation is trusted-only. The gate's answer holds
+  A signed-out visitor revokes nothing. Code outside a session, like a seed, a Mix task, a console
+  or an app's own plug or controller, is subject to neither gate, and is how an entity's roles are
+  set up and torn down. A type-wide revocation is trusted-only. The gate's answer holds
   until the revocation lands: a revocation of the role it rests on waits for this one to commit
   rather than slipping in between the two.
 
@@ -391,7 +393,7 @@ defmodule Hologram.Auth do
   # revoke_role/3's twin for a revocation made in a browser: the same two gates, asked about the
   # actor the request authenticated rather than about anything the batch carried.
   #
-  # Where the verb reads an absent actor as trusted code, this reads it as an anonymous session -
+  # Where the verb reads an absent session as trusted code, this reads it as an anonymous one -
   # a client is never the trusted tier, so both shapes trusted code writes are refused outright and
   # nobody signed in revokes nothing. The row comes from the store rather than from the write, so
   # its columns are the ones the grant was made with, whatever the client believed it was deleting.
@@ -508,15 +510,19 @@ defmodule Hologram.Auth do
   # Granting on an entity is the per-role question can?/3 answers, asked of the evaluator with
   # an id-only struct: a gate line carries no predicate and no delegation (the policy validator
   # refuses both), so nothing but the id is ever read, and the button and the gate agree by
-  # construction. Running with no actor is the trusted tier - scripts, consoles and seeds grant
-  # whatever they need.
+  # construction. Running with no session is the trusted tier - scripts, consoles, seeds and an
+  # app's own plugs and controllers grant whatever they need - and a signed-out visitor grants
+  # nothing.
   defp authorize_grant!(_entity_type, nil, _role),
     do: authorize_trusted_write!("type-wide", "granted")
 
   defp authorize_grant!(entity_type, entity_id, role) do
-    case Context.actor_user_id() do
-      nil -> :ok
-      actor_user_id -> check_grant!(gate_entity(entity_type, entity_id), role, actor_user_id)
+    if Context.session?() do
+      actor_user_id = signed_in_actor!("granted")
+
+      check_grant!(gate_entity(entity_type, entity_id), role, actor_user_id)
+    else
+      :ok
     end
   end
 
@@ -527,17 +533,17 @@ defmodule Hologram.Auth do
   end
 
   defp authorize_revoke!(entity_type, entity_id, user_id, role) do
-    case Context.actor_user_id() do
-      nil ->
-        :ok
+    if Context.session?() do
+      actor_user_id = signed_in_actor!("revoked")
 
-      actor_user_id ->
-        check_revocation!(gate_entity(entity_type, entity_id), user_id, role, actor_user_id)
+      check_revocation!(gate_entity(entity_type, entity_id), user_id, role, actor_user_id)
+    else
+      :ok
     end
   end
 
   defp authorize_trusted_write!(scope, verb) do
-    if Context.actor_user_id() do
+    if Context.session?() do
       raise Hologram.AccessDeniedError, trusted_write_message(scope, verb)
     end
 
@@ -1195,6 +1201,15 @@ defmodule Hologram.Auth do
   defp operation_verb(:grant_role), do: "grant"
 
   defp operation_verb(:revoke_role), do: "revoke"
+
+  # The session's user, for a gate only a signed-in user can pass: a signed-out visitor is refused
+  # the way a browser batch from one is.
+  defp signed_in_actor!(verb) do
+    case Context.actor_user_id() do
+      nil -> raise Hologram.AccessDeniedError, signed_in_write_message(verb)
+      actor_user_id -> actor_user_id
+    end
+  end
 
   defp signed_in_write_message(verb) do
     "a role is #{verb} only by a signed-in user - nobody is signed in"

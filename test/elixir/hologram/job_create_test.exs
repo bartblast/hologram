@@ -149,6 +149,17 @@ defmodule Hologram.JobCreateTest do
       assert DB.read(Module3) == []
     end
 
+    test "raises on a job type that declares no allow lines in a signed-out session" do
+      expected_msg =
+        "cannot create Hologram.Test.Fixtures.Job.Module2 as a user - it declares no allow lines, so no rule can grant the create. Add \"allow :create, ...\" to enqueue it from an action, or create it from server code, where there is no acting user."
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> create(Module2) end)
+      end
+
+      assert DB.read(Module2) == []
+    end
+
     test "raises on a job type that declares no allow lines under an acting user" do
       user = create_user("blocked@example.com")
 

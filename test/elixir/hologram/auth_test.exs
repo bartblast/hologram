@@ -1704,9 +1704,48 @@ defmodule Hologram.AuthTest do
         Context.with_actor(7, fn -> grant_role(user, Role.Module1) end)
       end
     end
+
+    test "raises on a global grant issued in a signed-out session" do
+      user = create_user("signed_out_grant_1@example.com")
+
+      expected_msg =
+        "global roles are granted only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(nil, fn -> grant_role(user, Role.Module1) end)
+      end
+
+      assert grant_rows(user.id) == []
+    end
   end
 
   describe "grant_role/3" do
+    test "raises on a grant on a row issued in a signed-out session" do
+      user = create_user("signed_out_grant_2@example.com")
+      resource = create_resource()
+
+      expected_msg = "a role is granted only by a signed-in user - nobody is signed in"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(nil, fn -> grant_role(user, :owner, resource) end)
+      end
+
+      assert grant_rows(user.id) == []
+    end
+
+    test "raises on a type-wide grant issued in a signed-out session" do
+      user = create_user("signed_out_grant_3@example.com")
+
+      expected_msg =
+        "type-wide roles are granted only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(nil, fn -> grant_role(user, :owner, Module1) end)
+      end
+
+      assert grant_rows(user.id) == []
+    end
+
     # The store has one identity scheme whoever writes it - a grant made here and the same grant
     # made from a browser are one row, and this is the half a command makes.
     test "mints the row's id from the grant" do
@@ -2508,9 +2547,54 @@ defmodule Hologram.AuthTest do
         Context.with_actor(granter.id, fn -> revoke_role(user, Role.Module1) end)
       end
     end
+
+    test "raises on a global revocation issued in a signed-out session" do
+      user = create_user("signed_out_revoke_1@example.com")
+
+      grant_role(user, Role.Module1)
+
+      expected_msg =
+        "global roles are revoked only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(nil, fn -> revoke_role(user, Role.Module1) end)
+      end
+
+      assert [_grant] = grant_rows(user.id)
+    end
   end
 
   describe "revoke_role/3" do
+    test "raises on a revocation on a row issued in a signed-out session" do
+      user = create_user("signed_out_revoke_2@example.com")
+      resource = create_resource()
+
+      grant_role(user, :owner, resource)
+
+      expected_msg = "a role is revoked only by a signed-in user - nobody is signed in"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(nil, fn -> revoke_role(user, :owner, resource) end)
+      end
+
+      assert [_grant] = grant_rows(user.id)
+    end
+
+    test "raises on a type-wide revocation issued in a signed-out session" do
+      user = create_user("signed_out_revoke_3@example.com")
+
+      grant_role(user, :owner, Module1)
+
+      expected_msg =
+        "type-wide roles are revoked only by trusted code running without an acting user"
+
+      assert_error Hologram.AccessDeniedError, expected_msg, fn ->
+        Context.with_actor(nil, fn -> revoke_role(user, :owner, Module1) end)
+      end
+
+      assert [_grant] = grant_rows(user.id)
+    end
+
     test "raises on a canonical id followed by a newline" do
       user = create_user("user_170@example.com")
       resource = create_resource()
