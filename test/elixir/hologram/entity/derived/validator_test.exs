@@ -120,6 +120,163 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture5]) end
     end
 
+    test "returns :ok for an integer at either end of 64 bits" do
+      defmodule Fixture25 do
+        use Hologram.Entity
+
+        derived :highest, :integer, fn -> 9_223_372_036_854_775_807 end
+
+        derived :lowest, :integer, fn -> -9_223_372_036_854_775_808 end
+      end
+
+      assert validate([Fixture25]) == :ok
+    end
+
+    test "returns :ok for an integer past 64 bits a float field holds" do
+      defmodule Fixture26 do
+        use Hologram.Entity
+
+        derived :cap, :float, fn -> 9_223_372_036_854_775_808 end
+      end
+
+      assert validate([Fixture26]) == :ok
+    end
+
+    test "returns :ok for an integer at either end of what a float holds" do
+      defmodule Fixture30 do
+        use Hologram.Entity
+
+        @highest 2 ** 1024 - 2 ** 970 - 1
+        @lowest -@highest
+
+        derived :highest, :float, fn -> @highest end
+
+        derived :lowest, :float, fn -> @lowest end
+      end
+
+      assert validate([Fixture30]) == :ok
+    end
+
+    test "raises on an integer above what a float holds" do
+      line = __ENV__.line + 7
+
+      defmodule Fixture31 do
+        use Hologram.Entity
+
+        @huge 2 ** 1024 - 2 ** 970
+
+        derived :cap, :float, fn -> @huge end
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :cap in Hologram.Entity.Derived.ValidatorTest.Fixture31 is declared :float, but its definition is the value #{2 ** 1024 - 2 ** 970}, which doesn't fit in a float\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture31]) end
+    end
+
+    test "raises on an integer below what a float holds" do
+      line = __ENV__.line + 7
+
+      defmodule Fixture32 do
+        use Hologram.Entity
+
+        @huge -(2 ** 1024 - 2 ** 970)
+
+        derived :floor, :float, fn -> @huge end
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :floor in Hologram.Entity.Derived.ValidatorTest.Fixture32 is declared :float, but its definition is the value #{-(2 ** 1024 - 2 ** 970)}, which doesn't fit in a float\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture32]) end
+    end
+
+    test "raises on a branch of an if holding an integer too large for a float" do
+      line = __ENV__.line + 9
+
+      defmodule Fixture33 do
+        use Hologram.Entity
+
+        @huge 2 ** 1024 - 2 ** 970
+
+        attribute :position, :integer
+
+        derived :cap, :float, fn position -> if position > 1, do: 1.5, else: @huge end
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :cap in Hologram.Entity.Derived.ValidatorTest.Fixture33 is declared :float, but a branch of its definition is the value #{2 ** 1024 - 2 ** 970}, which doesn't fit in a float\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture33]) end
+    end
+
+    test "raises on an integer above 64 bits" do
+      line = __ENV__.line + 5
+
+      defmodule Fixture27 do
+        use Hologram.Entity
+
+        derived :cap, :integer, fn -> 9_223_372_036_854_775_808 end
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :cap in Hologram.Entity.Derived.ValidatorTest.Fixture27 is declared :integer, but its definition is the value 9223372036854775808, which doesn't fit in 64 bits\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture27]) end
+    end
+
+    test "raises on an integer below 64 bits" do
+      line = __ENV__.line + 5
+
+      defmodule Fixture28 do
+        use Hologram.Entity
+
+        derived :floor, :integer, fn -> -9_223_372_036_854_775_809 end
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :floor in Hologram.Entity.Derived.ValidatorTest.Fixture28 is declared :integer, but its definition is the value -9223372036854775809, which doesn't fit in 64 bits\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture28]) end
+    end
+
+    test "raises on a branch of an if holding an integer past 64 bits" do
+      line = __ENV__.line + 7
+
+      defmodule Fixture29 do
+        use Hologram.Entity
+
+        attribute :position, :integer
+
+        derived :cap, :integer, fn position ->
+          if position > 1, do: 1, else: 9_223_372_036_854_775_808
+        end
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :cap in Hologram.Entity.Derived.ValidatorTest.Fixture29 is declared :integer, but a branch of its definition is the value 9223372036854775808, which doesn't fit in 64 bits\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture29]) end
+    end
+
     test "raises on an operand of <> computing another type" do
       line = __ENV__.line + 8
 

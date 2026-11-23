@@ -9,6 +9,7 @@ defmodule Hologram.Test.SyncClient do
   # Consumed by the feature, cluster and sync test apps, like FeatureHelpers beside it. Built on
   # :httpc so it adds no dependency to any of them.
 
+  alias Hologram.DB.Codec
   alias Hologram.Entity.Model
   alias Hologram.Sync.Frame
 
@@ -51,7 +52,8 @@ defmodule Hologram.Test.SyncClient do
   and `:protocol_version` default to this build's own - a test speaking as a stale client
   overrides them - and `:page` names the page the client claims to be on. `:cursor` is the place
   a returning client hands back, absent for a first visit, and `:policy_hash` the rules a bundle was
-  built with, absent for a client the server is to take as current.
+  built with, absent for a client the server is to take as current. `:synced_types` are the entity
+  types the bundle names, as a list of modules or labels, absent for a bundle naming none.
   """
   @spec connect(String.t(), keyword) :: t
   def connect(base_url, opts) do
@@ -86,7 +88,7 @@ defmodule Hologram.Test.SyncClient do
   The `:model_hash` and `:protocol_version` default to this build's own, so a client built here
   claims what is true of it. A `:cursor` travels only when given, the same as the browser's
   first visit, and so does a `:policy_hash` - a client naming no rules is served as one holding the
-  current ones.
+  current ones - and `:synced_types`, joined by commas as the browser joins them.
   """
   @spec greeting_params(keyword) :: keyword
   def greeting_params(opts) do
@@ -96,13 +98,32 @@ defmodule Hologram.Test.SyncClient do
       protocol_version: Keyword.get(opts, :protocol_version, Frame.protocol_version())
     ]
 
-    Enum.reduce([:policy_hash, :cursor], base, fn key, params ->
-      case Keyword.get(opts, key) do
-        nil -> params
-        value -> [{key, value} | params]
-      end
-    end)
+    base
+    |> put_given(opts, :policy_hash)
+    |> put_given(opts, :cursor)
+    |> put_synced_types(Keyword.get(opts, :synced_types))
   end
+
+  defp put_given(params, opts, key) do
+    case Keyword.get(opts, key) do
+      nil -> params
+      value -> [{key, value} | params]
+    end
+  end
+
+  # Spelled and joined as the browser spells and joins them (see `assets/js/sync_stream.mjs`), so a
+  # test may name the types by their modules.
+  defp put_synced_types(params, nil), do: params
+
+  defp put_synced_types(params, types) do
+    labels = Enum.map(types, &label/1)
+
+    [{:synced_types, Enum.join(labels, ",")} | params]
+  end
+
+  defp label(type) when is_atom(type), do: Codec.encode_enum_value(type)
+
+  defp label(label) when is_binary(label), do: label
 
   @doc """
   Returns the next frame of the given SSE event kind, or says that none arrived in time.

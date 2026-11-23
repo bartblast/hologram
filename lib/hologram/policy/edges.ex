@@ -46,7 +46,7 @@ defmodule Hologram.Policy.Edges do
       relationships stored on the entity type, which put rows into the set the chain reaches -
       the owner's to-many, or the to-many an inverse of one reverses.
     * `{:named_grants, entity_type, role_names}` - grants of these roles held on the
-      entity a grant-store row names, deciding that row's visibility.
+      entity a grant-store row names or on its whole type, deciding that row's visibility.
 
   Beside the operations, `{entity type, {:verdicts}}` names what the server's verdicts sent with
   its rows read, when they read anything: the edges of every rule `Hologram.Policy.operation_rules/2`

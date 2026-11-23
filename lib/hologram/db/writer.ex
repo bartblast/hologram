@@ -27,7 +27,7 @@ defmodule Hologram.DB.Writer do
   def create(entity) do
     refuse_unrecordable_job!(entity)
 
-    stamped = stamp_actor(entity)
+    stamped = stamp_job(entity)
 
     {:ok, result} =
       Connection.retry_on_deadlock(fn ->
@@ -326,9 +326,12 @@ defmodule Hologram.DB.Writer do
   # before the claim is evaluated, so a policy naming the field judges the value the row will
   # hold - and stamped over whatever the struct carries, the way the executor stamps the
   # timestamps.
-  defp stamp_actor(entity) do
+  #
+  # It is due from now, by this node's clock: a browser's own clock can be set as far back as it
+  # likes, and the queue is ordered by this time, so a job it wrote must not be able to jump it.
+  defp stamp_job(entity) do
     if Reflection.job?(entity.__struct__) do
-      %{entity | actor_id: Context.actor_entity_id()}
+      %{entity | actor_id: Context.actor_entity_id(), scheduled_at: DateTime.utc_now()}
     else
       entity
     end

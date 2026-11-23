@@ -9,8 +9,7 @@ defmodule HologramSyncTests.Consistency.Writer do
   # The lock is held to the commit, and PostgreSQL takes a transaction out of the running set before
   # it lets its locks go, so the next writer to get the lock sees every earlier commit: commits
   # happen in lock order, and each state read under the lock is exactly the state its commit leaves.
-  # It's taken with a plain query at the transaction's top level - `Hologram.DB.sql/3` runs in a
-  # savepoint it rolls back, which would give the lock back at once (#1750).
+  # It's taken with a plain query at the transaction's top level.
 
   alias Hologram.DB
   alias Hologram.DB.Connection

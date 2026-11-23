@@ -17,6 +17,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.DB.Oplog
   alias Hologram.DB.QueryCache
   alias Hologram.Entity
+  alias Hologram.Entity.Model
   alias Hologram.Mutation.Record
   alias Hologram.Policy
   alias Hologram.Policy.Edges
@@ -25,6 +26,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Sync.Fill
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Gate
+  alias Hologram.Sync.Lens
   alias Hologram.Sync.Live
   alias Hologram.Sync.PackedIds
   alias Hologram.Sync.PageTypes
@@ -37,6 +39,8 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module39
+  alias Hologram.Test.Fixtures.Entity.Module40
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyProject
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyLabel
@@ -102,8 +106,8 @@ defmodule Hologram.Sync.SessionTest do
 
   # Let into the sandbox, since the session reads the rows and the grant store itself to decide what
   # this client may see, so without this it judges every rule against the committed database rather
-  # than against what the test wrote. Every reader lets the session in itself too, since both a fill
-  # and a catch-up read in the continue that starts the session, before the test could.
+  # than against what the test wrote. The fill and the held ids let the session in themselves too,
+  # since a session can reach either of them before the test could let it in.
   #
   # A test names what a returning client missed as `gap:`, and the edge the gap read reached as
   # `edge:` - the session reads both through `:read_gap`. The edge defaults to past the gap's last
@@ -111,9 +115,18 @@ defmodule Hologram.Sync.SessionTest do
   defp start_session!(opts) do
     test_pid = self()
 
-    # A first arrival fills inside its first callback, which can run before the test lets it in -
-    # so the fill lets the session in itself, as a gap reader does.
+    # A session reads before the test can let it in, so its first read lets it in itself, whichever
+    # reader a test gave it: the fill for a first arrival, the held ids for a client coming back. It
+    # traps exits from here on, so the end of a test stops it between two messages rather than in
+    # the middle of a read: a process killed while it reads takes the test's connection down with
+    # it, and the test's rollback fails.
+    enter_sandbox = fn ->
+      Process.flag(:trap_exit, true)
+      allow_into_sandbox(self(), test_pid)
+    end
+
     read_fill = Keyword.get(opts, :read_fill, &read_fill_in_sandbox/4)
+    read_ids = Keyword.get_lazy(opts, :read_ids, &read_ids_in_sandbox/0)
 
     opts =
       opts
@@ -124,11 +137,15 @@ defmodule Hologram.Sync.SessionTest do
       |> Keyword.put_new(:policy_hash, @policy_hash)
       |> Keyword.put_new(:types_hash, @types_hash)
       |> Keyword.put(:read_fill, fn entity_type, actor_user_id, replica_id, synced_types ->
-        allow_into_sandbox(self(), test_pid)
+        enter_sandbox.()
 
         read_fill.(entity_type, actor_user_id, replica_id, synced_types)
       end)
-      |> Keyword.put_new(:read_ids, read_ids_in_sandbox())
+      |> Keyword.put(:read_ids, fn entity_type, actor_user_id ->
+        enter_sandbox.()
+
+        read_ids.(entity_type, actor_user_id)
+      end)
       |> Keyword.put_new(:read_part, read_part_in_sandbox())
 
     session = start_supervised!(Supervisor.child_spec({Session, opts}, id: make_ref()))
@@ -138,8 +155,8 @@ defmodule Hologram.Sync.SessionTest do
     session
   end
 
-  # A gap reader over the log lets the session in itself when the session calls it, which can be
-  # before this test gets the chance - so being let in already is as good as letting it in.
+  # The session's readers let it in themselves when it calls them, which can be before this test
+  # gets the chance - so being let in already is as good as letting it in.
   defp allow_into_sandbox(pid, owner \\ self()) do
     case DBConnection.Ownership.ownership_allow(DB.pool_name(), owner, pid, []) do
       :ok -> :ok
@@ -151,13 +168,7 @@ defmodule Hologram.Sync.SessionTest do
   # connection cannot open: it is inside the test's transaction, and a savepoint of the session's
   # would share names with the test's own. So the session reads in the test's transaction, which is
   # the one snapshot every read here sees.
-  #
-  # And it traps exits from here on, so the end of a test stops it between two messages rather than
-  # in the middle of a read: a process killed while it reads takes the test's connection down with
-  # it, and the next test's with that.
   defp read_fill_in_sandbox(entity_type, actor_user_id, replica_id, synced_types) do
-    Process.flag(:trap_exit, true)
-
     Fill.read_now(entity_type, actor_user_id, replica_id, synced_types)
   end
 
@@ -203,7 +214,7 @@ defmodule Hologram.Sync.SessionTest do
 
   # What a returning client is taken to hold, read by a session that lets itself into the sandbox
   # first, since it reads before a test could let it in - and traps exits from here on, as the other
-  # readers below have it, so the end of a test stops it between two messages.
+  # readers above have it, so the end of a test stops it between two messages.
   defp read_ids_in_sandbox do
     test_pid = self()
 
@@ -513,17 +524,33 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "cuts the client off when the log says it has to be sent everything again" do
-      session = start_session!(read_gap: fn -> {:full_resync, :gap_too_large} end)
+      test_pid = self()
+
+      # Held until the test is watching, since a session already gone reports no reason.
+      session =
+        start_session!(
+          read_gap: fn ->
+            send(test_pid, {:reading_gap, self()})
+
+            receive do
+              :answer_gap -> {:full_resync, :gap_too_large}
+            end
+          end
+        )
 
       ref = Process.monitor(session)
+
+      assert_receive {:reading_gap, ^session}
+      send(session, :answer_gap)
 
       assert_receive {:DOWN, ^ref, :process, ^session, {:full_resync, :gap_too_large}}
       refute_received {:sync_synced, :all, _cursor}
     end
 
-    # The batch is read while the gap is told, so it reaches the session before the catch-up is
-    # over - and below the edge read after it, so it may be in some of what the catch-up read and
-    # not in the rest.
+    # The batch reaches the session before the catch-up is over, dated at the gap's edge, so it is
+    # told - and below the edge read once the catch-up is over, so it may be in some of what the
+    # catch-up read and not in the rest. Routed during the held read, a real batch would be wholly
+    # below the edge and passed over: the date makes it one not finished when the edge was read.
     test "tells a batch routed during the catch-up after the marker, its rows whole" do
       task = create("before")
       test_pid = self()
@@ -555,6 +582,67 @@ defmodule Hologram.Sync.SessionTest do
 
       assert id == task.id
       assert data.c == "after"
+    end
+
+    # The batch's rows are read before the gap's edge, and a transaction committing in between
+    # writes the row again - which the gap holds, and the chunk's rows hold too. Told after the
+    # marker, the batch would put the row back as it stood before that transaction, under the edge.
+    test "passes over a batch routed during the catch-up that committed wholly below the edge" do
+      row = create("before")
+
+      batch = [logged(:patch_entity, Module2, row.id, %{"c" => "before"}, {100, 1})]
+      part = Live.part_now(batch, nil, Edges.index(), QueryCache.synced_types(), {100, 0}, 100)
+
+      DB.update!(Module2, row.id, c: "after")
+
+      gap = [logged(:patch_entity, Module2, row.id, %{"c" => "after"}, {150, 1})]
+
+      session =
+        start_session!(
+          read_gap: fn ->
+            send(self(), {:live, part})
+
+            {:ok, gap, 200}
+          end
+        )
+
+      assert_receive {:sync_deltas, cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert id == row.id
+      assert data.c == "after"
+      assert cursor == Cursor.encode(150, 1, @policy_hash, @types_hash)
+
+      assert_receive {:sync_synced, :all, all_cursor}
+      assert all_cursor == Cursor.encode(200, 0, @policy_hash, @types_hash)
+
+      await_live(session)
+      refute_received {:sync_deltas, _cursor, _deltas, _seq}
+    end
+
+    # Its last transaction can have been open when the gap's edge was read, and commit after the gap
+    # was read, so the gap need not hold it.
+    test "tells a batch routed during the catch-up that reaches the edge" do
+      row = create("after")
+
+      batch = [
+        logged(:patch_entity, Module2, row.id, %{"c" => "before"}, {190, 1}),
+        logged(:patch_entity, Module2, row.id, %{"c" => "after"}, {200, 1})
+      ]
+
+      part = Live.part_now(batch, nil, Edges.index(), QueryCache.synced_types(), {190, 0}, 200)
+
+      start_session!(
+        read_gap: fn ->
+          send(self(), {:live, part})
+
+          {:ok, [], 200}
+        end
+      )
+
+      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_deltas, cursor, [%{data: data, id: id, op: :put_entity}], _seq}
+      assert id == row.id
+      assert data.c == "after"
+      assert cursor == Cursor.encode(200, 0, @policy_hash, @types_hash)
     end
   end
 
@@ -791,8 +879,9 @@ defmodule Hologram.Sync.SessionTest do
              end)
     end
 
-    # The batch is read after the gap, which holds nothing of it, and below the edge read once the
-    # catch-up is over.
+    # The batch is dated at the gap's edge, so it is told - and below the edge read once the
+    # catch-up is over. Routed during the held read, a real batch would be wholly below the edge
+    # and passed over: the date makes it one not finished when the edge was read.
     test "drops by hash a row a batch routed during the catch-up hid", %{
       child: child,
       parent: parent
@@ -823,8 +912,9 @@ defmodule Hologram.Sync.SessionTest do
 
       assert_receive {:sync_synced, :all, _cursor}
 
-      # The held ids of both types are read after the parent went private, so neither row is held:
-      # the batch tells both by hash, each type in a frame of its own.
+      # The held ids of both types are read after the parent went private, so neither row is held,
+      # and the batch is below the trust edge: it tells both by hash, each type in a frame of its
+      # own.
       assert_receive {:sync_deltas, _cursor, first, nil}
       assert_receive {:sync_deltas, _cursor, second, nil}
 
@@ -841,7 +931,8 @@ defmodule Hologram.Sync.SessionTest do
 
     # The chunk's search walks the tables as they stand once the child moved, so it no longer
     # reaches the child from the parent - and the move's own batch, routed meanwhile, finds the
-    # child hidden and not held.
+    # child hidden and not held. The move commits after the gap was read, so its transaction is at
+    # or above the gap's edge, and its batch is told.
     test "drops by hash a row its parent's going private hid that then moved", %{
       child: child,
       parent: parent
@@ -872,7 +963,7 @@ defmodule Hologram.Sync.SessionTest do
         | old: %{"parent_id" => parent.id}
       }
 
-      route([moved], {1, 0})
+      route([moved], {301, 0})
       send(session, :moved)
 
       chunk_frames = await_frames()
@@ -2245,6 +2336,27 @@ defmodule Hologram.Sync.SessionTest do
       assert Enum.any?(deltas, &(&1.op == :put_entity and &1.id == public.id))
     end
 
+    test "stops when a fill reads under a data model on hold" do
+      page_types(%{})
+      Process.flag(:trap_exit, true)
+
+      read_fill = fn _entity_type, _actor_user_id, _replica_id, _synced_types ->
+        raise Hologram.StaleModelError
+      end
+
+      {:ok, session} =
+        Session.start_link(
+          client: self(),
+          outbox: [raw: true],
+          page: @page,
+          policy_hash: @policy_hash,
+          read_fill: read_fill,
+          types_hash: @types_hash
+        )
+
+      assert_receive {:EXIT, ^session, {:shutdown, :model_held}}, 1_000
+    end
+
     test "stops when a part arrives under a data model on hold" do
       page_types(%{})
 
@@ -2270,6 +2382,7 @@ defmodule Hologram.Sync.SessionTest do
 
       part = %{
         checked: %{},
+        moved: %{},
         overtaking_seqs: %{},
         own_puts: %{},
         own_seqs: %{},
@@ -2331,6 +2444,508 @@ defmodule Hologram.Sync.SessionTest do
         })
 
       assert status.message == {:live, :redacted}
+    end
+  end
+
+  # A client built against an older model reads only some of the types this build syncs, and is
+  # told of no other, filled, coming back or watching.
+  describe "a session given fewer types than the build syncs" do
+    test "fills only the types it is given" do
+      task = create("first")
+
+      %{public: true}
+      |> PolicyModule1.new()
+      |> DB.create!()
+
+      page_types(%{})
+
+      start_session!(synced_types: [Module2])
+
+      assert [%{id: id, type: "Hologram.Test.Fixtures.Entity.Module2"}] = await_fill()
+      assert id == task.id
+    end
+
+    test "takes a returning client to hold only rows of the types it is given" do
+      test_pid = self()
+      read_ids = read_ids_in_sandbox()
+
+      page_types(%{})
+
+      start_session!(
+        gap: [],
+        read_ids: fn entity_type, actor_user_id ->
+          send(test_pid, {:read_ids, entity_type})
+          read_ids.(entity_type, actor_user_id)
+        end,
+        synced_types: [Module2]
+      )
+
+      assert_receive {:read_ids, Module2}
+      refute_receive {:read_ids, _other_type}, 100
+    end
+
+    test "tells a returning client nothing of the gap's rows of a type it isn't given" do
+      task = create("missed")
+
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      page_types(%{})
+
+      gap = [
+        logged(:put_entity, PolicyModule1, row.id, %{"public" => true}, {100, 1}),
+        logged(:put_entity, Module2, task.id, %{"a" => true, "c" => "missed"}, {100, 2})
+      ]
+
+      start_session!(gap: gap, synced_types: [Module2])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert [%{id: id, op: :put_entity}] = deltas
+      assert id == task.id
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
+    # A grant change can move every row of a type for a user, which the session reads again whole -
+    # never one of a type the client isn't given.
+    test "reads no type it isn't given again whole" do
+      test_pid = self()
+
+      read_fill = fn entity_type, actor_user_id, replica_id, synced_types ->
+        send(test_pid, {:read_fill, entity_type})
+        read_fill_in_sandbox(entity_type, actor_user_id, replica_id, synced_types)
+      end
+
+      page_types(%{})
+
+      session = start_session!(read_fill: read_fill, synced_types: [Module2])
+      await_fill()
+      assert_receive {:read_fill, Module2}
+
+      send(session, {:live, hand_built_part(whole_types: [PolicyModule1])})
+      await_live(session)
+
+      refute_receive {:read_fill, _entity_type}, 100
+    end
+
+    # A part a returning client can't trust what it holds against tells the rows the batch may have
+    # hidden by hash - never one of a type the client isn't given, whose label an old tab may not
+    # know.
+    test "tells no row of a type it isn't given by hash" do
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      page_types(%{})
+
+      session = start_session!(gap: [], synced_types: [Module2])
+
+      # Caught up, so the session judges what came before its trust edge without trusting what it
+      # holds.
+      assert_receive {:sync_synced, :all, _cursor}
+
+      packed = PackedIds.pack([row.id])
+
+      part =
+        hand_built_part(
+          checked: %{PolicyModule1 => packed},
+          moved: %{PolicyModule1 => packed},
+          readable: %{PolicyModule1 => %{}},
+          tx_range: {1, 1}
+        )
+
+      send(session, {:live, part})
+      await_live(session)
+
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
+    test "tells nothing of a batch's rows of a type it isn't given" do
+      page_types(%{})
+
+      start_session!(synced_types: [Module2])
+      await_fill()
+
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      route([live_effect(:put_entity, PolicyModule1, row.id, %{"public" => true})])
+
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+
+      task = create("created")
+      route([live_effect(:put_entity, Module2, task.id, %{"a" => true, "c" => "created"})])
+
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], nil}
+      assert id == task.id
+    end
+  end
+
+  # A client built against an older model, served through a lens: what it is sent is in its
+  # model's names, and a row holding a value its model lacks is kept from it.
+  describe "a session serving through a lens" do
+    setup do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        permission_checking?: true,
+        synced_types: [Module2, Module39, Module40, PolicyModule1, PolicyModule5],
+        windows: %{}
+      })
+
+      page_types(%{})
+
+      :ok
+    end
+
+    # The tab's model: Module2's `c` was `title` and its `b` is new since, and Module39's `kind`
+    # gained `:staff` since.
+    defp tab_lens(extra_ops \\ []) do
+      ops =
+        [
+          %{op: :rename_attribute, entity: Module2, from: :title, to: :c},
+          %{op: :add_attribute, entity: Module2, name: :b, type: :integer, opts: []},
+          %{op: :add_enum_value, entity: Module39, attribute: :kind, value: :staff, opts: []}
+        ] ++ extra_ops
+
+      {:ok, lens} = Lens.build(Model.empty(), ops)
+
+      resolved = Lens.resolve(lens, [Module2, Module39, Module40, PolicyModule1, RoleGrant])
+
+      %{resolved | model_hash: Model.hash()}
+    end
+
+    defp create_member(kind) do
+      %{kind: kind, score: 1}
+      |> Module39.new()
+      |> DB.create!()
+    end
+
+    test "fills in the tab's names, without what is new since" do
+      task = create("first")
+
+      start_session!(lens: tab_lens(), synced_types: [Module2])
+
+      assert [%{data: data, id: id, type: "Hologram.Test.Fixtures.Entity.Module2"}] = await_fill()
+      assert id == task.id
+      assert data.title == "first"
+      refute Map.has_key?(data, :c)
+      refute Map.has_key?(data, :b)
+    end
+
+    test "names a type renamed since by its old name, in rows and markers" do
+      create("first")
+      lens = tab_lens([%{op: :rename_entity, from: MyApp.OldTask, to: Module2}])
+
+      start_session!(lens: lens, synced_types: [Module2])
+
+      assert_receive {:sync_deltas, nil, [%{type: "MyApp.OldTask"}], _applied_seq}
+      assert_receive {:sync_synced, {:types, [MyApp.OldTask], _applied_seq}, nil}
+    end
+
+    test "patches a row under the tab's names" do
+      task = create("before")
+
+      start_session!(lens: tab_lens(), synced_types: [Module2])
+      await_fill()
+
+      DB.update!(Module2, task.id, c: "after")
+      route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})])
+
+      assert_receive {:sync_deltas, _cursor, [%{data: data, op: :patch_entity}], nil}
+      assert data.title == "after"
+    end
+
+    # A live reload can change the model while the session sits idle, with nothing held when the
+    # part is read, and the lens is of the model before.
+    test "stops rather than tell a part through a lens of a model no longer running" do
+      task = create("before")
+
+      session = start_session!(lens: tab_lens(), synced_types: [Module2])
+      await_fill()
+
+      :sys.replace_state(session, fn state -> put_in(state.lens.model_hash, "0ld") end)
+      ref = Process.monitor(session)
+
+      DB.update!(Module2, task.id, c: "after")
+      route([live_effect(:patch_entity, Module2, task.id, %{"c" => "after"})])
+
+      assert_receive {:DOWN, ^ref, :process, ^session, {:shutdown, :model_held}}, 1_000
+      refute_received {:sync_deltas, _cursor, _deltas, _claim}
+    end
+
+    test "fills no row holding a value the tab's model lacks" do
+      guest = create_member(:guest)
+      create_member(:staff)
+
+      start_session!(lens: tab_lens(), synced_types: [Module39])
+
+      assert [%{id: id}] = await_fill()
+      assert id == guest.id
+    end
+
+    test "drops a row a batch gives a value the tab's model lacks, and hands it over whole once it loses it" do
+      member = create_member(:guest)
+
+      start_session!(lens: tab_lens(), synced_types: [Module39])
+      await_fill()
+
+      DB.update!(Module39, member.id, kind: :staff)
+      route([live_effect(:patch_entity, Module39, member.id, %{"kind" => "staff"})])
+
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :unsync_entity}], nil}
+      assert id == member.id
+
+      DB.update!(Module39, member.id, kind: :guest)
+      route([live_effect(:patch_entity, Module39, member.id, %{"kind" => "guest"})])
+
+      assert_receive {:sync_deltas, _cursor, [%{data: data, id: ^id, op: :put_entity}], nil}
+      assert data.kind == "guest"
+    end
+
+    # A returning client is taken to hold every row its user may read, bar the ones the lens keeps
+    # from it - so one that loses its new value is handed over whole, not patched.
+    test "takes a returning client to hold no row it is kept from" do
+      member = create_member(:staff)
+
+      start_session!(gap: [], lens: tab_lens(), synced_types: [Module39])
+      assert_receive {:sync_synced, :all, _cursor}
+
+      DB.update!(Module39, member.id, kind: :guest)
+      route([live_effect(:patch_entity, Module39, member.id, %{"kind" => "guest"})])
+
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], nil}
+      assert id == member.id
+    end
+
+    test "tells a returning client to drop a row that took a value its model lacks while it was away" do
+      member = create_member(:staff)
+
+      gap = [logged(:patch_entity, Module39, member.id, %{"kind" => "staff"}, {100, 1})]
+
+      start_session!(gap: gap, lens: tab_lens(), synced_types: [Module39])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert [%{id: id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Entity.Module39"}] =
+               deltas
+
+      assert id == member.id
+    end
+
+    # The batch's recheck gives verdicts for every readable row of a type with a deciding quantifier,
+    # and the session asks after those of the rows its client holds.
+    test "drops a held row it is kept from whatever verdicts the batch gave it" do
+      member = create_member(:guest)
+
+      session = start_session!(lens: tab_lens(), synced_types: [Module39])
+      await_fill()
+
+      staff = %{member | kind: :staff}
+
+      part =
+        hand_built_part(
+          checked: %{Module39 => PackedIds.pack([member.id])},
+          readable: %{Module39 => %{member.id => staff}},
+          verdicts: %{Module39 => %{member.id => %{"read:00" => true}}}
+        )
+
+      send(session, {:live, part})
+
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :unsync_entity}], nil}
+      assert id == member.id
+    end
+
+    # A catch-up of several chunks passes over a row an earlier chunk settled - a row it told to
+    # drop among them, which a later chunk naming it again must neither take as held nor tell to drop
+    # again. Patched on attributes no read rule reads, the row is no moved one, so only being told to
+    # drop settles it.
+    test "hands over whole a row a catch-up told to drop over several chunks, once it loses its value" do
+      put_app_env(:sync, rows_per_frame: 1)
+
+      member = create_member(:staff)
+
+      gap = [
+        logged(:patch_entity, Module39, member.id, %{"kind" => "staff"}, {100, 1}),
+        logged(:patch_entity, Module39, member.id, %{"score" => 2}, {100, 2})
+      ]
+
+      start_session!(gap: gap, lens: tab_lens(), synced_types: [Module39])
+
+      # Told to drop once, by the first chunk naming it.
+      drops =
+        for {:sync_deltas, _cursor, deltas, _applied_seq} <- catch_up_frames(),
+            %{id: id, op: :unsync_entity} <- deltas,
+            id == member.id,
+            do: id
+
+      assert drops == [member.id]
+
+      DB.update!(Module39, member.id, kind: :guest)
+      route([live_effect(:patch_entity, Module39, member.id, %{"kind" => "guest"})])
+
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], nil}
+      assert id == member.id
+    end
+
+    test "tells a returning client to drop a row it is kept from in a part it can't trust" do
+      member = create_member(:staff)
+
+      session = start_session!(gap: [], lens: tab_lens(), synced_types: [Module39])
+      assert_receive {:sync_synced, :all, _cursor}
+
+      part =
+        hand_built_part(
+          checked: %{Module39 => PackedIds.pack([member.id])},
+          readable: %{Module39 => %{member.id => member}},
+          tx_range: {1, 1}
+        )
+
+      send(session, {:live, part})
+
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :unsync_entity}], _applied_seq}
+      assert id == member.id
+    end
+
+    test "reads a type again whole without the rows it is kept from" do
+      session = start_session!(lens: tab_lens(), synced_types: [Module39])
+      await_fill()
+
+      # Rows the batch's grant change opened, as far as the session knows.
+      guest = create_member(:guest)
+      create_member(:staff)
+
+      send(session, {:live, hand_built_part(whole_types: [Module39])})
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert Enum.map(deltas, & &1.id) == [guest.id]
+    end
+
+    test "lists only the grants the tab's model has among those a returning client may keep" do
+      user =
+        %{email: "old-tab@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      Auth.grant_role(user, :viewer, PolicyModule1)
+      Auth.grant_role(user, :editor, PolicyModule1)
+
+      [viewer, editor] =
+        for role <- [:viewer, :editor] do
+          RoleGrant.derive_id(user.id, PolicyModule1, nil, role)
+        end
+
+      lens = tab_lens([%{op: :add_role, entity: PolicyModule1, name: :editor, opts: []}])
+
+      session =
+        start_session!(actor_user_id: user.id, gap: [], lens: lens, synced_types: [RoleGrant])
+
+      assert_receive {:sync_synced, :all, _cursor}
+
+      # A grant the batch may have taken away, judged without trusting what the client holds.
+      lost = Entity.generate_id()
+
+      part =
+        hand_built_part(
+          checked: %{RoleGrant => PackedIds.pack([lost])},
+          moved: %{RoleGrant => PackedIds.pack([lost])},
+          readable: %{RoleGrant => %{}},
+          tx_range: {1, 1}
+        )
+
+      send(session, {:live, part})
+
+      assert_receive {:sync_deltas, _cursor,
+                      [%{data: %{hashes: hashes, salt: salt}, op: :keep_hashed}], nil}
+
+      assert Frame.drop_hash(salt, viewer) in hashes
+      refute Frame.drop_hash(salt, editor) in hashes
+    end
+
+    test "fills a set without the members it is kept from" do
+      guest = create_member(:guest)
+      staff = create_member(:staff)
+
+      team =
+        %{name: "team"}
+        |> Module40.new()
+        |> DB.create!()
+
+      :ok = EntityOperations.add_relationship(Module40, team.id, :players, guest.id)
+      :ok = EntityOperations.add_relationship(Module40, team.id, :players, staff.id)
+
+      start_session!(lens: tab_lens(), synced_types: [Module39, Module40])
+
+      deltas = await_fill()
+
+      assert [%{data: %{players: players}}] =
+               Enum.filter(deltas, &(&1.type == "Hologram.Test.Fixtures.Entity.Module40"))
+
+      assert players == [guest.id]
+    end
+
+    test "fills no grant of a role the tab's model lacks" do
+      user =
+        %{email: "old-tab@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      Auth.grant_role(user, :viewer, PolicyModule1)
+
+      lens = tab_lens([%{op: :add_role, entity: PolicyModule1, name: :viewer, opts: []}])
+
+      start_session!(actor_user_id: user.id, lens: lens, synced_types: [RoleGrant])
+
+      assert await_fill() == []
+    end
+
+    test "fills a grant of a role the tab's model has" do
+      user =
+        %{email: "old-tab@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      Auth.grant_role(user, :viewer, PolicyModule1)
+
+      start_session!(actor_user_id: user.id, lens: tab_lens(), synced_types: [RoleGrant])
+
+      assert [%{data: %{role: "viewer"}, type: "Hologram.Auth.RoleGrant"}] = await_fill()
+    end
+
+    # The raw outbox hands the session's messages over as they are; a real one encodes them as the
+    # stream writes them, and an old type's marker has to encode too.
+    test "markers naming an old type encode for the stream" do
+      create("first")
+      lens = tab_lens([%{op: :rename_entity, from: MyApp.OldTask, to: Module2}])
+
+      start_session!(lens: lens, outbox: [], synced_types: [Module2])
+
+      assert types_marker_chunk() =~ ~s("types":["MyApp.OldTask"])
+    end
+
+    # The frames a returning client is sent up to the marker saying it is caught up.
+    defp catch_up_frames(acc \\ []) do
+      receive do
+        {:sync_synced, :all, _cursor} -> Enum.reverse(acc)
+        {:sync_deltas, _cursor, _deltas, _applied_seq} = frame -> catch_up_frames([frame | acc])
+      after
+        1_000 -> flunk("the client was never told it is caught up")
+      end
+    end
+
+    # The encoded types marker the session sends, each chunk before it acknowledged as written.
+    defp types_marker_chunk do
+      receive do
+        {:sync_frame, session, chunk} ->
+          send(session, :sync_written)
+
+          if chunk =~ ~s("scope":"types"), do: chunk, else: types_marker_chunk()
+      after
+        1_000 -> flunk("the session never sent a types marker")
+      end
     end
   end
 
@@ -2507,6 +3122,7 @@ defmodule Hologram.Sync.SessionTest do
 
       part = %{
         checked: %{},
+        moved: %{},
         overtaking_seqs: %{},
         own_puts: %{},
         own_seqs: %{},
@@ -2719,6 +3335,29 @@ defmodule Hologram.Sync.SessionTest do
       assert id == arrived.id
       assert data[:"$verdicts"] == project_verdicts(false)
     end
+  end
+
+  # A part as `Hologram.Sync.Live.parts/5` builds one, for every type the suite's build syncs,
+  # telling nothing unless the given fields say otherwise.
+  defp hand_built_part(fields) do
+    Map.merge(
+      %{
+        checked: %{},
+        moved: %{},
+        overtaking_seqs: %{},
+        own_seqs: %{},
+        pair_effects: %{},
+        pairs: %{},
+        place: {Oplog.current_xmax() + 1, 0},
+        readable: %{},
+        synced_types: QueryCache.synced_types(),
+        tx_range: {Oplog.current_xmax() + 1, Oplog.current_xmax() + 1},
+        verdicts: %{},
+        whole_types: [],
+        written: %{}
+      },
+      Map.new(fields)
+    )
   end
 
   # Drops what the session sent so far, so a test reads only what follows.

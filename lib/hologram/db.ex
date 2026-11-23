@@ -409,6 +409,19 @@ defmodule Hologram.DB do
   Inside an enclosing transaction the statement runs on the transaction's connection and sees its
   uncommitted rows, and the transaction stays writable afterwards.
 
+  A transaction-level advisory lock (`pg_advisory_xact_lock`, and its `_shared` and `pg_try_`
+  variants) named in the statement is held until the enclosing transaction ends, or until the
+  nested transaction it was taken in rolls back. A lock taken inside a function of the app's own
+  isn't seen and is given back when the read returns. A statement that names one keeps everything
+  else a read-only transaction allows it to do, such as changing a setting with `set_config` or
+  calling `pg_notify`, so keep it to the lock. The wait for the lock counts against `timeout:` and
+  against the time the enclosing transaction has left. Past `timeout:` the read is answered as
+  {:error, %Hologram.SQLError{code: :query_canceled}}. Past the transaction's bound the driver
+  closes the connection, the call raises DBConnection.ConnectionError and the transaction is lost.
+  So take the lock first in the transaction, with a `timeout:` shorter than the time the transaction
+  has left, or use `pg_try_advisory_xact_lock`, which never waits. Use a single-number key: the data
+  layer locks rows with two-number keys.
+
   Runs only on the server: a page whose client code reaches it fails the build. Call it from a
   command, a job, a seed or a script, and hand an action what the client needs. A row is not an
   entity, so nothing strips server-only attribute values from it - a selected `password_hash` put
@@ -418,15 +431,19 @@ defmodule Hologram.DB do
   to 2_147_483_647, the largest PostgreSQL accepts, or `:infinity` - fifteen seconds by default.
   PostgreSQL enforces it: past it the statement is cancelled and answered as
   {:error, %Hologram.SQLError{code: :query_canceled}}, and the connection and any enclosing
-  transaction carry on. Inside an enclosing transaction its own bound applies as well. The read
-  is not run again when PostgreSQL resolves a deadlock, since it takes no row locks.
+  transaction carry on. Inside an enclosing transaction its own bound applies as well, and passing
+  it closes the connection (see transaction/2). The read is not run again when PostgreSQL resolves
+  a deadlock: it takes no row locks, and a deadlock over an advisory lock it waits for is answered
+  as {:error, %Hologram.SQLError{code: :deadlock_detected}}, for whoever opened the enclosing
+  transaction to retry.
 
   Raises Hologram.MisuseError for a statement that takes a session-level advisory lock or prepares a
-  named statement, either of which would outlive the read on a pooled connection - a
-  transaction-level advisory lock taken inside an enclosing transaction is held until that
-  transaction ends. Raises it as well for an option other than `timeout:`, an invalid timeout, a
-  number of params that differs from the statement's placeholders, and a param that does not fit
-  its placeholder's type. None of these reaches the server.
+  named statement, either of which would outlive the read on a pooled connection, for one that
+  releases an advisory lock, which the read could not undo, and for one that takes a
+  transaction-level advisory lock outside a transaction, where the lock would end with the read.
+  Raises it as well for an option other than `timeout:`, an invalid timeout, a number of
+  params that differs from the statement's placeholders, and a param that does not fit its
+  placeholder's type. None of these runs the statement.
   """
   @spec sql(String.t(), list, keyword) :: {:ok, sql_result} | {:error, SQLError.t()}
   def sql(statement, params \\ [], opts \\ []) do
@@ -476,10 +493,29 @@ defmodule Hologram.DB do
   PostgreSQL aborts the transaction as a deadlock victim - the error propagates, and this
   transaction is the one to retry.
 
+  The `timeout:` option is the milliseconds from this call until the transaction has to be done,
+  the wait for a free connection included, or `:infinity`, and is fifteen seconds by default. Past
+  it the driver closes the connection, the running statement raises DBConnection.ConnectionError
+  and the transaction is lost. A nested call's `timeout:` is ignored, since the outermost
+  transaction's bound is the one that applies.
+
   A nested call costs two statements (SAVEPOINT and RELEASE, three when it rolls back), and
   PostgreSQL caches 64 subtransactions per session - a transaction opening more than that, such
   as a loop of writes inside one transaction, slows every other session's visibility checks for
   as long as it runs. Split such batches into transactions of their own.
+
+  An Ecto repo runs on a connection pool of its own, so its transactions and the data layer's
+  commit separately. Any data layer call that runs a statement raises Hologram.MisuseError while
+  one of the app's Ecto repos has a transaction open in the calling process, reads included. A
+  transaction Ecto's SQL sandbox holds for a test doesn't count.
+
+  An Ecto query run inside this function makes the transaction fail with Hologram.MisuseError
+  naming the query, at the next data layer statement, at a rollback, or when the function
+  returns, and the data layer's writes roll back. Ecto can't be stopped at the call, so what it
+  wrote may already be committed. An exception the function raises itself propagates unchanged.
+  Keep every Ecto call outside the transaction: one made in another process isn't seen, nor is one
+  that overrides its telemetry event, and a preload of several associations may or may not be
+  caught, because Ecto runs it in parallel tasks when more than one association needs a query.
   """
   @spec transaction((-> any), keyword) :: {:ok, any} | {:error, any}
   defdelegate transaction(fun, opts \\ []), to: Connection

@@ -70,8 +70,8 @@ defmodule Hologram.DB.IndexPlan do
   reference column, which a delete checks and the sync's backwards search and recheck follow from
   the row it names; each join table's reverse direction, from the target back to its sources, which
   its primary key - led by the source - can't serve; the grant store's lookup of the grants on
-  an entity, by type, then id, then role; and a job worker's lookups of a job type's queued jobs,
-  oldest first, and of its running ones - by status, then creation time.
+  an entity, by type, then id, then role; and a job worker's lookups of a job type's due jobs,
+  the longest due first, and of its running ones - by status, then due time.
   """
   @spec framework_needs(%{module => %{atom => any}}) :: list(need)
   def framework_needs(mapping) do
@@ -520,8 +520,9 @@ defmodule Hologram.DB.IndexPlan do
   # The worker's lookups name the job type through a variable, which the build can't replay into a
   # need, so they're the framework's own. A job table keeps every job ever run, done ones included,
   # and the worker reads it on every write and every poll: without the index each read scans every
-  # row. One need serves both lookups - the queued jobs by status, oldest first, and the running
-  # ones by status alone, which the index's first column serves.
+  # row. One need serves both lookups - the due jobs by status and a range on the due time, which
+  # also gives their order, and the running ones by status alone, which the index's first column
+  # serves.
   #
   # It costs the claim and the outcome write, which change the status and so update the index too,
   # and the done rows stay in it - a plan index has no WHERE to leave them out. Two index writes per
@@ -532,8 +533,8 @@ defmodule Hologram.DB.IndexPlan do
         %{
           table: entity_mapping.table,
           eq: MapSet.new(["status"]),
-          range: nil,
-          order: ["created_at"]
+          range: "scheduled_at",
+          order: []
         }
       ]
     else

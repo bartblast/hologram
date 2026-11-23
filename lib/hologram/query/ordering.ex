@@ -5,13 +5,21 @@ defmodule Hologram.Query.Ordering do
   # them: what a comparison in a filter and a query's sort agree on, kept in one place so every
   # evaluation over rows read into memory orders them alike.
 
+  alias Hologram.DB.Codec
   alias Hologram.DB.SortKey
+
+  # What an integer column holds. Only these compare as floats: the database has no comparison for
+  # anything larger.
+  defguardp is_int8(value)
+            when is_integer(value) and value >= -0x8000000000000000 and
+                   value <= 0x7FFFFFFFFFFFFFFF
 
   @doc """
   Compares two values of one kind the way the database orders them, as `:lt`, `:eq` or `:gt`: a
   date, a datetime or a time chronologically, a string by the key derived from it and then by
-  itself, and an enum value by its position in the given ranks, a map from each declared value to
-  its index. Given no ranks, an enum value compares as any other atom.
+  itself, an integer and a float as two floats, and an enum value by its position in the given
+  ranks, a map from each declared value to its index. Given no ranks, an enum value compares as any
+  other atom.
   """
   @spec compare(any, any, %{atom => non_neg_integer} | nil) :: :eq | :gt | :lt
   def compare(left, right, ranks \\ nil)
@@ -79,6 +87,21 @@ defmodule Hologram.Query.Ordering do
     |> Enum.map(fn {row, _values} -> row end)
   end
 
+  @doc """
+  Returns the given value as a field of the given declared type reads it: an integer a float field
+  reads becomes a float, the way the database casts it, and anything else stays as it is, an
+  integer too large for a float included.
+  """
+  @spec widened(any, atom) :: any
+  def widened(value, :float) when is_integer(value) do
+    case Codec.decode_json(value, :float) do
+      {:ok, float} -> float
+      :error -> value
+    end
+  end
+
+  def widened(value, _type), do: value
+
   # Missing values are placed the way the database places them - last when ascending, first when
   # descending - so a page reading its own rows shows them where the server put them.
   defp compare_keys(nil, nil, _direction, _ranks), do: :eq
@@ -111,6 +134,16 @@ defmodule Hologram.Query.Ordering do
   end
 
   defp compare_values(%Time{} = left, %Time{} = right), do: Time.compare(left, right)
+
+  # The database rounds the integer to a float before comparing, where Erlang compares the two
+  # exactly, and the two answers differ above 2^53.
+  defp compare_values(left, right) when is_int8(left) and is_float(right) do
+    compare_values(left * 1.0, right)
+  end
+
+  defp compare_values(left, right) when is_float(left) and is_int8(right) do
+    compare_values(left, right * 1.0)
+  end
 
   defp compare_values(left, right) when left < right, do: :lt
 

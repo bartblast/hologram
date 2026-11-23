@@ -146,12 +146,10 @@ defmodule Hologram.Query.Interpreter do
     entity_type = row.__struct__
     {^name, type, _opts} = List.keyfind(entity_type.__derived__(), name, 0)
 
-    value =
-      entity_type
-      |> Derived.definition(name)
-      |> evaluated(row, scope)
-
-    if type == :float and is_integer(value), do: value * 1.0, else: value
+    entity_type
+    |> Derived.definition(name)
+    |> evaluated(row, scope)
+    |> Ordering.widened(type)
   end
 
   # A relationship the query asked for is filled from the rest of the database - a to-one by
@@ -261,6 +259,10 @@ defmodule Hologram.Query.Interpreter do
   end
 
   defp equal?(%Time{} = left, %Time{} = right), do: Time.compare(left, right) == :eq
+
+  defp equal?(left, right) when is_number(left) and is_number(right) do
+    Ordering.compare(left, right) == :eq
+  end
 
   defp equal?(left, right), do: left == right
 

@@ -584,6 +584,12 @@ describe("QueryKernel", () => {
 
         assert.deepEqual(titles(QueryKernel.run(bounded)), ["bob"]);
       });
+
+      it("reads a bound held as a BigInt", () => {
+        const bounded = term({skip: 1n, take: 9007199254740993n});
+
+        assert.deepEqual(titles(QueryKernel.run(bounded)), ["bob", "cleo"]);
+      });
     });
 
     describe("terminals", () => {
@@ -1477,6 +1483,24 @@ describe("QueryKernel", () => {
       assert.deepEqual(nicknames([["badge", "not_in", ["top", null]]]), []);
     });
 
+    it("widens a big integer a float field reads", () => {
+      LocalDatabase.putRow(PLAYER, {
+        id: "p4",
+        kind: "guest",
+        member_id: null,
+        score: 9007199254740993n,
+      });
+
+      const matched = QueryKernel.run(
+        term(PLAYER, {filter: [["ratio", "==", 9007199254740992n]]}),
+      );
+
+      assert.deepEqual(
+        matched.map((node) => node.row.id),
+        ["p4"],
+      );
+    });
+
     it("compares a derived value with an attribute of the row", () => {
       assert.deepEqual(scores([["ratio", ">", {attribute: "score"}]]), []);
 
@@ -2315,6 +2339,38 @@ describe("QueryKernel", () => {
         namesMatching([["count", "==", {attribute: "rating"}]]),
         ["dan"],
       );
+    });
+
+    it("compares a big integer with a float the way the database does", () => {
+      const row = {count: 9007199254740993n, rating: 9007199254740992};
+
+      assert.isTrue(matches(row, [["count", "==", {attribute: "rating"}]]));
+      assert.isFalse(matches(row, [["count", "!=", {attribute: "rating"}]]));
+      assert.isFalse(matches(row, [["count", ">", {attribute: "rating"}]]));
+      assert.isTrue(matches(row, [["rating", ">=", {attribute: "count"}]]));
+    });
+
+    it("compares a BigInt no column can hold with a float exactly", () => {
+      const row = {cap: 18446744073709551616n, rating: 18446744073709551616};
+
+      assert.isTrue(matches(row, [["cap", "==", {attribute: "rating"}]]));
+
+      assert.isFalse(
+        matches({...row, cap: 18446744073709551617n}, [
+          ["cap", "==", {attribute: "rating"}],
+        ]),
+      );
+
+      assert.isFalse(
+        matches({...row, rating: NaN}, [["cap", "==", {attribute: "rating"}]]),
+      );
+    });
+
+    it("finds a float in a list holding the big integer it rounds from", () => {
+      const row = {rating: 9007199254740992};
+
+      assert.isTrue(matches(row, [["rating", "in", [9007199254740993n]]]));
+      assert.isFalse(matches(row, [["rating", "not_in", [9007199254740993n]]]));
     });
 
     // Declared order, not label order: "high" is after "medium" in the declared list and before it

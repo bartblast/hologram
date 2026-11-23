@@ -2,7 +2,9 @@ defmodule HologramFeatureTests.Derived.Page4 do
   use Hologram.Page
   use Hologram.DB
 
+  alias Hologram.UI.Link
   alias HologramFeatureTests.Components.Derived.Component2
+  alias HologramFeatureTests.Derived.Page3
   alias HologramFeatureTests.Entities.Ticket
 
   route "/derived/4"
@@ -23,6 +25,9 @@ defmodule HologramFeatureTests.Derived.Page4 do
       <button $click={action: :lower_alpha}> Lower alpha </button>
     </p>
     <Component2 cid="ticket_counts" ticket={@ticket} />
+    <p>
+      <Link to={Page3}>Away link</Link>
+    </p>
     """
   end
 

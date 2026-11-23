@@ -95,6 +95,9 @@ export default class Durability {
   // starts, which is what stops two batches stored in the same turn from both asking.
   static #persistenceAsked = false;
 
+  // The last identity write started, for a send to wait on (see replicaWritten).
+  static #replicaWrite = Promise.resolve();
+
   // The batches this browser has filed above a number, oldest first - what a tab reads before it
   // sends, so that what it ships is the queue as the DATABASE holds it rather than as messages
   // happened to reach it.
@@ -365,7 +368,11 @@ export default class Durability {
   // Not awaited by anything on the write path. The rows are already in memory and already on
   // screen, and what this buys is only whether they are still there after a reload. What waits for
   // it is telling the other tabs (see Tabs.post).
-  static persistFrame(records, cursor) {
+  //
+  // `factRemovals` are pairs to take out of stored sets, leaving the rest of each record as stored
+  // (see `LocalDatabase.takeStoredFactRemovals`). Read after the frame's own puts, which a
+  // transaction runs in order, so a record this frame wrote is judged as written.
+  static persistFrame(records, cursor, factRemovals = []) {
     return Durability.#write([ENTITIES, META], (transaction) => {
       const entities = transaction.objectStore(ENTITIES);
       const meta = transaction.objectStore(META);
@@ -377,6 +384,8 @@ export default class Durability {
           entities.put(record);
         }
       }
+
+      Durability.#removeStoredFacts(entities, factRemovals);
 
       // A frame sent mid-fill names no place, because a client holding part of a pot could not
       // honour the claim one makes. The place already stored still describes the rows that were
@@ -406,18 +415,141 @@ export default class Durability {
   //
   // Fire and forget: the marks are already in memory, and what storing them buys is only whether
   // they are still true after a reload.
+  //
+  // Only over a record the queue still holds. A tab other than the sender can hear the frame that
+  // lands a batch after the sender was answered and let go of it - a follower whose frame arrives
+  // behind the delete, or a starting tab replaying what it heard while starting - and writing it
+  // back would put an answered batch in the queue for the next page load to send again. Read and
+  // written in ONE transaction, the put chained onto the read's callback, so a delete cannot land
+  // in between.
+  //
+  // And with the marks the record already holds kept: another tab can have stored more of them,
+  // having heard frames this one has not yet, and a mark lost is a move promoted a second time,
+  // by the next page load or by a later read of the store (see Tabs.#takeStore).
+  //
+  // The marks are taken as they stand now, not when the record answers: a frame that lands another
+  // write meanwhile has its own write coming, behind its rows, and its mark written here would go
+  // down ahead of those rows.
   static persistLanded(batch) {
-    return Durability.#write([QUEUE], (transaction) =>
-      transaction.objectStore(QUEUE).put(batch.record()),
-    );
+    const record = batch.record();
+
+    return Durability.#write([QUEUE], (transaction) => {
+      const queue = transaction.objectStore(QUEUE);
+      const stored = queue.get(batch.seq);
+
+      stored.onsuccess = () => {
+        if (stored.result === undefined) {
+          return;
+        }
+
+        // A record can predate the marks (see Batch#record): none stored is none landed.
+        const landed = new Set([
+          ...(stored.result.landed ?? []),
+          ...record.landed,
+        ]);
+
+        queue.put({
+          ...record,
+          landed: Array.from(landed).sort((left, right) => left - right),
+        });
+      };
+    });
   }
 
   // The identity this browser presents, kept so that the next page load can ignore the fresh pair
   // it is offered and go on numbering where this one left off.
   static persistReplica(replica) {
-    return Durability.#write([META], (transaction) => {
+    Durability.#replicaWrite = Durability.#write([META], (transaction) => {
       transaction.objectStore(META).put(replica, "replica");
     });
+
+    return Durability.#replicaWrite;
+  }
+
+  // The rows the store holds and the place they stand at, read again after the load - for a tab
+  // that follows and hears the group name a place it does not hold. The tab that led can have
+  // brought the store somewhere this tab never followed it to (see repair), and the store is the
+  // one record of where that is, and of the rows that stand there.
+  //
+  // Given the place the tab holds, so the rows are read only when they can be other than the ones
+  // it has. A place is only ever written with its rows, in one transaction, and the rows under a
+  // place that stands change only through frames every tab of the group hears in order - so the
+  // same place is taken for the same rows, which is the equality repair rests on too. A store
+  // holding no place has no rows to take up: they are a fill that never finished, which is why a
+  // restore refuses them. Answers the stored place, with every stored record, or with
+  // `records: null` when the place is the given one or there is none - and the user the store
+  // belongs to, since one store serves every user of the browser, each in a group of their own.
+  //
+  // With the rows comes what the queue records as landed, batch by batch: a stored frame can
+  // have landed a batch this tab holds unlanded, and promoted again over rows that already hold
+  // its writes, a moved counter would count twice.
+  //
+  // ONE read-only transaction, the rows read in the callback of the place's own request: a write
+  // landing between two transactions could leave the rows of one place beside another.
+  //
+  // A READ, like batchesAbove: not counted as work in flight, and one that fails answers nothing
+  // rather than tearing the storage down. So does memory mode, where there is nothing to read.
+  // Whatever goes wrong, it answers: a tab waits on it before it hears its group again.
+  static async readBase(cursor) {
+    if (Durability.mode === "memory") {
+      return null;
+    }
+
+    try {
+      const transaction = Durability.#db.transaction(
+        [ENTITIES, META, QUEUE],
+        "readonly",
+      );
+
+      return await new Promise((resolve, reject) => {
+        transaction.onabort = () => reject(transaction.error);
+
+        const meta = transaction.objectStore(META);
+
+        // Requests on one transaction answer in the order they were made, so the owner is in by the
+        // time the place's callback runs.
+        const owned = meta.get("actorUserId");
+        const stored = meta.get("cursor");
+
+        owned.onerror = () => reject(owned.error);
+        stored.onerror = () => reject(stored.error);
+
+        stored.onsuccess = () => {
+          const owner = owned.result ?? null;
+          const place = stored.result ?? null;
+
+          if (place === cursor || place === null) {
+            resolve({cursor: place, owner, records: null});
+
+            return;
+          }
+
+          try {
+            Promise.all([
+              Durability.#request(transaction.objectStore(ENTITIES).getAll()),
+              Durability.#request(transaction.objectStore(QUEUE).getAll()),
+            ]).then(
+              ([records, queued]) =>
+                resolve({
+                  cursor: place,
+                  // A record can predate the marks (see Batch#record).
+                  landed: (queued ?? []).map(({landed, seq}) => ({
+                    landed: landed ?? [],
+                    seq,
+                  })),
+                  owner,
+                  records: records ?? [],
+                }),
+              reject,
+            );
+          } catch (error) {
+            reject(error);
+          }
+        };
+      });
+    } catch {
+      return null;
+    }
   }
 
   // The store brought to what this tab holds in memory, where the two name different places - what
@@ -482,6 +614,17 @@ export default class Durability {
     });
 
     return placeless;
+  }
+
+  // Settles once every identity write started so far has - what a send waits on, so nothing goes
+  // out under an identity still on its way to the store (see Batches.flush). Writes to the same
+  // store commit in the order they were made, so the last one settling means every earlier one has.
+  //
+  // Not every write is awaited where it is made: the restore writes a fresh pair and goes on, and
+  // the tab's first send can follow at once. A reload landing between the two would take up yet
+  // another pair, and send the same batch again under it.
+  static replicaWritten() {
+    return Durability.#replicaWrite;
   }
 
   // Takes up what the previous page load left, and answers the three things the runtime resumes
@@ -582,8 +725,9 @@ export default class Durability {
     // load would abandon the numbering its batches are identified by. Somebody else signing in is
     // the one case where the held pair goes too: it was minted for the previous owner, or for a
     // session that is no longer theirs - and the leader writes the page's pair in its place, once
-    // for the group. A follower writes none: it presents no identity of its own to the server, and
-    // the pair the leader settled on reaches it with the group's state.
+    // for the group, which its first send waits for (see replicaWritten). A follower writes none:
+    // it presents no identity of its own to the server, and the pair the leader settled on reaches
+    // it with the group's state.
     if (loaded.replica !== null && !ownerChanged) {
       Replica.adopt(loaded.replica);
     } else if (leader) {
@@ -621,6 +765,7 @@ export default class Durability {
 
     Durability.#loaded = null;
     Durability.#persistenceAsked = false;
+    Durability.#replicaWrite = Promise.resolve();
   }
 
   static #close() {
@@ -664,10 +809,18 @@ export default class Durability {
   // come back round to this function, and it cannot: nothing in this block reports one. That is
   // also why there is no "already failing" flag to keep in step - the shape rules the case out
   // rather than catching it.
+  //
+  // The log line is best-effort. It goes to session storage, which has a quota of its own that the
+  // log can fill and that survives reloads. A throw here would leave the store open and unwiped,
+  // tell no other tab, and reject the write being failed - which a send waits on when it is the
+  // identity's or the batch's own (see replicaWritten).
   static #fail(reason) {
-    Logger.debug(
-      `Hologram: durable storage stopped (${reason}), the database lives in memory for this page`,
-    );
+    try {
+      Logger.debug(
+        `Hologram: durable storage stopped (${reason}), the database lives in memory for this page`,
+      );
+      // eslint-disable-next-line no-empty
+    } catch {}
 
     try {
       const transaction = Durability.#db.transaction(
@@ -821,6 +974,45 @@ export default class Durability {
     Durability.#write([META], (transaction) => {
       transaction.objectStore(META).put(actorUserId, "actorUserId");
     });
+  }
+
+  // One read per record, applying all its removals at once: two reads of one record would both see
+  // it as stored, and the second put would undo the first.
+  static #removeStoredFacts(entities, factRemovals) {
+    const byRecord = new Map();
+
+    for (const removal of factRemovals) {
+      const key = JSON.stringify([removal.type, removal.id]);
+
+      byRecord.set(key, [...(byRecord.get(key) ?? []), removal]);
+    }
+
+    for (const removals of byRecord.values()) {
+      const {id, type} = removals[0];
+      const read = entities.get([type, id]);
+
+      read.onsuccess = () => {
+        const record = read.result;
+
+        if (record === undefined) {
+          return;
+        }
+
+        const facts = {...record.facts};
+
+        for (const {relationship, targetIds} of removals) {
+          if (facts[relationship] !== undefined) {
+            const removed = new Set(targetIds);
+
+            facts[relationship] = facts[relationship].filter(
+              (targetId) => !removed.has(targetId),
+            );
+          }
+        }
+
+        entities.put({...record, facts});
+      };
+    }
   }
 
   static #request(request) {

@@ -878,6 +878,34 @@ defmodule Hologram.Policy.EvaluatorTest do
     end
   end
 
+  describe "rule_matches?/4 - an integer past 2^53 beside a float" do
+    setup do
+      put_derived_definitions([Module34, Module39])
+    end
+
+    test "compares the two as floats, the way the database does" do
+      entity = %Module39{score: 9_007_199_254_740_993}
+
+      assert rule_matches?(
+               rule(predicates: [{:score, :==, 9_007_199_254_740_992.0}]),
+               entity,
+               nil,
+               &deny/3
+             )
+    end
+
+    test "widens an integer a float field reads" do
+      entity = %Module39{score: 9_007_199_254_740_993}
+
+      assert rule_matches?(
+               rule(predicates: [{:ratio, :==, 9_007_199_254_740_992}]),
+               entity,
+               nil,
+               &deny/3
+             )
+    end
+  end
+
   describe "rule_matches?/4 - quantifiers" do
     setup do
       put_derived_definitions([Module34, Module39])

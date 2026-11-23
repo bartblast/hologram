@@ -6,9 +6,16 @@ defmodule Hologram.DB.Connection do
   # Hologram.DB - these functions back its delegates, which also carry the docs.
 
   alias Hologram.DB
+  alias Hologram.DB.EctoGuard
   alias Hologram.MisuseError
 
   @connection_key {__MODULE__, :connection}
+
+  @ecto_call_key {__MODULE__, :ecto_call}
+
+  @ecto_statement_shown_length 200
+
+  @ecto_transaction_statements ["begin", "commit", "rollback"]
 
   @rollback_throw {__MODULE__, :rollback}
 
@@ -42,20 +49,59 @@ defmodule Hologram.DB.Connection do
   @spec execute(Postgrex.Query.t(), list, keyword) ::
           {:ok, Postgrex.Query.t(), Postgrex.Result.t()} | {:error, Exception.t()}
   def execute(query, params, opts \\ []) do
+    refuse_nesting!()
+
     Postgrex.execute(current_connection(), query, params, with_timeout_opt(opts))
+  end
+
+  @doc """
+  Returns whether the calling process is inside a transaction it opened. The externally managed
+  sandbox transaction doesn't count, so a test outside any transaction of its own gets the answer
+  production would.
+  """
+  @spec in_transaction?() :: boolean
+  def in_transaction? do
+    case Process.get(@transaction_key) do
+      {:transaction, _connection, _depth} -> true
+      {:sandbox_transaction, _pool_name, _depth} -> true
+      _other -> false
+    end
   end
 
   # The unnamed statement needs no close: the next parse on the connection replaces it.
   @doc false
   @spec prepare(String.t(), keyword) :: {:ok, Postgrex.Query.t()} | {:error, Exception.t()}
   def prepare(statement, opts \\ []) do
+    refuse_nesting!()
+
     Postgrex.prepare(current_connection(), "", statement, with_timeout_opt(opts))
   end
 
   @doc false
   @spec query(String.t(), list, keyword) :: {:ok, Postgrex.Result.t()} | {:error, Exception.t()}
   def query(statement, params \\ [], opts \\ []) do
+    refuse_nesting!()
+
     Postgrex.query(current_connection(), statement, params, with_timeout_opt(opts))
+  end
+
+  @doc """
+  Records that the given Ecto repo ran the given statement in the calling process, when the process
+  is inside a transaction it opened. Ecto can't be stopped at the call, and its statement may have
+  committed already, so the record is what fails the transaction: at its next statement, at the
+  end of any block around the call, or at a rollback. The first call is the one named, except
+  that a statement takes over from a recorded begin, commit or rollback, since Ecto reports those
+  the same way and they don't tell the developer which call to move.
+
+  Called from a telemetry handler, which telemetry detaches if it raises, so this never raises.
+  """
+  @spec record_ecto_call(module, String.t() | nil) :: :ok
+  def record_ecto_call(repo, statement) do
+    if in_transaction?() and replaces_recorded_ecto_call?(statement) do
+      Process.put(@ecto_call_key, {repo, statement})
+    end
+
+    :ok
   end
 
   # A transaction PostgreSQL aborted as the victim of a deadlock is one to run again: the other
@@ -78,6 +124,11 @@ defmodule Hologram.DB.Connection do
   @doc false
   @spec rollback(any) :: no_return
   def rollback(reason) do
+    # A rollback is a normal return to the caller, so without this a block that always rolls back
+    # would leave the Ecto write in place with nothing reporting it. Only with a call recorded, so
+    # that a rollback that isn't refused never pays for the look at the running repos.
+    if Process.get(@ecto_call_key), do: refuse_nesting!()
+
     case Process.get(@transaction_key) do
       {:transaction, connection, 1} ->
         Postgrex.rollback(connection, reason)
@@ -103,6 +154,8 @@ defmodule Hologram.DB.Connection do
   @doc false
   @spec snapshot((-> any)) :: {:ok, any} | {:error, any}
   def snapshot(fun) do
+    refuse_nesting!()
+
     case Process.get(@transaction_key) do
       nil ->
         run_transaction(
@@ -126,6 +179,8 @@ defmodule Hologram.DB.Connection do
   @doc false
   @spec transaction((-> any), keyword) :: {:ok, any} | {:error, any}
   def transaction(fun, opts \\ []) do
+    refuse_nesting!()
+
     opts = with_timeout_opt(opts)
 
     case Process.get(@transaction_key) do
@@ -155,14 +210,17 @@ defmodule Hologram.DB.Connection do
   def with_connection(connection, fun) do
     outer_mode = Process.get(@transaction_key)
     outer_connection = Process.get(@connection_key)
+    outer_ecto_call = Process.get(@ecto_call_key)
 
     Process.delete(@transaction_key)
+    Process.delete(@ecto_call_key)
     Process.put(@connection_key, connection)
 
     try do
       fun.()
     after
       restore_key(@connection_key, outer_connection)
+      restore_key(@ecto_call_key, outer_ecto_call)
       restore_key(@transaction_key, outer_mode)
     end
   end
@@ -196,6 +254,56 @@ defmodule Hologram.DB.Connection do
       {:sandbox, pool_name} -> pool_name
       {:sandbox_transaction, pool_name, _depth} -> pool_name
       {:transaction, connection, _depth} -> connection
+    end
+  end
+
+  defp refuse_ecto_call! do
+    case Process.get(@ecto_call_key) do
+      nil ->
+        :ok
+
+      {repo, statement} ->
+        call =
+          if statement do
+            inspect(String.slice(statement, 0, @ecto_statement_shown_length))
+          else
+            "a query"
+          end
+
+        raise MisuseError,
+              "#{inspect(repo)} ran #{call} inside a data layer transaction - Ecto commits on " <>
+                "a connection of its own, so anything it wrote may already be committed while " <>
+                "this transaction rolls back. Run Ecto calls before or after the transaction."
+    end
+  end
+
+  # Ecto runs on a connection pool of its own, so a statement here would commit whatever becomes
+  # of the Ecto transaction around it. The SQL that undoes a savepoint or a transaction doesn't
+  # come through here, so cleaning up after a refusal can't be refused too. An Ecto transaction
+  # still open is checked first: its work can still roll back, so moving this call out of it is
+  # the advice that applies.
+  defp refuse_nesting! do
+    case EctoGuard.open_transaction_repo() do
+      nil ->
+        refuse_ecto_call!()
+
+      repo ->
+        raise MisuseError,
+              "cannot run a data layer statement inside a #{inspect(repo)} transaction - the " <>
+                "two commit separately, so a rollback on one side would keep the other side's " <>
+                "writes. Move the call outside the Ecto transaction. An Ecto migration runs " <>
+                "in one unless it sets @disable_ddl_transaction true."
+    end
+  end
+
+  defp replaces_recorded_ecto_call?(statement) do
+    case Process.get(@ecto_call_key) do
+      nil ->
+        true
+
+      {_repo, recorded} ->
+        recorded in @ecto_transaction_statements and is_binary(statement) and
+          statement not in @ecto_transaction_statements
     end
   end
 
@@ -238,6 +346,7 @@ defmodule Hologram.DB.Connection do
 
     try do
       result = fun.()
+      refuse_ecto_call!()
       Postgrex.query!(connection, "RELEASE SAVEPOINT #{savepoint}", [])
       {:ok, result}
     rescue
@@ -247,28 +356,49 @@ defmodule Hologram.DB.Connection do
     catch
       :throw, {@rollback_throw, thrown_depth, reason} when thrown_depth == depth ->
         rollback_savepoint(connection, savepoint)
+
+        # An `after` in the block can make an Ecto call while the rollback unwinds it.
+        refuse_ecto_call!()
+
         {:error, reason}
     after
       Process.put(@transaction_key, outer_mode)
+
+      # Depth 1 is the sandbox's stand-in for an outermost transaction. A real transaction's
+      # savepoints start at depth 2, and its record goes when run_transaction/2 ends.
+      if depth == 1, do: Process.delete(@ecto_call_key)
     end
   end
 
   defp run_transaction(fun, opts) do
     connection = Process.get(@connection_key, DB.pool_name())
 
-    Postgrex.transaction(
-      connection,
-      fn connection ->
-        Process.put(@transaction_key, {:transaction, connection, 1})
+    try do
+      result =
+        Postgrex.transaction(
+          connection,
+          fn connection ->
+            Process.put(@transaction_key, {:transaction, connection, 1})
 
-        try do
-          fun.()
-        after
-          Process.delete(@transaction_key)
-        end
-      end,
-      opts
-    )
+            try do
+              result = fun.()
+              refuse_ecto_call!()
+              result
+            after
+              Process.delete(@transaction_key)
+            end
+          end,
+          opts
+        )
+
+      # An `after` in the block can make an Ecto call while a rollback unwinds it. The check at
+      # the end of the block never runs then, and the transaction has already rolled back.
+      refuse_ecto_call!()
+
+      result
+    after
+      Process.delete(@ecto_call_key)
+    end
   end
 
   defp with_timeout_opt(opts) do

@@ -1981,6 +1981,56 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert get(Module20, created_entity.id).count == max_int
     end
 
+    test "refuses a move by an amount its column can't hold, even where the result would fit" do
+      {:ok, created_entity} =
+        %{count: -5_000_000_000_000_000_000}
+        |> Module20.new()
+        |> create()
+
+      assert update(Module20, created_entity.id, %{},
+               deltas: %{count: 10_000_000_000_000_000_000}
+             ) == {:error, %{count: [{:type, :integer}]}}
+
+      assert get(Module20, created_entity.id).count == -5_000_000_000_000_000_000
+    end
+
+    test "names only the counter moved by an amount its column can't hold" do
+      {:ok, created_entity} =
+        %{count: 1, views: 1}
+        |> Module20.new()
+        |> create()
+
+      assert update(Module20, created_entity.id, %{},
+               deltas: %{count: 1, views: -9_223_372_036_854_775_809}
+             ) == {:error, %{views: [{:type, :integer}]}}
+
+      reloaded = get(Module20, created_entity.id)
+
+      assert reloaded.count == 1
+      assert reloaded.views == 1
+    end
+
+    test "doesn't ask a unique key about an amount its column can't hold" do
+      {:ok, created_entity} =
+        %{count: 1, name: "moved"}
+        |> Module54.new()
+        |> create()
+
+      assert update(Module54, created_entity.id, %{}, deltas: %{count: 9_223_372_036_854_775_808}) ==
+               {:error, %{count: [{:type, :integer}]}}
+    end
+
+    test "refuses an amount its column can't hold beside a value that's refused too" do
+      {:ok, created_entity} =
+        %{count: 1, name: "moved"}
+        |> Module54.new()
+        |> create()
+
+      assert update(Module54, created_entity.id, %{s1: 123},
+               deltas: %{count: 9_223_372_036_854_775_808}
+             ) == {:error, %{count: [{:type, :integer}], s1: [{:type, :string}]}}
+    end
+
     test "names only the counter that moved past what its column can hold" do
       max_int = 9_223_372_036_854_775_807
 

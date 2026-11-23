@@ -32,9 +32,9 @@ defmodule Hologram.Sync.Cursor do
   @doc """
   Returns the cursor naming the given place in the log, under the rules with the given policy hash
   (see `Hologram.Policy.hash/1`) - the rules the rows a client holds there were judged by - and
-  with the entity types sync sends of the given types hash (see `types_hash/1`). A place is only
-  worth resuming from under the rules that decided what it holds, and with the types it was filled
-  with.
+  with the given types hash (see `types_hash/3`), naming the entity types sync sends and the model
+  the rows were read under. A place is only worth resuming from under the rules that decided what
+  it holds, with the types it was filled with, under the model it was filled under.
   """
   @spec encode(non_neg_integer, non_neg_integer, String.t(), String.t()) :: String.t()
   def encode(tx, seq, policy_hash, types_hash) do
@@ -66,18 +66,24 @@ defmodule Hologram.Sync.Cursor do
 
   @doc """
   Returns the hash a cursor names the given entity types by - the types sync sends (see
-  `Hologram.DB.QueryCache.synced_types/0`) - and whether the browser checks permissions (see
-  `Hologram.DB.QueryCache.permission_checking?/0`), as the same short digest the policy hash is.
-  Their order moves nothing.
+  `Hologram.DB.QueryCache.synced_types/0`) - whether the browser checks permissions (see
+  `Hologram.DB.QueryCache.permission_checking?/0`), and the hash of the data model the rows were
+  read under (see `Hologram.Entity.Model.hash/0`), as the same short digest the policy hash is.
+  The types' order moves nothing.
 
   Whether the browser checks permissions is in it because the rows a client holds carry the server's
   verdicts only when it does (see `Hologram.Sync.Frame.row_verdicts/2`): a client filled without
   them holds rows with none, and nothing in the log says so - a deploy turning the checks on moves
   no row. A place naming the other answer sends the client everything again, like a place filled
   with other types.
+
+  The model is in it because a migration can change rows at rest with nothing in the log to say so
+  - a column made required takes a value in every row that held none - and a tab built against an
+  older model keeps across the deploy the rows it was filled with. A client of the current model
+  never names a place from another: its store is one per model hash.
   """
-  @spec types_hash(list(module), boolean) :: String.t()
-  def types_hash(entity_types, permission_checking?) do
+  @spec types_hash(list(module), boolean, String.t()) :: String.t()
+  def types_hash(entity_types, permission_checking?, model_hash) do
     labels =
       entity_types
       |> Enum.map(&Codec.encode_enum_value/1)
@@ -86,7 +92,7 @@ defmodule Hologram.Sync.Cursor do
 
     checks = if permission_checking?, do: ";checks", else: ""
 
-    CryptographicUtils.short_digest(labels <> checks, 16)
+    CryptographicUtils.short_digest(labels <> checks <> ";" <> model_hash, 16)
   end
 
   defp in_range?(value, ceiling), do: value >= 0 and value <= ceiling

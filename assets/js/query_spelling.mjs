@@ -13,7 +13,7 @@ import StringOrder from "./string_order.mjs";
 // both tiers share: an object's members sorted by name, a filter's clauses sorted by their
 // spelling all the way down, since the two normalizers sort them by different keys, a boolean as
 // text, since an enum may declare true and the server can't tell the two apart by shape, a number
-// whole and exact as an integer and any other by its bits.
+// whole and exact as an integer, a BigInt in full and any other number by its bits.
 //
 // Every way the two could still differ has to make the spellings differ, never agree: a count whose
 // key misses is counted here, one whose key hits wrongly shows a number for another query. So a
@@ -198,6 +198,9 @@ export default class QuerySpelling {
     }
 
     switch (typeof value) {
+      case "bigint":
+        return String(value);
+
       case "boolean":
         return $.#spellString(String(value));
 

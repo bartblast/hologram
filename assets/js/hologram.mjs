@@ -1189,6 +1189,7 @@ export default class Hologram {
     Hologram.dataLayer?.ingestMountData({
       actorEntityId: $.#bootData.actorEntityId,
       actorUserId: $.#bootData.actorUserId,
+      identityPeriod: IdentityTracker.documentPeriod,
       syncCountTypes: $.#bootData.syncCountTypes,
       syncCounts: $.#bootData.syncCounts,
       syncRows: $.#bootData.syncRows,
@@ -2075,6 +2076,8 @@ export default class Hologram {
       // the period that lasts now, whichever document took it.
       $.#restorePageSnapshot(pageSnapshot, IdentityTracker.period);
 
+      Hologram.dataLayer?.restoreCounts(pageSnapshot.carriedCounts);
+
       $.#mountWhenReady(isPageModuleRegistered);
     };
 
@@ -2633,14 +2636,18 @@ export default class Hologram {
     );
   }
 
-  // Whether the server stopped serving this tab after a deploy (see DataLayer.stopped).
+  // Whether a navigation loads the next page afresh: the server stopped serving this tab after a
+  // deploy, or serves it across models, its next page being the new build's (see
+  // DataLayer.stopped).
   static #isStopped() {
     return Hologram.dataLayer?.stopped() === true;
   }
 
-  // How a tab the server stopped serving after a deploy goes to another page: by loading it afresh,
-  // which brings the code the server serves now, rather than running the next page on the code it
-  // can no longer serve. The person is leaving this page anyway, so nothing they were doing is
+  // How a tab the server stopped serving after a deploy, or serves across models, goes to another
+  // page: by loading it afresh, which brings the code the server serves now, rather than running
+  // the next page on code of another build - the one the server can no longer serve, or the new
+  // build's over this tab's runtime and store. Only a stopped tab shows the reload notice and holds
+  // its writes. The person is leaving this page anyway, so nothing they were doing is
   // lost - once what they wrote is in the store, which is waited for first. A navigation begun
   // meanwhile takes over.
   //
@@ -3171,6 +3178,9 @@ export default class Hologram {
     }
 
     const pageSnapshot = {
+      // The server's numbers the page is showing, which a document loaded later has no other way
+      // to get back (see DataLayer.restoreCounts).
+      carriedCounts: Hologram.dataLayer?.pageCounts() ?? [],
       // Every chunk the tab has loaded, not only the ones this page's state needs: which of them
       // the state needs is not known here, and a chunk too many costs a restore one cached fetch.
       chunkDigests: Array.from($.#chunkDigests).filter((digest) =>

@@ -135,6 +135,10 @@ export default class Deserializer {
       case "j":
         return data;
 
+      // A plain BigInt, which a query term held in a page snapshot can carry.
+      case "n":
+        return /^-?\d+$/.test(data) ? BigInt(data) : serialized;
+
       case "o":
         return $.#deserializeBoxedIdentifier("port", data);
 
