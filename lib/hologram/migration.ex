@@ -78,10 +78,11 @@ defmodule Hologram.Migration do
   giving nil when a reference is nil. Anything from the surrounding Elixir code is pinned
   with `^`, an attribute or a sigil included. The words are:
 
-    * `a <> b` joins strings, giving nil when any of them is nil
+    * `a <> b` joins strings, giving nil when any of them is nil. In a `fn`, a body whose
+      outermost part is `<>` is Elixir, which raises on nil, so write it as `query(a <> b)`
     * `split(text, separator)` splits as `String.split/2`, giving nil for nil, and is read
       through `at`, since a list can't be stored
-    * `at(split(...), n)` picks a part as `Enum.at/2`, counting from 0, giving nil past the end
+    * `at(split(...), n)` picks a part, with `n` from 0 up to 1_000_000, giving nil past the end
     * `coalesce(a, b, ...)` gives the first value that isn't nil
     * `count(set)` counts the rows of a to-many relationship, giving 0 for none
     * `most_common(set, attribute)` gives the attribute's most frequent value among the
@@ -89,8 +90,8 @@ defmodule Hologram.Migration do
       row holds a value
 
   A `fn` names the row's fields and relationships it reads as its arguments. Its body is a query
-  when its outermost part is one of these words, when it's only a field or a path, or when it's
-  wrapped in `query(...)`, and then it runs as one `UPDATE`:
+  when its outermost part is one of these words other than `<>`, when it's only a field or a path,
+  or when it's wrapped in `query(...)`, and then it runs as one `UPDATE`:
 
       add_attribute :city, :string, backfill: fn destination ->
         destination |> split(", ") |> at(0)
