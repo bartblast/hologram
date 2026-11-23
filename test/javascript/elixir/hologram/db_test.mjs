@@ -957,6 +957,288 @@ describe("Elixir_Hologram_DB", () => {
     });
   });
 
+  // What the browser refuses by itself is what the values a call states can't pass, whatever the
+  // server holds. Everything else goes to the server, which judges every write.
+  describe("update/1 of rules reading the row after the change", () => {
+    const ACTOR = "018f0000-0000-7000-8000-00000000000a";
+    const BOARD = "MyApp.Board";
+    const BOARD_1 = "018f0000-0000-7000-8000-00000000000b";
+    const BOARD_2 = "018f0000-0000-7000-8000-00000000000c";
+    const CARD = "MyApp.Card";
+    const LABEL = "MyApp.Label";
+
+    const rule = (overrides = {}) => ({
+      predicates: [],
+      to: null,
+      via: null,
+      ...overrides,
+    });
+
+    const newName = (name) => ({name, outer: 1});
+
+    const exact = (predicates, overrides = {}) =>
+      rule({new: {predicates}, ...overrides});
+
+    const newIs = (name, value) => exact([[newName(name), "==", value]]);
+
+    const ok = Type.atom("ok");
+
+    let timers;
+
+    const defineCard = (policy) => {
+      const plain = (attributes) => ({
+        attributes,
+        constraints: {},
+        defaults: {},
+        enumValues: {},
+        frameworkAttributes: [],
+        inverses: {},
+        policy: {},
+        relationships: {},
+        serverOnly: [],
+      });
+
+      globalThis.Hologram.sync.model[BOARD] = plain({
+        archived: "boolean",
+        id: "uuid",
+      });
+
+      globalThis.Hologram.sync.model[LABEL] = plain({id: "uuid"});
+
+      globalThis.Hologram.sync.model[CARD] = {
+        ...plain({
+          count: "integer",
+          id: "uuid",
+          code: "string",
+          held_at: "datetime",
+          note: "string",
+          rating: "float",
+          status: "enum",
+          title: "string",
+        }),
+        constraints: {
+          code: {
+            format: {opts: Type.list([]), source: "^\\S+$"},
+            optional: true,
+          },
+          held_at: {optional: true},
+          note: {optional: true},
+          rating: {optional: true},
+          title: {optional: true},
+        },
+        enumValues: {status: ["pending", "approved", "rejected"]},
+        policy,
+        relationships: {
+          board: {optional: true, toMany: false, type: BOARD},
+          labels: {toMany: true, type: LABEL},
+        },
+      };
+
+      Model.reset();
+
+      LocalDatabase.putRow(CARD, {
+        board_id: BOARD_1,
+        count: 9,
+        id: ID_1,
+        note: "a",
+        status: "pending",
+        title: "t",
+      });
+
+      LocalDatabase.putRow(BOARD, {archived: false, id: BOARD_1});
+      LocalDatabase.putRow(BOARD, {archived: false, id: BOARD_2});
+    };
+
+    const card = () => Model.box(CARD, LocalDatabase.getRow(CARD, ID_1));
+
+    const put = (values) =>
+      putAttribute(
+        card(),
+        Type.list(
+          Object.entries(values).map(([name, value]) =>
+            Type.tuple([Type.atom(name), value]),
+          ),
+        ),
+      );
+
+    const status = (label) => ({status: Type.atom(label)});
+    const note = (text) => ({note: Type.bitstring(text)});
+
+    const denied = (fields, hint = "") =>
+      `not allowed to update ${CARD} "${ID_1}" - no allow line that holds covers ${fields}${hint}`;
+
+    const assertDenied = (values, fields, hint) =>
+      assertBoxedError(
+        () => update(put(values)),
+        "Hologram.AccessDeniedError",
+        denied(fields, hint),
+      );
+
+    const assertSent = (entity) => {
+      assert.deepStrictEqual(update(entity), ok);
+      assert.equal(Batches.current().writes.length, 1);
+    };
+
+    beforeEach(() => {
+      timers = sinon.useFakeTimers(1_756_100_000_123);
+      Batches.open("todos");
+      LocalDatabase.actorEntityId = ACTOR;
+    });
+
+    afterEach(() => {
+      timers.restore();
+      LocalDatabase.actorEntityId = null;
+    });
+
+    describe("what the call alone decides", () => {
+      it("sends a value its rule allows", () => {
+        defineCard({"update:status": [newIs("status", "approved")]});
+
+        assertSent(put(status("approved")));
+      });
+
+      it("refuses a value its rule can't allow", () => {
+        defineCard({"update:status": [newIs("status", "approved")]});
+
+        assertDenied(status("rejected"), ":status");
+        assert.equal(Batches.current().writes.length, 0);
+      });
+
+      it("judges update/3 the same way", () => {
+        defineCard({"update:status": [newIs("status", "approved")]});
+
+        assertBoxedError(
+          () =>
+            updateById(
+              Type.alias(CARD),
+              Type.bitstring(ID_1),
+              Type.map([[Type.atom("status"), Type.atom("rejected")]]),
+            ),
+          "Hologram.AccessDeniedError",
+          denied(":status"),
+        );
+      });
+
+      it("refuses whatever the stored row holds, when the stated value fails", () => {
+        defineCard({
+          "update:status": [
+            exact([
+              ["status", "==", "pending"],
+              [newName("status"), "==", "approved"],
+            ]),
+          ],
+        });
+
+        assertDenied(status("rejected"), ":status");
+      });
+
+      it("refuses a rule with a role when its stated value fails", () => {
+        defineCard({
+          "update:status": [
+            exact([[newName("status"), "==", "approved"]], {
+              to: [["own", ["editor"]]],
+            }),
+          ],
+        });
+
+        assertDenied(status("rejected"), ":status");
+      });
+
+      it("compares two stated values", () => {
+        defineCard({
+          "update:note": [
+            exact([[newName("note"), "==", {attribute: newName("title")}]]),
+          ],
+          "update:title": [rule()],
+        });
+
+        assertDenied(
+          {note: Type.bitstring("x"), title: Type.bitstring("y")},
+          ":note",
+        );
+      });
+
+      it("reads a list of allowed values", () => {
+        defineCard({
+          "update:status": [
+            exact([[newName("status"), "in", ["approved", "pending"]]]),
+          ],
+        });
+
+        assertDenied(status("rejected"), ":status");
+      });
+
+      it("orders an enum by its declared values", () => {
+        defineCard({
+          "update:status": [exact([[newName("status"), ">", "pending"]])],
+        });
+
+        assertDenied(status("pending"), ":status");
+      });
+
+      it("refuses when every alternative of a disjunction fails", () => {
+        defineCard({
+          "update:status": [
+            exact([
+              {
+                or: [
+                  [[newName("status"), "==", "approved"]],
+                  [[newName("status"), "==", "pending"]],
+                ],
+              },
+            ]),
+          ],
+        });
+
+        assertDenied(status("rejected"), ":status");
+      });
+
+      it("sends a change another line allows", () => {
+        defineCard({
+          "update:status": [
+            newIs("status", "approved"),
+            newIs("status", "rejected"),
+          ],
+        });
+
+        assertSent(put(status("rejected")));
+      });
+
+      it("reads a stated empty reference", () => {
+        defineCard({
+          "update:board": [exact([[newName("board_id"), "!=", null]])],
+        });
+
+        assertDenied({board_id: Type.nil()}, ":board");
+      });
+
+      it("refuses a changed field no line covers", () => {
+        defineCard({"update:status": [newIs("status", "approved")]});
+
+        assertDenied({...status("approved"), ...note("x")}, ":note");
+      });
+
+      it("names every refused field, sorted", () => {
+        defineCard({
+          "update:note": [newIs("note", "x")],
+          "update:status": [newIs("status", "approved")],
+        });
+
+        assertDenied({...status("rejected"), ...note("y")}, ":note, :status");
+      });
+
+      it("says a refused field's value was invalid", () => {
+        defineCard({"update:status": [newIs("note", "x")]});
+
+        assertDenied(
+          {...note("y"), ...status("bogus")},
+          ":note, :status",
+          " (the value given for :status is invalid, so its rule read the stored value)",
+        );
+      });
+    });
+  });
+
   describe("update/3", () => {
     const NOW_MS = 1_756_100_000_123;
     const STAMP = NOW_MS * 1024;

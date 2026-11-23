@@ -60,6 +60,9 @@ const UNKNOWN = Symbol("unknown");
 // marked in turn, and a row with no mark reads as stored, so a bare name keeps the stored value.
 const afterChanges = new WeakMap();
 
+// The furthest year a JavaScript Date reaches in both directions.
+const MAX_DATE_YEAR = 271820n;
+
 // What every write of a value moves, to a moment only the write knows.
 const WRITE_TIMESTAMPS = ["server_updated_at", "updated_at"];
 
@@ -1268,6 +1271,263 @@ function coversChange(entry, entityType, entity, fields, after, actorUserId) {
   }
 
   return result;
+}
+
+// The value a name of the row after the change holds when the call alone says so, or UNKNOWN.
+function statedName(name, stated) {
+  return isOuterName(name) &&
+    name.outer === 1 &&
+    typeof name.name === "string" &&
+    stated.has(name.name)
+    ? stated.get(name.name)
+    : UNKNOWN;
+}
+
+// What a clause's operand is when the call alone says so: a value written in the rule, or a name
+// the call states. The acting user is the session's, which the call doesn't state.
+function statedOperand(value, stated) {
+  if (isActorValue(value)) {
+    return UNKNOWN;
+  }
+
+  if (isAttributeValue(value)) {
+    return statedName(value.attribute, stated);
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => statedOperand(item, stated) === UNKNOWN)
+      ? UNKNOWN
+      : value;
+  }
+
+  return value;
+}
+
+// A whole number past what a JavaScript number holds exactly, in an integer or a float, which can't
+// decide a comparison.
+function isInexactInteger(value) {
+  return Array.isArray(value)
+    ? value.some(isInexactInteger)
+    : typeof value === "number" &&
+        Number.isInteger(value) &&
+        !Number.isSafeInteger(value);
+}
+
+// Whether a triple holds by the call alone: it compares names the call states with each other or
+// with a value written in the rule. Anything else reads what only the server knows for certain.
+function statedTripleHolds(entityType, [name, operator, value], stated) {
+  const subject = statedName(name, stated);
+  const operand = statedOperand(value, stated);
+
+  if (subject === UNKNOWN || operand === UNKNOWN) {
+    return UNKNOWN;
+  }
+
+  if (isInexactInteger(subject) || isInexactInteger(operand)) {
+    return UNKNOWN;
+  }
+
+  return holds(
+    subject,
+    operator,
+    operand,
+    enumRanks(entityType, name.name),
+    declaredType(entityType, name.name),
+  );
+}
+
+function statedClausesHold(entityType, clauses, stated) {
+  let result = true;
+
+  for (const clause of clauses) {
+    let held = UNKNOWN;
+
+    if (Array.isArray(clause)) {
+      held = statedTripleHolds(entityType, clause, stated);
+    } else if (Object.hasOwn(clause, "or")) {
+      held = someHolds(clause.or, (alternative) =>
+        statedClausesHold(entityType, alternative, stated),
+      );
+    }
+
+    if (held === false) {
+      return false;
+    }
+
+    if (held === UNKNOWN) {
+      result = UNKNOWN;
+    }
+  }
+
+  return result;
+}
+
+// Whether a rule holds by the call alone. A role or a delegation reads what only the server knows
+// for certain, so a rule with one holds at most UNKNOWN.
+function statedRuleHolds(rule, entityType, stated) {
+  const clauses = Object.hasOwn(rule, "new")
+    ? rule.new.predicates
+    : rule.predicates;
+
+  const result = statedClausesHold(entityType, clauses, stated);
+
+  if (result === false) {
+    return false;
+  }
+
+  return rule.to === null && rule.via === null ? result : UNKNOWN;
+}
+
+// Whether a date or a datetime is one this client can neither validate nor compare: its year, or
+// the instant its offset moves it to, is past what a JavaScript Date holds.
+function isFarDate(value, type) {
+  if ((type !== "date" && type !== "datetime") || !Type.isMap(value)) {
+    return false;
+  }
+
+  const year = value.data[Type.encodeMapKey(Type.atom("year"))]?.[1];
+
+  if (year === undefined || !Type.isInteger(year)) {
+    return false;
+  }
+
+  if (year.value > MAX_DATE_YEAR || year.value < -MAX_DATE_YEAR) {
+    return true;
+  }
+
+  try {
+    return Model.unbox(value, type).includes("NaN");
+  } catch {
+    return true;
+  }
+}
+
+// The values a call states that a rule can read as they are, as a held row spells them, the names
+// of the invalid ones, and the names this client can't be sure of. An invalid value reads as stored
+// on the server, and a reference to a row reads as stored when no such row exists, which this
+// client can't tell, so neither is stated. Nor is a value with a format, since the browser's regex
+// engine doesn't always answer as the server's does, or a date past what a JavaScript Date holds.
+function statedValues(entityType, values) {
+  const validation = Elixir_Hologram_Entity["validate/2"](
+    Type.alias(entityType),
+    Type.map(
+      Object.entries(values).map(([name, value]) => [Type.atom(name), value]),
+    ),
+  );
+
+  const invalid = Type.isAtom(validation)
+    ? []
+    : Object.values(validation.data[1].data).map(([name]) => name.value);
+
+  const {attributes, constraints} = Model.entry(entityType);
+  const stated = new Map();
+  const unsure = [];
+
+  for (const [name, value] of Object.entries(values)) {
+    if (
+      Object.hasOwn(constraints?.[name] ?? {}, "format") ||
+      isFarDate(value, attributes[name])
+    ) {
+      unsure.push(name);
+    } else if (
+      !invalid.includes(name) &&
+      (Object.hasOwn(attributes, name) || Type.isNil(value))
+    ) {
+      stated.set(name, Model.unbox(value, attributes[name] ?? "uuid"));
+    }
+  }
+
+  return {invalid, stated, unsure};
+}
+
+// The refusal of an update, in the words of the server's Writer.
+function deniedUpdateMessage(entityType, id, uncovered, invalid) {
+  const spell = (fields) =>
+    fields.map((field) => Interpreter.inspect(Type.atom(field))).join(", ");
+
+  const invalidFields = uncovered.filter((field) => invalid.includes(field));
+
+  let hint = "";
+
+  if (invalidFields.length === 1) {
+    hint = ` (the value given for ${spell(invalidFields)} is invalid, so its rule read the stored value)`;
+  } else if (invalidFields.length > 1) {
+    hint = ` (the values given for ${spell(invalidFields)} are invalid, so their rules read the stored values)`;
+  }
+
+  return `not allowed to update ${entityType} ${Interpreter.inspect(Type.bitstring(id))} - no allow line that holds covers ${spell(uncovered)}${hint}`;
+}
+
+// Refuses an update the values it states can't pass, whatever the server holds, before it leaves
+// this client. What the rows and grants here say is never grounds for a refusal: they can be out of
+// date, and a client's write isn't refused for what it read. A type with no rule reading the row
+// after the change on a changed field writes as it did. A field the call alone leaves open sends
+// the write on, since only the server can name every field it refuses.
+export function refuseDeniedChange(entityType, id, values, deltas, edgeNames) {
+  const model = globalThis.Hologram.sync?.model ?? {};
+  const entry = Object.hasOwn(model, entityType) ? model[entityType] : null;
+
+  if (entry === null || entry.policy === undefined) {
+    return;
+  }
+
+  const names = [...Object.keys(values), ...Object.keys(deltas)];
+
+  const fields = [
+    ...new Set([...changedFieldNames(entityType, names), ...edgeNames]),
+  ];
+
+  const rulesOf = (field) =>
+    policyRules(entry, `update:${field}`).concat(policyRules(entry, "update"));
+
+  const readsChange = fields.some((field) =>
+    rulesOf(field).some((rule) => Object.hasOwn(rule, "new")),
+  );
+
+  if (!readsChange) {
+    return;
+  }
+
+  const {invalid, stated, unsure} = statedValues(entityType, values);
+  const answers = new Map();
+
+  const holdsByCall = (rule) => {
+    if (!answers.has(rule)) {
+      answers.set(rule, statedRuleHolds(rule, entityType, stated));
+    }
+
+    return answers.get(rule);
+  };
+
+  const fieldAnswers = fields.map((field) => [
+    field,
+    someHolds(rulesOf(field), holdsByCall),
+  ]);
+
+  if (fieldAnswers.some(([_field, answer]) => answer === UNKNOWN)) {
+    return;
+  }
+
+  const uncovered = fieldAnswers
+    .filter(([_field, answer]) => answer === false)
+    .map(([field]) => field)
+    .sort(StringOrder.compare);
+
+  // Whether a refused field's value is invalid is part of what the refusal says.
+  if (uncovered.some((field) => unsure.includes(field))) {
+    return;
+  }
+
+  if (uncovered.length > 0) {
+    raiseAccessDenied(
+      deniedUpdateMessage(
+        entityType,
+        id,
+        uncovered,
+        changedFieldNames(entityType, invalid),
+      ),
+    );
+  }
 }
 
 // The given names of a write's values as allow lines name them, a to-one by its relationship - the

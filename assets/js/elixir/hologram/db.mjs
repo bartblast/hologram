@@ -8,7 +8,7 @@ import Erlang from "../../erlang/erlang.mjs";
 import Elixir_Hologram_Query_Stage from "./query/stage.mjs";
 // A cycle - auth.mjs takes currentBatch from here - and a safe one: neither module calls the
 // other while it is being evaluated, so both bindings are in place by the time a verb runs.
-import {grantEntry, grantId} from "./auth.mjs";
+import {grantEntry, grantId, refuseDeniedChange} from "./auth.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
@@ -844,6 +844,17 @@ const Elixir_Hologram_DB = {
     ]);
 
     const batch = currentBatch("update");
+
+    // Before the values are judged, as on the server: a rule reads an invalid value as the stored
+    // one, and someone it refuses is told that rather than what's wrong with the value.
+    refuseDeniedChange(
+      entityType,
+      id,
+      changes,
+      deltas,
+      Object.values(relationshipOps.data).map(([key]) => key.data[0].value),
+    );
+
     const boxedChanges = Object.entries(changes).map(([name, value]) => [
       Type.atom(name),
       value,
