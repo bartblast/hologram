@@ -1476,25 +1476,57 @@ defmodule Hologram.Query.Expression do
 
   defp predicate_list!(ast, names, env), do: unsupported!(ast, names, env)
 
-  # The hint for a call of Hologram.Auth's function. A user it names first has no place in a
-  # condition, which asks about the acting user, so the hint says that.
+  # The hint for a call of Hologram.Auth's function. A user it names and the values can? takes have
+  # no place in a condition, which asks about the acting user and the row as it stands, so the hint
+  # says what the suggestion leaves out.
   defp new_row_function_fix(word, args) do
     {replacement, example} = Map.fetch!(@new_row_functions, word)
+    {names_user, passes_values, asked_args} = call_parts(word, args)
 
-    if names_user?(args) do
-      "a condition asks only about the acting user, so " <>
-        suggested_call(replacement, example, tl(args))
-    else
-      suggested_call(replacement, example, args)
-    end
+    dropped_note(names_user, passes_values) <> suggested_call(replacement, example, asked_args)
   end
 
-  # An operation or a role in second place means what stands first is the user.
-  defp names_user?([first, {:^, _meta, _args} | _rest]), do: not plain_atom?(first)
+  defp call_parts(:can?, [_user, asked, target, _values]), do: {true, true, [asked, target]}
 
-  defp names_user?([first, second | _rest]), do: not plain_atom?(first) and plain_atom?(second)
+  defp call_parts(:can?, [first, second, third]) do
+    if plain_atom?(first) or values_literal?(third),
+      do: {false, true, [first, second]},
+      else: {true, false, [second, third]}
+  end
 
-  defp names_user?(_args), do: false
+  defp call_parts(:has_role?, [first, role, target]) do
+    if plain_atom?(first),
+      do: {false, false, [first, role, target]},
+      else: {true, false, [role, target]}
+  end
+
+  # A role in second place, an atom, a module or a pin, means what stands first is the user.
+  defp call_parts(:has_role?, [first, second]) do
+    if not plain_atom?(first) and role_operand?(second),
+      do: {true, false, [second]},
+      else: {false, false, [first, second]}
+  end
+
+  defp call_parts(_word, args), do: {false, false, args}
+
+  defp role_operand?({:^, _meta, _args}), do: true
+
+  defp role_operand?({:__aliases__, _meta, _parts}), do: true
+
+  defp role_operand?(ast), do: is_atom(ast) and not is_nil(ast) and not is_boolean(ast)
+
+  defp values_literal?({:%{}, _meta, _pairs}), do: true
+
+  defp values_literal?(ast), do: Keyword.keyword?(ast)
+
+  defp dropped_note(true, true),
+    do: "a condition asks only about the acting user and passes no values, so "
+
+  defp dropped_note(true, false), do: "a condition asks only about the acting user, so "
+
+  defp dropped_note(false, true), do: "a condition passes no values, so "
+
+  defp dropped_note(false, false), do: ""
 
   # The call with its own operation or role and target when a plain atom and a row say what it asks,
   # since suggesting other ones would change that. Anything else, a pin among them, only the word's

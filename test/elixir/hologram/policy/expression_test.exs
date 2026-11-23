@@ -340,7 +340,7 @@ defmodule Hologram.Policy.ExpressionTest do
 
     test "says a condition asks about the acting user when can? names a user and values" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:12: can? isn't available in a condition - a condition asks only about the acting user, so write can(:update, new(project)), got: can?(user, :update, new(project), status: :done)",
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - a condition asks only about the acting user and passes no values, so write can(:update, new(project)), got: can?(user, :update, new(project), status: :done)",
                    fn ->
                      lower_spec("[when: can?(user, :update, new(project), status: :done)]")
                    end
@@ -348,7 +348,7 @@ defmodule Hologram.Policy.ExpressionTest do
 
     test "names no user when can? starts with the operation and has values" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write can(:update, new(project)), and the stored row goes in via: {:update, project}, got: can?(:update, project, status: :done)",
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - a condition passes no values, so write can(:update, new(project)), and the stored row goes in via: {:update, project}, got: can?(:update, project, status: :done)",
                    fn -> lower_spec("[when: can?(:update, project, status: :done)]") end
     end
 
@@ -366,8 +366,34 @@ defmodule Hologram.Policy.ExpressionTest do
 
     test "names no user when can? starts with a variable operation and has values" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write it like can(:update, new(project)), got: can?(operation, new(project), status: :done)",
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - a condition passes no values, so write it like can(:update, new(project)), got: can?(operation, new(project), status: :done)",
                    fn -> lower_spec("[when: can?(operation, new(project), status: :done)]") end
+    end
+
+    test "names only the user when can? names one and a variable operation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - a condition asks only about the acting user, so write it like can(:update, new(project)), got: can?(user, operation, new(project))",
+                   fn -> lower_spec("[when: can?(user, operation, new(project))]") end
+    end
+
+    test "names the user and the values when can? has both and a variable operation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - a condition asks only about the acting user and passes no values, so write it like can(:update, new(project)), got: can?(user, operation, new(project), status: :done)",
+                   fn ->
+                     lower_spec("[when: can?(user, operation, new(project), status: :done)]")
+                   end
+    end
+
+    test "names the values when can? pins its row and names no user" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - a condition passes no values, so write it like can(:update, new(project)), got: can?(operation, ^project, status: :done)",
+                   fn -> lower_spec("[when: can?(operation, ^project, status: :done)]") end
+    end
+
+    test "says a condition asks about the acting user when has_role? names a user and a role module" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: has_role? isn't available in a condition - a condition asks only about the acting user, so write it like has_role(:member, new(project)), got: has_role?(user, Admin)",
+                   fn -> lower_spec("[when: has_role?(user, Admin)]") end
     end
 
     test "gives an example for a pinned operation" do
