@@ -79,6 +79,8 @@ defmodule Hologram.Migration.Value.Check do
   Returns the given declared options with a stored format compiled, as the validator takes it.
   """
   @spec runnable_opts(keyword) :: keyword
+  # The pattern is the one the app's own entity type or migration declares, never a request's.
+  # sobelow_skip ["DOS.Regex"]
   def runnable_opts(opts) do
     case Keyword.fetch(opts, :format) do
       {:ok, {:regex, source, regex_opts}} ->
@@ -131,6 +133,8 @@ defmodule Hologram.Migration.Value.Check do
 
   defp compilable?(%Regex{}), do: true
 
+  # The pattern is the one the app's own entity type or migration declares, never a request's.
+  # sobelow_skip ["DOS.Regex"]
   defp compilable?({:regex, source, opts}) when is_binary(source) and is_list(opts) do
     match?({:ok, _regex}, Regex.compile(source, opts))
   rescue

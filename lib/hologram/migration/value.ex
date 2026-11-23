@@ -780,7 +780,7 @@ defmodule Hologram.Migration.Value do
   defp referencing(ast, scope), do: refuse_referencing(ast, scope)
 
   # The name comes from the migration's own source, so it's bounded by the file.
-  # sobelow_skip ["DOS.BinToAtom"]
+  # sobelow_skip ["DOS.StringToAtom"]
   defp referencing_set(type, field, ast, scope) do
     text = Atom.to_string(field)
 
