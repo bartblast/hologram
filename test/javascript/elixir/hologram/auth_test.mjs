@@ -3919,6 +3919,32 @@ describe("Elixir_Hologram_Auth", () => {
         );
       });
 
+      it("reads a map with a calendar on a text field as the stored value", () => {
+        defineUpdate("update:title", newIs("title", "==", "old"));
+
+        const notText = Type.map([
+          [Type.atom("calendar"), Type.alias("MyApp.Calendar")],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(update, {title: notText}, document({title: "old"})),
+          Type.boolean(true),
+        );
+      });
+
+      it("reads a time on a date field as the stored value, whatever its calendar", () => {
+        defineUpdate("update:due_on", newIs("due_on", "==", null));
+
+        const notDate = Type.struct("Time", [
+          [Type.atom("calendar"), Type.alias("MyApp.Calendar")],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(update, {due_on: notDate}),
+          Type.boolean(true),
+        );
+      });
+
       it("doesn't read a date in another calendar as the stored value", () => {
         defineUpdate("update:due_on", newIs("due_on", "==", null));
 

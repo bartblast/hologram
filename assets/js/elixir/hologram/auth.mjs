@@ -1800,8 +1800,10 @@ function unheldReferences(entityType, entity, changes) {
 
 // Whether a temporal value is in a calendar other than ISO, which the server asks about the value
 // and this client can't, so neither its validation nor its comparison speaks for the server's.
-function hasOtherCalendar(value) {
-  if (!Type.isMap(value)) {
+function hasOtherCalendar(value, type) {
+  const struct = {date: "Date", datetime: "DateTime", time: "Time"}[type];
+
+  if (struct === undefined || !Type.isStruct(value, struct)) {
     return false;
   }
 
@@ -1882,7 +1884,7 @@ function rowAfterChange(entityType, entity, changes) {
       ...[...changes]
         .filter(
           ([name, value]) =>
-            hasOtherCalendar(value) ||
+            hasOtherCalendar(value, Model.entry(entityType).attributes[name]) ||
             (!surelyInvalid.has(name) &&
               isUnjudgedValue(entityType, name, value)),
         )
