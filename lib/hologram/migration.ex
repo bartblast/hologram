@@ -109,6 +109,17 @@ defmodule Hologram.Migration do
   the module defines is that function rather than a word of the same name, except inside
   `query(...)`, which a module can't define as `query/1` beside a body using it.
 
+  Any other body is Elixir, and runs row by row:
+
+      add_attribute :slug, :string, backfill: fn title ->
+        title |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-")
+      end
+
+  Its arguments are the row's own fields, and the body is pure: the standard library's value
+  functions and the migration's own functions. A module attribute is plain `@x` there, read where
+  the op is written. It can't call a query word, so an operator beside one, like
+  `coalesce(a, b) <> "!"`, needs `query(...)` around the whole body.
+
   Where this departs from an entity's derived field: a query reaches the rows pointing at this one
   by `Type |> filter(<ref>_id == ^id)`, since a migration's history records no declared inverse,
   and it takes only the words above, with no `if` and no comparison outside that filter.
@@ -277,17 +288,20 @@ defmodule Hologram.Migration do
     validate_snapshots_taken!(env)
     validate_op_imports!(env)
 
-    ops =
+    {settled_ops, functions} =
       env.module
       |> Module.get_attribute(@ops_attribute)
       |> Enum.reverse()
       |> settle_fn_backfills(env)
-      |> FieldAccess.rewrite()
+
+    ops = FieldAccess.rewrite(settled_ops)
 
     version = Path.basename(env.file, ".ex")
     path = Path.relative_to_cwd(env.file)
 
     quote do
+      unquote_splicing(functions)
+
       @doc false
       def __hologram_migration__ do
         %{version: unquote(version), path: unquote(path), ops: List.flatten(unquote(ops))}
@@ -305,7 +319,7 @@ defmodule Hologram.Migration do
 
     migration = env.module.__hologram_migration__()
 
-    Value.validate_ops!(migration.ops, migration.path)
+    Value.validate_ops!(migration.ops, migration.path, env.module)
     Loader.verify_rename_order!(migration.ops, migration.path)
     Loader.validate_resolved!([migration], build_env())
   end
@@ -543,6 +557,25 @@ defmodule Hologram.Migration do
     end
   end
 
+  # The side of a fn that didn't run read its attributes into snapshots nothing reads, which the
+  # compiler would warn about.
+  defp drop_snapshots(quoted, module) do
+    snapshots =
+      module
+      |> Module.get_attribute(@snapshots_attribute)
+      |> MapSet.new(fn {snapshot, _name, _line} -> snapshot end)
+
+    Macro.prewalk(quoted, fn
+      {:@, _meta, [{name, _name_meta, nil}]} = node ->
+        if MapSet.member?(snapshots, name), do: Module.delete_attribute(module, name)
+
+        node
+
+      node ->
+        node
+    end)
+  end
+
   # Aliases are expanded where the op is written: the op's code is placed in a function
   # defined at the end of the module, where an alias the module defines later would
   # otherwise change what an earlier op names. The expansion runs as though inside that
@@ -566,10 +599,46 @@ defmodule Hologram.Migration do
     end)
   end
 
+  # One function per backfill, so its clause never lands apart from itself. The name is built from
+  # a per-module counter, bounded by the source.
+  # sobelow_skip ["DOS.BinToAtom"]
+  defp hoist_fn_backfill(reading, index, body, env, functions) do
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    name = :"__backfill_#{index}__"
+
+    if Module.defines?(env.module, {name, length(reading.args)}) do
+      raise Hologram.CompileError,
+        message:
+          "#{name}/#{length(reading.args)} is the name a backfill fn runs under - rename the " <>
+            "function",
+        file: env.file,
+        line: reading.env.line
+    end
+
+    definition = FieldAccess.define(:def, {name, [], reading.arg_asts}, do: body)
+
+    function =
+      quote do
+        @doc false
+        unquote(definition)
+      end
+
+    {Value.function_value(reading, env.module, name), [function | functions]}
+  end
+
   # Options written as a list in place. Ones from a variable or a call are evaluated with the
   # op, and validate_ops!/2 checks a computed value they hold.
+  # A fn's body is judged on its own once it's known to be Elixir - inside query(...) its calls are
+  # words, whatever the file imports.
   defp imports_at(quoted, caller) do
     quoted
+    |> Macro.prewalk(fn
+      {:__hologram_fn_backfill__, meta, [index, value, _body]} ->
+        {:__hologram_fn_backfill__, meta, [index, value, nil]}
+
+      node ->
+        node
+    end)
     |> Value.local_calls()
     |> Map.new(&{&1, Macro.Env.lookup_import(caller, &1)})
   end
@@ -901,6 +970,19 @@ defmodule Hologram.Migration do
     caller.module != nil and caller.function == nil
   end
 
+  # Whether a fn is a query can hang on a function defined below the op, which only
+  # __before_compile__ can see, so the op holds a placeholder until then. The query reading and the
+  # body ride in it, so their attributes and aliases are read where the op is written, like any
+  # op's, even though an Elixir body is emitted at the end of the module.
+  defp read_fn_backfill(ast, caller) do
+    reading = Value.read_fn(ast, caller)
+    index = length(Module.get_attribute(caller.module, @fn_backfills_attribute))
+
+    Module.put_attribute(caller.module, @fn_backfills_attribute, {index, reading})
+
+    {:__hologram_fn_backfill__, [], [index, Value.fn_value(reading), reading.body]}
+  end
+
   # An op is stored in the migration module's body, and the module's __hologram_migration__/0
   # returns the stored ops (see validate_placement!/1). What the op leaves in the body are the
   # snapshots of the attributes it reads (see snapshot_attribute_reads/3).
@@ -919,6 +1001,34 @@ defmodule Hologram.Migration do
       [] -> nil
       assignments -> {:__block__, [], assignments}
     end
+  end
+
+  # Returns the ops with each fn settled, and the functions the Elixir ones run as.
+  defp settle_fn_backfills(ops, env) do
+    readings =
+      env.module
+      |> Module.get_attribute(@fn_backfills_attribute)
+      |> Map.new()
+
+    Macro.prewalk(ops, [], fn
+      {:__hologram_fn_backfill__, _meta, [index, value, body]}, functions ->
+        reading = Map.fetch!(readings, index)
+
+        case Value.choose_fn!(reading, env) do
+          :query ->
+            drop_snapshots(body, env.module)
+
+            {value, functions}
+
+          :elixir ->
+            drop_snapshots(value, env.module)
+
+            hoist_fn_backfill(reading, index, body, env, functions)
+        end
+
+      node, functions ->
+        {node, functions}
+    end)
   end
 
   # An attribute an op reads is read where the op is written: the op's code is placed in a
@@ -969,36 +1079,6 @@ defmodule Hologram.Migration do
   end
 
   defp snapshot_attribute_reads(other, _module, snapshots), do: {other, snapshots}
-
-  # Whether a fn is a query can hang on a function defined below the op, which only
-  # __before_compile__ can see, so the op holds a placeholder until then. The query reading rides
-  # in it, so its pins and aliases are read where the op is written, like any op's.
-  defp read_fn_backfill(ast, caller) do
-    reading = Value.read_fn(ast, caller)
-    index = length(Module.get_attribute(caller.module, @fn_backfills_attribute))
-
-    Module.put_attribute(caller.module, @fn_backfills_attribute, {index, reading})
-
-    {:__hologram_fn_backfill__, [], [index, Value.fn_value(reading)]}
-  end
-
-  defp settle_fn_backfills(ops, env) do
-    readings =
-      env.module
-      |> Module.get_attribute(@fn_backfills_attribute)
-      |> Map.new()
-
-    Macro.prewalk(ops, fn
-      {:__hologram_fn_backfill__, _meta, [index, value]} ->
-        reading = Map.fetch!(readings, index)
-        :query = Value.choose_fn!(reading, env)
-
-        value
-
-      node ->
-        node
-    end)
-  end
 
   defp statement_line(meta, caller) do
     Keyword.get(meta, :line, caller.line)
@@ -1075,19 +1155,6 @@ defmodule Hologram.Migration do
     end
   end
 
-  # Checked before anything else an op macro does, so an op in the wrong place is told so
-  # first, whatever else is wrong with it. Anywhere but a migration module's body - a function,
-  # a module nested in a migration or one that only imports the vocabulary, a script - the op
-  # has nowhere to go, so it is refused rather than dropped.
-  defp validate_placement!(caller) do
-    if not (module_body?(caller) and Module.has_attribute?(caller.module, @ops_attribute)) do
-      raise Hologram.CompileError,
-        message:
-          "migration ops go in the body of a module that uses Hologram.Migration - " <>
-            "#{Path.relative_to_cwd(caller.file)}:#{caller.line}"
-    end
-  end
-
   # An op's code is placed in a function defined at the end of the module, under the imports in
   # force there, so a call an import changes after the op would run another function than the one
   # written, and could store another value.
@@ -1104,6 +1171,19 @@ defmodule Hologram.Migration do
     end
 
     :ok
+  end
+
+  # Checked before anything else an op macro does, so an op in the wrong place is told so
+  # first, whatever else is wrong with it. Anywhere but a migration module's body - a function,
+  # a module nested in a migration or one that only imports the vocabulary, a script - the op
+  # has nowhere to go, so it is refused rather than dropped.
+  defp validate_placement!(caller) do
+    if not (module_body?(caller) and Module.has_attribute?(caller.module, @ops_attribute)) do
+      raise Hologram.CompileError,
+        message:
+          "migration ops go in the body of a module that uses Hologram.Migration - " <>
+            "#{Path.relative_to_cwd(caller.file)}:#{caller.line}"
+    end
   end
 
   # An op is recorded however the module body runs around it, but its attribute snapshots are

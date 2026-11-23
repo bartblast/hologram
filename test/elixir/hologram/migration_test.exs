@@ -59,6 +59,24 @@ defmodule Hologram.MigrationTest do
   end
 
   describe "__before_compile__/1" do
+    test "refuses an Elixir backfill fn reading an attribute in code that never runs" do
+      body = """
+      @suffix "!"
+
+      if false do
+        change_entity MyApp.Task do
+          add_attribute :first, :string, backfill: fn title -> title <> @suffix end
+        end
+      end
+      """
+
+      ExUnit.CaptureIO.capture_io(:stderr, fn ->
+        assert_raise Hologram.CompileError, ~r/reads @suffix/, fn ->
+          compile_migration("20260813091522", body)
+        end
+      end)
+    end
+
     test "refuses an op that reads an attribute in module-body code that never runs" do
       body = """
       @default "a"

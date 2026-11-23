@@ -34,7 +34,8 @@ defmodule Hologram.Migration.Value.Resolver do
   @type resolved_set :: {:relationship, list(atom)} | {:referencing, module, atom}
 
   @type resolved ::
-          {:value, any, type}
+          {:function, module, atom, list(atom)}
+          | {:value, any, type}
           | {:name, list(atom), type}
           | {:concat, list(resolved)}
           | {:at, {:split, resolved, {:value, String.t(), :string}}, {:value, integer, :integer}}
@@ -446,6 +447,23 @@ defmodule Hologram.Migration.Value.Resolver do
             "this op"
         )
     end
+  end
+
+  # What it returns is known only when it runs, so the apply checks its type then.
+  defp resolve_term({:function, _module, _function, args} = term, expected, context) do
+    entry = entry!(context.entity, context)
+
+    Enum.each(args, fn arg ->
+      if not field?(entry, arg) do
+        refuse!(
+          context,
+          "takes #{inspect(arg)}, a relationship, in an Elixir fn - an Elixir fn reads the " <>
+            "row's own fields, so read it through a query word instead"
+        )
+      end
+    end)
+
+    {term, expected}
   end
 
   defp resolve_term({:value, value}, expected, context) do

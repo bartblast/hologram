@@ -817,6 +817,13 @@ defmodule Hologram.Migration.Renderer do
     [%{backfill: {:computed, value}, kind: kind, nulls_only: nulls_only}] =
       Value.fills([op], model)
 
+    if match?({:function, _module, _function, _args}, value.term) do
+      raise Hologram.CompileError,
+        message:
+          "the backfill of #{inspect(op.name)} on #{inspect(op.entity)} (line #{op.line}) is an " <>
+            "Elixir fn, which can't apply yet"
+    end
+
     {^kind, {_name, type, rules} = member} = Value.fill_member(op, next_model)
     target = Value.fill_target(kind, member, op)
 

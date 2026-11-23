@@ -800,6 +800,21 @@ defmodule Hologram.Migration.Value.ResolverTest do
       refute error.message =~ "Map.fetch!"
     end
 
+    test "resolves an Elixir fn over the row's own fields, typed as the target" do
+      term = {:function, MyApp.M, :__backfill_0__, [:destination, :owner_id, :id]}
+      value = %Value{args: [:destination, :owner_id, :id], term: term}
+
+      assert resolve_on(MyApp.Trip, value, :string) == %{term: term, type: :string}
+    end
+
+    test "refuses a relationship as an argument of an Elixir fn" do
+      term = {:function, MyApp.M, :__backfill_0__, [:tags]}
+      value = %Value{args: [:tags], term: term}
+
+      assert resolve_refusal(MyApp.Trip, value, :string) =~
+               "takes :tags, a relationship, in an Elixir fn"
+    end
+
     test "counts the rows pointing at this one" do
       value = %Value{args: [:id], term: {:count, {:referencing, MyApp.Stop, :trip}}}
 

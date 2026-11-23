@@ -26,6 +26,7 @@ defmodule Hologram.Migration.Value do
           | {:coalesce, list(expression)}
           | {:count, set}
           | {:most_common, set, atom}
+          | {:function, module, atom, list(atom)}
 
   @type set :: {:relationship, list(atom)} | {:referencing, module, atom}
 
@@ -33,6 +34,7 @@ defmodule Hologram.Migration.Value do
 
   # How a fn body reads, before the module's own functions are known.
   @type fn_reading :: %{
+          arg_asts: list(Macro.t()),
           args: list(atom),
           body: Macro.t(),
           calls: list({atom, non_neg_integer}),
@@ -78,6 +80,12 @@ defmodule Hologram.Migration.Value do
 
   # The calls that open a query at the outermost part of a fn body.
   @query_calls @words ++ @stages
+
+  # What can change the meaning of a name inside an Elixir body.
+  @scope_changing_forms [:alias, :import, :require, :unquote, :unquote_splicing]
+
+  # The ones an Elixir body can't call, since nothing else would give them a meaning there.
+  @elixir_refused_words [:filter | @words]
 
   # Forms holding a value of the surrounding code, however they're spelled.
   @value_forms [:%, :%{}, :&, :@, :__aliases__, :fn, :{}]
@@ -230,12 +238,13 @@ defmodule Hologram.Migration.Value do
   @spec read_fn(Macro.t(), Macro.Env.t()) :: fn_reading
   def read_fn({:fn, _meta, clauses} = ast, env) do
     scope = %{args: [], env: env, in_fn: true}
-    {args, body} = fn_parts(clauses, ast, scope)
+    {arg_asts, args, body} = fn_parts(clauses, ast, scope)
     fn_scope = %{scope | args: args}
     kind = fn_kind(body, fn_scope)
     calls = local_calls(body)
 
     %{
+      arg_asts: arg_asts,
       args: args,
       body: body,
       calls: calls,
@@ -247,6 +256,15 @@ defmodule Hologram.Migration.Value do
   end
 
   @doc """
+  Returns the AST of the `%Value{}` of an Elixir `fn` running as the given function of the given
+  module.
+  """
+  @spec function_value(fn_reading, module, atom) :: Macro.t()
+  def function_value(%{args: args}, module, function) do
+    value_ast({:{}, [], [:function, module, function, args]}, args)
+  end
+
+  @doc """
   Returns the AST of the `%Value{}` the query reading of the given `fn` holds, or nil with none.
   """
   @spec fn_value(fn_reading) :: Macro.t() | nil
@@ -255,18 +273,19 @@ defmodule Hologram.Migration.Value do
   def fn_value(_reading), do: nil
 
   @doc """
-  Settles whether the given `fn` of the given module runs as a query, returning :query.
+  Settles whether the given `fn` of the given module runs as a query or as Elixir.
 
   A body is a query when it's marked with `query(...)`, is only a field or a path, or its outermost
-  part is a word that the module neither imports nor defines. Anything else is Elixir.
+  part is a word that the module neither imports nor defines. Anything else is Elixir, and reads
+  the row's own fields as its arguments.
 
   Takes the module's environment at its end, where an import written below the op is in force.
 
   Raises Hologram.CompileError on a query reading that was refused, on a module defining `query/1`
-  beside a marked body, on a call an import below the op changes, and on an Elixir body, which
-  can't run yet.
+  beside a marked body, on a call an import below the op changes, and on an Elixir body that reads
+  nothing of the row, calls a query word or pins a value.
   """
-  @spec choose_fn!(fn_reading, Macro.Env.t()) :: :query
+  @spec choose_fn!(fn_reading, Macro.Env.t()) :: :elixir | :query
   def choose_fn!(reading, %{module: module} = env) do
     if {:query, 1} in reading.calls and Module.defines?(module, {:query, 1}) do
       Expression.compile_error!(
@@ -297,15 +316,17 @@ defmodule Hologram.Migration.Value do
   @doc """
   Validates that every computed backfill of the given evaluated ops holds a term lowering can
   produce. Op options may come from a call, so a migration could build the struct by hand, and
-  what a term runs must never be anything the call check hasn't seen.
+  what a term runs must never be anything the call check hasn't seen, so a function it runs has to
+  be one of the given migration module.
 
   Raises Hologram.CompileError, located at the op in the given file, on any other term.
   """
-  @spec validate_ops!(list(%{atom => any}), String.t()) :: :ok
-  def validate_ops!(ops, file) do
+  @spec validate_ops!(list(%{atom => any}), String.t(), module | nil) :: :ok
+  def validate_ops!(ops, file, module \\ nil) do
     for op <- ops,
         %{__struct__: __MODULE__} = value <- op_backfills(op),
-        not (valid_term?(Map.get(value, :term)) and valid_args?(Map.get(value, :args, []))) do
+        not (valid_top_term?(Map.get(value, :term), module) and
+               valid_args?(Map.get(value, :args, []))) do
       raise Hologram.CompileError,
         message:
           "a backfill holds a computed value that wasn't written as a backfill expression - " <>
@@ -363,7 +384,7 @@ defmodule Hologram.Migration.Value do
     validate_imports_agree!(reading, env)
 
     if call_taken?(word, reading, module) do
-      refuse_elixir_body!(reading, module)
+      settle_elixir!(reading, module)
     else
       settle_query!(reading)
     end
@@ -372,7 +393,7 @@ defmodule Hologram.Migration.Value do
   defp choose_kind!(:elixir, reading, %{module: module} = env) do
     validate_imports_agree!(reading, env)
 
-    refuse_elixir_body!(reading, module)
+    settle_elixir!(reading, module)
   end
 
   @spec compile_error!(String.t(), Macro.t(), scope) :: no_return
@@ -502,7 +523,9 @@ defmodule Hologram.Migration.Value do
 
   defp fn_parts([{:->, _meta, [[], _body]}], ast, scope), do: refuse_constant_fn(ast, scope)
 
-  defp fn_parts([{:->, _meta, [args, body]}], _ast, scope), do: {fn_args(args, scope), body}
+  defp fn_parts([{:->, _meta, [args, body]}], _ast, scope) do
+    {args, fn_args(args, scope), body}
+  end
 
   defp fn_parts(_clauses, ast, scope) do
     compile_error!(
@@ -542,6 +565,10 @@ defmodule Hologram.Migration.Value do
 
     {names, position_values ++ values}
   end
+
+  defp guard_of({:when, _meta, args}), do: List.last(args)
+
+  defp guard_of(_pattern), do: nil
 
   defp interpolated?(parts) do
     Enum.any?(parts, fn
@@ -609,6 +636,21 @@ defmodule Hologram.Migration.Value do
   end
 
   defp path(_ast, _names), do: nil
+
+  # A pin in a pattern matches against a variable, which Elixir allows anywhere in a body.
+  defp pin_outside_pattern?(ast, env) do
+    {_ast, found?} =
+      Macro.prewalk(ast, false, fn node, found? ->
+        kept =
+          node
+          |> unpiped_call()
+          |> without_pattern(env)
+
+        {kept, found? or match?({:^, _meta, _args}, kept)}
+      end)
+
+    found?
+  end
 
   # What a pipe can go into: a word or a remote call, which then refuses on its own terms.
   defp pipeable?(form, _args) when not is_atom(form), do: true
@@ -802,35 +844,6 @@ defmodule Hologram.Migration.Value do
     )
   end
 
-  @spec refuse_elixir_body!(fn_reading, module) :: no_return
-  defp refuse_elixir_body!(reading, module) do
-    scope = %{args: reading.args, env: reading.env, in_fn: true}
-
-    if not reads_argument?(reading.body, reading.args) do
-      refuse_constant_fn(reading.body, scope)
-    end
-
-    words =
-      Enum.filter(reading.calls, fn {name, _arity} = call ->
-        name in @query_calls and not call_taken?(call, reading, module)
-      end)
-
-    if words != [] and operator_call?(call_shape(reading.body)) do
-      compile_error!(
-        "a backfill fn mixes an operator with query words, got: " <>
-          "#{Macro.to_string(reading.body)} - wrap the whole body in query(...)",
-        reading.body,
-        scope
-      )
-    end
-
-    compile_error!(
-      "a backfill fn with an Elixir body can't run yet, got: #{Macro.to_string(reading.body)}",
-      reading.body,
-      scope
-    )
-  end
-
   @spec refuse_fn(Macro.t(), scope) :: no_return
   defp refuse_fn(ast, scope) do
     compile_error!(
@@ -900,6 +913,33 @@ defmodule Hologram.Migration.Value do
     )
   end
 
+  @spec refuse_word_in_elixir!({atom, non_neg_integer}, Macro.t(), scope) :: no_return
+  defp refuse_word_in_elixir!({:split, _arity}, body, scope) do
+    compile_error!(
+      "split is a query word, and this fn's body is Elixir - write String.split/2",
+      body,
+      scope
+    )
+  end
+
+  defp refuse_word_in_elixir!({:at, _arity}, body, scope) do
+    compile_error!(
+      "at is a query word, and this fn's body is Elixir - write Enum.at/2",
+      body,
+      scope
+    )
+  end
+
+  defp refuse_word_in_elixir!({word, _arity}, body, scope) do
+    compile_error!(
+      "#{word} is a query word, and this fn's body is Elixir, which reads only the row's own " <>
+        "fields and has no query - write the whole body in Elixir, or the whole body in query " <>
+        "words",
+      body,
+      scope
+    )
+  end
+
   defp resolved_backfill(%__MODULE__{} = value, op, kind, member, model) do
     {:computed, resolve!(value, model, op.entity, fill_target(kind, member, op))}
   end
@@ -943,6 +983,32 @@ defmodule Hologram.Migration.Value do
 
   # Reads the row's id, the argument its filter pins.
   defp set_heads({:{}, _meta, [:referencing, _type, _ref]}), do: [:id]
+
+  # An Elixir body gets the row's values as its arguments, so a query word or a pin in it has
+  # nothing to read.
+  defp settle_elixir!(reading, module) do
+    scope = %{args: reading.args, env: reading.env, in_fn: true}
+
+    if not reads_argument?(reading.body, reading.args) do
+      refuse_constant_fn(reading.body, scope)
+    end
+
+    validate_no_scope_change!(reading.body, scope)
+    validate_no_own_macros!(reading, module, scope)
+    validate_no_words!(reading, module, scope)
+
+    if pin_outside_pattern?(reading.body, reading.env) do
+      compile_error!(
+        "an Elixir backfill fn gets the row's values as its arguments, so it pins nothing, " <>
+          "got: #{Macro.to_string(reading.body)} - read the argument by name, and a module " <>
+          "attribute as @x",
+        reading.body,
+        scope
+      )
+    end
+
+    :elixir
+  end
 
   defp settle_query!(%{query: {:ok, _term}}), do: :query
 
@@ -994,6 +1060,12 @@ defmodule Hologram.Migration.Value do
 
   defp unpipe(ast, _scope), do: ast
 
+  defp unpiped_call({:|>, _meta, [left, {form, call_meta, args}]}) when is_list(args) do
+    {form, call_meta, [left | args]}
+  end
+
+  defp unpiped_call(node), do: node
+
   defp valid_args?(args),
     do: is_list(args) and not List.improper?(args) and Enum.all?(args, &is_atom/1)
 
@@ -1039,6 +1111,13 @@ defmodule Hologram.Migration.Value do
 
   defp valid_term?(_term), do: false
 
+  defp valid_top_term?({:function, function_module, function, args}, module) do
+    module != nil and function_module == module and is_atom(function) and valid_args?(args) and
+      function_exported?(module, function, length(args))
+  end
+
+  defp valid_top_term?(term, _module), do: valid_term?(term)
+
   # A term reading nothing of the row is a constant, and a name that isn't an argument, or an
   # argument pinned, would read the surrounding code.
   defp validate_fn_term!(term, inner, scope) do
@@ -1082,6 +1161,95 @@ defmodule Hologram.Migration.Value do
     end
   end
 
+  # A macro of the migration can expand to an alias or an import the check above can't see. Any
+  # other module's macro is refused by the call check. A guard is a macro too, and one can't hold
+  # an alias.
+  defp validate_no_own_macros!(reading, module, scope) do
+    macro =
+      reading.body
+      |> without_guards()
+      |> local_calls()
+      |> Enum.find(fn call ->
+        Module.defines?(module, call, :defmacro) or Module.defines?(module, call, :defmacrop)
+      end)
+
+    if macro do
+      {name, arity} = macro
+
+      compile_error!(
+        "an Elixir backfill fn can't call the migration's macro #{name}/#{arity} - make it a " <>
+          "defp",
+        reading.body,
+        scope
+      )
+    end
+  end
+
+  # An Elixir body's aliases are expanded where the op is written, and its calls judged by the
+  # imports there, so one it changes for itself would run another function than the one written.
+  # An unquote can splice one in unseen.
+  defp validate_no_scope_change!(body, scope) do
+    {_ast, changed} =
+      Macro.prewalk(body, nil, fn
+        {kind, _meta, args} = node, nil when kind in @scope_changing_forms and is_list(args) ->
+          {node, kind}
+
+        node, found ->
+          {node, found}
+      end)
+
+    case changed do
+      nil ->
+        :ok
+
+      kind when kind in [:unquote, :unquote_splicing] ->
+        compile_error!(
+          "an Elixir backfill fn can't #{kind} inside its body - read a value of the file as @x",
+          body,
+          scope
+        )
+
+      kind ->
+        compile_error!(
+          "an Elixir backfill fn can't #{kind} inside its body - put the #{kind} at the top of " <>
+            "the module",
+          body,
+          scope
+        )
+    end
+  end
+
+  defp validate_no_words!(reading, module, scope) do
+    if {:query, 1} in reading.calls do
+      compile_error!(
+        "query(...) wraps the whole body of a backfill fn, got: " <>
+          Macro.to_string(reading.body),
+        reading.body,
+        scope
+      )
+    end
+
+    words =
+      Enum.filter(reading.calls, fn {name, _arity} = call ->
+        name in @elixir_refused_words and not call_taken?(call, reading, module)
+      end)
+
+    if words != [] and operator_call?(call_shape(reading.body)) and
+         match?({:ok, _term}, read_query(reading.body, :query, scope)) do
+      compile_error!(
+        "a backfill fn mixes an operator with query words, got: " <>
+          "#{Macro.to_string(reading.body)} - wrap the whole body in query(...)",
+        reading.body,
+        scope
+      )
+    end
+
+    case words do
+      [word | _rest] -> refuse_word_in_elixir!(word, reading.body, scope)
+      [] -> :ok
+    end
+  end
+
   defp validate_pin!(expr, inner, scope) do
     {_ast, pinned} =
       Macro.prewalk(expr, [], fn
@@ -1111,4 +1279,35 @@ defmodule Hologram.Migration.Value do
   defp value_ast(term, args) do
     {:%{}, [], [__struct__: __MODULE__, args: args, term: term]}
   end
+
+  # A cond's heads are expressions, so they stay in the walk with the clauses taken apart.
+  defp without_guards(body) do
+    Macro.prewalk(body, fn
+      {:when, meta, args} -> {:__block__, meta, Enum.drop(args, -1)}
+      node -> node
+    end)
+  end
+
+  defp without_pattern({:cond, meta, [[do: clauses]]}, _env) do
+    {:cond, meta, [Enum.flat_map(clauses, fn {:->, _meta, [heads, body]} -> [body | heads] end)]}
+  end
+
+  defp without_pattern({op, meta, [pattern, right]}, _env) when op in [:=, :<-, :match?] do
+    {op, meta, [guard_of(pattern), right]}
+  end
+
+  defp without_pattern({:->, meta, [heads, body]}, _env) do
+    {:->, meta, [Enum.map(heads, &guard_of/1), body]}
+  end
+
+  defp without_pattern(
+         {{:., _dot_meta, [receiver, :match?]} = form, meta, [pattern, right]} = node,
+         env
+       ) do
+    if Macro.expand(receiver, env) == Kernel,
+      do: {form, meta, [guard_of(pattern), right]},
+      else: node
+  end
+
+  defp without_pattern(node, _env), do: node
 end

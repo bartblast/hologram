@@ -132,6 +132,18 @@ defmodule Hologram.Migration.Value.EvaluatorTest do
     end
   end
 
+  describe "evaluate/2 and reads/1, an Elixir fn" do
+    test "calls the function with the row's values, in argument order" do
+      term = {:function, String, :replace_suffix, [:title, :suffix, :with]}
+
+      assert evaluate(term, %{title: "a.txt", suffix: ".txt", with: ".md"}) == "a.md"
+    end
+
+    test "reads nothing beyond the row's own fields" do
+      assert reads({:function, String, :upcase, [:title]}) == %{}
+    end
+  end
+
   describe "evaluate/2 and reads/1, the rows pointing at this one" do
     @set {:referencing, MyApp.Stop, :trip}
 

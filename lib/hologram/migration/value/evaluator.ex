@@ -18,6 +18,10 @@ defmodule Hologram.Migration.Value.Evaluator do
   Returns the value the given resolved term computes for the given row.
   """
   @spec evaluate(Resolver.resolved(), %{atom => any}) :: any
+  def evaluate({:function, module, function, args}, row) do
+    apply(module, function, Enum.map(args, &Map.get(row, &1)))
+  end
+
   def evaluate({:value, value, _type}, _row), do: value
 
   def evaluate({:name, path, _type}, row), do: read_path(row, path)
@@ -59,6 +63,8 @@ defmodule Hologram.Migration.Value.Evaluator do
   map from each relationship to what's read through it.
   """
   @spec reads(Resolver.resolved()) :: %{(atom | {module, atom}) => map}
+  def reads({:function, _module, _function, _args}), do: %{}
+
   def reads({:value, _value, _type}), do: %{}
 
   def reads({:name, path, _type}) do

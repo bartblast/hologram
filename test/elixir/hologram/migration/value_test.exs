@@ -286,6 +286,71 @@ defmodule Hologram.Migration.ValueTest do
     end
   end
 
+  describe "validate_ops!/2, a function term" do
+    defp function_op(module) do
+      value = %Value{args: [:title], term: {:function, module, :__backfill_0__, [:title]}}
+
+      %{
+        op: :add_attribute,
+        entity: MyApp.Trip,
+        name: :value,
+        type: :string,
+        opts: [backfill: value],
+        line: 3
+      }
+    end
+
+    test "accepts a function of the migration module" do
+      module =
+        compile_migration("20260813091522", """
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: fn title -> String.upcase(title) end
+        end
+        """)
+
+      assert Value.validate_ops!(
+               [function_op(module)],
+               "app/migrations/20260813091522.ex",
+               module
+             ) == :ok
+    end
+
+    test "refuses a function the module doesn't export at that arity" do
+      module =
+        compile_migration("20260813091522", """
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: fn a, b -> a <> b end
+        end
+        """)
+
+      assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
+        Value.validate_ops!([function_op(module)], "app/migrations/20260813091522.ex", module)
+      end
+    end
+
+    test "refuses a function of another module" do
+      assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
+        Value.validate_ops!(
+          [function_op(System)],
+          "app/migrations/20260813091522.ex",
+          MyApp.Migration
+        )
+      end
+    end
+
+    test "refuses a function nested inside another word" do
+      op =
+        put_in(
+          function_op(MyApp.Migration).opts[:backfill].term,
+          {:coalesce, [{:function, MyApp.Migration, :f, []}, {:value, "a"}]}
+        )
+
+      assert_raise Hologram.CompileError, ~r/wasn't written as a backfill expression/, fn ->
+        Value.validate_ops!([op], "app/migrations/20260813091522.ex", MyApp.Migration)
+      end
+    end
+  end
+
   describe "validate_ops!/2" do
     test "passes the terms lowering produces" do
       ops = [
@@ -998,22 +1063,33 @@ defmodule Hologram.Migration.ValueTest do
     end
 
     test "treats a word the file imports as Elixir" do
-      message =
-        compiled_refusal(op_with("fn title -> count(title) end", "import Enum, only: [count: 1]"))
+      module =
+        compile_migration(
+          "20260813091522",
+          op_with("fn title -> count(title) end", "import Enum, only: [count: 1]")
+        )
 
-      assert message =~ "an Elixir body can't run yet"
+      assert [%{opts: [backfill: %Value{term: {:function, ^module, :__backfill_0__, [:title]}}]}] =
+               module.__hologram_migration__().ops
+
+      assert module.__backfill_0__([1, 2]) == 2
     end
 
     test "treats a word the module defines below the op as Elixir" do
       body = """
+      @fallback "a"
       change_entity MyApp.Trip do
         add_attribute :value, :string, backfill: fn title -> coalesce(title, @fallback) end
       end
+      @fallback "b"
 
       defp coalesce(left, right), do: left || right
       """
 
-      assert compiled_refusal(body) =~ "an Elixir body can't run yet"
+      module = compile_migration("20260813091522", body)
+
+      assert module.__backfill_0__(nil) == "a"
+      assert module.__backfill_0__("x") == "x"
     end
 
     test "lets the word win inside query(...), over a function of that name" do
@@ -1046,9 +1122,266 @@ defmodule Hologram.Migration.ValueTest do
       assert refusal(~s|fn title -> coalesce(title, "x") <> "!" end|) =~
                "wrap the whole body in query(...)"
     end
+  end
 
-    test "refuses an Elixir body for now" do
-      assert refusal("fn title -> String.upcase(title) end") =~ "an Elixir body can't run yet"
+  describe "read_fn/2 and choose_fn!/2, an Elixir body" do
+    defp compiled(body), do: compile_migration("20260813091522", body)
+
+    defp elixir_op(expression, extra \\ "") do
+      module =
+        compiled("""
+        #{extra}
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: #{expression}
+        end
+        """)
+
+      [op] = module.__hologram_migration__().ops
+
+      {module, op.opts[:backfill]}
+    end
+
+    test "runs as a generated function of the migration" do
+      {module, value} = elixir_op("fn title -> String.upcase(title) end")
+
+      assert %Value{args: [:title], term: {:function, ^module, :__backfill_0__, [:title]}} = value
+      assert module.__backfill_0__("a") == "A"
+    end
+
+    test "takes the arguments in the order written" do
+      {module, value} = elixir_op(~s|fn first, last -> first <> " " <> last end|)
+
+      assert %Value{args: [:first, :last]} = value
+      assert module.__backfill_0__("Ann", "Lee") == "Ann Lee"
+    end
+
+    test "gives two backfills on one line distinct functions" do
+      module =
+        compiled("""
+        change_entity MyApp.Trip do
+          add_attribute :a, :string, backfill: fn x -> String.upcase(x) end; add_attribute :b, :string, backfill: fn x -> String.downcase(x) end
+        end
+        """)
+
+      assert [%{opts: [backfill: first]}, %{opts: [backfill: second]}] =
+               module.__hologram_migration__().ops
+
+      assert {:function, ^module, a, [:x]} = first.term
+      assert {:function, ^module, b, [:x]} = second.term
+      assert a != b
+    end
+
+    test "reads a plain attribute's value at the op" do
+      {module, _value} = elixir_op(~s|fn title -> title <> @suffix end|, ~s|@suffix "!"|)
+
+      assert module.__backfill_0__("a") == "a!"
+    end
+
+    test "reads an attribute reassigned below the op at its value at the op" do
+      module =
+        compiled("""
+        @suffix "!"
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: fn title -> title <> @suffix end
+        end
+        @suffix "?"
+        """)
+
+      assert module.__backfill_0__("a") == "a!"
+    end
+
+    test "resolves an alias where the op is written" do
+      module =
+        compiled("""
+        alias String, as: Text
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: fn title -> Text.upcase(title) end
+        end
+        alias Enum, as: Text
+        """)
+
+      assert module.__backfill_0__("a") == "A"
+    end
+
+    test "calls the migration's own private function" do
+      module =
+        compiled("""
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: fn title -> shout(title) end
+        end
+
+        defp shout(text), do: String.upcase(text) <> "!"
+        """)
+
+      assert module.__backfill_0__("a") == "A!"
+    end
+
+    test "reads a field of a value through the strict read" do
+      {module, _value} = elixir_op("fn created_at -> Integer.to_string(created_at.year) end")
+
+      assert module.__backfill_0__(~U[2026-01-02 00:00:00Z]) == "2026"
+      assert_raise BadMapError, fn -> module.__backfill_0__(String) end
+    end
+
+    test "refuses an alias, import or require inside the body" do
+      for {kind, line} <- [
+            alias: "alias String, as: S",
+            import: "import String",
+            require: "require Integer"
+          ] do
+        assert refusal("fn title -> #{line}; String.upcase(title) end") =~
+                 "put the #{kind} at the top of the module"
+      end
+    end
+
+    test "emits no warning for the side of a fn that didn't run" do
+      warnings =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          compiled("""
+          @suffix "!"
+          change_entity MyApp.Trip do
+            add_attribute :value, :string, backfill: fn title -> query(title <> ^@suffix) end
+          end
+          """)
+        end)
+
+      refute warnings =~ "was set but never used"
+    end
+
+    test "keeps a pin inside match?, however it's spelled" do
+      for {call, extra} <- [
+            {"match?(^b, a)", ""},
+            {"Kernel.match?(^b, a)", ""},
+            {"Elixir.Kernel.match?(^b, a)", ""},
+            {"K.match?(^b, a)", "alias Kernel, as: K"},
+            {"^b |> match?(a)", ""}
+          ] do
+        {module, _value} =
+          elixir_op(~s(fn a, b -> if #{call}, do: "same", else: "other" end), extra)
+
+        assert module.__backfill_0__(1, 1) == "same"
+        assert module.__backfill_0__(1, 2) == "other"
+      end
+    end
+
+    test "refuses an unquote in the body" do
+      for form <- ["unquote(@swap)", "unquote_splicing(@swap)"] do
+        message =
+          refusal(~s|fn title -> #{form}; String.upcase(title) end|)
+
+        assert message =~ "read a value of the file as @x"
+      end
+    end
+
+    test "accepts a guard the migration defines" do
+      module =
+        compiled("""
+        defguardp is_short(x) when byte_size(x) < 3
+
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: fn t ->
+            case t do
+              x when is_short(x) -> x
+              _other -> "long"
+            end
+          end
+        end
+        """)
+
+      assert module.__backfill_0__("ab") == "ab"
+      assert module.__backfill_0__("abcd") == "long"
+    end
+
+    test "refuses a pin in a cond head" do
+      assert refusal(~s|fn a, b -> cond do ^b -> a; true -> "x" end end|) =~
+               "so it pins nothing"
+    end
+
+    test "refuses a pin in a guard" do
+      assert refusal(~s|fn a, b -> case a do x when x == ^b -> x; _o -> "n" end end|) =~
+               "so it pins nothing"
+    end
+
+    test "refuses a call to the migration's own macro" do
+      for kind <- ["defmacro", "defmacrop"] do
+        body = """
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: fn title -> shout(title) end
+        end
+
+        #{kind} shout(text), do: text
+        """
+
+        error = assert_raise Hologram.CompileError, fn -> compiled(body) end
+
+        assert error.message =~ "can't call the migration's macro shout/1 - make it a defp"
+      end
+    end
+
+    test "refuses a function holding the generated name" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn x -> String.upcase(x) end
+      end
+
+      def __backfill_0__(_x), do: "mine"
+      """
+
+      error = assert_raise Hologram.CompileError, fn -> compiled(body) end
+
+      assert error.message =~ "__backfill_0__/1 is the name a backfill fn runs under"
+    end
+
+    test "names the Elixir function for a word beside an operator a query can't read" do
+      assert refusal(~s|fn a -> at(a, 0) <> "!" end|) =~ "write Enum.at/2"
+
+      assert refusal(~s|fn a -> String.upcase(a) <> coalesce(a, "x") end|) =~ "has no query"
+    end
+
+    test "refuses query(...) nested in an Elixir body" do
+      assert refusal("fn a -> String.upcase(query(a)) end") =~
+               "query(...) wraps the whole body of a backfill fn"
+    end
+
+    test "keeps a pin inside a pattern" do
+      {module, _value} = elixir_op("fn a, b -> case a do ^b -> 1; _other -> 2 end end")
+
+      assert module.__backfill_0__(1, 1) == 1
+      assert module.__backfill_0__(1, 2) == 2
+    end
+
+    test "refuses a pin outside a pattern" do
+      assert refusal(~s|fn title -> String.upcase(^title) end|) =~
+               "gets the row's values as its arguments, so it pins nothing"
+    end
+
+    test "refuses split and at, naming the Elixir function" do
+      assert refusal(~s|fn title -> String.trim(split(title, ",")) end|) =~ "write String.split/2"
+      assert refusal(~s|fn title -> String.trim(at(title, 0)) end|) =~ "write Enum.at/2"
+    end
+
+    test "refuses the other words, saying it has no query" do
+      for word <- [
+            "count(title)",
+            "most_common(title, name)",
+            ~s|coalesce(title, "x")|,
+            "filter(title, a == 1)"
+          ] do
+        message = refusal("fn title -> String.trim(#{word}) end")
+
+        assert message =~ "has no query"
+        refute message =~ "query(...)"
+      end
+    end
+
+    test "refuses an app call through the call check" do
+      assert_raise Hologram.CompileError, ~r/MyApp.Slug/, fn ->
+        elixir_op("fn title -> MyApp.Slug.make(title) end")
+      end
+    end
+
+    test "refuses a capture in place of a fn" do
+      assert refusal("&String.upcase/1") =~ "a capture hides the fields it reads"
     end
   end
 
