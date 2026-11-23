@@ -469,6 +469,26 @@ defmodule Hologram.Query do
   @spec increment(Entity.t(), atom, integer) :: Entity.t()
   defdelegate increment(entity, name, amount), to: Stage
 
+  # TODO(#1854): replace these two with the real words. Importing them now means a function of
+  # either name that an app calls fails today rather than when the words arrive.
+  @doc false
+  @spec inverse(Macro.t(), Macro.t()) :: no_return
+  defmacro inverse(_type, _reference) do
+    reserved_error!(
+      "inverse/2 is reserved for a query word Hologram doesn't have yet",
+      __CALLER__
+    )
+  end
+
+  @doc false
+  @spec most_common(Macro.t(), Macro.t()) :: no_return
+  defmacro most_common(_set, _attribute) do
+    reserved_error!(
+      "most_common/2 is reserved - if you meant the query word most_common, it works only in a migration's backfill: for now",
+      __CALLER__
+    )
+  end
+
   @doc """
   Marks the given query as single-result and returns the resulting query term.
 
@@ -712,5 +732,13 @@ defmodule Hologram.Query do
     defp field_doc({name, value}, opts) do
       concat([Atom.to_string(name), ": ", to_doc(value, opts)])
     end
+  end
+
+  @spec reserved_error!(String.t(), Macro.Env.t()) :: no_return
+  defp reserved_error!(message, env) do
+    raise Hologram.CompileError,
+      message: "#{message} - if this is your own function, rename it",
+      file: env.file,
+      line: env.line
   end
 end

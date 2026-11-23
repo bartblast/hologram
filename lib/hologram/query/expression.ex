@@ -10,6 +10,8 @@ defmodule Hologram.Query.Expression do
   # held in a variable), so it judges the spelling only. Whether a name is declared, and whether a
   # value suits it, stays with the stage, which judges the data it is given.
 
+  alias Hologram.Query.Words
+
   @comparison_operators [:!=, :<, :<=, :==, :>, :>=]
 
   # What a predicate lowering says, for a policy condition and for a filter. A condition judges one
@@ -134,11 +136,12 @@ defmodule Hologram.Query.Expression do
   else.
   """
   @spec condition(Macro.t(), Macro.Env.t()) :: Macro.t()
-  def condition({:^, _meta, [expr]}, _env), do: expr
-
-  def condition(list, env) when is_list(list), do: keyword_list_error!(list, env)
-
-  def condition(ast, env), do: predicate_list!(ast, @condition_names, env)
+  def condition(ast, env) do
+    lower_condition(ast, env)
+  rescue
+    error in Hologram.CompileError ->
+      reraise Words.add_backfill_only_hint(error, ast), __STACKTRACE__
+  end
 
   @doc """
   Returns the hints `Hologram.Query.Stage.predicate_triples!/3` can add to its refusal of a name
@@ -269,11 +272,12 @@ defmodule Hologram.Query.Expression do
   nor pinned, and on anything else in a name position.
   """
   @spec ordering(Macro.t(), Macro.Env.t()) :: Macro.t()
-  def ordering({:^, _meta, [_expr]} = ast, env), do: pinned_name!(ast, @ordering_names, env)
-
-  def ordering(list, env) when is_list(list), do: Enum.map(list, &ordering_entry!(&1, env))
-
-  def ordering(ast, env), do: name!(ast, @ordering_names, env)
+  def ordering(ast, env) do
+    lower_ordering(ast, env)
+  rescue
+    error in Hologram.CompileError ->
+      reraise Words.add_backfill_only_hint(error, ast), __STACKTRACE__
+  end
 
   @doc """
   Returns the hints `Hologram.Query.Stage.sort/3` can add to its refusal of a name the given
@@ -344,11 +348,12 @@ defmodule Hologram.Query.Expression do
   and on anything else.
   """
   @spec predicates(Macro.t(), Macro.Env.t()) :: Macro.t()
-  def predicates({:^, _meta, [expr]}, _env), do: expr
-
-  def predicates(list, env) when is_list(list), do: Enum.map(list, &keyword_entry!(&1, env))
-
-  def predicates(ast, env), do: predicate_list!(ast, @filter_names, env)
+  def predicates(ast, env) do
+    lower_predicates(ast, env)
+  rescue
+    error in Hologram.CompileError ->
+      reraise Words.add_backfill_only_hint(error, ast), __STACKTRACE__
+  end
 
   @doc """
   Returns the hints `Hologram.Query.Stage.filter/3` can add to its refusal of a name the given
@@ -867,6 +872,26 @@ defmodule Hologram.Query.Expression do
   defp located({_name, meta, _args} = ast, _fallback) when is_list(meta), do: ast
 
   defp located(_ast, fallback), do: fallback
+
+  defp lower_condition({:^, _meta, [expr]}, _env), do: expr
+
+  defp lower_condition(list, env) when is_list(list), do: keyword_list_error!(list, env)
+
+  defp lower_condition(ast, env), do: predicate_list!(ast, @condition_names, env)
+
+  defp lower_ordering({:^, _meta, [_expr]} = ast, env),
+    do: pinned_name!(ast, @ordering_names, env)
+
+  defp lower_ordering(list, env) when is_list(list), do: Enum.map(list, &ordering_entry!(&1, env))
+
+  defp lower_ordering(ast, env), do: name!(ast, @ordering_names, env)
+
+  defp lower_predicates({:^, _meta, [expr]}, _env), do: expr
+
+  defp lower_predicates(list, env) when is_list(list),
+    do: Enum.map(list, &keyword_entry!(&1, env))
+
+  defp lower_predicates(ast, env), do: predicate_list!(ast, @filter_names, env)
 
   defp membership!({:^, _meta, [expr]}, _names, _env), do: expr
 

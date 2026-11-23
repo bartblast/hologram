@@ -249,7 +249,7 @@ defmodule Hologram.Migration.Value do
       body: body,
       calls: calls,
       env: env,
-      imported: Enum.filter(calls, &(Macro.Env.lookup_import(env, &1) != [])),
+      imported: Enum.filter(calls, &(elixir_imports(env, &1) != [])),
       kind: kind,
       query: read_query(body, kind, fn_scope)
     }
@@ -407,6 +407,17 @@ defmodule Hologram.Migration.Value do
   defp constant?({:__aliases__, _meta, [head | _rest]}), do: is_atom(head)
 
   defp constant?(ast), do: is_atom(ast) or is_number(ast) or is_binary(ast)
+
+  # A word imported from Hologram.Query is still the word, and the call check refuses the import.
+  defp elixir_imports(env, {name, _arity} = call) do
+    imports = Macro.Env.lookup_import(env, call)
+
+    if name in @query_calls do
+      Enum.reject(imports, fn {_kind, module} -> module == Hologram.Query end)
+    else
+      imports
+    end
+  end
 
   defp expression({:|>, _meta, _args} = ast, scope) do
     ast
@@ -1146,7 +1157,7 @@ defmodule Hologram.Migration.Value do
   defp validate_imports_agree!(reading, env) do
     moved =
       Enum.find(reading.calls, fn call ->
-        Macro.Env.lookup_import(reading.env, call) != Macro.Env.lookup_import(env, call)
+        elixir_imports(reading.env, call) != elixir_imports(env, call)
       end)
 
     if moved do

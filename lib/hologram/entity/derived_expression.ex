@@ -17,9 +17,14 @@ defmodule Hologram.Entity.DerivedExpression do
   # A derived field is computed by the database, so anything else is refused at its line: Elixir
   # over a row is a plain def in the module. A def a derived body calls is a query builder, held to
   # the query vocabulary by the build's walk.
+  #
+  # TODO(#1853): read a body the way a migration's backfill fn is read: a query only when its
+  # outermost part is a query word or query(...), or it's only a field or a path, and a module
+  # attribute in a query spelled ^@x.
 
   alias Hologram.Entity.Derived
   alias Hologram.Query.Expression
+  alias Hologram.Query.Words
 
   @comparison_operators [:!=, :<, :<=, :==, :>, :>=]
 
@@ -101,6 +106,9 @@ defmodule Hologram.Entity.DerivedExpression do
     lowered_body = body(body, state)
 
     {names, lowered_body, builder_call?(lowered_body)}
+  rescue
+    error in Hologram.CompileError ->
+      reraise Words.add_backfill_only_hint(error, body), __STACKTRACE__
   end
 
   @doc """
@@ -428,6 +436,15 @@ defmodule Hologram.Entity.DerivedExpression do
     vocabulary_error!(described_use(ast), ast, state)
   end
 
+  # A name use Hologram.DB reserves says so itself, since the module's own function of that name
+  # has to be renamed, which the refusal of a call into Hologram.Query wouldn't tell.
+  defp expand_reserved(Hologram.Query, {name, _meta, [_left, _right]} = ast, state)
+       when name in [:inverse, :most_common] do
+    Macro.expand(ast, %{state.env | line: line(ast, state)})
+  end
+
+  defp expand_reserved(_module, ast, _state), do: ast
+
   defp field_call(path, state) do
     quote do
       Derived.field(unquote(state.env.module), unquote(path))
@@ -486,6 +503,8 @@ defmodule Hologram.Entity.DerivedExpression do
         vocabulary_error!(described_use(ast), ast, state)
 
       module = imported_module(name, meta, arity, state) ->
+        expand_reserved(module, ast, state)
+
         if module == Hologram.Query or own_module?(module) do
           vocabulary_error!(described_use(ast), ast, state)
         end
@@ -847,6 +866,9 @@ defmodule Hologram.Entity.DerivedExpression do
 
   @spec vocabulary_error!(String.t(), Macro.t(), map) :: no_return
   defp vocabulary_error!(what, ast, state) do
-    compile_error!("#{state.field} #{what} - #{@vocabulary_reason}", ast, state)
+    # An own builder's refusal comes once the module body has run, outside function/3's rescue.
+    hint = Words.backfill_only_hint(ast)
+
+    compile_error!("#{state.field} #{what} - #{@vocabulary_reason}#{hint}", ast, state)
   end
 end

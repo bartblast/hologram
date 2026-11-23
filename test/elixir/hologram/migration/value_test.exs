@@ -1075,6 +1075,36 @@ defmodule Hologram.Migration.ValueTest do
       assert module.__backfill_0__([1, 2]) == 2
     end
 
+    test "refuses use Hologram.DB rather than reading its stub in a backfill" do
+      body = """
+      use Hologram.DB
+
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn tags -> tags |> most_common(name) end
+      end
+      """
+
+      refusal = compiled_refusal(body)
+
+      assert refusal =~ "uses Hologram.DB at compile time"
+      refute refusal =~ "is reserved"
+    end
+
+    test "refuses use Hologram.DB below an op rather than calling it an import change" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn tags -> tags |> most_common(name) end
+      end
+
+      use Hologram.DB
+      """
+
+      refusal = compiled_refusal(body)
+
+      assert refusal =~ "uses Hologram.DB at compile time"
+      refute refusal =~ "an import changes"
+    end
+
     test "treats a word the module defines below the op as Elixir" do
       body = """
       @fallback "a"

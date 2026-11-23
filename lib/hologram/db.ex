@@ -71,6 +71,8 @@ defmodule Hologram.DB do
           filter: 2,
           include: 2,
           increment: 3,
+          inverse: 2,
+          most_common: 2,
           one: 1,
           paginate: 2,
           put_attribute: 2,

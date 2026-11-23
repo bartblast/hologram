@@ -7,6 +7,13 @@ defmodule Hologram.Query.Words do
 
   alias Hologram.Query.Ordering
 
+  # TODO(#1854): once the words work in queries, remove this list and the hint built from it. An
+  # entity's own function of a word's name keeps winning in a derived body (#1853), so the words
+  # can't simply join the stages a derived body imports.
+  @backfill_only_words [:at, :coalesce, :most_common, :split]
+
+  @backfill_only_hint_start " - if you meant the query word "
+
   @doc """
   Returns the part of the given split at the given position, counting from 0, as `Enum.at/2` does:
   nil past the end, and nil for a nil list.
@@ -15,6 +22,45 @@ defmodule Hologram.Query.Words do
   def at(nil, _position), do: nil
 
   def at(parts, position), do: Enum.at(parts, position)
+
+  @doc """
+  Returns the given compile error with the hint for the given query expression added to its
+  message, unless the message carries one already.
+  """
+  @spec add_backfill_only_hint(Exception.t(), Macro.t()) :: Exception.t()
+  def add_backfill_only_hint(error, ast) do
+    if String.contains?(error.message, @backfill_only_hint_start) do
+      error
+    else
+      %{error | message: error.message <> backfill_only_hint(ast)}
+    end
+  end
+
+  @doc """
+  Returns what to add to a refusal of the given query expression when it calls something named
+  like a word that works only in a migration's `backfill:` for now, or an empty string when it
+  doesn't. A pinned expression is the surrounding code's, so its calls aren't words.
+  """
+  @spec backfill_only_hint(Macro.t()) :: String.t()
+  def backfill_only_hint(ast) do
+    {_ast, word} =
+      Macro.prewalk(ast, nil, fn
+        {:^, _meta, _args}, word ->
+          {nil, word}
+
+        {name, _meta, args} = node, nil when name in @backfill_only_words and is_list(args) ->
+          {node, name}
+
+        node, word ->
+          {node, word}
+      end)
+
+    if word do
+      "#{@backfill_only_hint_start}#{word}, it works only in a migration's backfill: for now"
+    else
+      ""
+    end
+  end
 
   @doc """
   Returns the first of the given values that isn't nil, or nil when all are. A false is a value.

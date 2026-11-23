@@ -93,6 +93,69 @@ defmodule Hologram.Entity.DerivedExpressionTest do
       assert names == [:messages]
     end
 
+    test "names a backfill word a body calls" do
+      code = """
+      defmodule Hologram.Test.Fixtures.Entity.DerivedBackfillWord do
+        use Hologram.Entity
+
+        attribute :name, :string, optional: true
+
+        derived :label, :string, fn name -> coalesce(name, "x") end
+      end
+      """
+
+      expected_msg =
+        "nofile:6: derived field :label in Hologram.Test.Fixtures.Entity.DerivedBackfillWord calls coalesce/2 - #{@vocabulary_reason} - if you meant the query word coalesce, it works only in a migration's backfill: for now"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+    end
+
+    test "says inverse/2 is reserved when an entity using Hologram.DB calls its own" do
+      code = """
+      defmodule Hologram.Test.Fixtures.Entity.DerivedReservedInverse do
+        use Hologram.Entity
+        use Hologram.DB
+
+        attribute :name, :string, optional: true
+
+        derived :label, :string, fn name ->
+          inverse(name, 1)
+        end
+
+        def inverse(set, _attribute), do: set
+      end
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:8: inverse/2 is reserved for a query word Hologram doesn't have yet - if this is your own function, rename it",
+                   fn -> Code.eval_string(code) end
+    end
+
+    test "says most_common/2 is reserved once when an entity using Hologram.DB calls its own" do
+      code = """
+      defmodule Hologram.Test.Fixtures.Entity.DerivedReservedMostCommon do
+        use Hologram.Entity
+        use Hologram.DB
+
+        attribute :name, :string, optional: true
+
+        derived :label, :string, fn name -> most_common(name, 1) end
+
+        def most_common(set, _attribute), do: set
+      end
+      """
+
+      assert_error Hologram.CompileError,
+                   ~r/most_common\/2 is reserved - if you meant the query word most_common, it works only in a migration's backfill: for now - if this is your own function, rename it$/,
+                   fn -> Code.eval_string(code) end
+    end
+
+    test "names a backfill word whose argument no field binds" do
+      assert_error Hologram.CompileError,
+                   ~r/name is not an argument .* if you meant the query word most_common, it works only/,
+                   fn -> lower("fn tags -> tags |> most_common(name) end") end
+    end
+
     test "raises on a local binding" do
       expected_msg =
         "lib/my_app/channel.ex:12: #{@field} binds n - a derived field's body is one expression, with nothing bound along the way"

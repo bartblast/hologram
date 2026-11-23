@@ -3,6 +3,60 @@ defmodule Hologram.Query.WordsTest do
 
   import Hologram.Query.Words
 
+  describe "backfill_only_hint/1" do
+    test "names a word the expression calls" do
+      assert backfill_only_hint(quote(do: coalesce(a, "x"))) ==
+               " - if you meant the query word coalesce, it works only in a migration's backfill: for now"
+    end
+
+    test "finds a word inside a pipe" do
+      piped = Code.string_to_quoted!(~s[split(a, " ") |> at(0)])
+
+      assert backfill_only_hint(piped) ==
+               " - if you meant the query word split, it works only in a migration's backfill: for now"
+    end
+
+    test "is empty when the expression calls no word" do
+      assert backfill_only_hint(quote(do: name(a))) == ""
+    end
+
+    test "is empty for a variable named like a word" do
+      assert backfill_only_hint(quote(do: at)) == ""
+    end
+
+    test "is empty for a call of another module named like a word" do
+      assert backfill_only_hint(quote(do: String.split(a, " "))) == ""
+    end
+
+    test "is empty for a word inside a pin, which is the surrounding code's" do
+      assert backfill_only_hint(quote(do: foo(^split(a, " ")))) == ""
+    end
+  end
+
+  describe "add_backfill_only_hint/2" do
+    test "adds the hint to the error's message" do
+      error = %Hologram.CompileError{message: "refused"}
+
+      assert add_backfill_only_hint(error, quote(do: split(a, " "))).message ==
+               "refused - if you meant the query word split, it works only in a migration's backfill: for now"
+    end
+
+    test "leaves a message that carries a hint already" do
+      message =
+        "refused - if you meant the query word at, it works only in a migration's backfill: for now"
+
+      error = %Hologram.CompileError{message: message}
+
+      assert add_backfill_only_hint(error, quote(do: split(a, " "))).message == message
+    end
+
+    test "leaves the message when the expression calls no word" do
+      error = %Hologram.CompileError{message: "refused"}
+
+      assert add_backfill_only_hint(error, quote(do: name(a))).message == "refused"
+    end
+  end
+
   describe "at/2" do
     test "counts from 0" do
       assert at(["a", "b"], 0) == "a"

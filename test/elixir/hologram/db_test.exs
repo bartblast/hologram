@@ -160,6 +160,68 @@ defmodule Hologram.DBTest do
       assert module.executor() == pool_name()
       assert module.job_fields() == [:actor_id, :error, :status]
     end
+
+    test "refuses a call to an own function named like a reserved query word" do
+      code = """
+      defmodule Hologram.Test.Fixtures.DB.ReservedLocal do
+        use Hologram.DB
+
+        def run, do: most_common(1, 2)
+
+        def most_common(a, b), do: {a, b}
+      end
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:4: most_common/2 is reserved - if you meant the query word most_common, it works only in a migration's backfill: for now - if this is your own function, rename it",
+                   fn -> Code.eval_string(code) end
+    end
+
+    test "refuses the same call from a nested module" do
+      code = """
+      defmodule Hologram.Test.Fixtures.DB.ReservedOuter do
+        use Hologram.DB
+
+        defmodule Inner do
+          def run, do: inverse(1, 2)
+
+          def inverse(a, b), do: {a, b}
+        end
+      end
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:5: inverse/2 is reserved for a query word Hologram doesn't have yet - if this is your own function, rename it",
+                   fn -> Code.eval_string(code) end
+    end
+
+    test "leaves an own function nothing calls unqualified" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.DB.ReservedUncalled do
+          use Hologram.DB
+
+          def most_common(a, b), do: {a, b}
+        end
+        """)
+
+      assert module.most_common(1, 2) == {1, 2}
+    end
+
+    test "leaves a function of the same name with another arity alone" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.DB.ReservedOtherArity do
+          use Hologram.DB
+
+          def run, do: inverse(1)
+
+          def inverse(a), do: {:inverse, a}
+        end
+        """)
+
+      assert module.run() == {:inverse, 1}
+    end
   end
 
   describe "init/1" do
