@@ -73,6 +73,7 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
     memory_limit = opts[:memory_limit] * 1_073_741_824
 
     :ok = check_cards!(opts)
+    :ok = check_replicas!(opts)
     :ok = check_server!(conn)
     :ok = Clients.check_limits!(clients, Step.connect_concurrency())
     :ok = Report.check_readme!()
@@ -213,6 +214,17 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
 
     if opts[:cards] < needed do
       raise ArgumentError, "the backlog case needs at least #{needed} cards"
+    end
+
+    :ok
+  end
+
+  # A replica's sequence numbers rise in commit order, as a browser's do, which takes one writer
+  # per replica. `write_batches/5` gives that only for a multiple of the writers.
+  defp check_replicas!(opts) do
+    if rem(opts[:replicas], @writers) != 0 do
+      raise ArgumentError,
+            "--replicas must be a multiple of #{@writers}, so each replica has one writer"
     end
 
     :ok
