@@ -1362,6 +1362,11 @@ describe("Elixir_Hologram_DB", () => {
         });
 
         assertDenied(status("pending"), ":status");
+
+        assert.deepStrictEqual(
+          update(put(status("approved"))),
+          Type.atom("ok"),
+        );
       });
 
       it("refuses when every alternative of a disjunction fails", () => {
