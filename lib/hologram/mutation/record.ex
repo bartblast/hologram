@@ -11,8 +11,10 @@ defmodule Hologram.Mutation.Record do
   # either commits with an answer or takes the claim with it.
   #
   # A batch the evaluator REFUSED is written afterwards instead, on its own statement - its claim
-  # rolled back with everything else the transaction did - and it keeps the batch as it arrived
-  # beside the answer, since its rows reached no log and exist nowhere else on the server.
+  # rolled back with everything else the transaction did - and it keeps the batch as it arrived,
+  # each NUL spelled as U+FFFD, beside the answer, since its rows reached no log and exist nowhere
+  # else on the server. So is a batch holding a value the server couldn't read, which never had a
+  # transaction to roll back.
   #
   # A landed batch's envelope is not kept: the rows it wrote are in the oplog under
   # mutation_ref, keyed by the same pair, so keeping it here would keep every write twice.
@@ -116,15 +118,15 @@ defmodule Hologram.Mutation.Record do
   end
 
   @doc """
-  Records the given batch as refused - the batch as it arrived and the answer it got, bound to the
-  user who sent it - and returns :ok.
+  Records the given batch as refused - the batch as it arrived, with each NUL spelled as U+FFFD,
+  and the answer it got, bound to the user who sent it - and returns :ok.
 
   A batch already recorded is left as it is, so two arrivals of one refused batch do not collide.
   """
   @spec refuse!(String.t(), non_neg_integer, String.t(), String.t(), map, map) :: :ok
   def refuse!(replica_id, seq, actor_id, model_hash, envelope, answer) do
-    # Outside any transaction by intent: the refusal already took the batch's transaction back,
-    # and this is the one statement that outlives it.
+    # Outside any transaction by intent: the refusal already took the batch's transaction back, if
+    # it got as far as having one, and this is the one statement that outlives it.
     statement = """
     INSERT INTO "#{Mapper.system_schema()}"."mutation"
       ("replica_id", "seq", "actor_id", "model_hash", "envelope", "result")
@@ -132,10 +134,37 @@ defmodule Hologram.Mutation.Record do
     ON CONFLICT ("replica_id", "seq") DO NOTHING
     """
 
-    params = [replica_id, seq, Codec.encode(actor_id, :uuid), model_hash, envelope, answer]
+    params = [
+      replica_id,
+      seq,
+      Codec.encode(actor_id, :uuid),
+      model_hash,
+      without_nul(envelope),
+      answer
+    ]
 
     {:ok, _result} = Connection.query(statement, params)
 
     :ok
   end
+
+  # A jsonb column can't hold a NUL in any string, and a batch carrying one is among those refused,
+  # so the kept copy spells each NUL as U+FFFD. Keys too: jsonb refuses a NUL in a key the same way.
+  # Two keys differing only there would become one, and only keys the parser ignores can.
+  #
+  # The host app picks the JSON decoder, and one can hand back a struct, like a Decimal for a float.
+  # A struct is left for the driver's JSON encoder, which is what spells it.
+  defp without_nul(%_struct{} = value), do: value
+
+  defp without_nul(value) when is_binary(value) do
+    :binary.replace(value, <<0>>, "�", [:global])
+  end
+
+  defp without_nul(value) when is_list(value), do: Enum.map(value, &without_nul/1)
+
+  defp without_nul(value) when is_map(value) do
+    Map.new(value, fn {key, item} -> {without_nul(key), without_nul(item)} end)
+  end
+
+  defp without_nul(value), do: value
 end

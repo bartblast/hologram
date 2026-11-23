@@ -19,6 +19,7 @@ defmodule Hologram.Mutation.DedupTest do
   alias Hologram.Mutation
   alias Hologram.Mutation.Record
   alias Hologram.Server
+  alias Hologram.Test.Fixtures.Mutation.Module8
 
   @context %{
     otp_app: "hologram",
@@ -27,12 +28,14 @@ defmodule Hologram.Mutation.DedupTest do
     timestamp: ~U[2026-08-13 09:15:22.000000Z]
   }
 
-  defp claim_holder(replica_id, test_pid) do
-    fn -> Connection.transaction(fn -> hold_claim(replica_id, test_pid) end) end
+  @confirmed %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
+
+  defp claim_holder(replica_id, actor_id, test_pid) do
+    fn -> Connection.transaction(fn -> hold_claim(replica_id, actor_id, test_pid) end) end
   end
 
-  defp hold_claim(replica_id, test_pid) do
-    Record.claim!(replica_id, 1, nil, Model.hash())
+  defp hold_claim(replica_id, actor_id, test_pid) do
+    Record.claim!(replica_id, 1, actor_id, Model.hash())
 
     send(test_pid, :claimed)
 
@@ -40,7 +43,7 @@ defmodule Hologram.Mutation.DedupTest do
       :go -> :ok
     end
 
-    Record.complete!(replica_id, 1, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}})
+    Record.complete!(replica_id, 1, @confirmed)
   end
 
   defp on_own_session(scratch_opts, fun) do
@@ -58,8 +61,34 @@ defmodule Hologram.Mutation.DedupTest do
 
   # The first arrival, holding its claim open until the test lets it finish - so the second really
   # does meet a claim in flight rather than one already committed.
-  defp start_first_arrival(replica_id, scratch_opts, test_pid) do
-    Task.async(fn -> on_own_session(scratch_opts, claim_holder(replica_id, test_pid)) end)
+  defp start_first_arrival(replica_id, scratch_opts, test_pid, actor_id \\ nil) do
+    Task.async(fn ->
+      on_own_session(scratch_opts, claim_holder(replica_id, actor_id, test_pid))
+    end)
+  end
+
+  # Refused while being read, so it never takes a claim of its own and goes straight to keeping the
+  # refusal, which is where it meets the first arrival's claim.
+  defp start_refused_arrival(replica_id, scratch_opts, user_id) do
+    envelope = %{
+      "instance_id" => "i1",
+      "replica_id" => replica_id,
+      "model_hash" => Model.hash(),
+      "seq" => 1,
+      "writes" => [
+        %{
+          "op" => "create",
+          "type" => inspect(Module8),
+          "id" => "not-an-entity-id",
+          "data" => %{"title" => "x"},
+          "stamp" => System.os_time(:millisecond) * 1024
+        }
+      ]
+    }
+
+    Task.async(fn ->
+      on_own_session(scratch_opts, fn -> Mutation.run(envelope, %Server{user_id: user_id}) end)
+    end)
   end
 
   # A batch of no writes: nothing here needs an entity table, and what is under test is the claim
@@ -124,12 +153,42 @@ defmodule Hologram.Mutation.DedupTest do
 
     assert Task.await(first) == {:ok, :ok}
 
-    assert Task.await(second) ==
-             {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
+    assert Task.await(second) == {:ok, @confirmed}
 
     assert route(scratch, fn -> Record.find(replica_id, 1) end) == %{
              actor_id: nil,
-             result: %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
+             result: @confirmed
+           }
+
+    assert route(scratch, fn -> record_row_count() end) == 1
+  end
+
+  test "a refused arrival answers what the record holds when another arrival landed the batch", %{
+    scratch: scratch,
+    scratch_opts: scratch_opts
+  } do
+    route(scratch, fn ->
+      Connection.transaction(fn -> SchemaReconciler.ensure_managed!(@context) end)
+    end)
+
+    replica_id = Entity.generate_id()
+    user_id = Entity.generate_id()
+
+    landing = start_first_arrival(replica_id, scratch_opts, self(), user_id)
+    assert_receive :claimed, 5_000
+
+    refused = start_refused_arrival(replica_id, scratch_opts, user_id)
+
+    wait_for_blocked_claim(scratch_opts)
+
+    send(landing.pid, :go)
+
+    assert Task.await(landing) == {:ok, :ok}
+    assert Task.await(refused) == {:ok, @confirmed}
+
+    assert route(scratch, fn -> Record.find(replica_id, 1) end) == %{
+             actor_id: user_id,
+             result: @confirmed
            }
 
     assert route(scratch, fn -> record_row_count() end) == 1

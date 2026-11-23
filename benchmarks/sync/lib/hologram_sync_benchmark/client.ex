@@ -35,6 +35,15 @@ defmodule HologramSyncBenchmark.Client do
   # The frame handing a client the rules the server enforces, sent when the greeting named others.
   @rules_pattern "event: sync_rules\n"
 
+  # Where a frame names the place in the log it leaves the client at, up to the closing quote. A
+  # place is digits, dots and hex, so nothing in it is escaped, and a row value holding these
+  # characters travels with its quotes escaped.
+  @cursor_prefix ~s("cursor":")
+
+  # The prefix, a transaction id of 20 digits, a sequence number of 19, two hashes of 32
+  # characters, the three dots between them and the closing quote.
+  @max_cursor_bytes 117
+
   # A timed write sets a column to a marker, the prefix and a number of a fixed width (see
   # marker/1), and a client records when it first saw each one. Seeded values never start with
   # the prefix.
@@ -48,6 +57,7 @@ defmodule HologramSyncBenchmark.Client do
   @frame_end "\n\n"
 
   @patterns [
+    @cursor_prefix,
     @frame_end,
     @marker_prefix,
     @rules_pattern,
@@ -58,6 +68,7 @@ defmodule HologramSyncBenchmark.Client do
   # byte short of the longest thing matched, a marker counted whole. A shorter one can lie wholly
   # inside it, so a match ending there was already taken with the previous chunk and is skipped.
   @carry_bytes Enum.max([
+                 @max_cursor_bytes,
                  byte_size(@marker_prefix) + @marker_digits | Enum.map(@patterns, &byte_size/1)
                ]) - 1
 
@@ -74,6 +85,8 @@ defmodule HologramSyncBenchmark.Client do
 
   @type report :: %{
           bytes: non_neg_integer,
+          bytes_at_leave: non_neg_integer | nil,
+          caught_up_at: integer | nil,
           connect_retries: non_neg_integer,
           connected_at: integer | nil,
           counted: %{put: non_neg_integer, unsync: non_neg_integer},
@@ -81,6 +94,8 @@ defmodule HologramSyncBenchmark.Client do
           failure: term | nil,
           markers: %{non_neg_integer => integer},
           restarts: non_neg_integer,
+          return_restarts: non_neg_integer,
+          returned_at: integer | nil,
           rules_at: integer | nil,
           synced_all_at: integer | nil
         }
@@ -91,6 +106,19 @@ defmodule HologramSyncBenchmark.Client do
   @spec close(pid) :: :ok
   def close(client) do
     GenServer.stop(client, :normal)
+  end
+
+  @doc """
+  Has a client that left come back after the given milliseconds, opening its stream with the last
+  place it was told, and returns :ok, or `{:error, :not_away}` for one that didn't leave.
+
+  `:returned_at` in its report is when it opens the stream and `:caught_up_at` the `synced` frame
+  for the whole pot after that. A failed open and a stream lost before that frame are tried again
+  on the browser's delay, with the latest place, and counted in `:return_restarts`.
+  """
+  @spec come_back(pid, non_neg_integer) :: :ok | {:error, :not_away}
+  def come_back(client, delay_ms) do
+    GenServer.call(client, {:come_back, delay_ms}, :infinity)
   end
 
   @doc """
@@ -113,6 +141,42 @@ defmodule HologramSyncBenchmark.Client do
   @spec has_marker?(pid, non_neg_integer) :: boolean
   def has_marker?(client, number) do
     GenServer.call(client, {:has_marker?, number}, :infinity)
+  end
+
+  @doc """
+  Closes the stream of a client holding its whole pot, the way a deploy closes it, and keeps what
+  the client knows, returning :ok. A client leaves once. One that hasn't filled, has failed, left
+  before or was told no place to come back to answers `{:error, reason}`.
+  """
+  @spec leave(pid) :: :ok | {:error, term}
+  def leave(client) do
+    GenServer.call(client, :leave, :infinity)
+  end
+
+  @doc """
+  Returns whether the client has failed, cheaper to ask than a whole report while a case waits on
+  a write.
+  """
+  @spec failed?(pid) :: boolean
+  def failed?(client) do
+    GenServer.call(client, :failed?, :infinity)
+  end
+
+  @doc """
+  Closes the client's stream for good and marks it failed, returning :ok. For a client a step can't
+  use, which would otherwise go on retrying.
+  """
+  @spec give_up(pid) :: :ok
+  def give_up(client) do
+    GenServer.call(client, :give_up, :infinity)
+  end
+
+  @doc """
+  Returns whether the client has seen every marker with the given numbers.
+  """
+  @spec has_markers?(pid, [non_neg_integer]) :: boolean
+  def has_markers?(client, numbers) do
+    GenServer.call(client, {:has_markers?, numbers}, :infinity)
   end
 
   @doc """
@@ -161,15 +225,18 @@ defmodule HologramSyncBenchmark.Client do
   `:policy_hash` is the hash of the rules the client's bundle was built with, absent for one
   holding the current ones.
 
+  `:replica` has the client greet with the replica identity its cookie page hands it, as a browser
+  does, which costs the server a query per connect. Off by default.
+
   `:count_type` names an entity type, as `inspect/1` spells its module, whose `put_entity` and
   `unsync_entity` deltas the client counts, decoding every `sync_deltas` frame for it. Costly, so
   only for a case that needs to know when every row of a big change has arrived.
 
   A stream that ends before the whole pot arrived is opened again after the browser's delay, the
   way a browser starts a fill over, and counted in `:restarts`: the server cutting a fill short
-  (#1635) is a cost a user pays, not a failure of the run. A stream that ends after the fill
-  fails the client, since a browser would come back with a cursor and catch up, which this
-  client can't.
+  is a cost a user pays, not a failure of the run. A stream that ends after the fill fails the
+  client, unless it left (see `leave/1`) or is still catching up after coming back (see
+  `come_back/2`).
 
   Options: `:base_url`, `:cookie_path` (the page whose render hands out the session cookie, and
   signs the client in when it's a sign-in path), and the greeting: `:page`, and the server's
@@ -190,8 +257,11 @@ defmodule HologramSyncBenchmark.Client do
       |> URI.parse()
 
     state = %{
+      away: false,
       bytes: 0,
+      bytes_at_leave: nil,
       carry: "",
+      caught_up_at: nil,
       conn: nil,
       connect_retries: 0,
       connected_at: nil,
@@ -200,6 +270,7 @@ defmodule HologramSyncBenchmark.Client do
       count_type: Keyword.get(opts, :count_type),
       counted: %{put: 0, unsync: 0},
       counted_at: %{put: nil, unsync: nil},
+      cursor: nil,
       failure: nil,
       frames: "",
       greeting: greeting(opts),
@@ -208,8 +279,12 @@ defmodule HologramSyncBenchmark.Client do
       pending: [],
       port: uri.port,
       reconnect_attempt: 0,
+      replica: Keyword.get(opts, :replica, false),
+      replica_params: [],
       request_ref: nil,
       restarts: 0,
+      return_restarts: 0,
+      returned_at: nil,
       rules_at: nil,
       stream_opened_at: nil,
       synced_all_at: nil
@@ -221,8 +296,11 @@ defmodule HologramSyncBenchmark.Client do
   @impl GenServer
   def handle_call(:prepare, _from, state) do
     case fetch_cookie(state) do
-      {:ok, cookie} -> {:reply, :ok, %{state | cookie: cookie}}
-      {:error, reason} -> {:reply, {:error, reason}, %{state | failure: {:prepare, reason}}}
+      {:ok, cookie, replica_params} ->
+        {:reply, :ok, %{state | cookie: cookie, replica_params: replica_params}}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, %{state | failure: {:prepare, reason}}}
     end
   end
 
@@ -244,14 +322,72 @@ defmodule HologramSyncBenchmark.Client do
     {:reply, {:error, :connected_before}, state}
   end
 
+  def handle_call(
+        :leave,
+        _from,
+        %{bytes_at_leave: nil, cursor: cursor, failure: nil, synced_all_at: synced_all_at} = state
+      )
+      when cursor != nil and synced_all_at != nil do
+    if state.conn, do: Mint.HTTP.close(state.conn)
+
+    left = %{
+      state
+      | away: true,
+        bytes_at_leave: state.bytes,
+        carry: "",
+        conn: nil,
+        frames: "",
+        pending: [],
+        # Worked out here, since the time away would count as the stream's age later. Coming back
+        # is the browser's next retry after losing this stream, so one that fails waits one step
+        # further.
+        reconnect_attempt: attempt_after_stream(state) + 1,
+        request_ref: nil
+    }
+
+    {:reply, :ok, left}
+  end
+
+  def handle_call(:leave, _from, state) do
+    {:reply, {:error, state.failure || :cannot_leave}, state}
+  end
+
+  def handle_call(:give_up, _from, state) do
+    if state.conn, do: Mint.HTTP.close(state.conn)
+
+    closed = %{state | carry: "", conn: nil, frames: "", pending: [], request_ref: nil}
+
+    {:reply, :ok, fail(closed, :gave_up)}
+  end
+
+  def handle_call({:come_back, delay_ms}, _from, %{away: true} = state) do
+    Process.send_after(self(), :come_back, delay_ms)
+
+    {:reply, :ok, %{state | away: false}}
+  end
+
+  def handle_call({:come_back, _delay_ms}, _from, state) do
+    {:reply, {:error, :not_away}, state}
+  end
+
   def handle_call({:has_marker?, number}, _from, state) do
     {:reply, Map.has_key?(state.markers, number), state}
+  end
+
+  def handle_call(:failed?, _from, state) do
+    {:reply, state.failure != nil, state}
+  end
+
+  def handle_call({:has_markers?, numbers}, _from, state) do
+    {:reply, Enum.all?(numbers, &Map.has_key?(state.markers, &1)), state}
   end
 
   def handle_call(:report, _from, state) do
     report =
       Map.take(state, [
         :bytes,
+        :bytes_at_leave,
+        :caught_up_at,
         :connect_retries,
         :connected_at,
         :counted,
@@ -259,6 +395,8 @@ defmodule HologramSyncBenchmark.Client do
         :failure,
         :markers,
         :restarts,
+        :return_restarts,
+        :returned_at,
         :rules_at,
         :synced_all_at
       ])
@@ -267,14 +405,18 @@ defmodule HologramSyncBenchmark.Client do
   end
 
   @impl GenServer
+  def handle_info(:come_back, %{conn: nil} = state) do
+    reopen(%{state | returned_at: now()})
+  end
+
+  # A client given up on stays down, whatever retry was already on its way.
+  def handle_info(:reconnect, %{failure: failure} = state) when failure != nil do
+    {:noreply, state}
+  end
+
   # Tried again until the driver gives up on the fill, the way a browser keeps trying: what the
   # server refuses mid-fill is part of the cost a fill has.
-  def handle_info(:reconnect, %{conn: nil} = state) do
-    case open_stream(state, 1) do
-      {:ok, state} -> {:noreply, state}
-      {:error, _reason, state} -> {:noreply, schedule_reconnect(state)}
-    end
-  end
+  def handle_info(:reconnect, %{conn: nil} = state), do: reopen(state)
 
   def handle_info(message, %{conn: conn} = state) when conn != nil do
     case Mint.HTTP.stream(conn, message) do
@@ -308,13 +450,18 @@ defmodule HologramSyncBenchmark.Client do
   defp lose_stream(%{conn: nil} = state, _reason), do: state
 
   defp lose_stream(%{failure: nil, synced_all_at: nil} = state, _reason) do
-    Mint.HTTP.close(state.conn)
+    restart_stream(%{state | restarts: state.restarts + 1})
+  end
 
-    # A stream that lasted starts the delay over, as the browser's does.
-    attempt =
-      if now() - state.stream_opened_at >= @reconnect_reset_ms * 1_000,
-        do: 0,
-        else: state.reconnect_attempt
+  defp lose_stream(%{caught_up_at: nil, failure: nil, returned_at: returned_at} = state, _reason)
+       when returned_at != nil do
+    restart_stream(%{state | return_restarts: state.return_restarts + 1})
+  end
+
+  defp lose_stream(state, reason), do: fail(state, reason)
+
+  defp restart_stream(state) do
+    Mint.HTTP.close(state.conn)
 
     schedule_reconnect(%{
       state
@@ -322,13 +469,34 @@ defmodule HologramSyncBenchmark.Client do
         conn: nil,
         frames: "",
         pending: [],
-        reconnect_attempt: attempt,
-        request_ref: nil,
-        restarts: state.restarts + 1
+        reconnect_attempt: attempt_after_stream(state),
+        request_ref: nil
     })
   end
 
-  defp lose_stream(state, reason), do: fail(state, reason)
+  # A stream that lasted starts the delay over, as the browser's does.
+  defp attempt_after_stream(state) do
+    if now() - state.stream_opened_at >= @reconnect_reset_ms * 1_000,
+      do: 0,
+      else: state.reconnect_attempt
+  end
+
+  # A returning client gets no quick retries: a browser waits out its delay after every refused
+  # connection, and a wave overflowing the listen backlog is what's being measured.
+  defp reopen(state) do
+    first_attempt = if state.returned_at, do: @connect_attempts, else: 1
+
+    case open_stream(state, first_attempt) do
+      {:ok, opened} -> {:noreply, opened}
+      {:error, _reason, failed} -> {:noreply, schedule_reconnect(count_failed_return(failed))}
+    end
+  end
+
+  defp count_failed_return(%{returned_at: nil} = state), do: state
+
+  defp count_failed_return(state) do
+    %{state | return_restarts: state.return_restarts + 1}
+  end
 
   defp schedule_reconnect(state) do
     attempt = state.reconnect_attempt + 1
@@ -425,13 +593,24 @@ defmodule HologramSyncBenchmark.Client do
     end
   end
 
-  # A marker is its prefix and the digits after it. One whose digits haven't arrived yet is
-  # dropped here and found whole in the next chunk, since it starts inside the carry.
+  # A marker is its prefix and the digits after it, and a cursor its prefix and everything up to
+  # the closing quote. One that hasn't arrived whole is dropped here and found whole in the next
+  # chunk, since it starts inside the carry.
   defp match_size(joined, start, length) do
-    if binary_part(joined, start, length) == @marker_prefix do
-      length + @marker_digits
-    else
-      length
+    case binary_part(joined, start, length) do
+      @marker_prefix -> length + @marker_digits
+      @cursor_prefix -> cursor_size(joined, start, length)
+      _other -> length
+    end
+  end
+
+  defp cursor_size(joined, start, prefix_size) do
+    value_start = start + prefix_size
+    scope_size = min(@max_cursor_bytes - prefix_size, byte_size(joined) - value_start)
+
+    case :binary.match(joined, "\"", scope: {value_start, scope_size}) do
+      {quote_at, 1} -> quote_at + 1 - start
+      :nomatch -> byte_size(joined) - start + 1
     end
   end
 
@@ -455,12 +634,36 @@ defmodule HologramSyncBenchmark.Client do
     end
   end
 
+  # Copied, since a part of the chunk would keep the whole chunk alive for as long as the client.
+  defp take_match(state, @cursor_prefix <> quoted, _received_at) do
+    cursor =
+      quoted
+      |> binary_part(0, byte_size(quoted) - 1)
+      |> :binary.copy()
+
+    %{state | cursor: cursor}
+  end
+
+  # The browser greets with the rules it was handed from then on, which naming none stands for.
   defp take_match(state, @rules_pattern, received_at) do
-    %{state | rules_at: state.rules_at || received_at}
+    %{
+      state
+      | greeting: List.keydelete(state.greeting, :policy_hash, 0),
+        rules_at: state.rules_at || received_at
+    }
   end
 
   defp take_match(%{synced_all_at: nil} = state, @synced_all_pattern, received_at) do
     %{state | synced_all_at: received_at}
+  end
+
+  defp take_match(
+         %{caught_up_at: nil, returned_at: returned_at} = state,
+         @synced_all_pattern,
+         received_at
+       )
+       when returned_at != nil do
+    %{state | caught_up_at: received_at}
   end
 
   defp take_match(state, @synced_all_pattern, _received_at), do: state
@@ -488,7 +691,8 @@ defmodule HologramSyncBenchmark.Client do
   defp fetch_cookie(state) do
     with {:ok, conn} <- open_connection(state),
          {:ok, conn, ref} <- Mint.HTTP.request(conn, "GET", state.cookie_path, [], nil),
-         {:ok, conn, %{status: 200, headers: headers}} <- receive_response(conn, ref) do
+         {:ok, conn, %{body: body, status: 200, headers: headers}} <-
+           receive_response(conn, ref) do
       Mint.HTTP.close(conn)
 
       cookies =
@@ -499,7 +703,10 @@ defmodule HologramSyncBenchmark.Client do
         end
 
       # Caught here rather than as the handshake's refusal later, which wouldn't say why.
-      if cookies == [], do: {:error, :no_session_cookie}, else: {:ok, Enum.join(cookies, "; ")}
+      with true <- cookies != [] || {:error, :no_session_cookie},
+           {:ok, replica_params} <- replica_params(state, body) do
+        {:ok, Enum.join(cookies, "; "), replica_params}
+      end
     else
       {:ok, conn, %{status: status}} ->
         Mint.HTTP.close(conn)
@@ -511,6 +718,19 @@ defmodule HologramSyncBenchmark.Client do
       {:error, conn, reason} ->
         Mint.HTTP.close(conn)
         {:error, reason}
+    end
+  end
+
+  # The identity the page hands its browser, in the data it boots from, which a real browser greets
+  # with on every stream.
+  defp replica_params(%{replica: false}, _body), do: {:ok, []}
+
+  defp replica_params(_state, body) do
+    with [_match, id] <- Regex.run(~r/"replicaId":"([^"]+)"/, body),
+         [_match, token] <- Regex.run(~r/"replicaToken":"([^"]+)"/, body) do
+      {:ok, [replica_id: id, replica_token: token]}
+    else
+      nil -> {:error, :no_replica_identity}
     end
   end
 
@@ -558,7 +778,10 @@ defmodule HologramSyncBenchmark.Client do
 
     with {:ok, conn} <- open_connection(state),
          {:ok, conn, handshake_id} <- redeem_handshake(conn, cookie_header, instance_id),
-         params = state.greeting ++ [handshake_id: handshake_id, instance_id: instance_id],
+         params =
+           state.greeting ++
+             state.replica_params ++
+             cursor_param(state) ++ [handshake_id: handshake_id, instance_id: instance_id],
          {:ok, conn, ref, early_chunks} <- request_stream(conn, cookie_header, params) do
       received_at = now()
       state = %{state | conn: conn, request_ref: ref, stream_opened_at: received_at}
@@ -569,6 +792,12 @@ defmodule HologramSyncBenchmark.Client do
       {:error, conn, reason} -> retry_or_fail(state, attempt, reason, conn)
     end
   end
+
+  # Only a client holding a whole pot has a place, so one restarting its first fill greets with
+  # none and is filled from nothing, as a browser is.
+  defp cursor_param(%{cursor: nil}), do: []
+
+  defp cursor_param(%{cursor: cursor}), do: [cursor: cursor]
 
   defp receive_response(conn, ref, response \\ %{body: [], headers: [], status: nil}) do
     case Mint.HTTP.recv(conn, 0, @io_timeout_ms) do
