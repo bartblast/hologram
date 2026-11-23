@@ -25,6 +25,8 @@ defmodule Hologram.Entity do
     {:updated_at, :datetime, []}
   ]
 
+  @sequence_attributes [:server_created_seq, :server_updated_seq]
+
   @typedoc """
   An entity id - the canonical lowercase 8-4-4-4-12 spelling generate_id/0 mints.
   """
@@ -873,6 +875,13 @@ defmodule Hologram.Entity do
       [{name, kept_opts} | declarations]
     end
   end
+
+  # Whether the given name is one of the two sequence numbers every entity carries. The server takes
+  # them from the log's sequence, and until one is final a browser and the server can read it
+  # differently.
+  @doc false
+  @spec sequence_attribute?(any) :: boolean
+  def sequence_attribute?(name), do: name in @sequence_attributes
 
   @doc false
   @spec server_only_attribute_names(module) :: list(atom)

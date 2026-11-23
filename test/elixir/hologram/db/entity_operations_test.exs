@@ -132,6 +132,16 @@ defmodule Hologram.DB.EntityOperationsTest do
     end
   end
 
+  # The log's entries for the given row, in order, as {op, seq}.
+  defp effect_seqs(id) do
+    statement =
+      ~s|SELECT "op", "seq" FROM "hologram_system"."oplog" WHERE "entity_id" = $1 ORDER BY "seq"|
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [Codec.encode(id, :uuid)])
+
+    Enum.map(rows, fn [op, seq] -> {op, seq} end)
+  end
+
   describe "add_relationship/4" do
     test "adds an edge to the join table" do
       {:ok, required_target} = create(Module1.new())
@@ -269,6 +279,14 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert is_integer(stored.server_created_seq)
       assert stored.server_updated_seq == stored.server_created_seq
+    end
+
+    test "stores the row's effect under the row's serial" do
+      {:ok, created_entity} = create(Module2.new(a: true, c: "some text"))
+
+      stored = get(Module2, created_entity.id)
+
+      assert effect_seqs(created_entity.id) == [{"put_entity", stored.server_created_seq}]
     end
 
     test "gives rows written one after another rising sequence numbers" do
@@ -1675,6 +1693,32 @@ defmodule Hologram.DB.EntityOperationsTest do
   end
 
   describe "update/4" do
+    test "moves the updated number to the patch's serial and leaves the created one" do
+      {:ok, created_entity} = create(Module2.new(a: true, c: "some text"))
+      before = get(Module2, created_entity.id)
+
+      :ok = update(Module2, created_entity.id, c: "other text")
+
+      stored = get(Module2, created_entity.id)
+
+      assert stored.server_created_seq == before.server_created_seq
+      assert stored.server_updated_seq > before.server_updated_seq
+
+      assert effect_seqs(created_entity.id) == [
+               {"put_entity", before.server_created_seq},
+               {"patch_entity", stored.server_updated_seq}
+             ]
+    end
+
+    test "leaves both numbers alone when the update is refused" do
+      {:ok, created_entity} = create(Module2.new(a: true, c: "some text"))
+      before = get(Module2, created_entity.id)
+
+      assert {:error, _violations} = update(Module2, created_entity.id, c: nil)
+
+      assert get(Module2, created_entity.id) == before
+    end
+
     test "sets exactly the changed columns and bumps updated_at" do
       {:ok, created_entity} =
         %{a: true, b: 1, c: "before"}

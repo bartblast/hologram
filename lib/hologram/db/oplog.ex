@@ -22,6 +22,7 @@ defmodule Hologram.DB.Oplog do
   @channel "hologram_oplog"
 
   @columns [
+    "seq",
     "op",
     "type",
     "entity_id",
@@ -63,6 +64,10 @@ defmodule Hologram.DB.Oplog do
 
   An effect of a create or an update carries the `:revisions` it set - the stamp per column, keyed
   by field - which is stored beside it. An edge or a delete carries none.
+
+  An effect of a create or an update also carries the `:seq` the statement writing the row took, so
+  the row's number names its entry in the log. An edge or a delete has no row number to match and
+  takes a serial here.
 
   A `:patch_entity` may carry `:old`, the value each to-one reference it changed held before it,
   keyed by field - what points a reader at the rows the move took the row away from. An effect
@@ -107,6 +112,12 @@ defmodule Hologram.DB.Oplog do
   """
   @spec serial_lock_key() :: integer
   def serial_lock_key, do: @serial_lock_key
+
+  @doc """
+  Returns the SQL calling the function every serial comes from.
+  """
+  @spec next_seq_sql() :: String.t()
+  def next_seq_sql, do: ~s|#{Mapper.quote_identifier(Mapper.system_schema())}."next_seq"()|
 
   @doc """
   Returns the transaction id below which every transaction has finished - the upper edge of the
@@ -313,6 +324,9 @@ defmodule Hologram.DB.Oplog do
   do: this exists for a caller reconstructing what a small, insert-and-delete-only type held, and
   the values are the whole point of asking.
 
+  The order can't say whether a row stands now. An insert takes its serial before it waits for a
+  delete of the same id, so that delete can sit above the put that outlived it.
+
   Deliberately unlimited. It is read for a gap whose size has already been decided, over the same
   range - so it can answer no more rows than that gap holds, and a limit here would be a second
   bound on a thing already bounded.
@@ -475,6 +489,7 @@ defmodule Hologram.DB.Oplog do
          mutation_ref
        ) do
     [
+      Map.get(effect, :seq),
       Atom.to_string(op),
       Codec.encode_enum_value(entity_type),
       Codec.encode(entity_id, :uuid),
@@ -491,10 +506,10 @@ defmodule Hologram.DB.Oplog do
     column_count = length(@columns)
 
     Enum.map_join(0..(count - 1), ", ", fn index ->
-      placeholders =
-        Enum.map_join(1..column_count, ", ", &"$#{index * column_count + &1}")
+      # The first column is the seq, which an effect without one takes from the sequence.
+      [seq_slot | slots] = Enum.map(1..column_count, &"$#{index * column_count + &1}")
 
-      "(#{placeholders})"
+      "(COALESCE(#{seq_slot}::bigint, #{next_seq_sql()}), #{Enum.join(slots, ", ")})"
     end)
   end
 end

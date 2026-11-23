@@ -522,8 +522,9 @@ defmodule Hologram.DB do
 
   @doc """
   Updates the entity of the given type with the given id, setting exactly the changed
-  columns plus updated_at and server_updated_at - there is no full-row variant. Changes (a map
-  or keyword list) are keyed by declared attribute names and to-one reference fields
+  columns plus updated_at, server_updated_at and server_updated_seq - there is no full-row
+  variant. Changes (a map or keyword list) are keyed by declared attribute names and to-one
+  reference fields
   (`<relationship name>_id`) - a to-one reference is set, reassigned, or cleared (nil) through
   its reference field. Changing any other name, system attributes included, raises
   Hologram.MisuseError - as do empty changes and an id that names no entity.

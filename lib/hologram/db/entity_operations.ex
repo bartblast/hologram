@@ -72,9 +72,9 @@ defmodule Hologram.DB.EntityOperations do
           # The transaction's own shape is the contract: its value is the stamped entity, and
           # whatever refused the write rolls back as its reason.
           Connection.transaction(fn ->
-            {stamped_entity, _result} = insert(entity, "")
+            {stamped_entity, %Postgrex.Result{rows: [[seq]]}} = insert(entity, "")
 
-            Oplog.append([put_effect(stamped_entity)])
+            Oplog.append([put_effect(stamped_entity, seq)])
 
             # The grants ride in the create's own transaction rather than opening one each -
             # a row never exists without its creator's roles, and a nested transaction per
@@ -371,13 +371,17 @@ defmodule Hologram.DB.EntityOperations do
           delta_columns = Enum.map(delta_entries, fn {column, _amount} -> column end)
 
           returning_list =
-            Enum.map_join([~s|"$revisions"| | delta_columns], ", ", fn
-              ~s|"$revisions"| = literal -> literal
-              column -> Mapper.quote_identifier(column.name)
-            end)
+            Enum.join(
+              [
+                ~s|"$revisions"|,
+                ~s|"server_updated_seq"|
+                | Enum.map(delta_columns, &Mapper.quote_identifier(&1.name))
+              ],
+              ", "
+            )
 
           statement =
-            ~s|UPDATE #{qualified_table(table)} SET #{set_list}, #{revisions_assignment}, "updated_at" = $#{updated_at_placeholder}, "server_updated_at" = $#{server_updated_at_placeholder} WHERE "id" = $#{id_placeholder} RETURNING #{returning_list}|
+            ~s|UPDATE #{qualified_table(table)} SET #{set_list}, #{revisions_assignment}, "updated_at" = $#{updated_at_placeholder}, "server_updated_at" = $#{server_updated_at_placeholder}, "server_updated_seq" = #{Oplog.next_seq_sql()} WHERE "id" = $#{id_placeholder} RETURNING #{returning_list}|
 
           changed_values = Enum.map(set_entries, fn {{_column, value}, _form} -> value end)
 
@@ -878,8 +882,8 @@ defmodule Hologram.DB.EntityOperations do
     # Both numbers are one serial, so it's read once from a subquery the planner can't flatten.
     statement =
       "INSERT INTO #{qualified_table(table)} (#{column_list}) " <>
-        ~s|SELECT #{value_list} FROM (SELECT #{next_seq_call()} AS "n" OFFSET 0) AS "$serial"| <>
-        conflict_clause
+        ~s|SELECT #{value_list} FROM (SELECT #{Oplog.next_seq_sql()} AS "n" OFFSET 0) AS "$serial"| <>
+        conflict_clause <> ~s| RETURNING "server_created_seq"|
 
     case Connection.query(statement, encoded_values) do
       {:ok, result} ->
@@ -914,12 +918,14 @@ defmodule Hologram.DB.EntityOperations do
 
     # A row that was already there is not a change, and the conflicting insert wrote
     # nothing - an effect recorded for it would be a change clients never saw happen.
-    if result.num_rows == 1 do
-      Oplog.append([put_effect(stamped_entity)])
+    case result.rows do
+      [[seq]] ->
+        Oplog.append([put_effect(stamped_entity, seq)])
 
-      :created
-    else
-      :present
+        :created
+
+      [] ->
+        :present
     end
   end
 
@@ -1033,14 +1039,16 @@ defmodule Hologram.DB.EntityOperations do
     Map.update(violations, field, [reason], &Enum.sort([reason | &1]))
   end
 
-  # What the entity now is, as the oplog records it, with the revisions the write set.
-  defp put_effect(entity) do
+  # What the entity now is, as the oplog records it, with the revisions the write set, under the
+  # serial the row's numbers hold.
+  defp put_effect(entity, seq) do
     %{
       op: :put_entity,
       entity_type: entity.__struct__,
       entity_id: entity.id,
       data: effect_data(entity),
-      revisions: entity.__meta__.revisions
+      revisions: entity.__meta__.revisions,
+      seq: seq
     }
   end
 
@@ -1063,7 +1071,7 @@ defmodule Hologram.DB.EntityOperations do
     case Connection.query(statement, params) do
       # The stored map comes back rather than the stamp that was sent: a column already past the
       # stamp keeps its own revision, so what the row now holds is the only true answer.
-      {:ok, %Postgrex.Result{num_rows: 1, rows: [[stored_revisions | returned_values]]}} ->
+      {:ok, %Postgrex.Result{num_rows: 1, rows: [[stored_revisions, seq | returned_values]]}} ->
         results =
           delta_columns
           |> Enum.zip(returned_values)
@@ -1083,7 +1091,8 @@ defmodule Hologram.DB.EntityOperations do
                 entity_id: id,
                 data: Map.merge(data, results),
                 old: old,
-                revisions: revisions_from_row(stored_revisions, set_columns)
+                revisions: revisions_from_row(stored_revisions, set_columns),
+                seq: seq
               }
             ])
 
@@ -1132,8 +1141,6 @@ defmodule Hologram.DB.EntityOperations do
 
     old_references(current, changes, reference_fields)
   end
-
-  defp next_seq_call, do: ~s|#{Mapper.quote_identifier(Mapper.system_schema())}."next_seq"()|
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"

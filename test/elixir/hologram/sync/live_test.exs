@@ -410,7 +410,10 @@ defmodule Hologram.Sync.LiveTest do
         assert part.place == @place
         assert part.synced_types == @synced
         assert part.tx_range == {100, 101}
-        assert part.written == %{project.id => MapSet.new(["name", "public"])}
+
+        assert part.written == %{
+                 project.id => MapSet.new(["name", "public", "server_updated_seq"])
+               }
       end
     end
 
@@ -682,7 +685,10 @@ defmodule Hologram.Sync.LiveTest do
       parts = parts(effects, context.sessions, context.edges, @synced, @place)
       part = Map.fetch!(parts, nil)
 
-      assert part.written == %{project.id => MapSet.new(["name", "public"])}
+      assert part.written == %{
+               project.id =>
+                 MapSet.new(["name", "public", "server_created_seq", "server_updated_seq"])
+             }
     end
 
     test "names what was written of the rows the user may read alone", context do
@@ -693,7 +699,10 @@ defmodule Hologram.Sync.LiveTest do
 
       parts = parts(effects, context.sessions, context.edges, @synced, @place)
 
-      assert parts[context.alice].written == %{project.id => MapSet.new(["name"])}
+      assert parts[context.alice].written == %{
+               project.id => MapSet.new(["name", "server_updated_seq"])
+             }
+
       assert parts[context.bob].written == %{}
     end
 

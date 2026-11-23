@@ -526,6 +526,12 @@ defmodule Hologram.Sync.Live do
     end)
   end
 
+  # An effect's data leaves out the row's sequence numbers, since its own place in the log is the
+  # number, so the ones its op moves are named here.
+  defp sequence_names(:patch_entity), do: ["server_updated_seq"]
+
+  defp sequence_names(:put_entity), do: ["server_created_seq", "server_updated_seq"]
+
   # The to-many of the given type the log names by the given label, with its target type - matched
   # as the log spells it, so nothing read from it becomes an atom.
   defp to_many(entity_type, label) do
@@ -578,7 +584,7 @@ defmodule Hologram.Sync.Live do
   defp written(effects) do
     Enum.reduce(effects, %{}, fn
       %{op: op, data: data, entity_id: id}, written when op in @written_ops and is_map(data) ->
-        names = MapSet.new(Map.keys(data))
+        names = MapSet.new(Map.keys(data) ++ sequence_names(op))
 
         Map.update(written, id, names, &MapSet.union(&1, names))
 
