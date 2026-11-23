@@ -2226,6 +2226,156 @@ describe("Batches", () => {
 
       assert.equal(Batches.close().seq, 10);
     });
+
+    describe("a batch this tab made", () => {
+      let filings, sendStub;
+
+      // Closes a batch whose filing settles when told to, stored under number 5 or not at all.
+      const closeFiled = () => {
+        Batches.open("todos");
+        Batches.current().append({
+          data: {done: false, title: "mine"},
+          id: "t1",
+          op: "create",
+          stamp: STAMP,
+          type: TODO,
+        });
+
+        const batch = Batches.close();
+
+        return {batch, file: filings.at(-1)};
+      };
+
+      beforeEach(() => {
+        filings = [];
+
+        Durability.mode = "indexeddb";
+
+        sinon.stub(Durability, "fileBatch").callsFake(
+          (batch) =>
+            new Promise((resolve) => {
+              filings.push((stored) => {
+                if (stored) {
+                  batch.seal(5);
+                }
+
+                resolve(stored);
+              });
+            }),
+        );
+
+        sendStub = sinon.stub(Mutations, "send");
+      });
+
+      it("is let go of when the store holds it", async () => {
+        const {batch, file} = closeFiled();
+
+        file(true);
+        await batch.recorded;
+
+        Batches.disown();
+
+        assert.deepStrictEqual(Batches.pending, []);
+        assert.isNull(LocalDatabase.getRow(TODO, "t1"));
+      });
+
+      // No other tab holds it, so letting it go would lose the write.
+      it("is kept when the store never took it", async () => {
+        const {batch, file} = closeFiled();
+
+        file(false);
+        await batch.recorded;
+
+        Batches.disown();
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.equal(LocalDatabase.getRow(TODO, "t1").title, "mine");
+      });
+
+      it("is kept when there was no store to file it in", () => {
+        Durability.mode = "memory";
+
+        const {batch} = closeFiled();
+
+        Batches.disown();
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+      });
+
+      // An action can run the next one in the same turn, so the second batch may update a row the
+      // first created. They go out in the order they were made.
+      it("numbers batches in order after a store that failed on the spot", async () => {
+        Durability.fileBatch.callsFake(async () => {
+          Durability.mode = "memory";
+
+          return false;
+        });
+
+        const first = closeFiled().batch;
+        const second = closeFiled().batch;
+
+        await Promise.all([first.recorded, second.recorded]);
+
+        assert.equal(first.seq, 1);
+        assert.equal(second.seq, 2);
+        assert.isFalse(first.filed);
+      });
+
+      it("is let go of once a filing in flight turns out to have stored it", async () => {
+        const {batch, file} = closeFiled();
+
+        Batches.disown();
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+
+        file(true);
+        await batch.recorded;
+
+        assert.deepStrictEqual(Batches.pending, []);
+        assert.isNull(LocalDatabase.getRow(TODO, "t1"));
+      });
+
+      it("counts on from a filing let go of in flight", async () => {
+        const {batch, file} = closeFiled();
+
+        Batches.disown();
+
+        file(true);
+        await batch.recorded;
+
+        Durability.mode = "memory";
+
+        assert.equal(closeFiled().batch.seq, 6);
+      });
+
+      it("is kept once a filing in flight turns out to have failed", async () => {
+        const {batch, file} = closeFiled();
+
+        Batches.disown();
+
+        file(false);
+        await batch.recorded;
+
+        assert.deepStrictEqual(Batches.pending, [batch]);
+        assert.equal(LocalDatabase.getRow(TODO, "t1").title, "mine");
+      });
+
+      it("is not sent when it was let go of while the sender waited on its filing", async () => {
+        const {batch, file} = closeFiled();
+
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        Batches.disown();
+
+        file(true);
+        await batch.recorded;
+        await flushing;
+
+        sinon.assert.notCalled(sendStub);
+      });
+    });
   });
 
   describe("discard()", () => {

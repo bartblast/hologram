@@ -1153,11 +1153,62 @@ describe("Durability", () => {
     it("leaves the batch unnumbered in memory mode", async () => {
       const batch = unfiledBatch();
 
-      await Durability.fileBatch(batch);
+      assert.isFalse(await Durability.fileBatch(batch));
 
       assert.isNull(batch.seq);
       assert.equal(Durability.mode, "memory");
       assert.equal(Durability.inFlight, 0);
+    });
+
+    it("answers that the batch is stored", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      assert.isTrue(await Durability.fileBatch(unfiledBatch()));
+    });
+
+    // The number was read and put on the batch inside a transaction that then failed, so nothing
+    // records it and another tab can file under it.
+    it("leaves the caller's number on a batch when the store failed on the spot", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      sinon
+        .stub(FDBDatabase.prototype, "transaction")
+        .throws(new DOMException("broken", "UnknownError"));
+
+      const batch = unfiledBatch();
+      const filing = Durability.fileBatch(batch);
+
+      assert.equal(Durability.mode, "memory");
+
+      batch.seal(7);
+
+      assert.isFalse(await filing);
+      assert.equal(batch.seq, 7);
+    });
+
+    it("takes the number back when the batch can't be stored", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const batch = unfiledBatch();
+
+      batch.append({
+        id: "t2",
+        op: "delete",
+        type: "MyApp.Task",
+        held: () => {},
+      });
+
+      const sealing = sinon.spy(batch, "seal");
+
+      assert.isFalse(await Durability.fileBatch(batch));
+
+      sinon.assert.calledOnceWithExactly(sealing, 1);
+      assert.isNull(batch.seq);
+      assert.equal(Durability.mode, "memory");
+      assert.deepStrictEqual(await readAll("queue"), []);
     });
   });
 

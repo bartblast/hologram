@@ -60,9 +60,12 @@ export default class Batches {
   static #running = null;
 
   // One batch is in flight at a time, and the loop that keeps it that way must not be entered
-  // twice - every close calls flush, and an answer can arrive while another action is running.
-  // The sender while it runs, for a caller that has to know when it has finished.
+  // twice - every close calls flush, and an answer can arrive while another action is running. Held
+  // while it runs, for a caller that has to know when it has finished.
   static #drain = null;
+
+  // Batches let go of while their filing was still in flight (see disown).
+  static #disowned = new WeakSet();
 
   static #seq = 0;
 
@@ -208,8 +211,8 @@ export default class Batches {
     }
   }
 
-  // Every batch this tab is holding, let go: out of the queue, so this tab does not send it, and
-  // out of the overlay, so nothing is shown that this tab can no longer learn the fate of.
+  // Every batch the store holds, let go: out of the queue, so this tab does not send it, and out
+  // of the overlay, so nothing is shown that this tab can no longer learn the fate of.
   //
   // For a tab whose group has DISSOLVED. Those batches were numbered under the group's identity,
   // the tab that kept that identity is still sending them, and this one - which has just taken a
@@ -219,12 +222,19 @@ export default class Batches {
   // The rows go back to what the server last said, and come back when its answer to those batches
   // does, through this tab's own stream, as an ordinary frame. That gap is what a store breaking
   // mid-session costs a tab that was not the one sending.
+  //
+  // A batch the store doesn't hold stays: it exists nowhere else, so no other tab will send it. One
+  // whose filing is still in flight can go either way, so it's decided when the filing settles.
   static disown() {
-    for (const batch of Batches.pending) {
-      Overlay.remove(batch);
-    }
+    Batches.pending = Batches.pending.filter((batch) => {
+      if (batch.filed === null) {
+        Batches.#disowned.add(batch);
+      } else if (batch.filed) {
+        Overlay.remove(batch);
+      }
 
-    Batches.pending = [];
+      return !batch.filed;
+    });
   }
 
   // The landed marks the store records, taken into the batches this tab holds - for a tab taking
@@ -300,6 +310,12 @@ export default class Batches {
         // Durability.replicaWritten).
         await batch.recorded;
         await Durability.replicaWritten();
+
+        // Either wait is long enough for the batch to be let go of (see disown) or answered through
+        // another tab, and then it isn't this tab's to send.
+        if (!Batches.pending.includes(batch)) {
+          continue;
+        }
 
         // Nothing goes out until the pair this tab asked for arrives (see Replica.requestMint). The
         // handshake that brings it wakes the sender again.
@@ -627,19 +643,45 @@ export default class Batches {
   // `#seq` is what this tab has SEEN rather than what it has spent: it follows a number the store
   // handed out, so a tab that later has to count for itself counts on from there.
   static #number(batch) {
-    const filed = Durability.fileBatch(batch);
+    const filing = Durability.fileBatch(batch);
 
     // Where there is nowhere to file it the number is taken HERE, in the turn the batch was
     // closed, rather than in the one the filing settles - so a batch closed where nothing can be
     // stored has its number the moment the action ends, exactly as it did before there was
-    // anywhere to file one.
+    // anywhere to file one. A store that failed on the spot counts: it's in memory mode by now, and
+    // the batch keeps its place ahead of whatever the action closes next.
     if (Durability.mode === "memory") {
+      batch.filed = false;
+
       Batches.#numbered(batch);
 
-      return filed;
+      return filing;
     }
 
-    return filed.then(() => Batches.#numbered(batch));
+    return filing.then((stored) => {
+      batch.filed = stored;
+
+      if (stored && Batches.#disowned.has(batch)) {
+        Batches.#letGo(batch);
+      } else {
+        Batches.#numbered(batch);
+      }
+    });
+  }
+
+  // A batch disown() couldn't decide about, now known to be in the store. Its number stays seen,
+  // like those of the batches disown() let go of at once.
+  //
+  // Its rows may not come back through this tab's stream as disown() says: the leader may have let
+  // go of the store before reading this batch, and then it waits for the next page load to send
+  // it. Kept on screen instead, a move the leader did send would show twice, since this tab has
+  // left the group and would never hear the answer.
+  static #letGo(batch) {
+    Batches.#seq = Math.max(Batches.#seq, batch.seq);
+    Batches.pending = Batches.pending.filter((held) => held !== batch);
+
+    Overlay.remove(batch);
+    SyncStream.scheduleRender();
   }
 
   // A batch whose number is settled: taken from this tab's own count if the store gave none, and

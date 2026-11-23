@@ -219,9 +219,12 @@ export default class Durability {
   //
   // In memory mode the batch is left UNNUMBERED and the caller numbers it: there is nothing to file
   // and no transaction to order it against.
-  static fileBatch(batch) {
+  //
+  // Answers whether the batch is stored. One that isn't gives back the number it read here: that
+  // was spent only in a transaction that didn't commit, so another tab can file under it.
+  static async fileBatch(batch) {
     if (Durability.mode === "memory") {
-      return Promise.resolve();
+      return false;
     }
 
     // The first batch stored is the first moment this browser holds something that exists nowhere
@@ -234,7 +237,9 @@ export default class Durability {
       Durability.#requestPersistence();
     }
 
-    return Durability.#write([META, QUEUE], (transaction) => {
+    let taken = false;
+
+    const stored = await Durability.#write([META, QUEUE], (transaction) => {
       const meta = transaction.objectStore(META);
       const queue = transaction.objectStore(QUEUE);
       const counter = meta.get("seq");
@@ -246,6 +251,7 @@ export default class Durability {
           const spent = Math.max(counter.result ?? 0, highest.result?.key ?? 0);
 
           batch.seal(spent + 1);
+          taken = true;
 
           queue.put(batch.record());
           meta.put(batch.seq, "seq");
@@ -253,6 +259,14 @@ export default class Durability {
         };
       };
     });
+
+    // Only a number this filing put there: a store that failed on the spot never reached the read,
+    // and the caller has numbered the batch for itself by now.
+    if (!stored && taken) {
+      batch.seq = null;
+    }
+
+    return stored;
   }
 
   // A batch the server has ruled on, gone from the queue. Confirmed or refused alike: either way
@@ -1031,9 +1045,11 @@ export default class Durability {
   //
   // In memory mode this answers an already-settled promise, so a caller that awaits one - the
   // batch counter does - waits for nothing rather than branching.
+  //
+  // Answers whether the write committed.
   static async #write(storeNames, fn) {
     if (Durability.mode === "memory") {
-      return;
+      return false;
     }
 
     Durability.inFlight += 1;
@@ -1046,8 +1062,12 @@ export default class Durability {
       fn(transaction);
 
       await Durability.#complete(transaction);
+
+      return true;
     } catch (error) {
       Durability.#fail(`write failed (${error})`);
+
+      return false;
     } finally {
       Durability.inFlight -= 1;
     }
