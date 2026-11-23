@@ -21,6 +21,7 @@ defmodule Hologram.JobTest do
                {:actor_id, :uuid, [optional: true]},
                {:attempt, :integer, [default: 0]},
                {:error, :string, [optional: true, server_only: true]},
+               {:run_as_server, :boolean, [default: false]},
                {:scheduled_at, :datetime, [optional: true]},
                {:status, :enum, [values: [:queued, :running, :done, :failed], default: :queued]}
              ]
@@ -201,7 +202,8 @@ defmodule Hologram.JobTest do
 
   describe "framework_attribute_names/0" do
     test "names the attributes only the framework sets" do
-      assert framework_attribute_names() == [:actor_id, :attempt, :error, :scheduled_at, :status]
+      assert framework_attribute_names() ==
+               [:actor_id, :attempt, :error, :run_as_server, :scheduled_at, :status]
     end
   end
 end

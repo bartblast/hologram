@@ -742,10 +742,12 @@ describe("DataLayer", () => {
           "can?/3",
           "grant_role/2",
           "grant_role/3",
+          "grant_role/4",
           "has_role?/2",
           "has_role?/3",
           "revoke_role/2",
           "revoke_role/3",
+          "revoke_role/4",
         ]),
       );
 

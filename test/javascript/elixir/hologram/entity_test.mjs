@@ -182,6 +182,7 @@ describe("Elixir_Hologram_Entity", () => {
             "actor_id",
             "attempt",
             "error",
+            "run_as_server",
             "scheduled_at",
             "status",
           ],

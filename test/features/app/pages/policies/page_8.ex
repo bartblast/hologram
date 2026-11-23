@@ -1,7 +1,7 @@
 defmodule HologramFeatureTests.Policies.Page8 do
   use Hologram.Page
+  use Hologram.DB
 
-  alias Hologram.DB
   alias HologramFeatureTests.Components.Policies.Component9
   alias HologramFeatureTests.Entities.User
 
@@ -39,6 +39,7 @@ defmodule HologramFeatureTests.Policies.Page8 do
     user =
       %{email: "teammate@example.com"}
       |> User.new()
+      |> trust()
       |> DB.create!()
 
     put_action(%{server | user_id: user.id}, :show_result, result: "logged_in")

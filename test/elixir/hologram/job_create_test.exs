@@ -55,6 +55,59 @@ defmodule Hologram.JobCreateTest do
       assert job.actor_id == nil
     end
 
+    test "marks a job created with no session to run as the server" do
+      assert {:ok, job} = create(Module1)
+
+      assert job.run_as_server == true
+      assert DB.read(Module1, job.id).run_as_server == true
+    end
+
+    test "marks a trust claim from a signed-out session to run as the server" do
+      assert {:ok, job} = as_user(nil, fn -> create(Module1, %{}, trust: true) end)
+
+      assert job.actor_id == nil
+      assert job.run_as_server == true
+    end
+
+    test "marks a trust claim under a user id no user entity can have to run as the server" do
+      assert {:ok, job} = as_user(7, fn -> create(Module1, %{}, trust: true) end)
+
+      assert job.actor_id == nil
+      assert job.run_as_server == true
+    end
+
+    test "leaves a signed-out visitor's job unmarked, so it runs under the rules" do
+      assert {:ok, job} = as_user(nil, fn -> create(Module1) end)
+
+      assert job.actor_id == nil
+      assert job.run_as_server == false
+      assert DB.read(Module1, job.id).run_as_server == false
+    end
+
+    test "leaves a job under a user id no user entity can have unmarked" do
+      assert {:ok, job} = as_user(7, fn -> create(Module1) end)
+
+      assert job.actor_id == nil
+      assert job.run_as_server == false
+    end
+
+    test "leaves a signed-in user's job unmarked" do
+      user = create_user("unmarked@example.com")
+
+      assert {:ok, job} = as_user(user, fn -> create(Module1) end)
+
+      assert job.run_as_server == false
+    end
+
+    test "leaves a signed-in user's trust claim unmarked, since it runs as that user" do
+      user = create_user("unmarked-trust@example.com")
+
+      assert {:ok, job} = as_user(user, fn -> create(Module1, %{}, trust: true) end)
+
+      assert job.actor_id == user.id
+      assert job.run_as_server == false
+    end
+
     test "starts with no attempts" do
       assert {:ok, job} = create(Module1)
 
@@ -149,11 +202,22 @@ defmodule Hologram.JobCreateTest do
       assert DB.read(Module3) == []
     end
 
+    test "raises on a job type that declares no allow lines in a signed-out session" do
+      expected_msg =
+        "cannot create Hologram.Test.Fixtures.Job.Module2 in a session - it declares no allow lines, so no rule can grant the create. Add \"allow :create, ...\" to enqueue it from an action, or create it from server code with trust: true."
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> create(Module2) end)
+      end
+
+      assert DB.read(Module2) == []
+    end
+
     test "raises on a job type that declares no allow lines under an acting user" do
       user = create_user("blocked@example.com")
 
       expected_msg =
-        "cannot create Hologram.Test.Fixtures.Job.Module2 as a user - it declares no allow lines, so no rule can grant the create. Add \"allow :create, ...\" to enqueue it from an action, or create it from server code, where there is no acting user."
+        "cannot create Hologram.Test.Fixtures.Job.Module2 in a session - it declares no allow lines, so no rule can grant the create. Add \"allow :create, ...\" to enqueue it from an action, or create it from server code with trust: true."
 
       assert_error AccessDeniedError, expected_msg, fn ->
         as_user(user, fn -> create(Module2) end)

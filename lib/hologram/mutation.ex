@@ -9,7 +9,7 @@ defmodule Hologram.Mutation do
   # no second set of rules for a write that arrived over the wire. Its authority is the one
   # difference: a batch carries no claim, and every write in it is judged by the verb's own rules -
   # an update by the fields it changes - under the anonymous semantics when nobody is signed in,
-  # where a server-side verb with no acting user would write raw. One update/1 call reaches here as
+  # as a server-side verb in the same request is. One update/1 call reaches here as
   # a write for its values and amounts, if it has any, and one for each of its edges, the later ones
   # marked as the same call, and they are applied through ONE executor call, as the server verb
   # applies them: every field the call changes is judged against the row the call started from. A

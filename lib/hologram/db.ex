@@ -106,17 +106,20 @@ defmodule Hologram.DB do
   the moment it was asked, and a value free then can be taken by the next attempt. A write
   refuses at the first violated database constraint and reports no other of its own.
 
-  With an acting user set, the write is evaluated against that user's policies for :create,
-  against the row being inserted, and raises Hologram.AccessDeniedError when no rule grants it.
+  In a session - a Hologram page, command or middleware, or a job run as the user who created it -
+  the write is evaluated against the session user's policies for :create, an anonymous session's
+  for a signed-out visitor, against the row being inserted, and raises
+  Hologram.AccessDeniedError when no rule grants it.
   The grant rows the answer rests on are held until the write commits, so a revocation of one of
   them lands after the write, and a grant made meanwhile is not seen - the write is refused where
   a moment later it would pass. Every related row a rule reads - a `via:` target, or a row along a
   path - is held the same way, so a change to it lands after the write. An entity claiming the
-  server's own authority through trust/1 is written without evaluation, and without an acting user
-  the write is raw - the trusted tier. A session user id no user entity can have - an app's own
-  serial id - is still an acting user: its writes are evaluated as an anonymous session's, never
-  raw, so server code writing past the rules claims trust/1. The returned entity carries no claim
-  and no recorded changes.
+  server's own authority through trust/1 is written without evaluation, and code outside a session,
+  like a seed, a Mix task, a console or an app's own plug or controller, writes raw - the trusted
+  tier. A session user id no user
+  entity can have - an app's own serial id - is evaluated as an anonymous session too, so server
+  code in a session that means to write past the rules claims trust/1. The returned entity
+  carries no claim and no recorded changes.
 
   A write PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -168,13 +171,14 @@ defmodule Hologram.DB do
   reports the first such reference only. This is the one translated constraint error - any
   other constraint violation raises. Deleting a nonexistent id is a no-op. Returns :ok.
 
-  With an acting user set, the delete is evaluated against that user's policies for :delete,
-  against the row as it stands, read FOR UPDATE - naming the row by type and id carries no claim,
-  so delete/1 is the spelling for a trusted one. The grant rows the answer rests on are held until
+  In a session, the delete is evaluated against the session user's policies for :delete, an
+  anonymous session's for a signed-out visitor, against the row as it stands, read FOR UPDATE -
+  naming the row by type and id carries no claim, so a trusted delete is `entity |> trust() |>
+  DB.delete()`. The grant rows the answer rests on are held until
   the delete commits, so a revocation of one of them lands after the delete, and a grant made
   meanwhile is not seen - the delete is refused where a moment later it would pass. Every related
   row a rule reads - a `via:` target, or a row along a path - is held the same way, so a change to
-  it lands after the delete. Without an acting user the delete is raw.
+  it lands after the delete. Code outside a session deletes raw.
 
   A delete PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -196,14 +200,15 @@ defmodule Hologram.DB do
   {:error, %{referenced_by: entity_type, relationship: name}}, and a struct whose id names no
   row is a no-op.
 
-  With an acting user set, the delete is evaluated against that user's policies for :delete,
-  against the row as it stands, read FOR UPDATE, and raises Hologram.AccessDeniedError when no
+  In a session, the delete is evaluated against the session user's policies for :delete, an
+  anonymous session's for a signed-out visitor, against the row as it stands, read FOR UPDATE, and
+  raises Hologram.AccessDeniedError when no
   rule grants it. The grant rows the answer rests on are held until the delete commits, so a
   revocation of one of them lands after the delete, and a grant made meanwhile is not seen - the
   delete is refused where a moment later it would pass. Every related row a rule reads - a `via:`
   target, or a row along a path - is held the same way, so a change to it lands after the delete.
   An entity claiming the server's own authority through trust/1 is deleted without evaluation, and
-  without an acting user an unclaimed delete is raw. A struct whose id names no row is not
+  code outside a session deletes raw without a claim. A struct whose id names no row is not
   evaluated at all: there is nothing to authorize against.
 
   A delete PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
@@ -303,14 +308,16 @@ defmodule Hologram.DB do
   A :string ordering reads the attribute's sort-key companion column, which every
   :string attribute derives.
 
-  With an acting user set, the query is read through that user's :read policies - the rows the
-  policies grant, each included relationship filtered by its own type's :read rules, a
+  In a session - a Hologram page, command or middleware, or a job run as the user who created it -
+  the query is read through the session user's :read policies, an anonymous session's for a
+  signed-out visitor: the rows the policies grant, each included relationship filtered by its
+  own type's :read rules, a
   single-result query answering nil and a counting query counting only what the user may read -
   exactly as a template's derived query is. A session user id no user entity can have - an
-  app's own serial id - reads as an anonymous session would. Without an acting user the query is
-  read raw: the trusted tier, for seeds, tasks and jobs.
+  app's own serial id - reads as an anonymous session would. Code outside a session reads
+  raw: the trusted tier, for seeds, Mix tasks, a console and an app's own plugs and controllers.
 
-  A query marked with trust/1 is read raw whether or not a user is acting - the server's own
+  A query marked with trust/1 is read raw in a session too, signed in or not - the server's own
   authority, the spelling for a read that must see past the acting user's policies.
   """
   @spec read(module | Query.t()) :: list(Entity.t()) | Entity.t() | integer | nil
@@ -319,12 +326,10 @@ defmodule Hologram.DB do
 
     assert_not_sourced!(term)
 
-    actor_user_id = Context.actor_user_id()
-
-    if term.trust or is_nil(actor_user_id) do
+    if term.trust or not Context.session?() do
       QueryRunner.run(term, mapping())
     else
-      QueryRunner.run_policied(term, mapping(), actor_user_id)
+      QueryRunner.run_policied(term, mapping(), Context.actor_user_id())
     end
   end
 
@@ -333,9 +338,11 @@ defmodule Hologram.DB do
   read/1 with one more predicate and single-result cardinality. Column values are decoded
   back into their logical types.
 
-  With an acting user set, the row is read through that user's :read policies and a row the
-  policies withhold reads as nil - as if it did not exist, which is what the template tier and
-  the client answer. Without an acting user the row is read raw.
+  In a session, the row is read through the session user's :read policies, an anonymous session's
+  for a signed-out visitor, and a row the policies withhold reads as nil - as if it did not exist,
+  which is what the template tier and the client answer. Code outside a session reads the row
+  raw. A by-id read carries no claim, so a trusted one is
+  `type |> filter(id: ^id) |> one() |> trust() |> DB.read()`.
 
   Raises Hologram.MisuseError when the id is not a canonical entity id (a lowercase
   8-4-4-4-12 UUID string), or when the first argument is not an entity type module.
@@ -526,8 +533,9 @@ defmodule Hologram.DB do
   columns plus updated_at and server_updated_at - there is no full-row variant. Changes (a map
   or keyword list) are keyed by declared attribute names and to-one reference fields
   (`<relationship name>_id`) - a to-one reference is set, reassigned, or cleared (nil) through
-  its reference field. Changing any other name, system attributes included, raises
-  Hologram.MisuseError - as do empty changes and an id that names no entity.
+  its reference field. Changing any other name, system attributes and the attributes the framework
+  sets on a job included, raises Hologram.MisuseError - as do empty changes and an id that names no
+  entity.
 
   Returns :ok, or {:error, violations} - the map Entity.validate/2 returns, naming each
   field the changes leave breaking a declaration: the declared constraints a changed value
@@ -549,16 +557,18 @@ defmodule Hologram.DB do
   The misuses named above raise rather than returning, as does a constraint violation the
   mapping does not explain.
 
-  With an acting user set, the update is evaluated against that user's update rules, against the row
-  as it stands, read FOR UPDATE: every field it changes - a reference field counting as its
+  In a session, the update is evaluated against the session user's update rules, an anonymous
+  session's for a signed-out visitor, against the row as it stands, read FOR UPDATE: every field it
+  changes - a reference field counting as its
   relationship - has to be covered by a rule that holds, a field-limited line covering it (one whose
   `only:` lists it, or whose `except:` leaves it out) or a line covering the whole row, and
   Hologram.AccessDeniedError names the fields none covers. Naming the row by type and id carries no
-  claim, so update/1 is the spelling for a trusted one. The grant rows the answer rests on are held
+  claim, so a trusted update is a struct from a trusted read, `|> put_attribute(...) |> trust() |>
+  DB.update()`. The grant rows the answer rests on are held
   until the update commits, so a revocation of one of them lands after the update, and a grant made
   meanwhile is not seen - the update is refused where a moment later it would pass. Every related
   row a rule reads - a `via:` target, or a row along a path - is held the same way, so a change to
-  it lands after the update. Without an acting user the update is raw.
+  it lands after the update. Code outside a session updates raw.
 
   An update PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -579,12 +589,14 @@ defmodule Hologram.DB do
   add_relationship and delete_relationship - in one transaction, and returns :ok.
 
   Only recorded changes are written: a field set directly on the struct is not among them, and a
-  struct carrying nothing recorded raises Hologram.MisuseError, as does an id that names no entity.
+  struct carrying nothing recorded raises Hologram.MisuseError, as do an id that names no entity
+  and a change to an attribute the framework sets on a job, whatever the claim.
   The attribute changes go first and the edges follow, so a refused value leaves the edges unapplied
   and an edge that raises takes the values with it.
 
-  With an acting user set, the write is evaluated against that user's update rules, and raises
-  Hologram.AccessDeniedError when no rule grants it. Every field it changes - a value put or moved,
+  In a session, the write is evaluated against the session user's update rules, an anonymous
+  session's for a signed-out visitor, and raises Hologram.AccessDeniedError when no rule grants it.
+  Every field it changes - a value put or moved,
   a to-one's reference field as its relationship, an edge as its to-many relationship - has to be
   covered by an update rule that holds: a field-limited line covering it (one whose `only:` lists
   it, or whose `except:` leaves it out) or a line covering the whole row. The refusal names the
@@ -596,7 +608,7 @@ defmodule Hologram.DB do
   made meanwhile is not seen - the write is refused where a moment later it would pass. Every
   related row a rule reads - a `via:` target, or a row along a path - is held the same way, so a
   change to it lands after the write. An entity claiming the server's own authority through trust/1
-  is written without evaluation, and without an acting user an unclaimed write is raw.
+  is written without evaluation, and code outside a session writes raw without a claim.
 
   An update PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
