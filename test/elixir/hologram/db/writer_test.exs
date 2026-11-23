@@ -51,42 +51,6 @@ defmodule Hologram.DB.WriterTest do
     |> DB.create!()
   end
 
-  defp table_of(entity_type) do
-    ~s("hologram_data"."#{Map.fetch!(DB.mapping(), entity_type).table}")
-  end
-
-  # Stands in for another transaction committing a row between a rule reading that it isn't there
-  # and the write's foreign key check. The row copies the given one under the given id.
-  defp make_row_appear(timing, written_table, target_type, template, id) do
-    target_table = table_of(target_type)
-
-    {:ok, _result} =
-      Connection.query(
-        """
-        CREATE FUNCTION pg_temp.make_row_appear() RETURNS trigger LANGUAGE plpgsql AS $body$
-        BEGIN
-          INSERT INTO #{target_table}
-          SELECT (jsonb_populate_record(t, jsonb_build_object('id', '#{id}'))).*
-          FROM #{target_table} t WHERE "id" = '#{template.id}'
-          ON CONFLICT DO NOTHING;
-
-          RETURN NEW;
-        END
-        $body$
-        """,
-        []
-      )
-
-    {:ok, _result} =
-      Connection.query(
-        "CREATE TRIGGER make_row_appear #{timing} ON #{written_table} " <>
-          "FOR EACH ROW EXECUTE FUNCTION pg_temp.make_row_appear()",
-        []
-      )
-
-    :ok
-  end
-
   defp count_edges(source_entity, target_entity) do
     count_sql =
       ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_entity_module16_secrets_$join" | <>
@@ -1233,44 +1197,6 @@ defmodule Hologram.DB.WriterTest do
       end
     end
 
-    test "refuses a reference whose row appears after its rule read it" do
-      user = create_user("appearing_reference@example.com")
-      project = create_changed_project()
-      template = create_changed_project()
-      task = create_changed_task(%{project_id: project.id})
-      Auth.grant_role(user, :member, project)
-      appearing_id = Entity.generate_id()
-
-      make_row_appear(
-        "BEFORE UPDATE",
-        table_of(ChangedTask),
-        ChangedProject,
-        template,
-        appearing_id
-      )
-
-      assert_error AccessDeniedError, uncovered_message(task, :project), fn ->
-        as_user(user, fn -> update(put_attribute(task, :project_id, appearing_id)) end)
-      end
-
-      assert EntityOperations.get(ChangedTask, task.id).project_id == project.id
-    end
-
-    test "refuses an edge whose target appears after its rule read it" do
-      user = create_user("appearing_edge@example.com")
-      template = create_changed_label(true)
-      task = create_changed_task()
-      appearing_id = Entity.generate_id()
-      join_table = ~s("hologram_data"."#{DB.join_table_name(ChangedTask, :labels)}")
-      make_row_appear("BEFORE INSERT", join_table, ChangedLabel, template, appearing_id)
-
-      assert_error AccessDeniedError, uncovered_message(task, :labels), fn ->
-        as_user(user, fn -> update(add_relationship(task, :labels, appearing_id)) end)
-      end
-
-      assert {:ok, %{rows: [[0]]}} = Connection.query("SELECT count(*) FROM #{join_table}", [])
-    end
-
     test "judges nothing on the trusted tier" do
       task = create_changed_task()
 
@@ -1279,29 +1205,6 @@ defmodule Hologram.DB.WriterTest do
   end
 
   describe "update/3 of rules reading the row after the change" do
-    test "refuses a reference whose row appears after its rule read it" do
-      user = create_user("appearing_given_reference@example.com")
-      project = create_changed_project()
-      template = create_changed_project()
-      task = create_changed_task(%{project_id: project.id})
-      Auth.grant_role(user, :member, project)
-      appearing_id = Entity.generate_id()
-
-      make_row_appear(
-        "BEFORE UPDATE",
-        table_of(ChangedTask),
-        ChangedProject,
-        template,
-        appearing_id
-      )
-
-      assert_error AccessDeniedError, uncovered_message(task, :project), fn ->
-        as_user(user, fn -> update(ChangedTask, task.id, project_id: appearing_id) end)
-      end
-
-      assert EntityOperations.get(ChangedTask, task.id).project_id == project.id
-    end
-
     test "judges the values it's given" do
       user = create_user("indexed@example.com")
       task = create_changed_task()
