@@ -926,7 +926,10 @@ defmodule Hologram.MutationTest do
         |> ChangedTask.new()
         |> DB.create!()
 
-      write = update_write(ChangedTask, task.id, %{"phase" => "signed", "signer" => "ann"})
+      write =
+        update_write(ChangedTask, task.id, %{"phase" => "signed", "signer" => "ann"},
+          stamp: stamp_above(task)
+        )
 
       assert {:ok, %{"status" => "confirmed"}} = run(envelope([write]), server(user.id))
       assert EntityOperations.get(ChangedTask, task.id).signer == "ann"
@@ -1014,7 +1017,10 @@ defmodule Hologram.MutationTest do
         |> ChangedTask.new()
         |> DB.create!()
 
-      write = update_write(ChangedTask, task.id, %{"signer" => "much too long"})
+      write =
+        update_write(ChangedTask, task.id, %{"signer" => "much too long"},
+          stamp: stamp_above(task)
+        )
 
       assert {:ok, %{"status" => "rejected", "write" => 0, "reason" => reason}} =
                run(envelope([write]), server(user.id))
