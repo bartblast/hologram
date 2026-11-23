@@ -1231,6 +1231,10 @@ defmodule Hologram.Migrator do
     {:halt, %{walked | removed?: true}}
   end
 
+  defp follow_index(%{op: :fill_column, table: table}, %{removed?: false, table: table} = walked) do
+    {:cont, %{walked | written?: true}}
+  end
+
   defp follow_index(%{op: :rebuild_enum_type} = op, %{removed?: false} = walked) do
     writes? = Enum.any?(op.columns, fn {table, _column} -> table == walked.table end)
 

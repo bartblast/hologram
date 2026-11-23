@@ -30,6 +30,7 @@ defmodule Hologram.Migration.IndexRecoveryTest do
   alias Hologram.DB.DDL
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Model
+  alias Hologram.Migration.Value
 
   @context %{
     otp_app: "hologram",
@@ -70,6 +71,20 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     [statement] = DDL.statements(concurrent_op)
 
     Connection.query(statement)
+  end
+
+  # A computed fill of every row of the table, reading the slug.
+  defp computed_copy(version) do
+    migration(version, [
+      %{
+        op: :add_attribute,
+        entity: MyApp.Task,
+        name: :copy,
+        type: :string,
+        opts: [optional: true, backfill: %Value{term: {:name, [:slug]}}],
+        line: 3
+      }
+    ])
   end
 
   defp delete_all_rows_but_one(table) do
@@ -1310,6 +1325,67 @@ defmodule Hologram.Migration.IndexRecoveryTest do
 
         assert index_validity(@slug_index) == :absent
         assert index_validity("my_app_task_amount_$uidx") == true
+      end)
+    end
+
+    test "refuses a pending computed fill on the table of an invalid index still checking " <>
+           "writes",
+         %{chain: chain, model: model, scratch: scratch} do
+      assert_refused_with_checking_index(
+        scratch,
+        chain,
+        model,
+        computed_copy("20260813091524")
+      )
+    end
+
+    test "boots on the first try when a later pending file drops an invalid index still " <>
+           "checking writes, past a computed fill on its table",
+         %{chain: chain, model: model, scratch: scratch} do
+      pending = [computed_copy("20260813091524"), @drop_unique_slug]
+
+      assert_boots_past_checking_index(scratch, chain, model, pending)
+    end
+
+    # Dropped early, the index would not be there when the fill writes the table, and the
+    # unique index the last file brings back would be built over whatever the fill left.
+    test "refuses a pending type change on the table of a missing index whose key repeats " <>
+           "when a later computed fill writes the table and a unique index comes back",
+         %{chain: chain, model: model, scratch: scratch} do
+      {extra_chain, extra_model} = apply_extra_attributes(chain, model, scratch)
+
+      swap =
+        migration("20260813091527", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            changes: [unique: false],
+            line: 3
+          },
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [unique: true],
+            line: 4
+          }
+        ])
+
+      pending = [@change_amount_type, computed_copy("20260813091526"), swap]
+      post_model = Enum.reduce(pending, extra_model, &Model.fold(&2, &1.ops))
+
+      route(scratch, fn ->
+        drop_index(@slug_index)
+        insert_task("taken")
+        insert_task("taken")
+
+        assert_error RuntimeError, @invalid_slug_msg, fn ->
+          run(Enum.concat(extra_chain, pending), post_model, @context)
+        end
+
+        refute "20260813091525" in applied_versions()
+        assert index_validity(@slug_index) == false
       end)
     end
 
