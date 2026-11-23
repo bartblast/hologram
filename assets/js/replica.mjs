@@ -26,6 +26,10 @@ export default class Replica {
   // Whether the pair in use is one the server minted for this tab alone.
   static minted = false;
 
+  // Whether the server refused to mint one, because the pair this tab showed it no longer holds
+  // for whoever is signed in (see refuseMint).
+  static mintRefused = false;
+
   static adopt(replica) {
     Replica.id = replica.id;
     Replica.token = replica.token;
@@ -75,17 +79,37 @@ export default class Replica {
   // it was. The page's pair is let go of for good: refresh() going back to it would undo the point
   // of asking.
   static takeMinted(replica) {
-    if (!Replica.awaitingMint || !replica?.id) {
+    if (!Replica.withoutIdentity() || !replica?.id) {
       return false;
     }
 
     Replica.awaitingMint = false;
     Replica.fresh = null;
     Replica.minted = true;
+    Replica.mintRefused = false;
 
     Replica.adopt(replica);
 
     return true;
+  }
+
+  // The server won't mint for the owner of the pair this tab showed. A stored pair can simply be
+  // stale, from a session that has ended, so the page's own gets a turn. With that refused too,
+  // somebody else holds the session: nothing goes out, since the writes this tab holds are its
+  // owner's. It stops asking, and later handshakes still show the pair, so it recovers if its owner
+  // signs back in.
+  static refuseMint() {
+    if (!Replica.awaitingMint || Replica.refresh()) {
+      return;
+    }
+
+    Replica.awaitingMint = false;
+    Replica.mintRefused = true;
+  }
+
+  // Whether this tab has no pair it may send under, for now or for good.
+  static withoutIdentity() {
+    return Replica.awaitingMint || Replica.mintRefused;
   }
 
   static reset() {
@@ -93,6 +117,7 @@ export default class Replica {
     Replica.fresh = null;
     Replica.id = null;
     Replica.minted = false;
+    Replica.mintRefused = false;
     Replica.token = null;
   }
 }

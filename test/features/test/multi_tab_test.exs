@@ -135,8 +135,8 @@ defmodule HologramFeatureTests.MultiTabTest do
     |> assert_text(css("#todos"), "alpha 0")
   end
 
-  # The tab whose write failed and the tab that led each go on with no store. Counting under the
-  # identity they shared, both would take the same next number, and the server would answer one
+  # The tab whose write failed goes on with no store, and the tab that leads keeps it. Counting under
+  # the identity they shared, both would take the same next number, and the server would answer one
   # write from the record of the other.
   feature "lands the writes of each tab after one tab's store write fails", %{session: session} do
     leading =
@@ -170,7 +170,6 @@ defmodule HologramFeatureTests.MultiTabTest do
     failing
     |> await_pending_writes(0)
     |> focus_tab(first)
-    |> await_memory_mode()
     |> click(button("Rename alpha"))
     |> assert_text(css("#todos"), "beta 0")
 

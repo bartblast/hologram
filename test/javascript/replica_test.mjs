@@ -95,6 +95,77 @@ describe("Replica", () => {
     });
   });
 
+  describe("refuseMint()", () => {
+    it("ends the asking for good", () => {
+      Replica.requestMint();
+      Replica.refuseMint();
+
+      assert.isFalse(Replica.awaitingMint);
+      assert.isTrue(Replica.mintRefused);
+    });
+
+    it("does nothing in a tab that wasn't asking", () => {
+      Replica.refuseMint();
+
+      assert.isFalse(Replica.mintRefused);
+    });
+
+    // The refused pair can be a stored one from a session that has ended.
+    it("gives the page's own pair a turn first", () => {
+      Replica.offer({id: "r-page", token: "statement-page"});
+      Replica.adopt({id: "r-stored", token: "statement-stored"});
+      Replica.requestMint();
+
+      Replica.refuseMint();
+
+      assert.equal(Replica.id, "r-page");
+      assert.isTrue(Replica.awaitingMint);
+      assert.isFalse(Replica.mintRefused);
+
+      Replica.refuseMint();
+
+      assert.isFalse(Replica.awaitingMint);
+      assert.isTrue(Replica.mintRefused);
+    });
+
+    it("can still take a pair afterwards", () => {
+      Replica.requestMint();
+      Replica.refuseMint();
+
+      assert.isTrue(Replica.takeMinted({id: "r-minted", token: "statement"}));
+
+      assert.equal(Replica.id, "r-minted");
+      assert.isFalse(Replica.mintRefused);
+      assert.isTrue(Replica.minted);
+    });
+  });
+
+  describe("withoutIdentity()", () => {
+    it("is false for a tab with a pair to send under", () => {
+      assert.isFalse(Replica.withoutIdentity());
+    });
+
+    it("is true while asking", () => {
+      Replica.requestMint();
+
+      assert.isTrue(Replica.withoutIdentity());
+    });
+
+    it("is true once refused", () => {
+      Replica.requestMint();
+      Replica.refuseMint();
+
+      assert.isTrue(Replica.withoutIdentity());
+    });
+
+    it("is false once the pair has arrived", () => {
+      Replica.requestMint();
+      Replica.takeMinted({id: "r-minted", token: "statement"});
+
+      assert.isFalse(Replica.withoutIdentity());
+    });
+  });
+
   describe("takeMinted()", () => {
     const minted = {id: "replica-minted", token: "token-minted"};
 

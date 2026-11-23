@@ -20,6 +20,7 @@ import QueryCheck from "../../assets/js/query_check.mjs";
 import QuerySpelling from "../../assets/js/query_spelling.mjs";
 import ReloadNotice from "../../assets/js/reload_notice.mjs";
 import Replica from "../../assets/js/replica.mjs";
+import Sse from "../../assets/js/sse.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -916,6 +917,17 @@ describe("DataLayer", () => {
 
       assert.isFalse(DataLayer.holdsUnsentWrites());
     });
+
+    it("is false for a tab the server refused an identity", () => {
+      Replica.requestMint();
+      Replica.refuseMint();
+
+      try {
+        assert.isFalse(DataLayer.holdsUnsentWrites());
+      } finally {
+        Replica.reset();
+      }
+    });
   });
 
   describe("ingestMountData()", () => {
@@ -1389,6 +1401,56 @@ describe("DataLayer", () => {
       DataLayer.listenToStream(eventSource);
 
       sinon.assert.calledOnceWithExactly(listening, eventSource);
+    });
+
+    describe("when the stream says sync is starting over", () => {
+      let asking, resync;
+
+      beforeEach(() => {
+        const eventSource = {
+          addEventListener: (kind, listener) => {
+            if (kind === "sync_resync") resync = listener;
+          },
+        };
+
+        Replica.reset();
+
+        sinon.stub(SyncStream, "listen");
+        asking = sinon.stub(Sse, "askForReplica");
+
+        DataLayer.listenToStream(eventSource);
+      });
+
+      afterEach(() => {
+        Replica.reset();
+      });
+
+      const refuse = () => {
+        Replica.requestMint();
+        Replica.refuseMint();
+      };
+
+      it("has a refused tab ask again when the user changed", () => {
+        refuse();
+
+        resync({data: JSON.stringify({reason: "identity"})});
+
+        sinon.assert.calledOnce(asking);
+      });
+
+      it("leaves a refused tab alone for any other reason", () => {
+        refuse();
+
+        resync({data: JSON.stringify({reason: "no place to resume from"})});
+
+        sinon.assert.notCalled(asking);
+      });
+
+      it("leaves a tab that wasn't refused alone", () => {
+        resync({data: JSON.stringify({reason: "identity"})});
+
+        sinon.assert.notCalled(asking);
+      });
     });
   });
 
@@ -1943,6 +2005,19 @@ describe("DataLayer", () => {
       flush.restore();
     });
 
+    it("ends the asking when the server refused", () => {
+      const flush = sinon.stub(Batches, "flush");
+
+      Replica.requestMint();
+
+      assert.isNull(DataLayer.takeReplica(undefined, true));
+      assert.isFalse(Replica.awaitingMint);
+      assert.isTrue(Replica.mintRefused);
+      sinon.assert.notCalled(flush);
+
+      flush.restore();
+    });
+
     it("wakes nothing when the tab did not ask", () => {
       const flush = sinon.stub(Batches, "flush");
 
@@ -1951,6 +2026,37 @@ describe("DataLayer", () => {
       sinon.assert.notCalled(flush);
 
       flush.restore();
+    });
+  });
+
+  describe("replicaToReplace()", () => {
+    afterEach(() => {
+      Replica.reset();
+    });
+
+    it("answers the pair in use while the tab is asking for a new one", () => {
+      Replica.adopt({id: "replica-held", token: "token-held"});
+      Replica.requestMint();
+
+      assert.deepStrictEqual(DataLayer.replicaToReplace(), {
+        id: "replica-held",
+        token: "token-held",
+      });
+    });
+
+    // So a refusal can end when its owner signs back in.
+    it("answers the pair in use after a refusal", () => {
+      Replica.adopt({id: "replica-held", token: "token-held"});
+      Replica.requestMint();
+      Replica.refuseMint();
+
+      assert.equal(DataLayer.replicaToReplace().id, "replica-held");
+    });
+
+    it("answers nothing otherwise", () => {
+      Replica.adopt({id: "replica-held", token: "token-held"});
+
+      assert.isNull(DataLayer.replicaToReplace());
     });
   });
 

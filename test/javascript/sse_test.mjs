@@ -67,6 +67,7 @@ describe("Sse", () => {
     refreshedReceipts = Type.list(),
     ok = true,
     replica = undefined,
+    replicaRefused = undefined,
     status = 200,
   } = {}) {
     const serializedRefreshedReceipts = serializedValue(refreshedReceipts);
@@ -79,6 +80,7 @@ describe("Sse", () => {
         heartbeatIntervalMs,
         refreshedReceipts: serializedRefreshedReceipts,
         replica,
+        replicaRefused,
       }),
     });
   }
@@ -94,6 +96,7 @@ describe("Sse", () => {
     Sse.reconnectAttempts = 0;
     Sse.reconnectTimer = null;
     Sse.reloadDeferrals = 0;
+    Sse.replicaAskId = 0;
     Sse.runId = 0;
     Sse.stabilityTimer = null;
 
@@ -146,6 +149,172 @@ describe("Sse", () => {
     SubscriptionReceiptRegistry.entries.clear();
   });
 
+  describe("askForReplica()", () => {
+    const minted = {id: "replica-minted", token: "token-minted"};
+
+    let flush, timers;
+
+    beforeEach(() => {
+      timers = sinon.useFakeTimers({toFake: ["setTimeout", "clearTimeout"]});
+      flush = sinon.stub(Batches, "flush").resolves();
+
+      sinon.stub(Math, "random").returns(0.5);
+      sinon.stub(Logger, "debug");
+
+      setDataLayer();
+
+      sinon.stub(Hologram.dataLayer, "listenToStream");
+
+      Replica.offer({id: "replica-page", token: "token-page"});
+      Replica.requestMint();
+      Replica.refuseMint();
+
+      Sse.eventSource = mockEventSource;
+    });
+
+    const askToTheEnd = async () => {
+      const asking = Sse.askForReplica();
+
+      await timers.tickAsync(
+        Sse.MAX_RECONNECT_DELAY * Sse.MAX_REPLICA_ASKS * 2,
+      );
+      await asking;
+    };
+
+    // The stream hears of a sign-in before the browser has the new session cookie.
+    it("takes a pair that arrives after refusals under the old cookie", async () => {
+      fetchStub.onCall(0).resolves({
+        ok: true,
+        json: async () => ({replicaRefused: true}),
+      });
+
+      fetchStub.resolves({
+        ok: true,
+        json: async () => ({
+          handshakeId: "test-handshake-id",
+          heartbeatIntervalMs: 15_000,
+          refreshedReceipts: serializedValue(Type.list()),
+          replica: minted,
+        }),
+      });
+
+      await askToTheEnd();
+
+      assert.equal(Replica.id, "replica-minted");
+      assert.isFalse(Replica.mintRefused);
+      sinon.assert.calledOnce(flush);
+    });
+
+    it("replaces the stream once a pair has arrived", async () => {
+      stubHandshakeResponse({replica: minted});
+
+      await askToTheEnd();
+
+      sinon.assert.calledOnce(mockEventSource.close);
+      sinon.assert.calledOnce(globalThis.EventSource);
+    });
+
+    // A stream reopened under the old cookie would serve the previous user's rows.
+    it("leaves the open stream alone while refused", async () => {
+      stubHandshakeResponse({replicaRefused: true});
+
+      await askToTheEnd();
+
+      sinon.assert.notCalled(mockEventSource.close);
+      sinon.assert.notCalled(globalThis.EventSource);
+      sinon.assert.callCount(fetchStub, Sse.MAX_REPLICA_ASKS);
+      assert.isTrue(Replica.mintRefused);
+    });
+
+    it("keeps asking after a request that failed", async () => {
+      fetchStub.onCall(0).rejects(new Error("offline"));
+
+      fetchStub.resolves({
+        ok: true,
+        json: async () => ({
+          handshakeId: "test-handshake-id",
+          heartbeatIntervalMs: 15_000,
+          refreshedReceipts: serializedValue(Type.list()),
+          replica: minted,
+        }),
+      });
+
+      await askToTheEnd();
+
+      assert.equal(Replica.id, "replica-minted");
+    });
+
+    it("moves on from a request that never answers", async () => {
+      fetchStub.onCall(0).callsFake(
+        (_path, {signal}) =>
+          new Promise((_resolve, reject) => {
+            signal?.addEventListener("abort", () =>
+              reject(new Error("aborted")),
+            );
+          }),
+      );
+
+      fetchStub.resolves({
+        ok: true,
+        json: async () => ({
+          handshakeId: "test-handshake-id",
+          heartbeatIntervalMs: 15_000,
+          refreshedReceipts: serializedValue(Type.list()),
+          replica: minted,
+        }),
+      });
+
+      Sse.askForReplica();
+
+      await timers.tickAsync(
+        Config.mutationTimeoutMs + Sse.MAX_RECONNECT_DELAY * 2,
+      );
+
+      assert.equal(Replica.id, "replica-minted");
+    });
+
+    it("stops once the page is left", async () => {
+      stubHandshakeResponse({replica: minted});
+
+      const asking = Sse.askForReplica();
+
+      Sse.isSuspended = true;
+
+      await timers.tickAsync(Sse.MAX_RECONNECT_DELAY);
+      await asking;
+
+      sinon.assert.notCalled(fetchStub);
+      assert.isTrue(Replica.mintRefused);
+    });
+
+    it("stops once another handshake has brought a pair", async () => {
+      stubHandshakeResponse({replicaRefused: true});
+
+      const asking = Sse.askForReplica();
+
+      Replica.takeMinted(minted);
+
+      await timers.tickAsync(Sse.MAX_RECONNECT_DELAY);
+      await asking;
+
+      sinon.assert.notCalled(fetchStub);
+    });
+
+    it("leaves only the latest asking running", async () => {
+      stubHandshakeResponse({replicaRefused: true});
+
+      const first = Sse.askForReplica();
+      const second = Sse.askForReplica();
+
+      await timers.tickAsync(
+        Sse.MAX_RECONNECT_DELAY * Sse.MAX_REPLICA_ASKS * 2,
+      );
+      await Promise.all([first, second]);
+
+      sinon.assert.callCount(fetchStub, Sse.MAX_REPLICA_ASKS);
+    });
+  });
+
   describe("buildHandshakePayload()", () => {
     it("returns an empty receipts list when no receipts are stored", () => {
       const payload = Sse.buildHandshakePayload();
@@ -177,6 +346,7 @@ describe("Sse", () => {
 
     it("asks for an identity while the tab is waiting for one", () => {
       setDataLayer();
+      Replica.adopt({id: "replica-held", token: "token-held"});
       Replica.requestMint();
 
       const payload = Sse.buildHandshakePayload();
@@ -184,7 +354,8 @@ describe("Sse", () => {
       const expected = Type.map([
         [Type.atom("instance_id"), Type.bitstring("test-instance-id")],
         [Type.atom("receipts"), Type.list()],
-        [Type.atom("wants_replica"), Type.boolean(true)],
+        [Type.atom("replica_id"), Type.bitstring("replica-held")],
+        [Type.atom("replica_token"), Type.bitstring("token-held")],
       ]);
 
       assert.deepStrictEqual(payload, expected);
@@ -192,6 +363,40 @@ describe("Sse", () => {
   });
 
   describe("reconnect()", () => {
+    // Answered late, it would close the stream the restart opened and open one of its own.
+    it("drops a handshake already in flight", async () => {
+      let answer;
+
+      stubHandshakeResponse();
+
+      fetchStub.onFirstCall().returns(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+
+      const overtaken = Sse.connect();
+
+      await Sse.reconnect();
+
+      sinon.assert.calledOnce(globalThis.EventSource);
+
+      answer({
+        json: async () => ({
+          handshakeId: "overtaken",
+          heartbeatIntervalMs: 15_000,
+          refreshedReceipts: serializedValue(Type.list()),
+        }),
+        ok: true,
+        status: 200,
+      });
+
+      await overtaken;
+
+      sinon.assert.calledOnce(globalThis.EventSource);
+      sinon.assert.notCalled(mockEventSource.close);
+    });
+
     // Both sides. The identity is module state, and the connect() tests below assert their whole
     // greeting URL - one left adopted here puts a replica on theirs and fails them, a long way
     // from anything that mentions an identity.
@@ -471,8 +676,67 @@ describe("Sse", () => {
         assert.isTrue(Replica.awaitingMint);
       });
 
-      // Only this tab's memory holds a write waiting for the identity, so a reload ahead of the
-      // send would lose it.
+      // The server won't mint for this tab's owner, and asking again would get the same answer.
+      it("opens the stream and stops asking when the server refuses", async () => {
+        Replica.requestMint();
+        stubHandshakeResponse({replicaRefused: true});
+
+        await Sse.connect();
+
+        sinon.assert.calledOnce(globalThis.EventSource);
+        assert.isFalse(Replica.awaitingMint);
+        assert.isTrue(Replica.mintRefused);
+        assert.equal(Replica.id, "replica-page");
+        sinon.assert.notCalled(flush);
+      });
+
+      // The stored pair can be from a session that has ended, while the page's own is still good.
+      it("asks again with the page's pair when the stored one is refused", async () => {
+        const timers = sinon.useFakeTimers({
+          toFake: ["setTimeout", "clearTimeout"],
+        });
+
+        Replica.adopt({id: "replica-stored", token: "token-stored"});
+        Replica.requestMint();
+        stubHandshakeResponse({replicaRefused: true});
+
+        await Sse.connect();
+
+        sinon.assert.notCalled(globalThis.EventSource);
+        assert.equal(Replica.id, "replica-page");
+        assert.isTrue(Replica.awaitingMint);
+
+        stubHandshakeResponse({replica: minted});
+
+        timers.tick(Sse.MAX_RECONNECT_DELAY * 2);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        assert.equal(Replica.id, "replica-minted");
+      });
+
+      it("takes an identity a later handshake brings after a refusal", async () => {
+        Replica.requestMint();
+        stubHandshakeResponse({replicaRefused: true});
+
+        await Sse.connect();
+
+        const refusedPayload = Sse.buildHandshakePayload();
+
+        assert.isTrue(Replica.mintRefused);
+        assert.include(
+          Serializer.serialize(refusedPayload, "server"),
+          "areplica_id",
+        );
+
+        stubHandshakeResponse({replica: minted});
+
+        await Sse.connect();
+
+        assert.equal(Replica.id, "replica-minted");
+        assert.isFalse(Replica.mintRefused);
+        sinon.assert.calledOnce(flush);
+      });
+
       it("asks again when the answer brought no identity", async () => {
         const timers = sinon.useFakeTimers({
           toFake: ["setTimeout", "clearTimeout"],
@@ -504,9 +768,12 @@ describe("Sse", () => {
           "server",
         );
 
-        assert.include(serialized, '["awants_replica","atrue"]');
+        assert.include(serialized, '"areplica_id"');
+        assert.include(serialized, '"areplica_token"');
       });
 
+      // Only this tab's memory holds a write waiting for the identity, so a reload ahead of the
+      // send would lose it.
       it("lets the sender finish before a reload for expired receipts", async () => {
         let finishSending;
 

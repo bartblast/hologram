@@ -215,8 +215,8 @@ export default class Batches {
   // of the overlay, so nothing is shown that this tab can no longer learn the fate of.
   //
   // For a tab whose group has DISSOLVED. Those batches were numbered under the group's identity,
-  // the tab that kept that identity is still sending them, and this one - which has just taken a
-  // fresh identity of its own - would be sending a second copy of each under a number nothing has
+  // the tab that kept that identity is still sending them, and this one - which is moving to an
+  // identity of its own - would be sending a second copy of each under a number nothing has
   // recorded against it. The server would apply them twice.
   //
   // The rows go back to what the server last said, and come back when its answer to those batches
@@ -334,7 +334,7 @@ export default class Batches {
             continue;
           }
 
-          if (!Replica.minted && !Replica.awaitingMint) {
+          if (!Replica.minted && !Replica.withoutIdentity()) {
             Replica.requestMint();
 
             if (Sse.isStarted) {
@@ -367,8 +367,9 @@ export default class Batches {
         }
 
         // Nothing goes out until the pair this tab asked for arrives (see Replica.requestMint). The
-        // handshake that brings it wakes the sender again.
-        if (Replica.awaitingMint) {
+        // handshake that brings it wakes the sender again. One that refused it leaves the writes
+        // here until a reload (see Replica.refuseMint).
+        if (Replica.withoutIdentity()) {
           return;
         }
 

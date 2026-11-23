@@ -17,6 +17,7 @@ import QueryKernel from "./query_kernel.mjs";
 import QuerySpelling from "./query_spelling.mjs";
 import ReloadNotice from "./reload_notice.mjs";
 import Replica from "./replica.mjs";
+import Sse from "./sse.mjs";
 import SyncStream from "./sync_stream.mjs";
 import Tabs from "./tabs.mjs";
 import Type from "./type.mjs";
@@ -564,13 +565,15 @@ export default class DataLayer {
   }
 
   // Whether this tab holds writes only in its memory that it can still send, which a reload would
-  // lose. A tab stopped over its model is left out: only a reload moves it on.
+  // lose. A tab stopped over its model, or refused an identity, is left out: only a reload moves it
+  // on.
   static holdsUnsentWrites() {
     return (
       Durability.mode === "memory" &&
       Batches.pendingCount() > 0 &&
       Tabs.sends() &&
-      !SyncStream.holdsWrites()
+      !SyncStream.holdsWrites() &&
+      !Replica.mintRefused
     );
   }
 
@@ -616,9 +619,17 @@ export default class DataLayer {
     }
   }
 
-  // The four sync kinds the stream delivers (see SyncStream.listen).
+  // The four sync kinds the stream delivers (see SyncStream.listen). A tab the server refused an
+  // identity shows its pair only on a handshake, so when the signed-in user changes it asks again,
+  // since its owner may be back.
   static listenToStream(eventSource) {
     SyncStream.listen(eventSource);
+
+    eventSource.addEventListener("sync_resync", (event) => {
+      if (JSON.parse(event.data).reason === "identity" && Replica.mintRefused) {
+        Sse.askForReplica();
+      }
+    });
   }
 
   // Called by every render: the rows the derived fields read are now the ones it computed them
@@ -711,6 +722,12 @@ export default class DataLayer {
   // (see ReloadNotice).
   static rendered() {
     ReloadNotice.update(SyncStream.stopReason !== null);
+  }
+
+  // The pair a stream handshake shows the server when this tab needs a new one, which it mints for
+  // the same owner (see Replica.requestMint).
+  static replicaToReplace() {
+    return Replica.withoutIdentity() ? Replica.current() : null;
   }
 
   // Takes up what a previous page load left - the place to resume the stream from, the number to
@@ -822,8 +839,14 @@ export default class DataLayer {
 
   // Takes up the identity a stream handshake brought, if this tab asked for one, and wakes the
   // sender that was holding for it. Answers the sender's promise, so a page about to reload can let
-  // it finish.
-  static takeReplica(replica) {
+  // it finish. A handshake that refused one ends the asking, so the stream can open.
+  static takeReplica(replica, refused = false) {
+    if (refused) {
+      Replica.refuseMint();
+
+      return null;
+    }
+
     return Replica.takeMinted(replica) ? Batches.flush() : null;
   }
 

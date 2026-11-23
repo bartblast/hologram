@@ -796,6 +796,36 @@ describe("Batches", () => {
         assert.isBelow(first.batch.seq, second.seq);
       });
 
+      // Somebody else holds the session now, and these writes are the tab's owner's.
+      it("sends nothing and asks no more once the server refused an identity", async () => {
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+
+        reconnecting.resetHistory();
+        Replica.refuseMint();
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, []);
+        assert.isFalse(Replica.awaitingMint);
+        assert.isFalse(reconnecting.called);
+        assert.equal(Batches.pending.length, 1);
+      });
+
+      it("holds a batch numbered in a page that never had a store once refused", async () => {
+        Durability.hadStore = false;
+        Replica.requestMint();
+
+        assert.isNotNull(sealed(creating("t1", "first")).seq);
+
+        Replica.refuseMint();
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, []);
+      });
+
       // Under another identity the server has no record of it, and would apply it again.
       it("lets a stored batch go rather than send it under an identity the store doesn't hold", async () => {
         Batches.adopt([record(3)]);

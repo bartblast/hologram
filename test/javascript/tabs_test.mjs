@@ -409,6 +409,21 @@ describe("Tabs", () => {
       assert.deepStrictEqual(await heard, {kind: "storage_failed"});
     });
 
+    // It writes neither rows nor a place, so they stay true for the tabs that go on using them.
+    it("tells nobody when it was following", async () => {
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      const posting = sinon.spy(BroadcastChannel.prototype, "postMessage");
+
+      await Tabs.storeLost();
+
+      assert.isFalse(posting.called);
+      assert.isNull(Tabs.name);
+    });
+
     it("lets a later tab lead after the tab that led has failed", async () => {
       const group = nextGroup();
 
@@ -1767,16 +1782,36 @@ describe("Tabs", () => {
       assert.isTrue(settling.calledOnceWithExactly(3, answer));
     });
 
-    // What that tab wiped it wiped for the whole browser, so this one stops writing too - and the
-    // group ends, because the store was what made it one.
-    it("lets the store go, and the group with it, when another tab could not write", () => {
+    // What the tab that led wiped it wiped for the whole browser, so this one stops using the store
+    // too - and the group ends, because the store was what made it one.
+    it("lets the store go, and the group with it, when the tab that led could not write", () => {
       const detaching = sinon.stub(Durability, "detach");
       const dissolving = sinon.stub(Tabs, "dissolve");
 
-      Tabs.receive({kind: "storage_failed"});
+      Tabs.leader = false;
+
+      try {
+        Tabs.receive({kind: "storage_failed"});
+      } finally {
+        Tabs.leader = true;
+      }
 
       assert.isTrue(detaching.calledOnce);
       assert.isTrue(dissolving.calledOnce);
+    });
+
+    // The lock reached it after the wipe, so it finds no place and starts over, as it does when a
+    // leader simply closes.
+    it("keeps the store in a tab that leads by the time it hears", () => {
+      const detaching = sinon.stub(Durability, "detach");
+      const dissolving = sinon.stub(Tabs, "dissolve");
+
+      Tabs.leader = true;
+
+      Tabs.receive({kind: "storage_failed"});
+
+      assert.isFalse(detaching.called);
+      assert.isFalse(dissolving.called);
     });
 
     it("answers a tab that has joined with the group's state, when it leads", async () => {
@@ -2708,7 +2743,7 @@ describe("Tabs", () => {
           release();
           await waitForEventLoop();
 
-          Tabs.receive({kind: "storage_failed"});
+          Tabs.storeLost();
 
           read({cursor: "place-2", records: []});
           await waitForEventLoop();

@@ -702,7 +702,8 @@ defmodule Hologram.Controller do
               refreshedReceipts: serialize_to_fragment(refreshed_receipts)
             },
             payload,
-            session_id
+            session_id,
+            current_user_id
           )
 
         conn
@@ -978,19 +979,32 @@ defmodule Hologram.Controller do
   # its page can't be that, since a browser can serve one cached page to two tabs. Nothing is
   # recorded: the signed statement is the whole of what makes the id usable.
   #
-  # Bound to the session even for a signed-in user. The identity lives only as long as this page,
-  # and a session outlasts a sign-in or sign-out on it, where a statement about the user would be
-  # refused after the sign-out.
-  defp maybe_mint_replica(response, %{wants_replica: true}, session_id) do
-    replica_id = UUID.uuid4()
+  # The tab shows the identity it holds, and the new one belongs to the same owner, so it can do no
+  # more than that one could. Bound to the session alone, the writes the tab has queued would be
+  # applied as whoever has signed in on that session since. An identity that no longer verifies
+  # earns no new one, and the tab's writes wait for a reload, as they do after a 403.
+  defp maybe_mint_replica(
+         response,
+         %{replica_id: presented_id, replica_token: presented_token},
+         session_id,
+         user_id
+       )
+       when is_binary(presented_id) and is_binary(presented_token) do
+    case ReplicaIdentity.verified_subject(presented_token, presented_id, session_id, user_id) do
+      {:ok, subject} ->
+        replica_id = UUID.uuid4()
 
-    Map.put(response, :replica, %{
-      id: replica_id,
-      token: ReplicaIdentity.issue(replica_id, session_id, nil)
-    })
+        Map.put(response, :replica, %{
+          id: replica_id,
+          token: ReplicaIdentity.issue_for(replica_id, subject)
+        })
+
+      {:error, _reason} ->
+        Map.put(response, :replicaRefused, true)
+    end
   end
 
-  defp maybe_mint_replica(response, _payload, _session_id), do: response
+  defp maybe_mint_replica(response, _payload, _session_id, _user_id), do: response
 
   # In dev a live reload builds the pages open in tabs first, and the page a tab shows is the page
   # it rendered last. A first page also renders the tab's document, which loads the app's assets, so

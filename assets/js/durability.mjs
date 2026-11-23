@@ -173,17 +173,15 @@ export default class Durability {
     return `hologram.${LAYOUT}.${sync.protocolVersion}.${sync.modelHash}`;
   }
 
-  // Lets go of the database without touching what it holds. For a tab told that ANOTHER tab of its
-  // group could not write: that tab wiped what had to be wiped and closed, and this one has to stop
-  // writing too - a leader that went on storing frames would be dating rows the store may no longer
-  // hold - but has nothing of its own to answer for. And for a tab another one needs a new database
-  // version from.
+  // Lets go of the database without touching what it holds. For a tab told that the tab leading its
+  // group could not write: that tab wiped the rows and the place and closed, and this one has to
+  // stop using the store too. And for a tab another one needs a new database version from.
   //
   // What load() read goes too, when this comes before the restore. The group ends with this (see
-  // Tabs.dissolve): a follower takes a fresh identity and lets its batches go, and taking up the
-  // stored identity and queue afterwards would make it a second sender under the group's replica.
-  // The leader keeps what it already holds, and a queue it never took up stays in the store for the
-  // next page load rather than going out twice.
+  // Tabs.dissolve): a follower asks for an identity of its own and lets go of the batches the store
+  // holds, and taking up the stored identity and queue afterwards would make it a second sender
+  // under the group's replica. The leader keeps what it already holds, and a queue it never took up
+  // stays in the store for the next page load rather than going out twice.
   static detach() {
     Durability.#loaded = null;
 
@@ -932,10 +930,8 @@ export default class Durability {
 
     Durability.#letGo();
 
-    // The other tabs of the group share this database, and a store that refused this write can
-    // refuse theirs. They let go of it too, rather than going on writing into a store whose place
-    // may no longer describe what it holds. This tab leaves the group as well, since it can't lead
-    // one with no store to number batches in.
+    // This tab leaves its group, since it can't lead one or file into one with no store. If it led,
+    // the other tabs are told, since the rows and the place have just gone from under them.
     Tabs.storeLost();
   }
 

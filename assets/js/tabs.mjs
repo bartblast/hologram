@@ -107,14 +107,15 @@ export default class Tabs {
   // down yet (see #lead), so it sends nothing.
   static #unrecorded = false;
 
-  // The group is over, because the thing that made it one is gone: with no store there is nowhere
-  // to file a batch and nothing to share, so every tab goes back to being a replica of its own -
+  // The group is over for this tab, because what made it a member is gone: with no store there is
+  // nowhere to file a batch and nothing to share, so it goes back to being a replica of its own -
   // which is exactly what a tab is in a browser that never had storage at all.
   //
-  // The tab that was LEADING keeps the identity and the queue. Those batches were numbered under
-  // that identity, it is the only tab that can still send them, and nothing else about it changes.
+  // A tab that was LEADING keeps the identity and the queue. Those batches were numbered under that
+  // identity, and a tab that leads after it sends the same ones under the same numbers, which the
+  // server answers from its record.
   //
-  // Every other tab asks the server for an identity of its own, lets go of the batches the store
+  // A tab that followed asks the server for an identity of its own, lets go of the batches the store
   // holds, keeps the ones it doesn't (see Batches.disown), and opens a stream of its own - which it
   // needs, because the frames it was being handed stop here. The page's pair won't do: a browser
   // can serve one cached page to two tabs, and the store can hold it.
@@ -164,16 +165,21 @@ export default class Tabs {
     return released;
   }
 
-  // This tab could not write to the store it shares. The other tabs are told, then the group ends
-  // for this tab too.
+  // This tab could not write to the store it shares, so it leaves the group.
+  //
+  // A tab that led has wiped the rows and the place for the whole browser, so the others are told.
+  // A tab that followed writes neither, so its failure leaves them true and the group carries on
+  // without it. If the disk really is full, the leader's next write fails and ends the group.
   //
   // Posted straight on the channel rather than through `post`: a message waiting behind a store
   // write goes nowhere once the tab leaves, and this one has to arrive.
   static storeLost() {
-    try {
-      Tabs.#channel?.postMessage({kind: "storage_failed"});
-    } catch {
-      // A channel that can't take it has nobody listening through it.
+    if (Tabs.leader) {
+      try {
+        Tabs.#channel?.postMessage({kind: "storage_failed"});
+      } catch {
+        // A channel that can't take it has nobody listening through it.
+      }
     }
 
     return Tabs.dissolve();
@@ -351,13 +357,17 @@ export default class Tabs {
 
         return;
 
-      // Another tab could not write. If it led, what it wiped it wiped for the whole browser: the
+      // The tab that led could not write, and what it wiped it wiped for the whole browser: the
       // rows and the place they were dated at are gone from a store every tab of the group shares.
-      // So this tab stops writing too - going on could date rows the store no longer holds - and
-      // the group ends, because what made it one was the store.
+      // So this tab stops using it too, and the group ends, because what made it one was the store.
+      //
+      // Except in a tab that leads by now. The lock reached it after that wipe, so it finds a store
+      // with no place and starts over (see #lead), as it does when a leader simply closes.
       case "storage_failed":
-        Durability.detach();
-        Tabs.dissolve();
+        if (!Tabs.leader) {
+          Durability.detach();
+          Tabs.dissolve();
+        }
 
         return;
     }
@@ -713,7 +723,8 @@ export default class Tabs {
       // The stream this tab has greeted the server with no sync - opened as a follower, while it
       // held a lead it was not ready to take, or while this was deciding - or has not greeted yet,
       // and would then greet with sync from whatever place the decision left; either way one the
-      // server serves sync on stands in its place, whichever answers last (see Sse.connect).
+      // server serves sync on stands in its place, and a handshake still in flight is dropped (see
+      // Sse.reconnect).
       // Holding no place when it took the lead, a tab handed the lead while starting has none yet:
       // its page starts one right after, which greets as the leader by itself, and a reconnect
       // would open a second one beside it.
@@ -900,9 +911,9 @@ export default class Tabs {
     // The store could not be read, so nothing says which rows stand at the group's place - and the
     // next frame naming a place would hand it over anyway, over rows this tab never checked. So it
     // leaves the group, as a tab whose store cannot be read at boot does (see DataLayer.boot), and
-    // stops using the store: it was never the one sending, so it takes a fresh identity, lets its
-    // batches go and opens a stream of its own, which greets the server from nowhere, since the
-    // place it holds is the one in doubt (see Tabs.dissolve).
+    // stops using the store: it was never the one sending, so it asks for an identity of its own,
+    // lets go of the batches the store holds and opens a stream of its own, which greets the server
+    // from nowhere, since the place it holds is the one in doubt (see Tabs.dissolve).
     //
     // Unless the group handed it the lead meanwhile. Leaving would let go of the lock, and with no
     // tab waiting for it nobody would send the queue - its own writes among it - until a page
