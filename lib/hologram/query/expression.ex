@@ -1476,9 +1476,9 @@ defmodule Hologram.Query.Expression do
 
   defp predicate_list!(ast, names, env), do: unsupported!(ast, names, env)
 
-  # The call with its own operation or role and target when a plain atom and a new() path say what
-  # it asks, since suggesting other ones would change that, with the user Hologram.Auth's function
-  # takes first left out. Anything else, a pin among them, only the word's spelling can answer.
+  # The call with its own operation or role and target when a plain atom and a row say what it asks,
+  # since suggesting other ones would change that, with the user Hologram.Auth's function takes
+  # first left out. Anything else, a pin among them, only the word's spelling can answer.
   defp new_row_function_fix(word, args) do
     {replacement, example} = Map.fetch!(@new_row_functions, word)
 
@@ -1490,9 +1490,12 @@ defmodule Hologram.Query.Expression do
   end
 
   defp new_row_function_fix(replacement, example, asked, target) do
-    if plain_atom?(asked) and new_path?(target),
-      do: "write #{Macro.to_string({replacement, [], [asked, target]})}",
-      else: "write it like #{example}"
+    cond do
+      not plain_atom?(asked) -> "write it like #{example}"
+      new_path?(target) -> "write #{Macro.to_string({replacement, [], [asked, target]})}"
+      hops(target) != nil -> stored_target_fix(replacement, asked, target)
+      true -> "write it like #{example}"
+    end
   end
 
   # An atom that prints with a colon: not nil, a boolean or one spelled as a module.
@@ -1787,20 +1790,19 @@ defmodule Hologram.Query.Expression do
   # A role or an operation on the stored row has an option of its own, which says it plainly.
   @spec stored_target_error!(Macro.t(), atom, Macro.t(), Macro.t(), Macro.Env.t()) :: no_return
   defp stored_target_error!(ast, word, asked, target, env) do
-    asked_spelled = Macro.to_string(asked)
-    target_spelled = Macro.to_string(target)
-
-    {option, spelled} =
-      case word do
-        :can -> {"via", "{#{asked_spelled}, #{target_spelled}}"}
-        :has_role -> {"to", "{#{asked_spelled}, #{target_spelled}}"}
-      end
-
     compile_error!(
-      "#{word} reads the row a change leads to, got: #{Macro.to_string(ast)} - write #{word}(#{asked_spelled}, new(#{target_spelled})), and the stored row goes in #{option}: #{spelled}",
+      "#{word} reads the row a change leads to, got: #{Macro.to_string(ast)} - #{stored_target_fix(word, asked, target)}",
       ast,
       env
     )
+  end
+
+  defp stored_target_fix(word, asked, target) do
+    asked_spelled = Macro.to_string(asked)
+    target_spelled = Macro.to_string(target)
+    option = if word == :can, do: "via", else: "to"
+
+    "write #{word}(#{asked_spelled}, new(#{target_spelled})), and the stored row goes in #{option}: {#{asked_spelled}, #{target_spelled}}"
   end
 
   # String.starts_with?/2 and String.contains?/2 compare bytes, and the query operators ignore case

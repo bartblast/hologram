@@ -344,10 +344,28 @@ defmodule Hologram.Policy.ExpressionTest do
                    fn -> lower_spec(~s/[when: can?(:"Elixir.Foo", new(project))]/) end
     end
 
-    test "gives an example when can? isn't asked of a row after the change" do
+    test "keeps the operation and the stored row in what it suggests for can?" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write it like can(:update, new(project)), got: can?(:read, project)",
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write can(:read, new(project)), and the stored row goes in via: {:read, project}, got: can?(:read, project)",
                    fn -> lower_spec("[when: can?(:read, project)]") end
+    end
+
+    test "leaves out the user when can? is asked of the stored row" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write can(:read, new(judge)), and the stored row goes in via: {:read, judge}, got: can?(user, :read, judge)",
+                   fn -> lower_spec("[when: can?(user, :read, judge)]") end
+    end
+
+    test "keeps the role and the stored row in what it suggests for has_role?" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: has_role? isn't available in a condition - write has_role(:admin, new(project.owner)), and the stored row goes in to: {:admin, project.owner}, got: has_role?(user, :admin, project.owner)",
+                   fn -> lower_spec("[when: has_role?(user, :admin, project.owner)]") end
+    end
+
+    test "gives an example when the target is no row" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write it like can(:update, new(project)), got: can?(:read, 1)",
+                   fn -> lower_spec("[when: can?(:read, 1)]") end
     end
 
     test "raises on can? in a condition" do
