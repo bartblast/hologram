@@ -3084,7 +3084,10 @@ defmodule Hologram.CompilerTest do
 
       js = build_sync_constants_js(sync_constants)
 
-      assert String.contains?(js, ~s/"frameworkAttributes":["actor_id","error","status"]/)
+      assert String.contains?(
+               js,
+               ~s/"frameworkAttributes":["actor_id","attempt","error","scheduled_at","status"]/
+             )
     end
 
     test "injects the relationships with their target types, cardinality and optionality" do
