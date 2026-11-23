@@ -459,7 +459,10 @@ defmodule Hologram.Query.ExpressionTest do
 
   describe "inclusion/2" do
     test "doesn't name a backfill word, which could never go here" do
-      error = catch_error(lower_inclusion(~s[split(a, ",")]))
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          lower_inclusion(~s[split(a, ",")])
+        end
 
       refute Exception.message(error) =~ "query word"
     end
