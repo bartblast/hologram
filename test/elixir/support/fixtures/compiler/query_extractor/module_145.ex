@@ -8,6 +8,9 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module145 do
   alias Hologram.Entity.Derived
   alias Hologram.Test.Fixtures.Entity.Module36
 
+  # The function it hands over always raises, which is what its helper catches.
+  @dialyzer {:nowarn_function, formatted_error_caught: 1}
+
   def by_computed_key(messages, key) do
     limit = if key == "ab", do: 1, else: 2
 
