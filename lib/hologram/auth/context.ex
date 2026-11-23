@@ -6,8 +6,9 @@ defmodule Hologram.Auth.Context do
   #
   # A process is in one of two states. With a session, it is doing a request's work, for the
   # session's user or, with a nil user id, for a signed-out visitor, whom the rules judge as an
-  # anonymous session. With no session, it is server code no request started, like a seed, a Mix
-  # task, a console or a worker, and that is the trusted tier.
+  # anonymous session. With no session, it is server code outside Hologram's request handling, like
+  # a seed, a Mix task, a console, a worker or an app's own plug or controller, and that is the
+  # trusted tier.
   #
   # The guarantee is about where identity comes from, not about what server code is able to
   # call: the actor always traces to an authenticated session, and nothing a client sends -
@@ -62,7 +63,7 @@ defmodule Hologram.Auth.Context do
 
   @doc """
   Returns true when the calling process is working for a session, signed in or not, or false when
-  it is server code no request started.
+  it is server code outside Hologram's request handling.
   """
   @spec session?() :: boolean
   def session? do
@@ -85,8 +86,9 @@ defmodule Hologram.Auth.Context do
   end
 
   @doc """
-  Runs the given function with no session, as server code no request started, and returns its
-  result. The session set before the call is restored afterwards, raised exceptions included.
+  Runs the given function with no session, as server code outside Hologram's request handling, and
+  returns its result. The session set before the call is restored afterwards, raised exceptions
+  included.
   """
   @spec without_session((-> any)) :: any
   def without_session(fun) do

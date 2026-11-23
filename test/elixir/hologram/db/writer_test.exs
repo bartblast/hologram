@@ -36,6 +36,7 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.Test.Fixtures.Policy.Module10, as: PolicyModule10
   alias Hologram.Test.Fixtures.Policy.Module11, as: PolicyModule11
   alias Hologram.Test.Fixtures.Policy.Module2
+  alias Hologram.Test.Fixtures.Policy.Module26
   alias Hologram.Test.Fixtures.Policy.Module36
   alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
   alias Hologram.Test.Fixtures.Policy.Module39, as: ChannelMessage
@@ -91,6 +92,153 @@ defmodule Hologram.DB.WriterTest do
     {:ok, %Postgrex.Result{rows: [[old]]}} = Connection.query(statement)
 
     old
+  end
+
+  describe "a signed-out session" do
+    test "is refused a create no rule gives a visitor" do
+      entity = Module2.new(public: true)
+
+      expected_msg =
+        ~s(not allowed to create Hologram.Test.Fixtures.Policy.Module2 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> create(entity) end)
+      end
+
+      assert DB.read(Module2, entity.id) == nil
+    end
+
+    test "creates what a rule gives a visitor" do
+      entity = Module9.new()
+
+      assert {:ok, %Module9{}} = as_user(nil, fn -> create(entity) end)
+      assert DB.read(Module9, entity.id) != nil
+    end
+
+    test "is refused an update of a struct no rule gives a visitor" do
+      entity =
+        %{priority: 5}
+        |> Module1.new()
+        |> DB.create!()
+
+      changed = put_attribute(entity, :priority, 7)
+
+      expected_msg =
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}" - no allow line that holds covers :priority)
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> update(changed) end)
+      end
+
+      assert DB.read(Module1, entity.id).priority == 5
+    end
+
+    test "is refused an update by type and id no rule gives a visitor" do
+      entity =
+        %{priority: 5}
+        |> Module1.new()
+        |> DB.create!()
+
+      expected_msg =
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}" - no allow line that holds covers :priority)
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> update(Module1, entity.id, priority: 7) end)
+      end
+
+      assert DB.read(Module1, entity.id).priority == 5
+    end
+
+    test "updates what a rule gives a visitor" do
+      entity = DB.create!(Module9.new())
+
+      assert as_user(nil, fn -> update(Module9, entity.id, archived: true) end) == :ok
+      assert DB.read(Module9, entity.id).archived == true
+    end
+
+    test "updates a struct a rule gives a visitor" do
+      entity = DB.create!(Module9.new())
+      changed = put_attribute(entity, :archived, true)
+
+      assert as_user(nil, fn -> update(changed) end) == :ok
+      assert DB.read(Module9, entity.id).archived == true
+    end
+
+    test "deletes a struct a rule gives a visitor" do
+      entity = DB.create!(Module26.new())
+
+      assert as_user(nil, fn -> delete(entity) end) == :ok
+      assert DB.read(Module26, entity.id) == nil
+    end
+
+    test "deletes by type and id what a rule gives a visitor" do
+      entity = DB.create!(Module26.new())
+
+      assert as_user(nil, fn -> delete(Module26, entity.id) end) == :ok
+      assert DB.read(Module26, entity.id) == nil
+    end
+
+    test "is refused a delete of a struct no rule gives a visitor" do
+      entity = DB.create!(Module1.new())
+
+      expected_msg =
+        ~s(not allowed to delete Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> delete(entity) end)
+      end
+
+      assert DB.read(Module1, entity.id) != nil
+    end
+
+    test "is refused a delete by type and id no rule gives a visitor" do
+      entity = DB.create!(Module1.new())
+
+      expected_msg =
+        ~s(not allowed to delete Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> delete(Module1, entity.id) end)
+      end
+
+      assert DB.read(Module1, entity.id) != nil
+    end
+
+    test "creates past the rules with a trust claim" do
+      entity = Module2.new(public: true)
+
+      trusted_entity = trust(entity)
+
+      assert {:ok, %Module2{}} = as_user(nil, fn -> create(trusted_entity) end)
+      assert DB.read(Module2, entity.id) != nil
+    end
+
+    test "updates past the rules with a trust claim" do
+      entity =
+        %{priority: 5}
+        |> Module1.new()
+        |> DB.create!()
+
+      result =
+        as_user(nil, fn ->
+          entity
+          |> put_attribute(:priority, 7)
+          |> trust()
+          |> update()
+        end)
+
+      assert result == :ok
+      assert DB.read(Module1, entity.id).priority == 7
+    end
+
+    test "deletes past the rules with a trust claim" do
+      entity = DB.create!(Module1.new())
+
+      trusted_entity = trust(entity)
+
+      assert as_user(nil, fn -> delete(trusted_entity) end) == :ok
+      assert DB.read(Module1, entity.id) == nil
+    end
   end
 
   describe "create/1" do
