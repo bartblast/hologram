@@ -4042,6 +4042,12 @@ describe("Elixir_Hologram_Auth", () => {
       it("stays undecided beside a value that can land", () => {
         defineStamped({max_length: 3});
 
+        globalThis.Hologram.sync.model[DOCUMENT].policy["update:status"] = [
+          rule(),
+        ];
+
+        Model.reset();
+
         assert.deepStrictEqual(
           asks(
             update,
