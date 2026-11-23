@@ -331,6 +331,9 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
       held_ms = Clients.delivery_ms(clients, held_number, held_committed_at, @delivery_limit_ms)
       held_rise_bytes = Measure.stop_memory_peak(held_rise)
 
+      # Had it ended by now, the delivery above could have carried the backlog too.
+      :ok = check_blocking!(conn, blocker)
+
       drain_rise = Measure.start_memory_peak(peer)
       released_at = release_blocker(blocker)
 
@@ -369,7 +372,8 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
       ])
 
     if status != "in progress" do
-      raise "the blocking transaction ended before the held write committed: #{status}"
+      raise "the blocking transaction ended before the held write's delivery was " <>
+              "confirmed: #{status}"
     end
 
     :ok
