@@ -852,13 +852,12 @@ defmodule Hologram.PolicyTest do
         allow :update, when: any(tag <- tags, tag.level > new(priority))
       end
 
-      assert [
-               %{exact: %{predicates: [{:any, {[:tags], [_clause]}}]}, predicates: predicates} =
-                 rule
-             ] =
-               build(NewRowFixture20)[:update]
+      assert [rule] = build(NewRowFixture20)[:update]
 
-      assert predicates == [{:any, {[:tags], []}}]
+      assert rule.exact.predicates ==
+               [{:any, {[:tags], [{:level, :>, {:attribute, {:outer, 2, :priority}}}]}}]
+
+      assert rule.predicates == [{:any, {[:tags], []}}]
 
       refute Evaluator.rule_matches?(
                rule,
@@ -897,6 +896,19 @@ defmodule Hologram.PolicyTest do
       end
 
       assert [%{predicates: [{:any, {[:tags], []}}]}] = build(NewRowFixture22)[:update]
+    end
+
+    test "drops a quantifier over the new row nested in an any" do
+      defmodule NewRowFixture23 do
+        use Hologram.Entity
+
+        relationship :tags, [NewRowTag]
+
+        allow :read
+        allow :update, when: any(a <- tags, any(b <- new(tags), b.level > a.level))
+      end
+
+      assert [%{predicates: [{:any, {[:tags], []}}]}] = build(NewRowFixture23)[:update]
     end
 
     test "drops a quantifier over a source on the new row" do
