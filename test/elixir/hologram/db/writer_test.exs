@@ -51,6 +51,19 @@ defmodule Hologram.DB.WriterTest do
     |> DB.create!()
   end
 
+  defp with_past_updated_at(%entity_type{id: id}) do
+    table = Map.fetch!(DB.mapping(), entity_type).table
+
+    {:ok, _result} =
+      Connection.query(
+        ~s|UPDATE "hologram_data"."#{table}" SET "updated_at" = "updated_at" - interval '1 hour' | <>
+          ~s|WHERE "id" = $1|,
+        [Codec.encode(id, :uuid)]
+      )
+
+    EntityOperations.get(entity_type, id)
+  end
+
   defp count_edges(source_entity, target_entity) do
     count_sql =
       ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_entity_module16_secrets_$join" | <>
@@ -1046,16 +1059,14 @@ defmodule Hologram.DB.WriterTest do
 
     test "moves the timestamp a rule reads for a write that admits a value" do
       user = create_user("marker@example.com")
-      task = create_changed_task()
-      Process.sleep(2)
+      task = with_past_updated_at(create_changed_task())
 
       assert as_user(user, fn -> update(put_attribute(task, :mark, "ok")) end) == :ok
     end
 
     test "leaves the timestamp a rule reads as stored when no value is admitted" do
       user = create_user("invalid_marker@example.com")
-      task = create_changed_task()
-      Process.sleep(2)
+      task = with_past_updated_at(create_changed_task())
 
       expected_msg =
         uncovered_message(task, :mark) <>
