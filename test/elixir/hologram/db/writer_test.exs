@@ -1018,6 +1018,8 @@ defmodule Hologram.DB.WriterTest do
       Auth.grant_role(user, :member, target)
 
       assert as_user(user, fn -> update(put_attribute(task, :project_id, target.id)) end) == :ok
+
+      assert EntityOperations.get(ChangedTask, task.id).project_id == target.id
     end
 
     test "refuses a move into a project the user isn't a member of" do
@@ -1051,6 +1053,8 @@ defmodule Hologram.DB.WriterTest do
       assert as_user(user, fn -> update(increment(task, :count, 1)) end) == :ok
 
       moved = EntityOperations.get(ChangedTask, task.id)
+
+      assert moved.count == 10
 
       assert_error AccessDeniedError, uncovered_message(task, :count), fn ->
         as_user(user, fn -> update(increment(moved, :count, 1)) end)
