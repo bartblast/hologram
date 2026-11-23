@@ -4489,6 +4489,47 @@ describe("Elixir_Hologram_Auth", () => {
         assert.deepStrictEqual(asked(), Type.boolean(true));
       });
 
+      it("answers no when a hop back to the changed row reads a reference it can't vouch for", () => {
+        defineFolderUpdate(
+          rule({
+            new: {
+              predicates: [
+                [
+                  {name: ["parent", "parent", "owner", "archived"], outer: 1},
+                  "==",
+                  false,
+                ],
+              ],
+            },
+          }),
+        );
+
+        globalThis.Hologram.sync.model[FOLDER].relationships.owner = {
+          toMany: false,
+          type: FOLDER,
+        };
+
+        Model.reset();
+
+        LocalDatabase.putRow(
+          FOLDER,
+          folderRow({id: PARENT_ID, parent_id: FOLDER_ID}),
+        );
+
+        assert.deepStrictEqual(
+          canChange(
+            alice,
+            updateOf(Type.atom("archived")),
+            Model.box(
+              FOLDER,
+              folderRow({owner_id: null, parent_id: PARENT_ID}),
+            ),
+            values({owner_id: ref(FOLDER_ID)}),
+          ),
+          Type.boolean(false),
+        );
+      });
+
       it("leaves a field no rule reads unread when a hop lands on it", () => {
         defineFolderUpdate(
           rule({

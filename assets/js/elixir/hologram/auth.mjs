@@ -373,7 +373,11 @@ function chainRowFrom(entityType, row, relationshipNames) {
   }
 
   const [relationshipName, ...laterNames] = relationshipNames;
-  const targetId = row[`${relationshipName}_id`] ?? null;
+  const referenceField = `${relationshipName}_id`;
+
+  const targetId = undecidedByChange(row, referenceField)
+    ? UNKNOWN
+    : (row[referenceField] ?? null);
 
   return linkedRow(
     entityType,
