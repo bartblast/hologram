@@ -116,7 +116,10 @@ defmodule Hologram.Sync.SessionTest do
     test_pid = self()
 
     # A first arrival fills inside its first callback, which can run before the test lets it in -
-    # so the fill lets the session in itself, as a gap reader does.
+    # so the fill lets the session in itself, as a gap reader does. It traps exits from here on,
+    # whichever read a test gave it, so the end of a test stops it between two messages rather than
+    # in the middle of a read: a process killed while it reads takes the test's connection down with
+    # it, and the test's rollback fails.
     read_fill = Keyword.get(opts, :read_fill, &read_fill_in_sandbox/4)
 
     opts =
@@ -128,6 +131,7 @@ defmodule Hologram.Sync.SessionTest do
       |> Keyword.put_new(:policy_hash, @policy_hash)
       |> Keyword.put_new(:types_hash, @types_hash)
       |> Keyword.put(:read_fill, fn entity_type, actor_user_id, replica_id, synced_types ->
+        Process.flag(:trap_exit, true)
         allow_into_sandbox(self(), test_pid)
 
         read_fill.(entity_type, actor_user_id, replica_id, synced_types)
@@ -155,13 +159,7 @@ defmodule Hologram.Sync.SessionTest do
   # connection cannot open: it is inside the test's transaction, and a savepoint of the session's
   # would share names with the test's own. So the session reads in the test's transaction, which is
   # the one snapshot every read here sees.
-  #
-  # And it traps exits from here on, so the end of a test stops it between two messages rather than
-  # in the middle of a read: a process killed while it reads takes the test's connection down with
-  # it, and the next test's with that.
   defp read_fill_in_sandbox(entity_type, actor_user_id, replica_id, synced_types) do
-    Process.flag(:trap_exit, true)
-
     Fill.read_now(entity_type, actor_user_id, replica_id, synced_types)
   end
 
@@ -207,7 +205,7 @@ defmodule Hologram.Sync.SessionTest do
 
   # What a returning client is taken to hold, read by a session that lets itself into the sandbox
   # first, since it reads before a test could let it in - and traps exits from here on, as the other
-  # readers below have it, so the end of a test stops it between two messages.
+  # readers above have it, so the end of a test stops it between two messages.
   defp read_ids_in_sandbox do
     test_pid = self()
 
