@@ -883,7 +883,7 @@ const Elixir_Hologram_DB = {
       changes,
       deltas,
       Object.values(relationshipOps.data).map(([key]) => key.data[0].value),
-      unmovableCounters(entityType, held, deltas),
+      () => unmovableCounters(entityType, held, deltas),
     );
 
     const boxedChanges = Object.entries(changes).map(([name, value]) => [
