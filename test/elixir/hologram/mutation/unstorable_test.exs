@@ -1,11 +1,12 @@
 defmodule Hologram.Mutation.UnstorableTest do
-  # async: false - each test puts a trigger on the fixture's table, and the lock that takes would
-  # hold up anything else writing to it.
+  # async: false - each test puts a trigger on a table, and the lock that takes would hold up
+  # anything else writing to it.
   use Hologram.Test.DatabaseCase, async: false
 
   import ExUnit.CaptureLog
   import Hologram.Mutation
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
@@ -16,6 +17,7 @@ defmodule Hologram.Mutation.UnstorableTest do
   alias Hologram.Runtime.Serializer
   alias Hologram.Server
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Mutation.Module5
   alias Hologram.Test.Fixtures.Mutation.Module8
 
   @refused_title "a-value-the-log-must-not-show"
@@ -44,6 +46,30 @@ defmodule Hologram.Mutation.UnstorableTest do
       "seq" => 1,
       "writes" => writes
     }
+  end
+
+  # Rolled back with the test's transaction.
+  defp point_grant_key_at(column, user_id) do
+    table = ~s|"hologram_data"."#{Mapper.table_name(RoleGrant)}"|
+
+    {:ok, _result} =
+      Connection.query("""
+      CREATE FUNCTION public.point_grant_key() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        NEW.#{column} := '#{user_id}'::uuid;
+
+        RETURN NEW;
+      END
+      $$
+      """)
+
+    {:ok, _result} =
+      Connection.query("""
+      CREATE TRIGGER point_grant_key BEFORE INSERT ON #{table}
+      FOR EACH ROW EXECUTE FUNCTION public.point_grant_key()
+      """)
+
+    :ok
   end
 
   # Makes the database refuse a row holding @refused_title with the given SQLSTATE, the way it would
@@ -171,6 +197,29 @@ defmodule Hologram.Mutation.UnstorableTest do
 
     assert_raise Postgrex.Error, ~r/private detail/, fn ->
       run(envelope([create_write(Entity.generate_id(), @refused_title)]), %Server{})
+    end
+  end
+
+  # A creator's grant names the missing user in two keys, and which one the database reports
+  # depends on the names of its triggers. Pointing the other key at a real user makes the one under
+  # test the only one that can fail.
+  for {reporting, other} <- [{"user_id", "granted_by_id"}, {"granted_by_id", "user_id"}] do
+    test "refuses a create by a user whose row is gone when #{reporting} reports it" do
+      point_grant_key_at(unquote(other), create_user().id)
+      id = Entity.generate_id()
+
+      write = %{
+        "op" => "create",
+        "type" => inspect(Module5),
+        "id" => id,
+        "data" => %{"title" => "x"},
+        "stamp" => System.os_time(:millisecond) * 1024
+      }
+
+      assert run(envelope([write]), %Server{user_id: Entity.generate_id()}) ==
+               rejected(0, :actor_not_found)
+
+      assert EntityOperations.get(Module5, id) == nil
     end
   end
 

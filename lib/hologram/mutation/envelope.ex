@@ -12,9 +12,10 @@ defmodule Hologram.Mutation.Envelope do
   # A refusal names the first thing wrong and stops. It is written for whoever is building a
   # client, so it says which write and which field rather than which guard.
   #
-  # One value is answered differently: a date or datetime spelled as text that this server can't
-  # read. A browser could queue one before its own validator refused it, and a bad request would
-  # hold that browser's queue for good, so it's refused as a value of the write instead.
+  # Two kinds of value are answered differently: a date or datetime spelled as text that this
+  # server can't read, and an id or edge target that is text but no entity id. A browser could queue
+  # one before its own checks refused it, and a bad request would hold that browser's queue for
+  # good, so it's refused as a value of the write instead.
 
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB
@@ -43,9 +44,10 @@ defmodule Hologram.Mutation.Envelope do
   Parses the given decoded JSON object into an envelope, or returns the first thing wrong with it
   as a message whoever is building a client can act on.
 
-  A date or datetime spelled as text this server can't read answers
-  `{:refused, envelope, index, violations}` instead: the envelope with its identity and no writes,
-  the position of the write holding the value, and the violation naming its field.
+  A date or datetime spelled as text this server can't read, or an id or edge target that is text
+  but no entity id, answers `{:refused, envelope, index, violations}` instead: the envelope with its
+  identity and no writes, the position of the write holding the value, and the violation naming its
+  field.
   """
   @spec parse(map) ::
           {:ok, t}
@@ -102,6 +104,20 @@ defmodule Hologram.Mutation.Envelope do
   defp call_position(_write, _previous) do
     {:error, "same_call joins a write to an update or edge of the same row before it"}
   end
+
+  # A refusal of a call names the write it starts at. The writes parsed so far are newest first, so
+  # the ones marked same_call at their head are this call's, and the write below them leads it. An
+  # entry marked same_call with nothing before it is the envelope's own mistake, and has no lead.
+  defp call_start(%{"same_call" => true}, index, writes) do
+    followers =
+      writes
+      |> Enum.take_while(& &1.same_call)
+      |> length()
+
+    max(index - followers - 1, 0)
+  end
+
+  defp call_start(_entry, index, _writes), do: index
 
   # A write names no authority. The server judges it by what it does - the verb's own operation -
   # under the session's own actor, so a claim could only ask for more than that, and is refused by
@@ -349,10 +365,10 @@ defmodule Hologram.Mutation.Envelope do
   defp id(entry) do
     value = Map.get(entry, "id")
 
-    if is_binary(value) and Validator.attribute_value_valid?(value, :uuid) do
-      {:ok, value}
-    else
-      {:error, "id must be an entity id"}
+    cond do
+      Validator.attribute_value_valid?(value, :uuid) -> {:ok, value}
+      is_binary(value) -> {:refused, %{id: [{:type, :uuid}]}}
+      true -> {:error, "id must be an entity id"}
     end
   end
 
@@ -488,7 +504,7 @@ defmodule Hologram.Mutation.Envelope do
     with {:ok, entity_type} <- entity_type(entry),
          {:ok, id} <- id(entry),
          {:ok, relationship} <- relationship(entry, entity_type),
-         {:ok, target_id} <- target_id(entry),
+         {:ok, target_id} <- target_id(entry, relationship),
          :ok <- no_stamp(entry),
          :ok <- no_deltas(entry),
          :ok <- no_claim(entry) do
@@ -529,7 +545,7 @@ defmodule Hologram.Mutation.Envelope do
          :ok <- call_position(write, List.first(writes)) do
       {:cont, {:ok, [write | writes]}}
     else
-      {:refused, violations} -> {:halt, {:refused, index, violations}}
+      {:refused, violations} -> {:halt, {:refused, call_start(entry, index, writes), violations}}
       {:error, message} -> {:halt, {:error, "write #{index}: #{message}"}}
     end
   end
@@ -640,13 +656,13 @@ defmodule Hologram.Mutation.Envelope do
     end
   end
 
-  defp target_id(entry) do
+  defp target_id(entry, relationship) do
     value = Map.get(entry, "target_id")
 
-    if is_binary(value) and Validator.attribute_value_valid?(value, :uuid) do
-      {:ok, value}
-    else
-      {:error, "target_id must be an entity id"}
+    cond do
+      Validator.attribute_value_valid?(value, :uuid) -> {:ok, value}
+      is_binary(value) -> {:refused, %{relationship => [{:type, :uuid}]}}
+      true -> {:error, "target_id must be an entity id"}
     end
   end
 

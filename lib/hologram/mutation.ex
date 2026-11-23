@@ -23,6 +23,7 @@ defmodule Hologram.Mutation do
   alias Hologram.Auth
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
+  alias Hologram.DB
   alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -50,7 +51,8 @@ defmodule Hologram.Mutation do
   @default_clock_allowance_ms 300_000
 
   @type rejection ::
-          :stale_build
+          :actor_not_found
+          | :stale_build
           | :clock
           | :forged_client
           | :not_found
@@ -416,9 +418,15 @@ defmodule Hologram.Mutation do
     # is a programming error to write what the acting user may not. Here it is an ordinary answer:
     # a client asking for something it may not have is the system working. Anything else raised
     # propagates - the transaction rolls back and re-raises it, which is what a bug should do -
-    # except a data error from the database, which no retry can be counted on to land.
-    error in Hologram.AccessDeniedError -> Connection.rollback({:rejected, index, error})
-    error in Postgrex.Error -> refuse_unstorable(error, write, index, __STACKTRACE__)
+    # except what the database says about this write itself, which a retry would only hear again.
+    error in Hologram.AccessDeniedError ->
+      Connection.rollback({:rejected, index, error})
+
+    error in Postgrex.Error ->
+      case write_refusal(error, write) do
+        nil -> refuse_unstorable(error, write, index, __STACKTRACE__)
+        reason -> Connection.rollback({:rejected, index, reason})
+      end
   end
 
   # A record answers as the batch first landed, and a grant row that answer carries may have been
@@ -474,6 +482,22 @@ defmodule Hologram.Mutation do
       |> Map.new(fn {name, _type, _opts} -> {String.to_existing_atom("#{name}_id"), :uuid} end)
 
     Map.merge(attributes, references)
+  end
+
+  # A creator's grant names the session's own user as both granter and grantee, so either key
+  # failing means that user's row is gone, or was deleted earlier in this batch, and the database
+  # may report either. A browser-sent
+  # grant's missing grantee never gets here: the grant verb answers it first. The reason is no field
+  # of the write, which may have a user of its own. A model with no user entity type has no grant
+  # store to ask.
+  defp granter_refusal(mapping, constraint) do
+    with %{columns: columns} <- Map.get(mapping, RoleGrant),
+         %{name: name} when name in ["granted_by_id", "user_id"] <-
+           Enum.find(columns, &(&1.fk_constraint == constraint)) do
+      :actor_not_found
+    else
+      _no_match -> nil
+    end
   end
 
   # What the row KEPT where this write lost, spelled the way a frame spells a patch - the winning
@@ -722,4 +746,33 @@ defmodule Hologram.Mutation do
   defp stringify_entry({:"$revisions", revisions}), do: {"$revisions", stringify(revisions)}
 
   defp stringify_entry({name, value}), do: {Atom.to_string(name), value}
+
+  # Three things a browser can't know before it sends, answered as refusals of the write because
+  # raising would have it retry them forever. An edge's target may be gone: deleted while the device
+  # was offline, or a create of this device's that was refused. A create's id may be taken: a form
+  # that made its id once and was submitted twice, or a derived id made on a second device. And the
+  # signed-in user's own row may be gone, which the grant a create hands its creator runs into.
+  defp write_refusal(
+         %Postgrex.Error{postgres: %{code: :foreign_key_violation, constraint: constraint}},
+         %Write{entity_type: entity_type}
+       ) do
+    mapping = DB.mapping()
+    %{join_tables: join_tables} = Map.fetch!(mapping, entity_type)
+
+    case Enum.find(join_tables, &(&1.target_fk_constraint == constraint)) do
+      %{relationship: relationship} -> %{relationship => [:not_found]}
+      nil -> granter_refusal(mapping, constraint)
+    end
+  end
+
+  defp write_refusal(
+         %Postgrex.Error{postgres: %{code: :unique_violation, constraint: constraint}},
+         %Write{op: :create, entity_type: entity_type}
+       ) do
+    if Map.fetch!(DB.mapping(), entity_type).pk_constraint == constraint do
+      %{id: [:unique]}
+    end
+  end
+
+  defp write_refusal(_error, _write), do: nil
 end

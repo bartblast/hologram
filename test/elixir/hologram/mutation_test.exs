@@ -2022,6 +2022,77 @@ defmodule Hologram.MutationTest do
       assert run(raw, server(other.id)) == rejected(nil, :forged_client)
     end
 
+    test "refuses an edge to a row the server doesn't have" do
+      source = create_source()
+      write = edge_write("add_relationship", Module16, source.id, "secrets", Entity.generate_id())
+
+      assert run(envelope([write]), server()) == rejected(0, %{secrets: [:not_found]})
+    end
+
+    test "takes back the values of a call whose edge names a missing row" do
+      ticket = create_ticket("open")
+
+      writes = [
+        update_write(MutationModule6, ticket.id, %{"status" => "closed"},
+          stamp: stamp_above(ticket)
+        ),
+        same_call(
+          edge_write("add_relationship", MutationModule6, ticket.id, "tags", Entity.generate_id())
+        )
+      ]
+
+      assert run(envelope(writes), server()) == rejected(0, %{tags: [:not_found]})
+      assert EntityOperations.get(MutationModule6, ticket.id).status == "open"
+    end
+
+    test "refuses a create whose id a row already holds, and leaves that row alone" do
+      row =
+        [title: "first"]
+        |> MutationModule7.new()
+        |> DB.create!()
+
+      write = create_write(MutationModule7, row.id, %{"title" => "second"})
+
+      assert run(envelope([write]), server()) == rejected(0, %{id: [:unique]})
+      assert EntityOperations.get(MutationModule7, row.id).title == "first"
+    end
+
+    test "refuses a batch creating one id twice, and keeps neither row" do
+      id = Entity.generate_id()
+
+      writes = [
+        create_write(MutationModule7, id, %{"title" => "first"}),
+        create_write(MutationModule7, id, %{"title" => "second"})
+      ]
+
+      assert run(envelope(writes), server()) == rejected(1, %{id: [:unique]})
+      assert EntityOperations.get(MutationModule7, id) == nil
+    end
+
+    # A session can outlive its user's row, and the grant a create hands its creator names that row.
+    test "refuses a create by a signed-in user whose row is gone" do
+      id = Entity.generate_id()
+      write = create_write(MutationModule5, id, %{"title" => "x"})
+
+      assert run(envelope([write]), server(Entity.generate_id())) ==
+               rejected(0, :actor_not_found)
+
+      assert EntityOperations.get(MutationModule5, id) == nil
+    end
+
+    test "refuses a create whose id is text but no entity id" do
+      write = create_write(MutationModule7, "NOT-AN-ID", %{"title" => "x"})
+
+      assert run(envelope([write]), server()) == rejected(0, %{id: [{:type, :uuid}]})
+    end
+
+    test "refuses an edge whose target is text but no entity id" do
+      source = create_source()
+      write = edge_write("add_relationship", Module16, source.id, "secrets", "nope")
+
+      assert run(envelope([write]), server()) == rejected(0, %{secrets: [{:type, :uuid}]})
+    end
+
     test "keeps a refused batch holding a NUL, with the NUL spelled as U+FFFD" do
       user = create_user("refused-nul@example.com")
       replica_id = Entity.generate_id()

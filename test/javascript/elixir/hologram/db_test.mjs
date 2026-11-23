@@ -59,6 +59,8 @@ describe("Elixir_Hologram_DB", () => {
 
   const ID_1 = "018f0000-0000-7000-8000-000000000001";
   const ID_2 = "018f0000-0000-7000-8000-000000000002";
+  const TAG_1 = "018f0000-0000-7000-8000-000000000011";
+  const TAG_2 = "018f0000-0000-7000-8000-000000000012";
 
   const field = (struct, name) =>
     struct.data[Type.encodeMapKey(Type.atom(name))][1];
@@ -419,6 +421,22 @@ describe("Elixir_Hologram_DB", () => {
       return held;
     };
 
+    it("raises for an id that isn't an entity id, and appends nothing", () => {
+      const entity = Model.box(TASK, {
+        done: false,
+        id: "NOT-AN-ID",
+        title: "alpha",
+      });
+
+      assertBoxedError(
+        () => create(entity),
+        "Hologram.MisuseError",
+        'invalid id "NOT-AN-ID" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+      );
+
+      assert.deepStrictEqual(Batches.current().writes, []);
+    });
+
     it("raises for a value the client was never shown", () => {
       assertBoxedError(
         () => create(withServerOnlyValue()),
@@ -604,6 +622,22 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
+    it("raises for an edge whose target isn't an entity id, and appends nothing", () => {
+      const entity = addRelationship(
+        held(),
+        Type.atom("tags"),
+        Type.bitstring("nope"),
+      );
+
+      assertBoxedError(
+        () => update(entity),
+        "Hologram.MisuseError",
+        'invalid id "nope" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+      );
+
+      assert.deepStrictEqual(Batches.current().writes, []);
+    });
+
     it("carries no deltas key for an update that only puts", () => {
       update(putAttribute(held(), pairs([["title", Type.bitstring("x")]])));
 
@@ -612,9 +646,9 @@ describe("Elixir_Hologram_DB", () => {
 
     it("appends the edges it records, in one order", () => {
       const entity = addRelationship(
-        addRelationship(held(), Type.atom("tags"), Type.bitstring("g2")),
+        addRelationship(held(), Type.atom("tags"), Type.bitstring(TAG_2)),
         Type.atom("tags"),
-        Type.bitstring("g1"),
+        Type.bitstring(TAG_1),
       );
 
       update(entity);
@@ -622,8 +656,8 @@ describe("Elixir_Hologram_DB", () => {
       assert.deepStrictEqual(
         Batches.current().writes.map((write) => [write.op, write.target_id]),
         [
-          ["add_relationship", "g1"],
-          ["add_relationship", "g2"],
+          ["add_relationship", TAG_1],
+          ["add_relationship", TAG_2],
         ],
       );
     });
@@ -633,10 +667,10 @@ describe("Elixir_Hologram_DB", () => {
         addRelationship(
           putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
           Type.atom("tags"),
-          Type.bitstring("g1"),
+          Type.bitstring(TAG_1),
         ),
         Type.atom("tags"),
-        Type.bitstring("g2"),
+        Type.bitstring(TAG_2),
       );
 
       update(entity);
@@ -653,9 +687,9 @@ describe("Elixir_Hologram_DB", () => {
 
     it("marks the edges after the first of a call that changes only edges", () => {
       const entity = addRelationship(
-        addRelationship(held(), Type.atom("tags"), Type.bitstring("g1")),
+        addRelationship(held(), Type.atom("tags"), Type.bitstring(TAG_1)),
         Type.atom("tags"),
-        Type.bitstring("g2"),
+        Type.bitstring(TAG_2),
       );
 
       update(entity);
@@ -667,7 +701,7 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("marks nothing on a call that writes one entry", () => {
-      update(addRelationship(held(), Type.atom("tags"), Type.bitstring("g1")));
+      update(addRelationship(held(), Type.atom("tags"), Type.bitstring(TAG_1)));
 
       assert.notProperty(Batches.current().writes[0], "same_call");
     });
@@ -677,7 +711,7 @@ describe("Elixir_Hologram_DB", () => {
         addRelationship(
           putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
           Type.atom("tags"),
-          Type.bitstring("g1"),
+          Type.bitstring(TAG_1),
         ),
       );
 
@@ -697,7 +731,7 @@ describe("Elixir_Hologram_DB", () => {
       const entity = addRelationship(
         putAttribute(held(), pairs([["title", Type.bitstring("x")]])),
         Type.atom("tags"),
-        Type.bitstring("g1"),
+        Type.bitstring(TAG_1),
       );
 
       update(entity);
@@ -993,11 +1027,11 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("shows the edges it recorded", () => {
-      update(addRelationship(held(), Type.atom("tags"), Type.bitstring("g1")));
+      update(addRelationship(held(), Type.atom("tags"), Type.bitstring(TAG_1)));
 
       assert.deepStrictEqual(
         LocalDatabase.getTargetIds(TASK, "tags", ID_1),
-        new Set(["g1"]),
+        new Set([TAG_1]),
       );
     });
 
@@ -1253,7 +1287,7 @@ describe("Elixir_Hologram_DB", () => {
         $revisions: {done: 10, title: 11},
       });
 
-      LocalDatabase.addFact(TASK, "tags", ID_1, "g1");
+      LocalDatabase.addFact(TASK, "tags", ID_1, TAG_1);
     });
 
     afterEach(() => {

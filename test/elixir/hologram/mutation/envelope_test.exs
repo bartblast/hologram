@@ -475,10 +475,19 @@ defmodule Hologram.Mutation.EnvelopeTest do
                 ~s(write 0: type "Hologram.Mutation.Envelope" is not an entity type of this build)}
     end
 
-    test "refuses an id that is not an entity id" do
+    # A browser can queue one, and a bad request would hold its queue for good.
+    test "answers an id that is text but no entity id as a refused value" do
       entry = create(Module2, %{"c" => "x"}, id: "nope")
 
-      assert parse(raw([entry])) == {:error, "write 0: id must be an entity id"}
+      assert {:refused, %Envelope{writes: []}, 0, %{id: [{:type, :uuid}]}} = parse(raw([entry]))
+    end
+
+    test "refuses an id that isn't text as a bad request" do
+      for id <- [nil, 7] do
+        entry = create(Module2, %{"c" => "x"}, id: id)
+
+        assert parse(raw([entry])) == {:error, "write 0: id must be an entity id"}
+      end
     end
 
     test "refuses data that is not an object" do
@@ -805,8 +814,40 @@ defmodule Hologram.Mutation.EnvelopeTest do
                 ~s[write 0: "c" is not a to-many relationship of Hologram.Test.Fixtures.Entity.Module3]}
     end
 
-    test "refuses a target id that is not an entity id" do
+    # A browser can queue one, and a bad request would hold its queue for good.
+    test "answers a target id that is text but no entity id as a refused value" do
       entry = edge("add_relationship", Module16, "secrets", target_id: "nope")
+
+      assert {:refused, %Envelope{writes: []}, 0, %{secrets: [{:type, :uuid}]}} =
+               parse(raw([entry]))
+    end
+
+    test "names the write a call starts at when a later edge of it holds a bad target" do
+      other = create(Module2, %{"c" => "x"})
+      lead = edge("add_relationship", Module16, "secrets")
+      good = same_call(edge("add_relationship", Module16, "secrets"))
+      bad = same_call(edge("add_relationship", Module16, "secrets", target_id: "nope"))
+
+      assert {:refused, %Envelope{}, 1, %{secrets: [{:type, :uuid}]}} =
+               parse(raw([other, lead, good, bad]))
+    end
+
+    test "counts back only through the call the bad edge belongs to" do
+      lead = edge("add_relationship", Module16, "secrets")
+      follower = same_call(edge("add_relationship", Module16, "secrets"))
+      bad = same_call(edge("add_relationship", Module16, "secrets", target_id: "nope"))
+
+      assert {:refused, %Envelope{}, 2, _violations} = parse(raw([lead, follower, lead, bad]))
+    end
+
+    test "names the write itself when a bad edge marked same_call has nothing before it" do
+      bad = same_call(edge("add_relationship", Module16, "secrets", target_id: "nope"))
+
+      assert {:refused, %Envelope{}, 0, _violations} = parse(raw([bad]))
+    end
+
+    test "refuses a target id that isn't text as a bad request" do
+      entry = edge("add_relationship", Module16, "secrets", target_id: 7)
 
       assert parse(raw([entry])) == {:error, "write 0: target_id must be an entity id"}
     end
