@@ -625,7 +625,7 @@ defmodule Hologram.ControllerTest do
       boot_data = build_boot_data(put_in(fields.mount_data.actor_user_id, 7))
 
       assert boot_data.actorEntityId == nil
-      assert boot_data.actorUserId == 7
+      assert boot_data.actorUserId == "i7"
     end
 
     test "builds the page fields as a navigation's payload does", %{fields: fields} do
@@ -648,7 +648,9 @@ defmodule Hologram.ControllerTest do
                "/hologram/runtime-1234567890abcdef.js"
 
       assert decoded["actorEntityId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
-      assert decoded["actorUserId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
+
+      assert decoded["actorUserId"] == "u02x9QDX4pOzriCIlt0xKjn"
+
       assert decoded["chunks"] == ["AAAAAAAA"]
       assert decoded["csrfToken"] == "my_csrf_token"
       assert decoded["identityTag"] == "my_identity_tag"
@@ -731,22 +733,40 @@ defmodule Hologram.ControllerTest do
         |> Jason.decode!()
 
       assert decoded["actorEntityId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
-      assert decoded["actorUserId"] == "0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"
+
+      assert decoded["actorUserId"] == "u02x9QDX4pOzriCIlt0xKjn"
+
       assert decoded["syncCountTypes"] == %{"posts" => ["MyApp.Post"]}
       assert decoded["syncCounts"] == %{"posts" => 2}
       assert decoded["syncRows"] == %{"posts" => []}
     end
 
     # The browser's rules read the acting user as the server's data layer does, so a user id no user
-    # entity can have goes as no entity id - an atom spelled as a uuid included, which JSON would
-    # turn into the id itself - while the id as it is still says whose rows and writes they are.
-    test "sends a user id no user entity can have as it is, with no entity id", %{fields: fields} do
-      for user_id <- [7, "abc", :admin, :"0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f"] do
+    # entity can have goes as no entity id, while the id's exact text still says whose rows and
+    # writes they are.
+    test "sends a user id no user entity can have as text, with no entity id", %{fields: fields} do
+      for {user_id, owner_key} <- [{7, "i7"}, {"abc", "sabc"}] do
         payload = build_page_data_payload(put_in(fields.mount_data.actor_user_id, user_id))
 
         assert payload.actorEntityId == nil
-        assert payload.actorUserId == user_id
+        assert payload.actorUserId == owner_key
       end
+    end
+
+    # A browser reads a JSON number as a double, so these two would arrive as one owner.
+    test "keeps two integer user ids past 2^53 apart in JSON", %{fields: fields} do
+      [first, second] =
+        for user_id <- [9_007_199_254_740_992, 9_007_199_254_740_993] do
+          fields
+          |> put_in([:mount_data, :actor_user_id], user_id)
+          |> build_page_data_payload()
+          |> Jason.encode!()
+          |> Jason.decode!()
+          |> Map.fetch!("actorUserId")
+        end
+
+      assert first == "i9007199254740992"
+      assert second == "i9007199254740993"
     end
 
     test "sends no acting user as none", %{fields: fields} do
@@ -2099,7 +2119,7 @@ defmodule Hologram.ControllerTest do
         |> Jason.decode!()
 
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   "User ID must be a UTF-8 string or an integer, but received false",
                    fn ->
                      :post
                      |> conn_with_parsed_json("/hologram/command", parsed_json, session)
@@ -2155,7 +2175,7 @@ defmodule Hologram.ControllerTest do
         |> Jason.decode!()
 
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   "User ID must be a UTF-8 string or an integer, but received false",
                    fn ->
                      :post
                      |> conn_with_parsed_json("/hologram/command", parsed_json, session)
@@ -3682,7 +3702,7 @@ defmodule Hologram.ControllerTest do
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   "User ID must be a UTF-8 string or an integer, but received false",
                    fn ->
                      :get
                      |> Plug.Test.conn("/")
@@ -3708,7 +3728,7 @@ defmodule Hologram.ControllerTest do
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   "User ID must be a UTF-8 string or an integer, but received false",
                    fn ->
                      :get
                      |> Plug.Test.conn("/")

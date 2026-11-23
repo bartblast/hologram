@@ -1027,12 +1027,11 @@ defmodule Hologram.Controller do
   # The acting user and the rows the render read are plain JSON, which the data layer reads as it
   # is, so they are nested as they are rather than serialized as terms.
   #
-  # The acting user goes twice. As it is, it names whose rows and queued writes the browser holds,
-  # and two users of the same browser must stay apart there whatever their ids. As the data layer
-  # reads it - a user entity's id, or nil for a user id no user entity can have, like an app's own
-  # serial id - it is what the browser's rules and grants ask about, so they answer such a session
-  # as the server does, a visitor. Worked out here rather than in the browser, which can't tell an
-  # atom spelled as a uuid, which JSON turns into a string, from the id itself.
+  # The acting user goes twice. As exact text (see Auth.owner_key/1), it names whose rows and queued
+  # writes the browser holds, and two users of the same browser must stay apart there whatever their
+  # ids. As the data layer reads it - a user entity's id, or nil for a user id no user entity can
+  # have, like an app's own serial id - it is what the browser's rules and grants ask about, so they
+  # answer such a session as the server does, a visitor.
   defp page_fields(%{
          chunk_digests: chunk_digests,
          mount_data: mount_data,
@@ -1043,7 +1042,7 @@ defmodule Hologram.Controller do
        }) do
     %{
       actorEntityId: Auth.canonical_id(mount_data.actor_user_id),
-      actorUserId: mount_data.actor_user_id,
+      actorUserId: Auth.owner_key(mount_data.actor_user_id),
       chunks: chunk_digests,
       componentRegistry: serialize_to_fragment(mount_data.component_registry),
       pageDigest: page_digest,

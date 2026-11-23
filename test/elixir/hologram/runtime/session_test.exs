@@ -69,10 +69,12 @@ defmodule Hologram.Runtime.SessionTest do
       assert get_user_id(conn_with_empty_session()) == nil
     end
 
-    test "returns nil for a boolean persisted before booleans were refused" do
-      conn = conn_with_session(%{@user_id_key => false})
+    test "returns nil for a value persisted before it was refused" do
+      for user_id <- [false, true, :admin, <<255, 254>>] do
+        conn = conn_with_session(%{@user_id_key => user_id})
 
-      assert get_user_id(conn) == nil
+        assert get_user_id(conn) == nil
+      end
     end
   end
 
@@ -96,11 +98,6 @@ defmodule Hologram.Runtime.SessionTest do
     test "differs when the user ID differs, given as an integer" do
       refute identity_tag_of(%{@session_id_key => "session-1", @user_id_key => 1}) ==
                identity_tag_of(%{@session_id_key => "session-1", @user_id_key => 2})
-    end
-
-    test "differs when the user ID differs, given as an atom" do
-      refute identity_tag_of(%{@session_id_key => "session-1", @user_id_key => :alice}) ==
-               identity_tag_of(%{@session_id_key => "session-1", @user_id_key => :bob})
     end
 
     test "differs between a logged-in user and no user" do
@@ -181,7 +178,7 @@ defmodule Hologram.Runtime.SessionTest do
 
     test "raises Hologram.MisuseError when given a boolean" do
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   "User ID must be a UTF-8 string or an integer, but received false",
                    fn ->
                      put_user_id(conn_with_empty_session(), false)
                    end

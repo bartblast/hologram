@@ -50,7 +50,7 @@ defmodule Hologram.DBReadTest do
         |> PolicyModule6.new()
         |> DB.create!()
 
-      for session_user_id <- [String.replace(user.id, "-", ""), "abc", 7, :admin] do
+      for session_user_id <- [String.replace(user.id, "-", ""), "abc", 7] do
         ids =
           Context.with_actor(session_user_id, fn ->
             PolicyModule6

@@ -47,16 +47,15 @@ defmodule Hologram.Runtime.Session do
   Returns the authenticated Hologram user ID from the Phoenix session, or
   `nil` if absent.
 
-  A boolean reads as `nil`: only a session persisted before `put_user_id/2` refused booleans holds
-  one, and the stale value reads as no user on every request until a sign-in replaces it, rather
-  than failing them.
+  A value `put_user_id/2` refuses reads as `nil`: only a session persisted before it was refused
+  holds one, and the stale value reads as no user on every request until a sign-in replaces it,
+  rather than failing them.
   """
   @spec get_user_id(Plug.Conn.t()) :: Server.identity_id() | nil
   def get_user_id(conn) do
-    case Plug.Conn.get_session(conn, @user_id_key) do
-      user_id when is_boolean(user_id) -> nil
-      user_id -> user_id
-    end
+    user_id = Plug.Conn.get_session(conn, @user_id_key)
+
+    if Server.valid_user_id?(user_id), do: user_id
   end
 
   @doc """

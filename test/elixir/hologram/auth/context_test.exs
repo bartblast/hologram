@@ -19,7 +19,7 @@ defmodule Hologram.Auth.ContextTest do
     end
 
     test "returns nil for an id in any other spelling" do
-      for user_id <- ["0190C4E2-7C1F-7B3A-9D4E-1A2B3C4D5E6F", 7, "abc", :admin] do
+      for user_id <- ["0190C4E2-7C1F-7B3A-9D4E-1A2B3C4D5E6F", 7, "abc"] do
         assert with_actor(user_id, fn -> actor_entity_id() end) == nil
       end
     end
@@ -36,7 +36,7 @@ defmodule Hologram.Auth.ContextTest do
       put_actor("user_id_10")
 
       assert_error Hologram.MisuseError,
-                   "User ID must be a string, integer, or atom other than true and false, but received false",
+                   "User ID must be a UTF-8 string or an integer, but received false",
                    fn ->
                      put_actor(false)
                    end
@@ -49,7 +49,7 @@ defmodule Hologram.Auth.ContextTest do
     test "raises Hologram.MisuseError for a boolean before the function runs, leaving the actor as it was" do
       with_actor("user_id_11", fn ->
         assert_error Hologram.MisuseError,
-                     "User ID must be a string, integer, or atom other than true and false, but received true",
+                     "User ID must be a UTF-8 string or an integer, but received true",
                      fn ->
                        with_actor(true, fn -> send(self(), :ran) end)
                      end

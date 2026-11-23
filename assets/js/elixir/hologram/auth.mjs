@@ -824,8 +824,8 @@ function throughDerivedSet(entityType, names) {
 
 // The acting user as rules read it, taken from the user entity or the id itself - the twin of
 // acting_user_id/1 in Hologram.Auth. It is null, a visitor, for nil and for an id in any spelling
-// but the canonical lowercase uuid an entity id is. A session's user id may be any string, integer
-// or atom, and one naming no user entity is anonymous to the rules. Read as somebody holding
+// but the canonical lowercase uuid an entity id is. A session's user id may be any string or
+// integer, and one naming no user entity is anonymous to the rules. Read as somebody holding
 // nothing, it would pass an inequality on the acting user for every row it doesn't own.
 function unboxActorUserId(userOrId) {
   const term = Type.isMap(userOrId)

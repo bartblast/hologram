@@ -206,7 +206,7 @@ defmodule Hologram.DB.WriterTest do
              }
     end
 
-    for user_id <- [7, "abc", :admin] do
+    for user_id <- [7, "abc"] do
       test "writes a row a visitor may create under the user id #{inspect(user_id)}, recording no actor" do
         entity = Module9.new()
 

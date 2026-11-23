@@ -691,7 +691,7 @@ defmodule Hologram.Template.RendererDerivedTest do
 
       html = render_page_html(Module167, %Server{user_id: user.id})
 
-      assert String.contains?(html, ~s|"actorUserId":"#{user.id}"|)
+      assert String.contains?(html, ~s|"actorUserId":"#{Auth.owner_key(user.id)}"|)
     end
 
     test "names nobody for a visitor" do

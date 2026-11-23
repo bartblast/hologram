@@ -433,7 +433,7 @@ defmodule Hologram.Template.Renderer do
           chunk_digests: [String.t()],
           component_registry: %{String.t() => %{module: module, struct: Component.t()}},
           mount_data: %{
-            actor_user_id: String.t() | integer | atom | nil,
+            actor_user_id: Server.identity_id() | nil,
             component_registry: %{String.t() => %{module: module, struct: Component.t()}},
             page_module: module,
             page_params: %{atom => any},

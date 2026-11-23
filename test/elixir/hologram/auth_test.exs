@@ -984,6 +984,44 @@ defmodule Hologram.AuthTest do
     end
   end
 
+  describe "owner_key/1" do
+    test "names a visitor as nobody" do
+      assert owner_key(nil) == nil
+    end
+
+    test "keeps integer ids past 2^53 exact" do
+      assert owner_key(9_007_199_254_740_992) == "i9007199254740992"
+      assert owner_key(9_007_199_254_740_993) == "i9007199254740993"
+    end
+
+    # Browsers keep this text across deploys, so a changed format would strand a user's stored rows
+    # and unsent writes.
+    test "keeps its exact format" do
+      assert owner_key(7) == "i7"
+      assert owner_key("abc") == "sabc"
+
+      assert owner_key("0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f") == "u02x9QDX4pOzriCIlt0xKjn"
+    end
+
+    test "writes an entity id at a fixed width" do
+      assert owner_key("00000000-0000-7000-8000-000000000001") == "u000000002dwHTRTFRxWLTN"
+    end
+
+    test "keeps a uuid spelling Hologram doesn't generate as a plain string" do
+      assert owner_key("0190C4E2-7C1F-7B3A-9D4E-1A2B3C4D5E6F") ==
+               "s0190C4E2-7C1F-7B3A-9D4E-1A2B3C4D5E6F"
+    end
+
+    test "keeps an entity id and the same text as a string apart" do
+      assert owner_key("0190c4e2-7c1f-7b3a-9d4e-1a2b3c4d5e6f") !=
+               owner_key("02x9QDX4pOzriCIlt0xKjn")
+    end
+
+    test "keeps an integer and the same digits as a string apart" do
+      assert owner_key(1) != owner_key("1")
+    end
+  end
+
   describe "can?/4" do
     test "answers a user id in a spelling Hologram doesn't generate as an anonymous session" do
       user = create_user("user_168@example.com")

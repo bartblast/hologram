@@ -42,7 +42,7 @@ defmodule Hologram.DB.QueryRunner do
     end
   end
 
-  # A session's user id may be any string, integer or atom, and one that isn't an id Hologram
+  # A session's user id may be any UTF-8 string or integer, and one that isn't an id Hologram
   # generates names no user entity, so the rules read it as an anonymous session - the way
   # Hologram.Auth.can?/3 and the recheck do.
   @doc false

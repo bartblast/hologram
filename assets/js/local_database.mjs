@@ -32,10 +32,10 @@ const CARRIED_COUNT_KEYS_LENGTH_LIMIT = 4_000_000;
 const SAVED_COUNT_KEYS_LENGTH_LIMIT = 256_000;
 
 export default class LocalDatabase {
-  // Who the client is, the session's user id as it is - nil for a visitor. It names whose rows and
-  // queued writes this database holds. It arrives with the page rather than with the rows, and a
-  // resync does not clear it: what the client may see can change without anyone becoming someone
-  // else.
+  // Who the client is, the session's user id as exact text from the server - null for a visitor.
+  // It only tells owners apart: it names whose rows and queued writes this database holds, and is
+  // never an id to look up. It arrives with the page rather than with the rows, and a resync does
+  // not clear it: what the client may see can change without anyone becoming someone else.
   static actorUserId = null;
 
   // The same user as the data layer reads them - the id of a user entity, or null for a visitor and
