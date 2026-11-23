@@ -4773,6 +4773,73 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    describe("an update name a refresh of the rules removed", () => {
+      const archive = Type.atom("archive");
+      const published = {status: enumValue("published")};
+
+      const refreshed = (policy) => {
+        const {derived, inverses} = globalThis.Hologram.sync.model[DOCUMENT];
+
+        Model.replaceRules({
+          [DOCUMENT]: {
+            derived,
+            inverses,
+            operations: Object.keys(policy),
+            policy,
+            updateNames: [],
+            verdicts: {},
+          },
+        });
+      };
+
+      it("answers no, as can?/3 does", () => {
+        defineUpdate("archive", approving);
+        refreshed({});
+
+        assert.deepStrictEqual(asks(archive, published), Type.boolean(false));
+        assert.deepStrictEqual(
+          can(alice, archive, document()),
+          Type.boolean(false),
+        );
+      });
+
+      it("answers no when the name now belongs to another operation", () => {
+        defineUpdate("archive", approving);
+        refreshed({archive: [rule()]});
+
+        assert.deepStrictEqual(asks(archive, published), Type.boolean(false));
+      });
+
+      it("still refuses a name that was never an update", () => {
+        defineUpdate("archive", approving);
+        refreshed({read: [rule()]});
+
+        assertBoxedError(
+          () => asks(Type.atom("read"), published),
+          "Hologram.MisuseError",
+          "can? with values takes :update, the name of an allow :update line, or {:update, field} / {:update, fields} - got :read",
+        );
+      });
+
+      it("answers by its rules when a later refresh brings it back", () => {
+        defineUpdate("archive", approving);
+        refreshed({});
+
+        Model.replaceRules({
+          [DOCUMENT]: {
+            derived: {},
+            inverses: {},
+            operations: ["archive"],
+            policy: {archive: [approving]},
+            updateNames: ["archive"],
+            verdicts: {},
+          },
+        });
+
+        assert.deepStrictEqual(asks(archive, published), Type.boolean(true));
+      });
+    });
+
     it("refuses an operation that isn't an update", () => {
       defineUpdate("update:status", approving);
 

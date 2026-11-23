@@ -1893,6 +1893,68 @@ describe("Model", () => {
       Model.reset();
     });
 
+    it("remembers the update names the new rules no longer carry", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["approve", "archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: ["approve"],
+          policy: {},
+          updateNames: ["approve"],
+          verdicts: {},
+        },
+      });
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        ["archive"],
+      );
+    });
+
+    it("remembers the update names of a held type the entries leave out", () => {
+      globalThis.Hologram.sync.model[DOC].updateNames = ["archive"];
+
+      Model.replaceRules({});
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        ["archive"],
+      );
+    });
+
+    it("keeps a removed update name across a later refresh", () => {
+      globalThis.Hologram.sync.model[DOC].formerUpdateNames = ["archive"];
+
+      Model.replaceRules({});
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        ["archive"],
+      );
+    });
+
+    it("forgets a removed update name the new rules bring back", () => {
+      globalThis.Hologram.sync.model[DOC].formerUpdateNames = ["archive"];
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {},
+          inverses: {},
+          operations: ["archive"],
+          policy: {},
+          updateNames: ["archive"],
+          verdicts: {},
+        },
+      });
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].formerUpdateNames,
+        [],
+      );
+    });
+
     it("takes a held type's rules from its entry", () => {
       const policy = {
         read: [

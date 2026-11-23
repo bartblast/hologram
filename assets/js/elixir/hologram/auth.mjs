@@ -1646,6 +1646,10 @@ function changeAnswer(
 
   Model.validateOperation(entityType, operation);
 
+  if ((entry.formerUpdateNames ?? []).includes(operation.value)) {
+    return false;
+  }
+
   if (!(entry.updateNames ?? []).includes(operation.value)) {
     Interpreter.raiseMisuseError(changeOperationMessage(operation));
   }
