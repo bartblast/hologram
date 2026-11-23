@@ -488,11 +488,11 @@ defmodule Hologram.DB do
   A nested call opens a savepoint: its own abort or exception undoes what it wrote and nothing
   more, and the enclosing transaction continues. The write verbs answer the
   same way inside a transaction as outside it - a refused write returns {:error,
-  violations} or raises through its bang, and the transaction stays usable. The exception is a
-  counter move in the browser, which answers :ok whatever it lands on, as update/1 says. An
-  exception rolls the transaction back and re-raises. A write verb called inside it is not run again when
-  PostgreSQL aborts the transaction as a deadlock victim - the error propagates, and this
-  transaction is the one to retry.
+  violations} or raises through its bang, and the transaction stays usable. In the browser only
+  the server judges the value a counter move lands on, so a move past a bound still answers :ok,
+  as update/1 says. An exception rolls the transaction back and re-raises. A write verb called
+  inside it is not run again when PostgreSQL aborts the transaction as a deadlock victim - the
+  error propagates, and this transaction is the one to retry.
 
   The `timeout:` option is the milliseconds from this call until the transaction has to be done,
   the wait for a free connection included, or `:infinity`, and is fifteen seconds by default. Past
