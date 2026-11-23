@@ -1357,11 +1357,11 @@ function statedOperand(value, stated) {
   return value;
 }
 
-// A whole number past what a JavaScript number holds exactly, in an integer or a float, which can't
-// decide a comparison.
-function isInexactInteger(value) {
+// A float this large is a whole number, which a write spells as bare digits, and the server can read
+// those back as the float next to it. An integer past 2^53 is a BigInt here, and travels exactly.
+function isBigWholeFloat(value) {
   return Array.isArray(value)
-    ? value.some(isInexactInteger)
+    ? value.some(isBigWholeFloat)
     : typeof value === "number" &&
         Number.isInteger(value) &&
         !Number.isSafeInteger(value);
@@ -1377,7 +1377,7 @@ function statedTripleHolds(entityType, [name, operator, value], stated) {
     return UNKNOWN;
   }
 
-  if (isInexactInteger(subject) || isInexactInteger(operand)) {
+  if (isBigWholeFloat(subject) || isBigWholeFloat(operand)) {
     return UNKNOWN;
   }
 

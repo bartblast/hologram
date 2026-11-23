@@ -1367,6 +1367,17 @@ describe("Elixir_Hologram_DB", () => {
         assertDenied(status("rejected"), ":status");
       });
 
+      it("judges an integer past 2^53 by its exact value", () => {
+        defineCard({
+          "update:count": [
+            exact([[newName("count"), "==", {$integer: "9007199254740993"}]]),
+          ],
+        });
+
+        assertDenied({count: Type.integer(9007199254740995n)}, ":count");
+        assertSent(put({count: Type.integer(9007199254740993n)}));
+      });
+
       it("sends a change another line allows", () => {
         defineCard({
           "update:status": [
@@ -1550,26 +1561,14 @@ describe("Elixir_Hologram_DB", () => {
         assertSent(put(status("rejected")));
       });
 
-      it("leaves an integer past what a number holds exactly", () => {
-        defineCard({
-          "update:count": [
-            exact([[newName("count"), "==", Number.MAX_SAFE_INTEGER + 1]]),
-          ],
-        });
-
-        assertSent(
-          put({count: Type.integer(BigInt(Number.MAX_SAFE_INTEGER) + 3n)}),
-        );
-      });
-
-      it("leaves a float past what a number holds exactly", () => {
+      it("leaves a big whole float, which the server can read back as the next one", () => {
         defineCard({
           "update:rating": [
-            exact([[newName("rating"), "!=", Number.MAX_SAFE_INTEGER + 1]]),
+            exact([[newName("rating"), "!=", 6.853704104479601e19]]),
           ],
         });
 
-        assertSent(put({rating: Type.float(Number.MAX_SAFE_INTEGER + 1)}));
+        assertSent(put({rating: Type.float(6.853704104479601e19)}));
       });
 
       it("leaves a value with a format, which the two regex engines can judge differently", () => {
