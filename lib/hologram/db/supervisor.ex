@@ -14,6 +14,7 @@ defmodule Hologram.DB.Supervisor do
   use Supervisor
 
   alias Hologram.DB
+  alias Hologram.DB.EctoGuard
   alias Hologram.DB.IndexBuilder
   alias Hologram.DB.QueryCache
   alias Hologram.Job
@@ -40,6 +41,9 @@ defmodule Hologram.DB.Supervisor do
 
   @impl Supervisor
   def init(nil) do
+    # Only an app with a data model gets here, and only its transactions have anything to protect.
+    EctoGuard.attach()
+
     Hologram.env()
     |> children()
     |> Supervisor.init(strategy: :rest_for_one)
