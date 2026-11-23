@@ -538,6 +538,11 @@ defmodule Hologram.Mutation do
   # Nothing is kept for an anonymous session either, nor for a user id no user entity can have: an
   # answer is replayed only to the session that earned it, and the record holds every such session
   # as nobody - so a refusal kept under no actor would be readable by any of them, or by nobody.
+  #
+  # The answer comes from the record, because another arrival of this batch may have landed it after
+  # this one was refused, and the record is what every arrival has to agree with. Keeping a refusal
+  # waits for an arrival still running. A visitor's refusal keeps nothing, so it has nothing to wait
+  # on and sees only an arrival that has already finished.
   defp keep_refused(envelope, raw, actor_id, index, reason) do
     answer = rejection(index, reason)
 
@@ -552,7 +557,7 @@ defmodule Hologram.Mutation do
       )
     end
 
-    {:ok, answer}
+    recorded_answer(envelope, actor_id) || {:ok, answer}
   end
 
   defp lock_row(write, index) do
