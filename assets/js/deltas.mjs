@@ -18,12 +18,13 @@ import Model from "./model.mjs";
 // one means putting its attributes in its type's table and its target ids in the relationship
 // facts, with nothing left nested.
 export default class Deltas {
-  // The hashes of the held ids of each type under the salt of the catch-up telling them, each id
-  // hashed once per catch-up rather than once per frame - every frame of one catch-up hashes under
-  // one salt. A row filed since the last hashed drop of its type - one a page carried, or one the
-  // client's own write filed when its answer came - is hashed when the next one arrives. Kept until
-  // the next catch-up's salt replaces them: a hash per held row of the types a catch-up dropped any
-  // of.
+  // The hashes of the ids of each type the client holds a row of or finds in a set, under the salt
+  // of the catch-up telling them, each id hashed once per catch-up rather than once per frame -
+  // every frame of one catch-up hashes under one salt. A row filed since the last hashed drop of
+  // its type - one a page carried, or one the client's own write filed when its answer came - is
+  // hashed when the next one arrives. Kept until the next catch-up's salt replaces them or `reset`
+  // forgets them: a hash per such id of the types a catch-up dropped any of by hash, less the ones
+  // a hashed drop took.
   static #hashes = {byType: new Map(), salt: null};
 
   // Forgets the hashes worked out for the last catch-up.

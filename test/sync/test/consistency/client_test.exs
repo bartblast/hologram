@@ -320,62 +320,41 @@ defmodule HologramSyncTests.Consistency.ClientTest do
     assert Client.failures(client) == []
   end
 
-  # The catch-up's first frame of cards carries the pair under the tag naming a card a later frame
-  # holds. Once the access is gone the replay names the card only by the keep list.
-  test "a client cut inside a batch drops a pair naming a row that never arrived", %{
+  # Once the type-wide grant is gone, the replay names the card only by the keep list.
+  test "a client cut inside a batch drops a pair naming a row a grant had reached", %{
     users: [_member, _viewer, _wide_viewer, outsider]
   } do
-    [red] =
-      Tag
-      |> DB.read()
-      |> Enum.filter(&(&1.name == "red"))
-
-    [other_board] =
-      Board
-      |> DB.read()
-      |> Enum.filter(&(&1.name == "other"))
-
-    for number <- 1..6, do: create!(Card, board_id: other_board.id, title: "filler #{number}")
-
-    tagged = create!(Card, board_id: other_board.id, title: "tagged")
-
-    tagged
-    |> add_relationship(:tags, red.id)
-    |> DB.update!()
-
-    # A transaction left open elsewhere would put the client's place below these writes, and the
-    # catch-up would then replay them and restate the tag's set.
-    edge = Oplog.current_xmax()
-    assert await(fn -> Oplog.current_xmin() >= edge end)
-
-    client = start_client(outsider.id)
-
-    Client.connect(client)
-    assert Checks.await_converged(client, outsider.id, 5_000) == :ok
-
-    {:ok, tx, _seq, _policy_hash, _types_hash} =
-      client
-      |> Client.cursor()
-      |> Cursor.decode()
-
-    assert tx >= edge
-
-    Client.cut(client)
-    Auth.grant_role(outsider, :viewer, Board)
-    Client.connect(client, cut_when: &pair_frame?/1)
-
-    assert await(fn -> cut_count(client) == 2 end)
-
-    store = Client.store(client)
-
-    assert tagged.id in store[Tag][red.id]["cards"]
-    refute Map.has_key?(store[Card], tagged.id)
+    {client, red} =
+      cut_with_pair_ahead_of_card(outsider, fn _board ->
+        Auth.grant_role(outsider, :viewer, Board)
+      end)
 
     Auth.revoke_role(outsider, :viewer, Board)
     Client.connect(client)
 
     assert Checks.await_converged(client, outsider.id, 5_000) == :ok
     assert Client.store(client)[Tag][red.id]["cards"] == []
+    assert {"keep_hashed", wire_type(Card)} in received_ops(client)
+    assert resync_reasons(client) == []
+    assert Client.failures(client) == []
+  end
+
+  # Once the membership is gone, the replay names the card only by its hash.
+  test "a client cut inside a batch drops a pair naming a row a membership had reached", %{
+    users: [_member, _viewer, _wide_viewer, outsider]
+  } do
+    {client, red} =
+      cut_with_pair_ahead_of_card(outsider, fn board ->
+        create!(SpaceMember, space_id: board.space_id, user_id: outsider.id)
+      end)
+
+    delete_membership!(outsider)
+    Client.connect(client)
+
+    assert Checks.await_converged(client, outsider.id, 5_000) == :ok
+    assert Client.store(client)[Tag][red.id]["cards"] == []
+    assert {"unsync_hashed", wire_type(Card)} in received_ops(client)
+    assert resync_reasons(client) == []
     assert Client.failures(client) == []
   end
 
@@ -477,6 +456,59 @@ defmodule HologramSyncTests.Consistency.ClientTest do
 
   defp connect_cursors(client) do
     for %{kind: :connect, cursor: cursor} <- Client.events(client), do: cursor
+  end
+
+  # A client holding a tag, cut right after the catch-up's first frame of cards, which carries the
+  # pair under the tag naming a card a later frame holds. The given function gives the user access
+  # to the board's cards while the client is away.
+  defp cut_with_pair_ahead_of_card(user, give_access) do
+    [red] =
+      Tag
+      |> DB.read()
+      |> Enum.filter(&(&1.name == "red"))
+
+    [other_board] =
+      Board
+      |> DB.read()
+      |> Enum.filter(&(&1.name == "other"))
+
+    for number <- 1..6, do: create!(Card, board_id: other_board.id, title: "filler #{number}")
+
+    tagged = create!(Card, board_id: other_board.id, title: "tagged")
+
+    tagged
+    |> add_relationship(:tags, red.id)
+    |> DB.update!()
+
+    # A transaction left open elsewhere would put the client's place below these writes, and the
+    # catch-up would then replay them and restate the tag's set.
+    edge = Oplog.current_xmax()
+    assert await(fn -> Oplog.current_xmin() >= edge end)
+
+    client = start_client(user.id)
+
+    Client.connect(client)
+    assert Checks.await_converged(client, user.id, 5_000) == :ok
+
+    {:ok, tx, _seq, _policy_hash, _types_hash} =
+      client
+      |> Client.cursor()
+      |> Cursor.decode()
+
+    assert tx >= edge
+
+    Client.cut(client)
+    give_access.(other_board)
+    Client.connect(client, cut_when: &pair_frame?/1)
+
+    assert await(fn -> cut_count(client) == 2 end)
+
+    store = Client.store(client)
+
+    assert tagged.id in store[Tag][red.id]["cards"]
+    refute Map.has_key?(store[Card], tagged.id)
+
+    {client, red}
   end
 
   defp cut_count(client) do
