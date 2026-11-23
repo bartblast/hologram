@@ -4193,6 +4193,7 @@ describe("Elixir_Hologram_Auth", () => {
       it("answers by the grant on the row the new reference names", () => {
         defineUpdate("update:folder", member);
         putFolder(FOLDER_ID);
+        putFolder(PARENT_ID);
 
         LocalDatabase.putRow(
           GRANT,
