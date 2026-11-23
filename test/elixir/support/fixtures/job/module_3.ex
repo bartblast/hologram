@@ -7,6 +7,7 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
   use Hologram.Job
 
   alias Hologram.Auth
+  alias Hologram.Auth.Context
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
@@ -74,6 +75,7 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
 
   def run(%{outcome: :record_actor}) do
     Process.put(:ran_as, Auth.user_id())
+    Process.put(:ran_in_session?, Context.session?())
 
     :ok
   end

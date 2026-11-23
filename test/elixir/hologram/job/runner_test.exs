@@ -227,6 +227,27 @@ defmodule Hologram.Job.RunnerTest do
     test "runs a job created with no actor raw" do
       assert invoke(job(:record_actor)) == :done
       assert Process.get(:ran_as) == nil
+      assert Process.get(:ran_in_session?) == false
+    end
+
+    test "runs a job created with no actor with no session, whatever session calls it" do
+      user = create_user("caller@example.com")
+      job = job(:record_actor)
+
+      as_user(user, fn ->
+        assert invoke(job) == :done
+        assert Auth.user_id() == user.id
+      end)
+
+      assert Process.get(:ran_as) == nil
+      assert Process.get(:ran_in_session?) == false
+    end
+
+    test "runs a job created by a user in that user's session" do
+      user = create_user("session@example.com")
+
+      assert invoke(job(:record_actor, user)) == :done
+      assert Process.get(:ran_in_session?) == true
     end
 
     test "answers failed for a write the creating user may not make" do
@@ -256,6 +277,14 @@ defmodule Hologram.Job.RunnerTest do
       assert_receive {:DOWN, ^monitor_ref, :process, ^dead, _reason}
 
       assert catch_exit(process(Module3, job.id, dead))
+    end
+
+    test "runs a job stored with no actor with no session", %{run_lock: run_lock} do
+      job = job(:record_actor)
+
+      assert process(Module3, job.id, run_lock) == :done
+      assert Process.get(:ran_as) == nil
+      assert Process.get(:ran_in_session?) == false
     end
 
     test "leaves a queued job whose run lock another session holds", %{run_lock: run_lock} do
