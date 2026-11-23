@@ -1643,15 +1643,15 @@ defmodule Hologram.AuthTest do
       label = create_named_label("shared")
       message = create_message(channel, "pinned")
       other = create_message(channel, "plain")
+      source = {:outer, 1, [:labels, :messages, :channel, :messages]}
+      any_plain = [{:any, {source, [{:body, :==, "plain"}]}}]
 
       EntityOperations.add_relationship(Message, message.id, :labels, label.id)
       EntityOperations.add_relationship(Message, other.id, :labels, label.id)
 
-      refute holds_after?(
-               any_pinned({:outer, 1, [:labels, :messages, :channel, :messages]}),
-               stored(message),
-               %{channel_id: nil}
-             )
+      assert holds_after?(any_pinned(source), stored(message), %{})
+      refute holds_after?(any_pinned(source), stored(message), %{channel_id: nil})
+      assert holds_after?(any_plain, stored(message), %{channel_id: nil})
     end
 
     test "follows a reference to the changed row as it will be" do
