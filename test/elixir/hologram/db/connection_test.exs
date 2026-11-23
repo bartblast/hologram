@@ -203,6 +203,14 @@ defmodule Hologram.DB.ConnectionTest do
       id
     end
 
+    # A rollback that goes ahead throws, which an assertion on what it raises can't see, and the
+    # end of the transaction then raises the same error.
+    defp refused_rollback do
+      rollback(:some_reason)
+    catch
+      :throw, _value -> flunk("the rollback went ahead")
+    end
+
     test "fails the transaction at its next statement and rolls its writes back" do
       id = :crypto.strong_rand_bytes(16)
 
@@ -211,6 +219,7 @@ defmodule Hologram.DB.ConnectionTest do
           {:ok, _result} = query(@insert_given_id_sql, [id])
           record_ecto_call(SomeRepo, "INSERT INTO audit")
           query("SELECT 1")
+          flunk("the statement ran")
         end)
       end
 
@@ -254,11 +263,7 @@ defmodule Hologram.DB.ConnectionTest do
           {:ok, _result} = query(@insert_given_id_sql, [id])
           record_ecto_call(SomeRepo, "INSERT INTO audit")
 
-          try do
-            query("SELECT 1")
-          rescue
-            MisuseError -> :rescued
-          end
+          assert_error MisuseError, @ecto_call_msg, fn -> query("SELECT 1") end
         end)
       end
 
@@ -272,10 +277,8 @@ defmodule Hologram.DB.ConnectionTest do
         transaction(fn ->
           {:ok, _result} = query(@insert_given_id_sql, [id])
 
-          try do
+          assert_error MisuseError, @ecto_call_msg, fn ->
             transaction(fn -> record_ecto_call(SomeRepo, "INSERT INTO audit") end)
-          rescue
-            MisuseError -> :rescued
           end
         end)
       end
@@ -290,7 +293,7 @@ defmodule Hologram.DB.ConnectionTest do
         transaction(fn ->
           {:ok, _result} = query(@insert_given_id_sql, [id])
           record_ecto_call(SomeRepo, "INSERT INTO audit")
-          rollback(:some_reason)
+          refused_rollback()
         end)
       end
 
@@ -315,6 +318,7 @@ defmodule Hologram.DB.ConnectionTest do
             {:ok, _result} = query(@insert_given_id_sql, [id])
             record_ecto_call(SomeRepo, "INSERT INTO audit")
             query("SELECT 1")
+            flunk("the statement ran")
           end)
         end
 
@@ -338,7 +342,8 @@ defmodule Hologram.DB.ConnectionTest do
         assert_error MisuseError, @ecto_call_msg, fn ->
           transaction(fn ->
             record_ecto_call(SomeRepo, "INSERT INTO audit")
-            call.()
+
+            assert_error MisuseError, @ecto_call_msg, fn -> call.() end
           end)
         end
       end)
@@ -418,7 +423,7 @@ defmodule Hologram.DB.ConnectionTest do
 
           EctoRepo.transaction(fn ->
             assert_error MisuseError, ~r/^cannot run a data layer statement inside a/, fn ->
-              rollback(:some_reason)
+              refused_rollback()
             end
           end)
         end)
