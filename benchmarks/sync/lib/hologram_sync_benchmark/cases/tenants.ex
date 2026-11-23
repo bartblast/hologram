@@ -29,7 +29,7 @@ defmodule HologramSyncBenchmark.Cases.Tenants do
       check!: &check!(opts, &1),
       clients: "signed-in clients, one per user, filling whole tenants in order",
       counts: Enum.filter(Sweep.default_counts(), &(&1 <= users)),
-      name: "tenants",
+      name: "tenants" <> Step.group_suffix(opts),
       data:
         "#{opts[:tenants]} tenants of #{opts[:members]} members with #{opts[:tasks]} tasks " <>
           "each, #{opts[:tenants] * opts[:tasks]} tasks in all, read with " <>
@@ -42,7 +42,7 @@ defmodule HologramSyncBenchmark.Cases.Tenants do
       ],
       seed: &seed(&1, &2, opts),
       spec: &spec(&1, &2, &3, &4, opts),
-      title: "Multi-tenant app"
+      title: "Multi-tenant app" <> Step.group_title(opts)
     }
   end
 
@@ -99,6 +99,7 @@ defmodule HologramSyncBenchmark.Cases.Tenants do
         tenant = rem(offset, reached)
         Enum.to_list((tenant * members)..(min((tenant + 1) * members, count) - 1))
       end,
+      fill_group: opts[:fill_group],
       fill_timeout_ms: opts[:fill_timeout] * 1_000,
       first_marker: first_marker,
       rate: opts[:rate],

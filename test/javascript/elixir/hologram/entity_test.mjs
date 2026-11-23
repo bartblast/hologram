@@ -92,7 +92,7 @@ describe("Elixir_Hologram_Entity", () => {
 
   // One entry per shape the mirrored cases need: a type declaring nothing, one declaring a
   // default and an optional attribute, one declaring relationships of both cardinalities, one
-  // declaring an inverse, and a job, whose three framework-owned attributes no caller may set.
+  // declaring an inverse, and a job, whose framework-owned attributes no caller may set.
   beforeEach(() => {
     globalThis.Hologram.sync = {
       model: {
@@ -170,13 +170,21 @@ describe("Elixir_Hologram_Entity", () => {
           attributes: {
             ...systemAttributes,
             actor_id: "uuid",
+            attempt: "integer",
             error: "string",
+            scheduled_at: "datetime",
             status: "enum",
           },
           constraints: {},
-          defaults: {status: Type.atom("queued")},
+          defaults: {attempt: Type.integer(0), status: Type.atom("queued")},
           enumValues: {status: ["queued", "running", "done", "failed"]},
-          frameworkAttributes: ["actor_id", "error", "status"],
+          frameworkAttributes: [
+            "actor_id",
+            "attempt",
+            "error",
+            "scheduled_at",
+            "status",
+          ],
           relationships: {},
           serverOnly: ["error"],
         },
@@ -357,7 +365,9 @@ describe("Elixir_Hologram_Entity", () => {
 
       assert.deepEqual(field(job, "status"), Type.atom("queued"));
       assert.deepEqual(field(job, "actor_id"), Type.nil());
+      assert.deepEqual(field(job, "attempt"), Type.integer(0));
       assert.deepEqual(field(job, "error"), Type.nil());
+      assert.deepEqual(field(job, "scheduled_at"), Type.nil());
     });
 
     // What Model.box leaves in place of a relationship, so a row built here reads like one that
@@ -462,6 +472,28 @@ describe("Elixir_Hologram_Entity", () => {
         () => newEntityWithValues(Type.alias(NOTIFY), values),
         "Hologram.MisuseError",
         `:actor_id of ${NOTIFY} is set by the framework - a job is enqueued as queued, and the worker records the rest`,
+      );
+    });
+
+    it("raises on an assigned job attempt count", () => {
+      const values = Type.map([[Type.atom("attempt"), Type.integer(5)]]);
+
+      assertBoxedError(
+        () => newEntityWithValues(Type.alias(NOTIFY), values),
+        "Hologram.MisuseError",
+        `:attempt of ${NOTIFY} is set by the framework - a job is enqueued as queued, and the worker records the rest`,
+      );
+    });
+
+    it("raises on an assigned job due time", () => {
+      const values = Type.map([
+        [Type.atom("scheduled_at"), Type.bitstring("2000-01-01T00:00:00Z")],
+      ]);
+
+      assertBoxedError(
+        () => newEntityWithValues(Type.alias(NOTIFY), values),
+        "Hologram.MisuseError",
+        `:scheduled_at of ${NOTIFY} is set by the framework - a job is enqueued as queued, and the worker records the rest`,
       );
     });
 

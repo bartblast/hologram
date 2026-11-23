@@ -117,6 +117,14 @@ defmodule Hologram.Job.WorkerTest do
     end
   end
 
+  defp time_out_stub(test_pid) do
+    fn job_type, id, timeout ->
+      send(test_pid, {:timed_out, job_type, id, timeout})
+
+      :ok
+    end
+  end
+
   # The look a worker makes as it starts asks each type once, the last in module order last. On
   # queues the test fills only after it, a job the test adds is run by a look the test asks for, and
   # the asks left in the mailbox are the ones made after it.
@@ -156,6 +164,7 @@ defmodule Hologram.Job.WorkerTest do
       |> Keyword.put_new(:release, fn _job_type, _id -> :ok end)
       |> Keyword.put_new(:run, fn _job_type, _id -> :done end)
       |> Keyword.put_new(:sweep, fn _job_types, _skip_ids -> :ok end)
+      |> Keyword.put_new(:time_out, fn _job_type, _id, _timeout -> :ok end)
       |> Keyword.put_new(:poll_interval_ms, :timer.minutes(1))
       |> Keyword.put_new_lazy(:runs, &start_runs/0)
 
@@ -931,6 +940,354 @@ defmodule Hologram.Job.WorkerTest do
       wake(worker)
 
       assert ran(2) == [{Module1, "a"}, {Module1, "b"}]
+    end
+  end
+
+  describe "handle a run past its time limit" do
+    # Long enough never to fire on its own, however slow the machine: each test fires it itself.
+    @time_limit_ms :timer.minutes(1)
+
+    defp time_limit(_job_type), do: @time_limit_ms
+
+    # The worker clears a run when it handles the run's reply or DOWN, which the test process can't
+    # see. Asking the worker for its state can come before that, so wait until the state shows it.
+    defp await_run_cleared(worker) do
+      wait_until(fn ->
+        state = :sys.get_state(worker)
+
+        state.runs == %{} and state.timers == %{}
+      end)
+
+      :sys.get_state(worker)
+    end
+
+    defp expire_run(worker, job_type, id) do
+      %{runs: runs} = :sys.get_state(worker)
+
+      {ref, _job} = Enum.find(runs, fn {_ref, job} -> job == {job_type, id} end)
+
+      send(worker, {:run_timeout, ref})
+
+      :ok
+    end
+
+    test "kills a run once its limit passes" do
+      queues = start_queues(%{Module1 => ["a"]})
+
+      start_worker_on!(queues,
+        run: blocking_run_stub(self(), queues),
+        time_out: time_out_stub(self()),
+        timeout: fn _job_type -> 30 end
+      )
+
+      assert_receive {:timed_out, Module1, "a", 30}, @timeout_ms
+    end
+
+    test "kills the run, gives up its lock and records it" do
+      queues = start_queues(%{Module1 => ["a"]})
+
+      test_pid = self()
+
+      # Both report through one envelope, so the order they arrive in is the order they are read in.
+      worker =
+        start_worker_on!(queues,
+          release: fn _job_type, id ->
+            send(test_pid, {:event, {:released, id}})
+
+            :ok
+          end,
+          run: blocking_run_stub(self(), queues),
+          time_out: fn job_type, id, timeout ->
+            send(test_pid, {:event, {:timed_out, job_type, id, timeout}})
+
+            :ok
+          end,
+          timeout: &time_limit/1
+        )
+
+      assert_receive {:running, Module1, "a", run_pid}, @timeout_ms
+
+      monitor_ref = Process.monitor(run_pid)
+
+      expire_run(worker, Module1, "a")
+
+      assert_receive {:DOWN, ^monitor_ref, :process, ^run_pid, :killed}, @timeout_ms
+      assert_receive {:event, first}, @timeout_ms
+      assert_receive {:event, second}, @timeout_ms
+
+      assert first == {:released, "a"}
+      assert second == {:timed_out, Module1, "a", @time_limit_ms}
+    end
+
+    test "kills a run that traps exits" do
+      test_pid = self()
+      queues = start_queues(%{Module1 => ["a"]})
+
+      run = fn job_type, id ->
+        Process.flag(:trap_exit, true)
+        take_off(queues, job_type, id)
+        send(test_pid, {:running, job_type, id, self()})
+
+        Process.sleep(:infinity)
+      end
+
+      worker =
+        start_worker_on!(queues,
+          run: run,
+          time_out: time_out_stub(test_pid),
+          timeout: &time_limit/1
+        )
+
+      assert_receive {:running, Module1, "a", run_pid}, @timeout_ms
+
+      monitor_ref = Process.monitor(run_pid)
+
+      expire_run(worker, Module1, "a")
+
+      assert_receive {:DOWN, ^monitor_ref, :process, ^run_pid, :killed}, @timeout_ms
+      assert_receive {:timed_out, Module1, "a", @time_limit_ms}, @timeout_ms
+    end
+
+    test "records it before sweeping its type, which would call it cut short" do
+      test_pid = self()
+      queues = start_queues(%{})
+
+      worker =
+        start_worker_on!(queues,
+          run: blocking_run_stub(test_pid, queues),
+          sweep: fn _job_types, _skip_ids ->
+            send(test_pid, {:event, :swept})
+
+            :ok
+          end,
+          time_out: fn _job_type, _id, _timeout ->
+            send(test_pid, {:event, :timed_out})
+
+            :ok
+          end,
+          timeout: &time_limit/1
+        )
+
+      await_first_look()
+
+      for _type <- 1..3, do: assert_receive({:event, :swept}, @timeout_ms)
+
+      add_jobs(queues, Module1, ["a"])
+      wake(worker)
+
+      assert_receive {:running, Module1, "a", _run_pid}, @timeout_ms
+
+      expire_run(worker, Module1, "a")
+
+      assert_receive {:event, first}, @timeout_ms
+      assert_receive {:event, second}, @timeout_ms
+
+      assert {first, second} == {:timed_out, :swept}
+    end
+
+    test "cancels the limit of a run that ends in time" do
+      queues = start_queues(%{Module1 => ["a"]})
+
+      worker =
+        start_worker_on!(queues,
+          run: blocking_run_stub(self(), queues),
+          time_out: time_out_stub(self()),
+          timeout: &time_limit/1
+        )
+
+      assert_receive {:running, Module1, "a", run_pid}, @timeout_ms
+
+      [{timer, ^run_pid, @time_limit_ms}] = Map.values(:sys.get_state(worker).timers)
+      monitor_ref = Process.monitor(run_pid)
+
+      send(run_pid, :finish)
+
+      assert_receive {:DOWN, ^monitor_ref, :process, ^run_pid, _reason}, @timeout_ms
+
+      state = await_run_cleared(worker)
+
+      assert Process.read_timer(timer) == false
+      assert state.timers == %{}
+      assert state.timed_out == MapSet.new()
+      refute_received {:timed_out, _job_type, _id, _timeout}
+    end
+
+    test "ignores the timer of a run that has ended" do
+      worker = start_worker!(time_out: time_out_stub(self()))
+
+      send(worker, {:run_timeout, make_ref()})
+
+      assert :sys.get_state(worker).timers == %{}
+      refute_received {:timed_out, _job_type, _id, _timeout}
+    end
+
+    # The timer fires, and the run's reply is already on its way, so the kill finds nothing.
+    test "leaves nothing behind for a run whose reply races the kill" do
+      queues = start_queues(%{Module1 => ["a"]})
+
+      worker =
+        start_worker_on!(queues,
+          run: blocking_run_stub(self(), queues),
+          time_out: time_out_stub(self()),
+          timeout: &time_limit/1
+        )
+
+      assert_receive {:running, Module1, "a", run_pid}, @timeout_ms
+
+      [ref] = Map.keys(:sys.get_state(worker).runs)
+      monitor_ref = Process.monitor(run_pid)
+
+      :sys.suspend(worker)
+
+      send(worker, {:run_timeout, ref})
+      send(run_pid, :finish)
+
+      assert_receive {:DOWN, ^monitor_ref, :process, ^run_pid, _reason}, @timeout_ms
+
+      :sys.resume(worker)
+
+      state = await_run_cleared(worker)
+
+      assert state.runs == %{}
+      assert state.timers == %{}
+      assert state.timed_out == MapSet.new()
+      refute_received {:timed_out, _job_type, _id, _timeout}
+    end
+
+    # It went down for a reason of its own, so its row says it was cut short rather than killed.
+    test "leaves a run that crashed as its limit passed to the sweep" do
+      test_pid = self()
+      queues = start_queues(%{Module1 => ["a"]})
+
+      run = fn job_type, id ->
+        take_off(queues, job_type, id)
+        send(test_pid, {:running, job_type, id, self()})
+
+        receive do
+          :crash -> exit(:boom)
+        end
+      end
+
+      worker =
+        start_worker_on!(queues,
+          run: run,
+          sweep: sweep_stub(test_pid),
+          time_out: time_out_stub(test_pid),
+          timeout: &time_limit/1
+        )
+
+      assert_receive {:running, Module1, "a", run_pid}, @timeout_ms
+
+      [ref] = Map.keys(:sys.get_state(worker).runs)
+      monitor_ref = Process.monitor(run_pid)
+
+      for job_type <- [Module1, Module2, Module3] do
+        assert_receive {:swept, [^job_type], _skip_ids}, @timeout_ms
+      end
+
+      capture_log(fn ->
+        :sys.suspend(worker)
+
+        send(worker, {:run_timeout, ref})
+        send(run_pid, :crash)
+
+        assert_receive {:DOWN, ^monitor_ref, :process, ^run_pid, :boom}, @timeout_ms
+
+        :sys.resume(worker)
+
+        assert_receive {:swept, [Module1], _skip_ids}, @timeout_ms
+      end)
+
+      assert :sys.get_state(worker).timed_out == MapSet.new()
+      refute_received {:timed_out, _job_type, _id, _timeout}
+    end
+
+    test "keeps the node's other runs going" do
+      queues = start_queues(%{Module1 => ["slow"], Module2 => ["other"]})
+
+      worker =
+        start_worker_on!(queues,
+          run: blocking_run_stub(self(), queues),
+          time_out: time_out_stub(self()),
+          timeout: &time_limit/1
+        )
+
+      assert_receive {:running, Module1, "slow", _slow_pid}, @timeout_ms
+      assert_receive {:running, Module2, "other", other_pid}, @timeout_ms
+
+      expire_run(worker, Module1, "slow")
+
+      assert_receive {:timed_out, Module1, "slow", @time_limit_ms}, @timeout_ms
+
+      assert Process.alive?(other_pid)
+    end
+
+    test "frees the run's slot" do
+      test_pid = self()
+      queues = start_queues(%{Module1 => ["a", "b"]})
+
+      run = fn job_type, id ->
+        take_off(queues, job_type, id)
+        send(test_pid, {:running, job_type, id, self()})
+
+        if id == "a", do: Process.sleep(:infinity), else: :done
+      end
+
+      worker =
+        start_worker_on!(queues,
+          max_concurrency: fn _job_type -> 1 end,
+          run: run,
+          time_out: time_out_stub(test_pid),
+          timeout: &time_limit/1
+        )
+
+      assert_receive {:running, Module1, "a", _run_pid}, @timeout_ms
+
+      :sys.get_state(worker)
+
+      refute_received {:running, Module1, "b", _run_pid}
+
+      expire_run(worker, Module1, "a")
+
+      assert_receive {:timed_out, Module1, "a", @time_limit_ms}, @timeout_ms
+      assert_receive {:running, Module1, "b", _run_pid}, @timeout_ms
+    end
+
+    # The row stays running with no lock held, which is what a sweep records as cut short.
+    test "leaves the run to its sweep when recording it fails" do
+      test_pid = self()
+      queues = start_queues(%{})
+
+      worker =
+        start_worker_on!(queues,
+          run: blocking_run_stub(test_pid, queues),
+          sweep: sweep_stub(test_pid),
+          time_out: fn _job_type, _id, _timeout -> raise "refused" end,
+          timeout: &time_limit/1
+        )
+
+      await_first_look()
+
+      for job_type <- [Module1, Module2, Module3] do
+        assert_receive {:swept, [^job_type], _skip_ids}, @timeout_ms
+      end
+
+      log =
+        capture_log(fn ->
+          add_jobs(queues, Module1, ["a"])
+          wake(worker)
+
+          assert_receive {:running, Module1, "a", _run_pid}, @timeout_ms
+
+          expire_run(worker, Module1, "a")
+
+          assert_receive {:swept, [Module1], _skip_ids}, @timeout_ms
+
+          :sys.get_state(worker)
+        end)
+
+      assert log =~ "refused"
+      assert Process.alive?(worker)
     end
   end
 

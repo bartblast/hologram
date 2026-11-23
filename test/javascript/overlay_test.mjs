@@ -7,6 +7,7 @@ import Clock from "../../assets/js/clock.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
+import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
 
@@ -139,6 +140,46 @@ describe("Overlay", () => {
           votes: stamp,
         },
       });
+    });
+
+    it("gives a created job the defaults of the framework's attributes", () => {
+      const JOB = "MyApp.Jobs.Notify";
+
+      globalThis.Hologram.sync.model[JOB] = {
+        attributes: {
+          actor_id: "uuid",
+          attempt: "integer",
+          created_at: "datetime",
+          error: "string",
+          id: "uuid",
+          scheduled_at: "datetime",
+          status: "enum",
+          updated_at: "datetime",
+        },
+        constraints: {},
+        defaults: {attempt: Type.integer(0), status: Type.atom("queued")},
+        enumValues: {status: ["queued", "running", "done", "failed"]},
+        frameworkAttributes: [
+          "actor_id",
+          "attempt",
+          "error",
+          "scheduled_at",
+          "status",
+        ],
+        relationships: {},
+        serverOnly: ["error"],
+      };
+
+      Model.reset();
+
+      pushed(createWrite({data: {}, id: "j1", type: JOB}));
+
+      const row = Overlay.foldRow(JOB, "j1", null);
+
+      assert.strictEqual(row.attempt, 0);
+      assert.strictEqual(row.status, "queued");
+      assert.notProperty(row, "scheduled_at");
+      assert.notProperty(row.$revisions, "attempt");
     });
 
     it("timestamps a create from the moment its writer made it", () => {

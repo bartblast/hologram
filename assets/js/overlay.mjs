@@ -324,7 +324,8 @@ export default class Overlay {
   // server's pair is nil: it is the moment the row reaches the server, which has not happened
   // yet, and the server's own row brings it.
   // Every settable field takes that stamp as its revision, which is what the server's insert does
-  // with the same number.
+  // with the same number. A job's framework attributes aren't in the write, so the ones with a
+  // default take it here: an absent attempt would box to nil, which compares above every number.
   //
   // Reached only while the base holds no such row - once one is there, it is the server's own
   // copy and stands on its own.
@@ -335,13 +336,18 @@ export default class Overlay {
       Model.settableFields(type).map((field) => [field, write.stamp]),
     );
 
-    const row = Object.assign({id: write.id}, write.data, {
-      created_at: timestamp,
-      server_created_at: null,
-      server_updated_at: null,
-      updated_at: timestamp,
-      $revisions: revisions,
-    });
+    const row = Object.assign(
+      {id: write.id},
+      Overlay.#frameworkDefaults(type),
+      write.data,
+      {
+        created_at: timestamp,
+        server_created_at: null,
+        server_updated_at: null,
+        updated_at: timestamp,
+        $revisions: revisions,
+      },
+    );
 
     return Model.computeSortKeys(type, row);
   }
@@ -401,6 +407,20 @@ export default class Overlay {
     }
 
     return sourceIds;
+  }
+
+  // The defaults of the given type's framework attributes, as a row spells them.
+  static #frameworkDefaults(type) {
+    const entry = Model.entry(type);
+
+    return Object.fromEntries(
+      entry.frameworkAttributes
+        .filter((name) => Object.hasOwn(entry.defaults, name))
+        .map((name) => [
+          name,
+          Model.unbox(entry.defaults[name], entry.attributes[name]),
+        ]),
+    );
   }
 
   // The inverse of a to-many the given relationship of the given type is, when it is one - an

@@ -545,6 +545,29 @@ defmodule Hologram.Mutation.EnvelopeTest do
                 ~s[write 0: "actor_id" is not a field of Hologram.Test.Fixtures.Job.Module1 a client can write]}
     end
 
+    test "refuses a job's attempt count as a field" do
+      entry = create(JobModule1, %{"attempt" => 0})
+
+      assert parse(raw([entry])) ==
+               {:error,
+                ~s[write 0: "attempt" is not a field of Hologram.Test.Fixtures.Job.Module1 a client can write]}
+    end
+
+    test "refuses a delta on a job's attempt count" do
+      entry = update(JobModule1, nil, deltas: %{"attempt" => -1})
+
+      assert {:error, message} = parse(raw([entry]))
+      assert message =~ ~s("attempt")
+    end
+
+    test "refuses a job's due time as a field" do
+      entry = create(JobModule1, %{"scheduled_at" => "2000-01-01T00:00:00Z"})
+
+      assert parse(raw([entry])) ==
+               {:error,
+                ~s[write 0: "scheduled_at" is not a field of Hologram.Test.Fixtures.Job.Module1 a client can write]}
+    end
+
     test "refuses a job's error as a field" do
       entry = create(JobModule1, %{"error" => "boom"})
 

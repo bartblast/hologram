@@ -130,7 +130,7 @@ describe("Elixir_Hologram_DB", () => {
           relationships: {},
           serverOnly: [],
         },
-        // A job type - the three attributes its framework fills are what tells one apart here.
+        // A job type - the attributes its framework fills are what tells one apart here.
         [NOTIFY]: {
           attributes: {
             actor_id: "uuid",
@@ -142,7 +142,13 @@ describe("Elixir_Hologram_DB", () => {
           constraints: {},
           defaults: {},
           enumValues: {},
-          frameworkAttributes: ["actor_id", "error", "status"],
+          frameworkAttributes: [
+            "actor_id",
+            "attempt",
+            "error",
+            "scheduled_at",
+            "status",
+          ],
           relationships: {},
           serverOnly: [],
         },

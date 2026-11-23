@@ -55,6 +55,23 @@ defmodule Hologram.JobCreateTest do
       assert job.actor_id == nil
     end
 
+    test "starts with no attempts" do
+      assert {:ok, job} = create(Module1)
+
+      assert job.attempt == 0
+      assert DB.read(Module1, job.id).attempt == 0
+    end
+
+    test "makes the job due from now" do
+      before_create = DateTime.utc_now()
+
+      assert {:ok, job} = create(Module1)
+
+      assert DateTime.compare(job.scheduled_at, before_create) != :lt
+      assert DateTime.compare(job.scheduled_at, DateTime.utc_now()) != :gt
+      assert DB.read(Module1, job.id).scheduled_at == job.scheduled_at
+    end
+
     test "evaluates the write as create for the acting user" do
       user = create_user("refused@example.com")
 
@@ -92,6 +109,22 @@ defmodule Hologram.JobCreateTest do
         ":status of Hologram.Test.Fixtures.Job.Module1 is set by the framework - a job is enqueued as queued, and the worker records the rest"
 
       assert_error MisuseError, expected_msg, fn -> create(Module1, status: :done) end
+    end
+
+    test "raises on a value of the attempt count" do
+      expected_msg =
+        ":attempt of Hologram.Test.Fixtures.Job.Module1 is set by the framework - a job is enqueued as queued, and the worker records the rest"
+
+      assert_error MisuseError, expected_msg, fn -> create(Module1, attempt: 5) end
+    end
+
+    test "raises on a value of the due time" do
+      expected_msg =
+        ":scheduled_at of Hologram.Test.Fixtures.Job.Module1 is set by the framework - a job is enqueued as queued, and the worker records the rest"
+
+      assert_error MisuseError, expected_msg, fn ->
+        create(Module1, scheduled_at: ~U[2000-01-01 00:00:00Z])
+      end
     end
 
     test "raises on an unknown option" do

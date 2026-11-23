@@ -178,6 +178,7 @@ export default class SyncStream {
       const stored = Durability.persistFrame(
         LocalDatabase.records(written),
         frame.cursor,
+        LocalDatabase.takeStoredFactRemovals(),
       );
 
       $.tell("sync_deltas", frame, stored);

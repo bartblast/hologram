@@ -64,9 +64,11 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Vault
   alias HologramFeatureTests.Entities.Waybill
   alias HologramFeatureTests.Entities.Workshop
+  alias HologramFeatureTests.Jobs.FlakyRun
   alias HologramFeatureTests.Jobs.HoldRun
   alias HologramFeatureTests.Jobs.KillRun
   alias HologramFeatureTests.Jobs.RestockItem
+  alias HologramFeatureTests.Jobs.SlowRun
   alias HologramFeatureTestsWeb.Endpoint
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
   alias Wallaby.Browser
@@ -1290,6 +1292,7 @@ defmodule HologramFeatureTests.Helpers do
         Docket,
         Document,
         Event,
+        FlakyRun,
         Folder,
         GuestEntry,
         HoldRun,
@@ -1321,6 +1324,7 @@ defmodule HologramFeatureTests.Helpers do
         Ship,
         Shop,
         Slip,
+        SlowRun,
         Sticker,
         Stop,
         Ticket,
