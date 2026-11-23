@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.ActionWritesPage do
 
   alias HologramFeatureTests.Components.ActionWrites.Todos
   alias HologramFeatureTests.Entities.Todo
+  alias HologramFeatureTests.Entities.User
 
   route "/action-writes"
 
@@ -25,6 +26,9 @@ defmodule HologramFeatureTests.ActionWritesPage do
   def template do
     ~HOLO"""
     <p>
+      <button $click={command: :log_in}> Log in </button>
+      <button $click={action: :add_todo_holding_nul}> Add a todo holding a NUL </button>
+      <button $click={action: :add_todo_to_corrupt}> Add a todo the test corrupts </button>
       <button $click={action: :add_todo_with_taken_slug}> Add a todo with a taken slug </button>
       <button $click={action: :add_one_todo}> Add one todo </button>
       <button $click={action: :add_two_todos}> Add two todos </button>
@@ -49,6 +53,28 @@ defmodule HologramFeatureTests.ActionWritesPage do
       |> DB.create()
 
     put_state(component, :result, "created_#{todo.title}")
+  end
+
+  # A NUL is valid text that no PostgreSQL text column can hold, so the browser refuses it here
+  # rather than queue a write the database would never take.
+  def action(:add_todo_holding_nul, _params, component) do
+    {:error, %{title: [{:type, :string}]}} =
+      %{title: "a\0b"}
+      |> Todo.new()
+      |> DB.create()
+
+    put_state(component, :result, "refused_nul")
+  end
+
+  # Valid as written. A test rewrites this title in the browser's stored queue to one holding a NUL,
+  # which stands in for a batch queued before the browser's validator refused such a value.
+  def action(:add_todo_to_corrupt, _params, component) do
+    {:ok, _todo} =
+      %{title: "corrupt-me"}
+      |> Todo.new()
+      |> DB.create()
+
+    put_state(component, :result, "created_to_corrupt")
   end
 
   # Uniqueness is a question about rows this client does not hold, so the create passes here and
@@ -133,6 +159,10 @@ defmodule HologramFeatureTests.ActionWritesPage do
     put_state(component, :result, "renamed_beta")
   end
 
+  def action(:show_result, params, component) do
+    put_state(component, :result, params.result)
+  end
+
   def action(:vote, _params, component) do
     Todo
     |> filter(title: "alpha")
@@ -142,5 +172,15 @@ defmodule HologramFeatureTests.ActionWritesPage do
     |> DB.update!()
 
     put_state(component, :result, "voted_1")
+  end
+
+  def command(:log_in, _params, server) do
+    user =
+      %{email: "action-writes@example.com"}
+      |> User.new()
+      |> trust()
+      |> DB.create!()
+
+    put_action(%{server | user_id: user.id}, :show_result, result: "logged_in")
   end
 end

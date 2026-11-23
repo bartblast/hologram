@@ -24,6 +24,21 @@ defmodule HologramFeatureTests.WriteQueueTest do
     :ok
   end
 
+  # The create and the rename are two batches, so the row exists before the rename lands, and
+  # waiting for one row can read it between them.
+  defp await_server_title(title) do
+    Enum.reduce_while(1..100, [], fn _attempt, _acc ->
+      todos = DB.read(Todo)
+
+      if match?([%Todo{title: ^title}], todos) do
+        {:halt, todos}
+      else
+        Process.sleep(50)
+        {:cont, todos}
+      end
+    end)
+  end
+
   defp replica_id(session) do
     script_result(session, "return globalThis.Hologram.durability.replicaId();")
   end
@@ -161,7 +176,7 @@ defmodule HologramFeatureTests.WriteQueueTest do
       |> reload()
       |> assert_page(WriteQueuePage)
 
-    assert [%Todo{title: "beta"}] = await_server_todos(1)
+    assert [%Todo{title: "beta"}] = await_server_title("beta")
 
     assert [
              %{seq: 1, result: %{"status" => "confirmed"}},

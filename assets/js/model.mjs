@@ -517,6 +517,15 @@ export default class Model {
           ? Model.#heldInteger(value.value)
           : Number(value.value);
 
+      // A lone surrogate, half of a pair, is spelled the way the server will store it, so the row
+      // on this screen and the row the server holds are one value. A struct edited in an action can
+      // hold a non-text binary until it's validated, and that has no text to mend.
+      case "string": {
+        const text = Bitstring.toText(value);
+
+        return typeof text === "string" ? text.toWellFormed() : text;
+      }
+
       case "time":
         return Model.#unboxTime(value);
 
