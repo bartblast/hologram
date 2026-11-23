@@ -32,10 +32,11 @@ import Tabs from "./tabs.mjs";
 // user's unfinished work whatever has gone wrong since. Its record shape is FROZEN, spelled and
 // argued in `batch.mjs`: a bundle drains what an older bundle wrote.
 //
-// They do NOT outlive a storage failure, and that is the one exception. After one, this page goes
-// on spending numbers that nothing records, so a stored counter is stale rather than merely old -
-// and a later load resuming from it would hand out numbers already answered. Absent is safe where
-// stale is not.
+// A storage failure leaves all of them standing too. A number under an identity is spent only where
+// the store records it, so a tab that lost its store spends none under the stored identity. It
+// sends the batches the store already holds under that identity, which the server answers from
+// its record if it has seen them, and anything newer goes out under an identity the server mints
+// for it (see Replica.requestMint).
 //
 // ONE DATABASE PER MODEL VERSION, named for the layout of the store itself and the model this
 // bundle speaks. A deploy that changes the model lands in a new tab while an old tab is still open,
@@ -84,6 +85,10 @@ export default class Durability {
   // is not sending them" apart from "there are none", and nothing in the framework reads it.
   static storedBatches = 0;
 
+  // Whether this page ever had a store open. Once it has, a pair it isn't sure the store doesn't
+  // hold can have numbers recorded under it (see Batches.#numbered).
+  static hadStore = false;
+
   static #db = null;
 
   // What load() read, held until restore() consumes it. Read before the mount so that restore has
@@ -94,6 +99,9 @@ export default class Durability {
   // Whether restore() has run, after which this tab holds what the store held or knows it held
   // nothing.
   static #restored = false;
+
+  // The id of the identity the store holds, as far as this tab knows (see holdsIdentity).
+  static #storedReplicaId = null;
 
   // Whether this page load has already put the question to the browser. Flipped BEFORE the asking
   // starts, which is what stops two batches stored in the same turn from both asking.
@@ -202,11 +210,10 @@ export default class Durability {
   // can tell a correct version from one that reads the counter outside the transaction. The two
   // tabs of `multi_tab_test.exs` are what bind it, in a browser where the case is real.
   //
-  // The number taken is above the counter AND above every batch already in the queue, which are
-  // the same thing until a storage failure: that drops the counter (a page that goes on spending
-  // numbers nothing records leaves a stale one) and keeps the queue (a stored batch is still the
-  // user's unfinished work). 10b applied that rule when a page load resumed; applying it at every
-  // seal is what makes it hold for a tab that never resumed anything.
+  // The number taken is above the counter AND above every batch already in the queue. They're
+  // normally the same, and part in a store an earlier build failed on, which dropped the counter and
+  // kept the queue. 10b applied that rule when a page load resumed; applying it at every seal is
+  // what makes it hold for a tab that never resumed anything.
   //
   // The batch and its number go down TOGETHER, in one transaction, because either without the
   // other is wrong in its own way. A number with no batch is one the next load counts on from for
@@ -278,9 +285,59 @@ export default class Durability {
   // same replica and number is answered from the server's record of the first rather than applied
   // again, so the cost is a round trip rather than a duplicate write.
   static forgetBatch(seq) {
+    if (Durability.mode === "memory") {
+      return Durability.hadStore && Durability.holdsIdentity()
+        ? Durability.#forgetWithoutStore(seq)
+        : Promise.resolve();
+    }
+
     return Durability.#write([QUEUE], (transaction) =>
       transaction.objectStore(QUEUE).delete(seq),
     );
+  }
+
+  // The same, for a tab that has let go of the store and is still sending the batches it holds. Not
+  // every verdict is on the server's record: a refusal of a signed-out visitor's batch isn't, and
+  // neither is a `:clock` refusal. A batch left in the queue would go out again on the next load
+  // and be judged afresh, so a write the person watched fail could apply.
+  //
+  // Over a connection of its own, for this one delete, which usually works on a full disk too. If
+  // it doesn't, the next load sends the batch again and that risk stands.
+  //
+  // Only while the store still names this identity. Under another one, the same number can be a
+  // different batch. And a database deleted meanwhile stays deleted: opening it would otherwise
+  // bring it back with no stores in it, and every later load would fall to memory mode.
+  static async #forgetWithoutStore(seq) {
+    const replicaId = Replica.id;
+
+    let db = null;
+
+    try {
+      const request = globalThis.indexedDB.open(
+        Durability.databaseName(),
+        VERSION,
+      );
+
+      request.onupgradeneeded = () => request.transaction.abort();
+
+      db = await Durability.#request(request);
+      db.onversionchange = () => db.close();
+
+      const transaction = db.transaction([META, QUEUE], "readwrite");
+      const stored = transaction.objectStore(META).get("replica");
+
+      stored.onsuccess = () => {
+        if (stored.result?.id === replicaId) {
+          transaction.objectStore(QUEUE).delete(seq);
+        }
+      };
+
+      await Durability.#complete(transaction);
+    } catch {
+      // There is nothing further to try, and the batch has had its answer either way.
+    } finally {
+      db?.close();
+    }
   }
 
   // Everything the previous page load left, read in one go and held for restore() - apart from
@@ -312,6 +369,7 @@ export default class Durability {
     }
 
     Durability.#loaded = loaded;
+    Durability.#storedReplicaId = loaded.replica?.id ?? null;
     Durability.storedBatches = loaded.queue.length;
   }
 
@@ -380,6 +438,7 @@ export default class Durability {
       Tabs.dissolve();
     };
 
+    Durability.hadStore = true;
     Durability.mode = "indexeddb";
   }
 
@@ -478,9 +537,29 @@ export default class Durability {
   static persistReplica(replica) {
     Durability.#replicaWrite = Durability.#write([META], (transaction) => {
       transaction.objectStore(META).put(replica, "replica");
+    }).then((stored) => {
+      if (stored) {
+        Durability.noteStoredReplica(replica);
+      }
+
+      return stored;
     });
 
     return Durability.#replicaWrite;
+  }
+
+  // The identity the store holds, for a tab that learned it from its group rather than reading or
+  // writing it itself. A tab's state names an identity only once it's written down (see
+  // Tabs.postState).
+  static noteStoredReplica(replica) {
+    Durability.#storedReplicaId = replica.id;
+  }
+
+  // Whether the identity this tab presents is the one the store holds. A tab without a store that
+  // does may send the stored batches under it, and nothing else: their numbers are recorded, and a
+  // new one would be recorded nowhere, so the next load could spend it again.
+  static holdsIdentity() {
+    return Replica.id !== null && Replica.id === Durability.#storedReplicaId;
   }
 
   // The rows the store holds and the place they stand at, read again after the load - for a tab
@@ -691,12 +770,9 @@ export default class Durability {
   // whole of what is available, and it costs nothing.)
   //
   // The counter resumes above every STORED BATCH as well as above the number itself, which are
-  // normally the same. They part after a storage failure: the counter is dropped there, because a
-  // page that goes on spending numbers nothing records leaves a stale one behind - and the queue is
-  // kept, because a batch already written down is still the user's unfinished work. Counting from
-  // nothing would then hand a new batch a number a stored one already holds, and its record would
-  // be overwritten by a batch that is not it. The maximum is what makes keeping one and dropping
-  // the other safe.
+  // normally the same. They part in a store an earlier build failed on, which dropped the counter
+  // and kept the queue. Counting from nothing would then hand a new batch a number a stored one
+  // already holds, and its record would be overwritten by a batch that is not it.
   static restore(leader) {
     const loaded = Durability.#loaded;
 
@@ -781,6 +857,7 @@ export default class Durability {
       // eslint-disable-next-line no-empty
     } catch {}
 
+    Durability.hadStore = false;
     Durability.inFlight = 0;
     Durability.persisted = null;
     Durability.storedBatches = 0;
@@ -788,6 +865,7 @@ export default class Durability {
     Durability.#loaded = null;
     Durability.#persistenceAsked = false;
     Durability.#restored = false;
+    Durability.#storedReplicaId = null;
     Durability.#replicaWrite = Promise.resolve();
   }
 
@@ -809,24 +887,18 @@ export default class Durability {
   }
 
   // Something the database was asked to do could not be done. What follows is always the same:
-  // what is stored goes, and this page carries on from memory.
+  // the rows and the place go, and this page carries on from memory.
   //
-  // The rows go because a base missing one frame's is worse than no base at all - the next startup
+  // They go because a base missing one frame's is worse than no base at all - the next startup
   // cannot tell the two apart, and would resume from a place claiming rows that were never
   // written. What this browser DID is left alone, as everywhere else: a number reused and a clock
   // restarted low cost more than a re-download.
   //
-  // The identity and its counter go too, and this is the ONE place they do. They survive a
-  // resync, a model change and somebody else signing in because they stay TRUE through all three -
-  // but a counter that has stopped advancing on disk while this page goes on spending numbers is
-  // no longer true, and keeping it would cause the very thing it exists to prevent: the next load
-  // would resume from it and hand out numbers the server has already answered, which it answers
-  // again from the record of the batch that first carried them. The distinct writes would be
-  // dropped in silence.
-  //
-  // Absent is safe where stale is not. A load that finds no identity takes the fresh pair its own
-  // page was minted - a new id, with no record anywhere - and counts from nothing. The clock is
-  // left, because it only ever moves forward and cannot go stale in this way.
+  // That includes the identity and its counter, which stay true: nothing spends a number under the
+  // stored identity without the store (see Batches.#numbered). And the stored queue needs them. A
+  // batch answered after this point can't be taken out of the queue, so the next load sends it
+  // again, and only under the same identity and number does the server answer it from its record
+  // rather than apply it twice.
   //
   // The wipe deliberately does NOT go through the ordinary write path. A failure here must not
   // come back round to this function, and it cannot: nothing in this block reports one. That is
@@ -848,30 +920,22 @@ export default class Durability {
       `Hologram: durable storage stopped (${reason}), the database lives in memory for this page`,
     );
 
-    try {
-      const transaction = Durability.#db.transaction(
-        Tabs.leader ? [ENTITIES, META] : [META],
-        "readwrite",
-      );
-
-      if (Tabs.leader) {
-        Durability.#wipe(transaction);
+    if (Tabs.leader) {
+      try {
+        Durability.#wipe(
+          Durability.#db.transaction([ENTITIES, META], "readwrite"),
+        );
+      } catch {
+        // There is nothing further to try - this page stops storing either way.
       }
-
-      const meta = transaction.objectStore(META);
-
-      meta.delete("replica");
-      meta.delete("seq");
-    } catch {
-      // There is nothing further to try - this page stops storing either way.
     }
 
     Durability.#letGo();
 
     // The other tabs of the group share this database, and a store that refused this write can
     // refuse theirs. They let go of it too, rather than going on writing into a store whose place
-    // may no longer describe what it holds. This tab leaves the group as well, so it can't inherit
-    // the lead with a counter nothing records.
+    // may no longer describe what it holds. This tab leaves the group as well, since it can't lead
+    // one with no store to number batches in.
     Tabs.storeLost();
   }
 

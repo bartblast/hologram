@@ -317,6 +317,55 @@ export default class Batches {
           continue;
         }
 
+        // No number means no store took this batch, and the tab has no identity of its own to
+        // number it under (see #numbered). Every batch the store does hold goes first, including
+        // one whose filing may still land. Then the tab asks for an identity and numbers what's
+        // left under it, in the order it was made.
+        if (batch.seq === null) {
+          const filing = Batches.pending.filter((held) => held.filed === null);
+
+          if (filing.length > 0) {
+            await Promise.allSettled(filing.map((held) => held.recorded));
+
+            continue;
+          }
+
+          if (Batches.pending[0] !== batch) {
+            continue;
+          }
+
+          if (!Replica.minted && !Replica.awaitingMint) {
+            Replica.requestMint();
+
+            if (Sse.isStarted) {
+              Sse.reconnect();
+            }
+
+            return;
+          }
+
+          if (Replica.minted) {
+            for (const held of Batches.pending) {
+              if (held.seq === null) {
+                Batches.#numbered(held);
+              }
+            }
+          }
+        }
+
+        // A stored batch only ever goes out under the stored identity: under any other, the server
+        // has no record of it and would apply it a second time if it has already seen it. It stays
+        // in the store for the next page load, which takes up both.
+        if (
+          batch.filed &&
+          Durability.mode === "memory" &&
+          !Durability.holdsIdentity()
+        ) {
+          Batches.#letFiledGo();
+
+          continue;
+        }
+
         // Nothing goes out until the pair this tab asked for arrives (see Replica.requestMint). The
         // handshake that brings it wakes the sender again.
         if (Replica.awaitingMint) {
@@ -351,6 +400,20 @@ export default class Batches {
         // neither of those is coming when the stream stays up while the endpoint fails - a retry
         // on the stream's own backoff, scheduled below.
         if (answer.status === "failed") {
+          // Refused with no store to record a new identity in, a stored batch can't move to one:
+          // if an earlier send landed, the server would apply it again. It waits in the store for
+          // the next page load.
+          if (
+            answer.httpStatus === 403 &&
+            batch.filed &&
+            Durability.mode === "memory"
+          ) {
+            batch.mark("pending");
+            Batches.#letFiledGo();
+
+            continue;
+          }
+
           // A 403 says the IDENTITY was refused, before the writes were read - a stored statement
           // stops verifying when the session it was bound to is gone, and after the server's
           // signing key is rotated every stored one does. Presenting it again would be refused
@@ -539,8 +602,8 @@ export default class Batches {
 
   // The batch is in the overlay from the moment it opens, so a write is readable on the next line
   // of the action that made it.
-  // How long the oldest unsent batch has been waiting, named by its sequence number - null when
-  // nothing is pending.
+  // How long the oldest unsent batch has been waiting, named by its sequence number - null when no
+  // pending batch has a number yet.
   static oldestPendingSeq() {
     return Batches.pending[0]?.seq ?? null;
   }
@@ -669,6 +732,13 @@ export default class Batches {
     });
   }
 
+  // The batches the store holds, off this tab's queue and screen, for a tab that can no longer send
+  // them. The next page load does.
+  static #letFiledGo() {
+    Batches.disown();
+    SyncStream.scheduleRender();
+  }
+
   // A batch disown() couldn't decide about, now known to be in the store. Its number stays seen,
   // like those of the batches disown() let go of at once.
   //
@@ -687,8 +757,22 @@ export default class Batches {
   // A batch whose number is settled: taken from this tab's own count if the store gave none, and
   // followed by `#seq` either way, so a tab that later has to count for itself counts on from the
   // highest number it has seen rather than from the last one it spent.
+  //
+  // Except in a page that has had a store, until the server has minted it a pair of its own. Any
+  // other pair it presents can be one the store holds, or is about to, and a number spent under it
+  // would be recorded nowhere: the next load could spend it again on another write, and the server
+  // would answer that write from this one's record. So the batch waits, unnumbered and behind
+  // every stored batch, for that pair (see flush).
+  //
+  // And under that pair it waits for the batches made before it, whose filings can still fail and
+  // need a number too. Numbers are the order batches go out in, and a later batch may name a row an
+  // earlier one created.
   static #numbered(batch) {
     if (batch.seq === null) {
+      if (Durability.hadStore && !Batches.#isNextToNumber(batch)) {
+        return;
+      }
+
       batch.seal(++Batches.#seq);
     } else {
       Batches.#seq = Math.max(Batches.#seq, batch.seq);
@@ -702,6 +786,15 @@ export default class Batches {
     // reads it here or out of the store, and because a Batch is not something a browser can carry
     // from one tab to another.
     Tabs.post({kind: "sealed", record: batch.record()});
+  }
+
+  static #isNextToNumber(batch) {
+    return (
+      Replica.minted &&
+      Batches.pending.find(
+        (held) => held.seq === null || held.filed === null,
+      ) === batch
+    );
   }
 
   // Oldest first, which is the order batches must ship in - a later batch may name a row an earlier

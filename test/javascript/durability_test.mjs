@@ -434,12 +434,6 @@ describe("Durability", () => {
       assert.isUndefined(await readMeta("cursor"));
     });
 
-    // A stored counter exists only so that a later load does not reuse a number. Once storing has
-    // stopped, this page goes on spending numbers that nothing records - so the stored one is
-    // stale, and a load resuming from it would hand out numbers the server answers from the record
-    // of the batch that first carried them, dropping the new writes in silence. Absent is safe
-    // where stale is not: a load finding no identity takes its own page's fresh pair and counts
-    // from nothing.
     // The rows and the place are gone for the whole browser, not for this tab - so a tab that goes
     // on writing frames into it would be dating rows the store no longer holds.
     it("tells the group it has stopped storing", async () => {
@@ -500,8 +494,7 @@ describe("Durability", () => {
       sinon.assert.calledOnce(losing);
 
       assert.isUndefined(await readMeta("cursor"));
-      assert.isUndefined(await readMeta("replica"));
-      assert.isUndefined(await readMeta("seq"));
+      assert.equal(await readMeta("replica").then(({id}) => id), "r-stored");
     });
 
     // Only the tab that leads writes rows and a place, so a follower's failed write leaves them
@@ -536,9 +529,7 @@ describe("Durability", () => {
       assert.equal((await readAll("entities")).length, 1);
     });
 
-    // The tab that leads goes on counting in memory after hearing of this, so the stored counter
-    // stops being true whichever tab's write failed.
-    it("drops the identity and the counter in a tab that follows", async () => {
+    it("keeps the identity and the counter in a tab that follows", async () => {
       sinon.stub(Tabs, "storeLost");
 
       await seedPreviousLoad();
@@ -562,11 +553,13 @@ describe("Durability", () => {
         Tabs.leader = true;
       }
 
-      assert.isUndefined(await readMeta("replica"));
-      assert.isUndefined(await readMeta("seq"));
+      assert.equal(await readMeta("replica").then(({id}) => id), "r-stored");
+      assert.equal(await readMeta("seq"), 41);
     });
 
-    it("drops the identity and the counter, which have stopped being true", async () => {
+    // The stored queue goes out again under them, which is what lets the server answer a batch it
+    // has already applied from its record. Nothing spends a number under them without the store.
+    it("keeps the identity and the counter", async () => {
       await Durability.open();
       await Durability.load();
       await storeBatch(41);
@@ -575,8 +568,12 @@ describe("Durability", () => {
       await Durability.persistFrame([unstorableRecord()], "place-1");
 
       assert.equal(Durability.mode, "memory");
-      assert.isUndefined(await readMeta("seq"));
-      assert.isUndefined(await readMeta("replica"));
+      assert.equal(await readMeta("seq"), 41);
+
+      assert.deepStrictEqual(await readMeta("replica"), {
+        id: "r1",
+        token: "statement",
+      });
     });
 
     // It only ever moves forward, so it cannot go stale the way the counter does - and a clock
@@ -657,6 +654,63 @@ describe("Durability", () => {
     });
   });
 
+  describe("holdsIdentity()", () => {
+    it("is true for the identity the load read", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+
+      assert.isTrue(Durability.holdsIdentity());
+    });
+
+    it("is true once an identity it wrote has committed", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      Replica.adopt({id: "r1", token: "statement"});
+
+      const writing = Durability.persistReplica(Replica.current());
+
+      assert.isFalse(Durability.holdsIdentity());
+
+      await writing;
+
+      assert.isTrue(Durability.holdsIdentity());
+    });
+
+    it("is false after a write of the identity that failed", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      const refused = {id: () => {}, token: "statement"};
+
+      Replica.adopt(refused);
+
+      await Durability.persistReplica(refused);
+
+      assert.isFalse(Durability.holdsIdentity());
+    });
+
+    it("is true for an identity its group named", () => {
+      Replica.adopt({id: "r-group", token: "statement"});
+
+      Durability.noteStoredReplica(Replica.current());
+
+      assert.isTrue(Durability.holdsIdentity());
+    });
+
+    it("is false with no identity in use", () => {
+      Durability.noteStoredReplica({id: null});
+
+      assert.isFalse(Durability.holdsIdentity());
+    });
+  });
+
   describe("forgetBatch()", () => {
     it("deletes the record of the given number and no other", async () => {
       await Durability.open();
@@ -678,6 +732,101 @@ describe("Durability", () => {
       assert.equal(Durability.mode, "memory");
       assert.equal(Durability.inFlight, 0);
       assert.notInclude(Logger.getLogs() ?? "", "durable storage stopped");
+    });
+
+    describe("in a tab that has let go of the store", () => {
+      const letGo = async () => {
+        await seedPreviousLoad();
+        await writeBatches([batchRecord(7), batchRecord(8)]);
+        await Durability.open();
+        await Durability.load();
+
+        Durability.restore(true);
+        Durability.detach();
+
+        raw.forEach((connection) => connection.close());
+        raw = [];
+      };
+
+      const queued = async () =>
+        (await readAll("queue")).map((record) => record.seq);
+
+      // Not every verdict is on the server's record, so one left here could apply on the next load.
+      it("takes the answered batch out of the store", async () => {
+        await letGo();
+
+        await Durability.forgetBatch(7);
+
+        assert.equal(Durability.mode, "memory");
+        assert.deepStrictEqual(await queued(), [8]);
+      });
+
+      it("leaves the batch when the tab no longer presents the stored identity", async () => {
+        await letGo();
+
+        Replica.adopt({id: "r-minted", token: "statement-minted"});
+
+        const opening = sinon.spy(globalThis.indexedDB, "open");
+
+        await Durability.forgetBatch(7);
+
+        sinon.assert.notCalled(opening);
+        opening.restore();
+
+        assert.deepStrictEqual(await queued(), [7, 8]);
+      });
+
+      // Under another identity, the same number can be a different batch.
+      it("leaves the batch when the store has moved to another identity", async () => {
+        await letGo();
+        await writeMeta({replica: {id: "r-other", token: "statement-other"}});
+
+        await Durability.forgetBatch(7);
+
+        assert.deepStrictEqual(await queued(), [7, 8]);
+      });
+
+      // Opened with nothing there, it would come back with no stores in it.
+      it("doesn't bring back a database deleted meanwhile", async () => {
+        await letGo();
+
+        await new Promise((resolve) => {
+          globalThis.indexedDB.deleteDatabase(DATABASE_NAME).onsuccess =
+            resolve;
+        });
+
+        await Durability.forgetBatch(7);
+
+        const names = (await globalThis.indexedDB.databases()).map(
+          ({name}) => name,
+        );
+
+        assert.notInclude(names, DATABASE_NAME);
+      });
+
+      it("closes the connection it opened", async () => {
+        await letGo();
+
+        const closing = sinon.spy(FDBDatabase.prototype, "close");
+
+        await Durability.forgetBatch(7);
+
+        sinon.assert.calledOnce(closing);
+      });
+
+      it("never throws when the store can't be reached", async () => {
+        await letGo();
+
+        const indexedDB = globalThis.indexedDB;
+
+        globalThis.indexedDB = undefined;
+
+        try {
+          await Durability.forgetBatch(7);
+        } finally {
+          globalThis.indexedDB = indexedDB;
+        }
+      });
     });
   });
 
@@ -1236,9 +1385,9 @@ describe("Durability", () => {
       assert.equal(batch.seq, 10);
     });
 
-    // The two part after a storage failure, which drops the counter and keeps the queue - and
-    // counting from below a stored batch would hand its number to something else, whose record
-    // would then overwrite it.
+    // The two part in a store an earlier build failed on, which dropped the counter and kept the
+    // queue - and counting from below a stored batch would hand its number to something else, whose
+    // record would then overwrite it.
     it("numbers the batch above every stored batch when the counter was dropped", async () => {
       await Durability.open();
       await Durability.load();

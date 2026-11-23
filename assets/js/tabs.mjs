@@ -114,8 +114,10 @@ export default class Tabs {
   // The tab that was LEADING keeps the identity and the queue. Those batches were numbered under
   // that identity, it is the only tab that can still send them, and nothing else about it changes.
   //
-  // Every other tab takes the fresh identity its own page was minted, lets the batches go, and
-  // opens a stream of its own - which it needs, because the frames it was being handed stop here.
+  // Every other tab asks the server for an identity of its own, lets go of the batches the store
+  // holds, keeps the ones it doesn't (see Batches.disown), and opens a stream of its own - which it
+  // needs, because the frames it was being handed stop here. The page's pair won't do: a browser
+  // can serve one cached page to two tabs, and the store can hold it.
   // A tab still starting up has no stream to replace: the one its page opens after the mount
   // greets the server as the replica of its own it now is, and opening one before the mount would
   // greet it with none of the page's subscriptions (see where the page starts it, in hologram.mjs).
@@ -149,7 +151,7 @@ export default class Tabs {
 
     if (followed) {
       Batches.disown();
-      Replica.refresh();
+      Replica.requestMint();
     }
 
     if ((followed || untaken) && Sse.isStarted) {
@@ -783,6 +785,12 @@ export default class Tabs {
   static #takeState(message) {
     if (message.replica?.id) {
       Replica.adopt(message.replica);
+
+      // Not in a tab about to lead: its own restore can have written another pair over this one,
+      // and #lead writes down the one it settles on.
+      if (!Tabs.leader) {
+        Durability.noteStoredReplica(message.replica);
+      }
     }
 
     // And what model the server runs: the group syncs one, so a tab joining it goes to its next

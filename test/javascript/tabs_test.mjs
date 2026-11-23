@@ -151,6 +151,8 @@ describe("Tabs", () => {
   afterEach(async () => {
     await Tabs.leave();
 
+    Durability.noteStoredReplica({id: null});
+
     globalThis.Hologram.sync = originalSync;
 
     releases.forEach((release) => release());
@@ -204,7 +206,8 @@ describe("Tabs", () => {
       assert.isFalse(reconnecting.called);
     });
 
-    it("takes a fresh identity and lets the batches go in a tab that was following", async () => {
+    // The page's own pair won't do: a browser can serve one cached page to two tabs.
+    it("asks for an identity and lets the batches go in a tab that was following", async () => {
       const group = nextGroup();
 
       await holdLeaderLock(group);
@@ -214,8 +217,29 @@ describe("Tabs", () => {
 
       Tabs.dissolve();
 
-      assert.equal(Replica.id, "r-fresh");
+      assert.isTrue(Replica.awaitingMint);
       assert.isTrue(disowning.calledOnce);
+    });
+
+    // Asked before the reconnect, whose handshake is what carries the request.
+    it("asks for the identity ahead of the stream it opens", async () => {
+      const asking = sinon.spy(Replica, "requestMint");
+      const group = nextGroup();
+
+      await holdLeaderLock(group);
+      await Tabs.join(group, stubs());
+
+      Tabs.dissolve();
+
+      assert.isTrue(asking.calledBefore(reconnecting));
+    });
+
+    it("asks for no identity in the tab that was leading", async () => {
+      await Tabs.join(nextGroup(), stubs());
+
+      Tabs.dissolve();
+
+      assert.isFalse(Replica.awaitingMint);
     });
 
     // The frames it was being handed stop here, so it needs a stream the server serves sync on.
@@ -470,6 +494,73 @@ describe("Tabs", () => {
       await Tabs.storeLost();
 
       assert.isNull(Tabs.name);
+    });
+
+    // The tab that failed let the lock go, and this one was granted it before the message came. It
+    // holds the group's identity as a leader would, but has no store to record a number in.
+    describe("a tab handed the lead just before it hears of the failure", () => {
+      const closeBatch = () => {
+        Batches.open("todos");
+        Batches.current().append({
+          id: "t1",
+          op: "delete",
+          stamp: 1,
+          type: "MyApp.Todo",
+        });
+
+        return Batches.close();
+      };
+
+      const handedTheLead = async ({ready}) => {
+        const group = nextGroup();
+        const release = await holdLeaderLock(group);
+
+        await Tabs.join(group, {onLead: () => {}, onMessage: () => {}});
+
+        if (ready) {
+          Tabs.ready();
+        }
+
+        Replica.adopt({id: "r-group", token: "statement-group"});
+        Durability.noteStoredReplica(Replica.current());
+
+        release();
+        await waitForEventLoop();
+      };
+
+      beforeEach(() => {
+        Durability.hadStore = true;
+        Batches.reset();
+      });
+
+      afterEach(() => {
+        Batches.reset();
+        Durability.hadStore = false;
+        Replica.reset();
+      });
+
+      for (const ready of [true, false]) {
+        it(`numbers nothing under the group's identity (${ready ? "ready" : "starting"})`, async () => {
+          await handedTheLead({ready});
+
+          assert.isTrue(Tabs.leader);
+
+          await Tabs.dissolve();
+
+          assert.isNull(closeBatch().seq);
+        });
+      }
+
+      // The group's state can name a pair the tab's own read of the store didn't find.
+      it("numbers nothing under a pair the store isn't known to hold", async () => {
+        await handedTheLead({ready: false});
+
+        Replica.adopt({id: "r-newer", token: "statement-newer"});
+
+        await Tabs.dissolve();
+
+        assert.isNull(closeBatch().seq);
+      });
     });
 
     it("says nothing outside a group", async () => {
@@ -1966,6 +2057,33 @@ describe("Tabs", () => {
         LocalDatabase.actorUserId = actor;
       });
 
+      // A state names an identity only once it's written down.
+      it("counts the identity the group names as the one the store holds", async () => {
+        await follow();
+
+        Tabs.receive(
+          state("place-1", {
+            replica: {id: "r-group", token: "statement-group"},
+          }),
+        );
+
+        assert.isTrue(Durability.holdsIdentity());
+      });
+
+      // Its own restore can have written another pair over this one, and #lead writes down the one
+      // it settles on.
+      it("doesn't count the identity the group names as stored in a tab that leads", async () => {
+        await Tabs.join(nextGroup(), {onLead: () => {}});
+
+        Tabs.receive(
+          state("place-1", {
+            replica: {id: "r-group", token: "statement-group"},
+          }),
+        );
+
+        assert.isFalse(Durability.holdsIdentity());
+      });
+
       it("takes up the store when the group's state names another place", async () => {
         const reading = sinon.stub(Durability, "readBase").resolves({
           cursor: "place-2",
@@ -2482,7 +2600,7 @@ describe("Tabs", () => {
         const detaching = sinon.stub(Durability, "detach");
         const disowning = sinon.stub(Batches, "disown");
         const reconnecting = sinon.stub(Sse, "reconnect");
-        const refreshing = sinon.stub(Replica, "refresh");
+        const asking = sinon.stub(Replica, "requestMint");
         const wasStarted = Sse.isStarted;
 
         Sse.isStarted = true;
@@ -2497,7 +2615,7 @@ describe("Tabs", () => {
           assert.isTrue(Tabs.leader);
           assert.isTrue(detaching.calledOnce);
           assert.isTrue(disowning.calledOnce);
-          assert.isTrue(refreshing.calledOnce);
+          assert.isTrue(asking.calledOnce);
 
           // A stream of its own, greeting the server from nowhere: the place it holds is in doubt.
           assert.isTrue(reconnecting.calledOnce);

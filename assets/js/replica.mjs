@@ -23,6 +23,9 @@ export default class Replica {
   // Whether this tab is waiting for the server to mint it a pair of its own (see requestMint).
   static awaitingMint = false;
 
+  // Whether the pair in use is one the server minted for this tab alone.
+  static minted = false;
+
   static adopt(replica) {
     Replica.id = replica.id;
     Replica.token = replica.token;
@@ -78,6 +81,7 @@ export default class Replica {
 
     Replica.awaitingMint = false;
     Replica.fresh = null;
+    Replica.minted = true;
 
     Replica.adopt(replica);
 
@@ -88,6 +92,7 @@ export default class Replica {
     Replica.awaitingMint = false;
     Replica.fresh = null;
     Replica.id = null;
+    Replica.minted = false;
     Replica.token = null;
   }
 }
