@@ -2638,20 +2638,25 @@ describe("Batches", () => {
 
         Durability.mode = "indexeddb";
 
-        sinon.stub(Durability, "fileBatch").callsFake(
-          (batch) =>
-            new Promise((resolve) => {
-              filings.push((stored) => {
-                if (stored) {
-                  batch.seal(5);
-                }
+        sinon.stub(Durability, "fileBatch").callsFake((batch) => {
+          if (Durability.mode === "memory") return Promise.resolve(false);
 
-                resolve(stored);
-              });
-            }),
-        );
+          return new Promise((resolve) => {
+            filings.push((stored) => {
+              if (stored) {
+                batch.seal(5);
+              }
+
+              resolve(stored);
+            });
+          });
+        });
 
         sendStub = sinon.stub(Mutations, "send");
+      });
+
+      afterEach(() => {
+        Durability.hadStore = false;
       });
 
       it("is let go of when the store holds it", async () => {
@@ -2679,10 +2684,14 @@ describe("Batches", () => {
         assert.equal(LocalDatabase.getRow(TODO, "t1").title, "mine");
       });
 
-      it("is kept when there was no store to file it in", () => {
+      it("is kept when there was no store to file it in", async () => {
         Durability.mode = "memory";
 
         const {batch} = closeFiled();
+
+        await batch.recorded;
+
+        assert.isFalse(batch.filed);
 
         Batches.disown();
 
@@ -2692,20 +2701,42 @@ describe("Batches", () => {
       // An action can run the next one in the same turn, so the second batch may update a row the
       // first created. They go out in the order they were made.
       it("numbers batches in order after a store that failed on the spot", async () => {
+        const sent = [];
+
+        Durability.hadStore = true;
+
         Durability.fileBatch.callsFake(async () => {
           Durability.mode = "memory";
 
           return false;
         });
 
+        sendStub.callsFake(async (batch) => {
+          sent.push(`${Replica.id}:${batch.seq}`);
+
+          return {dropped: {}, kept: {}, status: "confirmed"};
+        });
+
         const first = closeFiled().batch;
+
+        // Known in the turn it closed, so it keeps its place ahead of the next batch.
+        assert.isFalse(first.filed);
+
         const second = closeFiled().batch;
 
         await Promise.all([first.recorded, second.recorded]);
 
+        assert.isNull(first.seq);
+        assert.isNull(second.seq);
+
+        Replica.requestMint();
+        Replica.takeMinted({id: "r-minted", token: "statement-minted"});
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, ["r-minted:1", "r-minted:2"]);
         assert.equal(first.seq, 1);
         assert.equal(second.seq, 2);
-        assert.isFalse(first.filed);
       });
 
       it("is let go of once a filing in flight turns out to have stored it", async () => {
