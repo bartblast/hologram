@@ -341,13 +341,13 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns every place the build spells an entity operation at, sorted by the calling function:
-  each call of `Hologram.Auth.can?/3` found in the IR of the functions the call graph names as
+  each call of `Hologram.Auth.can?/3` or `can?/4` found in the IR of the functions the call graph names as
   its callers, with the line of the call and the operation it names - a literal atom, a literal
   `{name, role}` tuple of atoms, a literal `{:update, field}` or `{:update, fields}` tuple, or
   `{:dynamic}` when the operation is computed and the build cannot read it - a tuple rather than an
   atom, so a name an allow line carries, `:dynamic` included, is never mistaken for it.
 
-  Takes the UNSPLIT call graph - `can?/3` is hand-ported, so the runtime graph no longer holds the
+  Takes the UNSPLIT call graph - `can?/3` and `can?/4` are hand-ported, so the runtime graph no longer holds the
   vertices whose callers this reads. The IR of a caller whose module the call graph's module info
   PLT holds is built into the IR PLT when it is missing (the compile task builds IR as it is read,
   see `build_missing_ir!/2`); a caller the IR PLT does not hold after that is skipped, as

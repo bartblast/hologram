@@ -16,6 +16,7 @@ import Elixir_Hologram_Auth, {
   unqualifiedRoleMessage,
 } from "../../../../assets/js/elixir/hologram/auth.mjs";
 import Batches from "../../../../assets/js/batches.mjs";
+import Bitstring from "../../../../assets/js/bitstring.mjs";
 import Clock from "../../../../assets/js/clock.mjs";
 import Elixir_Hologram_DB from "../../../../assets/js/elixir/hologram/db.mjs";
 import Interpreter from "../../../../assets/js/interpreter.mjs";
@@ -3707,6 +3708,261 @@ describe("Elixir_Hologram_Auth", () => {
         asks(update, {folder_id: ref(FOLDER_ID)}),
         Type.boolean(false),
       );
+    });
+
+    describe("a value this client can't judge as the server does", () => {
+      const datetimeInYear = (year, month = 1) =>
+        Type.struct("DateTime", [
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("hour"), Type.integer(0)],
+          [
+            Type.atom("microsecond"),
+            Type.tuple([Type.integer(0), Type.integer(6)]),
+          ],
+          [Type.atom("minute"), Type.integer(0)],
+          [Type.atom("month"), Type.integer(month)],
+          [Type.atom("second"), Type.integer(0)],
+          [Type.atom("std_offset"), Type.integer(0)],
+          [Type.atom("time_zone"), Type.bitstring("Etc/UTC")],
+          [Type.atom("utc_offset"), Type.integer(0)],
+          [Type.atom("year"), Type.integer(year)],
+          [Type.atom("zone_abbr"), Type.bitstring("UTC")],
+        ]);
+
+      const newIs = (name, operator, value) =>
+        rule({new: {predicates: [[{name, outer: 1}, operator, value]]}});
+
+      const defineFormat = (value) => {
+        defineUpdate("update:title", newIs("title", "==", value));
+
+        globalThis.Hologram.sync.model[DOCUMENT].constraints.title = {
+          format: {opts: Type.list([]), source: "^\\S+$"},
+          optional: true,
+        };
+
+        Model.reset();
+      };
+
+      it("doesn't grant on a date past what a JavaScript date holds", () => {
+        defineUpdate(
+          "update:held_at",
+          newIs("held_at", "<", "2026-01-01T00:00:00.000000Z"),
+        );
+
+        assert.deepStrictEqual(
+          asks(update, {held_at: datetimeInYear(300000)}),
+          Type.boolean(false),
+        );
+      });
+
+      it("still judges an ordinary date", () => {
+        defineUpdate(
+          "update:held_at",
+          newIs("held_at", "<", "2026-01-01T00:00:00.000000Z"),
+        );
+
+        assert.deepStrictEqual(
+          asks(update, {held_at: datetimeInYear(2025)}),
+          Type.boolean(true),
+        );
+      });
+
+      it("reads a too big integer both tiers refuse as the stored value", () => {
+        defineUpdate("update:count", newIs("count", "<=", 100));
+
+        assert.deepStrictEqual(
+          asks(update, {count: Type.integer(2n ** 63n)}, document({count: 5})),
+          Type.boolean(true),
+        );
+      });
+
+      it("compares a big number with a small one", () => {
+        defineUpdate("update:rating", newIs("rating", ">", 0.0));
+
+        assert.deepStrictEqual(
+          asks(update, {rating: Type.float(1.0e16)}),
+          Type.boolean(true),
+        );
+      });
+
+      it("reads a non-text value of an attribute with a format as the stored value", () => {
+        defineFormat("old");
+
+        assert.deepStrictEqual(
+          asks(
+            update,
+            {title: Bitstring.fromBytes([255])},
+            document({title: "old"}),
+          ),
+          Type.boolean(true),
+        );
+      });
+
+      it("doesn't grant on a non-ASCII value of an attribute with a format", () => {
+        defineFormat("a b");
+
+        assert.deepStrictEqual(
+          asks(update, {title: Type.bitstring("a b")}),
+          Type.boolean(false),
+        );
+      });
+
+      it("reads a non-ASCII value both tiers refuse as the stored value", () => {
+        defineFormat("old");
+
+        globalThis.Hologram.sync.model[DOCUMENT].constraints.title.max_length =
+          3;
+
+        Model.reset();
+
+        assert.deepStrictEqual(
+          asks(
+            update,
+            {title: Type.bitstring("\u00E9\u00E9\u00E9\u00E9")},
+            document({title: "old"}),
+          ),
+          Type.boolean(true),
+        );
+      });
+
+      it("reads a far date both tiers refuse as the stored value", () => {
+        const stored = "2026-01-01T00:00:00.000000Z";
+
+        defineUpdate("update:held_at", newIs("held_at", "==", stored));
+
+        assert.deepStrictEqual(
+          asks(
+            update,
+            {held_at: datetimeInYear(300000, 13)},
+            document({held_at: stored}),
+          ),
+          Type.boolean(true),
+        );
+      });
+
+      it("doesn't read a date in another calendar as the stored value", () => {
+        defineUpdate("update:due_on", newIs("due_on", "==", null));
+
+        const otherCalendar = Type.struct("Date", [
+          [Type.atom("calendar"), Type.alias("MyApp.Calendar")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("month"), Type.integer(13)],
+          [Type.atom("year"), Type.integer(2026)],
+        ]);
+
+        assert.deepStrictEqual(
+          asks(update, {due_on: otherCalendar}),
+          Type.boolean(false),
+        );
+      });
+
+      it("still judges an ASCII value of an attribute with a format", () => {
+        defineFormat("ab");
+
+        assert.deepStrictEqual(
+          asks(update, {title: Type.bitstring("ab")}),
+          Type.boolean(true),
+        );
+      });
+    });
+
+    describe("rules that don't read the row after the change", () => {
+      const KEY = "update:00112233aabbccdd";
+
+      const delegated = rule({via: ["read", ["folder"]]});
+
+      const stored = (verdict) => {
+        LocalDatabase.actorEntityId = ALICE;
+
+        LocalDatabase.putRow(DOCUMENT, {
+          author_id: null,
+          folder_id: FOLDER_ID,
+          id: DOC,
+          public: false,
+          title: null,
+          $verdicts: {[KEY]: verdict},
+        });
+
+        return Model.box(DOCUMENT, LocalDatabase.getRow(DOCUMENT, DOC));
+      };
+
+      const putVerdict = (key) => {
+        globalThis.Hologram.sync.model[DOCUMENT].verdicts = {
+          [key]: {reads: [DOCUMENT, FOLDER], verdict: KEY},
+        };
+      };
+
+      const title = {title: Type.bitstring("y")};
+
+      it("answers from a field's true verdict where the held rows leave it open", () => {
+        defineUpdate("update:title", delegated);
+        putVerdict("update:title");
+
+        assert.deepStrictEqual(
+          asks(update, title, stored(true)),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          asks(updateOf(Type.atom("title")), title, stored(true)),
+          Type.boolean(true),
+        );
+      });
+
+      it("answers from a field's false verdict", () => {
+        defineUpdate("update:title", delegated);
+        putVerdict("update:title");
+
+        assert.deepStrictEqual(
+          asks(update, title, stored(false)),
+          Type.boolean(false),
+        );
+      });
+
+      it("answers a name from its verdict", () => {
+        defineUpdate("archive", delegated);
+        putVerdict("archive");
+
+        assert.deepStrictEqual(
+          asks(Type.atom("archive"), title, stored(true)),
+          Type.boolean(true),
+        );
+      });
+
+      it("takes no verdict for a field one of whose rules reads the row after the change", () => {
+        defineUpdate(
+          "update:title",
+          rule({
+            new: {predicates: [[{name: "title", outer: 1}, "==", "y"]]},
+            via: ["read", ["folder"]],
+          }),
+        );
+
+        putVerdict("update:title");
+
+        assert.deepStrictEqual(
+          asks(update, title, stored(true)),
+          Type.boolean(false),
+        );
+      });
+
+      it("takes no verdict for a name one of whose rules reads the row after the change", () => {
+        defineUpdate(
+          "archive",
+          rule({
+            new: {predicates: [[{name: "title", outer: 1}, "==", "y"]]},
+            via: ["read", ["folder"]],
+          }),
+        );
+
+        putVerdict("archive");
+
+        assert.deepStrictEqual(
+          asks(Type.atom("archive"), title, stored(true)),
+          Type.boolean(false),
+        );
+      });
     });
 
     describe("a role on the row after the change", () => {

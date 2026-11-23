@@ -466,12 +466,12 @@ defmodule Hologram.DB.EntityOperations do
   def validate_update!(RoleGrant, _changes), do: raise_grant_update!()
 
   def validate_update!(entity_type, changes) do
-    sorted_changes =
+    given_changes =
       changes
       |> Map.new()
-      |> Enum.sort()
+      |> Map.to_list()
 
-    validate_changes!(entity_type, sorted_changes, [], columns_by_field(entity_type))
+    validate_changes!(entity_type, given_changes, [], columns_by_field(entity_type))
   end
 
   # A unique attribute is worth asking about only when the value could be compared at all: a

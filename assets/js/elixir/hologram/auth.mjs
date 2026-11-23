@@ -795,12 +795,8 @@ function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
 }
 
 // Whether a set read under a change can hold a row the change affects: a hop lands on the changed
-// type, or the first one is a to-many of the changed type whose pairs the change adds or deletes.
+// type.
 function changeReachesSet({entityType, hops}, change) {
-  if (entityType === change.type && change.edges.has(hops[0])) {
-    return true;
-  }
-
   let type = entityType;
 
   return hops.some((name) => {
@@ -1228,18 +1224,51 @@ function coversFields(entry, entityType, entity, fields, actorUserId) {
       return held;
     }
 
-    const verdict = verdictEntry(entry, key) ?? verdictEntry(entry, "update");
-
-    return (
-      verdict !== undefined &&
-      verdictHolds(entityType, entity, verdict, actorUserId) === true
+    return verdictAnswers(
+      entry,
+      entityType,
+      entity,
+      [key, "update"],
+      actorUserId,
     );
   });
 }
 
+// Whether the first verdict entry baked under the given keys grants the row.
+function verdictAnswers(entry, entityType, entity, keys, actorUserId) {
+  const verdict = keys
+    .map((key) => verdictEntry(entry, key))
+    .find((found) => found !== undefined);
+
+  return (
+    verdict !== undefined &&
+    verdictHolds(entityType, entity, verdict, actorUserId) === true
+  );
+}
+
+function readsRowAfterChange(rule) {
+  return Object.hasOwn(rule, "new");
+}
+
+// What the given rules' answer for one specific change comes to. A verdict speaks for a rule's
+// planned form, which says nothing about one change, so it answers what the held rows leave open
+// only when none of the rules reads the row after the change, and they all ask what it answers.
+function changeRulesAnswer(
+  held,
+  rules,
+  entry,
+  entityType,
+  entity,
+  keys,
+  actorUserId,
+) {
+  return held === UNKNOWN && !rules.some(readsRowAfterChange)
+    ? verdictAnswers(entry, entityType, entity, keys, actorUserId)
+    : held;
+}
+
 // Whether some update rule covering each of the given field names holds on the row after a change:
-// false when one can't be covered, UNKNOWN when none fails but one may. No verdict answers it, since
-// a verdict speaks for the rule's planned form, which says nothing about one specific change.
+// false when one can't be covered, UNKNOWN when none fails but one may.
 function coversChange(entry, entityType, entity, fields, after, actorUserId) {
   const matched = new Map();
 
@@ -1258,8 +1287,18 @@ function coversChange(entry, entityType, entity, fields, after, actorUserId) {
   let result = true;
 
   for (const field of fields) {
-    const rules = policyRules(entry, `update:${field}`).concat(wholeRowRules);
-    const held = someHolds(rules, holds);
+    const key = `update:${field}`;
+    const rules = policyRules(entry, key).concat(wholeRowRules);
+
+    const held = changeRulesAnswer(
+      someHolds(rules, holds),
+      rules,
+      entry,
+      entityType,
+      entity,
+      [key, "update"],
+      actorUserId,
+    );
 
     if (held === false) {
       return false;
@@ -1481,7 +1520,7 @@ export function refuseDeniedChange(entityType, id, values, deltas, edgeNames) {
     policyRules(entry, `update:${field}`).concat(policyRules(entry, "update"));
 
   const readsChange = fields.some((field) =>
-    rulesOf(field).some((rule) => Object.hasOwn(rule, "new")),
+    rulesOf(field).some(readsRowAfterChange),
   );
 
   if (!readsChange) {
@@ -1587,8 +1626,18 @@ function changeAnswer(
     Interpreter.raiseMisuseError(changeOperationMessage(operation));
   }
 
-  return someHolds(policyRules(entry, operation.value), (rule) =>
-    ruleHolds(rule, entityType, entity, actorUserId, after),
+  const rules = policyRules(entry, operation.value);
+
+  return changeRulesAnswer(
+    someHolds(rules, (rule) =>
+      ruleHolds(rule, entityType, entity, actorUserId, after),
+    ),
+    rules,
+    entry,
+    entityType,
+    entity,
+    [operation.value],
+    actorUserId,
   );
 }
 
@@ -1721,18 +1770,65 @@ function unheldReferences(entityType, entity, changes) {
     });
 }
 
+// Whether a temporal value is in a calendar other than ISO, which the server asks about the value
+// and this client can't, so neither its validation nor its comparison speaks for the server's.
+function hasOtherCalendar(value) {
+  if (!Type.isMap(value)) {
+    return false;
+  }
+
+  const calendar = value.data[Type.encodeMapKey(Type.atom("calendar"))]?.[1];
+
+  return (
+    calendar !== undefined &&
+    !Interpreter.isStrictlyEqual(calendar, Type.alias("Calendar.ISO"))
+  );
+}
+
+// Whether a validation reason is one both tiers give alike. A format goes through two regex engines,
+// and a bound on a date past what a JavaScript Date holds compares nothing here.
+function isSureRefusal(reason) {
+  const kind = Type.isTuple(reason) ? reason.data[0].value : reason.value;
+
+  return !["format", "max", "min"].includes(kind);
+}
+
+// Whether this client can't judge the given value of the attribute as the server does: a date past
+// what a JavaScript Date holds, or a non-ASCII value of an attribute with a format, on which the
+// browser's regex engine can answer differently.
+function isUnjudgedValue(entityType, name, value) {
+  const {attributes, constraints} = Model.entry(entityType);
+
+  if (isFarDate(value, attributes[name])) {
+    return true;
+  }
+
+  return (
+    Object.hasOwn(constraints?.[name] ?? {}, "format") &&
+    Bitstring.isText(value) &&
+    [...Bitstring.toText(value)].some((char) => char.codePointAt(0) > 127)
+  );
+}
+
 // The scope a rule reads the row after a change through: the entity with the given values on it,
 // bar one failing its declaration, which can't be on the row and so reads as stored.
-function rowAfterChange(entityType, entity, changes, edges = new Set()) {
+function rowAfterChange(entityType, entity, changes) {
   const validation = Elixir_Hologram_Entity["validate/2"](
     Type.alias(entityType),
     Type.map([...changes].map(([name, value]) => [Type.atom(name), value])),
   );
 
-  const invalid = new Set(
-    Type.isAtom(validation)
-      ? []
-      : Object.values(validation.data[1].data).map(([name]) => name.value),
+  const refusals = Type.isAtom(validation)
+    ? []
+    : Object.values(validation.data[1].data);
+
+  const invalid = new Set(refusals.map(([name]) => name.value));
+
+  // A value refused for a reason both tiers judge alike reads as stored on both.
+  const surelyInvalid = new Set(
+    refusals
+      .filter(([_name, reasons]) => reasons.data.some(isSureRefusal))
+      .map(([name]) => name.value),
   );
 
   const valid = new Map([...changes].filter(([name]) => !invalid.has(name)));
@@ -1749,13 +1845,20 @@ function rowAfterChange(entityType, entity, changes, edges = new Set()) {
 
   const change = {
     builtRow: null,
-    edges,
     entity: boxed,
     id: storedValue(entityType, entity, "id"),
     type: entityType,
     undecided: new Set([
       ...WRITE_TIMESTAMPS,
       ...unheldReferences(entityType, entity, valid),
+      ...[...changes]
+        .filter(
+          ([name, value]) =>
+            hasOtherCalendar(value) ||
+            (!surelyInvalid.has(name) &&
+              isUnjudgedValue(entityType, name, value)),
+        )
+        .map(([name]) => name),
     ]),
   };
 
@@ -2028,7 +2131,7 @@ const Elixir_Hologram_Auth = {
   },
 
   // Whether the user may make one specific change - the twin of Hologram.Auth.can?/4. No is what an
-  // answer the held rows leave open comes to, since no verdict speaks for one change.
+  // answer neither the held rows nor a verdict can give comes to.
   "can?/4": (userOrId, operation, entity, values) => {
     const entityType = Interpreter.moduleExName(
       entity.data[Type.encodeMapKey(Type.atom("__struct__"))][1],

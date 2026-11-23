@@ -276,17 +276,6 @@ defmodule Hologram.Query.Expression do
   def name!(ast, names, env), do: name_error!(ast, names, env)
 
   @doc """
-  Returns whether the given node is a `new()` call, or a dot chain over one.
-  """
-  @spec new_call?(Macro.t()) :: boolean
-  def new_call?({:new, _meta, args}) when is_list(args), do: true
-
-  def new_call?({{:., _dot_meta, [left, field]}, _meta, []}) when is_atom(field),
-    do: new_call?(left)
-
-  def new_call?(_ast), do: false
-
-  @doc """
   Returns whether the given node is `new()` of a name or a path, with any names dotted after it.
   """
   @spec new_path?(Macro.t()) :: boolean
@@ -1085,6 +1074,14 @@ defmodule Hologram.Query.Expression do
       env
     )
   end
+
+  # Whether the given node is a new() call, or a dot chain over one.
+  defp new_call?({:new, _meta, args}) when is_list(args), do: true
+
+  defp new_call?({{:., _dot_meta, [left, field]}, _meta, []}) when is_atom(field),
+    do: new_call?(left)
+
+  defp new_call?(_ast), do: false
 
   # The names a new() call reads, those inside it and any dotted after it - nil when it holds
   # anything but a name or a path.
