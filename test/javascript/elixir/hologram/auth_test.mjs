@@ -4331,15 +4331,19 @@ describe("Elixir_Hologram_Auth", () => {
           grantRow({entity_id: PARENT_ID, entity_type: FOLDER}),
         );
 
-        assert.deepStrictEqual(
+        const asked = () =>
           canChange(
             alice,
-            update,
+            updateOf(Type.atom("archived")),
             Model.box(FOLDER, {...folderRow(), owner_id: null}),
             values({owner_id: ref(PARENT_ID), parent_id: ref(FOLDER_ID)}),
-          ),
-          Type.boolean(false),
-        );
+          );
+
+        assert.deepStrictEqual(asked(), Type.boolean(false));
+
+        LocalDatabase.putRow(FOLDER, {...folderRow(), id: PARENT_ID});
+
+        assert.deepStrictEqual(asked(), Type.boolean(true));
       });
 
       it("leaves a field no rule reads unread when a hop lands on it", () => {
