@@ -25,6 +25,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Crate
   alias HologramFeatureTests.Entities.Docket
   alias HologramFeatureTests.Entities.Document
+  alias HologramFeatureTests.Entities.Errand
   alias HologramFeatureTests.Entities.Event
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.GuestEntry
@@ -53,6 +54,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Shop
   alias HologramFeatureTests.Entities.Slip
+  alias HologramFeatureTests.Entities.Squad
   alias HologramFeatureTests.Entities.Sticker
   alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Ticket
@@ -1176,6 +1178,7 @@ defmodule HologramFeatureTests.Helpers do
         Crate,
         Docket,
         Document,
+        Errand,
         Event,
         Folder,
         GuestEntry,
@@ -1208,6 +1211,7 @@ defmodule HologramFeatureTests.Helpers do
         Ship,
         Shop,
         Slip,
+        Squad,
         Sticker,
         Stop,
         Ticket,
