@@ -23,12 +23,35 @@ defmodule Hologram.Migration.Value.RowFill do
   holding NULL when it fills only those, whose ids it keeps for FillCheck. A row the function gives
   nil is left NULL. Returns how many rows it wrote.
 
-  Raises naming the row on a raise in the function, on a result that isn't of the column's type or
-  that its unique index can't carry, and on a key it repeats or an id no row of the target holds.
+  Raises, naming the row when it can tell which one, on a raise in the function, on a result that
+  isn't of the column's type or that its unique index can't carry, and on a key it repeats or an
+  id no row of the target holds.
   """
   @spec run!(%{atom => any}, pos_integer) :: non_neg_integer
   def run!(op, page_size \\ @page_size) do
     walk_pages(op, read_statement(op), write_statement(op), page_size, nil, 0)
+  end
+
+  # Public so a test can reach a refusal with no key, which takes row security or a translation
+  # leaving it out.
+  @doc """
+  Returns what a refused write says when a filled id names no row of the given target type, from
+  the detail PostgreSQL gave and the page of `{id, value, encoded}` rows it was writing. It names
+  the row when the detail's key or a one-row page tells which one, and the page when neither does.
+  """
+  @spec missing_target(String.t() | nil, list({String.t(), any, any}), module) :: String.t()
+  def missing_target(detail, filled, target) do
+    {_columns, key} = key_parts(detail)
+
+    where =
+      case {key_rows(filled, key), filled} do
+        {[row | _rest], _filled} -> "on row #{row}"
+        {[], [{row, _value, _encoded}]} -> "on row #{row}"
+        {[], _filled} -> "on a row that can't be identified #{where_repeated(filled, [])}"
+      end
+
+    "writes #{key || "an id"} #{where}, which no #{inspect(target)} holds - " <>
+      "change the fn or add that row"
   end
 
   defp call!(op, id, args) do
@@ -170,7 +193,7 @@ defmodule Hologram.Migration.Value.RowFill do
     end
   end
 
-  # A key over several columns can't be told from one row's value, so it names the page.
+  # A key that can't be tied to one row's value names the page.
   defp where_repeated(filled, rows) do
     case rows do
       [] ->
@@ -210,19 +233,7 @@ defmodule Hologram.Migration.Value.RowFill do
         )
 
       {:error, %{postgres: %{code: :foreign_key_violation} = error}} ->
-        {_columns, key} = key_parts(error[:detail])
-        {first_id, _value, _encoded} = hd(filled)
-
-        row =
-          filled
-          |> key_rows(key)
-          |> List.first(first_id)
-
-        refuse!(
-          op,
-          "writes #{key || "an id"} on row #{row}, which no #{inspect(op.fill_target)} holds - " <>
-            "change the fn or add that row"
-        )
+        refuse!(op, missing_target(error[:detail], filled, op.fill_target))
 
       {:error, error} ->
         raise error
