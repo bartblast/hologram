@@ -106,8 +106,8 @@ defmodule Hologram.Sync.SessionTest do
 
   # Let into the sandbox, since the session reads the rows and the grant store itself to decide what
   # this client may see, so without this it judges every rule against the committed database rather
-  # than against what the test wrote. Every reader lets the session in itself too, since both a fill
-  # and a catch-up read in the continue that starts the session, before the test could.
+  # than against what the test wrote. The fill and the held ids let the session in themselves too,
+  # since a session can reach either of them before the test could let it in.
   #
   # A test names what a returning client missed as `gap:`, and the edge the gap read reached as
   # `edge:` - the session reads both through `:read_gap`. The edge defaults to past the gap's last
@@ -115,12 +115,18 @@ defmodule Hologram.Sync.SessionTest do
   defp start_session!(opts) do
     test_pid = self()
 
-    # A first arrival fills inside its first callback, which can run before the test lets it in -
-    # so the fill lets the session in itself, as a gap reader does. It traps exits from here on,
-    # whichever read a test gave it, so the end of a test stops it between two messages rather than
-    # in the middle of a read: a process killed while it reads takes the test's connection down with
+    # A session reads before the test can let it in, so its first read lets it in itself, whichever
+    # reader a test gave it: the fill for a first arrival, the held ids for a client coming back. It
+    # traps exits from here on, so the end of a test stops it between two messages rather than in
+    # the middle of a read: a process killed while it reads takes the test's connection down with
     # it, and the test's rollback fails.
+    enter_sandbox = fn ->
+      Process.flag(:trap_exit, true)
+      allow_into_sandbox(self(), test_pid)
+    end
+
     read_fill = Keyword.get(opts, :read_fill, &read_fill_in_sandbox/4)
+    read_ids = Keyword.get_lazy(opts, :read_ids, &read_ids_in_sandbox/0)
 
     opts =
       opts
@@ -131,12 +137,15 @@ defmodule Hologram.Sync.SessionTest do
       |> Keyword.put_new(:policy_hash, @policy_hash)
       |> Keyword.put_new(:types_hash, @types_hash)
       |> Keyword.put(:read_fill, fn entity_type, actor_user_id, replica_id, synced_types ->
-        Process.flag(:trap_exit, true)
-        allow_into_sandbox(self(), test_pid)
+        enter_sandbox.()
 
         read_fill.(entity_type, actor_user_id, replica_id, synced_types)
       end)
-      |> Keyword.put_new(:read_ids, read_ids_in_sandbox())
+      |> Keyword.put(:read_ids, fn entity_type, actor_user_id ->
+        enter_sandbox.()
+
+        read_ids.(entity_type, actor_user_id)
+      end)
       |> Keyword.put_new(:read_part, read_part_in_sandbox())
 
     session = start_supervised!(Supervisor.child_spec({Session, opts}, id: make_ref()))
@@ -146,8 +155,8 @@ defmodule Hologram.Sync.SessionTest do
     session
   end
 
-  # A gap reader over the log lets the session in itself when the session calls it, which can be
-  # before this test gets the chance - so being let in already is as good as letting it in.
+  # The session's readers let it in themselves when it calls them, which can be before this test
+  # gets the chance - so being let in already is as good as letting it in.
   defp allow_into_sandbox(pid, owner \\ self()) do
     case DBConnection.Ownership.ownership_allow(DB.pool_name(), owner, pid, []) do
       :ok -> :ok
@@ -515,9 +524,24 @@ defmodule Hologram.Sync.SessionTest do
     end
 
     test "cuts the client off when the log says it has to be sent everything again" do
-      session = start_session!(read_gap: fn -> {:full_resync, :gap_too_large} end)
+      test_pid = self()
+
+      # Held until the test is watching, since a session already gone reports no reason.
+      session =
+        start_session!(
+          read_gap: fn ->
+            send(test_pid, {:reading_gap, self()})
+
+            receive do
+              :answer_gap -> {:full_resync, :gap_too_large}
+            end
+          end
+        )
 
       ref = Process.monitor(session)
+
+      assert_receive {:reading_gap, ^session}
+      send(session, :answer_gap)
 
       assert_receive {:DOWN, ^ref, :process, ^session, {:full_resync, :gap_too_large}}
       refute_received {:sync_synced, :all, _cursor}
