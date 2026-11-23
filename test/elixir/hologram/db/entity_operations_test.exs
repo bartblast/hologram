@@ -1708,11 +1708,14 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert update(Module2, created_entity.id, [c: "after"], clock_stamp: clock_stamp) == :ok
 
       reloaded_entity = get(Module2, created_entity.id)
-      expected = written_timestamps(nil, clock_stamp)
+      clock_at = ~U[2093-10-13 05:26:40.000000Z]
 
       assert reloaded_entity.__meta__.revisions.c == clock_stamp
-      assert reloaded_entity.updated_at == expected.updated_at
-      assert reloaded_entity.server_updated_at == expected.server_updated_at
+      assert reloaded_entity.updated_at == clock_at
+      assert reloaded_entity.server_updated_at == clock_at
+
+      assert written_timestamps(nil, clock_stamp) ==
+               %{server_updated_at: clock_at, updated_at: clock_at}
     end
 
     test "takes only server_updated_at from a given clock reading beside a stamp" do
@@ -1730,12 +1733,15 @@ defmodule Hologram.DB.EntityOperationsTest do
              ) == :ok
 
       reloaded_entity = get(Module2, created_entity.id)
-      expected = written_timestamps(stamp, clock_stamp)
+      stamp_at = ~U[2090-09-08 22:42:30.000000Z]
+      clock_at = ~U[2093-10-13 05:26:40.000000Z]
 
       assert reloaded_entity.__meta__.revisions.c == stamp
-      assert reloaded_entity.updated_at == expected.updated_at
-      assert reloaded_entity.server_updated_at == expected.server_updated_at
-      assert expected.updated_at != expected.server_updated_at
+      assert reloaded_entity.updated_at == stamp_at
+      assert reloaded_entity.server_updated_at == clock_at
+
+      assert written_timestamps(stamp, clock_stamp) ==
+               %{server_updated_at: clock_at, updated_at: stamp_at}
     end
 
     test "sets exactly the changed columns and bumps updated_at" do
