@@ -107,6 +107,9 @@ export default class Durability {
   // starts, which is what stops two batches stored in the same turn from both asking.
   static #persistenceAsked = false;
 
+  // How this tab's latest filing ended, once it has (see fileBatch).
+  static #lastFiling = null;
+
   // The last identity write started, for a send to wait on (see replicaWritten).
   static #replicaWrite = Promise.resolve();
 
@@ -245,25 +248,66 @@ export default class Durability {
 
     let taken = false;
 
+    // Each filing's transaction starts in the turn its batch closed, so a tab letting go of the
+    // store doesn't cut off the ones waiting in line. IndexedDB runs them in that order, so one
+    // behind a filing that aborted aborts too. Stored, it would go out ahead of the earlier batch,
+    // and the server would refuse it if it names a row that batch created.
+    //
+    // This transaction starts only once the earlier one has finished, but the event saying how can
+    // still be on its way. Reading again keeps this one open until it arrives.
     const stored = await Durability.#write([META, QUEUE], (transaction) => {
+      const earlier = Durability.#lastFiling;
+      const filing = {aborted: false, done: false};
+
+      Durability.#lastFiling = filing;
+
+      transaction.addEventListener("abort", () => {
+        filing.aborted = true;
+        filing.done = true;
+      });
+
+      transaction.addEventListener("complete", () => {
+        filing.done = true;
+      });
+
       const meta = transaction.objectStore(META);
       const queue = transaction.objectStore(QUEUE);
-      const counter = meta.get("seq");
 
-      counter.onsuccess = () => {
-        const highest = queue.openKeyCursor(null, "prev");
+      const readCounter = () => {
+        const counter = meta.get("seq");
 
-        highest.onsuccess = () => {
-          const spent = Math.max(counter.result ?? 0, highest.result?.key ?? 0);
+        counter.onsuccess = () => {
+          if (earlier !== null && !earlier.done) {
+            readCounter();
 
-          batch.seal(spent + 1);
-          taken = true;
+            return;
+          }
 
-          queue.put(batch.record());
-          meta.put(batch.seq, "seq");
-          meta.put(Clock.last(), "clock");
+          if (earlier?.aborted) {
+            transaction.abort();
+
+            return;
+          }
+
+          const highest = queue.openKeyCursor(null, "prev");
+
+          highest.onsuccess = () => {
+            const spent = Math.max(
+              counter.result ?? 0,
+              highest.result?.key ?? 0,
+            );
+
+            batch.seal(spent + 1);
+            taken = true;
+
+            queue.put(batch.record());
+            meta.put(batch.seq, "seq");
+            meta.put(Clock.last(), "clock");
+          };
         };
       };
+
+      readCounter();
     });
 
     // Only a number this filing put there: a store that failed on the spot never reached the read,
@@ -861,6 +905,7 @@ export default class Durability {
     Durability.storedBatches = 0;
 
     Durability.#loaded = null;
+    Durability.#lastFiling = null;
     Durability.#persistenceAsked = false;
     Durability.#restored = false;
     Durability.#storedReplicaId = null;

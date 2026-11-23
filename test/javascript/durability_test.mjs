@@ -1354,6 +1354,50 @@ describe("Durability", () => {
       assert.deepStrictEqual(await readAll("queue"), [batch.record()]);
     });
 
+    // The later batch may name a row the earlier one created, so it can't go out ahead of it.
+    it("stores no batch behind one whose transaction aborted", async () => {
+      sinon.stub(Tabs, "storeLost");
+
+      await Durability.open();
+      await Durability.load();
+
+      const starting = sinon.spy(FDBDatabase.prototype, "transaction");
+      const first = unfiledBatch();
+      const second = unfiledBatch();
+      const filings = [
+        Durability.fileBatch(first),
+        Durability.fileBatch(second),
+      ];
+
+      starting.firstCall.returnValue.abort();
+
+      assert.deepStrictEqual(await Promise.all(filings), [false, false]);
+      assert.isNull(first.seq);
+      assert.isNull(second.seq);
+      assert.deepStrictEqual(await readAll("queue"), []);
+    });
+
+    // Waiting for the first to settle before starting the next would leave the next one out of the
+    // store, and it would go out alone while the first waits there for a later page load.
+    it("stores every filing in line when the tab lets go of the store", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      const first = unfiledBatch();
+      const second = unfiledBatch();
+      const filings = [
+        Durability.fileBatch(first),
+        Durability.fileBatch(second),
+      ];
+
+      Durability.detach();
+
+      assert.deepStrictEqual(await Promise.all(filings), [true, true]);
+      assert.equal(first.seq, 1);
+      assert.equal(second.seq, 2);
+      assert.equal((await readAll("queue")).length, 2);
+    });
+
     it("numbers the batch above the stored counter", async () => {
       await Durability.open();
       await Durability.load();
