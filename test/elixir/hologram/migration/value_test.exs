@@ -942,6 +942,132 @@ defmodule Hologram.Migration.ValueTest do
                  "module - put the import at the top of the module"
     end
 
+    test "compares a bare pipe target's import too" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title -> title |> reverse end
+      end
+
+      import Enum, only: [reverse: 1]
+      """
+
+      assert compiled_refusal(body) =~
+               "calls reverse/1, which an import changes between the op and the end of the " <>
+                 "module - put the import at the top of the module"
+    end
+
+    test "doesn't read a bare pipe target as the argument sharing its name" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn shout -> "abc" |> shout end
+      end
+
+      defp shout(value), do: value <> "!"
+      """
+
+      assert compiled_refusal(body) =~ "a backfill fn reads the row"
+    end
+
+    test "compares the import of a pipe spelled as a remote call too" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title -> Kernel.|>(title, reverse()) end
+      end
+
+      import Enum, only: [reverse: 1]
+      """
+
+      assert compiled_refusal(body) =~ "calls reverse/1, which an import changes"
+    end
+
+    test "compares the import of a one-argument remote pipe too" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title -> title |> Kernel.|>(reverse) end
+      end
+
+      import Enum, only: [reverse: 1]
+      """
+
+      assert compiled_refusal(body) =~ "calls reverse/1, which an import changes"
+    end
+
+    test "compares the import of a call in a pipe nested on the right too" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title -> title |> (reverse() |> hd()) end
+      end
+
+      import Enum, only: [reverse: 1]
+      """
+
+      assert compiled_refusal(body) =~ "calls reverse/1, which an import changes"
+    end
+
+    test "doesn't read a remote pipe's bare target as the argument sharing its name" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn shout -> Kernel.|>("abc", shout) end
+      end
+
+      defp shout(value), do: value <> "!"
+      """
+
+      assert compiled_refusal(body) =~ "a backfill fn reads the row"
+    end
+
+    test "refuses an import written as a bare pipe target inside a body" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title ->
+          Enum |> import
+          title
+        end
+      end
+      """
+
+      assert compiled_refusal(body) =~ "an Elixir backfill fn can't import inside its body"
+    end
+
+    test "still sees an import written as the receiver of a remote pipe" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title ->
+          import(Kernel, except: [to_string: 1]).|>(title, is_binary)
+          to_string(title)
+        end
+      end
+
+      defp to_string(value), do: value <> "!"
+      """
+
+      assert compiled_refusal(body) =~ "an Elixir backfill fn can't import inside its body"
+    end
+
+    test "compares the import of the pipe operator itself" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title -> title |> String.trim("x") end
+      end
+
+      import Kernel, except: [|>: 2]
+
+      defp left |> right, do: left <> "+" <> right
+      """
+
+      assert compiled_refusal(body) =~ "calls |>/2, which an import changes"
+    end
+
+    test "reads a migration's own pipe operator as a call with a value on its right" do
+      {module, _value} =
+        elixir_op(
+          ~s/fn suffix -> "abc" |> suffix end/,
+          "import Kernel, except: [|>: 2]\n\ndefp left |> right, do: left <> right"
+        )
+
+      assert module.__backfill_0__("!") == "abc!"
+    end
+
     test "compares a captured call's import too" do
       body = """
       change_entity MyApp.Trip do

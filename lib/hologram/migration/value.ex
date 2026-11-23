@@ -180,17 +180,23 @@ defmodule Hologram.Migration.Value do
   Returns each local call in the given code with its full arity, a piped call counting the value
   piped in and a capture counting as a call.
   """
-  @spec local_calls(Macro.t()) :: list({atom, non_neg_integer})
-  def local_calls(body) do
-    {_ast, calls} =
+  @spec local_calls(Macro.t(), Macro.Env.t()) :: list({atom, non_neg_integer})
+  def local_calls(body, env) do
+    # The operator is a call too, which an import can change.
+    {unpiped, pipes} =
       Macro.prewalk(body, [], fn
+        {:|>, _meta, [_left, _right]} = pipe, found ->
+          {unpiped_call(pipe, env), [{:|>, 2} | found]}
+
+        node, found ->
+          {unpiped_call(node, env), found}
+      end)
+
+    {_ast, calls} =
+      Macro.prewalk(unpiped, pipes, fn
         {:&, _meta, [{:/, _slash_meta, [{name, _name_meta, context}, arity]}]} = node, found
         when is_atom(name) and is_atom(context) and is_integer(arity) ->
           {node, [{name, arity} | found]}
-
-        {:|>, _meta, [left, {name, call_meta, args}]}, found
-        when is_atom(name) and is_list(args) ->
-          {{name, call_meta, [left | args]}, [{name, length(args) + 1} | found]}
 
         {name, _meta, args} = node, found when is_atom(name) and is_list(args) ->
           {node, [{name, length(args)} | found]}
@@ -241,7 +247,7 @@ defmodule Hologram.Migration.Value do
     {arg_asts, args, body} = fn_parts(clauses, ast, scope)
     fn_scope = %{scope | args: args}
     kind = fn_kind(body, fn_scope)
-    calls = local_calls(body)
+    calls = local_calls(body, env)
 
     %{
       arg_asts: arg_asts,
@@ -419,6 +425,32 @@ defmodule Hologram.Migration.Value do
     end
   end
 
+  defp expanded_pipe({:|>, meta, [left, {:|>, _right_meta, [middle, last]}]}, env) do
+    expanded_pipe({:|>, meta, [expanded_pipe({:|>, meta, [left, middle]}, env), last]}, env)
+  end
+
+  defp expanded_pipe(
+         {:|>, meta, [left, {{:., _dot_meta, [receiver, :|>]}, call_meta, [right]} = target]},
+         env
+       ) do
+    if Macro.expand(receiver, env) == Kernel do
+      expanded_pipe({:|>, meta, [left, right]}, env)
+    else
+      {elem(target, 0), call_meta, [left, right]}
+    end
+  end
+
+  defp expanded_pipe({:|>, _meta, [left, {name, call_meta, context}]}, _env)
+       when is_atom(name) and is_atom(context) do
+    {name, call_meta, [left]}
+  end
+
+  defp expanded_pipe({:|>, _meta, [left, {form, call_meta, args}]}, _env) when is_list(args) do
+    {form, call_meta, [left | args]}
+  end
+
+  defp expanded_pipe(pipe, _env), do: pipe
+
   defp expression({:|>, _meta, _args} = ast, scope) do
     ast
     |> unpipe(scope)
@@ -527,7 +559,7 @@ defmodule Hologram.Migration.Value do
       marked_inner(body) != nil -> :marked
       path(body) != nil -> :query
       shape != nil and elem(shape, 0) in @query_calls -> {:word, shape}
-      not reads_argument?(body, scope.args) -> refuse_constant_fn(body, scope)
+      not reads_argument?(body, scope.args, scope.env) -> refuse_constant_fn(body, scope)
       true -> :elixir
     end
   end
@@ -654,7 +686,7 @@ defmodule Hologram.Migration.Value do
       Macro.prewalk(ast, false, fn node, found? ->
         kept =
           node
-          |> unpiped_call()
+          |> unpiped_call(env)
           |> without_pattern(env)
 
         {kept, found? or match?({:^, _meta, _args}, kept)}
@@ -734,9 +766,11 @@ defmodule Hologram.Migration.Value do
   end
 
   # A module attribute is a value of the file rather than a read of the row.
-  defp reads_argument?(ast, args) do
+  defp reads_argument?(ast, args, env) do
     {_ast, found?} =
-      Macro.prewalk(ast, false, fn
+      ast
+      |> Macro.prewalk(&unpiped_call(&1, env))
+      |> Macro.prewalk(false, fn
         {:@, _meta, _args}, found? ->
           {nil, found?}
 
@@ -1000,7 +1034,7 @@ defmodule Hologram.Migration.Value do
   defp settle_elixir!(reading, module) do
     scope = %{args: reading.args, env: reading.env, in_fn: true}
 
-    if not reads_argument?(reading.body, reading.args) do
+    if not reads_argument?(reading.body, reading.args, reading.env) do
       refuse_constant_fn(reading.body, scope)
     end
 
@@ -1071,11 +1105,25 @@ defmodule Hologram.Migration.Value do
 
   defp unpipe(ast, _scope), do: ast
 
-  defp unpiped_call({:|>, _meta, [left, {form, call_meta, args}]}) when is_list(args) do
-    {form, call_meta, [left | args]}
+  # A pipe is the call Elixir expands it to, however it's spelled, but only Kernel's pipe expands:
+  # a migration's own |> is a call whose right side is a value, and any other receiver stays read.
+  defp unpiped_call({{:., _dot_meta, [receiver, :|>]}, meta, [left, right]} = node, env) do
+    if Macro.expand(receiver, env) == Kernel do
+      expanded_pipe({:|>, meta, [left, right]}, env)
+    else
+      node
+    end
   end
 
-  defp unpiped_call(node), do: node
+  defp unpiped_call({:|>, _meta, [_left, _right]} = pipe, env) do
+    if Macro.Env.lookup_import(env, {:|>, 2}) == [macro: Kernel] do
+      expanded_pipe(pipe, env)
+    else
+      pipe
+    end
+  end
+
+  defp unpiped_call(node, _env), do: node
 
   defp valid_args?(args),
     do: is_list(args) and not List.improper?(args) and Enum.all?(args, &is_atom/1)
@@ -1179,7 +1227,7 @@ defmodule Hologram.Migration.Value do
     macro =
       reading.body
       |> without_guards()
-      |> local_calls()
+      |> local_calls(reading.env)
       |> Enum.find(fn call ->
         Module.defines?(module, call, :defmacro) or Module.defines?(module, call, :defmacrop)
       end)
@@ -1201,7 +1249,9 @@ defmodule Hologram.Migration.Value do
   # An unquote can splice one in unseen.
   defp validate_no_scope_change!(body, scope) do
     {_ast, changed} =
-      Macro.prewalk(body, nil, fn
+      body
+      |> Macro.prewalk(&unpiped_call(&1, scope.env))
+      |> Macro.prewalk(nil, fn
         {kind, _meta, args} = node, nil when kind in @scope_changing_forms and is_list(args) ->
           {node, kind}
 

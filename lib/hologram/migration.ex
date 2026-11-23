@@ -639,7 +639,7 @@ defmodule Hologram.Migration do
       node ->
         node
     end)
-    |> Value.local_calls()
+    |> Value.local_calls(caller)
     |> Map.new(&{&1, Macro.Env.lookup_import(caller, &1)})
   end
 
