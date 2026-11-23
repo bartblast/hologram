@@ -1345,6 +1345,19 @@ defmodule Hologram.Migration.IndexRecoveryTest do
       pending = [computed_copy("20260813091524"), @drop_unique_slug]
 
       assert_boots_past_checking_index(scratch, chain, model, pending)
+
+      route(scratch, fn ->
+        {:ok, %{rows: [[total, taken, wrong]]}} =
+          Connection.query(
+            ~s|SELECT COUNT(*), COUNT(*) FILTER (WHERE "slug" = 'taken'), | <>
+              ~s|COUNT(*) FILTER (WHERE "copy" IS DISTINCT FROM "slug") | <>
+              ~s|FROM "hologram_data"."my_app_task"|
+          )
+
+        assert total == 302
+        assert taken == 2
+        assert wrong == 0
+      end)
     end
 
     # Dropped early, the index would not be there when the fill writes the table, and the
