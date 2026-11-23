@@ -564,8 +564,11 @@ defmodule Hologram.Migration.Renderer do
        ) do
     case Preflight.fill_value(mapping, op.table, op.column) do
       {:ok, value} ->
-        validate_default_held!(op, value, mapping)
-        Map.merge(op, %{fill: value, fill_companions: companions(mapping, op)})
+        Map.merge(op, %{
+          default_held: default_held?(op, value, mapping),
+          fill: value,
+          fill_companions: companions(mapping, op)
+        })
 
       :none ->
         op
@@ -1239,27 +1242,28 @@ defmodule Hologram.Migration.Renderer do
     |> Enum.filter(&MapSet.member?(next_join_tables, &1))
   end
 
-  # The whole file passed its fold, but a cut makes the ops on each side of it apply on their own,
-  # so what the chunks leave has to stand: a delete and its cleanup, or a relationship and the
-  # entity type it targets, can't sit on opposite sides. Asked up front rather than around the
-  # rendering, whose other refusals aren't about the cut.
   # A rename or a computed backfill can part a default from the op bringing its value into the
   # type, which then doesn't hold it when the column fills.
   defp validate_default_held!(op, value, mapping) do
+    if not default_held?(op, value, mapping) do
+      raise Hologram.CompileError,
+        message: Preflight.unheld_default_message(op.table, op.column, value)
+    end
+  end
+
+  defp default_held?(op, value, mapping) do
     {_entity_type, entry} =
       Enum.find(mapping, fn {_entity_type, entry} -> entry.table == op.table end)
 
     column = Enum.find(entry.columns, &(&1.name == op.column))
 
-    if column.enum_values && value not in column.enum_values do
-      raise Hologram.CompileError,
-        message:
-          ~s(the default #{inspect(value)} of column "#{op.column}" on table "#{op.table}" is ) <>
-            "an enum value its type doesn't hold yet when the column fills - move the change " <>
-            "filling the column to the next migration file"
-    end
+    is_nil(column.enum_values) or value in column.enum_values
   end
 
+  # The whole file passed its fold, but a cut makes the ops on each side of it apply on their own,
+  # so what the chunks leave has to stand: a delete and its cleanup, or a relationship and the
+  # entity type it targets, can't sit on opposite sides. Asked up front rather than around the
+  # rendering, whose other refusals aren't about the cut.
   defp validate_cuts!(chunks, pre_model) do
     if cut?(chunks) do
       cuts = for {cut, _chunk} <- chunks, cut, do: cut

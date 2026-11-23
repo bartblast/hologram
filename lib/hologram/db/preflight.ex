@@ -133,8 +133,15 @@ defmodule Hologram.DB.Preflight do
   check_cast!/1 does, and skipping the hand-made indexes it skips. An invalid index that
   takes no writes is skipped too: the fill doesn't go through it, and whoever builds it
   later counts the keys then.
+
+  A tightening's default its enum doesn't hold yet is refused here rather than when the file
+  renders, since it's only written when a row holds NULL.
   """
   @spec check_fill!(%{atom => any}) :: :ok
+  def check_fill!(%{default_held: false} = op) do
+    raise unheld_default_message(op.table, op.column, op.fill)
+  end
+
   def check_fill!(op) do
     source = if op[:fill_source] == :backfill, do: "the backfill", else: "the default"
 
@@ -292,6 +299,16 @@ defmodule Hologram.DB.Preflight do
   @spec run!(list(%{atom => any}), %{atom => any}, %{module => %{atom => any}}) :: :ok
   def run!(ops, actual, mapping) do
     Enum.each(ops, &check_op!(&1, actual, mapping))
+  end
+
+  @doc """
+  Returns the refusal of a default its enum doesn't hold yet where the given column fills.
+  """
+  @spec unheld_default_message(String.t(), String.t(), any) :: String.t()
+  def unheld_default_message(table, column, value) do
+    ~s(the default #{inspect(value)} of column "#{column}" on table "#{table}" is an enum value ) <>
+      "its type doesn't hold yet when the column fills - move the change filling the column to " <>
+      "the next migration file"
   end
 
   defp backfill_spelling(%{kind: :attribute}), do: "<value or expression>"

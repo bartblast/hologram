@@ -387,7 +387,7 @@ defmodule Hologram.Migration.RendererTest do
       end
     end
 
-    test "refuses a tightening filling a value the file adds below a cut" do
+    test "marks a tightening filling a value the file adds below a cut" do
       pre_model =
         model(%{
           MyApp.Task => %{
@@ -417,12 +417,13 @@ defmodule Hologram.Migration.RendererTest do
         }
       ]
 
-      assert_raise Hologram.CompileError,
-                   ~r/the default "fresh" of column "grade".*doesn't hold yet/,
-                   fn -> render(ops, pre_model) end
+      %{transactional: rendered} = render(ops, pre_model)
+
+      assert %{default_held: false, fill: "fresh"} =
+               Enum.find(rendered, &(&1.op == :alter_column and &1.column == "grade"))
     end
 
-    test "refuses a tightening filling a value the file adds below a rename" do
+    test "marks a tightening filling a value the file adds below a rename" do
       pre_model =
         model(%{
           MyApp.Task => %{
@@ -452,9 +453,10 @@ defmodule Hologram.Migration.RendererTest do
         }
       ]
 
-      assert_raise Hologram.CompileError,
-                   ~r/the default "fresh" of column "grade".*doesn't hold yet/,
-                   fn -> render(ops, pre_model) end
+      %{transactional: rendered} = render(ops, pre_model)
+
+      assert %{default_held: false, fill: "fresh"} =
+               Enum.find(rendered, &(&1.op == :alter_column and &1.column == "grade"))
     end
 
     test "passes a fill of a value whose label a later rename frees and an add takes" do

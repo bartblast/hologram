@@ -68,6 +68,44 @@ defmodule Hologram.Migration.RefusalTest do
     {:ok, _result} = Connection.query(statement, [title, amount, status])
   end
 
+  # A file adding an optional enum, and one making it required with a default that the same file
+  # adds to the enum only below a rename, so the value isn't there yet when the column fills.
+  defp grade_files(first_model) do
+    add_grade =
+      migration("20260813091523", [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          type: :enum,
+          opts: [optional: true, values: [:a]],
+          line: 3
+        }
+      ])
+
+    tighten =
+      migration("20260813091524", [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          changes: [optional: false, default: :fresh],
+          line: 3
+        },
+        %{op: :rename_attribute, entity: MyApp.Task, from: :amount, to: :cost, line: 4},
+        %{
+          op: :add_enum_value,
+          entity: MyApp.Task,
+          attribute: :grade,
+          value: :fresh,
+          opts: [],
+          line: 5
+        }
+      ])
+
+    {add_grade, Model.fold(first_model, add_grade.ops), tighten}
+  end
+
   defp migration(version, ops) do
     %{version: version, path: "app/migrations/#{version}.ex", ops: ops}
   end
@@ -250,6 +288,59 @@ defmodule Hologram.Migration.RefusalTest do
           "declare default: <value>, make the attribute optional: true, or clear the rows"
 
       assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
+    test "refuses a default its enum doesn't hold yet when a NULL needs it", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      {add_grade, grade_model, tighten} = grade_files(first_model)
+
+      route(scratch, fn ->
+        assert run([create, add_grade], grade_model, @context) == :ok
+
+        rows_before = task_rows()
+        schema_before = Introspection.schema()
+        full_model = Model.fold(grade_model, tighten.ops)
+
+        expected_msg =
+          ~s(the default "fresh" of column "grade" on table "my_app_task" is an enum value ) <>
+            "its type doesn't hold yet when the column fills - move the change filling the " <>
+            "column to the next migration file"
+
+        assert_error RuntimeError, expected_msg, fn ->
+          run([create, add_grade, tighten], full_model, @context)
+        end
+
+        assert applied_versions_list() == ["20260813091522", "20260813091523"]
+        assert Introspection.schema() == schema_before
+        assert task_rows() == rows_before
+      end)
+    end
+
+    test "applies a default its enum doesn't hold yet when no NULL needs it", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      {add_grade, grade_model, tighten} = grade_files(first_model)
+
+      route(scratch, fn ->
+        assert run([create, add_grade], grade_model, @context) == :ok
+
+        {:ok, _result} =
+          Connection.query(~s|UPDATE "hologram_data"."my_app_task" SET "grade" = 'a'|)
+
+        full_model = Model.fold(grade_model, tighten.ops)
+
+        assert run([create, add_grade, tighten], full_model, @context) == :ok
+
+        assert {:ok, %{rows: [["a"]]}} =
+                 Connection.query(
+                   ~s|SELECT DISTINCT "grade"::text FROM "hologram_data"."my_app_task"|
+                 )
+      end)
     end
 
     # The column turns required in its own chunk, where it declares no default - the one
