@@ -34,6 +34,7 @@ defmodule Hologram.MutationTest do
   alias Hologram.Test.Fixtures.Mutation.Module4, as: MutationModule4
   alias Hologram.Test.Fixtures.Mutation.Module5, as: MutationModule5
   alias Hologram.Test.Fixtures.Mutation.Module6, as: MutationModule6
+  alias Hologram.Test.Fixtures.Mutation.Module7, as: MutationModule7
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
 
@@ -1874,6 +1875,253 @@ defmodule Hologram.MutationTest do
 
       assert Record.find(replica_id, 1) == %{actor_id: user.id, result: answer}
       assert record_envelope(replica_id, 1) == raw
+    end
+
+    test "refuses a create holding a NUL, for a signed-in user and a visitor" do
+      user = create_user("create-nul@example.com")
+
+      for session <- [server(user.id), server()] do
+        id = Entity.generate_id()
+        write = create_write(MutationModule5, id, %{"title" => "a\0b"})
+
+        assert run(envelope([write]), session) ==
+                 rejected(0, %{title: [{:type, :string}]})
+
+        assert EntityOperations.get(MutationModule5, id) == nil
+      end
+    end
+
+    test "refuses an update holding a NUL and leaves the row as it was" do
+      user = create_user("update-nul@example.com")
+
+      channel =
+        [name: "open"]
+        |> Channel.new()
+        |> DB.create!()
+
+      write =
+        update_write(Channel, channel.id, %{"name" => "a\0b"}, stamp: stamp_above(channel))
+
+      assert run(envelope([write]), server(user.id)) ==
+               rejected(0, %{name: [{:type, :string}]})
+
+      assert EntityOperations.get(Channel, channel.id).name == "open"
+    end
+
+    test "refuses a create holding a date or datetime that can't be stored" do
+      user = create_user("create-range@example.com")
+
+      for session <- [server(user.id), server()],
+          {name, value, type} <- [
+            {:held_on, "-5000-01-01", :date},
+            {:starts_at, "-5000-01-01T00:00:00.000000Z", :datetime}
+          ] do
+        id = Entity.generate_id()
+        write = create_write(MutationModule7, id, %{Atom.to_string(name) => value})
+
+        assert run(envelope([write]), session) == rejected(0, %{name => [{:type, type}]})
+        assert EntityOperations.get(MutationModule7, id) == nil
+      end
+    end
+
+    test "refuses an update holding a value that can't be stored" do
+      user = create_user("update-range@example.com")
+
+      row =
+        [title: "kept"]
+        |> MutationModule7.new()
+        |> DB.create!()
+
+      for session <- [server(user.id), server()],
+          {name, value, type} <- [
+            {:held_on, "-5000-01-01", :date},
+            {:starts_at, "-5000-01-01T00:00:00.000000Z", :datetime},
+            {:title, "a\0b", :string}
+          ] do
+        write =
+          update_write(MutationModule7, row.id, %{Atom.to_string(name) => value},
+            stamp: stamp_above(row)
+          )
+
+        assert run(envelope([write]), session) == rejected(0, %{name => [{:type, type}]})
+      end
+
+      assert %{held_on: nil, starts_at: nil, title: "kept"} =
+               EntityOperations.get(MutationModule7, row.id)
+    end
+
+    # The writer only sees the values that win, and a losing one goes into the answer, stored as
+    # jsonb, which can't hold a NUL.
+    test "refuses an update whose NUL would lose the merge" do
+      user = create_user("losing-nul@example.com")
+
+      channel =
+        [name: "open"]
+        |> Channel.new()
+        |> DB.create!()
+
+      newer = channel.__meta__.revisions.name + 1_000_000
+
+      set_revisions(Channel, channel.id, %{"name" => newer})
+
+      write =
+        update_write(Channel, channel.id, %{"name" => "a\0b"},
+          based_on: %{"name" => channel.__meta__.revisions.name},
+          stamp: newer - 1
+        )
+
+      assert run(envelope([write]), server(user.id)) ==
+               rejected(0, %{name: [{:type, :string}]})
+
+      assert EntityOperations.get(Channel, channel.id).name == "open"
+    end
+
+    test "refuses a batch holding a date it can't read, naming the write and the field" do
+      write = create_write(MutationModule7, Entity.generate_id(), %{"held_on" => "-10000-01-01"})
+
+      assert run(envelope([write]), server()) == rejected(0, %{held_on: [{:type, :date}]})
+    end
+
+    test "refuses a batch holding a datetime it can't read, naming the write and the field" do
+      write =
+        create_write(MutationModule7, Entity.generate_id(), %{
+          "starts_at" => "10000-01-01T00:00:00.000000Z"
+        })
+
+      assert run(envelope([write]), server()) == rejected(0, %{starts_at: [{:type, :datetime}]})
+    end
+
+    test "keeps a signed-in user's batch holding a date it can't read" do
+      user = create_user("unread-date@example.com")
+      replica_id = Entity.generate_id()
+      write = create_write(MutationModule7, Entity.generate_id(), %{"held_on" => "-10000-01-01"})
+      raw = envelope([write], replica_id: replica_id)
+
+      assert {:ok, %{"status" => "rejected"} = answer} = run(raw, server(user.id))
+
+      assert Record.find(replica_id, 1) == %{actor_id: user.id, result: answer}
+      assert record_envelope(replica_id, 1) == raw
+    end
+
+    test "keeps nothing of a visitor's batch holding a date it can't read" do
+      replica_id = Entity.generate_id()
+      write = create_write(MutationModule7, Entity.generate_id(), %{"held_on" => "-10000-01-01"})
+
+      assert {:ok, %{"status" => "rejected"}} =
+               run(envelope([write], replica_id: replica_id), server())
+
+      assert Record.find(replica_id, 1) == nil
+    end
+
+    test "answers a repeat of a batch holding a date it can't read from its record" do
+      user = create_user("unread-repeat@example.com")
+      replica_id = Entity.generate_id()
+      write = create_write(MutationModule7, Entity.generate_id(), %{"held_on" => "-10000-01-01"})
+      raw = envelope([write], replica_id: replica_id)
+
+      assert {:ok, answer} = run(raw, server(user.id))
+
+      other_write =
+        create_write(MutationModule7, Entity.generate_id(), %{
+          "starts_at" => "10000-01-01T00:00:00Z"
+        })
+
+      assert run(envelope([other_write], replica_id: replica_id), server(user.id)) ==
+               {:ok, answer}
+    end
+
+    test "refuses another session's pair on a batch holding a date it can't read" do
+      user = create_user("unread-owner@example.com")
+      other = create_user("unread-other@example.com")
+      replica_id = Entity.generate_id()
+      write = create_write(MutationModule7, Entity.generate_id(), %{"held_on" => "-10000-01-01"})
+      raw = envelope([write], replica_id: replica_id)
+
+      assert {:ok, %{"status" => "rejected"}} = run(raw, server(user.id))
+      assert run(raw, server(other.id)) == rejected(nil, :forged_client)
+    end
+
+    test "refuses an edge to a row the server doesn't have" do
+      source = create_source()
+      write = edge_write("add_relationship", Module16, source.id, "secrets", Entity.generate_id())
+
+      assert run(envelope([write]), server()) == rejected(0, %{secrets: [:not_found]})
+    end
+
+    test "takes back the values of a call whose edge names a missing row" do
+      ticket = create_ticket("open")
+
+      writes = [
+        update_write(MutationModule6, ticket.id, %{"status" => "closed"},
+          stamp: stamp_above(ticket)
+        ),
+        same_call(
+          edge_write("add_relationship", MutationModule6, ticket.id, "tags", Entity.generate_id())
+        )
+      ]
+
+      assert run(envelope(writes), server()) == rejected(0, %{tags: [:not_found]})
+      assert EntityOperations.get(MutationModule6, ticket.id).status == "open"
+    end
+
+    test "refuses a create whose id a row already holds, and leaves that row alone" do
+      row =
+        [title: "first"]
+        |> MutationModule7.new()
+        |> DB.create!()
+
+      write = create_write(MutationModule7, row.id, %{"title" => "second"})
+
+      assert run(envelope([write]), server()) == rejected(0, %{id: [:unique]})
+      assert EntityOperations.get(MutationModule7, row.id).title == "first"
+    end
+
+    test "refuses a batch creating one id twice, and keeps neither row" do
+      id = Entity.generate_id()
+
+      writes = [
+        create_write(MutationModule7, id, %{"title" => "first"}),
+        create_write(MutationModule7, id, %{"title" => "second"})
+      ]
+
+      assert run(envelope(writes), server()) == rejected(1, %{id: [:unique]})
+      assert EntityOperations.get(MutationModule7, id) == nil
+    end
+
+    # A session can outlive its user's row, and the grant a create hands its creator names that row.
+    test "refuses a create by a signed-in user whose row is gone" do
+      id = Entity.generate_id()
+      write = create_write(MutationModule5, id, %{"title" => "x"})
+
+      assert run(envelope([write]), server(Entity.generate_id())) ==
+               rejected(0, :actor_not_found)
+
+      assert EntityOperations.get(MutationModule5, id) == nil
+    end
+
+    test "refuses a create whose id is text but no entity id" do
+      write = create_write(MutationModule7, "NOT-AN-ID", %{"title" => "x"})
+
+      assert run(envelope([write]), server()) == rejected(0, %{id: [{:type, :uuid}]})
+    end
+
+    test "refuses an edge whose target is text but no entity id" do
+      source = create_source()
+      write = edge_write("add_relationship", Module16, source.id, "secrets", "nope")
+
+      assert run(envelope([write]), server()) == rejected(0, %{secrets: [{:type, :uuid}]})
+    end
+
+    test "keeps a refused batch holding a NUL, with the NUL spelled as U+FFFD" do
+      user = create_user("refused-nul@example.com")
+      replica_id = Entity.generate_id()
+      id = Entity.generate_id()
+      write = update_write(MutationModule5, id, %{"title" => "a\0b"})
+      raw = envelope([write], replica_id: replica_id)
+
+      assert run(raw, server(user.id)) == rejected(0, :not_found)
+
+      assert [%{"data" => %{"title" => "a�b"}}] = record_envelope(replica_id, 1)["writes"]
     end
 
     test "answers a refused batch sent again from its record without evaluating it again" do

@@ -46,6 +46,7 @@ defmodule HologramSyncBenchmark.Step do
           conn: pid,
           duration_ms: pos_integer,
           expected: (non_neg_integer -> [non_neg_integer]),
+          fill_group: pos_integer | nil,
           fill_timeout_ms: pos_integer,
           first_marker: non_neg_integer,
           rate: pos_integer,
@@ -101,6 +102,20 @@ defmodule HologramSyncBenchmark.Step do
   def memory_min_clients, do: @memory_min_clients
 
   @doc """
+  Returns what a case's section name ends with for the given options, so a run filling its clients
+  in groups keeps its figures beside the plain run's rather than replacing them.
+  """
+  @spec group_suffix(keyword) :: String.t()
+  def group_suffix(opts), do: if(opts[:fill_group], do: "_groups", else: "")
+
+  @doc """
+  Returns what a case's title ends with for the given options, for the same reason as
+  `group_suffix/1`.
+  """
+  @spec group_title(keyword) :: String.t()
+  def group_title(opts), do: if(opts[:fill_group], do: ", filled in groups", else: "")
+
+  @doc """
   Returns how many writes a step makes at the given rate per second for the given seconds, each to
   a row of its own.
   """
@@ -151,16 +166,15 @@ defmodule HologramSyncBenchmark.Step do
   Connects the given clients and waits for their fills, returning what that cost: CPU, the
   database counters unadjusted, the fill times and what went wrong. For a case with steps of its
   own as well; `spec` needs `:conn` and `:fill_timeout_ms`, and may set how many clients connect
-  at once as `:connect_concurrency`.
+  at once as `:connect_concurrency`, or as `:fill_group` how many fill at once, each group once the
+  one before it is filled, for a step measuring what a node holds up rather than a burst of fills.
   """
   @spec fill(Peer.t(), [pid], map) :: map
   def fill(peer, clients, spec) do
     stats_before = DB.settled_stats(spec.conn)
     cpu_before = Measure.cpu_sample(peer)
 
-    concurrency = Map.get(spec, :connect_concurrency, @connect_concurrency)
-    connect_failures = Clients.connect_all(clients, concurrency)
-    reports = Clients.await_fills(clients, spec.fill_timeout_ms)
+    {connect_failures, reports} = connect_and_fill(clients, spec)
 
     cpu_after = Measure.cpu_sample(peer)
     stats_after = DB.settled_stats(spec.conn)
@@ -177,12 +191,25 @@ defmodule HologramSyncBenchmark.Step do
       db: DB.stats_delta(stats_after, stats_before),
       failed: Enum.count(reports, &(&1.failure != nil)),
       filled: length(fill_ms),
+      # Clients in a group after one that got stuck, which never connected.
+      never_connected: Enum.count(reports, &is_nil(&1.connected_at)),
       ms: fill_ms,
       restarts: Enum.sum_by(reports, & &1.restarts),
       unfinished: Enum.count(reports, &(&1.synced_all_at == nil and &1.failure == nil))
     }
 
     result
+  end
+
+  defp connect_and_fill(clients, %{fill_group: group} = spec) when group != nil do
+    Clients.fill_in_groups(clients, group, spec.fill_timeout_ms)
+  end
+
+  defp connect_and_fill(clients, spec) do
+    concurrency = Map.get(spec, :connect_concurrency, @connect_concurrency)
+    connect_failures = Clients.connect_all(clients, concurrency)
+
+    {connect_failures, Clients.await_fills(clients, spec.fill_timeout_ms)}
   end
 
   @doc """
@@ -307,7 +334,7 @@ defmodule HologramSyncBenchmark.Step do
     idle = idle(peer, spec, stats_after_steady)
 
     memory_per_client =
-      if length(clients) >= @memory_min_clients do
+      if length(clients) >= @memory_min_clients and fill.never_connected == 0 do
         (memory_after - memory_before) / length(clients)
       end
 
@@ -315,7 +342,7 @@ defmodule HologramSyncBenchmark.Step do
       clients: length(clients),
       fill: %{
         fill
-        | cpu_ms: fill.cpu_ms - idle.cpu_ms_per_ms * fill.cpu_elapsed_ms,
+        | cpu_ms: fill_cpu_ms(fill, idle, spec),
           db: adjust(fill.db, idle.db)
       },
       idle: idle,
@@ -332,6 +359,14 @@ defmodule HologramSyncBenchmark.Step do
         |> Map.put(:streams_lost, steady.failed_clients - fill.failed),
       warmup_cut_short: warmup_cut_short
     }
+  end
+
+  # Nil for clients filled in groups: the idle rate is read with all of them connected, while the
+  # number connected during the fill climbs from none, so taking it off would remove too much.
+  defp fill_cpu_ms(_fill, _idle, %{fill_group: group}) when group != nil, do: nil
+
+  defp fill_cpu_ms(fill, idle, _spec) do
+    fill.cpu_ms - idle.cpu_ms_per_ms * fill.cpu_elapsed_ms
   end
 
   defp rate(writes) when map_size(writes) < 2, do: nil

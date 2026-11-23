@@ -8,10 +8,35 @@ defmodule HologramSyncBenchmark.Measure do
 
   @heap_kill_line "maximum heap size reached"
 
-  # How a sync session cut for falling behind ended, in the server's log.
-  @session_cut_line "(stop) :behind_the_ring"
+  # How a sync session cut for a stream that stopped taking its frames ended, in the server's log.
+  @session_cut_line "(stop) :client_stalled"
+
+  # How often the sessions holding a turn at the gate are read. Short, since a catch-up of a small
+  # gap lasts tens of milliseconds, and only those few sessions are read each time.
+  @turn_sample_ms 20
+
+  # How many of those reads pass between two reads of the sessions waiting for a turn, about 250
+  # ms, and how many of them are read: a wave can leave thousands waiting, and reading them all this
+  # often would load the node being measured.
+  @waiting_sample_every 12
+
+  @waiting_sample_size 20
+
+  # How long the sampler waits for the gate to answer before skipping that read.
+  @gate_read_timeout_ms 1_000
 
   @type cpu_sample :: {integer, term}
+
+  @type session_figures :: %{
+          catching_up_each_bytes: non_neg_integer,
+          catching_up_sum_bytes: non_neg_integer,
+          error: String.t() | nil,
+          gate_reads_missed: non_neg_integer,
+          longest_mailbox: non_neg_integer,
+          turns_ms: [non_neg_integer],
+          waiting: non_neg_integer,
+          waiting_each_bytes: non_neg_integer
+        }
 
   @doc """
   Returns the CPU time the server node's schedulers were busy between the two samples, in
@@ -79,7 +104,7 @@ defmodule HologramSyncBenchmark.Measure do
   end
 
   @doc """
-  Counts the sync sessions the given log says were cut for falling behind.
+  Counts the sync sessions the given log says were cut for a stream that stopped taking frames.
 
   Counted from the log rather than from the clients: the server ends a cut session's stream, so
   the client sees a stream end like any other, and only the log says why.
@@ -311,6 +336,173 @@ defmodule HologramSyncBenchmark.Measure do
     after
       20 -> poll_memory(owner, start, max(peak, :erlang.memory(:total)))
     end
+  end
+
+  @doc """
+  Starts reading the memory of the sync sessions at the server node's gate and returns the sampler,
+  for `stop_session_sampler/1`. Runs on the server node, so it keeps its pace when the node is
+  busy. It reads the gate's private state, copying the whole queue each time, which costs the node
+  a few percent of a core with thousands waiting, so it's for a run measuring this rather than one
+  measuring the wave's CPU.
+  """
+  @spec start_session_sampler(Peer.t()) :: pid
+  def start_session_sampler(peer) do
+    Node.spawn(peer.node, __MODULE__, :sample_sessions, [self()])
+  end
+
+  @doc """
+  Stops the given sampler and returns the highest readings it took, or nil when the node went
+  first.
+
+  A session's bytes are its process memory, mailbox included, and the binaries it refers to, each
+  counted once. The ones shared with other sessions count in each. `:catching_up_each_bytes` and
+  `:waiting_each_bytes` are the most one session held in that state, `:catching_up_sum_bytes` the
+  most the sessions holding a turn held together, `:waiting` the most waiting at once, and
+  `:turns_ms` how long each turn seen ending lasted, to the sampler's 20 ms. A binary in a message
+  still queued can be left out while the session is running.
+
+  `:gate_reads_missed` counts the reads the gate was too busy to answer, and `:error` says why
+  reading failed otherwise, such as a change to the gate's shape, keeping what was read before it.
+  """
+  @spec stop_session_sampler(pid) :: session_figures | nil
+  def stop_session_sampler(sampler) do
+    ref = Process.monitor(sampler)
+    send(sampler, {:stop, self(), ref})
+
+    receive do
+      {^ref, figures} ->
+        Process.demonitor(ref, [:flush])
+        figures
+
+      {:DOWN, ^ref, :process, ^sampler, _reason} ->
+        nil
+    end
+  end
+
+  @doc false
+  # The sampler, on the server node. Public only so the node can be told to run it.
+  @spec sample_sessions(pid) :: term
+  def sample_sessions(owner) do
+    Process.flag(:priority, :high)
+
+    poll_sessions(Process.monitor(owner), 0, %{}, %{
+      catching_up_each_bytes: 0,
+      catching_up_sum_bytes: 0,
+      error: nil,
+      gate_reads_missed: 0,
+      longest_mailbox: 0,
+      turns_ms: [],
+      waiting: 0,
+      waiting_each_bytes: 0
+    })
+  end
+
+  defp poll_sessions(owner_ref, tick, holding, figures) do
+    receive do
+      {:stop, from, ref} ->
+        send(from, {ref, figures})
+
+      {:DOWN, ^owner_ref, :process, _owner, _reason} ->
+        :ok
+    after
+      @turn_sample_ms ->
+        {holding, figures} = read_gate(tick, holding, figures)
+
+        poll_sessions(owner_ref, tick + 1, holding, figures)
+    end
+  end
+
+  defp read_gate(tick, holding, figures) do
+    gate = :sys.get_state(Hologram.Sync.Gate, @gate_read_timeout_ms)
+    {holding, figures} = read_turns(gate, holding, figures)
+
+    if rem(tick, @waiting_sample_every) == 0 do
+      {holding, read_waiting(gate, figures)}
+    else
+      {holding, figures}
+    end
+  catch
+    :exit, {:timeout, _call} ->
+      {holding, %{figures | gate_reads_missed: figures.gate_reads_missed + 1}}
+
+    kind, reason ->
+      {holding, %{figures | error: figures.error || Exception.format_banner(kind, reason)}}
+  end
+
+  defp read_turns(gate, holding, figures) do
+    now = System.monotonic_time(:millisecond)
+    holders = Map.keys(gate.holders)
+    {still_holding, ended} = Map.split(holding, holders)
+
+    turns_ms = Enum.map(ended, fn {_pid, since} -> now - since end)
+
+    read =
+      holders
+      |> Enum.map(&session_memory/1)
+      |> Enum.reject(&is_nil/1)
+
+    figures = %{
+      figures
+      | catching_up_each_bytes:
+          Enum.max([figures.catching_up_each_bytes | Enum.map(read, &elem(&1, 0))]),
+        catching_up_sum_bytes:
+          max(figures.catching_up_sum_bytes, Enum.sum_by(read, &elem(&1, 0))),
+        longest_mailbox: Enum.max([figures.longest_mailbox | Enum.map(read, &elem(&1, 1))]),
+        turns_ms: turns_ms ++ figures.turns_ms
+    }
+
+    # A session already holding keeps the moment it was first seen.
+    holding =
+      holders
+      |> Map.new(&{&1, now})
+      |> Map.merge(still_holding)
+
+    {holding, figures}
+  end
+
+  defp read_waiting(gate, figures) do
+    waiting =
+      gate.queue
+      |> :queue.to_list()
+      |> Enum.filter(fn {_pid, ref} -> MapSet.member?(gate.waiting, ref) end)
+
+    read =
+      waiting
+      |> Enum.take(@waiting_sample_size)
+      |> Enum.map(fn {pid, _ref} -> session_memory(pid) end)
+      |> Enum.reject(&is_nil/1)
+
+    %{
+      figures
+      | waiting: max(figures.waiting, length(waiting)),
+        waiting_each_bytes: Enum.max([figures.waiting_each_bytes | Enum.map(read, &elem(&1, 0))])
+    }
+  end
+
+  # Nil for a session that has ended since the gate was read.
+  defp session_memory(pid) do
+    case Process.info(pid, [:binary, :memory, :message_queue_len]) do
+      nil -> nil
+      info -> {info[:memory] + binaries_bytes(info[:binary]), info[:message_queue_len]}
+    end
+  end
+
+  @doc """
+  Returns the given process's own memory and the bytes of the binaries it refers to, each counted
+  once. Those live outside the process, so its own memory leaves them out. Runs on the node of the
+  process, which has to be alive.
+  """
+  @spec process_bytes(pid) :: {non_neg_integer, non_neg_integer}
+  def process_bytes(pid) do
+    [binary: binaries, memory: memory] = Process.info(pid, [:binary, :memory])
+
+    {memory, binaries_bytes(binaries)}
+  end
+
+  defp binaries_bytes(binaries) do
+    binaries
+    |> Enum.uniq_by(fn {address, _size, _references} -> address end)
+    |> Enum.sum_by(fn {_address, size, _references} -> size end)
   end
 
   @doc """
