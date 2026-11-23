@@ -230,7 +230,7 @@ defmodule Hologram.Compiler do
           | {:component, module}
 
   # A chunk whose rendered definitions are smaller than this many bytes is folded into another
-  # chunk (see fold_small_chunks/2), because shipping it as a file of its own costs more than it
+  # chunk (see fold_small_chunks/3), because shipping it as a file of its own costs more than it
   # holds. The measured part: a bundled chunk with no function is 403 bytes, and the response
   # headers of a static script are about 185 bytes, so a file costs about 590 bytes on the wire
   # before its first function. Rendered definitions minify to about 0.69 of their size (measured on
@@ -673,13 +673,14 @@ defmodule Hologram.Compiler do
       signature holds the type. A type no chunk's signature holds has no entry.
 
     * `{:page, page}` - the digests of the chunks a page preloads, sorted: the ones its own types
-      need and the ones the given runtime types need. A page that preloads none has an empty list.
+      need and the ones the given shared types need. A page that preloads none has an empty list.
 
   A chunk's digest names its file (see `Hologram.Router.Helpers.chunk_bundle_path/1`).
 
   Takes the chunks' bundle infos by signature (see `bundle/4`), each page's types (see
-  `CallGraph.list_page_chunk_types/4`) and the struct types the runtime's code names (see
-  `CallGraph.runtime_analysis/1`).
+  `CallGraph.list_page_chunk_types/4`) and the types every page needs: the struct types the
+  runtime's code names (see `CallGraph.runtime_analysis/1`) and the ones whose implementations run
+  on synced rows (see `merge_held_chunks/2`).
   """
   @spec build_chunk_registry_plt(
           %{MapSet.t(module) => map},
@@ -690,7 +691,7 @@ defmodule Hologram.Compiler do
   def build_chunk_registry_plt(
         bundle_infos_by_signature,
         chunk_types_by_page,
-        runtime_types,
+        shared_types,
         opts
       ) do
     digests_by_type =
@@ -707,7 +708,7 @@ defmodule Hologram.Compiler do
       Enum.map(chunk_types_by_page, fn {page, types} ->
         digests =
           types
-          |> Enum.concat(runtime_types)
+          |> Enum.concat(shared_types)
           |> Enum.flat_map(&Map.get(digests_by_type, &1, []))
           |> Enum.uniq()
           |> Enum.sort()
@@ -1915,7 +1916,7 @@ defmodule Hologram.Compiler do
   Returns the chunks to bundle, by signature, with the size of each chunk given:
 
     * `:chunks` - the given MFAs by signature (see `group_mfas_by_signature/1`) with the small
-      chunks folded into others (see `fold_small_chunks/2`).
+      chunks folded into others (see `fold_small_chunks/3`).
 
     * `:sizes` - the size of each given chunk, keyed by its MFAs: the size of its definitions as
       rendered, which holds the Erlang functions and the protocol dispatchers too, so the encode
@@ -1925,7 +1926,8 @@ defmodule Hologram.Compiler do
   chunk whose functions are the ones it was sized with, and whose modules were not edited since.
   The other chunks are sized: the IR their functions need is built into the IR PLT, the functions
   are encoded into the encode PLT (`encode_reachable_functions/5`) and each chunk is rendered
-  once. Takes the options `create_chunk_entry_files/5` takes, plus `:sizes`.
+  once. Takes the options `create_chunk_entry_files/5` takes, plus `:sizes` and `:held_types`, which
+  `fold_small_chunks/3` takes.
   """
   @spec fold_chunks(%{MapSet.t(module) => [mfa]}, PLT.t(), PLT.t(), MapSet.t(mfa), T.opts()) ::
           %{chunks: %{MapSet.t(module) => [mfa]}, sizes: %{[mfa] => non_neg_integer}}
@@ -1957,7 +1959,9 @@ defmodule Hologram.Compiler do
     size_by_signature =
       Map.new(mfas_by_signature, fn {signature, mfas} -> {signature, sizes[mfas]} end)
 
-    %{chunks: fold_small_chunks(mfas_by_signature, size_by_signature), sizes: sizes}
+    held_types = opts[:held_types] || MapSet.new()
+
+    %{chunks: fold_small_chunks(mfas_by_signature, size_by_signature, held_types), sizes: sizes}
   end
 
   @doc """
@@ -1970,6 +1974,11 @@ defmodule Hologram.Compiler do
 
   The smallest chunks are folded first, and a chunk that grew to the bound by what was folded into
   it stays.
+
+  A chunk whose signature holds one of the given held types is the one every page preloads (see
+  `merge_held_chunks/2`), so nothing is folded into it: a small chunk of an unrelated type would
+  load on every page. It's never folded away either, since a signature holding all of its types
+  would hold a held type, and so be that chunk.
 
   ## Examples
 
@@ -1989,15 +1998,16 @@ defmodule Hologram.Compiler do
   """
   @spec fold_small_chunks(
           %{MapSet.t(module) => [mfa]},
-          %{MapSet.t(module) => non_neg_integer}
+          %{MapSet.t(module) => non_neg_integer},
+          MapSet.t(module)
         ) :: %{MapSet.t(module) => [mfa]}
-  def fold_small_chunks(mfas_by_signature, size_by_signature) do
+  def fold_small_chunks(mfas_by_signature, size_by_signature, held_types \\ MapSet.new()) do
     {folded_mfas_by_signature, _sizes} =
       size_by_signature
       |> Enum.filter(fn {_signature, size} -> size < @chunk_fold_bound end)
       |> Enum.sort_by(fn {signature, size} -> {size, Enum.sort(signature)} end)
       |> Enum.reduce({mfas_by_signature, size_by_signature}, fn {signature, _size}, acc ->
-        fold_small_chunk(signature, acc)
+        fold_small_chunk(signature, acc, held_types)
       end)
 
     folded_mfas_by_signature
@@ -2070,6 +2080,72 @@ defmodule Hologram.Compiler do
     |> Enum.group_by(fn {mfa, _type} -> mfa end, fn {_mfa, type} -> type end)
     |> Enum.group_by(fn {_mfa, types} -> MapSet.new(types) end, fn {mfa, _types} -> mfa end)
     |> Map.new(fn {signature, mfas} -> {signature, Enum.sort(mfas)} end)
+  end
+
+  @doc """
+  Merges every chunk whose signature holds one of the given held types into one chunk, keyed by the
+  union of their signatures, with its MFAs sorted. Every page preloads it, so that the
+  implementations of the types a synced row can hold are there before any code reads a row, in one
+  file however many types there are. A struct type that shares a helper with a held type is in the
+  merged signature, so its lookup still gets that helper. Each MFA stays in one chunk. With no
+  held type, or no chunk holding one, the chunks are returned as they are.
+
+  ## Examples
+
+      iex> merge_held_chunks(
+      ...>   %{
+      ...>     MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+      ...>     MapSet.new([Date, Time]) => [{Calendar.ISO, :zero_pad, 2}],
+      ...>     MapSet.new([Version]) => [{Version, :__struct__, 0}]
+      ...>   },
+      ...>   MapSet.new([Date])
+      ...> )
+      %{
+        MapSet.new([Date, Time]) => [
+          {Calendar.ISO, :zero_pad, 2},
+          {String.Chars.Date, :to_string, 1}
+        ],
+        MapSet.new([Version]) => [{Version, :__struct__, 0}]
+      }
+  """
+  @spec merge_held_chunks(%{MapSet.t(module) => [mfa]}, MapSet.t(module)) ::
+          %{MapSet.t(module) => [mfa]}
+  def merge_held_chunks(mfas_by_signature, held_types) do
+    {held_chunks, other_chunks} =
+      Map.split_with(mfas_by_signature, fn {signature, _mfas} ->
+        not MapSet.disjoint?(signature, held_types)
+      end)
+
+    if held_chunks == %{} do
+      mfas_by_signature
+    else
+      signature =
+        held_chunks
+        |> Map.keys()
+        |> Enum.reduce(&MapSet.union/2)
+
+      mfas =
+        held_chunks
+        |> Map.values()
+        |> Enum.concat()
+        |> Enum.sort()
+
+      Map.put(other_chunks, signature, mfas)
+    end
+  end
+
+  @doc """
+  Returns the struct types with an implementation of a client protocol, given the chunks' entry
+  vertices by type (see `CallGraph.list_chunk_entries/2`): the ones with an entry other than their
+  own struct functions.
+  """
+  @spec list_impl_types(%{module => [CallGraph.vertex()]}) :: MapSet.t(module)
+  def list_impl_types(entries_by_type) do
+    for {type, entries} <- entries_by_type,
+        Enum.any?(entries, &(not match?({^type, :__struct__, _arity}, &1))),
+        into: MapSet.new() do
+      type
+    end
   end
 
   @doc """
@@ -4174,9 +4250,9 @@ defmodule Hologram.Compiler do
 
   # Merges the chunk of the given signature into its target (see fold_target/2), when it is still
   # under the bound with what was folded into it and has one.
-  defp fold_small_chunk(signature, {mfas_by_signature, size_by_signature} = acc) do
+  defp fold_small_chunk(signature, {mfas_by_signature, size_by_signature} = acc, held_types) do
     size = Map.fetch!(size_by_signature, signature)
-    target = fold_target(signature, Map.keys(mfas_by_signature))
+    target = fold_target(signature, Map.keys(mfas_by_signature), held_types)
 
     if size < @chunk_fold_bound and target do
       {mfas, remaining_mfas_by_signature} = Map.pop!(mfas_by_signature, signature)
@@ -4193,10 +4269,14 @@ defmodule Hologram.Compiler do
   end
 
   # The signature a small chunk is folded into: its strict superset with the fewest types, the
-  # first by its sorted types among several. Nil when no signature is a strict superset.
-  defp fold_target(signature, signatures) do
+  # first by its sorted types among several, leaving out the chunk every page preloads. Nil when
+  # no signature is left.
+  defp fold_target(signature, signatures, held_types) do
     signatures
-    |> Enum.filter(&(&1 != signature and MapSet.subset?(signature, &1)))
+    |> Enum.filter(fn candidate ->
+      candidate != signature and MapSet.subset?(signature, candidate) and
+        MapSet.disjoint?(candidate, held_types)
+    end)
     |> Enum.min_by(&{MapSet.size(&1), Enum.sort(&1)}, fn -> nil end)
   end
 

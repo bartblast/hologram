@@ -27,6 +27,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity12, as: ImplEntity12
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity3, as: ImplEntity3
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity4, as: ImplEntity4
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity6, as: ImplEntity6
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity7, as: ImplEntity7
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity8, as: ImplEntity8
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Helper, as: ImplHelper
@@ -37,6 +38,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Protocol3, as: ImplProtocol3
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Protocol4, as: ImplProtocol4
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct1, as: ImplStruct1
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct3, as: ImplStruct3
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct4, as: ImplStruct4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, as: QueryExtractorModule53
   alias Hologram.Test.Fixtures.Component.Module40, as: ComponentModule40
@@ -2248,6 +2250,102 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       assert count_calls({CallGraph, :list_page_impl_mfas, 5}, fn -> run(opts) end) == 0
+    end
+
+    test "every page preloads the one chunk of the held types", %{opts: opts} do
+      run(opts)
+
+      %{chunks: chunks} = cache_state()
+      items = load_chunk_registry_items(opts)
+
+      assert ImplEntity7 in chunks.held_types
+
+      assert [signature] =
+               chunks.mfas_by_signature
+               |> Map.keys()
+               |> Enum.reject(&MapSet.disjoint?(&1, chunks.held_types))
+
+      digest = chunks.bundle_infos[signature].digest
+
+      for {{:page, _page_module}, digests} <- items do
+        assert digest in digests
+      end
+
+      for type <- signature do
+        assert digest in items[{:type, type}]
+      end
+    end
+
+    test "puts each function in one chunk when the held types' chunks merge", %{opts: opts} do
+      run(opts)
+
+      mfas =
+        cache_state().chunks.mfas_by_signature
+        |> Map.values()
+        |> Enum.concat()
+
+      assert mfas == Enum.uniq(mfas)
+    end
+
+    test "a synced type with no implementation of a client protocol isn't held", %{opts: opts} do
+      run(opts)
+
+      assert ImplEntity6 in synced_types(opts)
+      refute ImplEntity6 in cache_state().chunks.held_types
+    end
+
+    test "a type with an implementation that doesn't sync isn't held", %{opts: opts} do
+      run(opts)
+
+      refute ImplEntity12 in synced_types(opts)
+      refute ImplEntity12 in cache_state().chunks.held_types
+    end
+
+    test "keeps the merged chunk when the data layer is kept", %{opts: opts} do
+      run(opts)
+
+      %{chunks: chunks} = cache_state()
+
+      assert count_calls({Compiler, :merge_held_chunks, 2}, fn -> run(opts) end) == 0
+      assert cache_state().chunks == chunks
+    end
+
+    test "groups the chunks again when the held types moved on an unchanged graph", %{opts: opts} do
+      run(opts)
+
+      %{chunks: chunks} = cache_state()
+      Cache.put_chunks(%{chunks | held_types: MapSet.new()})
+
+      assert count_calls({Compiler, :merge_held_chunks, 2}, fn -> run(opts) end) == 1
+
+      new_chunks = cache_state().chunks
+
+      assert new_chunks.held_types == chunks.held_types
+      assert new_chunks.mfas_by_signature == chunks.mfas_by_signature
+    end
+
+    test "a regroup lists the chunks on a graph holding what its walk built", %{opts: opts} do
+      run(opts)
+
+      %{call_graph: call_graph, chunks: chunks, data_layer: data_layer, ir_plt: ir_plt} =
+        cache_state()
+
+      # An implementation calling a helper, so that a copy of the graph without it loses the helper.
+      CallGraph.patch(call_graph, ir_plt, %{
+        added_modules: [],
+        edited_modules: [],
+        removed_modules: [Module.safe_concat(ImplProtocol, ImplStruct3)]
+      })
+
+      # A data layer to derive makes the runtime graph's copy before the regroup's walk.
+      data_layer
+      |> Map.delete(:held_impl_walks)
+      |> Cache.put_data_layer()
+
+      Cache.put_chunks(%{chunks | held_types: MapSet.new()})
+      run(opts)
+
+      assert cache_state().chunks.mfas_by_signature == chunks.mfas_by_signature
     end
 
     test "reuses a kept page's walks when an edit doesn't touch them", %{opts: opts} do

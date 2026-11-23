@@ -7836,6 +7836,102 @@ defmodule Hologram.CompilerTest do
     test "returns an empty map for no chunks" do
       assert fold_small_chunks(%{}, %{}) == %{}
     end
+
+    test "folds nothing into a chunk holding a held type" do
+      mfas_by_signature = %{
+        MapSet.new([Time]) => [{String.Chars.Time, :to_string, 1}],
+        MapSet.new([Date, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+      }
+
+      size_by_signature = %{MapSet.new([Time]) => 300, MapSet.new([Date, Time]) => 4_000}
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature, MapSet.new([Date])) ==
+               mfas_by_signature
+    end
+
+    test "folds a small chunk into its next superset when the smallest holds a held type" do
+      mfas_by_signature = %{
+        MapSet.new([Time]) => [{String.Chars.Time, :to_string, 1}],
+        MapSet.new([Date, Time]) => [{Calendar.ISO, :zero_pad, 2}],
+        MapSet.new([DateTime, Time, Version]) => [{Calendar.ISO, :time_to_string, 4}]
+      }
+
+      size_by_signature = %{
+        MapSet.new([Time]) => 300,
+        MapSet.new([Date, Time]) => 4_000,
+        MapSet.new([DateTime, Time, Version]) => 4_000
+      }
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature, MapSet.new([Date])) == %{
+               MapSet.new([Date, Time]) => [{Calendar.ISO, :zero_pad, 2}],
+               MapSet.new([DateTime, Time, Version]) => [
+                 {Calendar.ISO, :time_to_string, 4},
+                 {String.Chars.Time, :to_string, 1}
+               ]
+             }
+    end
+  end
+
+  describe "list_impl_types/1" do
+    test "lists a type with an entry other than its own struct functions" do
+      entries_by_type = %{
+        Date => [
+          {Date, :__struct__, 0},
+          {Date, :__struct__, 1},
+          {String.Chars.Date, :to_string, 1}
+        ]
+      }
+
+      assert list_impl_types(entries_by_type) == MapSet.new([Date])
+    end
+
+    test "leaves out a type with only its struct functions" do
+      entries_by_type = %{Date => [{Date, :__struct__, 0}, {Date, :__struct__, 1}]}
+
+      assert list_impl_types(entries_by_type) == MapSet.new()
+    end
+  end
+
+  describe "merge_held_chunks/2" do
+    test "merges every chunk holding a held type, under the union of their signatures" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, Time]) => [{Calendar.ISO, :zero_pad, 2}],
+        MapSet.new([DateTime]) => [{String.Chars.DateTime, :to_string, 1}]
+      }
+
+      assert merge_held_chunks(mfas_by_signature, MapSet.new([Date, DateTime])) == %{
+               MapSet.new([Date, DateTime, Time]) => [
+                 {Calendar.ISO, :zero_pad, 2},
+                 {String.Chars.Date, :to_string, 1},
+                 {String.Chars.DateTime, :to_string, 1}
+               ]
+             }
+    end
+
+    test "leaves a chunk holding no held type alone" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Version]) => [{Version, :__struct__, 0}]
+      }
+
+      assert merge_held_chunks(mfas_by_signature, MapSet.new([Date])) == mfas_by_signature
+    end
+
+    test "returns the chunks as they are with no held types" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+      }
+
+      assert merge_held_chunks(mfas_by_signature, MapSet.new()) == mfas_by_signature
+    end
+
+    test "returns the chunks as they are when none holds a held type" do
+      mfas_by_signature = %{MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}]}
+
+      assert merge_held_chunks(mfas_by_signature, MapSet.new([Time])) == mfas_by_signature
+    end
   end
 
   describe "get_erlang_function_js/4" do

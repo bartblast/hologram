@@ -45,10 +45,14 @@ defmodule Hologram.Compiler.Cache do
 
   # What the chunk bundles were built from: the bundle info of each chunk on disk and the MFAs of
   # each chunk as bundled, folded (see Hologram.Compiler.fold_chunks/5), by signature, the modules
-  # of all the chunks' MFAs, and the size each chunk was folded by, keyed by its MFAs. A chunk with
-  # MFAs and no bundle info is one still to build.
+  # of all the chunks' MFAs, the size each chunk was folded by, keyed by its MFAs, the struct types
+  # with an implementation of a client protocol, and the ones of those whose chunks were merged into
+  # the one every page preloads (see Hologram.Compiler.merge_held_chunks/2). A chunk with MFAs and
+  # no bundle info is one still to build.
   @type chunks_state :: %{
           bundle_infos: %{MapSet.t(module) => map},
+          held_types: MapSet.t(module),
+          impl_types: MapSet.t(module),
           mfas_by_signature: %{MapSet.t(module) => [mfa]},
           modules: MapSet.t(module),
           sizes: %{[mfa] => non_neg_integer}
@@ -72,14 +76,16 @@ defmodule Hologram.Compiler.Cache do
   # What the data layer was derived from and what it rendered: the definitions of its derived
   # fields, the walks of the implementations of the types each page holds through rows, what every
   # page's walk of the implementations started with, what the data layer read of each page's reach
-  # before those walks were folded in, the shapes of the queries server code writes by module, and
-  # the statement the data model bundle sets the client's data layer constants with.
+  # before those walks were folded in, the shapes of the queries server code writes by module, the
+  # struct types a synced row can hold, and the statement the data model bundle sets the client's
+  # data layer constants with.
   @type data_layer_state :: %{
           derived: Compiler.derived_definitions(),
           held_impl_walks: Compiler.held_impl_walks(),
           impl_seeds: CallGraph.page_impl_seeds(),
           pages: %{module => Compiler.kept_page_reach()},
           query_shapes: %{module => list(Hologram.Query.Shape.t())},
+          row_types: MapSet.t(module),
           sync_constants_js: String.t()
         }
 

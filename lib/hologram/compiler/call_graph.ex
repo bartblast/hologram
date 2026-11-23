@@ -1317,8 +1317,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   A type the page reaches only through a relationship or derived field name is not one it can hold
   here, unless it's among the seeds' types, which is how `Hologram.Compiler.fold_held_impls/5` walks
-  a page again with the types it holds through rows. The page doesn't preload the implementations
-  of such a type. The browser gets them when the server sends it a struct or the module of that type.
+  a page again with the types it holds through rows. Every page preloads the implementations of
+  those types, in one chunk (see `Hologram.Compiler.merge_held_chunks/2`).
 
   Give it the graph without the manually ported functions, as `list_client_protocols/4` asks, or the
   walk follows their Elixir bodies, which don't run on the client. `analyses` is taken as
