@@ -4248,9 +4248,20 @@ describe("Elixir_Hologram_Auth", () => {
 
       it("answers no for an empty new reference", () => {
         defineUpdate("update:folder", delegating, openFolders);
+        globalThis.Hologram.sync.model[DOCUMENT].relationships.folder.optional =
+          true;
+        Model.reset();
+        putFolder(FOLDER_ID, {archived: false});
+
+        const inFolder = document({folder_id: FOLDER_ID});
 
         assert.deepStrictEqual(
-          asks(update, {folder_id: Type.nil()}),
+          asks(update, {folder_id: ref(FOLDER_ID)}, inFolder),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          asks(update, {folder_id: Type.nil()}, inFolder),
           Type.boolean(false),
         );
       });
