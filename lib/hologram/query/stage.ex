@@ -443,7 +443,8 @@ defmodule Hologram.Query.Stage do
   # past the quantifiers around it names. The scope marks that row, since it's no row a hint's depth,
   # a row field or a refusal's count of the rows above a condition is about.
   @doc false
-  @spec new_row_triples!(module, Query.predicates(), list(name_hint)) :: list(Query.clause())
+  @spec new_row_triples!(module, Query.policy_predicates(), list(name_hint)) ::
+          list(Query.policy_clause())
   def new_row_triples!(entity_type, predicates, hints) when is_list(hints) do
     scope = [entity_type, {:new_row, entity_type}]
 

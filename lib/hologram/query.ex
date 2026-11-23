@@ -50,6 +50,12 @@ defmodule Hologram.Query do
   # quantifier the related row - or one of the row the given number of quantifiers out.
   @type name :: atom | path | {:outer, pos_integer, atom | path}
 
+  # What an update line's condition asks of the row a chain of relationships leads to: that its
+  # rules allow an operation, or that the acting user holds a role, expanded to the roles that
+  # imply it once built. It stands at the top of a condition or in an or, never in a quantifier.
+  @type new_row_check ::
+          {:can, {atom, list(atom)}} | {:has_role, {atom | list(atom), list(atom)}}
+
   @type operator ::
           :!=
           | :<
@@ -77,6 +83,13 @@ defmodule Hologram.Query do
   # The data form a filter is given in: a name or a placeholder paired with a value, an or: entry,
   # or a quantifier's any:, none: or all: entry.
   @type predicates :: list({name | Placeholder.t(), any})
+
+  # A clause of a policy condition: a filter's, or a check on a related row.
+  @type policy_clause :: clause | new_row_check | {:or, list(list(policy_clause))}
+
+  # The data form a policy condition is given in: a filter's, with a check on a related row keyed
+  # by what it asks and paired with the chain to that row.
+  @type policy_predicates :: list({name | Placeholder.t() | {:can | :has_role, atom}, any})
 
   # The operand is a literal, a placeholder, the acting user ({:actor}) - in a policy condition only
   # - or an attribute_operand.

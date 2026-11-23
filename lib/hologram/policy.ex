@@ -291,7 +291,8 @@ defmodule Hologram.Policy do
   # The clauses a line's condition builds: an update line's are read with the row after the change
   # one level above the rule's own row, which is what new() lowers to.
   @doc false
-  @spec condition_clauses(module, Entity.operation(), Query.predicates(), list) :: list(tuple)
+  @spec condition_clauses(module, Entity.operation(), Query.policy_predicates(), list) ::
+          list(Query.policy_clause())
   def condition_clauses(entity_type, operation, predicates, hints \\ [])
 
   def condition_clauses(entity_type, :update, predicates, hints),
