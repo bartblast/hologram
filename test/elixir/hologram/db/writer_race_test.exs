@@ -58,11 +58,15 @@ defmodule Hologram.DB.WriterRaceTest do
   defp make_row_appear(timing, written_table, target_type, template, id) do
     target_table = table_of(target_type)
 
+    {:ok, _result} = Connection.query("CREATE TEMP SEQUENCE make_row_appear_fired", [])
+
     {:ok, _result} =
       Connection.query(
         """
         CREATE FUNCTION pg_temp.make_row_appear() RETURNS trigger LANGUAGE plpgsql AS $body$
         BEGIN
+          PERFORM nextval('pg_temp.make_row_appear_fired');
+
           INSERT INTO #{target_table}
           SELECT (jsonb_populate_record(t, jsonb_build_object('id', '#{id}'))).*
           FROM #{target_table} t WHERE "id" = '#{template.id}'
@@ -83,6 +87,13 @@ defmodule Hologram.DB.WriterRaceTest do
       )
 
     :ok
+  end
+
+  # A sequence's position survives the rollback, so this tells a write that reached the database
+  # and was undone from one refused before it ran.
+  defp assert_write_reached_database do
+    assert {:ok, %{rows: [[true]]}} =
+             Connection.query("SELECT is_called FROM pg_temp.make_row_appear_fired", [])
   end
 
   describe "update/1 when a target appears after its rule read it" do
@@ -106,6 +117,7 @@ defmodule Hologram.DB.WriterRaceTest do
         as_user(user, fn -> update(put_attribute(task, :project_id, appearing_id)) end)
       end
 
+      assert_write_reached_database()
       assert EntityOperations.get(ChangedTask, task.id).project_id == project.id
     end
 
@@ -121,6 +133,7 @@ defmodule Hologram.DB.WriterRaceTest do
         as_user(user, fn -> update(add_relationship(task, :labels, appearing_id)) end)
       end
 
+      assert_write_reached_database()
       assert {:ok, %{rows: [[0]]}} = Connection.query("SELECT count(*) FROM #{join_table}", [])
     end
   end
@@ -146,6 +159,7 @@ defmodule Hologram.DB.WriterRaceTest do
         as_user(user, fn -> update(ChangedTask, task.id, project_id: appearing_id) end)
       end
 
+      assert_write_reached_database()
       assert EntityOperations.get(ChangedTask, task.id).project_id == project.id
     end
   end
