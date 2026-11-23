@@ -193,6 +193,10 @@ describe("Durability", () => {
     });
   };
 
+  // The pair stored for the given user, by default the one this page is mounted for.
+  const readPair = async (owner = LocalDatabase.actorUserId ?? null) =>
+    readMeta(`replica:${owner ?? "anonymous"}`);
+
   const writeMeta = async (entries) => {
     const {db} = await rawOpen();
 
@@ -304,14 +308,23 @@ describe("Durability", () => {
     await createSchema();
     await writeRecords([taskRecord("t1", "Draft copy")]);
 
-    await writeMeta({
+    const {replica, ...meta} = {
       actorUserId: "u1",
       clock: 1_756_100_000_123_004,
       cursor: "place-1",
       replica: {id: "r-stored", token: "statement-stored"},
       seq: 41,
       ...overrides,
-    });
+    };
+
+    await writeMeta(
+      replica
+        ? {
+            ...meta,
+            [`replica:${meta.actorUserId ?? "anonymous"}`]: replica,
+          }
+        : meta,
+    );
 
     LocalDatabase.actorUserId = "u1";
     Replica.offer({id: "r-fresh", token: "statement-fresh"});
@@ -374,7 +387,7 @@ describe("Durability", () => {
 
       await writeMeta({
         actorUserId: "u1",
-        replica: {id: "r1", token: "statement"},
+        "replica:u1": {id: "r1", token: "statement"},
         seq: 41,
       });
 
@@ -386,7 +399,7 @@ describe("Durability", () => {
       assert.equal(await readMeta("actorUserId"), "u1");
       assert.equal(await readMeta("seq"), 41);
 
-      assert.deepStrictEqual(await readMeta("replica"), {
+      assert.deepStrictEqual(await readPair("u1"), {
         id: "r1",
         token: "statement",
       });
@@ -475,11 +488,10 @@ describe("Durability", () => {
       sinon.assert.calledOnceWithExactly(posting, {kind: "storage_failed"});
 
       assert.isUndefined(await readMeta("cursor"));
-      assert.isUndefined(await readMeta("replica"));
-      assert.isUndefined(await readMeta("seq"));
+      assert.isUndefined(await readPair());
     });
 
-    it("drops the identity and the counter, which have stopped being true", async () => {
+    it("drops this user's identity, which has stopped being true", async () => {
       await Durability.open();
       await Durability.load();
       await storeBatch(41);
@@ -488,8 +500,71 @@ describe("Durability", () => {
       await Durability.persistFrame([unstorableRecord()], "place-1");
 
       assert.equal(Durability.mode, "memory");
-      assert.isUndefined(await readMeta("seq"));
-      assert.isUndefined(await readMeta("replica"));
+      assert.isUndefined(await readPair());
+    });
+
+    // Other users' pairs go on counting from it, so dropped it would hand them numbers they spent.
+    // A full disk can refuse a write, and refused inside this transaction it would roll back the
+    // wipe, leaving a place and a pair this page has stopped recording numbers under.
+    it("drops the pair without writing anything", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+      await Durability.replicaWritten();
+
+      const putting = sinon.spy(FDBObjectStore.prototype, "put");
+
+      await Durability.persistFrame([unstorableRecord()], "place-1");
+
+      const wrotePair = putting
+        .getCalls()
+        .some(({args: [, key]}) => String(key).startsWith("replica:"));
+
+      assert.isFalse(wrotePair);
+      assert.isUndefined(await readPair("u1"));
+    });
+
+    // The pair whose numbers stopped being recorded is the document's, whoever the page is now.
+    it("drops the pair of the user it was taken up for", async () => {
+      await seedPreviousLoad();
+      await writeMeta({"replica:u2": {id: "r-u2", token: "statement-u2"}});
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+      await Durability.replicaWritten();
+
+      LocalDatabase.actorUserId = "u2";
+
+      await Durability.persistFrame([unstorableRecord()], "place-1");
+
+      assert.isUndefined(await readPair("u1"));
+      assert.equal((await readPair("u2")).id, "r-u2");
+    });
+
+    it("keeps the counter", async () => {
+      await Durability.open();
+      await Durability.load();
+      await storeBatch(41);
+
+      await Durability.persistFrame([unstorableRecord()], "place-1");
+
+      assert.equal(Durability.mode, "memory");
+      assert.equal(await readMeta("seq"), 41);
+    });
+
+    it("keeps another user's identity", async () => {
+      const pair = {id: "r-other", token: "statement-other"};
+
+      await Durability.open();
+      await Durability.load();
+      await writeMeta({"replica:u9": pair});
+
+      await Durability.persistFrame([unstorableRecord()], "place-1");
+
+      assert.deepStrictEqual(await readPair("u9"), pair);
     });
 
     // It only ever moves forward, so it cannot go stale the way the counter does - and a clock
@@ -734,10 +809,27 @@ describe("Durability", () => {
       assert.equal(await readMeta("cursor"), "place-1");
       assert.equal((await readAll("entities")).length, 1);
 
-      assert.deepStrictEqual(await readMeta("replica"), {
+      assert.deepStrictEqual(await readPair(), {
         id: "r1",
         token: "statement",
       });
+    });
+  });
+
+  describe("groupName()", () => {
+    it("names a visitor's group", () => {
+      assert.equal(Durability.groupName(null), `${DATABASE_NAME}.anonymous`);
+    });
+
+    it("names a user's group with the server's text for them", () => {
+      assert.equal(Durability.groupName("i7"), `${DATABASE_NAME}.i7`);
+    });
+
+    it("keeps a user whose id is the word anonymous out of the visitors' group", () => {
+      assert.notEqual(
+        Durability.groupName("sanonymous"),
+        Durability.groupName(null),
+      );
     });
   });
 
@@ -1352,12 +1444,55 @@ describe("Durability", () => {
   });
 
   describe("persistReplica()", () => {
+    it("leaves another user's pair", async () => {
+      const pair = {id: "r-other", token: "statement-other"};
+
+      await Durability.open();
+      await Durability.load();
+      await writeMeta({"replica:u9": pair});
+
+      await Durability.persistReplica({id: "r1", token: "statement"});
+
+      assert.deepStrictEqual(await readPair("u9"), pair);
+    });
+
+    // The actor moves at a page visit while the pair stays the document's.
+    it("writes under the user the pair was taken up for", async () => {
+      await seedPreviousLoad();
+      await writeMeta({"replica:u2": {id: "r-u2", token: "statement-u2"}});
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+
+      LocalDatabase.actorUserId = "u2";
+
+      await Durability.persistReplica({id: "r-u1b", token: "statement-u1b"});
+
+      assert.equal((await readPair("u1")).id, "r-u1b");
+      assert.equal((await readPair("u2")).id, "r-u2");
+    });
+
+    it("keeps an id and the same id spelled as a string apart", async () => {
+      await Durability.open();
+      await Durability.load();
+
+      LocalDatabase.actorUserId = "i1";
+      await Durability.persistReplica({id: "r-number", token: "statement"});
+
+      LocalDatabase.actorUserId = "s1";
+      await Durability.persistReplica({id: "r-string", token: "statement"});
+
+      assert.equal((await readPair("i1")).id, "r-number");
+      assert.equal((await readPair("s1")).id, "r-string");
+    });
+
     it("writes the pair", async () => {
       await Durability.open();
       await Durability.load();
       await Durability.persistReplica({id: "r1", token: "statement"});
 
-      assert.deepStrictEqual(await readMeta("replica"), {
+      assert.deepStrictEqual(await readPair(), {
         id: "r1",
         token: "statement",
       });
@@ -1927,7 +2062,7 @@ describe("Durability", () => {
       assert.isUndefined(await readMeta("cursor"));
       assert.equal(await readMeta("actorUserId"), "u2");
 
-      assert.deepStrictEqual(await readMeta("replica"), {
+      assert.deepStrictEqual(await readPair(), {
         id: "r-fresh",
         token: "statement-fresh",
       });
@@ -2005,7 +2140,7 @@ describe("Durability", () => {
         Durability.restore(false);
 
         assert.equal(Replica.id, "r-fresh");
-        assert.isUndefined(await readMeta("replica"));
+        assert.isUndefined(await readPair());
       });
 
       it("writes no owner", async () => {
@@ -2099,6 +2234,40 @@ describe("Durability", () => {
       assert.equal(Replica.id, "r-stored");
     });
 
+    // Their queued batches were numbered under it, and sent under another pair a batch whose answer
+    // was lost would be applied twice.
+    it("takes up this user's own pair from a store somebody else holds", async () => {
+      sinon.stub(Tabs, "post");
+
+      await seedPreviousLoad({
+        actorUserId: "u2",
+        replica: {id: "r-u2", token: "statement-u2"},
+      });
+
+      await writeMeta({"replica:u1": {id: "r-u1", token: "statement-u1"}});
+
+      LocalDatabase.actorUserId = "u1";
+
+      await Durability.open();
+      await Durability.load();
+
+      Durability.restore(true);
+
+      await Durability.replicaWritten();
+
+      assert.equal(Replica.id, "r-u1");
+
+      assert.deepStrictEqual(await readPair("u1"), {
+        id: "r-u1",
+        token: "statement-u1",
+      });
+
+      assert.deepStrictEqual(await readPair("u2"), {
+        id: "r-u2",
+        token: "statement-u2",
+      });
+    });
+
     it("writes the page's pair when none was stored", async () => {
       await seedPreviousLoad({replica: undefined});
       await Durability.open();
@@ -2113,7 +2282,7 @@ describe("Durability", () => {
 
       await Durability.replicaWritten();
 
-      assert.deepStrictEqual(await readMeta("replica"), {
+      assert.deepStrictEqual(await readPair(), {
         id: "r-fresh",
         token: "statement-fresh",
       });
@@ -2166,7 +2335,21 @@ describe("Durability", () => {
       assert.deepStrictEqual(await readAll("entities"), []);
       assert.isUndefined(await readMeta("cursor"));
       assert.equal(await readMeta("actorUserId"), "u2");
-      assert.deepStrictEqual(await readMeta("replica"), replica);
+      assert.deepStrictEqual(await readPair("u2"), replica);
+    });
+
+    // They come back to it, with batches numbered under it.
+    it("leaves the previous owner's pair", async () => {
+      await seedPreviousLoad();
+      await Durability.open();
+      await Durability.load();
+
+      await Durability.claim("u2", replica);
+
+      assert.deepStrictEqual(await readPair("u1"), {
+        id: "r-stored",
+        token: "statement-stored",
+      });
     });
 
     // A tab can have read the store before another tab of its group claimed it.
@@ -2180,7 +2363,7 @@ describe("Durability", () => {
       assert.equal((await readAll("entities")).length, 1);
       assert.equal(await readMeta("cursor"), "place-1");
       assert.equal(await readMeta("actorUserId"), "u1");
-      assert.deepStrictEqual(await readMeta("replica"), replica);
+      assert.deepStrictEqual(await readPair(), replica);
     });
 
     it("takes a store for a visitor", async () => {

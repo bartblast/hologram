@@ -32,10 +32,16 @@ import Tabs from "./tabs.mjs";
 // user's unfinished work whatever has gone wrong since. Its record shape is FROZEN, spelled and
 // argued in `batch.mjs`: a bundle drains what an older bundle wrote.
 //
-// They do NOT outlive a storage failure, and that is the one exception. After one, this page goes
-// on spending numbers that nothing records, so a stored counter is stale rather than merely old -
-// and a later load resuming from it would hand out numbers already answered. Absent is safe where
-// stale is not.
+// The identity is kept PER USER, each under a key of its own in `meta`, because a replica's numbering is
+// that user's. A user who comes back to a browser somebody else used in between has to send their
+// queued batches under the pair they were numbered under, or a batch whose answer was lost is
+// applied a second time. And a tab whose store another user took can go on writing its own pair
+// without touching theirs.
+//
+// A storage failure is the one thing a pair does not outlive. After one, this page goes on spending
+// numbers that nothing records, so a later load resuming under that pair would hand out numbers
+// already answered. Only the failing tab's own user's pair goes: a new pair has no record to
+// collide with, whatever the shared counter says, and the counter stays true for every other pair.
 //
 // ONE DATABASE PER MODEL VERSION, named for the layout of the store itself and the model this
 // bundle speaks. A deploy that changes the model lands in a new tab while an old tab is still open,
@@ -64,6 +70,12 @@ const LAYOUT = 1;
 
 const META = "meta";
 const QUEUE = "queue";
+
+// What starts the key in META of each user's replica pair. One key per user rather than one map,
+// so that a storage failure drops a pair with a delete: a write can be refused on a full disk, and
+// refused inside the failure's transaction it would roll the whole cleanup back.
+const REPLICA_PREFIX = "replica:";
+
 const VERSION = 1;
 
 export default class Durability {
@@ -161,6 +173,12 @@ export default class Durability {
     return `hologram.${LAYOUT}.${sync.protocolVersion}.${sync.modelHash}`;
   }
 
+  // The group of the given user's tabs over this database, so that two owners the store tells apart
+  // are two groups.
+  static groupName(owner) {
+    return `${Durability.databaseName()}.${Durability.#ownerKey(owner)}`;
+  }
+
   // Makes the store the given user's, with the given replica pair. The stored rows and place go
   // when they were somebody else's, and stay when the store is already this user's: a tab can have
   // read it before another tab of its group claimed it.
@@ -168,7 +186,7 @@ export default class Durability {
   // ONE transaction, with the owner read inside it. Cleared in one and owned in another, a tab
   // reading between the two would find an empty store under the previous owner, and one reading
   // after a frame landed there would find the new user's rows under the old name. The pair goes
-  // down with the owner, so a load can never take up the previous owner's pair as the new one's.
+  // down with the owner, under that owner's name, and every other user's stays.
   //
   // The queue stays, as it does through every clear: the previous owner's batches wait there for a
   // page mounted under them.
@@ -186,7 +204,7 @@ export default class Durability {
             meta.put(owner, "actorUserId");
           }
 
-          meta.put(replica, "replica");
+          Durability.#writePair(transaction, owner, replica);
         };
       },
     );
@@ -231,10 +249,9 @@ export default class Durability {
   // tabs of `multi_tab_test.exs` are what bind it, in a browser where the case is real.
   //
   // The number taken is above the counter AND above every batch already in the queue, which are
-  // the same thing until a storage failure: that drops the counter (a page that goes on spending
-  // numbers nothing records leaves a stale one) and keeps the queue (a stored batch is still the
-  // user's unfinished work). 10b applied that rule when a page load resumed; applying it at every
-  // seal is what makes it hold for a tab that never resumed anything.
+  // normally the same thing. Taking the higher means a store holding a batch above its counter can
+  // never have that batch's record overwritten. 10b applied that rule when a page load resumed;
+  // applying it at every seal is what makes it hold for a tab that never resumed anything.
   //
   // The batch and its number go down TOGETHER, in one transaction, because either without the
   // other is wrong in its own way. A number with no batch is one the next load counts on from for
@@ -485,9 +502,13 @@ export default class Durability {
 
   // The identity this browser presents, kept so that the next page load can ignore the fresh pair
   // it is offered and go on numbering where this one left off.
+  //
+  // Under this tab's own user, whoever owns the store's rows at the moment.
   static persistReplica(replica) {
+    const owner = Durability.#pairOwner();
+
     Durability.#replicaWrite = Durability.#write([META], (transaction) => {
-      transaction.objectStore(META).put(replica, "replica");
+      Durability.#writePair(transaction, owner, replica);
     });
 
     return Durability.#replicaWrite;
@@ -705,12 +726,8 @@ export default class Durability {
   // whole of what is available, and it costs nothing.)
   //
   // The counter resumes above every STORED BATCH as well as above the number itself, which are
-  // normally the same. They part after a storage failure: the counter is dropped there, because a
-  // page that goes on spending numbers nothing records leaves a stale one behind - and the queue is
-  // kept, because a batch already written down is still the user's unfinished work. Counting from
-  // nothing would then hand a new batch a number a stored one already holds, and its record would
-  // be overwritten by a batch that is not it. The maximum is what makes keeping one and dropping
-  // the other safe.
+  // normally the same. Counting from below a stored batch would hand a new batch the number it
+  // holds, and its record would be overwritten by a batch that is not it.
   static restore(leader) {
     const loaded = Durability.#loaded;
 
@@ -730,19 +747,28 @@ export default class Durability {
     const refusal = leader ? Durability.#refusal(loaded, ownerChanged) : null;
     const takesRows = refusal === null && !ownerChanged;
     const owner = LocalDatabase.actorUserId ?? null;
+    const storedPair = loaded.replicas[Durability.#ownerKey(owner)] ?? null;
 
     if (takesRows) {
       LocalDatabase.restore(loaded.records);
     }
+
+    // A page load offers a fresh pair and a browser already holding one for this user ignores it -
+    // re-minting per load would abandon the numbering its batches are identified by. Taken up
+    // whoever's rows the store holds now, and before the claim below writes the pair in use.
+    if (storedPair !== null) {
+      Replica.adopt(storedPair);
+    }
+
+    Replica.owner = owner;
 
     if (refusal !== null) {
       Logger.debug(
         `Hologram: the stored rows were dropped (${refusal}), this page fills from nothing`,
       );
 
-      // Somebody else's store becomes this user's, with the page's pair: the held one was minted
-      // for the previous owner, or for a session that is no longer theirs. Once for the group, and
-      // the first send waits for it (see replicaWritten).
+      // Somebody else's store becomes this user's. Once for the group, and the first send waits
+      // for it (see replicaWritten).
       if (ownerChanged) {
         Durability.claim(owner, Replica.current());
       } else {
@@ -763,15 +789,10 @@ export default class Durability {
       });
     }
 
-    // A page load offers a fresh pair and a browser already holding one ignores it - re-minting per
-    // load would abandon the numbering its batches are identified by. Somebody else signing in is
-    // the one case where the held pair goes too, and the claim above has written the page's in its
-    // place. With none stored, the leader writes the page's, once for the group. A follower writes
-    // none: it presents no identity of its own to the server, and the pair the leader settled on
-    // reaches it with the group's state.
-    if (loaded.replica !== null && !ownerChanged) {
-      Replica.adopt(loaded.replica);
-    } else if (leader && !ownerChanged) {
+    // With none stored for this user, the leader writes the page's, once for the group. A follower
+    // writes none: it presents no identity of its own to the server, and the pair the leader
+    // settled on reaches it with the group's state.
+    if (storedPair === null && leader && !ownerChanged) {
       Durability.persistReplica(Replica.current());
     }
 
@@ -829,17 +850,17 @@ export default class Durability {
   // written. What this browser DID is left alone, as everywhere else: a number reused and a clock
   // restarted low cost more than a re-download.
   //
-  // The identity and its counter go too, and this is the ONE place they do. They survive a
-  // resync, a model change and somebody else signing in because they stay TRUE through all three -
-  // but a counter that has stopped advancing on disk while this page goes on spending numbers is
-  // no longer true, and keeping it would cause the very thing it exists to prevent: the next load
-  // would resume from it and hand out numbers the server has already answered, which it answers
-  // again from the record of the batch that first carried them. The distinct writes would be
-  // dropped in silence.
+  // This user's identity goes too, and this is the ONE place it does. It survives a resync, a
+  // model change and somebody else signing in because it stays TRUE through all three - but this
+  // page goes on spending numbers under it that nothing records, and a later load resuming under it
+  // would hand out numbers the server has already answered, which it answers again from the record
+  // of the batch that first carried them. The distinct writes would be dropped in silence.
   //
   // Absent is safe where stale is not. A load that finds no identity takes the fresh pair its own
-  // page was minted - a new id, with no record anywhere - and counts from nothing. The clock is
-  // left, because it only ever moves forward and cannot go stale in this way.
+  // page was minted - a new id, with no record anywhere. The counter stays: no number under a new
+  // pair can collide, and other users' pairs are still counting from it, so a counter dropped here
+  // would hand them numbers they already spent. The clock is left too, because it only ever moves
+  // forward and cannot go stale in this way.
   //
   // The wipe deliberately does NOT go through the ordinary write path. A failure here must not
   // come back round to this function, and it cannot: nothing in this block reports one. That is
@@ -865,11 +886,9 @@ export default class Durability {
       );
 
       Durability.#wipe(transaction);
-
-      const meta = transaction.objectStore(META);
-
-      meta.delete("replica");
-      meta.delete("seq");
+      transaction
+        .objectStore(META)
+        .delete(Durability.#pairKey(Durability.#pairOwner()));
     } catch {
       // There is nothing further to try - this page stops storing either way.
     }
@@ -955,16 +974,30 @@ export default class Durability {
     const meta = transaction.objectStore(META);
     const queue = transaction.objectStore(QUEUE);
 
-    const [actorUserId, clock, cursor, queued, records, replica, seq] =
-      await Promise.all([
-        Durability.#request(meta.get("actorUserId")),
-        Durability.#request(meta.get("clock")),
-        Durability.#request(meta.get("cursor")),
-        Durability.#request(queue.getAll()),
-        Durability.#request(entities.getAll()),
-        Durability.#request(meta.get("replica")),
-        Durability.#request(meta.get("seq")),
-      ]);
+    const pairKeys = globalThis.IDBKeyRange.bound(
+      REPLICA_PREFIX,
+      `${REPLICA_PREFIX}\uffff`,
+    );
+
+    const [
+      actorUserId,
+      clock,
+      cursor,
+      queued,
+      records,
+      storedPairKeys,
+      storedPairs,
+      seq,
+    ] = await Promise.all([
+      Durability.#request(meta.get("actorUserId")),
+      Durability.#request(meta.get("clock")),
+      Durability.#request(meta.get("cursor")),
+      Durability.#request(queue.getAll()),
+      Durability.#request(entities.getAll()),
+      Durability.#request(meta.getAllKeys(pairKeys)),
+      Durability.#request(meta.getAll(pairKeys)),
+      Durability.#request(meta.get("seq")),
+    ]);
 
     return {
       actorUserId: actorUserId ?? null,
@@ -972,7 +1005,12 @@ export default class Durability {
       cursor: cursor ?? null,
       queue: queued ?? [],
       records: records ?? [],
-      replica: replica ?? null,
+      replicas: Object.fromEntries(
+        storedPairKeys.map((key, index) => [
+          key.slice(REPLICA_PREFIX.length),
+          storedPairs[index],
+        ]),
+      ),
       seq: seq ?? 0,
     };
   }
@@ -996,6 +1034,28 @@ export default class Durability {
     }
 
     return null;
+  }
+
+  // The text naming an owner in a key or a group name. A user's is the server's exact text (see
+  // Hologram.Auth.owner_key/1), which starts with i, s or u, so it is never the word for a visitor.
+  static #ownerKey(owner) {
+    return owner ?? "anonymous";
+  }
+
+  static #pairKey(owner) {
+    return `${REPLICA_PREFIX}${Durability.#ownerKey(owner)}`;
+  }
+
+  // Whose the pair in use is. The actor can move on at a page visit while the pair stays the one
+  // this document took up, and written under the new actor it would replace that user's own.
+  static #pairOwner() {
+    return Replica.owner === undefined
+      ? (LocalDatabase.actorUserId ?? null)
+      : Replica.owner;
+  }
+
+  static #writePair(transaction, owner, replica) {
+    transaction.objectStore(META).put(replica, Durability.#pairKey(owner));
   }
 
   static #request(request) {

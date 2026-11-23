@@ -18,6 +18,10 @@ export default class Replica {
 
   static id = null;
 
+  // The user the pair in use was taken up for, once this document's restore has said (see
+  // Durability.restore). An owner can be null, for a visitor, so undefined is "not said yet".
+  static owner = undefined;
+
   static token = null;
 
   static adopt(replica) {
@@ -60,6 +64,7 @@ export default class Replica {
   static reset() {
     Replica.fresh = null;
     Replica.id = null;
+    Replica.owner = undefined;
     Replica.token = null;
   }
 }

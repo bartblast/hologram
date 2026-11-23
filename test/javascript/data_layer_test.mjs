@@ -1012,17 +1012,16 @@ describe("DataLayer", () => {
       });
     });
 
-    // Two integer ids past 2^53 reach the browser as one number, so only the period tells them
-    // apart.
+    // A user who signed out and back in has one id, so only the period tells the two visits apart.
     it("drops the earlier counts when the identity period changed under the same id", () => {
-      LocalDatabase.actorUserId = 9007199254740992;
+      LocalDatabase.actorUserId = "u1";
       LocalDatabase.syncCounts = {"MyApp.Earlier/count/": 9};
       LocalDatabase.syncCountTypes = {"MyApp.Earlier/count/": ["MyApp.Task"]};
 
       IdentityTracker.period = "period-2";
 
       DataLayer.ingestMountData({
-        actorUserId: 9007199254740992,
+        actorUserId: "u1",
         syncRows: {},
       });
 

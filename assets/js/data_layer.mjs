@@ -113,9 +113,7 @@ export default class DataLayer {
     // Nothing to join where there is no store: the tabs of such a browser share nothing, so each
     // is a replica of its own, exactly as every tab was before any of this.
     if (Durability.mode === "indexeddb") {
-      const group = `${Durability.databaseName()}.${readActorUserId() ?? "anonymous"}`;
-
-      await Tabs.join(group, {});
+      await Tabs.join(Durability.groupName(readActorUserId() ?? null), {});
     }
 
     // Awaited HERE, before the mount, which is what lets the restore that follows the mount be
@@ -576,8 +574,8 @@ export default class DataLayer {
 
     if (mountData.syncRows) {
       // A number counted for one identity must never answer for another. The period tells apart
-      // what the ids can't, like two integer ids too large for the browser to hold exactly. The
-      // ids cover a server that tags no responses, where the period never moves.
+      // what the ids can't, like one user signing out and back in. The ids cover a server that
+      // tags no responses, where the period never moves.
       //
       // The period the page was rendered in rather than the one lasting now: the identity can
       // change between a page arriving and its mount, and its numbers are still the old identity's.
