@@ -2954,6 +2954,17 @@ defmodule Hologram.CompilerTest do
              )
     end
 
+    test "bakes both parents' role checks under a move's name" do
+      js = sync_constants_js_for(ChangedTask)
+      role = ~s/["project"],"#{inspect(ChangedProject)}",["member"]/
+
+      assert String.contains?(
+               js,
+               ~s/"move":[{"new":{"predicates":[{"hasRole":[#{role}]}]},"predicates":[],/ <>
+                 ~s/"to":[["rel",#{role}]],"via":null}]/
+             )
+    end
+
     test "bakes an operation asked of the row the row after the change leads to" do
       js = sync_constants_js_for(ChangedTask)
 
