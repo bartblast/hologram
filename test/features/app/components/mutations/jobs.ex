@@ -2,9 +2,11 @@ defmodule HologramFeatureTests.Components.Mutations.Jobs do
   use Hologram.Component
   use Hologram.DB
 
+  alias HologramFeatureTests.Jobs.FlakyRun
   alias HologramFeatureTests.Jobs.HoldRun
   alias HologramFeatureTests.Jobs.KillRun
   alias HologramFeatureTests.Jobs.RestockItem
+  alias HologramFeatureTests.Jobs.SlowRun
 
   # The jobs reach this list through the ordinary read path - a derived query over the rows the
   # sync stream keeps current - so a job the worker moved to done shows here without the page being fetched again.
@@ -13,6 +15,10 @@ defmodule HologramFeatureTests.Components.Mutations.Jobs do
   derived :killed_jobs, [KillRun], &killed_jobs_query/0
 
   derived :held_jobs, [HoldRun], &held_jobs_query/0
+
+  derived :flaky_jobs, [FlakyRun], &flaky_jobs_query/0
+
+  derived :slow_jobs, [SlowRun], &slow_jobs_query/0
 
   def template do
     ~HOLO"""
@@ -24,6 +30,12 @@ defmodule HologramFeatureTests.Components.Mutations.Jobs do
     </p>
     <p>
       Held jobs: <strong id="held_jobs"><code>{Enum.map_join(@held_jobs, ",", &"#{&1.label}:#{&1.status}")}</code></strong>
+    </p>
+    <p>
+      Flaky jobs: <strong id="flaky_jobs"><code>{Enum.map_join(@flaky_jobs, ",", &"#{&1.label}:#{&1.status}:#{&1.attempt}")}</code></strong>
+    </p>
+    <p>
+      Slow jobs: <strong id="slow_jobs"><code>{Enum.map_join(@slow_jobs, ",", &"#{&1.label}:#{&1.status}")}</code></strong>
     </p>
     """
   end
@@ -38,5 +50,13 @@ defmodule HologramFeatureTests.Components.Mutations.Jobs do
 
   defp held_jobs_query do
     sort(HoldRun, label)
+  end
+
+  defp flaky_jobs_query do
+    sort(FlakyRun, label)
+  end
+
+  defp slow_jobs_query do
+    sort(SlowRun, label)
   end
 end

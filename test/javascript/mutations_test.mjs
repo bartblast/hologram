@@ -85,6 +85,22 @@ describe("Mutations", () => {
       });
     });
 
+    it("sends a big integer as its digits", async () => {
+      responding({dropped: {}, status: "confirmed"});
+
+      await Mutations.send({
+        ...batch,
+        writes: [
+          {data: {n: 9007199254740993n}, deltas: {m: -9007199254740993n}},
+        ],
+      });
+
+      assert.deepStrictEqual(
+        JSON.parse(fetchStub.firstCall.args[1].body).writes,
+        [{data: {n: "9007199254740993"}, deltas: {m: "-9007199254740993"}}],
+      );
+    });
+
     // Both halves of a confirmation reach the caller: what this client's write lost, and the value
     // standing in its place with the revision it carries. The second is what lets a losing write
     // give way to the winner as the answer lands, rather than to whatever the row held before

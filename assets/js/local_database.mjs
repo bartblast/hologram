@@ -10,6 +10,7 @@
 // there is no client-side eviction, a row leaves when the server says it is no longer this
 // client's to hold.
 
+import IdentityTracker from "./identity_tracker.mjs";
 import Model from "./model.mjs";
 import Overlay from "./overlay.mjs";
 
@@ -18,6 +19,17 @@ import Overlay from "./overlay.mjs";
 // into the file as a raw byte, which is what used to make git call this source binary and every
 // grep over it come back empty.
 const SEPARATOR = "\u0000";
+
+// How many carried counts are kept. They last until the client can count for itself, so a tab that
+// visits pages and never hears a marker would otherwise keep one for every query it was handed.
+const CARRIED_COUNTS_LIMIT = 1000;
+
+// How much text their keys may add up to, since a key spells a whole query and every value in it.
+const CARRIED_COUNT_KEYS_LENGTH_LIMIT = 4_000_000;
+
+// How much of that text one page snapshot may save, since a snapshot that doesn't fit in session
+// storage on unload is lost whole.
+const SAVED_COUNT_KEYS_LENGTH_LIMIT = 256_000;
 
 export default class LocalDatabase {
   // Who the client is, the session's user id as it is - nil for a visitor. It names whose rows and
@@ -36,9 +48,27 @@ export default class LocalDatabase {
   // has to hold every row of before it counts for itself.
   static syncCountTypes = {};
 
-  // What the render that handed this page over counted, keyed by the field and the query it ran -
-  // held until this client's own database is complete enough to count for itself.
+  // What the renders that handed pages over counted, keyed by the field and the query each ran -
+  // held across page visits, so a page Back or Forward returns to finds its number, until this
+  // client's own database is complete enough to count for itself.
   static syncCounts = {};
+
+  // The identity period the held counts were carried in (see IdentityTracker).
+  static syncCountsPeriod = null;
+
+  // The identity period that was lasting when this tab was told somebody else signed in. No saved
+  // count is filed while it lasts, whichever document saved it, though the page's own state is
+  // still restored. The stream's frame and the responses arrive independently, so either can reach
+  // a tab first, and the frame doesn't name the identity it announces, so the two orders can't be
+  // told apart here.
+  //
+  // With the frame first, the tab's period and tag go on naming the previous user, and this is what
+  // keeps that user's counts from coming back. With a response first, as after a login from this
+  // tab, the period is already the new user's, and their own saved counts are refused for the rest
+  // of it. A count still held keeps answering. One no longer held, like one reset() dropped or the
+  // cap trimmed, doesn't come back, and the page counts the rows it has so far, which can be too
+  // few during a fill.
+  static identityEndedPeriod = null;
 
   // type -> relationship -> source id -> Set of target ids
   static #facts = {};
@@ -78,6 +108,15 @@ export default class LocalDatabase {
   // the tab storing that frame takes it.
   static #storedFactRemovals = [];
 
+  // What has been marked complete since this client last changed identity, which a refill doesn't
+  // take back. A number saved before the client counted a query for itself is behind what it
+  // counted, even while a refill has it waiting to count again. Giving up a place counts as
+  // everything marked, since the server hands one out only for a whole pot, and a document that
+  // resumed from a stored place may have heard no marker yet.
+  static #everSyncedAll = false;
+
+  static #everSyncedTypes = new Set();
+
   // type -> id -> row
   static #tables = {};
 
@@ -108,10 +147,18 @@ export default class LocalDatabase {
   // takes away whatever it never delivered, through the same sweep that takes away the rows a
   // page carried and the stream never vouched for.
   //
-  // The counts and the completeness marks go, because neither is true of a database being filled: a
-  // count is answered from the rows as they stand once the client can count for itself, and nothing
-  // is complete again until a marker says so.
-  static beginRefill() {
+  // The completeness marks go, because nothing is complete again until a marker says so. A carried
+  // count stays: it's the only number the client has for a query it can't count yet, and the first
+  // greeting of a page load comes here right after the page filed its counts. Like the rows kept
+  // above, it can be behind what the user may now read, until the marker of the last type it
+  // reads. Counting sooner would count a table still being filled or swept. One the client has
+  // been counting itself goes, while the marks still say which those are. Kept past them, it would
+  // come back as a number the rows have moved on from.
+  static beginRefill({hadPlace = false} = {}) {
+    if (hadPlace) {
+      LocalDatabase.#everSyncedAll = true;
+    }
+
     for (const [type, table] of Object.entries(LocalDatabase.#tables)) {
       for (const id of Object.keys(table)) {
         LocalDatabase.markCarried(type, id);
@@ -124,14 +171,93 @@ export default class LocalDatabase {
     // back after the fill when its user may read it.
     LocalDatabase.#promotedSeqs = new Map();
 
-    LocalDatabase.syncCountTypes = {};
-    LocalDatabase.syncCounts = {};
+    LocalDatabase.#dropCountable();
     LocalDatabase.#syncedAll = false;
     LocalDatabase.#syncedTypes = new Set();
   }
 
+  // Files the counts a page visit carried beside the ones earlier visits did. A number for a query
+  // the client can already count is no use, so it isn't kept, and neither is one held from before
+  // its types were marked. The oldest go when there are too many, but never the ones given here:
+  // they are the numbers of the page being mounted.
+  static carryCounts(counts, countTypes) {
+    LocalDatabase.#dropCountable();
+
+    for (const [key, count] of Object.entries(counts)) {
+      LocalDatabase.#fileCount(key, count, countTypes[key]);
+    }
+
+    LocalDatabase.#trimCounts(new Set(Object.keys(counts)));
+  }
+
+  // The given carried counts that are still held and that the client can't count yet, as
+  // [key, number, types or null], the form a page snapshot stores them in.
+  static countEntries(keys) {
+    const entries = [];
+    let length = 0;
+
+    for (const key of keys) {
+      if (
+        !Object.hasOwn(LocalDatabase.syncCounts, key) ||
+        LocalDatabase.countsLocally(key)
+      ) {
+        continue;
+      }
+
+      length += key.length;
+
+      if (length > SAVED_COUNT_KEYS_LENGTH_LIMIT) {
+        break;
+      }
+
+      entries.push([
+        key,
+        LocalDatabase.syncCounts[key],
+        LocalDatabase.syncCountTypes[key] ?? null,
+      ]);
+    }
+
+    return entries;
+  }
+
+  // Whether the client counts the query under the given key for itself: it holds every row of each
+  // type the query reads, or everything. A count carried with no types waits for everything.
+  static countsLocally(key) {
+    return LocalDatabase.#isCountable(LocalDatabase.syncCountTypes[key]);
+  }
+
   static deleteFact(type, relationship, sourceId, targetId) {
     LocalDatabase.#facts[type]?.[relationship]?.[sourceId]?.delete(targetId);
+  }
+
+  // A number counted for one user must never answer for another.
+  static dropCounts() {
+    LocalDatabase.syncCountTypes = {};
+    LocalDatabase.syncCounts = {};
+  }
+
+  // Files the counts a page snapshot saved, in the form countEntries gives them. A number already
+  // held stays. It's usually from a later render, and when it isn't, both are old server counts
+  // that end at the same marker. Each is filed as the newest either way, since they are the numbers
+  // of the page being restored.
+  static restoreCountEntries(entries) {
+    LocalDatabase.#dropCountable();
+
+    for (const [key, count, types] of entries) {
+      const isHeld = Object.hasOwn(LocalDatabase.syncCounts, key);
+
+      if (!isHeld && LocalDatabase.#wasCountable(types ?? undefined)) {
+        continue;
+      }
+
+      LocalDatabase.#fileCount(
+        key,
+        isHeld ? LocalDatabase.syncCounts[key] : count,
+        isHeld ? LocalDatabase.syncCountTypes[key] : (types ?? undefined),
+      );
+    }
+
+    LocalDatabase.#trimCounts(new Set(entries.map(([key]) => key)));
   }
 
   // Every pair filed under a held row that names one of the given rows of the given type: in a
@@ -337,6 +463,7 @@ export default class LocalDatabase {
     }
 
     LocalDatabase.#syncedAll = true;
+    LocalDatabase.#everSyncedAll = true;
 
     // A row still recorded is one its session will judge, or one of a type sync doesn't send. It
     // stays as the answer filed it.
@@ -368,6 +495,7 @@ export default class LocalDatabase {
 
     for (const type of marked) {
       LocalDatabase.#syncedTypes.add(type);
+      LocalDatabase.#everSyncedTypes.add(type);
     }
 
     LocalDatabase.#settlePromoted(marked, appliedSeq);
@@ -522,8 +650,11 @@ export default class LocalDatabase {
   // SERVER said - and what this client has written and not yet sent is not the server's to take
   // away. Overlay.reset() exists for the callers that do mean it.
   static reset() {
-    LocalDatabase.syncCountTypes = {};
-    LocalDatabase.syncCounts = {};
+    LocalDatabase.dropCounts();
+    LocalDatabase.syncCountsPeriod = null;
+    LocalDatabase.identityEndedPeriod = IdentityTracker.period;
+    LocalDatabase.#everSyncedAll = false;
+    LocalDatabase.#everSyncedTypes = new Set();
     LocalDatabase.#carried = new Set();
     LocalDatabase.#facts = {};
     LocalDatabase.#promotedSeqs = new Map();
@@ -532,6 +663,73 @@ export default class LocalDatabase {
     LocalDatabase.#syncedAll = false;
     LocalDatabase.#syncedTypes = new Set();
     LocalDatabase.#tables = {};
+  }
+
+  static #dropCountable() {
+    for (const key of Object.keys(LocalDatabase.syncCounts)) {
+      if (LocalDatabase.countsLocally(key)) {
+        LocalDatabase.#forgetCount(key);
+      }
+    }
+  }
+
+  // Deleted first, so that a number filed again counts as the newest.
+  static #fileCount(key, count, types) {
+    LocalDatabase.#forgetCount(key);
+
+    if (LocalDatabase.#isCountable(types)) {
+      return;
+    }
+
+    LocalDatabase.syncCounts[key] = count;
+
+    if (types !== undefined) {
+      LocalDatabase.syncCountTypes[key] = types;
+    }
+  }
+
+  static #forgetCount(key) {
+    delete LocalDatabase.syncCounts[key];
+    delete LocalDatabase.syncCountTypes[key];
+  }
+
+  static #isCountable(types) {
+    return (
+      LocalDatabase.#syncedAll ||
+      (types !== undefined &&
+        types.every((type) => LocalDatabase.#syncedTypes.has(type)))
+    );
+  }
+
+  // Oldest first, which is the order the keys are in. The kept ones were filed last, so the walk
+  // ends at the first of them.
+  static #trimCounts(kept) {
+    const keys = Object.keys(LocalDatabase.syncCounts);
+
+    let excess = keys.length - CARRIED_COUNTS_LIMIT;
+    let length = keys.reduce((sum, key) => sum + key.length, 0);
+
+    for (const key of keys) {
+      if (
+        kept.has(key) ||
+        (excess <= 0 && length <= CARRIED_COUNT_KEYS_LENGTH_LIMIT)
+      ) {
+        return;
+      }
+
+      LocalDatabase.#forgetCount(key);
+
+      excess -= 1;
+      length -= key.length;
+    }
+  }
+
+  static #wasCountable(types) {
+    return (
+      LocalDatabase.#everSyncedAll ||
+      (types !== undefined &&
+        types.every((type) => LocalDatabase.#everSyncedTypes.has(type)))
+    );
   }
 
   // Queues the given ids taken out of a set here, and those of the given ids only its stored copy

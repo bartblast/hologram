@@ -1606,6 +1606,20 @@ defmodule Hologram.Query.InterpreterTest do
       assert scores(filter(Module39, kind == kind_label)) == [1, 7, 12]
     end
 
+    # The float field holds 2^53, the integer's nearest float, and the database compares the two as
+    # floats.
+    test "compares an integer past 2^53 with a float the way the database does" do
+      created(Module39, kind: :guest, score: 9_007_199_254_740_993)
+
+      assert scores(filter(Module39, ratio == score)) == [1, 7, 12, 9_007_199_254_740_993]
+    end
+
+    test "compares a float column with an integer past 2^53 the way the database does" do
+      created(Module4, a: ~D[2026-01-01], b: ~U[2026-01-01 00:00:00.000000Z], d: 2.0 ** 53)
+
+      assert [%Module4{}] = agreed(filter(Module4, d == 9_007_199_254_740_993))
+    end
+
     test "computes derived fields inside a quantifier's condition" do
       assert scores(filter(Module39, any(mentor <- mentors, mentor.active == true))) == [7]
       assert scores(filter(Module39, any(mentor <- mentors, mentor.score > ratio))) == [1]

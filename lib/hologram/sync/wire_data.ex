@@ -83,7 +83,7 @@ defmodule Hologram.Sync.WireData do
       MapSet.member?(model.server_only, name) -> []
       MapSet.member?(model.unspelled, name) -> []
       Map.has_key?(model.relationships, name) -> relationship_field(name, value)
-      true -> [{name, Codec.encode_json(value, Map.get(model.attribute_types, name, :uuid))}]
+      true -> [{name, Codec.encode_wire(value, Map.get(model.attribute_types, name, :uuid))}]
     end
   end
 

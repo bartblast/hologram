@@ -30,6 +30,7 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module16
+  alias Hologram.Test.Fixtures.Entity.Module20
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module10, as: PolicyModule10
@@ -661,6 +662,19 @@ defmodule Hologram.DB.WriterTest do
              |> update() == :ok
 
       assert EntityOperations.get(Module10, entity.id).__meta__.revisions.count == stamp
+    end
+
+    test "returns a violation for a move by an amount its column can't hold" do
+      entity =
+        %{count: -5_000_000_000_000_000_000}
+        |> Module20.new()
+        |> DB.create!()
+
+      assert entity
+             |> increment(:count, 10_000_000_000_000_000_000)
+             |> update() == {:error, %{count: [{:type, :integer}]}}
+
+      assert EntityOperations.get(Module20, entity.id).count == -5_000_000_000_000_000_000
     end
 
     test "returns the violation a moved value's declaration refuses" do

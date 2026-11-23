@@ -70,11 +70,12 @@ defmodule Hologram.Compiler.Cache do
         }
 
   # What the data layer was derived from and what it rendered: the definitions of its derived
-  # fields, what the data layer read of each page's reach, the shapes of the queries server code
-  # writes by module, and the statement the data model bundle sets the client's data layer
-  # constants with.
+  # fields, what every page's walk of the implementations started with, what the data layer read of
+  # each page's reach, the shapes of the queries server code writes by module, and the statement the
+  # data model bundle sets the client's data layer constants with.
   @type data_layer_state :: %{
           derived: Compiler.derived_definitions(),
+          impl_seeds: CallGraph.page_impl_seeds(),
           pages: %{module => Compiler.kept_page_reach()},
           query_shapes: %{module => list(Hologram.Query.Shape.t())},
           sync_constants_js: String.t()

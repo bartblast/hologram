@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.Jobs.RestockItem do
-  use Hologram.Job
+  use Hologram.Job, max_attempts: 1
   use Hologram.DB
 
   alias HologramFeatureTests.Entities.Item

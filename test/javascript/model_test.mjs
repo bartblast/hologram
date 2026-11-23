@@ -135,7 +135,7 @@ describe("Model", () => {
           roles: ["editor", "owner"],
           serverOnly: [],
         },
-        // A job type, whose three framework attributes are the worker's to fill and no client's
+        // A job type, whose framework attributes are the worker's to fill and no client's
         // to write.
         [NOTIFY]: {
           attributes: {
@@ -149,7 +149,13 @@ describe("Model", () => {
           constraints: {},
           defaults: {},
           enumValues: {reason: ["created"], status: ["queued", "running"]},
-          frameworkAttributes: ["actor_id", "error", "status"],
+          frameworkAttributes: [
+            "actor_id",
+            "attempt",
+            "error",
+            "scheduled_at",
+            "status",
+          ],
           relationships: {},
           serverOnly: ["error"],
         },
@@ -985,6 +991,26 @@ describe("Model", () => {
     });
   });
 
+  describe("addIntegers()", () => {
+    it("adds past what a Number holds exactly, into a BigInt", () => {
+      assert.strictEqual(
+        Model.addIntegers(9007199254740991, 2),
+        9007199254740993n,
+      );
+    });
+
+    it("answers a Number when a Number holds the sum", () => {
+      assert.strictEqual(
+        Model.addIntegers(9007199254740993n, -2),
+        9007199254740991,
+      );
+    });
+
+    it("counts a missing value as zero", () => {
+      assert.strictEqual(Model.addIntegers(null, 2), 2);
+    });
+  });
+
   describe("computeSortKeys()", () => {
     it("computes a null sort key for a server-only string, whose value never arrives", () => {
       const attributes = Model.computeSortKeys(TASK, {
@@ -1068,6 +1094,44 @@ describe("Model", () => {
       assert.isFalse(Model.unbox(Type.boolean(false), "boolean"));
       assert.equal(Model.unbox(Type.integer(7), "integer"), 7);
       assert.equal(Model.unbox(Type.float(1.5), "float"), 1.5);
+    });
+
+    it("unboxes an integer a Number can't hold exactly as a BigInt", () => {
+      assert.strictEqual(
+        Model.unbox(Type.integer(9007199254740992n), "integer"),
+        9007199254740992n,
+      );
+
+      assert.strictEqual(
+        Model.unbox(Type.integer(-9007199254740993n), "integer"),
+        -9007199254740993n,
+      );
+    });
+
+    it("unboxes an integer a Number holds exactly as a Number", () => {
+      assert.strictEqual(
+        Model.unbox(Type.integer(9007199254740991n), "integer"),
+        9007199254740991,
+      );
+
+      assert.strictEqual(
+        Model.unbox(Type.integer(-9007199254740991n), "integer"),
+        -9007199254740991,
+      );
+    });
+
+    // A struct edited in an action holds whatever was put there until it's validated, and a
+    // permission check reads it before that.
+    it("doesn't raise on a term that isn't an integer in an integer field", () => {
+      assert.strictEqual(Model.unbox(Type.float(1.5), "integer"), 1.5);
+      assert.isNaN(Model.unbox(Type.atom("x"), "integer"));
+    });
+
+    it("unboxes an integer a float field takes as a Number", () => {
+      assert.strictEqual(
+        Model.unbox(Type.integer(9007199254740993n), "float"),
+        9007199254740992,
+      );
     });
 
     it("unboxes nil as nothing", () => {
@@ -1678,6 +1742,111 @@ describe("Model", () => {
   describe("sortKeyField()", () => {
     it("names the field a string attribute's sort key is filed under", () => {
       assert.equal(Model.sortKeyField("title"), "title$sort");
+    });
+  });
+
+  describe("readIntegers()", () => {
+    const TYPE = "MyApp.Counted";
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TYPE]: {
+            attributes: {id: "uuid", label: "string", n: "integer"},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+    });
+
+    it("reads an integer attribute's text as a BigInt", () => {
+      assert.strictEqual(
+        Model.readIntegers(TYPE, {n: "-9007199254740993"}).n,
+        -9007199254740993n,
+      );
+    });
+
+    it("leaves a Number, a BigInt and null as they are", () => {
+      assert.strictEqual(Model.readIntegers(TYPE, {n: 42}).n, 42);
+      assert.strictEqual(Model.readIntegers(TYPE, {n: 5n}).n, 5n);
+      assert.isNull(Model.readIntegers(TYPE, {n: null}).n);
+    });
+
+    it("leaves another attribute's text as it is", () => {
+      assert.strictEqual(Model.readIntegers(TYPE, {label: "12"}).label, "12");
+    });
+  });
+
+  describe("integer literals in the rules", () => {
+    const TYPE = "MyApp.Counted";
+
+    const literal = {$integer: "9007199254740993"};
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TYPE]: {
+            attributes: {id: "uuid", n: "integer"},
+            derived: {
+              cap: {
+                definition: {value: literal},
+                kind: "scalar",
+                type: "integer",
+              },
+            },
+            policy: {
+              read: [
+                {predicates: [["n", "in", [1, literal]]], to: null, via: null},
+              ],
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+    });
+
+    it("reads a derived field's literal as a BigInt", () => {
+      assert.strictEqual(
+        Model.derivedField(TYPE, "cap").definition.value,
+        9007199254740993n,
+      );
+    });
+
+    it("reads a rule's literal as a BigInt, wherever it sits", () => {
+      assert.deepEqual(Model.entry(TYPE).policy.read[0].predicates, [
+        ["n", "in", [1, 9007199254740993n]],
+      ]);
+    });
+
+    it("leaves the model holding JSON, for another tab to take", () => {
+      Model.entry(TYPE);
+
+      assert.doesNotThrow(() => JSON.stringify(Model.serializedEntries()));
+      assert.deepEqual(
+        Model.serializedEntries()[TYPE].derived.cap.definition.value,
+        literal,
+      );
+    });
+
+    it("reads one policy into one object, however often it is asked for", () => {
+      const policy = globalThis.Hologram.sync.model[TYPE].policy;
+
+      assert.strictEqual(Model.readPolicy(policy), Model.readPolicy(policy));
+    });
+
+    it("hands back rules holding no literal as they are", () => {
+      const policy = {read: [{predicates: [], to: null, via: null}]};
+
+      globalThis.Hologram.sync.model[TYPE].policy = policy;
+      Model.reset();
+
+      assert.strictEqual(Model.entry(TYPE).policy, policy);
     });
   });
 

@@ -21,6 +21,17 @@ defmodule Hologram.Compiler.QueryExtractor do
   # closures it runs, which start from states of their own.
   @derived_reads_key {__MODULE__, :derived_reads}
 
+  # The expressions a derived field's walk built from the row: strings joined, a value a condition
+  # picks, whether a condition holds. Each is a plain tuple of lowered names, so nothing in its
+  # shape tells it from a tuple the builder wrote, and the walk remembers the ones it built.
+  @row_expressions_key {__MODULE__, :row_expressions}
+
+  @row_expression_functions [:concat, :condition, :if_value]
+
+  # The first refusal raised while a closure ran inside a call the build runs. That call is project
+  # code, which can rescue the refusal and carry on with a value the walk never decided.
+  @derived_refusal_key {__MODULE__, :derived_refusal}
+
   @doc """
   Resolves the definition of the given derived field of the given entity type by walking the
   field's clause of the type's `__derived_definition__/1` over its IR - the way a body calling a
@@ -48,7 +59,12 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     context = %{
       current_module: entity_type,
-      derived: %{at_field?: true, file: file},
+      derived: %{
+        at_field?: true,
+        file: file,
+        other_process_run: :atomics.new(1, signed: false),
+        process: self()
+      },
       ir_plt: ir_plt,
       line: line,
       stack: [{entity_type, :__derived_definition__, 1, [file: file, line: line]}],
@@ -58,6 +74,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     clause = derived_clause!(entity_type, name, ir_plt)
 
     Process.put(@derived_reads_key, MapSet.new())
+    Process.put(@row_expressions_key, MapSet.new())
 
     try do
       # Every branch of a derived field's walk is decided or refused, so the walk builds one
@@ -72,6 +89,8 @@ defmodule Hologram.Compiler.QueryExtractor do
       {Derived.normalize(definition), read_modules}
     after
       Process.delete(@derived_reads_key)
+      Process.delete(@row_expressions_key)
+      Process.delete(@derived_refusal_key)
     end
   end
 
@@ -116,7 +135,13 @@ defmodule Hologram.Compiler.QueryExtractor do
   # A Derived call builds a stand-in or a definition from others, so it runs natively - what it
   # refuses is the definition's to answer for, at the line the walk stood on.
   defp apply_derived!(function, arg_values, context) do
-    apply(Derived, function, arg_values)
+    result = apply(Derived, function, arg_values)
+
+    if function in @row_expression_functions and walk_process?(context) do
+      Process.put(@row_expressions_key, MapSet.put(row_expressions(), result))
+    end
+
+    result
   rescue
     error in [ArgumentError, MisuseError] ->
       reraise Hologram.CompileError,
@@ -341,8 +366,12 @@ defmodule Hologram.Compiler.QueryExtractor do
   # Whether the walk stands in the derived field's own clause, where a builder is called from.
   defp derived_level?(context), do: context.derived.at_field?
 
+  # A closure keeps only the variables its clause names, as an Elixir function captures them - so
+  # what it holds tells whether it depends on the row (see stand_in?/1).
   defp evaluate!(%IR.AnonymousFunctionType{arity: arity, clauses: [clause]}, state, context) do
-    {anonymous_closure!(arity, clause, state.env, context), state}
+    closure_env = Map.take(state.env, ir_variables(clause))
+
+    {anonymous_closure!(arity, clause, closure_env, context), state}
   end
 
   defp evaluate!(%IR.AnonymousFunctionType{}, _state, context) do
@@ -459,15 +488,14 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp evaluate!(%IR.MapType{data: data}, state, context) do
-    {pairs, new_state} =
-      Enum.reduce(data, {[], state}, fn {key_ir, value_ir}, {acc_pairs, acc_state} ->
-        {key, state_after_key} = evaluate!(key_ir, acc_state, context)
-        {value, state_after_value} = evaluate!(value_ir, state_after_key, context)
+    # Put in source order, so that of two keys that turn out equal the later one's value stays, as
+    # in Elixir.
+    Enum.reduce(data, {%{}, state}, fn {key_ir, value_ir}, {acc_map, acc_state} ->
+      {key, state_after_key} = evaluate!(key_ir, acc_state, context)
+      {value, state_after_value} = evaluate!(value_ir, state_after_key, context)
 
-        {[{key, value} | acc_pairs], state_after_value}
-      end)
-
-    {Map.new(pairs), new_state}
+      {Map.put(acc_map, key, value), state_after_value}
+    end)
   end
 
   defp evaluate!(
@@ -616,6 +644,17 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
+  # What the walk knows lives in its own process, so a function running in another can't be followed.
+  # It's only flagged there, and carries on: raising could crash a linked caller or leave one waiting
+  # forever for its reply. The call that started it refuses the build once it's back.
+  defp flag_other_process(context) do
+    if not walk_process?(context) do
+      :atomics.put(context.derived.other_process_run, 1, 1)
+    end
+
+    :ok
+  end
+
   # An Elixir stacktrace entry, which is what a frame has to BE rather than resemble: it renders
   # through Exception.format_stacktrace_entry/1 and the live-reload overlay reads it by the same
   # shape it reads the compiler's own frames by.
@@ -739,6 +778,26 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp interpret_anonymous!(clause, arg_values, closure_env, context) do
+    flag_other_process(context)
+
+    # The head decides as a named function's does, with a guard free to read what the closure holds.
+    candidates =
+      clause_candidates([clause], fn clause ->
+        clause_outcome(
+          clause.params,
+          clause.guards,
+          arg_values,
+          closure_env,
+          &call_binding!(&1, nil, context),
+          context
+        )
+      end)
+
+    no_match =
+      "#{context.subject} calls an anonymous function with #{Enum.map_join(arg_values, ", ", &inspect/1)}, which no clause matches - the code raises FunctionClauseError there"
+
+    choose_clause!(candidates, no_match, context)
+
     call_env = call_env!(clause.params, arg_values, closure_env, context)
 
     # A closure runs when the function it was given to calls it, after the walk that built it moved
@@ -747,7 +806,21 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     {value, _state} = evaluate!(clause.body, state, context)
 
+    # Only native code calls a closure, so a stand-in returned here would reach it unseen. One the
+    # closure holds is refused before the call, and this is one it made itself.
+    if stand_in?(value) do
+      compile_error!(
+        "#{context.subject} returns a field of the row from a function handed to another call - a field of the row reaches query stages and query builders only",
+        context
+      )
+    end
+
     value
+  rescue
+    error in Hologram.CompileError ->
+      record_refusal(error, __STACKTRACE__)
+
+      reraise error, __STACKTRACE__
   end
 
   defp interpret_call!(module, function, arg_values, state, context) do
@@ -804,6 +877,25 @@ defmodule Hologram.Compiler.QueryExtractor do
     {value, %{state_after_body | env: state_after_funs.env}}
   end
 
+  # The variables an IR term names at any depth, nested functions included.
+  defp ir_variables(%IR.Variable{name: name, version: version}), do: [{name, version}]
+
+  defp ir_variables([head | tail]), do: ir_variables(head) ++ ir_variables(tail)
+
+  defp ir_variables(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> ir_variables()
+  end
+
+  defp ir_variables(map) when is_map(map) do
+    map
+    |> Map.values()
+    |> ir_variables()
+  end
+
+  defp ir_variables(_term), do: []
+
   # Only application-owned Elixir modules outside the Elixir-shipped apps are followed into - their
   # IR is what the build follows a field of the row through, and their edits are what can change a
   # definition. Classified through loaded application specs, never through Mix, which releases do
@@ -818,16 +910,26 @@ defmodule Hologram.Compiler.QueryExtractor do
   # A call the build runs for real. Only the function it was asked to call is reported as missing:
   # one that exists and fails on a call of its own raises what it raises.
   defp known_call!(module, function, args, context) do
-    apply(module, function, args)
-  rescue
-    error in UndefinedFunctionError ->
-      if {error.module, error.function, error.arity} == {module, function, length(args)} do
+    value = apply(module, function, args)
+
+    raise_recorded_refusal!(context)
+
+    value
+  catch
+    kind, reason ->
+      stacktrace = __STACKTRACE__
+
+      # A refusal the call swallowed comes first, whatever the call raised, threw or exited with.
+      raise_recorded_refusal!(context)
+
+      if undefined_call?(kind, reason, stacktrace, {module, function, length(args)}) do
         message =
           undefined_function_message(context.subject, module, function, length(args))
 
         compile_error!(message, context)
       else
-        reraise error, __STACKTRACE__
+        # Rethrown as it came: project code up the stack can match on a raw Erlang reason.
+        :erlang.raise(kind, reason, stacktrace)
       end
   end
 
@@ -861,6 +963,10 @@ defmodule Hologram.Compiler.QueryExtractor do
     "#{subject} calls #{inspect(module)}.#{function}/#{length(arg_values)} with #{Enum.map_join(arg_values, ", ", &inspect/1)}, which no clause matches - the code raises FunctionClauseError there"
   end
 
+  defp other_process_message(context) do
+    "#{context.subject} runs a function in another process - the build follows a query builder in one process"
+  end
+
   # Whether a clause head's pattern matches a value: always for a name or _, by the literal's equality
   # for a literal - unknown when the build does not know the value - with the bindings it makes.
   defp pattern_outcome(%IR.Variable{name: name, version: version}, value, _binder),
@@ -891,11 +997,41 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
+  defp raise_recorded_refusal!(context) do
+    case Process.get(@derived_refusal_key) do
+      {error, stacktrace} ->
+        reraise error, stacktrace
+
+      nil ->
+        if walk_process?(context) and :atomics.get(context.derived.other_process_run, 1) == 1 do
+          compile_error!(other_process_message(context), context)
+        end
+
+        :ok
+    end
+  end
+
   # A project module whose function a derived field's walk follows or runs is one whose edit can
   # change the definition - Elixir's own modules never change between compiles of an app.
   defp record_derived_read(module) do
-    if interpretable_module?(module) do
-      Process.put(@derived_reads_key, MapSet.put(Process.get(@derived_reads_key), module))
+    reads = Process.get(@derived_reads_key)
+
+    # Outside the walk's process there's nothing to add to, and the build is refused there anyway.
+    if reads != nil and interpretable_module?(module) do
+      Process.put(@derived_reads_key, MapSet.put(reads, module))
+    end
+
+    :ok
+  end
+
+  # Only in the walk's own process, the one that clears the key when the walk ends. A record left in
+  # a process that outlives the walk would refuse a later field for this one's error. A function
+  # running elsewhere is refused through the walk's flag instead (see flag_other_process/1).
+  defp record_refusal(error, stacktrace) do
+    walking? = Process.get(@derived_reads_key) != nil
+
+    if walking? and is_nil(Process.get(@derived_refusal_key)) do
+      Process.put(@derived_refusal_key, {error, stacktrace})
     end
 
     :ok
@@ -920,6 +1056,9 @@ defmodule Hologram.Compiler.QueryExtractor do
     if Path.basename(path) == "nofile", do: nil, else: path
   end
 
+  # Empty outside the walk: a function a helper kept can be called after the walk ended.
+  defp row_expressions, do: Process.get(@row_expressions_key, MapSet.new())
+
   defp row_keyed?(map) when is_map(map) do
     map
     |> Map.keys()
@@ -932,7 +1071,9 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp row_value?(%RowRef{}), do: true
 
-  defp row_value?(_value), do: false
+  defp row_value?(%Query{source: source}), do: source != nil
+
+  defp row_value?(value), do: MapSet.member?(row_expressions(), value)
 
   # A dot on a set reads further through its rows, as a derived field's body reads a chain through a
   # set - only before a stage narrowed it, since the longer path is a set of its own.
@@ -955,12 +1096,21 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp stand_in?(%Query{source: source}), do: source != nil
 
-  defp stand_in?(list) when is_list(list), do: Enum.any?(list, &stand_in?/1)
+  # Walked cell by cell, since a value the build computed can be an improper list.
+  defp stand_in?([head | tail]), do: stand_in?(head) or stand_in?(tail)
+
+  # A function depends on the row when it holds a stand-in, called or only compared.
+  defp stand_in?(function) when is_function(function) do
+    {:env, env} = Function.info(function, :env)
+
+    stand_in?(env)
+  end
 
   defp stand_in?(tuple) when is_tuple(tuple) do
-    tuple
-    |> Tuple.to_list()
-    |> stand_in?()
+    row_value?(tuple) or
+      tuple
+      |> Tuple.to_list()
+      |> stand_in?()
   end
 
   defp stand_in?(map) when is_map(map) do
@@ -1003,9 +1153,29 @@ defmodule Hologram.Compiler.QueryExtractor do
     [frame(module, function, arity, line) | rest_frames]
   end
 
+  # Only a raw :undef is normalized: normalizing any other raw error runs the formatter it names,
+  # which is project code that can raise something else in its place.
+  defp undefined_call?(:error, :undef, stacktrace, mfa) do
+    error = Exception.normalize(:error, :undef, stacktrace)
+
+    undefined_call?(:error, error, stacktrace, mfa)
+  end
+
+  defp undefined_call?(
+         :error,
+         %UndefinedFunctionError{module: module, function: function, arity: arity},
+         _stacktrace,
+         {module, function, arity}
+       ),
+       do: true
+
+  defp undefined_call?(_kind, _reason, _stacktrace, _mfa), do: false
+
   defp undefined_function_message(subject, module, function, arity) do
     "#{subject} calls undefined function #{inspect(module)}.#{function}/#{arity}"
   end
+
+  defp walk_process?(context), do: self() == context.derived.process
 
   defp weaker(:match, outcome), do: outcome
 

@@ -858,7 +858,9 @@ defmodule Hologram.DB.QueryCompilerTest do
                  ~s|AND "$rg"."role" = ANY($3::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
                  ~s|AND "$rg"."entity_type" = | <>
                  ~s|$4::"hologram_data"."hologram_role_grant_entity_type_$enum" | <>
-                 ~s|AND "$rg"."entity_id" = "hologram_role_grant"."entity_id"))|
+                 ~s|AND "hologram_role_grant"."entity_id" IS NOT NULL | <>
+                 ~s|AND ("$rg"."entity_id" = "hologram_role_grant"."entity_id" | <>
+                 ~s|OR "$rg"."entity_id" IS NULL)))|
              )
     end
 
@@ -3893,6 +3895,10 @@ defmodule Hologram.DB.QueryCompilerTest do
     test "finds the holders of roles on the entity a grant names, and of global roles" do
       grant = readers_table(RoleGrant)
 
+      named_scope =
+        ~s|#{grant}."entity_id" IS NOT NULL | <>
+          ~s|AND ("$rg"."entity_id" = #{grant}."entity_id" OR "$rg"."entity_id" IS NULL)|
+
       assert %{sql: sql} = recheck(RoleGrant, @recheck_mapping, false)
 
       global_sql =
@@ -3902,13 +3908,13 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert candidates_sql(sql) ==
                ~s|(SELECT "user_id") UNION (| <>
-                 grant_candidate_sql(13, 14, ~s|"$rg"."entity_id" = #{grant}."entity_id"|) <>
+                 grant_candidate_sql(13, 14, named_scope) <>
                  ") UNION ((" <>
-                 grant_candidate_sql(15, 16, ~s|"$rg"."entity_id" = #{grant}."entity_id"|) <>
+                 grant_candidate_sql(15, 16, named_scope) <>
                  ") UNION (" <>
                  global_sql <>
                  ")) UNION (" <>
-                 grant_candidate_sql(18, 19, ~s|"$rg"."entity_id" = #{grant}."entity_id"|) <>
+                 grant_candidate_sql(18, 19, named_scope) <>
                  ")"
     end
 

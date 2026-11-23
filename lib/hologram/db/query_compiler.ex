@@ -1216,14 +1216,18 @@ defmodule Hologram.DB.QueryCompiler do
     {~s|"$rg"."entity_type" = #{placeholder} AND #{entity_sql}|, new_params}
   end
 
-  # The grant store's own policy checks a role held on the entity a grant row names, so the
-  # lookup keys on the outer row's entity_id column rather than on a relationship reference.
+  # The grant store's own policy checks a role held on the entity a grant row names or on its whole
+  # type, so the lookup keys on the outer row's entity_id column rather than on a relationship
+  # reference. A type-wide grant row names no entity, which the IS NOT NULL check refuses: a NULL
+  # never equals the id, but the lookup's own IS NULL branch would admit the row anyway.
   defp grant_scope_sql({:named, target_type, _role_names}, context, reversed_params) do
     {placeholder, new_params} = entity_type_slot(target_type, context, reversed_params)
 
+    row_entity_id = ~s|#{context.row_prefix}."entity_id"|
+
     scope_sql =
-      ~s|"$rg"."entity_type" = #{placeholder} | <>
-        ~s|AND "$rg"."entity_id" = #{context.row_prefix}."entity_id"|
+      ~s|"$rg"."entity_type" = #{placeholder} AND #{row_entity_id} IS NOT NULL | <>
+        ~s|AND ("$rg"."entity_id" = #{row_entity_id} OR "$rg"."entity_id" IS NULL)|
 
     {scope_sql, new_params}
   end

@@ -75,8 +75,8 @@ export default class SyncStream {
     // sync session's to consolidate.
     //
     // Nor does a tab still settling where its lead starts from (see Tabs.takingLead): a frame
-    // served now would be written over a store that is about to be cleared. It is greeted again
-    // once that is settled.
+    // served now would be written over a store and rows that may not stand at the place it
+    // names, or are about to be cleared. It is greeted again once that is settled.
     if (pageModule === null || !Tabs.leader || Tabs.takingLead) {
       return {};
     }
@@ -346,7 +346,7 @@ export default class SyncStream {
           // DataLayer.rowsChangedSinceRender).
           $.rowsChangedSinceRender = true;
         } else {
-          LocalDatabase.beginRefill();
+          LocalDatabase.beginRefill({hadPlace: $.syncCursor !== null});
         }
 
         $.syncCursor = null;
@@ -505,8 +505,9 @@ export default class SyncStream {
       //
       // And before a page has mounted there is nothing to render, and while one is mounting the
       // mount's own render is on its way. A tab listens to its group from before it reads the
-      // store (see DataLayer.boot), so a batch another tab seals can be taken up then and ask for
-      // a render - which, run first, would be the page's first render and leave the mount's to be
+      // store (see DataLayer.boot), but holds every message that would ask for a render until its
+      // restore, just after the mount (see Tabs.ready) - so this guards whatever else might ask
+      // that early. Run first, a render would be the page's first and leave the mount's to be
       // treated as a page arriving. The mount renders what was taken up.
       if (
         Hologram.pageModule() === null ||

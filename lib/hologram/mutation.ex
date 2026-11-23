@@ -403,6 +403,43 @@ defmodule Hologram.Mutation do
     error in Hologram.AccessDeniedError -> Connection.rollback({:rejected, index, error})
   end
 
+  # A record answers as the batch first landed, and a grant row that answer carries may have been
+  # revoked or hidden from its user since. A browser files such a row with no frame ever coming to
+  # correct it, so a replay reads the grant again: it answers the row as it stands when its user may
+  # read it, and otherwise says it's withheld, which has the browser leave the write's row alone.
+  defp current_answer(%{"status" => "confirmed", "kept" => kept} = result, writes, actor_id) do
+    rejudged = Map.new(kept, fn {key, entry} -> {key, current_kept(entry, actor_id)} end)
+
+    remade = remade_grants(writes, kept, actor_id)
+
+    %{result | "kept" => Map.merge(remade, rejudged)}
+  end
+
+  defp current_answer(result, _writes, _actor_id), do: result
+
+  # A grant row is told by its own columns, whose derivation is its id. The record keeps no writes
+  # of a confirmed batch, and the ones a resend carries are whatever its sender chose.
+  defp current_kept(
+         %{
+           "id" => id,
+           "entity_id" => entity_id,
+           "entity_type" => entity_type,
+           "role" => role,
+           "user_id" => user_id
+         } = entry,
+         actor_id
+       )
+       when is_binary(entity_id) and is_binary(entity_type) and is_binary(role) and
+              is_binary(user_id) do
+    if RoleGrant.derive_id_from_labels(user_id, entity_type, entity_id, role) == id do
+      readable_grant(id, actor_id) || %{"$withheld" => true}
+    else
+      entry
+    end
+  end
+
+  defp current_kept(entry, _actor_id), do: entry
+
   # Two writes of a call naming one edge, its lead included, collapse to the later one, which is
   # where applying them in order would leave the edge too. Only a hand-made batch sends that: the
   # browser records a call's edges in a map keyed by the edge.
@@ -491,7 +528,7 @@ defmodule Hologram.Mutation do
     types = field_types(write.entity_type)
 
     Map.new(names, fn name ->
-      {Atom.to_string(name), Codec.encode_json(Map.get(write.data, name), types[name])}
+      {Atom.to_string(name), Codec.encode_wire(Map.get(write.data, name), types[name])}
     end)
   end
 
@@ -541,12 +578,40 @@ defmodule Hologram.Mutation do
     Map.update!(verdicts, kind, &Map.put(&1, key, values))
   end
 
+  # A revocation that won keeps nothing, and its grant may have been made again since, under the
+  # same derived id and with revisions below the revocation's stamp. Answered with nothing, the
+  # browser would take that live row away with no frame to bring it back, so a replay answers the
+  # row. Read off the resend's writes, which its sender chose, so only a row they may read comes
+  # back.
+  defp remade_grants(writes, kept, actor_id) do
+    for {%Write{op: :delete, entity_type: RoleGrant, id: id}, index} <- Enum.with_index(writes),
+        key = Integer.to_string(index),
+        not Map.has_key?(kept, key),
+        row = readable_grant(id, actor_id),
+        into: %{} do
+      {key, row}
+    end
+  end
+
+  defp readable_grant(id, actor_id) do
+    row = EntityOperations.get(RoleGrant, id)
+
+    if row != nil and Auth.can?(actor_id, :read, row), do: stringify(WireData.row(row))
+  end
+
   defp recorded_answer(envelope, actor_id) do
     case Record.find(envelope.replica_id, envelope.seq) do
-      nil -> nil
-      %{actor_id: ^actor_id, result: nil} -> nil
-      %{actor_id: ^actor_id, result: result} -> {:ok, result}
-      _another_sessions -> {:ok, rejection(nil, :forged_client)}
+      nil ->
+        nil
+
+      %{actor_id: ^actor_id, result: nil} ->
+        nil
+
+      %{actor_id: ^actor_id, result: result} ->
+        {:ok, current_answer(result, envelope.writes, actor_id)}
+
+      _another_sessions ->
+        {:ok, rejection(nil, :forged_client)}
     end
   end
 

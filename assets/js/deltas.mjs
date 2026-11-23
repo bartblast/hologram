@@ -312,7 +312,7 @@ export default class Deltas {
       }
     }
 
-    Model.computeSortKeys(type, attributes);
+    Model.computeSortKeys(type, Model.readIntegers(type, attributes));
     LocalDatabase.putRow(type, attributes);
 
     // The whole target set of the relationship as it now stands, which is what a row states

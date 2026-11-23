@@ -33,6 +33,7 @@ describe("Deltas", () => {
             done: "boolean",
             id: "uuid",
             note: "string",
+            position: "integer",
             title: "string",
           },
           inverses: {
@@ -269,6 +270,62 @@ describe("Deltas", () => {
       carry([{done: false, id: "t1", title: "Łódź"}]);
 
       assert.equal(LocalDatabase.getRow(TASK, "t1").title$sort, "lodz");
+    });
+  });
+
+  describe("apply() - big integers", () => {
+    it("holds an integer that arrives as text as a BigInt", () => {
+      Deltas.apply({
+        put_entity: {[TASK]: [{id: "t1", position: "9007199254740993"}]},
+      });
+
+      assert.strictEqual(
+        LocalDatabase.getRow(TASK, "t1").position,
+        9007199254740993n,
+      );
+    });
+
+    it("leaves an integer that arrives as a number a Number", () => {
+      Deltas.apply({put_entity: {[TASK]: [{id: "t1", position: 42}]}});
+
+      assert.strictEqual(LocalDatabase.getRow(TASK, "t1").position, 42);
+    });
+
+    it("leaves text in a string attribute as it is", () => {
+      Deltas.apply({
+        put_entity: {[TASK]: [{id: "t1", title: "9007199254740993"}]},
+      });
+
+      assert.strictEqual(
+        LocalDatabase.getRow(TASK, "t1").title,
+        "9007199254740993",
+      );
+    });
+
+    it("holds a patched integer that arrives as text as a BigInt", () => {
+      Deltas.apply({put_entity: {[TASK]: [{id: "t1", position: 1}]}});
+
+      Deltas.apply({
+        patch_entity: {[TASK]: [{id: "t1", position: "-9007199254740993"}]},
+      });
+
+      assert.strictEqual(
+        LocalDatabase.getRow(TASK, "t1").position,
+        -9007199254740993n,
+      );
+    });
+
+    it("keeps a held BigInt a patch doesn't name", () => {
+      Deltas.apply({
+        put_entity: {[TASK]: [{id: "t1", position: "9007199254740993"}]},
+      });
+
+      Deltas.apply({patch_entity: {[TASK]: [{id: "t1", title: "Ship it"}]}});
+
+      assert.strictEqual(
+        LocalDatabase.getRow(TASK, "t1").position,
+        9007199254740993n,
+      );
     });
   });
 

@@ -1493,6 +1493,43 @@ describe("Elixir_Hologram_Query_Stage", () => {
       ]);
     });
 
+    it("keeps a range's bounds exact past what a Number holds", () => {
+      const query = filter(
+        task,
+        predicates([["position", range(9007199254740993n, 9007199254740995n)]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["position", ">=", 9007199254740993n],
+        ["position", "<=", 9007199254740995n],
+      ]);
+    });
+
+    it("keeps a big filter value exact, and two neighbours apart", () => {
+      const query = filter(
+        filter(
+          task,
+          predicates([["position", Type.integer(9007199254740993n)]]),
+        ),
+        predicates([["position", Type.integer(9007199254740992n)]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["position", "==", 9007199254740993n],
+        ["position", "==", 9007199254740992n],
+      ]);
+    });
+
+    it("keeps a big view bound exact", () => {
+      const query = skip(
+        take(task, Type.integer(9007199254740993n)),
+        Type.integer(9007199254740995n),
+      );
+
+      assert.strictEqual(query.take, 9007199254740993n);
+      assert.strictEqual(query.skip, 9007199254740995n);
+    });
+
     it("reads a range given to the membership operator the same way", () => {
       const value = Type.tuple([Type.atom("in"), range(1, 5)]);
       const query = filter(task, predicates([["position", value]]));
