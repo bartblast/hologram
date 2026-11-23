@@ -738,6 +738,21 @@ defmodule Hologram.Auth do
     {Map.drop(valid, missing), invalid, missing}
   end
 
+  # What a rule can read as the row after a change, from the amounts it moves counters by: an amount
+  # the column can't take, or a move to a value failing its declaration, can't be on that row, so
+  # the column reads as stored and its name comes back.
+  @doc false
+  @spec judged_deltas(struct, %{atom => integer}) :: {%{atom => integer}, list(atom)}
+  def judged_deltas(%entity_type{} = row, deltas) do
+    {valid, invalid} =
+      Enum.split_with(deltas, fn {name, amount} ->
+        Validator.attribute_value_valid?(amount, :integer) and
+          Entity.validate(entity_type, %{name => Map.fetch!(row, name) + amount}) == :ok
+      end)
+
+    {Map.new(valid), Keyword.keys(invalid)}
+  end
+
   # The edges among the given ones that add a target with no row, which a rule reads as left out of
   # the set. A target found under :held stays locked, as a reference's does.
   @doc false

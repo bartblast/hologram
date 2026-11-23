@@ -1412,6 +1412,85 @@ describe("Elixir_Hologram_DB", () => {
         assertDenied({...status("rejected"), ...note("y")}, ":note, :status");
       });
 
+      describe("a counter moved beside a value the rule refuses", () => {
+        const INVALID_COUNT =
+          " (the value given for :count is invalid, so its rule read the stored value)";
+
+        const moved = (amount) => () =>
+          update(
+            increment(
+              put(note("no")),
+              Type.atom("count"),
+              Type.integer(amount),
+            ),
+          );
+
+        beforeEach(() => {
+          defineCard({update: [newIs("note", "ok")]});
+        });
+
+        it("refuses it with the value it names as refused", () => {
+          assertBoxedError(
+            moved(1n),
+            "Hologram.AccessDeniedError",
+            denied(":count, :note"),
+          );
+        });
+
+        it("says a move past what the column holds was invalid", () => {
+          assertBoxedError(
+            moved(9_223_372_036_854_775_807n),
+            "Hologram.AccessDeniedError",
+            denied(":count, :note", INVALID_COUNT),
+          );
+        });
+
+        it("says an amount no column holds was invalid", () => {
+          assertBoxedError(
+            moved(10_000_000_000_000_000_000n),
+            "Hologram.AccessDeniedError",
+            denied(":count, :note", INVALID_COUNT),
+          );
+        });
+
+        it("refuses it when this client holds no value for the counter", () => {
+          const entity = increment(
+            put(note("no")),
+            Type.atom("count"),
+            Type.integer(1),
+          );
+
+          LocalDatabase.putRow(CARD, {
+            ...LocalDatabase.getRow(CARD, ID_1),
+            count: null,
+          });
+
+          assertBoxedError(
+            () => update(entity),
+            "Hologram.AccessDeniedError",
+            denied(":count, :note"),
+          );
+        });
+
+        it("refuses it ahead of another field's invalid value", () => {
+          assertBoxedError(
+            () =>
+              update(
+                increment(
+                  put({...note("no"), ...status("bogus")}),
+                  Type.atom("count"),
+                  Type.integer(1),
+                ),
+              ),
+            "Hologram.AccessDeniedError",
+            denied(
+              ":count, :note, :status",
+              " (the value given for :status is invalid, so its rule read the stored value)",
+            ),
+          );
+        });
+      });
+
       it("says a refused field's value was invalid", () => {
         defineCard({"update:status": [newIs("note", "x")]});
 

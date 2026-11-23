@@ -531,6 +531,23 @@ function validateMoves(entityType, held, deltas) {
       );
 }
 
+// The counters whose amount no column holds, or whose move lands on a value failing its declaration.
+// One this client holds no value for has nowhere to land, so it says nothing here.
+function unmovableCounters(entityType, held, deltas) {
+  const heldDeltas = Object.fromEntries(
+    Object.entries(deltas).filter(([name]) => (held[name] ?? null) !== null),
+  );
+
+  const validation = validateMoves(entityType, held, heldDeltas);
+
+  return [
+    ...refusedAmounts(deltas).map(([name]) => name.value),
+    ...(Type.isAtom(validation)
+      ? []
+      : Object.values(validation.data[1].data).map(([name]) => name.value)),
+  ];
+}
+
 function validateEntityType(query) {
   if (!Type.isAlias(query) || !Model.isEntityType(aliasName(query))) {
     Interpreter.raiseMisuseError(
@@ -862,6 +879,7 @@ const Elixir_Hologram_DB = {
       changes,
       deltas,
       Object.values(relationshipOps.data).map(([key]) => key.data[0].value),
+      unmovableCounters(entityType, held, deltas),
     );
 
     const boxedChanges = Object.entries(changes).map(([name, value]) => [

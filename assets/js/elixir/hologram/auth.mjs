@@ -1516,8 +1516,17 @@ function deniedUpdateMessage(entityType, id, uncovered, invalid) {
 // this client. What the rows and grants here say is never grounds for a refusal: they can be out of
 // date, and a client's write isn't refused for what it read. A type with no rule reading the row
 // after the change on a changed field writes as it did. A field the call alone leaves open sends
-// the write on, since only the server can name every field it refuses.
-export function refuseDeniedChange(entityType, id, values, deltas, edgeNames) {
+// the write on, since only the server can name every field it refuses. The given counters are the
+// ones whose move can't be on the row as this client holds it: the refusal stands whatever the
+// server holds, and they only decide whether it says their value was invalid.
+export function refuseDeniedChange(
+  entityType,
+  id,
+  values,
+  deltas,
+  edgeNames,
+  unmovable,
+) {
   const model = globalThis.Hologram.sync?.model ?? {};
   const entry = Object.hasOwn(model, entityType) ? model[entityType] : null;
 
@@ -1578,7 +1587,7 @@ export function refuseDeniedChange(entityType, id, values, deltas, edgeNames) {
         entityType,
         id,
         uncovered,
-        changedFieldNames(entityType, invalid),
+        changedFieldNames(entityType, [...invalid, ...unmovable]),
       ),
     );
   }

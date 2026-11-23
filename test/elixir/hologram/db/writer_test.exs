@@ -1178,6 +1178,39 @@ defmodule Hologram.DB.WriterTest do
                as_user(user, fn -> update(put_attribute(task, :project_id, missing_id)) end)
     end
 
+    test "answers a move past what the column holds with its violation when the stored value passes" do
+      user = create_user("overflowing_counter@example.com")
+      task = create_changed_task(%{count: 5})
+
+      assert as_user(user, fn ->
+               update(increment(task, :count, 9_223_372_036_854_775_807))
+             end) == {:error, %{count: [{:type, :integer}]}}
+
+      assert EntityOperations.get(ChangedTask, task.id).count == 5
+    end
+
+    test "answers an amount the column can't take with its violation when the stored value passes" do
+      user = create_user("huge_amount@example.com")
+      task = create_changed_task(%{count: 5})
+
+      assert as_user(user, fn ->
+               update(increment(task, :count, 10_000_000_000_000_000_000))
+             end) == {:error, %{count: [{:type, :integer}]}}
+    end
+
+    test "says a refused move was invalid when the stored value fails too" do
+      user = create_user("overflowing_refused@example.com")
+      task = create_changed_task(%{count: 11})
+
+      expected_msg =
+        uncovered_message(task, :count) <>
+          " (the value given for :count is invalid, so its rule read the stored value)"
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(user, fn -> update(increment(task, :count, 9_223_372_036_854_775_807)) end)
+      end
+    end
+
     test "refuses a reference whose row appears after its rule read it" do
       user = create_user("appearing_reference@example.com")
       project = create_changed_project()

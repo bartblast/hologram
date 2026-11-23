@@ -382,16 +382,17 @@ defmodule Hologram.DB.Writer do
     if Policy.judges_change?(entity_type, fields) do
       clock_stamp = Clock.stamp()
       {values, invalid, missing} = Auth.judged_values(entity_type, change.values, :held)
+      {deltas, unmovable} = Auth.judged_deltas(row, change.deltas)
       absent_edges = Auth.missing_edge_targets(entity_type, change.edges, :held)
       written = values_written(change, values, clock_stamp)
-      new_row = Auth.after_row(row, written, change.deltas, change.edges)
+      new_row = Auth.after_row(row, written, deltas, change.edges)
 
       %{
         absent: changed_fields(entity_type, missing, absent_edges),
         clock_stamp: clock_stamp,
-        invalid: changed_fields(entity_type, invalid, []),
+        invalid: changed_fields(entity_type, invalid ++ unmovable, []),
         new_row: new_row,
-        unjudged: invalid ++ missing
+        unjudged: invalid ++ unmovable ++ missing
       }
     else
       @not_judged

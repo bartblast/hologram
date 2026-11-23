@@ -2044,6 +2044,32 @@ defmodule Hologram.AuthTest do
     end
   end
 
+  describe "judged_deltas/2" do
+    test "keeps a move to a value the column can hold" do
+      row = %ChangedTask{count: 5}
+
+      assert judged_deltas(row, %{count: 2}) == {%{count: 2}, []}
+    end
+
+    test "names a move past what the column can hold" do
+      row = %ChangedTask{count: 5}
+
+      assert judged_deltas(row, %{count: 9_223_372_036_854_775_807}) == {%{}, [:count]}
+    end
+
+    test "names an amount the column can't take, whatever it would move the value to" do
+      row = %ChangedTask{count: -5_000_000_000_000_000_000}
+
+      assert judged_deltas(row, %{count: 10_000_000_000_000_000_000}) == {%{}, [:count]}
+    end
+
+    test "names a move to a value its declaration refuses" do
+      row = %Hologram.Test.Fixtures.Entity.Module10{count: 1}
+
+      assert judged_deltas(row, %{count: -1}) == {%{}, [:count]}
+    end
+  end
+
   describe "judged_values/3" do
     test "keeps values the row can hold" do
       project = DB.create!(ChangedProject.new())
