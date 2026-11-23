@@ -260,6 +260,41 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module145 do
     _error -> reraise ArgumentError, "the helper's own error", []
   end
 
+  def refusal_in_task(messages) do
+    count =
+      [1, 2]
+      |> __MODULE__.rescuing_in_task(fn x ->
+        {y} = {x}
+        y
+      end)
+      |> Enum.uniq()
+      |> length()
+
+    take(messages, ^count)
+  end
+
+  def harmless_in_task(messages) do
+    count =
+      [1, 2]
+      |> __MODULE__.running_in_task(fn x -> x + 1 end)
+      |> Enum.uniq()
+      |> length()
+
+    take(messages, ^count)
+  end
+
+  def running_in_task(list, fun) do
+    list
+    |> Enum.map(fn x -> Task.async(fn -> fun.(x) end) end)
+    |> Task.await_many()
+  end
+
+  def rescuing_in_task(list, fun) do
+    list
+    |> Enum.map(fn x -> Task.async(fn -> rescuing_call(fun, x) end) end)
+    |> Task.await_many()
+  end
+
   def rescuing(list, fun) do
     Enum.map(list, fun)
   rescue
@@ -267,4 +302,10 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module145 do
   end
 
   defp holding(value), do: fn _x -> value end
+
+  defp rescuing_call(fun, value) do
+    fun.(value)
+  rescue
+    _error -> :fallback
+  end
 end

@@ -59,7 +59,12 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     context = %{
       current_module: entity_type,
-      derived: %{at_field?: true, file: file},
+      derived: %{
+        at_field?: true,
+        file: file,
+        other_process_run: :atomics.new(1, signed: false),
+        process: self()
+      },
       ir_plt: ir_plt,
       line: line,
       stack: [{entity_type, :__derived_definition__, 1, [file: file, line: line]}],
@@ -132,7 +137,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp apply_derived!(function, arg_values, context) do
     result = apply(Derived, function, arg_values)
 
-    if function in @row_expression_functions do
+    if function in @row_expression_functions and walk_process?(context) do
       Process.put(@row_expressions_key, MapSet.put(row_expressions(), result))
     end
 
@@ -639,6 +644,17 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
+  # What the walk knows lives in its own process, so a function running in another can't be followed.
+  # It's only flagged there, and carries on: raising could crash a linked caller or leave one waiting
+  # forever for its reply. The call that started it refuses the build once it's back.
+  defp flag_other_process(context) do
+    if not walk_process?(context) do
+      :atomics.put(context.derived.other_process_run, 1, 1)
+    end
+
+    :ok
+  end
+
   # An Elixir stacktrace entry, which is what a frame has to BE rather than resemble: it renders
   # through Exception.format_stacktrace_entry/1 and the live-reload overlay reads it by the same
   # shape it reads the compiler's own frames by.
@@ -762,6 +778,8 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp interpret_anonymous!(clause, arg_values, closure_env, context) do
+    flag_other_process(context)
+
     # The head decides as a named function's does, with a guard free to read what the closure holds.
     candidates =
       clause_candidates([clause], fn clause ->
@@ -894,7 +912,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp known_call!(module, function, args, context) do
     value = apply(module, function, args)
 
-    raise_recorded_refusal!()
+    raise_recorded_refusal!(context)
 
     value
   catch
@@ -902,7 +920,7 @@ defmodule Hologram.Compiler.QueryExtractor do
       stacktrace = __STACKTRACE__
 
       # A refusal the call swallowed comes first, whatever the call raised, threw or exited with.
-      raise_recorded_refusal!()
+      raise_recorded_refusal!(context)
 
       if undefined_call?(kind, reason, stacktrace, {module, function, length(args)}) do
         message =
@@ -945,6 +963,10 @@ defmodule Hologram.Compiler.QueryExtractor do
     "#{subject} calls #{inspect(module)}.#{function}/#{length(arg_values)} with #{Enum.map_join(arg_values, ", ", &inspect/1)}, which no clause matches - the code raises FunctionClauseError there"
   end
 
+  defp other_process_message(context) do
+    "#{context.subject} runs a function in another process - the build follows a query builder in one process"
+  end
+
   # Whether a clause head's pattern matches a value: always for a name or _, by the literal's equality
   # for a literal - unknown when the build does not know the value - with the bindings it makes.
   defp pattern_outcome(%IR.Variable{name: name, version: version}, value, _binder),
@@ -975,25 +997,36 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
-  defp raise_recorded_refusal! do
+  defp raise_recorded_refusal!(context) do
     case Process.get(@derived_refusal_key) do
-      nil -> :ok
-      {error, stacktrace} -> reraise error, stacktrace
+      {error, stacktrace} ->
+        reraise error, stacktrace
+
+      nil ->
+        if walk_process?(context) and :atomics.get(context.derived.other_process_run, 1) == 1 do
+          compile_error!(other_process_message(context), context)
+        end
+
+        :ok
     end
   end
 
   # A project module whose function a derived field's walk follows or runs is one whose edit can
   # change the definition - Elixir's own modules never change between compiles of an app.
   defp record_derived_read(module) do
-    if interpretable_module?(module) do
-      Process.put(@derived_reads_key, MapSet.put(Process.get(@derived_reads_key), module))
+    reads = Process.get(@derived_reads_key)
+
+    # Outside the walk's process there's nothing to add to, and the build is refused there anyway.
+    if reads != nil and interpretable_module?(module) do
+      Process.put(@derived_reads_key, MapSet.put(reads, module))
     end
 
     :ok
   end
 
   # Only in the walk's own process, the one that clears the key when the walk ends. A record left in
-  # a process that outlives the walk would refuse a later field for this one's error.
+  # a process that outlives the walk would refuse a later field for this one's error. A function
+  # running elsewhere is refused through the walk's flag instead (see flag_other_process/1).
   defp record_refusal(error, stacktrace) do
     walking? = Process.get(@derived_reads_key) != nil
 
@@ -1023,7 +1056,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     if Path.basename(path) == "nofile", do: nil, else: path
   end
 
-  # A closure can run in a process of a call the build runs, where the walk's key is unset.
+  # Empty outside the walk: a function a helper kept can be called after the walk ended.
   defp row_expressions, do: Process.get(@row_expressions_key, MapSet.new())
 
   defp row_keyed?(map) when is_map(map) do
@@ -1141,6 +1174,8 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp undefined_function_message(subject, module, function, arity) do
     "#{subject} calls undefined function #{inspect(module)}.#{function}/#{arity}"
   end
+
+  defp walk_process?(context), do: self() == context.derived.process
 
   defp weaker(:match, outcome), do: outcome
 

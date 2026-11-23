@@ -214,6 +214,20 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146 do
     |> Derived.lower()
   end
 
+  def __derived_definition__(:refusal_in_task) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.refusal_in_task()
+    |> Derived.lower()
+  end
+
+  def __derived_definition__(:harmless_in_task) do
+    Module36
+    |> Derived.field([:channel, :messages])
+    |> Module145.harmless_in_task()
+    |> Derived.lower()
+  end
+
   def __derived_locations__ do
     %{
       closure_making_field: {"lib/my_app/member.ex", 1},
@@ -241,7 +255,9 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146 do
       refusal_replaced: {"lib/my_app/member.ex", 23},
       refusal_thrown_over: {"lib/my_app/member.ex", 24},
       erlang_error_caught: {"lib/my_app/member.ex", 25},
-      formatted_error_caught: {"lib/my_app/member.ex", 26}
+      formatted_error_caught: {"lib/my_app/member.ex", 26},
+      refusal_in_task: {"lib/my_app/member.ex", 27},
+      harmless_in_task: {"lib/my_app/member.ex", 28}
     }
   end
 end

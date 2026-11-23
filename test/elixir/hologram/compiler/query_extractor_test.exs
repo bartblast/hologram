@@ -595,6 +595,22 @@ defmodule Hologram.Compiler.QueryExtractorTest do
                    fn -> derived_definition(Module146, :refusal_thrown_over, ir_plt) end
     end
 
+    # The task rescues what the function raises and hands back a fallback the code never produces.
+    test "refuses a function run in another process, even when that process rescues", %{
+      ir_plt: ir_plt
+    } do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :refusal_in_task in .+ runs a function in another process/,
+                   fn -> derived_definition(Module146, :refusal_in_task, ir_plt) end
+    end
+
+    # The task is linked to the walk, so a raise inside it would kill the walk instead of refusing.
+    test "refuses a harmless function run in a linked task", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :harmless_in_task in .+ runs a function in another process/,
+                   fn -> derived_definition(Module146, :harmless_in_task, ir_plt) end
+    end
+
     test "takes the case clause a known value matches", %{ir_plt: ir_plt} do
       {definition, _read_modules} = derived_definition(Module142, :by_case, ir_plt)
 
