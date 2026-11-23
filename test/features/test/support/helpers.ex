@@ -69,6 +69,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Jobs.KillRun
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTests.Jobs.SlowRun
+  alias HologramFeatureTests.Jobs.UpdateMemo
   alias HologramFeatureTestsWeb.Endpoint
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
   alias Wallaby.Browser
@@ -1332,6 +1333,7 @@ defmodule HologramFeatureTests.Helpers do
         Tool,
         Topic,
         Trip,
+        UpdateMemo,
         User,
         Vault,
         Waybill,
