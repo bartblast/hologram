@@ -778,6 +778,284 @@ defmodule Hologram.Migration.BackfillTest do
     end
   end
 
+  describe "run/3, computed backfill scenarios" do
+    setup do
+      attribute = fn entity, name, type, line ->
+        %{
+          op: :add_attribute,
+          entity: entity,
+          name: name,
+          type: type,
+          opts: [optional: true],
+          line: line
+        }
+      end
+
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Place, line: 2},
+          attribute.(MyApp.Place, :name, :string, 3),
+          %{op: :create_entity, entity: MyApp.Tag, line: 4},
+          attribute.(MyApp.Tag, :name, :string, 5),
+          %{op: :create_entity, entity: MyApp.Task, line: 6},
+          attribute.(MyApp.Task, :code, :string, 7),
+          attribute.(MyApp.Task, :title, :string, 8),
+          attribute.(MyApp.Task, :rank, :integer, 9),
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :place,
+            type: MyApp.Place,
+            opts: [optional: true],
+            line: 10
+          },
+          %{
+            op: :add_relationship,
+            entity: MyApp.Task,
+            name: :tags,
+            type: [MyApp.Tag],
+            opts: [],
+            line: 11
+          }
+        ])
+
+      [create: create, first_model: Model.fold(Model.empty(), create.ops)]
+    end
+
+    defp insert_row(table, values) do
+      columns = Enum.map(values, fn {name, _value} -> ~s("#{name}") end)
+      params = Enum.map(values, fn {_name, value} -> value end)
+
+      placeholders =
+        values
+        |> Enum.with_index(1)
+        |> Enum.map(fn {_value, position} -> "$#{position}" end)
+
+      statement =
+        ~s|INSERT INTO "hologram_data"."#{table}" | <>
+          ~s|("id", #{Enum.join(columns, ", ")}, "created_at", "server_created_at", | <>
+          ~s|"server_updated_at", "updated_at", "$revisions") VALUES (gen_random_uuid(), | <>
+          ~s|#{Enum.join(placeholders, ", ")}, now(), now(), now(), now(), '{}') RETURNING "id"|
+
+      {:ok, %{rows: [[id]]}} = Connection.query(statement, params)
+
+      id
+    end
+
+    defp link_tag(task_id, name) do
+      tag_id = insert_row("my_app_tag", name: name)
+
+      {:ok, _result} =
+        Connection.query(
+          ~s|INSERT INTO "hologram_data"."my_app_task_tags_$join" | <>
+            ~s|("source_id", "target_id") VALUES ($1, $2)|,
+          [task_id, tag_id]
+        )
+    end
+
+    defp rows_by_code(columns) do
+      select_list = Enum.map_join(columns, ", ", &~s("#{&1}"))
+
+      {:ok, %{rows: rows}} =
+        Connection.query(
+          ~s(SELECT #{select_list} FROM "hologram_data"."my_app_task" ORDER BY "code")
+        )
+
+      rows
+    end
+
+    defp apply_scenario(%{create: create, first_model: first_model, scratch: scratch}, rows, ops) do
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        rows.()
+
+        assert apply_file(ops, create, first_model) == :ok
+      end)
+    end
+
+    test "splits a column in two and deletes it in one file", %{scratch: scratch} = context do
+      part = fn index -> {:at, {:split, {:name, [:title]}, {:value, ", "}}, {:value, index}} end
+
+      ops = [
+        computed_add(:city, :string, part.(0), optional: true),
+        computed_add(:country, :string, part.(1), optional: true),
+        %{op: :delete_attribute, entity: MyApp.Task, name: :title, line: 5}
+      ]
+
+      rows = fn ->
+        insert_row("my_app_task", code: "a", title: "Paris, France")
+        insert_row("my_app_task", code: "b", title: "Porto")
+      end
+
+      apply_scenario(context, rows, ops)
+
+      route(scratch, fn ->
+        assert rows_by_code(["city", "country"]) == [["Paris", "France"], ["Porto", nil]]
+        refute has_column?("my_app_task", "title")
+      end)
+    end
+
+    test "merges two columns into one", %{scratch: scratch} = context do
+      term = {:coalesce, [{:name, [:title]}, {:concat, [{:name, [:code]}, {:value, "?"}]}]}
+
+      rows = fn ->
+        insert_row("my_app_task", code: "a", title: "One")
+        insert_row("my_app_task", code: "b", title: nil)
+      end
+
+      apply_scenario(context, rows, [computed_add(:label, :string, term, optional: true)])
+
+      route(scratch, fn ->
+        assert rows_by_code(["label"]) == [["One"], ["b?"]]
+      end)
+    end
+
+    test "reads a field through a to-one", %{scratch: scratch} = context do
+      rows = fn ->
+        insert_row("my_app_place", name: "Bergen")
+        place_id = insert_row("my_app_place", name: "Oslo")
+
+        insert_row("my_app_task", code: "a", place_id: place_id)
+        insert_row("my_app_task", code: "b", place_id: nil)
+      end
+
+      ops = [computed_add(:city, :string, {:name, [:place, :name]}, optional: true)]
+
+      apply_scenario(context, rows, ops)
+
+      route(scratch, fn ->
+        assert rows_by_code(["city"]) == [["Oslo"], [nil]]
+      end)
+    end
+
+    test "counts and picks the most common over a join table", %{scratch: scratch} = context do
+      rows = fn ->
+        task_id = insert_row("my_app_task", code: "a")
+
+        Enum.each(["y", "x", "y"], &link_tag(task_id, &1))
+
+        insert_row("my_app_task", code: "b")
+      end
+
+      ops = [
+        computed_add(:tag_count, :integer, {:count, {:relationship, [:tags]}}, optional: true),
+        computed_add(
+          :main_tag,
+          :string,
+          {:most_common, {:relationship, [:tags]}, :name},
+          optional: true
+        )
+      ]
+
+      apply_scenario(context, rows, ops)
+
+      route(scratch, fn ->
+        assert rows_by_code(["tag_count", "main_tag"]) == [[3, "y"], [0, nil]]
+      end)
+    end
+
+    test "reads an attribute an earlier op added with a constant backfill",
+         %{scratch: scratch} = context do
+      ops = [
+        %{
+          op: :add_attribute,
+          entity: MyApp.Task,
+          name: :prefix,
+          type: :string,
+          opts: [backfill: "n-"],
+          line: 2
+        },
+        computed_add(
+          :label,
+          :string,
+          {:concat, [{:name, [:prefix]}, {:name, [:code]}]},
+          optional: true
+        )
+      ]
+
+      apply_scenario(context, fn -> insert_row("my_app_task", code: "a") end, ops)
+
+      route(scratch, fn ->
+        assert rows_by_code(["label"]) == [["n-a"]]
+      end)
+    end
+
+    test "reads an attribute whose type an earlier op changed", %{scratch: scratch} = context do
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :rank,
+          changes: [type: :string],
+          line: 2
+        },
+        # COALESCE refuses a bigint beside text, so this fails if the fill runs before the change.
+        computed_add(
+          :label,
+          :string,
+          {:coalesce, [{:name, [:rank]}, {:value, "none"}]},
+          optional: true
+        )
+      ]
+
+      apply_scenario(context, fn -> insert_row("my_app_task", code: "a", rank: 5) end, ops)
+
+      route(scratch, fn ->
+        assert rows_by_code(["rank", "label"]) == [["5", "5"]]
+      end)
+    end
+
+    test "reads an attribute under the name an earlier op gave it",
+         %{scratch: scratch} = context do
+      ops = [
+        %{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :heading, line: 2},
+        computed_add(:copy, :string, {:name, [:heading]}, optional: true)
+      ]
+
+      apply_scenario(context, fn -> insert_row("my_app_task", code: "a", title: "One") end, ops)
+
+      route(scratch, fn ->
+        assert rows_by_code(["heading", "copy"]) == [["One", "One"]]
+      end)
+    end
+
+    test "fills the sort and search keys of a computed string", %{scratch: scratch} = context do
+      ops = [computed_add(:copy, :string, {:name, [:title]}, optional: true)]
+
+      apply_scenario(context, fn -> insert_row("my_app_task", code: "a", title: @note) end, ops)
+
+      route(scratch, fn ->
+        assert rows_by_code(["copy", "copy_$sort", "copy_$search"]) == [
+                 [@note, SortKey.compute(@note), SortKey.search_key(@note)]
+               ]
+      end)
+    end
+
+    test "refuses a unique attribute whose computed values repeat, schema unchanged", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      ops = [computed_add(:copy, :string, {:name, [:title]}, optional: true, unique: true)]
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_row("my_app_task", code: "a", title: "same")
+        insert_row("my_app_task", code: "b", title: "same")
+
+        assert_error RuntimeError,
+                     ~r/found 1 duplicate key in "my_app_task" over \("copy"\)/,
+                     fn ->
+                       apply_file(ops, create, first_model)
+                     end
+
+        refute has_column?("my_app_task", "copy")
+      end)
+    end
+  end
+
   describe "run/3, a computed fill breaking its member's declared rules" do
     setup %{chain: [create | _rest], first_model: first_model} do
       [create: create, first_model: first_model]
