@@ -231,8 +231,8 @@ defmodule HologramSyncBenchmark.Cases.Catchups do
         "#{count} anonymous clients",
         "the same wave at #{Enum.join(limits, ", ")} catch-ups at once, with sync's database " <>
           "pool the same size, each on a fresh log and fresh nodes",
-        "a wave passes when every client is caught up within #{opts[:wave_limit]} s, holding " <>
-          "every write it should and no other"
+        "a wave passes when every client is caught up within #{opts[:wave_limit]} s of the " <>
+          "first one coming back, holding every write it should and no other"
       ]
   end
 

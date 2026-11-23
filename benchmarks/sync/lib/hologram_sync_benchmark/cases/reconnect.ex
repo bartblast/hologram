@@ -166,7 +166,7 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
 
     # A session reads its gap when its turn comes, so the last one's holds the writes made during
     # the wave as well.
-    writes = opts[:gap_writes] + opts[:wave_writes] * opts[:wave_limit]
+    writes = opts[:gap_writes] + most_wave_writes(opts)
 
     if writes > reachable_rows(Enum.min(counts), opts, source) do
       raise ArgumentError, "#{writes} writes need a row each, more than the fewest clients read"
@@ -178,6 +178,12 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
     end
 
     :ok
+  end
+
+  # The writer has to last as long as the wave's wait: the limit, plus up to the spread before the
+  # first client comes back.
+  defp most_wave_writes(opts) do
+    opts[:wave_writes] * (opts[:wave_limit] + ceil(opts[:wave_spread_ms] / 1_000))
   end
 
   # The tenants case's writes walk the tenants with clients connected.
@@ -351,7 +357,11 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
   # stops and then wait forever for a stop nobody sends.
   defp await_wave(returning, writer, opts) do
     :ok = Clients.come_back_all(returning, opts[:wave_spread_ms])
-    _reports = Clients.await_caught_up(returning, opts[:wave_limit] * 1_000)
+
+    # The limit runs from the first client coming back, which can be as late as the spread, so
+    # this waits for both and `slow_wave?/2` holds the step to the limit.
+    timeout_ms = opts[:wave_limit] * 1_000 + opts[:wave_spread_ms]
+    _reports = Clients.await_caught_up(returning, timeout_ms)
 
     stop_wave_writer(writer)
   catch
@@ -373,7 +383,7 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
         writing = %{
           first_number: List.last(prepared.numbers) + 1,
           gap_ms: 1_000 / rate,
-          limit: rate * opts[:wave_limit],
+          limit: most_wave_writes(opts),
           peer: peer,
           started_at: now_ms(),
           write: prepared.write

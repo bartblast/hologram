@@ -517,7 +517,7 @@ Run 2026-11-22 13:25 UTC on commit c4a007596, Apple M1 Pro, 10 cores, 16 GB, mac
 - 0 writes per second while they do, each to a row of its own
 - 1000 anonymous clients
 - the same wave at 1, 2, 4, 8, 16 catch-ups at once, with sync's database pool the same size, each on a fresh log and fresh nodes
-- a wave passes when every client is caught up within 120 s, holding every write it should and no other
+- a wave passes when every client is caught up within 120 s of the first one coming back, holding every write it should and no other
 
 Queue cleared after the last client came back: **1.61 s at 1, 0.01 s at 2, 0.02 s at 4, 0.01 s at 8, 0.01 s at 16**
 
@@ -543,7 +543,7 @@ Run 2026-11-22 14:33 UTC on commit eb20796a4, Apple M1 Pro, 10 cores, 16 GB, mac
 - 0 writes per second while they do, each to a row of its own
 - 1000 anonymous clients
 - the same wave at 1, 2, 3, 4, 5, 6, 7, 8, 16 catch-ups at once, with sync's database pool the same size, each on a fresh log and fresh nodes
-- a wave passes when every client is caught up within 120 s, holding every write it should and no other
+- a wave passes when every client is caught up within 120 s of the first one coming back, holding every write it should and no other
 
 Queue cleared after the last client came back: **7.56 s at 1, 4.40 s at 2, 3.44 s at 3, 2.91 s at 4, 2.61 s at 5, 2.41 s at 6, 2.24 s at 7, 2.14 s at 8, 1.96 s at 16**
 
