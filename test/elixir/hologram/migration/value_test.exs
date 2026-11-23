@@ -690,6 +690,368 @@ defmodule Hologram.Migration.ValueTest do
     end
   end
 
+  describe "read_fn/2 and choose_fn!/2, a query body" do
+    defp fn_backfill(expression), do: backfill(expression)
+
+    defp compiled_refusal(body) do
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          compile_migration("20260813091522", body)
+        end
+
+      error.message
+    end
+
+    defp op_with(expression, extra) do
+      """
+      #{extra}
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: #{expression}
+      end
+      """
+    end
+
+    test "lowers a body whose outermost part is a word, naming its arguments" do
+      assert %Value{args: [:title], term: {:coalesce, [{:name, [:title]}, {:value, "x"}]}} =
+               fn_backfill(~s|fn title -> coalesce(title, "x") end|)
+    end
+
+    test "lowers a piped word body" do
+      assert %Value{
+               term: {:at, {:split, {:name, [:title]}, {:value, ", "}}, {:value, 0}}
+             } = fn_backfill(~s[fn title -> title |> split(", ") |> at(0) end])
+    end
+
+    test "lowers a body that's only a field" do
+      assert %Value{args: [:title], term: {:name, [:title]}} =
+               fn_backfill("fn title -> title end")
+    end
+
+    test "lowers a body that's only a path" do
+      assert %Value{args: [:trip], term: {:name, [:trip, :currency]}} =
+               fn_backfill("fn trip -> trip.currency end")
+    end
+
+    test "lowers query(...) to its inner expression" do
+      assert %Value{args: [:first, :last], term: {:concat, operands}} =
+               fn_backfill(~s|fn first, last -> query(first <> " " <> last) end|)
+
+      assert operands == [{:name, [:first]}, {:value, " "}, {:name, [:last]}]
+    end
+
+    test "reads a pinned attribute at the op" do
+      body = """
+      @fallback "a"
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title -> coalesce(title, ^@fallback) end
+      end
+      @fallback "b"
+      """
+
+      [op] = compile_migration("20260813091522", body).__hologram_migration__().ops
+
+      assert %Value{term: {:coalesce, [{:name, [:title]}, {:value, "a"}]}} = op.opts[:backfill]
+    end
+
+    test "reads the rows pointing at this one, piped and not" do
+      for expression <- [
+            "fn id -> MyApp.Stop |> filter(trip_id == ^id) |> count() end",
+            "fn id -> count(filter(MyApp.Stop, trip_id == ^id)) end"
+          ] do
+        assert %Value{args: [:id], term: {:count, {:referencing, MyApp.Stop, :trip}}} =
+                 fn_backfill(expression)
+      end
+
+      for expression <- [
+            "fn id -> MyApp.Stop |> filter(trip_id == ^id) |> most_common(currency) end",
+            "fn id -> most_common(filter(MyApp.Stop, trip_id == ^id), currency) end"
+          ] do
+        assert %Value{term: {:most_common, {:referencing, MyApp.Stop, :trip}, :currency}} =
+                 fn_backfill(expression)
+      end
+    end
+
+    test "expands the alias of the queried type where the op is written" do
+      body = """
+      alias MyApp.Stop
+      change_entity MyApp.Trip do
+        add_attribute :value, :integer, backfill: fn id -> Stop |> filter(trip_id == ^id) |> count() end
+      end
+      """
+
+      [op] = compile_migration("20260813091522", body).__hologram_migration__().ops
+
+      assert %Value{term: {:count, {:referencing, MyApp.Stop, :trip}}} = op.opts[:backfill]
+    end
+
+    test "refuses a query with another condition" do
+      for condition <- ["trip_id != ^id", "name == ^id", "trip_id == ^other", "trip_id == 1"] do
+        assert refusal("fn id -> MyApp.Stop |> filter(#{condition}) |> count() end") =~
+                 "a backfill fn queries the rows pointing at this one"
+      end
+    end
+
+    test "refuses a query pinning id when id isn't an argument" do
+      assert refusal("fn title -> MyApp.Stop |> filter(trip_id == ^id) |> count() end") =~
+               "with id among the fn's arguments"
+    end
+
+    test "refuses a query that doesn't end in a word" do
+      assert refusal("fn id -> MyApp.Stop |> filter(trip_id == ^id) end") =~
+               "a query in a backfill ends in count or most_common"
+    end
+
+    test "refuses a body that's only a constant, naming the constant form" do
+      for expression <- [~s(fn title -> "x" end), "fn title -> 1 end", "fn title -> ^title end"] do
+        assert refusal(expression) =~ "for one value for every row, write it without the fn"
+      end
+    end
+
+    test "refuses a body that's only a module attribute, naming the constant form" do
+      assert refusal("fn title -> @fallback end") =~ "like backfill: ^@default"
+    end
+
+    test "refuses query(...) holding only a constant" do
+      assert refusal(~s|fn title -> query("x") end|) =~ "write it without the fn"
+    end
+
+    test "accepts a pinned attribute named like an argument" do
+      body = """
+      @title "Untitled"
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title -> coalesce(title, ^@title) end
+      end
+      """
+
+      [op] = compile_migration("20260813091522", body).__hologram_migration__().ops
+
+      assert %Value{term: {:coalesce, [{:name, [:title]}, {:value, "Untitled"}]}} =
+               op.opts[:backfill]
+    end
+
+    test "refuses a body reading nothing of the row, naming the constant form" do
+      for expression <- [
+            ~s|fn title -> coalesce("a", "b") end|,
+            ~s|fn title -> query("a" <> "b") end|,
+            "fn title -> ~D[2020-01-01] end",
+            "fn title -> [1] end",
+            "fn title -> %{a: 1} end",
+            "fn title -> coalesce(^@a, ^@b) end"
+          ] do
+        assert refusal(expression) =~ "write it without the fn"
+      end
+    end
+
+    test "refuses query(...) holding only a pin" do
+      assert refusal("fn title -> query(^other) end") =~ "write it without the fn"
+    end
+
+    test "reads a piped query(...) as the marker" do
+      assert %Value{args: [:title], term: {:name, [:title]}} =
+               fn_backfill("fn title -> title |> query() end")
+    end
+
+    test "refuses a module defining query/1 beside a piped marker" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title -> title |> query() end
+      end
+
+      defp query(value), do: value
+      """
+
+      assert compiled_refusal(body) =~ "can't define query/1 beside it"
+    end
+
+    test "refuses a word an import below the op changes" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :integer, backfill: fn tags -> count(tags) end
+      end
+
+      import Enum, only: [count: 1]
+      """
+
+      assert compiled_refusal(body) =~
+               "calls count/1, which an import changes between the op and the end of the " <>
+                 "module - put the import at the top of the module"
+    end
+
+    test "compares a captured call's import too" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :integer, backfill: fn tags -> Enum.map(tags, &count/1) end
+      end
+
+      import Enum, only: [count: 1]
+      """
+
+      assert compiled_refusal(body) =~ "calls count/1, which an import changes"
+    end
+
+    test "refuses a pinned call an import changes below the op, in each form" do
+      for backfill <- [
+            ~s|fn title -> query(coalesce(title, ^to_iso8601(~U[2020-01-01 00:00:00Z]))) end|,
+            ~s|coalesce(title, ^to_iso8601(~U[2020-01-01 00:00:00Z]))|,
+            ~s|^to_iso8601(~U[2020-01-01 00:00:00Z])|
+          ] do
+        body = """
+        import DateTime, only: [to_iso8601: 1]
+
+        change_entity MyApp.Trip do
+          add_attribute :value, :string, backfill: #{backfill}
+        end
+
+        import DateTime, only: []
+        import NaiveDateTime, only: [to_iso8601: 1]
+        """
+
+        assert compiled_refusal(body) =~
+                 "a migration op calls to_iso8601/1, which an import changes between the op " <>
+                   "and the end of the module"
+      end
+    end
+
+    test "doesn't count a capture's name as reading an argument" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn count -> Enum.map(["a"], &count/1) end
+      end
+
+      defp count(value), do: value
+      """
+
+      assert compiled_refusal(body) =~ "write it without the fn"
+    end
+
+    test "refuses a query with no filter, naming the shape it takes" do
+      for expression <- [
+            "fn id -> MyApp.Stop |> count() end",
+            "fn id -> count(MyApp.Stop) end",
+            "fn id -> MyApp.Stop |> take(1) |> count() end",
+            "fn id -> MyApp.Stop |> filter(true) |> count() end"
+          ] do
+        assert refusal(expression) =~ "a backfill fn queries the rows pointing at this one"
+      end
+    end
+
+    test "refuses a module defining query/1 beside a nested or piped call" do
+      for expression <- [
+            "fn title -> String.upcase(query(title)) end",
+            "fn title -> title |> query() |> String.upcase() end"
+          ] do
+        assert compiled_refusal(op_with(expression, "defp query(value), do: value")) =~
+                 "can't define query/1 beside it"
+      end
+    end
+
+    test "refuses an Elixir body using only its own variables" do
+      for expression <- [
+            ~s|fn title -> x = "a"; x end|,
+            "fn title -> for x <- [1], do: x end"
+          ] do
+        assert refusal(expression) =~ "write it without the fn"
+      end
+    end
+
+    test "refuses a query naming its type through an attribute" do
+      assert refusal("fn id -> @mod.Stop |> filter(trip_id == ^id) |> count() end") =~
+               "names the type it queries by its module"
+    end
+
+    test "refuses no arguments" do
+      assert refusal(~s(fn -> "x" end)) =~ "write it without the fn"
+    end
+
+    test "refuses an unpinned attribute in a query body, naming the pin" do
+      assert refusal("fn title -> coalesce(title, @fallback) end") =~ "pinned: ^@fallback"
+    end
+
+    test "refuses a name that isn't an argument" do
+      assert refusal(~s|fn title -> coalesce(title, nickname) end|) =~
+               "reads nickname, which isn't among its arguments - add it: " <>
+                 "fn title, nickname -> ..."
+    end
+
+    test "refuses an argument that's pinned" do
+      assert refusal(~s|fn title -> coalesce(^title, "x") end|) =~
+               "reads its argument title by name, not pinned"
+    end
+
+    test "refuses each malformed argument list" do
+      for expression <- [
+            "fn %{a: a} -> a end",
+            "fn a \\\\ 1 -> a end",
+            "fn _ -> 1 end",
+            "fn a when is_nil(a) -> a end"
+          ] do
+        assert refusal(expression) =~ "takes bare field names as its arguments"
+      end
+    end
+
+    test "refuses a repeated argument" do
+      assert refusal("fn a, a -> a end") =~ "names a twice"
+    end
+
+    test "refuses several clauses" do
+      assert refusal("fn nil -> 1; a -> a end") =~ "has one clause"
+    end
+
+    test "treats a word the file imports as Elixir" do
+      message =
+        compiled_refusal(op_with("fn title -> count(title) end", "import Enum, only: [count: 1]"))
+
+      assert message =~ "an Elixir body can't run yet"
+    end
+
+    test "treats a word the module defines below the op as Elixir" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title -> coalesce(title, @fallback) end
+      end
+
+      defp coalesce(left, right), do: left || right
+      """
+
+      assert compiled_refusal(body) =~ "an Elixir body can't run yet"
+    end
+
+    test "lets the word win inside query(...), over a function of that name" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title -> query(coalesce(title, "x")) end
+      end
+
+      def coalesce(left, right), do: left || right
+      """
+
+      [op] = compile_migration("20260813091522", body).__hologram_migration__().ops
+
+      assert %Value{term: {:coalesce, [{:name, [:title]}, {:value, "x"}]}} = op.opts[:backfill]
+    end
+
+    test "refuses a module defining query/1 beside a marked body" do
+      body = """
+      change_entity MyApp.Trip do
+        add_attribute :value, :string, backfill: fn title -> query(title) end
+      end
+
+      def query(value), do: value
+      """
+
+      assert compiled_refusal(body) =~ "can't define query/1 beside it - rename the function"
+    end
+
+    test "refuses an operator beside a word, naming query(...)" do
+      assert refusal(~s|fn title -> coalesce(title, "x") <> "!" end|) =~
+               "wrap the whole body in query(...)"
+    end
+
+    test "refuses an Elixir body for now" do
+      assert refusal("fn title -> String.upcase(title) end") =~ "an Elixir body can't run yet"
+    end
+  end
+
   describe "lower/2, refusals" do
     test "refuses a call that is no word, naming the words and the pin" do
       assert refusal("upcase(title)") ==
@@ -776,14 +1138,9 @@ defmodule Hologram.Migration.ValueTest do
       assert refusal("@mod.Tier") =~ "pinned: ^@mod.Tier"
     end
 
-    test "refuses a fn for now" do
-      assert refusal("fn title -> title end") ==
-               "a backfill can't take a fn yet - write the expression without it"
-    end
-
     test "refuses a nested fn" do
-      assert refusal("coalesce(title, fn x -> x end)") ==
-               "a backfill can't take a fn yet - write the expression without it"
+      assert refusal("coalesce(title, fn x -> x end)") =~
+               "a fn goes at the top of backfill:, got one inside the expression"
     end
 
     test "refuses a capture naming the fn form" do

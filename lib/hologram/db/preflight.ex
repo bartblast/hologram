@@ -153,7 +153,7 @@ defmodule Hologram.DB.Preflight do
   """
   @spec check_computed_fill!(%{atom => any}) :: :ok
   def check_computed_fill!(op) do
-    {fragment, params} = op.sql
+    {fragment, joins, params} = op.sql
 
     op.table
     |> standing_unique_indexes(op.column, not_ready_invalid_indexes())
@@ -164,7 +164,8 @@ defmodule Hologram.DB.Preflight do
           index.columns,
           op.column,
           index.nulls_distinct,
-          fragment
+          fragment,
+          joins
         )
 
       {:ok, %{rows: [[count]]}} = Connection.query(statement, params)

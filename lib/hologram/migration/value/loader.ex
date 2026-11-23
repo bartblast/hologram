@@ -19,7 +19,9 @@ defmodule Hologram.Migration.Value.Loader do
   an id no row holds, each with the related data the given tree of reads names (see
   `Hologram.Migration.Value.Evaluator.reads/1`).
   """
-  @spec load(%{atom => map}, module, list(String.t()), %{module => %{atom => any}}) ::
+  @spec load(%{(atom | {module, atom}) => map}, module, list(String.t()), %{
+          module => %{atom => any}
+        }) ::
           list(%{atom => any})
   def load(reads, entity_type, ids, mapping) do
     # One snapshot where the caller isn't in a transaction already, since a load is several
@@ -37,12 +39,41 @@ defmodule Hologram.Migration.Value.Loader do
   defp attach(rows, _entry, reads, _mapping) when reads == %{}, do: rows
 
   defp attach(rows, entry, reads, mapping) do
-    Enum.reduce(reads, rows, fn {name, subtree}, acc ->
-      case join_table(entry, name) do
-        nil -> attach_to_one(acc, entry, name, subtree, mapping)
-        join_table -> attach_to_many(acc, join_table, name, subtree, mapping)
-      end
+    Enum.reduce(reads, rows, fn
+      {{type, ref}, subtree}, acc ->
+        attach_referencing(acc, type, ref, subtree, mapping)
+
+      {name, subtree}, acc ->
+        case join_table(entry, name) do
+          nil -> attach_to_one(acc, entry, name, subtree, mapping)
+          join_table -> attach_to_many(acc, join_table, name, subtree, mapping)
+        end
     end)
+  end
+
+  defp attach_referencing(rows, type, ref, subtree, mapping) do
+    entry = Map.fetch!(mapping, type)
+    column = Enum.find(entry.columns, &(&1.source == {:relationship, ref}))
+
+    statement = """
+    SELECT "id"
+    FROM #{qualified(entry.table)}
+    WHERE #{Mapper.quote_identifier(column.name)} = ANY($1::uuid[])
+    ORDER BY "id"
+    """
+
+    {:ok, %{rows: id_rows}} = Connection.query(statement, [encode_ids(Map.keys(rows))])
+
+    ids = Enum.map(id_rows, fn [id] -> Codec.decode(id, :uuid) end)
+    reference = reference_key(ref)
+
+    grouped =
+      entry
+      |> load_rows(ids, subtree, mapping)
+      |> Map.values()
+      |> Enum.group_by(&Map.get(&1, reference))
+
+    Map.new(rows, fn {id, row} -> {id, Map.put(row, {type, ref}, Map.get(grouped, id, []))} end)
   end
 
   defp attach_to_many(rows, join_table, name, subtree, mapping) do

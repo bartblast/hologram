@@ -35,6 +35,7 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
     destination: {:string, []},
     external: {:uuid, []},
     first: {:string, []},
+    top_grade: {:enum, [values: [MyApp.Abc, MyApp.Zed]]},
     kind: {:enum, [values: [:live, :old, :draft]]},
     last: {:string, []},
     seats: {:integer, []},
@@ -47,6 +48,7 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
   @tag_attributes [
     code: {:integer, []},
     flag: {:boolean, []},
+    grade: {:enum, [values: [MyApp.Zed, MyApp.Abc]]},
     label: {:string, []},
     level: {:enum, [values: [:zed, :mid, :abc]]},
     moment: {:datetime, []},
@@ -131,6 +133,14 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
              type: [MyApp.Trip],
              opts: [],
              line: 8
+           },
+           %{
+             op: :add_relationship,
+             entity: MyApp.Tag,
+             name: :trip,
+             type: MyApp.Trip,
+             opts: [optional: true],
+             line: 9
            }
          ]
 
@@ -156,11 +166,11 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
     model = Model.fold(Model.empty(), @ops)
     mapping = Mapper.derive_from_model!(model)
     resolved = Value.resolve!(%Value{term: term}, model, MyApp.Trip, target)
-    {fragment, params} = SQL.render(resolved, MyApp.Trip, mapping, target)
+    {fragment, joins, params} = SQL.render(resolved, MyApp.Trip, mapping, target)
 
     statement = """
     SELECT "$r0"."id", #{fragment}
-    FROM "hologram_data"."my_app_trip" AS "$r0"
+    FROM "hologram_data"."my_app_trip" AS "$r0" #{joins}
     ORDER BY "$r0"."id"
     """
 
@@ -228,6 +238,8 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
 
   defp cast("level"), do: ~s("hologram_data"."my_app_tag_level_$enum")
 
+  defp cast("grade"), do: ~s("hologram_data"."my_app_tag_grade_$enum")
+
   defp cast("code"), do: "int8"
 
   defp cast("flag"), do: "boolean"
@@ -249,6 +261,8 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
   defp cast("owner_id"), do: "uuid"
 
   defp cast("parent_id"), do: "uuid"
+
+  defp cast("trip_id"), do: "uuid"
 
   defp cast("at"), do: "timestamptz"
 
@@ -296,7 +310,32 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
     trip
   end
 
+  # A trip with one tag pointing at it for each given map of fields, its string's sort key beside
+  # it, as a write stores it.
+  defp insert_trip_pointed_at(tags) do
+    trip = insert("my_app_trip", %{"seats" => 1})
+
+    for fields <- tags do
+      with_key =
+        case fields do
+          %{"label" => label} when is_binary(label) ->
+            Map.put_new(fields, "label_$sort", SortKey.compute(label))
+
+          _other ->
+            fields
+        end
+
+      insert("my_app_tag", Map.put(with_key, "trip_id", uuid(trip)))
+    end
+
+    trip
+  end
+
   defp most_common(attribute), do: {:most_common, {:relationship, [:tags]}, attribute}
+
+  defp pointing_common(attribute) do
+    {:most_common, {:referencing, MyApp.Tag, :trip}, attribute}
+  end
 
   defp prepare do
     model = Model.fold(Model.empty(), @ops)
@@ -456,6 +495,112 @@ defmodule Hologram.Migration.Value.EquivalenceTest do
           {:name, [:parent, :owner_id]},
           %{kind: :relationship, line: 9, name: :value, type: MyApp.User}
         )
+      end)
+    end
+  end
+
+  describe "the rows pointing at this one" do
+    test "count, over none and some, leaving out rows pointing elsewhere", %{scratch: scratch} do
+      route(scratch, fn ->
+        prepare()
+
+        insert_trip_pointed_at([])
+        insert_trip_pointed_at([%{"code" => 1}])
+        insert_trip_pointed_at([%{"code" => 1}, %{"code" => 2}, %{"code" => 3}])
+        insert("my_app_tag", %{"code" => 9})
+
+        assert_same(
+          {:count, {:referencing, MyApp.Tag, :trip}},
+          attribute_target(:integer)
+        )
+      end)
+    end
+
+    test "count on a self-reference", %{scratch: scratch} do
+      route(scratch, fn ->
+        prepare()
+
+        root = insert("my_app_trip", %{"seats" => 1})
+        child = insert("my_app_trip", %{"parent_id" => uuid(root)})
+        insert("my_app_trip", %{"parent_id" => uuid(root)})
+        insert("my_app_trip", %{"parent_id" => uuid(child)})
+
+        assert_same(
+          {:count, {:referencing, MyApp.Trip, :parent}},
+          attribute_target(:integer)
+        )
+      end)
+    end
+
+    test "most_common of strings, on ties and sort order", %{scratch: scratch} do
+      route(scratch, fn ->
+        prepare()
+
+        for labels <- [
+              [],
+              [nil, nil],
+              ["a"],
+              ["a", "b", "b"],
+              [nil, nil, "a"],
+              ["Zebra", "apple"],
+              ["apple", "Zebra"],
+              ["Apple", "apple"],
+              ["żółć", "zebra"],
+              ["e\u0301", "é"],
+              ["b", "a", "b", "a", "c"]
+            ] do
+          insert_trip_pointed_at(Enum.map(labels, &%{"label" => &1}))
+        end
+
+        assert_same(pointing_common(:label), attribute_target(:string))
+      end)
+    end
+
+    test "most_common orders an enum by declared position, not its label", %{scratch: scratch} do
+      route(scratch, fn ->
+        prepare()
+
+        for levels <- [["abc", "zed"], ["zed", "abc"], ["mid", "abc", "mid"], []] do
+          insert_trip_pointed_at(Enum.map(levels, &%{"level" => &1}))
+        end
+
+        # Copied into an enum declaring the same values in another order, so the copy can't lean
+        # on the target's order.
+        target = %{attribute_target(:enum, values: [:abc, :mid, :zed]) | name: :tier}
+
+        assert_same(pointing_common(:level), target)
+      end)
+    end
+
+    test "most_common orders module-valued enum values by declared position", %{
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        prepare()
+
+        for grades <- [
+              [MyApp.Abc, MyApp.Zed],
+              [MyApp.Zed, MyApp.Abc],
+              [MyApp.Abc, MyApp.Abc, MyApp.Zed]
+            ] do
+          insert_trip_pointed_at(Enum.map(grades, &%{"grade" => Codec.encode(&1, :enum)}))
+        end
+
+        target = %{attribute_target(:enum, values: [MyApp.Abc, MyApp.Zed]) | name: :top_grade}
+
+        assert_same(pointing_common(:grade), target)
+      end)
+    end
+
+    test "most_common of integers on a tie", %{scratch: scratch} do
+      route(scratch, fn ->
+        prepare()
+
+        for codes <- [[2, 1], [1, 2, 2], [3, 3, 1, 1]] do
+          insert_trip_pointed_at(Enum.map(codes, &%{"code" => &1}))
+        end
+
+        assert_same(pointing_common(:code), attribute_target(:integer))
       end)
     end
   end

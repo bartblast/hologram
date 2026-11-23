@@ -8,7 +8,8 @@ defmodule Hologram.Migration.Value.Evaluator do
   # in their native values: decoded, enums as atoms, uuids as lowercase canonical strings. For each
   # read `reads/1` names it also holds the related data: under a to-one's name the related row, in
   # the same shape and nil when the reference is nil, and under a stored to-many's name a list of
-  # rows. Hologram.Migration.Value.Loader builds rows in this shape.
+  # rows, and under `{type, relationship}` the rows of that type whose to-one points at this row.
+  # Hologram.Migration.Value.Loader builds rows in this shape.
 
   alias Hologram.Migration.Value.Resolver
   alias Hologram.Query.Words
@@ -40,15 +41,15 @@ defmodule Hologram.Migration.Value.Evaluator do
     |> Words.coalesce()
   end
 
-  def evaluate({:count, {:relationship, path}}, row) do
+  def evaluate({:count, set}, row) do
     row
-    |> read_set(path)
+    |> read_set(set)
     |> Words.count()
   end
 
-  def evaluate({:most_common, {:relationship, path}, attribute, _type, ranks}, row) do
+  def evaluate({:most_common, set, attribute, _type, ranks}, row) do
     row
-    |> read_set(path)
+    |> read_set(set)
     |> Enum.map(&Map.get(&1, attribute))
     |> Words.most_common(rank_map(ranks))
   end
@@ -57,7 +58,7 @@ defmodule Hologram.Migration.Value.Evaluator do
   Returns the related data the given resolved term reads beyond the row's own fields, as a tree: a
   map from each relationship to what's read through it.
   """
-  @spec reads(Resolver.resolved()) :: %{atom => map}
+  @spec reads(Resolver.resolved()) :: %{(atom | {module, atom}) => map}
   def reads({:value, _value, _type}), do: %{}
 
   def reads({:name, path, _type}) do
@@ -72,9 +73,9 @@ defmodule Hologram.Migration.Value.Evaluator do
 
   def reads({:coalesce, values}), do: merge_reads(values)
 
-  def reads({:count, {:relationship, path}}), do: tree(path)
+  def reads({:count, set}), do: set_reads(set)
 
-  def reads({:most_common, {:relationship, path}, _attribute, _type, _ranks}), do: tree(path)
+  def reads({:most_common, set, _attribute, _type, _ranks}), do: set_reads(set)
 
   defp deep_merge(left, right) do
     Map.merge(left, right, fn _name, left_tree, right_tree ->
@@ -106,15 +107,23 @@ defmodule Hologram.Migration.Value.Evaluator do
     |> read_path(rest)
   end
 
-  defp read_set(nil, _path), do: []
+  defp read_path_set(nil, _path), do: []
 
-  defp read_set(row, [name]), do: Map.get(row, name, [])
+  defp read_path_set(row, [name]), do: Map.get(row, name, [])
 
-  defp read_set(row, [hop | rest]) do
+  defp read_path_set(row, [hop | rest]) do
     row
     |> Map.get(hop)
-    |> read_set(rest)
+    |> read_path_set(rest)
   end
+
+  defp read_set(row, {:referencing, type, ref}), do: Map.get(row, {type, ref}, [])
+
+  defp read_set(row, {:relationship, path}), do: read_path_set(row, path)
+
+  defp set_reads({:referencing, type, ref}), do: %{{type, ref} => %{}}
+
+  defp set_reads({:relationship, path}), do: tree(path)
 
   defp tree(path) do
     path

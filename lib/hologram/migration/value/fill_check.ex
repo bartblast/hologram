@@ -10,6 +10,7 @@ defmodule Hologram.Migration.Value.FillCheck do
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Validator
   alias Hologram.Migration.Value.Check
+  alias Hologram.Migration.Value.SQL
 
   @page_size 1000
 
@@ -28,11 +29,11 @@ defmodule Hologram.Migration.Value.FillCheck do
   """
   @spec check_bytes!(%{atom => any}) :: :ok
   def check_bytes!(%{max_bytes: max_bytes, type: :string} = op) when is_integer(max_bytes) do
-    {fragment, params} = op.sql
+    {fragment, joins, params} = op.sql
     column = Mapper.quote_identifier(op.column)
 
     statement =
-      ~s|SELECT COUNT(*) FROM #{table(op)} AS "$r0" WHERE "$r0".#{column} IS NULL | <>
+      ~s|SELECT COUNT(*) FROM #{table(op)} AS "$r0" #{joins} WHERE "$r0".#{column} IS NULL | <>
         ~s|AND octet_length(#{fragment}) > $#{length(params) + 1}|
 
     {:ok, %{rows: [[count]]}} = Connection.query(statement, Enum.concat(params, [max_bytes]))
@@ -90,15 +91,14 @@ defmodule Hologram.Migration.Value.FillCheck do
   @spec fill_nulls!(%{atom => any}) :: :ok
   # sobelow_skip ["SQL.Query"]
   def fill_nulls!(op) do
-    {fragment, params} = op.sql
-    column = Mapper.quote_identifier(op.column)
+    {_fragment, _joins, params} = op.sql
 
     create_filled_ids!()
 
+    update = SQL.fill_statement(op.table, op.column, op.sql, nulls_only: true, returning: true)
+
     statement =
-      ~s|WITH "$filled" AS (UPDATE #{table(op)} AS "$r0" SET #{column} = #{fragment} | <>
-        ~s|WHERE "$r0".#{column} IS NULL RETURNING "$r0"."id") | <>
-        ~s|INSERT INTO #{@filled_ids} SELECT "id" FROM "$filled"|
+      ~s|WITH "$filled" AS (#{update}) INSERT INTO #{@filled_ids} SELECT "id" FROM "$filled"|
 
     query_fill!(op, statement, params)
   end

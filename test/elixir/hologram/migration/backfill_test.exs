@@ -20,6 +20,7 @@ defmodule Hologram.Migration.BackfillTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.SortKey
   alias Hologram.Entity.Model
+  alias Hologram.Migration.Renderer
   alias Hologram.Migration.Value
 
   @context %{
@@ -1707,6 +1708,153 @@ defmodule Hologram.Migration.BackfillTest do
                      fn ->
                        apply_file([add_to_one("nope")], create, first_model)
                      end
+      end)
+    end
+  end
+
+  describe "run/3, a fn reading the rows pointing at this one" do
+    setup do
+      attribute = fn entity, name, line ->
+        %{
+          op: :add_attribute,
+          entity: entity,
+          name: name,
+          type: :string,
+          opts: [optional: true],
+          line: line
+        }
+      end
+
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 2},
+          attribute.(MyApp.Task, :code, 3),
+          %{op: :create_entity, entity: MyApp.Stop, line: 4},
+          attribute.(MyApp.Stop, :currency, 5),
+          %{
+            op: :add_relationship,
+            entity: MyApp.Stop,
+            name: :task,
+            type: MyApp.Task,
+            opts: [optional: true],
+            line: 6
+          }
+        ])
+
+      [create: create, first_model: Model.fold(Model.empty(), create.ops)]
+    end
+
+    defp referencing_rows do
+      busy = insert_row("my_app_task", code: "a")
+      insert_row("my_app_task", code: "b")
+
+      for currency <- ["USD", "EUR", "EUR"] do
+        insert_row("my_app_stop", currency: currency, task_id: busy)
+      end
+
+      insert_row("my_app_stop", currency: "GBP")
+    end
+
+    test "fills a count and a most_common", %{scratch: scratch} = context do
+      set = {:referencing, MyApp.Stop, :task}
+
+      ops = [
+        computed_add(:stop_count, :integer, {:count, set}, optional: true),
+        computed_add(:currency, :string, {:most_common, set, :currency}, optional: true)
+      ]
+
+      apply_scenario(context, &referencing_rows/0, ops)
+
+      route(scratch, fn ->
+        assert rows_by_code(["stop_count", "currency"]) == [[3, "EUR"], [0, nil]]
+      end)
+    end
+
+    test "reads them through one join, with no index on the reference", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      op = computed_add(:stop_count, :integer, {:count, {:referencing, MyApp.Stop, :task}}, [])
+
+      %{transactional: ops} = Renderer.render([op], first_model)
+
+      assert %{sql: {fragment, joins, []}} = Enum.find(ops, &(&1.op == :fill_column))
+      refute fragment =~ "SELECT"
+      assert joins =~ "GROUP BY"
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        {:ok, %{rows: indexes}} =
+          Connection.query(
+            "SELECT indexdef FROM pg_indexes WHERE schemaname = 'hologram_data' " <>
+              "AND tablename = 'my_app_stop'"
+          )
+
+        refute Enum.any?(indexes, fn [definition] -> definition =~ "task_id" end)
+      end)
+    end
+
+    test "fills only the rows holding nil on a tightening", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      add =
+        migration("20260813100000", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :stop_count,
+            type: :integer,
+            opts: [optional: true],
+            line: 2
+          }
+        ])
+
+      added_model = Model.fold(first_model, add.ops)
+
+      tighten =
+        migration("20260813142237", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :stop_count,
+            changes: [
+              optional: false,
+              backfill: %Value{args: [:id], term: {:count, {:referencing, MyApp.Stop, :task}}}
+            ],
+            line: 3
+          }
+        ])
+
+      route(scratch, fn ->
+        assert run([create, add], added_model, @context) == :ok
+
+        referencing_rows()
+        insert_row("my_app_task", [{"code", "c"}, {"stop_count", 7}])
+
+        assert run([create, add, tighten], Model.fold(added_model, tighten.ops), @context) == :ok
+        assert rows_by_code(["stop_count"]) == [[3], [0], [7]]
+      end)
+    end
+
+    test "reads the row itself beside the join", %{scratch: scratch} = context do
+      term =
+        {:concat,
+         [
+           {:name, [:code]},
+           {:value, ":"},
+           {:most_common, {:referencing, MyApp.Stop, :task}, :currency}
+         ]}
+
+      apply_scenario(context, &referencing_rows/0, [
+        computed_add(:label, :string, term, optional: true)
+      ])
+
+      route(scratch, fn ->
+        assert rows_by_code(["label"]) == [["a:EUR"], [nil]]
       end)
     end
   end

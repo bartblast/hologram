@@ -31,7 +31,7 @@ defmodule Hologram.Migration.Value.Resolver do
           optional(:opts) => keyword
         }
 
-  @type resolved_set :: {:relationship, list(atom)}
+  @type resolved_set :: {:relationship, list(atom)} | {:referencing, module, atom}
 
   @type resolved ::
           {:value, any, type}
@@ -65,8 +65,19 @@ defmodule Hologram.Migration.Value.Resolver do
   value that doesn't fit its type, and a result of another type than the member's.
   """
   @spec resolve!(Value.t(), %{atom => any}, module, target) :: %{term: resolved, type: type}
-  def resolve!(%Value{term: term}, model, entity_type, target) do
-    context = %{entity: entity_type, line: target.line, member: target.name, model: model}
+  def resolve!(%Value{term: term} = value, model, entity_type, target) do
+    args = Map.get(value, :args, [])
+
+    context = %{
+      entity: entity_type,
+      in_fn: args != [],
+      line: target.line,
+      member: target.name,
+      model: model
+    }
+
+    validate_args!(args, context)
+
     expected = target_type(target, entity_type)
 
     {resolved, type} = resolve_term(term, expected, context)
@@ -215,7 +226,7 @@ defmodule Hologram.Migration.Value.Resolver do
   # What to do instead of a path through a field: go through the relationship for a reference. A
   # date or time of the row itself has parts an Elixir fn can read, which a related row's doesn't,
   # since a fn names the row's own fields.
-  defp hop_hint(hop, owner, entry, kind, context) do
+  defp hop_hint(hop, rest, owner, entry, kind, context) do
     cond do
       reference_target(entry, hop) ->
         relationship_name =
@@ -225,7 +236,10 @@ defmodule Hologram.Migration.Value.Resolver do
 
         ", so read through #{relationship_name}, not #{hop}"
 
-      kind == :value and owner == context.entity and time_field?(entry, hop) ->
+      kind == :value and own_field?(hop, owner, context) and context.in_fn ->
+        ", so read it in Elixir, like fn #{hop} -> Map.fetch!(#{hop}, #{inspect(hd(rest))}) end"
+
+      kind == :value and own_field?(hop, owner, context) and time_field?(entry, hop) ->
         ", and a part of a date or time is read in a fn with Map.fetch!/2"
 
       true ->
@@ -276,8 +290,14 @@ defmodule Hologram.Migration.Value.Resolver do
         name_type!(target, rest, expected, context)
 
       nil ->
-        refuse_hop!(hop, owner, entry, :value, context)
+        refuse_hop!(hop, rest, owner, entry, :value, context)
     end
+  end
+
+  # A path's first name, read on the row itself. A later hop can carry the same name on another
+  # type.
+  defp own_field?(hop, owner, context) do
+    owner == context.entity and hop == context[:path_head]
   end
 
   defp ranks({:enum, _owner, _name, values}), do: values
@@ -306,13 +326,14 @@ defmodule Hologram.Migration.Value.Resolver do
           "(line #{context.line}) #{message}"
   end
 
-  @spec refuse_hop!(atom, module, %{atom => any}, :set | :value, %{atom => any}) :: no_return
-  defp refuse_hop!(hop, owner, entry, kind, context) do
+  @spec refuse_hop!(atom, list(atom), module, %{atom => any}, :set | :value, %{atom => any}) ::
+          no_return
+  defp refuse_hop!(hop, rest, owner, entry, kind, context) do
     if field?(entry, hop) do
       refuse!(
         context,
         "reads through #{inspect(hop)} of #{inspect(owner)}, a field - a path reads through " <>
-          "to-one relationships#{hop_hint(hop, owner, entry, kind, context)}"
+          "to-one relationships#{hop_hint(hop, rest, owner, entry, kind, context)}"
       )
     else
       refuse_unknown!(hop, owner, entry, context)
@@ -402,12 +423,37 @@ defmodule Hologram.Migration.Value.Resolver do
     {{:relationship, path}, set_target!(context.entity, path, context)}
   end
 
+  # The rows of the given type whose to-one points at this row. Nothing needs storing to reach
+  # them, so the to-one has to say so itself.
+  defp resolve_set!({:referencing, type, ref} = set, context) do
+    entry = entry!(type, context)
+
+    case relationship(entry, ref) do
+      {^ref, target, _opts} when target == context.entity ->
+        {set, type}
+
+      {^ref, target, _opts} ->
+        refuse!(
+          context,
+          "queries #{inspect(type)} by #{ref}_id, which points at #{inspect(target)}, not at " <>
+            "#{inspect(context.entity)}"
+        )
+
+      nil ->
+        refuse!(
+          context,
+          "queries #{inspect(type)} by #{ref}_id, but #{inspect(type)} has no to-one #{ref} at " <>
+            "this op"
+        )
+    end
+  end
+
   defp resolve_term({:value, value}, expected, context) do
     {{:value, fit_value!(value, expected, context), expected}, expected}
   end
 
   defp resolve_term({:name, path}, expected, context) do
-    type = name_type!(context.entity, path, expected, context)
+    type = name_type!(context.entity, path, expected, Map.put(context, :path_head, hd(path)))
 
     {{:name, path, type}, type}
   end
@@ -533,7 +579,7 @@ defmodule Hologram.Migration.Value.Resolver do
         set_target!(target, rest, context)
 
       nil ->
-        refuse_hop!(hop, owner, entry, :set, context)
+        refuse_hop!(hop, rest, owner, entry, :set, context)
     end
   end
 
@@ -579,6 +625,16 @@ defmodule Hologram.Migration.Value.Resolver do
   defp to_one_target({_name, target, _opts}) when not is_list(target), do: target
 
   defp to_one_target(_relationship), do: nil
+
+  defp validate_args!(args, context) do
+    entry = entry!(context.entity, context)
+
+    Enum.each(args, fn arg ->
+      if not field?(entry, arg) and relationship(entry, arg) == nil do
+        refuse_unknown!(arg, context.entity, entry, context)
+      end
+    end)
+  end
 
   # A pinned struct may hold anything. The calendar is read first because the validator calls it,
   # and a datetime's offsets because comparing one does arithmetic on them.

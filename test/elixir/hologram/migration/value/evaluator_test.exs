@@ -132,6 +132,29 @@ defmodule Hologram.Migration.Value.EvaluatorTest do
     end
   end
 
+  describe "evaluate/2 and reads/1, the rows pointing at this one" do
+    @set {:referencing, MyApp.Stop, :trip}
+
+    test "counts them, none included" do
+      assert evaluate({:count, @set}, %{{MyApp.Stop, :trip} => [%{}, %{}]}) == 2
+      assert evaluate({:count, @set}, %{{MyApp.Stop, :trip} => []}) == 0
+    end
+
+    test "picks the most common value among them" do
+      rows = [%{currency: "b"}, %{currency: "a"}, %{currency: "b"}]
+      term = {:most_common, @set, :currency, :string, nil}
+
+      assert evaluate(term, %{{MyApp.Stop, :trip} => rows}) == "b"
+    end
+
+    test "names them in the reads, under the type and the to-one" do
+      assert reads({:count, @set}) == %{{MyApp.Stop, :trip} => %{}}
+
+      assert reads({:most_common, @set, :currency, :string, nil}) ==
+               %{{MyApp.Stop, :trip} => %{}}
+    end
+  end
+
   describe "reads/1" do
     test "reads nothing for a value" do
       assert reads({:value, "a", :string}) == %{}

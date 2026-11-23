@@ -88,6 +88,31 @@ defmodule Hologram.Migration do
       set's rows, skipping nil, a tie going to the smallest in `sort` order, and nil when no
       row holds a value
 
+  A `fn` names the row's fields and relationships it reads as its arguments. Its body is a query
+  when its outermost part is one of these words, when it's only a field or a path, or when it's
+  wrapped in `query(...)`, and then it runs as one `UPDATE`:
+
+      add_attribute :city, :string, backfill: fn destination ->
+        destination |> split(", ") |> at(0)
+      end
+      add_attribute :label, :string, backfill: fn title, city ->
+        query(title <> " in " <> city)
+      end
+      add_attribute :stop_count, :integer, backfill: fn id ->
+        Offgrid.Stop |> filter(trip_id == ^id) |> count()
+      end
+      add_attribute :currency, :string, backfill: fn id ->
+        Offgrid.Stop |> filter(trip_id == ^id) |> most_common(currency)
+      end
+
+  Inside a query, a module attribute is pinned (`^@x`). A call to a function the file imports or
+  the module defines is that function rather than a word of the same name, except inside
+  `query(...)`, which a module can't define as `query/1` beside a body using it.
+
+  Where this departs from an entity's derived field: a query reaches the rows pointing at this one
+  by `Type |> filter(<ref>_id == ^id)`, since a migration's history records no declared inverse,
+  and it takes only the words above, with no `if` and no comparison outside that filter.
+
   A to-one relationship takes the id of a row of its target, as a constant or an expression:
 
       add_relationship :owner, Offgrid.User, backfill: ^@admin_id
@@ -126,6 +151,10 @@ defmodule Hologram.Migration do
   @ops_attribute :__hologram_migration_ops__
 
   @snapshots_attribute :__hologram_migration_snapshots__
+
+  @fn_backfills_attribute :__hologram_migration_fn_backfills__
+
+  @op_imports_attribute :__hologram_migration_op_imports__
 
   @locals_without_parens [
     add_attribute: 2,
@@ -182,6 +211,8 @@ defmodule Hologram.Migration do
     # registration in the quote would run.
     Module.register_attribute(__CALLER__.module, @ops_attribute, accumulate: true)
     Module.register_attribute(__CALLER__.module, @snapshots_attribute, accumulate: true)
+    Module.register_attribute(__CALLER__.module, @fn_backfills_attribute, accumulate: true)
+    Module.register_attribute(__CALLER__.module, @op_imports_attribute, accumulate: true)
 
     quote do
       import Hologram.Migration,
@@ -244,11 +275,13 @@ defmodule Hologram.Migration do
   @doc false
   defmacro __before_compile__(env) do
     validate_snapshots_taken!(env)
+    validate_op_imports!(env)
 
     ops =
       env.module
       |> Module.get_attribute(@ops_attribute)
       |> Enum.reverse()
+      |> settle_fn_backfills(env)
       |> FieldAccess.rewrite()
 
     version = Path.basename(env.file, ".ex")
@@ -535,8 +568,15 @@ defmodule Hologram.Migration do
 
   # Options written as a list in place. Ones from a variable or a call are evaluated with the
   # op, and validate_ops!/2 checks a computed value they hold.
+  defp imports_at(quoted, caller) do
+    quoted
+    |> Value.local_calls()
+    |> Map.new(&{&1, Macro.Env.lookup_import(caller, &1)})
+  end
+
   defp lower_backfill(opts, caller) when is_list(opts) do
     Enum.map(opts, fn
+      {:backfill, {:fn, _meta, _clauses} = value} -> {:backfill, read_fn_backfill(value, caller)}
       {:backfill, value} -> {:backfill, Value.lower(value, caller)}
       other -> other
     end)
@@ -869,6 +909,12 @@ defmodule Hologram.Migration do
 
     Module.put_attribute(caller.module, @ops_attribute, expand_aliases(quoted, caller))
 
+    Module.put_attribute(
+      caller.module,
+      @op_imports_attribute,
+      {imports_at(quoted, caller), caller.line}
+    )
+
     case Enum.reverse(snapshots) do
       [] -> nil
       assignments -> {:__block__, [], assignments}
@@ -923,6 +969,36 @@ defmodule Hologram.Migration do
   end
 
   defp snapshot_attribute_reads(other, _module, snapshots), do: {other, snapshots}
+
+  # Whether a fn is a query can hang on a function defined below the op, which only
+  # __before_compile__ can see, so the op holds a placeholder until then. The query reading rides
+  # in it, so its pins and aliases are read where the op is written, like any op's.
+  defp read_fn_backfill(ast, caller) do
+    reading = Value.read_fn(ast, caller)
+    index = length(Module.get_attribute(caller.module, @fn_backfills_attribute))
+
+    Module.put_attribute(caller.module, @fn_backfills_attribute, {index, reading})
+
+    {:__hologram_fn_backfill__, [], [index, Value.fn_value(reading)]}
+  end
+
+  defp settle_fn_backfills(ops, env) do
+    readings =
+      env.module
+      |> Module.get_attribute(@fn_backfills_attribute)
+      |> Map.new()
+
+    Macro.prewalk(ops, fn
+      {:__hologram_fn_backfill__, _meta, [index, value]} ->
+        reading = Map.fetch!(readings, index)
+        :query = Value.choose_fn!(reading, env)
+
+        value
+
+      node ->
+        node
+    end)
+  end
 
   defp statement_line(meta, caller) do
     Keyword.get(meta, :line, caller.line)
@@ -1010,6 +1086,24 @@ defmodule Hologram.Migration do
           "migration ops go in the body of a module that uses Hologram.Migration - " <>
             "#{Path.relative_to_cwd(caller.file)}:#{caller.line}"
     end
+  end
+
+  # An op's code is placed in a function defined at the end of the module, under the imports in
+  # force there, so a call an import changes after the op would run another function than the one
+  # written, and could store another value.
+  defp validate_op_imports!(env) do
+    for {imports, line} <- Module.get_attribute(env.module, @op_imports_attribute),
+        {{name, arity} = call, at_op} <- imports,
+        Macro.Env.lookup_import(env, call) != at_op do
+      raise Hologram.CompileError,
+        message:
+          "a migration op calls #{name}/#{arity}, which an import changes between the op and " <>
+            "the end of the module - put the import at the top of the module",
+        file: env.file,
+        line: line
+    end
+
+    :ok
   end
 
   # An op is recorded however the module body runs around it, but its attribute snapshots are

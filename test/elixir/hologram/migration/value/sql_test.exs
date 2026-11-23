@@ -50,7 +50,9 @@ defmodule Hologram.Migration.Value.SQLTest do
          type,
          target \\ %{kind: :attribute, line: 1, name: :title, opts: [], type: :string}
        ) do
-    render(%{term: term, type: type}, MyApp.Trip, mapping(), target)
+    {sql, "", params} = render(%{term: term, type: type}, MyApp.Trip, mapping(), target)
+
+    {sql, params}
   end
 
   describe "render/4" do
@@ -210,6 +212,88 @@ defmodule Hologram.Migration.Value.SQLTest do
       }
 
       assert rendered({:name, [:state], @state}, @state, target) == {~s("$r0"."state"), []}
+    end
+  end
+
+  describe "render/4, the rows pointing at this one" do
+    @target %{kind: :attribute, line: 1, name: :title, opts: [], type: :string}
+
+    @count_target %{kind: :attribute, line: 1, name: :rank, opts: [], type: :integer}
+
+    @count {:count, {:referencing, MyApp.Trip, :parent}}
+
+    @most_common {:most_common, {:referencing, MyApp.Trip, :parent}, :title, :string, nil}
+
+    test "joins one aggregate for a count, with no subquery per row" do
+      assert render(%{term: @count, type: :integer}, MyApp.Trip, mapping(), @count_target) ==
+               {~s|COALESCE("$a0".v, 0)|,
+                ~s|LEFT JOIN (SELECT "parent_id" AS k, COUNT(*) AS v | <>
+                  ~s|FROM "hologram_data"."my_app_trip" WHERE "parent_id" IS NOT NULL | <>
+                  ~s|GROUP BY "parent_id") AS "$a0" ON "$a0".k = "$r0"."id"|, []}
+    end
+
+    test "joins one aggregate for a most_common, ordered as the word orders" do
+      {fragment, joins, []} =
+        render(%{term: @most_common, type: :string}, MyApp.Trip, mapping(), @target)
+
+      assert fragment == ~s("$a0".v)
+
+      assert joins ==
+               ~s|LEFT JOIN (SELECT DISTINCT ON (k) k, v FROM (SELECT "parent_id" AS k, | <>
+                 ~s|"title" AS v, COUNT(*) AS n, MIN("title_$sort") AS s | <>
+                 ~s|FROM "hologram_data"."my_app_trip" WHERE "parent_id" IS NOT NULL | <>
+                 ~s|AND "title" IS NOT NULL GROUP BY "parent_id", "title") AS grouped | <>
+                 ~s|ORDER BY k, n DESC, s, v) AS "$a0" ON "$a0".k = "$r0"."id"|
+    end
+
+    test "joins a word used twice once" do
+      term = {:coalesce, [@most_common, @most_common]}
+
+      {fragment, joins, []} = render(%{term: term, type: :string}, MyApp.Trip, mapping(), @target)
+
+      assert fragment == ~s|COALESCE("$a0".v, "$a0".v)|
+      assert length(String.split(joins, "LEFT JOIN")) == 2
+    end
+
+    test "names the sort key the word orders by" do
+      assert sort_keys(%{term: @most_common}, MyApp.Trip, mapping()) == [
+               %{op: :add_column, table: "my_app_trip", column: "title_$sort"}
+             ]
+    end
+  end
+
+  describe "fill_statement/4" do
+    @table "my_app_trip"
+
+    test "writes every row of a statement with no joins" do
+      assert fill_statement(@table, "title", {"$1::text", "", ["a"]}) ==
+               ~s|UPDATE "hologram_data"."my_app_trip" AS "$r0" SET "title" = $1::text|
+    end
+
+    test "writes only the rows holding NULL, returning their ids" do
+      assert fill_statement(@table, "title", {"$1::text", "", ["a"]},
+               nulls_only: true,
+               returning: true
+             ) ==
+               ~s|UPDATE "hologram_data"."my_app_trip" AS "$r0" SET "title" = $1::text | <>
+                 ~s|WHERE "$r0"."title" IS NULL RETURNING "$r0"."id"|
+    end
+
+    test "reads the row through a self-join when it has joins" do
+      assert fill_statement(@table, "rank", {~s|"$a0".v|, "LEFT JOIN x", []}) ==
+               ~s|UPDATE "hologram_data"."my_app_trip" AS "$u" SET "rank" = "$a0".v | <>
+                 ~s|FROM "hologram_data"."my_app_trip" AS "$r0" LEFT JOIN x | <>
+                 ~s|WHERE "$u"."id" = "$r0"."id"|
+    end
+
+    test "writes only the rows holding NULL through a self-join, returning their ids" do
+      assert fill_statement(@table, "rank", {~s|"$a0".v|, "LEFT JOIN x", []},
+               nulls_only: true,
+               returning: true
+             ) ==
+               ~s|UPDATE "hologram_data"."my_app_trip" AS "$u" SET "rank" = "$a0".v | <>
+                 ~s|FROM "hologram_data"."my_app_trip" AS "$r0" LEFT JOIN x | <>
+                 ~s|WHERE "$u"."id" = "$r0"."id" AND "$u"."rank" IS NULL RETURNING "$u"."id"|
     end
   end
 

@@ -39,6 +39,13 @@ defmodule Hologram.DB.WordSQL do
   def count(source), do: "(SELECT COUNT(*) #{source})"
 
   @doc """
+  Returns the query counting the rows of the given source, a `FROM` clause through its `WHERE`, per
+  value of the given key column, as `k` and `v`.
+  """
+  @spec count_by(String.t(), String.t()) :: String.t()
+  def count_by(key, source), do: "SELECT #{key} AS k, COUNT(*) AS v #{source} GROUP BY #{key}"
+
+  @doc """
   Returns the SQL of the value appearing most often among the given source's rows, a `FROM` clause
   through its `WHERE`, skipping NULL and NULL when none is left. A tie goes to the smallest value,
   by the given sort key column and then the value, or by the value alone given nil.
@@ -52,5 +59,19 @@ defmodule Hologram.DB.WordSQL do
 
     "(SELECT #{value} #{source} AND #{value} IS NOT NULL " <>
       "GROUP BY #{value} ORDER BY COUNT(*) DESC, #{order} LIMIT 1)"
+  end
+
+  @doc """
+  Returns the query giving, per value of the given key column, what `most_common/3` gives over the
+  source's rows holding that key, as `k` and `v`. The source is a `FROM` clause through a `WHERE`
+  that leaves out NULL values.
+  """
+  @spec most_common_by(String.t(), String.t(), String.t() | nil, String.t()) :: String.t()
+  def most_common_by(key, value, sort_key, source) do
+    {sort_select, order} = if sort_key, do: {", MIN(#{sort_key}) AS s", "s, v"}, else: {"", "v"}
+
+    "SELECT DISTINCT ON (k) k, v FROM (SELECT #{key} AS k, #{value} AS v, COUNT(*) AS n" <>
+      "#{sort_select} #{source} GROUP BY #{key}, #{value}) AS grouped " <>
+      "ORDER BY k, n DESC, #{order}"
   end
 end

@@ -741,6 +741,108 @@ defmodule Hologram.Migration.Value.ResolverTest do
     end
   end
 
+  describe "resolve!/4, a fn's arguments and the rows pointing at this one" do
+    defp resolve_on(entity, value, type) do
+      target = %{kind: :attribute, line: 7, name: :value, opts: [], type: type}
+
+      resolve!(value, @model, entity, target)
+    end
+
+    defp resolve_refusal(entity, value, type) do
+      error = assert_raise Hologram.CompileError, fn -> resolve_on(entity, value, type) end
+
+      error.message
+    end
+
+    test "accepts arguments naming fields and relationships" do
+      value = %Value{args: [:destination, :owner_id, :parent, :tags, :id], term: {:name, [:id]}}
+
+      assert %{type: :uuid} = resolve_on(MyApp.Trip, value, :uuid)
+    end
+
+    test "refuses an argument the row doesn't have" do
+      value = %Value{args: [:destination, :nope], term: {:name, [:destination]}}
+
+      assert resolve_refusal(MyApp.Trip, value, :string) =~ "reads :nope, which MyApp.Trip"
+    end
+
+    test "names an Elixir spelling for a path on a plain field of a fn" do
+      value = %Value{args: [:created_at], term: {:name, [:created_at, :year]}}
+
+      assert resolve_refusal(MyApp.Trip, value, :integer) =~
+               "read it in Elixir, like fn created_at -> Map.fetch!(created_at, :year) end"
+    end
+
+    test "gives no Elixir spelling for a path past a self-relationship" do
+      value = %Value{args: [:parent], term: {:name, [:parent, :created_at, :year]}}
+
+      message = resolve_refusal(MyApp.Trip, value, :integer)
+
+      assert message =~ "reads through :created_at of MyApp.Trip, a field"
+      refute message =~ "Map.fetch!"
+    end
+
+    test "gives no Elixir spelling for a later hop named like the path's first" do
+      model =
+        @model
+        |> put_in([:entities, MyApp.User, :attributes], [{:guide, :datetime, []}])
+        |> put_in([:entities, MyApp.Trip, :relationships], [{:guide, MyApp.User, []}])
+
+      value = %Value{args: [:guide], term: {:name, [:guide, :guide, :year]}}
+      target = %{kind: :attribute, line: 7, name: :value, opts: [], type: :integer}
+
+      error =
+        assert_raise Hologram.CompileError, fn ->
+          resolve!(value, model, MyApp.Trip, target)
+        end
+
+      assert error.message =~ "reads through :guide of MyApp.User, a field"
+      refute error.message =~ "Map.fetch!"
+    end
+
+    test "counts the rows pointing at this one" do
+      value = %Value{args: [:id], term: {:count, {:referencing, MyApp.Stop, :trip}}}
+
+      assert resolve_on(MyApp.Trip, value, :integer) == %{
+               term: {:count, {:referencing, MyApp.Stop, :trip}},
+               type: :integer
+             }
+    end
+
+    test "types a most_common over them by the attribute of the queried type" do
+      value = %Value{
+        args: [:id],
+        term: {:most_common, {:referencing, MyApp.Stop, :trip}, :currency}
+      }
+
+      assert %{
+               term: {:most_common, {:referencing, MyApp.Stop, :trip}, :currency, :string, nil},
+               type: :string
+             } = resolve_on(MyApp.Trip, value, :string)
+    end
+
+    test "refuses a type the model doesn't have" do
+      value = %Value{args: [:id], term: {:count, {:referencing, MyApp.Nope, :trip}}}
+
+      assert resolve_refusal(MyApp.Trip, value, :integer) =~
+               "reads MyApp.Nope, which doesn't exist at this op"
+    end
+
+    test "refuses a reference the queried type doesn't have" do
+      value = %Value{args: [:id], term: {:count, {:referencing, MyApp.Stop, :nope}}}
+
+      assert resolve_refusal(MyApp.Trip, value, :integer) =~
+               "by nope_id, but MyApp.Stop has no to-one nope at this op"
+    end
+
+    test "refuses a reference pointing at another type" do
+      value = %Value{args: [:id], term: {:count, {:referencing, MyApp.Stop, :guide}}}
+
+      assert resolve_refusal(MyApp.Trip, value, :integer) =~
+               "by guide_id, which points at MyApp.User, not at MyApp.Trip"
+    end
+  end
+
   describe "resolve!/4, most_common" do
     test "takes the attribute's type" do
       assert resolved({:most_common, {:relationship, [:tags]}, :name}, attribute_target(:string)) ==

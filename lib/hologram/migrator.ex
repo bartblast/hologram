@@ -19,6 +19,7 @@ defmodule Hologram.Migrator do
   alias Hologram.Migration.Loader
   alias Hologram.Migration.Renderer
   alias Hologram.Migration.Value.FillCheck
+  alias Hologram.Migration.Value.SQL
   alias Hologram.Reflection
 
   # The ops the boot applies when the database holds an object under a name the current naming
@@ -670,16 +671,12 @@ defmodule Hologram.Migrator do
   # A fill of every row writes through every index taking writes - see drop_removed_indexes/3. The
   # tightening after it needs to know no row was left NULL, and a declared default doesn't step
   # in: the expression said what each row holds.
-  # sobelow_skip ["SQL.Query"]
   defp apply_op(%{op: :fill_column} = op, later_ops) do
     drop_removed_indexes(op.table, :update, later_ops)
 
-    {fragment, params} = op.sql
-    table = ~s("#{Mapper.data_schema()}".#{Mapper.quote_identifier(op.table)})
-    column = Mapper.quote_identifier(op.column)
-    statement = ~s|UPDATE #{table} AS "$r0" SET #{column} = #{fragment}|
+    {_fragment, _joins, params} = op.sql
 
-    FillCheck.query_fill!(op, statement, params)
+    FillCheck.query_fill!(op, SQL.fill_statement(op.table, op.column, op.sql), params)
 
     if op.required, do: check_filled!(op)
 

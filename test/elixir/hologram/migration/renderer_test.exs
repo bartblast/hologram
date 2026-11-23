@@ -145,7 +145,7 @@ defmodule Hologram.Migration.RendererTest do
                member: :copy,
                nulls_only: false,
                required: false,
-               sql: {~s("$r0"."seats"), []}
+               sql: {~s("$r0"."seats"), "", []}
              } = fill_op
 
       refute Map.has_key?(fill_op, :mapping)

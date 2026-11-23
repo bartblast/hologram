@@ -25,32 +25,75 @@ defmodule Hologram.Migration.Value.SQL do
 
   @doc """
   Returns the SQL expression of the given resolved backfill for the given target member of the
-  given entity type, and the parameters it binds, in order. An enum of another attribute is cast
-  to the target's type, since each enum attribute has a PostgreSQL type of its own.
+  given entity type, the joins it reads through, and the parameters it binds, in order. An enum of
+  another attribute is cast to the target's type, since each enum attribute has a PostgreSQL type
+  of its own.
+
+  The rows pointing at this one are aggregated once and joined. A reference column has no index of
+  its own, so a subquery per row would scan the related table once for each row.
   """
   @spec render(
           %{term: Resolver.resolved(), type: Resolver.type()},
           module,
           %{module => %{atom => any}},
           Resolver.target()
-        ) :: {String.t(), list}
+        ) :: {String.t(), String.t(), list}
   def render(%{term: term, type: type}, entity_type, mapping, target) do
-    scope = %{depth: 0, entity: entity_type, mapping: mapping}
+    aggregates = aggregates(term)
+    scope = %{aggregates: Map.new(aggregates), depth: 0, entity: entity_type, mapping: mapping}
 
     {sql, reversed_params} = term_sql(term, scope, [])
+    joins = Enum.map_join(aggregates, " ", &join_sql(&1, scope))
 
-    {cast_to_target(sql, type, entity_type, mapping, target), Enum.reverse(reversed_params)}
+    {cast_to_target(sql, type, entity_type, mapping, target), joins,
+     Enum.reverse(reversed_params)}
+  end
+
+  @doc """
+  Returns the statement writing the given rendered backfill into the given column of the given
+  table. A backfill with joins reads the row through a self-join, since an `UPDATE` can't join its
+  own target. With `nulls_only: true` it writes only the rows holding NULL, and with
+  `returning: true` it returns the ids it wrote.
+  """
+  @spec fill_statement(String.t(), String.t(), {String.t(), String.t(), list}, keyword) ::
+          String.t()
+  def fill_statement(table, column, {fragment, joins, _params}, opts \\ []) do
+    source = qualified_table(table)
+    quoted = Mapper.quote_identifier(column)
+    target = if joins == "", do: ~s("$r0"), else: ~s("$u")
+    filter = if opts[:nulls_only], do: "#{target}.#{quoted} IS NULL"
+    returning = if opts[:returning], do: ~s| RETURNING #{target}."id"|, else: ""
+
+    update = ~s|UPDATE #{source} AS #{target} SET #{quoted} = #{fragment}|
+
+    statement =
+      if joins == "" do
+        update <> if(filter, do: " WHERE #{filter}", else: "")
+      else
+        and_filter = if filter, do: " AND #{filter}", else: ""
+
+        update <>
+          ~s| FROM #{source} AS "$r0" #{joins} WHERE "$u"."id" = "$r0"."id"#{and_filter}|
+      end
+
+    statement <> returning
   end
 
   @doc """
   Returns the statement counting the keys of the given unique index columns that would repeat once
-  the NULLs of the given column, one of them, take the given rendered expression, reading the row
-  as "$r0". Only keys holding a row the fill writes count. Nulls in a key compare as values when
+  the NULLs of the given column, one of them, take the given rendered expression and its joins,
+  reading the row as "$r0". Only keys holding a row the fill writes count. Nulls in a key compare as values when
   nulls_distinct is false, matching the index.
   """
-  @spec filled_repeat_statement(String.t(), list(String.t()), String.t(), boolean, String.t()) ::
+  @spec filled_repeat_statement(
+          String.t(),
+          list(String.t()),
+          String.t(),
+          boolean,
+          String.t(),
           String.t()
-  def filled_repeat_statement(table, columns, filled_column, nulls_distinct, fragment) do
+        ) :: String.t()
+  def filled_repeat_statement(table, columns, filled_column, nulls_distinct, fragment, joins) do
     keys =
       columns
       |> Enum.with_index()
@@ -76,7 +119,7 @@ defmodule Hologram.Migration.Value.SQL do
     source = ~s("#{Mapper.data_schema()}".#{Mapper.quote_identifier(table)})
 
     ~s|SELECT COUNT(*) FROM (SELECT 1 FROM (SELECT #{selected}, #{filled} AS "$filled" | <>
-      ~s|FROM #{source} AS "$r0") AS "$keys"#{not_null} GROUP BY #{grouped} | <>
+      ~s|FROM #{source} AS "$r0" #{joins}) AS "$keys"#{not_null} GROUP BY #{grouped} | <>
       ~s|HAVING COUNT(*) > 1 AND COUNT(*) FILTER (WHERE "$filled") > 0) AS duplicates|
   end
 
@@ -112,12 +155,23 @@ defmodule Hologram.Migration.Value.SQL do
   def sort_keys(%{term: term}, entity_type, mapping) do
     scope = %{depth: 0, entity: entity_type, mapping: mapping}
 
-    for {:most_common, {:relationship, path}, attribute, _type, _ranks} <- subterms(term),
-        {_owner_id_sql, join_table} = set_source(path, scope),
-        entry = Map.fetch!(mapping, related_entity!(mapping, join_table.target_table)),
+    for {:most_common, set, attribute, _type, _ranks} <- subterms(term),
+        entry = set_entry(set, scope),
         sort_key = Enum.find(entry.columns, &(&1.source == {:sort_key, attribute})) do
       %{op: :add_column, table: entry.table, column: sort_key.name}
     end
+  end
+
+  # Each word over the rows pointing at this one, with the alias its join goes under.
+  defp aggregates(term) do
+    term
+    |> subterms()
+    |> Enum.filter(&referencing?/1)
+    |> Enum.uniq()
+    |> Enum.with_index()
+    |> Enum.map(fn {aggregate, index} ->
+      {aggregate, Mapper.quote_identifier("$a#{index}")}
+    end)
   end
 
   defp attribute_column!(mapping, owner, name) do
@@ -182,6 +236,36 @@ defmodule Hologram.Migration.Value.SQL do
       "WHERE #{row_alias(inner_scope)}.\"id\" = #{column_sql(scope, reference)})"
   end
 
+  defp join_on(query, name) do
+    ~s|LEFT JOIN (#{query}) AS #{name} ON #{name}.k = "$r0"."id"|
+  end
+
+  defp join_sql({{:count, {:referencing, type, ref}}, name}, scope) do
+    {entry, key} = referencing_source(type, ref, scope)
+    source = "FROM #{qualified_table(entry.table)} WHERE #{key} IS NOT NULL"
+
+    join_on(WordSQL.count_by(key, source), name)
+  end
+
+  defp join_sql(
+         {{:most_common, {:referencing, type, ref}, attribute, _kind, _ranks}, name},
+         scope
+       ) do
+    {entry, key} = referencing_source(type, ref, scope)
+    value = Mapper.quote_identifier(QueryCompiler.name_column(entry, attribute).name)
+
+    sort_key =
+      case Enum.find(entry.columns, &(&1.source == {:sort_key, attribute})) do
+        nil -> nil
+        column -> Mapper.quote_identifier(column.name)
+      end
+
+    source =
+      "FROM #{qualified_table(entry.table)} WHERE #{key} IS NOT NULL AND #{value} IS NOT NULL"
+
+    join_on(WordSQL.most_common_by(key, value, sort_key, source), name)
+  end
+
   # The id of the row a set hangs off, and the entity type it's of, read through the given to-one
   # hops. The last hop's reference is that id, so it needs no read of the row it points at.
   defp owner_id([], scope), do: {"#{row_alias(scope)}.\"id\"", scope.entity}
@@ -203,6 +287,21 @@ defmodule Hologram.Migration.Value.SQL do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"
   end
 
+  defp referencing?({:count, {:referencing, _type, _ref}}), do: true
+
+  defp referencing?({:most_common, {:referencing, _type, _ref}, _attribute, _kind, _ranks}) do
+    true
+  end
+
+  defp referencing?(_term), do: false
+
+  defp referencing_source(type, ref, scope) do
+    entry = Map.fetch!(scope.mapping, type)
+    column = Enum.find(entry.columns, &(&1.source == {:relationship, ref}))
+
+    {entry, Mapper.quote_identifier(column.name)}
+  end
+
   defp related_entity!(mapping, table) do
     {entity_type, _entry} = Enum.find(mapping, fn {_type, entry} -> entry.table == table end)
 
@@ -210,6 +309,14 @@ defmodule Hologram.Migration.Value.SQL do
   end
 
   defp row_alias(%{depth: depth}), do: Mapper.quote_identifier("$r#{depth}")
+
+  defp set_entry({:referencing, type, _ref}, scope), do: Map.fetch!(scope.mapping, type)
+
+  defp set_entry({:relationship, path}, scope) do
+    {_owner_id_sql, join_table} = set_source(path, scope)
+
+    Map.fetch!(scope.mapping, related_entity!(scope.mapping, join_table.target_table))
+  end
 
   defp set_source(path, scope) do
     {hops, [set_name]} = Enum.split(path, -1)
@@ -299,6 +406,10 @@ defmodule Hologram.Migration.Value.SQL do
     {WordSQL.coalesce(value_sqls), new_params}
   end
 
+  defp term_sql({:count, {:referencing, _type, _ref}} = term, scope, reversed_params) do
+    {"COALESCE(#{Map.fetch!(scope.aggregates, term)}.v, 0)", reversed_params}
+  end
+
   defp term_sql({:count, {:relationship, path}}, scope, reversed_params) do
     {owner_id_sql, join_table} = set_source(path, scope)
     join_alias = Mapper.quote_identifier("$j#{scope.depth + 1}")
@@ -308,6 +419,14 @@ defmodule Hologram.Migration.Value.SQL do
         "WHERE #{join_alias}.\"source_id\" = #{owner_id_sql}"
 
     {WordSQL.count(source), reversed_params}
+  end
+
+  defp term_sql(
+         {:most_common, {:referencing, _type, _ref}, _attribute, _kind, _ranks} = term,
+         scope,
+         reversed_params
+       ) do
+    {"#{Map.fetch!(scope.aggregates, term)}.v", reversed_params}
   end
 
   defp term_sql(

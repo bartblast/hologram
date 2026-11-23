@@ -175,6 +175,35 @@ defmodule Hologram.Migration.Value.LoaderTest do
 
   defp uuid(id), do: Codec.encode(id, :uuid)
 
+  describe "load/4, the rows pointing at this one" do
+    test "holds them under the type and the to-one, none included", %{scratch: scratch} do
+      route(scratch, fn ->
+        mapping = prepare()
+        parent = insert("my_app_trip", %{"title" => "parent"})
+        childless = insert("my_app_trip", %{"title" => "childless"})
+
+        child_a =
+          insert("my_app_trip", %{"parent_id" => Codec.encode(parent, :uuid), "title" => "a"})
+
+        child_b =
+          insert("my_app_trip", %{"parent_id" => Codec.encode(parent, :uuid), "title" => "b"})
+
+        reads = %{{MyApp.Trip, :parent} => %{}}
+
+        assert [parent_row, childless_row] = load(reads, MyApp.Trip, [parent, childless], mapping)
+
+        children = Map.fetch!(parent_row, {MyApp.Trip, :parent})
+
+        ids = Enum.map(children, & &1.id)
+        titles = Enum.map(children, & &1.title)
+
+        assert Enum.sort(ids) == Enum.sort([child_a, child_b])
+        assert Enum.sort(titles) == ["a", "b"]
+        assert Map.fetch!(childless_row, {MyApp.Trip, :parent}) == []
+      end)
+    end
+  end
+
   describe "load/4" do
     test "reads the row's fields in their native values", %{scratch: scratch} do
       route(scratch, fn ->
