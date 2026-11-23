@@ -966,6 +966,7 @@ describe("Elixir_Hologram_DB", () => {
     const BOARD_2 = "018f0000-0000-7000-8000-00000000000c";
     const CARD = "MyApp.Card";
     const LABEL = "MyApp.Label";
+    const LABEL_1 = "018f0000-0000-7000-8000-00000000000d";
 
     const rule = (overrides = {}) => ({
       predicates: [],
@@ -975,6 +976,25 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     const newName = (name) => ({name, outer: 1});
+
+    const datetimeInYear = (year, utcOffset = 0n) =>
+      Type.struct("DateTime", [
+        [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+        [Type.atom("day"), Type.integer(1)],
+        [Type.atom("hour"), Type.integer(0)],
+        [
+          Type.atom("microsecond"),
+          Type.tuple([Type.integer(0), Type.integer(6)]),
+        ],
+        [Type.atom("minute"), Type.integer(0)],
+        [Type.atom("month"), Type.integer(1)],
+        [Type.atom("second"), Type.integer(0)],
+        [Type.atom("std_offset"), Type.integer(0)],
+        [Type.atom("time_zone"), Type.bitstring("Etc/UTC")],
+        [Type.atom("utc_offset"), Type.integer(utcOffset)],
+        [Type.atom("year"), Type.integer(year)],
+        [Type.atom("zone_abbr"), Type.bitstring("UTC")],
+      ]);
 
     const exact = (predicates, overrides = {}) =>
       rule({new: {predicates}, ...overrides});
@@ -1235,6 +1255,240 @@ describe("Elixir_Hologram_DB", () => {
           ":note, :status",
           " (the value given for :status is invalid, so its rule read the stored value)",
         );
+      });
+    });
+
+    describe("what only the server can decide", () => {
+      it("leaves a type with no new() rule alone", () => {
+        defineCard({
+          "update:status": [rule({predicates: [["status", "==", "approved"]]})],
+        });
+
+        assertSent(put(status("rejected")));
+      });
+
+      it("leaves a condition on the stored value", () => {
+        defineCard({
+          "update:status": [
+            exact([
+              ["status", "==", "rejected"],
+              [newName("status"), "==", "approved"],
+            ]),
+          ],
+        });
+
+        assertSent(put(status("approved")));
+      });
+
+      it("leaves a counter, whatever the held value makes it", () => {
+        defineCard({
+          "update:count": [exact([[newName("count"), "<=", 10]])],
+        });
+
+        assertSent(increment(card(), Type.atom("count"), Type.integer(5)));
+      });
+
+      it("leaves a name the call doesn't state", () => {
+        defineCard({
+          "update:note": [exact([[newName("title"), "==", "other"]])],
+        });
+
+        assertSent(put(note("x")));
+      });
+
+      it("leaves a role", () => {
+        defineCard({
+          "update:board": [exact([{hasRole: [["board"], BOARD, ["member"]]}])],
+        });
+
+        assertSent(put({board_id: Type.bitstring(BOARD_2)}));
+      });
+
+      it("leaves a role line for a visitor", () => {
+        LocalDatabase.actorEntityId = null;
+
+        defineCard({
+          "update:status": [
+            exact([[newName("status"), "==", "approved"]], {
+              to: [["own", ["editor"]]],
+            }),
+          ],
+        });
+
+        assertSent(put(status("approved")));
+      });
+
+      it("leaves a delegation", () => {
+        defineCard({
+          "update:board": [exact([{can: ["read", ["board"]]}])],
+        });
+
+        assertSent(put({board_id: Type.bitstring(BOARD_2)}));
+      });
+
+      it("leaves a path through a related row", () => {
+        defineCard({
+          "update:board": [
+            exact([[newName(["board", "archived"]), "==", true]]),
+          ],
+        });
+
+        assertSent(put({board_id: Type.bitstring(BOARD_2)}));
+      });
+
+      it("leaves a reference to a row, which may not exist", () => {
+        defineCard({
+          "update:board": [exact([[newName("board_id"), "==", null]])],
+        });
+
+        assertSent(put({board_id: Type.bitstring(BOARD_2)}));
+      });
+
+      it("leaves a condition on the acting user", () => {
+        defineCard({
+          "update:note": [exact([[newName("note"), "==", {actor: true}]])],
+        });
+
+        assertSent(put(note("x")));
+      });
+
+      it("leaves a quantifier", () => {
+        defineCard({
+          "update:labels": [
+            exact([
+              {
+                filter: [],
+                quantifier: "none",
+                source: {name: ["labels"], outer: 1},
+              },
+            ]),
+          ],
+        });
+
+        LocalDatabase.putRow(LABEL, {id: LABEL_1});
+        LocalDatabase.addFact(CARD, "labels", ID_1, LABEL_1);
+
+        assertSent(
+          addRelationship(card(), Type.atom("labels"), Type.bitstring(ID_2)),
+        );
+      });
+
+      it("leaves a rule's clause the build sends as a marker", () => {
+        defineCard({"update:status": [exact([{server: true}])]});
+
+        assertSent(put(status("rejected")));
+      });
+
+      it("leaves a disjunction with an open alternative", () => {
+        defineCard({
+          "update:status": [
+            exact([
+              {
+                or: [
+                  [[newName("status"), "==", "approved"]],
+                  [["title", "==", "t"]],
+                ],
+              },
+            ]),
+          ],
+        });
+
+        assertSent(put(status("rejected")));
+      });
+
+      it("leaves an integer past what a number holds exactly", () => {
+        defineCard({
+          "update:count": [
+            exact([[newName("count"), "==", Number.MAX_SAFE_INTEGER + 1]]),
+          ],
+        });
+
+        assertSent(
+          put({count: Type.integer(BigInt(Number.MAX_SAFE_INTEGER) + 3n)}),
+        );
+      });
+
+      it("leaves a float past what a number holds exactly", () => {
+        defineCard({
+          "update:rating": [
+            exact([[newName("rating"), "!=", Number.MAX_SAFE_INTEGER + 1]]),
+          ],
+        });
+
+        assertSent(put({rating: Type.float(Number.MAX_SAFE_INTEGER + 1)}));
+      });
+
+      it("leaves a value with a format, which the two regex engines can judge differently", () => {
+        defineCard({"update:code": [newIs("code", "x")]});
+
+        assertSent(put({code: Type.bitstring("ab")}));
+      });
+
+      it("leaves a refused field with a format, whose hint it can't be sure of", () => {
+        defineCard({
+          "update:code": [newIs("note", "x")],
+          "update:note": [rule()],
+        });
+
+        assertSent(put({code: Type.bitstring("ab"), ...note("y")}));
+      });
+
+      it("leaves a date past what a JavaScript date holds", () => {
+        defineCard({
+          "update:held_at": [
+            exact([[newName("held_at"), "==", "2026-01-01T00:00:00.000000Z"]]),
+          ],
+        });
+
+        assertSent(put({held_at: datetimeInYear(280000)}));
+      });
+
+      it("leaves a datetime whose offset moves it past what a JavaScript date holds", () => {
+        defineCard({
+          "update:held_at": [
+            exact([[newName("held_at"), ">=", "2026-01-01T00:00:00.000000Z"]]),
+          ],
+        });
+
+        assertSent(put({held_at: datetimeInYear(2026, -10_000_000_000_000n)}));
+      });
+
+      it("doesn't refuse a field holding a far date, which a bound can't judge", () => {
+        defineCard({
+          "update:held_at": [newIs("note", "x")],
+          "update:note": [rule()],
+        });
+
+        globalThis.Hologram.sync.model[CARD].constraints.held_at = {
+          min: datetimeInYear(2000),
+          optional: true,
+        };
+
+        Model.reset();
+
+        const result = update(
+          put({held_at: datetimeInYear(300000), ...note("y")}),
+        );
+
+        assert.deepStrictEqual(result.data[0], Type.atom("error"));
+      });
+
+      it("leaves a write with an open field beside a refused one", () => {
+        defineCard({
+          "update:note": [exact([{server: true}])],
+          "update:status": [newIs("status", "approved")],
+        });
+
+        assertSent(put({...status("rejected"), ...note("y")}));
+      });
+
+      it("answers an invalid value with its violations when its rule is open", () => {
+        defineCard({"update:status": [newIs("status", "approved")]});
+
+        const result = update(put(status("bogus")));
+
+        assert.deepStrictEqual(result.data[0], Type.atom("error"));
+        assert.equal(Batches.current().writes.length, 0);
       });
     });
   });
