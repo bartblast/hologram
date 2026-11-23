@@ -821,6 +821,70 @@ describe("LocalDatabase", () => {
     });
   });
 
+  describe("heldOrNamedIds()", () => {
+    const PROJECT = "MyApp.Project";
+    const TASK = "MyApp.Task";
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [PROJECT]: {
+            attributes: {id: "uuid"},
+            relationships: {tasks: {toMany: true, type: TASK}},
+            serverOnly: [],
+          },
+          [TASK]: {
+            attributes: {id: "uuid"},
+            inverses: {
+              owners: {
+                forward: "tasks",
+                reference: false,
+                sort: [],
+                toMany: true,
+                type: PROJECT,
+              },
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+      Model.reset();
+    });
+
+    it("answers the ids of the rows it holds", () => {
+      LocalDatabase.putRow(TASK, {id: "t1"});
+
+      assert.deepEqual(LocalDatabase.heldOrNamedIds(TASK), new Set(["t1"]));
+    });
+
+    it("answers an id a to-many of a held row names", () => {
+      LocalDatabase.putRow(PROJECT, {id: "p1"});
+      LocalDatabase.addFact(PROJECT, "tasks", "p1", "t1");
+
+      assert.deepEqual(LocalDatabase.heldOrNamedIds(TASK), new Set(["t1"]));
+    });
+
+    it("answers an id an inverse of a held row names", () => {
+      LocalDatabase.putRow(TASK, {id: "t1"});
+      LocalDatabase.addFact(TASK, "owners", "t1", "p1");
+
+      assert.deepEqual(LocalDatabase.heldOrNamedIds(PROJECT), new Set(["p1"]));
+    });
+
+    it("leaves out an id named only under a row it doesn't hold", () => {
+      LocalDatabase.addFact(PROJECT, "tasks", "p1", "t1");
+
+      assert.deepEqual(LocalDatabase.heldOrNamedIds(TASK), new Set());
+    });
+  });
+
   describe("isAllSynced()", () => {
     it("answers false before the marker arrived", () => {
       assert.isFalse(LocalDatabase.isAllSynced());
