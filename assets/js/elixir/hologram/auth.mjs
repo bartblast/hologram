@@ -1750,6 +1750,14 @@ function refuseChangeWithoutEntry(entityType, operation, pairs) {
 
   const asked = askedFields(operation);
 
+  const notAtom = asked?.find((field) => !Type.isAtom(field));
+
+  if (notAtom !== undefined) {
+    Interpreter.raiseMisuseError(
+      `unknown field ${Interpreter.inspect(notAtom)} in ${Interpreter.inspect(operation)} for ${entityType} - a field is named by an atom`,
+    );
+  }
+
   if (asked !== null && asked.length > 0) {
     return;
   }

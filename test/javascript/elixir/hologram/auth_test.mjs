@@ -4477,6 +4477,27 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    it("refuses a field that isn't an atom for a type the model doesn't carry", () => {
+      defineModel();
+
+      const operation = Type.tuple([
+        Type.atom("update"),
+        Type.list([Type.atom("title"), Type.integer(1)]),
+      ]);
+
+      assertBoxedError(
+        () =>
+          canChange(
+            alice,
+            operation,
+            entryless(),
+            values({a: Type.integer(1)}),
+          ),
+        "Hologram.MisuseError",
+        "unknown field 1 in {:update, [:title, 1]} for MyApp.Nothing - a field is named by an atom",
+      );
+    });
+
     it("refuses an operation that isn't an update for a type the model doesn't carry", () => {
       defineModel();
 
