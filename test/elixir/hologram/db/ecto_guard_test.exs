@@ -12,7 +12,7 @@ defmodule Hologram.DB.EctoGuardTest do
   # Created by the test that removes it again.
   @compile {:no_warn_undefined, __MODULE__.RemovedRepo}
 
-  @insert_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions") VALUES ($1, now(), now(), now(), now(), '{}')|
+  @insert_sql ~s|INSERT INTO "hologram_data"."test_fixtures_entity_module1" ("id", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions") VALUES ($1, now(), now(), 0, now(), 0, now(), '{}')|
 
   @moduletag :database
 

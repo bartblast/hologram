@@ -400,7 +400,9 @@ defmodule Hologram.Sync.FrameTest do
                      "created_at" => nil,
                      "id" => parent.id,
                      "server_created_at" => nil,
+                     "server_created_seq" => nil,
                      "server_updated_at" => nil,
+                     "server_updated_seq" => nil,
                      "updated_at" => nil
                    }
                  ],
@@ -413,7 +415,9 @@ defmodule Hologram.Sync.FrameTest do
                      "created_at" => nil,
                      "id" => child.id,
                      "server_created_at" => nil,
+                     "server_created_seq" => nil,
                      "server_updated_at" => nil,
+                     "server_updated_seq" => nil,
                      "updated_at" => nil
                    }
                  ]

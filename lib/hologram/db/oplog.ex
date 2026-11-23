@@ -42,6 +42,12 @@ defmodule Hologram.DB.Oplog do
 
   @relationship_ops [:add_relationship, :del_relationship]
 
+  # Fixed application-defined key every save holds, shared, from before it takes its first serial
+  # until it ends. Frozen forever: a node reading another key would not see the saves still
+  # running. Provenance (for uniqueness, not for re-derivation): first 8 bytes of
+  # md5("hologram_oplog_serial") as a signed 64-bit integer.
+  @serial_lock_key -7_797_217_468_688_855_007
+
   @doc """
   Appends the given effects to the log in the caller's transaction, and wakes the dispatchers
   listening for them. Appending nothing does nothing. A large append goes in as several statements,
@@ -95,6 +101,12 @@ defmodule Hologram.DB.Oplog do
   """
   @spec channel() :: String.t()
   def channel, do: @channel
+
+  @doc """
+  Returns the advisory lock key a save holds, shared, while it can still commit a serial.
+  """
+  @spec serial_lock_key() :: integer
+  def serial_lock_key, do: @serial_lock_key
 
   @doc """
   Returns the transaction id below which every transaction has finished - the upper edge of the

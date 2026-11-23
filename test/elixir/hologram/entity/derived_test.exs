@@ -38,7 +38,7 @@ defmodule Hologram.Entity.DerivedTest do
 
     test "raises on a name the owning type does not declare" do
       expected_msg =
-        "unknown attribute :nothing in Hologram.Test.Fixtures.Entity.Module34 - known attributes: :active, :badge, :channel_id, :channel_load, :created_at, :display_name, :featured, :id, :level, :named_after_channel, :nickname, :ranked, :recent_count, :score, :score_label, :server_created_at, :server_updated_at, :top_score, :updated_at"
+        "unknown attribute :nothing in Hologram.Test.Fixtures.Entity.Module34 - known attributes: :active, :badge, :channel_id, :channel_load, :created_at, :display_name, :featured, :id, :level, :named_after_channel, :nickname, :ranked, :recent_count, :score, :score_label, :server_created_at, :server_created_seq, :server_updated_at, :server_updated_seq, :top_score, :updated_at"
 
       assert_error MisuseError, expected_msg, fn -> condition(Module34, nothing: 1) end
     end
@@ -391,7 +391,7 @@ defmodule Hologram.Entity.DerivedTest do
       line = __ENV__.line - 7
 
       expected_msg =
-        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: invalid derived field :unread_count in Hologram.Entity.DerivedTest.InlineEntityFixture198 - unknown attribute :last_read_at in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :server_created_at, :server_updated_at, :tier, :updated_at - last_read_at is an argument of the derived field's function, read pinned: ^last_read_at"
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: invalid derived field :unread_count in Hologram.Entity.DerivedTest.InlineEntityFixture198 - unknown attribute :last_read_at in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :server_created_at, :server_created_seq, :server_updated_at, :server_updated_seq, :tier, :updated_at - last_read_at is an argument of the derived field's function, read pinned: ^last_read_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         resolve(InlineEntityFixture198, :unread_count)
@@ -418,7 +418,7 @@ defmodule Hologram.Entity.DerivedTest do
       line = __ENV__.line - 7
 
       expected_msg =
-        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: invalid derived field :unread_count in Hologram.Entity.DerivedTest.InlineEntityFixture199 - unknown attribute :last_read_at in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :server_created_at, :server_updated_at, :tier, :updated_at - Hologram.Entity.DerivedTest.InlineEntityFixture199, the row the derived field is computed for, declares last_read_at - add it to the function's head and pin it: ^last_read_at"
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: invalid derived field :unread_count in Hologram.Entity.DerivedTest.InlineEntityFixture199 - unknown attribute :last_read_at in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :server_created_at, :server_created_seq, :server_updated_at, :server_updated_seq, :tier, :updated_at - Hologram.Entity.DerivedTest.InlineEntityFixture199, the row the derived field is computed for, declares last_read_at - add it to the function's head and pin it: ^last_read_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         resolve(InlineEntityFixture199, :unread_count)
@@ -445,7 +445,7 @@ defmodule Hologram.Entity.DerivedTest do
       line = __ENV__.line - 7
 
       expected_msg =
-        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: invalid derived field :unread_count in Hologram.Entity.DerivedTest.InlineEntityFixture200 - unknown attribute :last_read_at in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :server_created_at, :server_updated_at, :tier, :updated_at - Hologram.Entity.DerivedTest.InlineEntityFixture200, the row the derived field is computed for, declares last_read_at - its fields are read through the function's arguments, pinned on the right side of a comparison"
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: invalid derived field :unread_count in Hologram.Entity.DerivedTest.InlineEntityFixture200 - unknown attribute :last_read_at in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :channel_id, :channel_name, :created_at, :id, :later_count, :position, :server_created_at, :server_created_seq, :server_updated_at, :server_updated_seq, :tier, :updated_at - Hologram.Entity.DerivedTest.InlineEntityFixture200, the row the derived field is computed for, declares last_read_at - its fields are read through the function's arguments, pinned on the right side of a comparison"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         resolve(InlineEntityFixture200, :unread_count)

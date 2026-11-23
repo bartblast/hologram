@@ -42,8 +42,8 @@ defmodule Hologram.Migration.AtomicityTest do
 
   defp insert_task(title, amount) do
     statement = """
-    INSERT INTO "hologram_data"."my_app_task" ("id", "title", "amount", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
-    VALUES (gen_random_uuid(), $1, $2, now(), now(), now(), now(), '{}')
+    INSERT INTO "hologram_data"."my_app_task" ("id", "title", "amount", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
+    VALUES (gen_random_uuid(), $1, $2, now(), now(), 0, now(), 0, now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [title, amount])
@@ -167,7 +167,9 @@ defmodule Hologram.Migration.AtomicityTest do
                  "created_at",
                  "id",
                  "server_created_at",
+                 "server_created_seq",
                  "server_updated_at",
+                 "server_updated_seq",
                  "title",
                  "title_$search",
                  "title_$sort",
@@ -225,7 +227,9 @@ defmodule Hologram.Migration.AtomicityTest do
                  "created_at",
                  "id",
                  "server_created_at",
+                 "server_created_seq",
                  "server_updated_at",
+                 "server_updated_seq",
                  "title",
                  "title_$search",
                  "title_$sort",
@@ -283,7 +287,9 @@ defmodule Hologram.Migration.AtomicityTest do
                  "note_$search",
                  "note_$sort",
                  "server_created_at",
+                 "server_created_seq",
                  "server_updated_at",
+                 "server_updated_seq",
                  "title",
                  "title_$search",
                  "title_$sort",

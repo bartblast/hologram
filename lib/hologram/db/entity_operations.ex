@@ -849,19 +849,23 @@ defmodule Hologram.DB.EntityOperations do
       entity
       | created_at: now,
         server_created_at: server_now,
+        server_created_seq: nil,
         server_updated_at: server_now,
+        server_updated_seq: nil,
         updated_at: now,
         __meta__: %Metadata{revisions: revisions}
     }
 
     encoded_values =
-      Enum.map(columns, fn
+      columns
+      |> Enum.reject(&Mapper.sequence?/1)
+      |> Enum.map(fn
         %{source: :revisions} -> Map.new(settable_columns, &{&1.name, stamp})
         column -> encoded_column_value(stamped_entity, column)
       end)
 
     column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
-    placeholder_list = Enum.map_join(1..length(columns), ", ", &"$#{&1}")
+    value_list = insert_value_list(columns)
 
     # A row naming an owner whose set a write rests on whole waits for that write - see
     # Hologram.DB.SetLock.
@@ -871,9 +875,11 @@ defmodule Hologram.DB.EntityOperations do
     |> SetLock.row_owners(entity_type, values)
     |> SetLock.enter!(reference_targets(entity_type, values))
 
+    # Both numbers are one serial, so it's read once from a subquery the planner can't flatten.
     statement =
       "INSERT INTO #{qualified_table(table)} (#{column_list}) " <>
-        "VALUES (#{placeholder_list})#{conflict_clause}"
+        ~s|SELECT #{value_list} FROM (SELECT #{next_seq_call()} AS "n" OFFSET 0) AS "$serial"| <>
+        conflict_clause
 
     case Connection.query(statement, encoded_values) do
       {:ok, result} ->
@@ -884,6 +890,19 @@ defmodule Hologram.DB.EntityOperations do
       {:error, error} ->
         Connection.rollback(error)
     end
+  end
+
+  # What an insert's select list gives each column: the serial for a sequence number, and for any
+  # other column the next bound value.
+  defp insert_value_list(columns) do
+    {values, _next} =
+      Enum.map_reduce(columns, 1, fn column, next ->
+        if Mapper.sequence?(column),
+          do: {~s|"$serial"."n"|, next},
+          else: {"$#{next}", next + 1}
+      end)
+
+    Enum.join(values, ", ")
   end
 
   defp insert_if_absent(entity) do
@@ -995,7 +1014,7 @@ defmodule Hologram.DB.EntityOperations do
   defp effect_data(entity) do
     entity.__struct__
     |> persisted_columns()
-    |> Enum.reject(&(&1.source == :revisions))
+    |> Enum.reject(&(&1.source == :revisions or Mapper.sequence?(&1)))
     |> Map.new(fn column ->
       name = field_name(column)
 
@@ -1113,6 +1132,8 @@ defmodule Hologram.DB.EntityOperations do
 
     old_references(current, changes, reference_fields)
   end
+
+  defp next_seq_call, do: ~s|#{Mapper.quote_identifier(Mapper.system_schema())}."next_seq"()|
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"

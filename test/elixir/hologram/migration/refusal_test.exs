@@ -61,8 +61,8 @@ defmodule Hologram.Migration.RefusalTest do
   defp insert_task(title, amount, status) do
     statement = """
     INSERT INTO "hologram_data"."my_app_task"
-      ("id", "title", "amount", "status", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
-    VALUES (gen_random_uuid(), $1, $2, $3, now(), now(), now(), now(), '{}')
+      ("id", "title", "amount", "status", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
+    VALUES (gen_random_uuid(), $1, $2, $3, now(), now(), 0, now(), 0, now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [title, amount, status])

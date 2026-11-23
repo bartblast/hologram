@@ -8,6 +8,7 @@ defmodule Hologram.DB.SchemaReconciler do
   alias Hologram.DB.IndexPlan
   alias Hologram.DB.Introspection
   alias Hologram.DB.Mapper
+  alias Hologram.DB.Oplog
   alias Hologram.DB.Preflight
   alias Hologram.DB.Schema
   alias Hologram.DB.SortKey
@@ -950,8 +951,24 @@ defmodule Hologram.DB.SchemaReconciler do
       )
       """,
       """
+      CREATE SEQUENCE "#{system_schema}"."oplog_seq_seq"
+      """,
+      # Every serial comes from here, so no save can hold one without holding the lock (see
+      # `Hologram.DB.Oplog.serial_lock_key/0`). The lock is taken per serial because a rolled back
+      # savepoint gives it up. A function call rather than a subquery, so that an update waiting
+      # for a row's lock takes its serial again once it holds it.
+      """
+      CREATE FUNCTION "#{system_schema}"."next_seq"() RETURNS bigint
+      LANGUAGE plpgsql VOLATILE AS $body$
+      BEGIN
+        PERFORM pg_catalog.pg_advisory_xact_lock_shared((#{Oplog.serial_lock_key()})::bigint);
+        RETURN pg_catalog.nextval('"#{system_schema}"."oplog_seq_seq"'::pg_catalog.regclass);
+      END
+      $body$
+      """,
+      """
       CREATE TABLE "#{system_schema}"."oplog" (
-        "seq" bigserial PRIMARY KEY,
+        "seq" bigint PRIMARY KEY DEFAULT "#{system_schema}"."next_seq"(),
         "op" text NOT NULL,
         "type" text NOT NULL,
         "entity_id" uuid NOT NULL,
@@ -964,6 +981,9 @@ defmodule Hologram.DB.SchemaReconciler do
         "actor_id" uuid,
         "inserted_at" timestamptz NOT NULL DEFAULT now()
       )
+      """,
+      """
+      ALTER SEQUENCE "#{system_schema}"."oplog_seq_seq" OWNED BY "#{system_schema}"."oplog"."seq"
       """,
       """
       CREATE INDEX "oplog_tx_seq_$idx" ON "#{system_schema}"."oplog" ("tx", "seq")

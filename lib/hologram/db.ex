@@ -382,8 +382,8 @@ defmodule Hologram.DB do
   come from this module at run time, quoted in the SQL - a join table's name carries `$`, and an
   attribute may be named by a reserved word (`"user"` unquoted is the database role). An
   attribute's column has the attribute's name, a to-one relationship's column is `<name>_id`,
-  every table has `id`, `created_at`, `updated_at`, `server_created_at` and `server_updated_at`,
-  and a join table has `source_id` and `target_id`. Columns whose names contain `$` are the
+  every table has `id`, `created_at`, `updated_at`, `server_created_at`, `server_updated_at`,
+  `server_created_seq` and `server_updated_seq`, and a join table has `source_id` and `target_id`. Columns whose names contain `$` are the
   framework's own, and what they hold can change between versions. Select attributes by name.
 
   Policies do not apply: the read sees every row. A read on behalf of a user keeps to what that

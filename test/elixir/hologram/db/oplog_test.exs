@@ -17,6 +17,31 @@ defmodule Hologram.DB.OplogTest do
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
 
+  defp next_seq do
+    {:ok, %Postgrex.Result{rows: [[seq]]}} =
+      Connection.query(~s|SELECT "hologram_system"."next_seq"()|)
+
+    seq
+  end
+
+  # Whether this connection holds the serial lock, shared. An advisory key of 64 bits shows in
+  # pg_locks as its high and low halves.
+  defp holds_serial_lock? do
+    <<class_id::32, object_id::32>> = <<serial_lock_key()::signed-64>>
+
+    statement = """
+    SELECT EXISTS (
+      SELECT 1 FROM pg_locks
+      WHERE locktype = 'advisory' AND classid = $1 AND objid = $2 AND objsubid = 1
+        AND mode = 'ShareLock' AND granted AND pid = pg_backend_pid()
+    )
+    """
+
+    {:ok, %Postgrex.Result{rows: [[held?]]}} = Connection.query(statement, [class_id, object_id])
+
+    held?
+  end
+
   defp places do
     statement = ~s|SELECT "tx", "seq" FROM "hologram_system"."oplog" ORDER BY "tx", "seq"|
 
@@ -90,6 +115,49 @@ defmodule Hologram.DB.OplogTest do
     {:ok, _result} = Connection.query(statement, params)
 
     :ok
+  end
+
+  describe "next_seq()" do
+    test "holds the serial lock from the first serial on" do
+      refute holds_serial_lock?()
+
+      next_seq()
+
+      assert holds_serial_lock?()
+    end
+
+    test "hands out rising serials" do
+      first = next_seq()
+
+      assert next_seq() > first
+    end
+
+    test "takes the lock again after a rolled back savepoint gave it up" do
+      {:error, :undone} =
+        Connection.transaction(fn ->
+          next_seq()
+
+          assert holds_serial_lock?()
+
+          Connection.rollback(:undone)
+        end)
+
+      refute holds_serial_lock?()
+
+      next_seq()
+
+      assert holds_serial_lock?()
+    end
+
+    test "numbers an effect appended without one" do
+      serial = next_seq()
+
+      :ok = append([%{op: :del_entity, entity_type: Module2, entity_id: @entity_id, data: %{}}])
+
+      assert holds_serial_lock?()
+      assert [{_tx, seq}] = places()
+      assert seq > serial
+    end
   end
 
   describe "current_xmin/0" do

@@ -1534,7 +1534,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture142 - unknown attribute :position in Hologram.Policy.ValidatorTest.InlinePolicyFixture142 - known attributes: :created_at, :id, :server_created_at, :server_updated_at, :updated_at - Hologram.Test.Fixtures.Entity.Module33 declares position, read as message.position"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture142 - unknown attribute :position in Hologram.Policy.ValidatorTest.InlinePolicyFixture142 - known attributes: :created_at, :id, :server_created_at, :server_created_seq, :server_updated_at, :server_updated_seq, :updated_at - Hologram.Test.Fixtures.Entity.Module33 declares position, read as message.position"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture142], [])
@@ -1551,7 +1551,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - unknown attribute :published in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - known attributes: :created_at, :id, :server_created_at, :server_updated_at, :title, :updated_at"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - unknown attribute :published in Hologram.Policy.ValidatorTest.InlinePolicyFixture3 - known attributes: :created_at, :id, :server_created_at, :server_created_seq, :server_updated_at, :server_updated_seq, :title, :updated_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture3], [])
@@ -3040,7 +3040,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity, taken from Hologram.Policy.ValidatorTest.TakenUnknownPredicatePolicy - unknown attribute :published in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity - known attributes: :created_at, :id, :server_created_at, :server_updated_at, :title, :updated_at"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity, taken from Hologram.Policy.ValidatorTest.TakenUnknownPredicatePolicy - unknown attribute :published in Hologram.Policy.ValidatorTest.TakenUnknownPredicateEntity - known attributes: :created_at, :id, :server_created_at, :server_created_seq, :server_updated_at, :server_updated_seq, :title, :updated_at"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([TakenUnknownPredicateEntity], [])

@@ -19,7 +19,9 @@ defmodule Hologram.Entity do
     {:created_at, :datetime, []},
     {:id, :uuid, []},
     {:server_created_at, :datetime, []},
+    {:server_created_seq, :integer, []},
     {:server_updated_at, :datetime, []},
+    {:server_updated_seq, :integer, []},
     {:updated_at, :datetime, []}
   ]
 

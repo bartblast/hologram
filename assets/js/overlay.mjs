@@ -343,7 +343,9 @@ export default class Overlay {
       {
         created_at: timestamp,
         server_created_at: null,
+        server_created_seq: null,
         server_updated_at: null,
+        server_updated_seq: null,
         updated_at: timestamp,
         $revisions: revisions,
       },

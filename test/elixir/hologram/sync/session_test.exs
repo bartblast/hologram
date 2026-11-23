@@ -1708,7 +1708,7 @@ defmodule Hologram.Sync.SessionTest do
 
       assert deltas == [
                %{
-                 data: WireData.row(task),
+                 data: WireData.row(EntityOperations.get(Module2, task.id)),
                  id: task.id,
                  op: :put_entity,
                  type: "Hologram.Test.Fixtures.Entity.Module2"

@@ -274,7 +274,9 @@ defmodule Hologram.EntityTest do
                :created_at,
                :id,
                :server_created_at,
+               :server_created_seq,
                :server_updated_at,
+               :server_updated_seq,
                :updated_at
              ]
     end
@@ -293,7 +295,9 @@ defmodule Hologram.EntityTest do
                :messages,
                :name,
                :server_created_at,
+               :server_created_seq,
                :server_updated_at,
+               :server_updated_seq,
                :topic,
                :updated_at
              ]
@@ -320,7 +324,9 @@ defmodule Hologram.EntityTest do
                :name,
                :recent_messages,
                :server_created_at,
+               :server_created_seq,
                :server_updated_at,
+               :server_updated_seq,
                :updated_at
              ]
 
@@ -343,7 +349,9 @@ defmodule Hologram.EntityTest do
                :created_at,
                :id,
                :server_created_at,
+               :server_created_seq,
                :server_updated_at,
+               :server_updated_seq,
                :updated_at
              ]
     end
@@ -390,7 +398,9 @@ defmodule Hologram.EntityTest do
                :created_at,
                :id,
                :server_created_at,
+               :server_created_seq,
                :server_updated_at,
+               :server_updated_seq,
                :updated_at
              ]
     end
@@ -402,7 +412,9 @@ defmodule Hologram.EntityTest do
         {:created_at, :datetime, []},
         {:id, :uuid, []},
         {:server_created_at, :datetime, []},
+        {:server_created_seq, :integer, []},
         {:server_updated_at, :datetime, []},
+        {:server_updated_seq, :integer, []},
         {:updated_at, :datetime, []}
       ]
 
@@ -1335,7 +1347,9 @@ defmodule Hologram.EntityTest do
                c: ":x | :y | nil",
                created_at: "DateTime.t() | nil",
                server_created_at: "DateTime.t() | nil",
+               server_created_seq: "integer() | nil",
                server_updated_at: "DateTime.t() | nil",
+               server_updated_seq: "integer() | nil",
                d: "float() | nil",
                id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
@@ -1354,7 +1368,9 @@ defmodule Hologram.EntityTest do
                b_id: "Hologram.Entity.id() | nil",
                created_at: "DateTime.t() | nil",
                server_created_at: "DateTime.t() | nil",
+               server_created_seq: "integer() | nil",
                server_updated_at: "DateTime.t() | nil",
+               server_updated_seq: "integer() | nil",
                id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }
@@ -1365,7 +1381,9 @@ defmodule Hologram.EntityTest do
                __meta__: "Hologram.Entity.Metadata.t()",
                created_at: "DateTime.t() | nil",
                server_created_at: "DateTime.t() | nil",
+               server_created_seq: "integer() | nil",
                server_updated_at: "DateTime.t() | nil",
+               server_updated_seq: "integer() | nil",
                id: "Hologram.Entity.id() | nil",
                messages:
                  "[Hologram.Test.Fixtures.Entity.Module28.t()] | Hologram.Entity.NotIncluded.t()",
@@ -1386,7 +1404,9 @@ defmodule Hologram.EntityTest do
                channel_name: "String.t() | Hologram.Entity.NotIncluded.t() | nil",
                created_at: "DateTime.t() | nil",
                server_created_at: "DateTime.t() | nil",
+               server_created_seq: "integer() | nil",
                server_updated_at: "DateTime.t() | nil",
+               server_updated_seq: "integer() | nil",
                id: "Hologram.Entity.id() | nil",
                later_count: "integer() | Hologram.Entity.NotIncluded.t() | nil",
                position: "integer() | nil",
@@ -1414,7 +1434,9 @@ defmodule Hologram.EntityTest do
                __meta__: "Hologram.Entity.Metadata.t()",
                created_at: "DateTime.t() | nil",
                server_created_at: "DateTime.t() | nil",
+               server_created_seq: "integer() | nil",
                server_updated_at: "DateTime.t() | nil",
+               server_updated_seq: "integer() | nil",
                id: "Hologram.Entity.id() | nil",
                label: "String.t() | nil",
                secret_note: "String.t() | Hologram.Entity.ServerOnly.t() | nil",
@@ -1431,7 +1453,9 @@ defmodule Hologram.EntityTest do
                c: "String.t() | nil",
                created_at: "DateTime.t() | nil",
                server_created_at: "DateTime.t() | nil",
+               server_created_seq: "integer() | nil",
                server_updated_at: "DateTime.t() | nil",
+               server_updated_seq: "integer() | nil",
                id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }
@@ -1449,7 +1473,9 @@ defmodule Hologram.EntityTest do
                c_id: "Hologram.Entity.id() | nil",
                created_at: "DateTime.t() | nil",
                server_created_at: "DateTime.t() | nil",
+               server_created_seq: "integer() | nil",
                server_updated_at: "DateTime.t() | nil",
+               server_updated_seq: "integer() | nil",
                id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }
@@ -1475,7 +1501,9 @@ defmodule Hologram.EntityTest do
                __meta__: "Hologram.Entity.Metadata.t()",
                created_at: "DateTime.t() | nil",
                server_created_at: "DateTime.t() | nil",
+               server_created_seq: "integer() | nil",
                server_updated_at: "DateTime.t() | nil",
+               server_updated_seq: "integer() | nil",
                id: "Hologram.Entity.id() | nil",
                updated_at: "DateTime.t() | nil"
              }

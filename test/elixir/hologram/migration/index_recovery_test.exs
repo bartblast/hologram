@@ -56,13 +56,13 @@ defmodule Hologram.Migration.IndexRecoveryTest do
 
   @global_grant_statement """
   INSERT INTO "hologram_data"."hologram_role_grant"
-    ("id", "user_id", "role", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
-  VALUES (gen_random_uuid(), $1, 'editor', now(), now(), now(), now(), '{}')
+    ("id", "user_id", "role", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
+  VALUES (gen_random_uuid(), $1, 'editor', now(), now(), 0, now(), 0, now(), '{}')
   """
 
   @task_statement """
-  INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
-  VALUES (gen_random_uuid(), $1, now(), now(), now(), now(), '{}')
+  INSERT INTO "hologram_data"."my_app_task" ("id", "slug", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
+  VALUES (gen_random_uuid(), $1, now(), now(), 0, now(), 0, now(), '{}')
   """
 
   defp build_index_concurrently(op \\ @index_op) do
@@ -154,8 +154,8 @@ defmodule Hologram.Migration.IndexRecoveryTest do
 
   defp insert_user(user_id) do
     statement = """
-    INSERT INTO "hologram_data"."my_app_user" ("id", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
-    VALUES ($1, now(), now(), now(), now(), '{}')
+    INSERT INTO "hologram_data"."my_app_user" ("id", "created_at", "server_created_at", "server_created_seq", "server_updated_at", "server_updated_seq", "updated_at", "$revisions")
+    VALUES ($1, now(), now(), 0, now(), 0, now(), '{}')
     """
 
     {:ok, _result} = Connection.query(statement, [Ecto.UUID.dump!(user_id)])

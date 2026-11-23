@@ -17,6 +17,20 @@ defmodule Hologram.DB.Mapper do
   # PostgreSQL truncates identifiers to 63 bytes - derived identifiers must never rely on that.
   @max_identifier_bytes 63
 
+  # The two columns holding a row's place in the server's order. Taken from the oplog's sequence by
+  # the statement writing the row, so an entity never supplies them.
+  @sequence_columns ["server_created_seq", "server_updated_seq"]
+
+  # The system columns every row carries beside its id.
+  @stamp_columns [
+    {"created_at", :datetime, "timestamptz"},
+    {"server_created_at", :datetime, "timestamptz"},
+    {"server_created_seq", :integer, "int8"},
+    {"server_updated_at", :datetime, "timestamptz"},
+    {"server_updated_seq", :integer, "int8"},
+    {"updated_at", :datetime, "timestamptz"}
+  ]
+
   @doc """
   Returns the column definitions derived from the given entity type module, in physical order:
   id, declared attributes sorted by name, to-one relationship references sorted by name,
@@ -237,6 +251,13 @@ defmodule Hologram.DB.Mapper do
   end
 
   @doc """
+  Returns whether the given column definition holds one of a row's two sequence numbers, which the
+  statement writing the row takes from the oplog's sequence rather than from the entity.
+  """
+  @spec sequence?(%{atom => any}) :: boolean
+  def sequence?(%{name: name}), do: name in @sequence_columns
+
+  @doc """
   Returns the name of the PostgreSQL schema the framework's own bookkeeping tables live in - the
   managed-database marker, the migration history, the operations log, the mutation record and the
   schema object registry - unquoted.
@@ -406,7 +427,7 @@ defmodule Hologram.DB.Mapper do
     columns =
       [id_column() | attribute_columns] ++
         to_one_columns ++
-        timestamp_columns() ++ [revisions_column()] ++ sort_columns ++ search_columns
+        stamp_columns() ++ [revisions_column()] ++ sort_columns ++ search_columns
 
     validate_column_names!(entity_type, columns)
 
@@ -851,12 +872,12 @@ defmodule Hologram.DB.Mapper do
 
   defp strip_root(segments, _root), do: segments
 
-  defp timestamp_columns do
-    Enum.map(["created_at", "server_created_at", "server_updated_at", "updated_at"], fn name ->
+  defp stamp_columns do
+    Enum.map(@stamp_columns, fn {name, type, sql_type} ->
       %{
         name: name,
-        type: :datetime,
-        sql_type: "timestamptz",
+        type: type,
+        sql_type: sql_type,
         collation: nil,
         enum_values: nil,
         default: nil,
