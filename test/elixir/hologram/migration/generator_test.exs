@@ -271,7 +271,25 @@ defmodule Hologram.Migration.GeneratorTest do
           MyApp.Place => %{}
         })
 
-      assert {:ok, _path, _questions} = generate(migrations, current, @timestamp, opts)
+      assert {:ok, path, 1} = generate(migrations, current, @timestamp, opts)
+
+      answered =
+        path
+        |> File.read!()
+        |> String.replace(
+          ~r/^( *)resolve! :fill, attributes: \[:b\]$/m,
+          "\\1change_relationship :b, optional: false"
+        )
+
+      refute answered =~ ~r/^ *resolve!/m
+
+      File.write!(path, answered)
+      Code.compile_file(path)
+
+      [migration] = Loader.from_modules!([written_module(opts[:namespace])])
+      history = Enum.concat(migrations, [migration])
+
+      assert generate(history, current, @timestamp, opts) == :nothing_to_do
     end
 
     @tag :database
