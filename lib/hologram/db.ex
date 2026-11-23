@@ -532,8 +532,9 @@ defmodule Hologram.DB do
   columns plus updated_at and server_updated_at - there is no full-row variant. Changes (a map
   or keyword list) are keyed by declared attribute names and to-one reference fields
   (`<relationship name>_id`) - a to-one reference is set, reassigned, or cleared (nil) through
-  its reference field. Changing any other name, system attributes included, raises
-  Hologram.MisuseError - as do empty changes and an id that names no entity.
+  its reference field. Changing any other name, system attributes and the attributes the framework
+  sets on a job included, raises Hologram.MisuseError - as do empty changes and an id that names no
+  entity.
 
   Returns :ok, or {:error, violations} - the map Entity.validate/2 returns, naming each
   field the changes leave breaking a declaration: the declared constraints a changed value
@@ -587,7 +588,8 @@ defmodule Hologram.DB do
   add_relationship and delete_relationship - in one transaction, and returns :ok.
 
   Only recorded changes are written: a field set directly on the struct is not among them, and a
-  struct carrying nothing recorded raises Hologram.MisuseError, as does an id that names no entity.
+  struct carrying nothing recorded raises Hologram.MisuseError, as do an id that names no entity
+  and a change to an attribute the framework sets on a job, whatever the claim.
   The attribute changes go first and the edges follow, so a refused value leaves the edges unapplied
   and an edge that raises takes the values with it.
 

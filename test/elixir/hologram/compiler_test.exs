@@ -3113,7 +3113,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"frameworkAttributes":["actor_id","attempt","error","scheduled_at","status"]/
+               ~s/"frameworkAttributes":["actor_id","attempt","error","run_as_server","scheduled_at","status"]/
              )
     end
 

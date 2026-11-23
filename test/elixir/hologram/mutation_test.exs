@@ -1932,16 +1932,22 @@ defmodule Hologram.MutationTest do
       assert run(batch, server()) == {:ok, answer}
     end
 
-    test "refuses a job create under a user id no user entity can have" do
+    test "records a job create under a user id no user entity can have to run under the rules" do
       id = Entity.generate_id()
 
-      message =
-        "cannot create Hologram.Test.Fixtures.Job.Module1 as user 7 - the user id isn't a user entity's, so the job would run with no user and skip every rule. Create it with trust: true to run it as the server."
+      assert {:ok, %{"status" => "confirmed"}} =
+               run(envelope([create_write(JobModule1, id, %{})]), server(7))
 
-      assert run(envelope([create_write(JobModule1, id, %{})]), server(7)) ==
-               rejected(0, %Hologram.AccessDeniedError{message: message})
+      assert %{actor_id: nil, run_as_server: false} = EntityOperations.get(JobModule1, id)
+    end
 
-      assert EntityOperations.get(JobModule1, id) == nil
+    test "records a signed-out visitor's job create to run under the rules" do
+      id = Entity.generate_id()
+
+      assert {:ok, %{"status" => "confirmed"}} =
+               run(envelope([create_write(JobModule1, id, %{})]), server())
+
+      assert %{actor_id: nil, run_as_server: false} = EntityOperations.get(JobModule1, id)
     end
 
     # A grant naming the session's own user id beside a create would pass as the creator's grant if

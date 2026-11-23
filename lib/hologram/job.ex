@@ -33,7 +33,9 @@ defmodule Hologram.Job do
       Job.create!(MyApp.Jobs.NotifyMembers, project_id: project.id, reason: :archived)
 
   Refuse the transaction and the job never existed, so nothing runs. Let it commit and the job
-  runs, as the user who enqueued it.
+  runs, as the user who enqueued it. A job a signed-out visitor enqueued runs as a signed-out
+  visitor, so the rules judge its run/1 and it says `trust` to go past them. A job enqueued outside
+  a session, or with `trust: true` and no user to record, runs as the server.
 
   A job that fails is tried again, up to 10 attempts unless its use line gives another number,
   written out:
@@ -80,8 +82,9 @@ defmodule Hologram.Job do
 
   Every job also carries what the framework records about it, readable like any attribute and the
   framework's alone to write: `status`, `attempt` (how many runs have started), `scheduled_at`
-  (when it is next due), `error` (server-only) and `actor_id`. The names are taken, so a job type
-  can't declare its own attribute under one of them.
+  (when it is next due), `error` (server-only), `actor_id` and `run_as_server` (whether it runs
+  with the server's authority). The names are taken, so a job type can't declare its own attribute
+  under one of them.
 
   Each node runs up to 10 jobs of a type at once. A job type that should run fewer at once, or
   more, says so in its use line, with the number written out:
@@ -121,9 +124,9 @@ defmodule Hologram.Job do
   Runs the job.
 
   Called by a worker with the job as it was read from its row, after the row committed, once per
-  attempt, with the acting user set to whoever enqueued it - so reads are filtered and writes are
-  evaluated as that user's. Returns :ok when the work is done, or {:error, reason} when it
-  failed. Raising fails the attempt with the exception. A failed attempt is tried again until the
+  attempt, as whoever enqueued it - so reads are filtered and writes are evaluated as that user's
+  or, for a signed-out visitor's job, as an anonymous session's. A job marked run_as_server runs
+  with no session. Returns :ok when the work is done, or {:error, reason} when it failed. Raising fails the attempt with the exception. A failed attempt is tried again until the
   job is out of attempts, so this has to be safe to run more than once.
   """
   @callback run(job :: Entity.t()) :: :ok | {:error, any}
@@ -150,6 +153,7 @@ defmodule Hologram.Job do
       attribute :actor_id, :uuid, optional: true
       attribute :attempt, :integer, default: 0
       attribute :error, :string, optional: true, server_only: true
+      attribute :run_as_server, :boolean, default: false
       attribute :scheduled_at, :datetime, optional: true
       attribute :status, :enum, values: [:queued, :running, :done, :failed], default: :queued
 
@@ -215,12 +219,18 @@ defmodule Hologram.Job do
   Creates a job of the given job type from the given values (a map or a keyword list), enqueuing it.
 
   The job is written as a row of its type, in whatever transaction the caller is already in, with
-  its status queued and its actor the acting user - nobody, on the trusted tier, and nobody for a
-  trust claim made under a user id no user entity can have, like an app's own serial id. It runs
-  after that transaction commits: a worker calls the job type's run/1 with the job, under the
-  acting user's authority, and records the outcome on it. A run that fails or is cut short is tried
-  again, up to the job type's max_attempts/1. A transaction that rolls back leaves no job, so
-  nothing runs.
+  its status queued and its actor the acting user. It runs after that transaction commits: a worker
+  calls the job type's run/1 with the job and records the outcome on it. A run that fails or is cut
+  short is tried again, up to the job type's max_attempts/1. A transaction that rolls back leaves
+  no job, so nothing runs.
+
+  The create settles who the job runs as:
+
+    * a signed-in user's job runs as that user, with or without a trust claim
+    * a signed-out visitor's job runs as an anonymous session, judged by the rules, and so does one
+      from a user id no user entity can have, like an app's own serial id
+    * a job created outside a session, like in a seed, a Mix task, a console or an app's own plug or
+      controller, runs as the server, and so does a trust claim with no user to record
 
   Returns {:ok, job} with the written job, or {:error, violations} naming each attribute or
   reference that broke its declaration - the same answers, and the same checks, as writing any
@@ -232,9 +242,8 @@ defmodule Hologram.Job do
 
   Raises Hologram.MisuseError for a module that is not a job type, for an unknown option, and for a
   value of an attribute the framework sets. Raises Hologram.AccessDeniedError in a session when
-  the job type declares no allow lines, since no rule can then grant the write, and when the
-  acting user id is one no user entity can have, unless the call claims trust: true - such a job
-  would run with no user, skipping every rule.
+  the job type declares no allow lines, since no rule can then grant the write, unless the call
+  claims trust: true.
   """
   @spec create(module, %{optional(atom) => any} | keyword, keyword) ::
           {:ok, Entity.t()} | {:error, %{atom => list(atom | {atom, any})}}
@@ -289,10 +298,12 @@ defmodule Hologram.Job do
   def timeout(job_type), do: job_type.__job_timeout__()
 
   @doc """
-  Returns the names of the attributes every job type carries and only the framework sets, sorted: the acting user at the enqueue, how many runs have started, the failure record, when the job is next due, and the status.
+  Returns the names of the attributes every job type carries and only the framework sets, sorted: the acting user at the enqueue, how many runs have started, the failure record, whether it runs as the server, when the job is next due, and the status.
   """
   @spec framework_attribute_names() :: list(atom)
-  def framework_attribute_names, do: [:actor_id, :attempt, :error, :scheduled_at, :status]
+  def framework_attribute_names do
+    [:actor_id, :attempt, :error, :run_as_server, :scheduled_at, :status]
+  end
 
   defp apply_claim(job, :none), do: job
 

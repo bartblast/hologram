@@ -87,15 +87,16 @@ defmodule Hologram.Job.Runner do
   end
 
   @doc """
-  Calls the given job's run/1 with it, as the user who created it - so its reads are filtered and
-  its writes evaluated as that user's, and raw, with no session, for a job created with no actor.
+  Calls the given job's run/1 with it, as whoever created it: as the recorded user, raw with no
+  session for a job marked run_as_server, and otherwise as an anonymous session, so a job with
+  neither mark is judged by the rules rather than trusted.
 
   Returns `:done` when run/1 answered `:ok` or `{:ok, value}` - the value is not kept, since what a
   job did is in the rows it wrote - or `{:failed, text}` for `{:error, reason}`, for a raise, throw
   or exit, and for any other return, each with the text that goes on the row.
   """
   @spec invoke(struct) :: :done | {:failed, String.t()}
-  def invoke(%{actor_id: nil} = job) do
+  def invoke(%{actor_id: nil, run_as_server: true} = job) do
     Context.without_session(fn -> attempt(job) end)
   end
 

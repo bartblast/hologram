@@ -559,6 +559,14 @@ defmodule Hologram.Mutation.EnvelopeTest do
                 ~s[write 0: "scheduled_at" is not a field of Hologram.Test.Fixtures.Job.Module1 a client can write]}
     end
 
+    test "refuses a job's server mark as a field" do
+      entry = create(JobModule1, %{"run_as_server" => true})
+
+      assert parse(raw([entry])) ==
+               {:error,
+                ~s[write 0: "run_as_server" is not a field of Hologram.Test.Fixtures.Job.Module1 a client can write]}
+    end
+
     test "refuses a job's error as a field" do
       entry = create(JobModule1, %{"error" => "boom"})
 

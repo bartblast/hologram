@@ -1217,9 +1217,9 @@ defmodule Hologram.Entity.Validator do
   defp unique_field_refusal(module, field, :unknown),
     do: "#{inspect(field)} is not an attribute or a to-one relationship of #{inspect(module)}"
 
-  # The system attributes, and a job's actor, attempt count, failure record, due time and status -
-  # declared like any attribute, and set by the framework alone: construction refuses them by
-  # name, so no write of the app's could ever choose the value a key over one would compare.
+  # The system attributes, and a job's actor, attempt count, failure record, server mark, due time
+  # and status - declared like any attribute, and set by the framework alone: construction refuses
+  # them by name, so no write of the app's could ever choose the value a key over one would compare.
   defp unique_framework_field?(module, field) do
     field in @reserved_names or
       (Module.defines?(module, {:__is_hologram_job__, 0}) and

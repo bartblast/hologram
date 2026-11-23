@@ -5,6 +5,7 @@ defmodule Hologram.Job.RunnerTest do
   import Hologram.Test, only: [as_user: 2]
 
   alias Hologram.Auth
+  alias Hologram.Auth.Context
   alias Hologram.DB
   alias Hologram.DB.EntityOperations
   alias Hologram.Entity
@@ -241,6 +242,25 @@ defmodule Hologram.Job.RunnerTest do
 
       assert Process.get(:ran_as) == nil
       assert Process.get(:ran_in_session?) == false
+    end
+
+    # A job with neither a user nor the server's mark fails closed: a signed-out visitor's.
+    test "runs a job with no user and no server mark as an anonymous session" do
+      job = %{job(:record_actor) | run_as_server: false}
+
+      assert invoke(job) == :done
+      assert Process.get(:ran_as) == nil
+      assert Process.get(:ran_in_session?) == true
+      assert Context.session?() == false
+    end
+
+    test "judges a write of a job with no user and no server mark by the rules" do
+      job = %{job(:create_row) | run_as_server: false}
+
+      assert {:failed, text} = invoke(job)
+
+      assert text =~ "** (Hologram.AccessDeniedError) not allowed to create"
+      assert DB.read(Entity2) == []
     end
 
     test "runs a job created by a user in that user's session" do
