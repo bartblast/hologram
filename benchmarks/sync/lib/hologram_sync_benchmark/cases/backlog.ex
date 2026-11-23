@@ -510,8 +510,8 @@ defmodule HologramSyncBenchmark.Cases.Backlog do
     [
       "#{opts[:cards]} cards read with a bare `allow :read`, #{clients} anonymous clients " <>
         "connected",
-      "#{@writers} writers commit batches of #{@batch_size} effects for #{opts[:replicas]} " <>
-        "replicas while one transaction holds the dispatcher up",
+      "#{@writers} writers commit batches of #{@batch_size} effects for up to " <>
+        "#{opts[:replicas]} replicas while one transaction holds the dispatcher up",
       "each size runs on a fresh log and a fresh server node, on a Postgres server of its own",
       "a delivery is waited on for at most #{div(@delivery_limit_ms, 1_000)} s, and a dash means " <>
         "it didn't reach every client in that time, or a client lost its stream first",
