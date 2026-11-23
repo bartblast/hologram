@@ -4002,6 +4002,125 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "list_struct_impl_mfas/4" do
+    test "lists what each given type's implementations reach, without its struct functions" do
+      call_graph = reach_full(reach_modules())
+
+      result =
+        list_struct_impl_mfas(
+          call_graph,
+          [ReachTest.TypeA, ReachTest.TypeB],
+          [ReachTest.Page],
+          []
+        )
+
+      assert result == %{
+               ReachTest.TypeA => [
+                 {ReachTest.ImplHelper, :fun, 0},
+                 {ReachTest.Proto.TypeA, :__impl__, 1},
+                 {ReachTest.Proto.TypeA, :fun, 1}
+               ],
+               ReachTest.TypeB => [
+                 {ReachTest.Proto.TypeB, :__impl__, 1},
+                 {ReachTest.Proto.TypeB, :fun, 1},
+                 {ReachTest.Unreached, :fun, 0}
+               ]
+             }
+    end
+
+    test "leaves out a type that isn't given" do
+      call_graph = reach_full(reach_modules())
+
+      result = list_struct_impl_mfas(call_graph, [ReachTest.TypeA], [ReachTest.Page], [])
+
+      assert Map.keys(result) == [ReachTest.TypeA]
+    end
+
+    test "leaves out a type with no implementation" do
+      modules =
+        Map.put(
+          reach_modules(),
+          ReachTest.TypeC,
+          {%{struct?: true}, [{:__struct__, 0, []}, {:__struct__, 1, []}]}
+        )
+
+      call_graph = reach_full(modules)
+
+      assert list_struct_impl_mfas(call_graph, [ReachTest.TypeC], [ReachTest.Page], []) == %{}
+    end
+
+    test "leaves out a type whose only implementation is of a protocol client code can't dispatch" do
+      call_graph = reach_full(reach_modules_with_chunk_only_protocol())
+
+      assert list_struct_impl_mfas(call_graph, [ReachTest.TypeC], [ReachTest.Page], []) == %{}
+    end
+
+    test "includes the implementation for a struct type the implementation's code names" do
+      modules =
+        Map.put(
+          reach_modules(),
+          ReachTest.Proto.TypeB,
+          reach_impl(ReachTest.TypeB, [
+            {ReachTest.Proto, :fun, 1},
+            {ReachTest.TypeA, :__struct__, 0}
+          ])
+        )
+
+      call_graph = reach_full(modules)
+
+      result = list_struct_impl_mfas(call_graph, [ReachTest.TypeB], [ReachTest.Page], [])
+
+      assert {ReachTest.Proto.TypeA, :fun, 1} in result[ReachTest.TypeB]
+      assert {ReachTest.TypeA, :__struct__, 0} in result[ReachTest.TypeB]
+    end
+
+    test "includes the implementation for a struct type a field's default holds" do
+      call_graph = reach_full(reach_modules())
+      add_edge(call_graph, {ReachTest.TypeA, :__struct__, 0}, ReachTest.TypeB)
+      add_edge(call_graph, {ReachTest.Proto.TypeA, :fun, 1}, {ReachTest.Proto, :fun, 1})
+
+      result = list_struct_impl_mfas(call_graph, [ReachTest.TypeA], [ReachTest.Page], [])
+
+      assert {ReachTest.Proto.TypeB, :fun, 1} in result[ReachTest.TypeA]
+      refute {ReachTest.TypeA, :__struct__, 0} in result[ReachTest.TypeA]
+    end
+
+    # What the runtime carries is left out of a chunk, but what it names still runs in the browser.
+    test "keeps the functions the runtime holds" do
+      modules =
+        Map.merge(reach_modules(), %{
+          Exception => {%{}, [{:message, 1, []}]},
+          ReachTest.Proto.TypeA => reach_impl(ReachTest.TypeA, [{Exception, :message, 1}])
+        })
+
+      call_graph = reach_full(modules)
+
+      result = list_struct_impl_mfas(call_graph, [ReachTest.TypeA], [ReachTest.Page], [])
+
+      assert {Exception, :message, 1} in result[ReachTest.TypeA]
+    end
+
+    test "doesn't follow the Elixir body of a manually ported function" do
+      modules =
+        Map.merge(reach_modules(), %{
+          Kernel => {%{}, [{:inspect, 1, [{ReachTest.Late, :fun, 0}]}]},
+          ReachTest.Proto.TypeA => reach_impl(ReachTest.TypeA, [{Kernel, :inspect, 1}])
+        })
+
+      call_graph = reach_full(modules)
+
+      result = list_struct_impl_mfas(call_graph, [ReachTest.TypeA], [ReachTest.Page], [])
+
+      refute {ReachTest.Late, :fun, 0} in result[ReachTest.TypeA]
+    end
+
+    test "returns nothing given no types" do
+      call_graph = reach_full(reach_modules())
+
+      assert list_struct_impl_mfas(call_graph, [], [ReachTest.Page], []) == %{}
+    end
+  end
+
   describe "load/2" do
     setup do
       dump_dir = Path.join([@tmp_dir, "tests", "compiler", "call_graph", "load_2"])
