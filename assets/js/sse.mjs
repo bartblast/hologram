@@ -68,6 +68,9 @@ export default class Sse {
   // Tells apart the latest askForReplica() from one it replaced.
   static replicaAskId = 0;
 
+  // Whether an askForReplica() is under way, or was when the page was left.
+  static isAskingForReplica = false;
+
   // How many handshakes in a row have put off a reload (see MAX_RELOAD_DEFERRALS).
   static reloadDeferrals = 0;
 
@@ -142,49 +145,54 @@ export default class Sse {
     const askId = ++$.replicaAskId;
 
     const isOver = () =>
-      askId !== $.replicaAskId ||
-      $.isSuspended ||
-      !Hologram.dataLayer?.replicaToReplace();
+      askId !== $.replicaAskId || !Hologram.dataLayer?.replicaToReplace();
 
-    for (let attempt = 1; attempt <= $.MAX_REPLICA_ASKS; attempt++) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, $.computeReconnectDelay(attempt)),
-      );
+    $.isAskingForReplica = true;
 
-      if (isOver()) return;
-
-      // A request that never answers is given up on, or it would hold back the asks after it.
-      const controller = new AbortController();
-
-      const deadline = setTimeout(
-        () => controller.abort(),
-        Config.mutationTimeoutMs,
-      );
-
-      try {
-        const response = await fetch($.HANDSHAKE_PATH, {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: Serializer.serialize($.buildHandshakePayload(), "server"),
-          signal: controller.signal,
-        });
-
-        if (!response.ok) continue;
-
-        const {replica} = await response.json();
+    try {
+      for (let attempt = 1; attempt <= $.MAX_REPLICA_ASKS; attempt++) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, $.computeReconnectDelay(attempt)),
+        );
 
         if (isOver()) return;
 
-        if (replica) {
-          Hologram.dataLayer.takeReplica(replica);
+        // A request that never answers is given up on, or it would hold back the asks after it.
+        const controller = new AbortController();
 
-          return $.reconnect();
+        const deadline = setTimeout(
+          () => controller.abort(),
+          Config.mutationTimeoutMs,
+        );
+
+        try {
+          const response = await fetch($.HANDSHAKE_PATH, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: Serializer.serialize($.buildHandshakePayload(), "server"),
+            signal: controller.signal,
+          });
+
+          if (!response.ok) continue;
+
+          const {replica} = await response.json();
+
+          if (isOver()) return;
+
+          if (replica) {
+            Hologram.dataLayer.takeReplica(replica);
+
+            return $.reconnect();
+          }
+        } catch {
+          // No answer is one more try gone, as a refusal is.
+        } finally {
+          clearTimeout(deadline);
         }
-      } catch {
-        // No answer is one more try gone, as a refusal is.
-      } finally {
-        clearTimeout(deadline);
       }
+    } finally {
+      // An ask the page's leaving cut short stays marked, so resume() starts another.
+      if (askId === $.replicaAskId) $.isAskingForReplica = false;
     }
   }
 
@@ -465,6 +473,12 @@ export default class Sse {
     if ($.isStarted) {
       $.connect();
     }
+
+    // The new cookie may still be on its way, and this handshake alone could be refused under the
+    // old one. The ask waits out a delay first, so the handshake goes before it.
+    if ($.isAskingForReplica) {
+      $.askForReplica();
+    }
   }
 
   // Bump the failure counter and re-run the handshake protocol from scratch
@@ -497,9 +511,10 @@ export default class Sse {
   // document open (https://issues.chromium.org/issues/358538891), and over HTTP/1.1 six such
   // streams use up the connections the browser allows per origin, so every further request
   // to it stalls. Everything that could reopen the stream is cancelled along with it: the
-  // timers, and a handshake in flight (see runId).
+  // timers, a handshake in flight (see runId), and an ask for an identity (see replicaAskId).
   static suspend() {
     $.isSuspended = true;
+    $.replicaAskId++;
     $.runId++;
 
     clearTimeout($.reconnectTimer);

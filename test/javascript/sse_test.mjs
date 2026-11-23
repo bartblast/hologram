@@ -96,6 +96,7 @@ describe("Sse", () => {
     Sse.reconnectAttempts = 0;
     Sse.reconnectTimer = null;
     Sse.reloadDeferrals = 0;
+    Sse.isAskingForReplica = false;
     Sse.replicaAskId = 0;
     Sse.runId = 0;
     Sse.stabilityTimer = null;
@@ -278,12 +279,100 @@ describe("Sse", () => {
 
       const asking = Sse.askForReplica();
 
-      Sse.isSuspended = true;
+      Sse.suspend();
 
       await timers.tickAsync(Sse.MAX_RECONNECT_DELAY);
       await asking;
 
       sinon.assert.notCalled(fetchStub);
+      assert.isTrue(Replica.mintRefused);
+    });
+
+    it("starts over when the page comes back, with one ask running", async () => {
+      stubHandshakeResponse({replicaRefused: true});
+
+      const asking = Sse.askForReplica();
+
+      Sse.suspend();
+      Sse.resume();
+
+      await timers.tickAsync(
+        Sse.MAX_RECONNECT_DELAY * Sse.MAX_REPLICA_ASKS * 2,
+      );
+      await asking;
+
+      sinon.assert.callCount(fetchStub, Sse.MAX_REPLICA_ASKS);
+      assert.isFalse(Sse.isAskingForReplica);
+    });
+
+    // The new cookie can land after the one handshake the return makes.
+    it("takes a pair that arrives after the page came back", async () => {
+      stubHandshakeResponse({replicaRefused: true});
+
+      Sse.askForReplica();
+      Sse.suspend();
+      Sse.resume();
+
+      await timers.tickAsync(Sse.MAX_RECONNECT_DELAY);
+
+      stubHandshakeResponse({replica: minted});
+
+      await timers.tickAsync(
+        Sse.MAX_RECONNECT_DELAY * Sse.MAX_REPLICA_ASKS * 2,
+      );
+
+      assert.equal(Replica.id, "replica-minted");
+    });
+
+    it("starts no ask on a return when none was running", async () => {
+      Sse.suspend();
+      Sse.resume();
+
+      await timers.tickAsync(Sse.MAX_RECONNECT_DELAY * 2);
+
+      sinon.assert.notCalled(fetchStub);
+    });
+
+    it("starts no ask on a return after the last one ended", async () => {
+      stubHandshakeResponse({replicaRefused: true});
+
+      await askToTheEnd();
+
+      fetchStub.resetHistory();
+
+      Sse.suspend();
+      Sse.resume();
+
+      await timers.tickAsync(Sse.MAX_RECONNECT_DELAY * 2);
+
+      sinon.assert.notCalled(fetchStub);
+    });
+
+    it("drops an answer that arrives after the page was left", async () => {
+      let answer;
+
+      stubHandshakeResponse({replicaRefused: true});
+
+      fetchStub.onFirstCall().returns(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+
+      Sse.askForReplica();
+
+      await timers.tickAsync(Sse.MAX_RECONNECT_DELAY);
+
+      Sse.suspend();
+      Sse.resume();
+
+      answer({ok: true, json: async () => ({replica: minted})});
+
+      await timers.tickAsync(
+        Sse.MAX_RECONNECT_DELAY * Sse.MAX_REPLICA_ASKS * 2,
+      );
+
+      assert.equal(Replica.id, "replica-page");
       assert.isTrue(Replica.mintRefused);
     });
 
