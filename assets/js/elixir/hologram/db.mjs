@@ -98,13 +98,17 @@ function basedOn(held, changes) {
 // two clients making the same two edges send the same two writes.
 function edgeEntries(entity, entityType, relationshipOps) {
   return Object.values(relationshipOps.data)
-    .map(([key, op]) => ({
-      id: Bitstring.toText(structField(entity, "id")),
-      op: `${op.value}_relationship`,
-      relationship: key.data[0].value,
-      target_id: Bitstring.toText(key.data[1]),
-      type: entityType,
-    }))
+    .map(([key, op]) => {
+      validateId(key.data[1]);
+
+      return {
+        id: Bitstring.toText(structField(entity, "id")),
+        op: `${op.value}_relationship`,
+        relationship: key.data[0].value,
+        target_id: Bitstring.toText(key.data[1]),
+        type: entityType,
+      };
+    })
     .sort((left, right) =>
       `${left.relationship} ${left.target_id}`.localeCompare(
         `${right.relationship} ${right.target_id}`,
@@ -329,6 +333,9 @@ export function createEntity(entity, entityType) {
   if (!Type.isAtom(validation)) {
     return validation;
   }
+
+  // Validation doesn't judge the id, and the server can't store a row under one that isn't an id.
+  validateId(structField(entity, "id"));
 
   const stamp = Clock.stamp();
   const entry = writeEntry(entity, entityType, stamp);

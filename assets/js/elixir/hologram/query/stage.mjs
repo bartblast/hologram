@@ -43,12 +43,13 @@ const SEARCH_OPERATORS = [
 // What a value of each type is, as the refusal of a value that doesn't fit it says.
 const TYPE_VALUES = {
   boolean: "true or false",
-  date: "a Date",
-  datetime: "a DateTime",
+  date: "an ISO Date from -4713-11-24 to 5874897-12-31",
+  datetime:
+    "an ISO DateTime from -4713-11-24T00:00:00Z to 9999-12-31T23:59:59.999999Z",
   float: "a float, or an integer that fits in 64 bits",
   integer: "an integer that fits in 64 bits",
-  string: "a UTF-8 string",
-  time: "a Time",
+  string: "a UTF-8 string with no NUL byte",
+  time: "an ISO Time",
   uuid: 'a UUID string in lowercase, like "018f0000-0000-7000-8000-000000000001"',
 };
 
@@ -1141,6 +1142,14 @@ function searchTriple(name, operator, operand, entityType) {
     );
   }
 
+  // The database refuses a NUL in any text it's handed, so the server can't simply match nothing,
+  // and the browser answers the same.
+  if (Bitstring.toText(operand).includes("\u0000")) {
+    Interpreter.raiseMisuseError(
+      `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${inspectName(name)} - a search term can't hold a NUL byte`,
+    );
+  }
+
   return [nameValue(name), operator, Model.unbox(operand, "string")];
 }
 
@@ -1851,7 +1860,7 @@ function validateOperandValue(name, value, entityType) {
 
   const fits =
     type === "float"
-      ? Type.isFloat(value) || typeValid(value, "integer")
+      ? typeValid(value, "float") || typeValid(value, "integer")
       : typeValid(value, type);
 
   if (!fits) {
