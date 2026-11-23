@@ -433,7 +433,8 @@ defmodule Hologram.DB.WriterTest do
     # A browser's write is never the server's, whatever state the process is in.
     test "leaves a client's job unmarked with no session" do
       job = JobModule1.new()
-      client_job = %{job | __meta__: %Metadata{job.__meta__ | claim: :client}}
+      %Metadata{} = metadata = job.__meta__
+      client_job = %{job | __meta__: %{metadata | claim: :client}}
 
       assert {:ok, %JobModule1{run_as_server: false}} = create(client_job)
       assert DB.read(JobModule1, job.id).run_as_server == false
