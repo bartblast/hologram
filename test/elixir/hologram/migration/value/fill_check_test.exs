@@ -80,7 +80,7 @@ defmodule Hologram.Migration.Value.FillCheckTest do
         end)
 
         assert_raise RuntimeError, ~r/must be at most 2 characters \(3 rows\)/, fn ->
-          check!(@fill, 1)
+          check!(@fill, page_size: 1)
         end
       end)
     end

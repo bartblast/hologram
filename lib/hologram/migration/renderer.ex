@@ -84,15 +84,16 @@ defmodule Hologram.Migration.Renderer do
 
   # A backfill rides its logical op, never the model - the physical column it fills is
   # found by the name the mapper derives for that attribute.
-  defp attach_backfills(physical_ops, logical_ops) do
+  defp attach_backfills(physical_ops, logical_ops, next_model) do
     backfills =
-      for %{op: :add_attribute} = op <- logical_ops,
-          {:ok, value} <- [Keyword.fetch(op.opts, :backfill)],
+      for %{op: kind} = op <- logical_ops,
+          kind in [:add_attribute, :change_attribute],
+          {:ok, value} <- [Value.fetch_backfill(op)],
           into: %{} do
-        normalized = Value.normalize_constant(value, op.type)
+        type = filled_type(op, next_model)
+        normalized = Value.normalize_constant(value, type)
 
-        {{Mapper.table_name(op.entity), Atom.to_string(op.name)},
-         Codec.encode(normalized, op.type)}
+        {{Mapper.table_name(op.entity), Atom.to_string(op.name)}, Codec.encode(normalized, type)}
       end
 
     Enum.map(physical_ops, &put_backfill(&1, backfills))
@@ -206,7 +207,27 @@ defmodule Hologram.Migration.Renderer do
 
   defp computed?(%{op: :add_attribute, opts: opts}), do: match?(%Value{}, opts[:backfill])
 
+  defp computed?(%{op: :change_attribute, changes: changes}) do
+    match?(%Value{}, changes[:backfill])
+  end
+
   defp computed?(_op), do: false
+
+  # A tightening's backfill, even a constant, fills the rows as the ops above it left them, so it
+  # never merges with a type change of the same attribute in the op next to it.
+  defp fills_apart?(%{op: :change_attribute, changes: changes}) do
+    Keyword.has_key?(changes, :backfill)
+  end
+
+  defp fills_apart?(op), do: computed?(op)
+
+  defp filled_type(%{op: :add_attribute, type: type}, _next_model), do: type
+
+  defp filled_type(op, next_model) do
+    {_name, type, _opts} = List.keyfind!(next_model.entities[op.entity].attributes, op.name, 0)
+
+    type
+  end
 
   defp entity_after(entity_type, %{op: :rename_entity, from: entity_type} = op), do: op.to
 
@@ -425,12 +446,12 @@ defmodule Hologram.Migration.Renderer do
 
   defp name_op(kind, _table, from, to), do: [%{op: kind, from: from, to: to}]
 
-  defp place_op(op, []), do: [{if(computed?(op), do: op), [op]}]
+  defp place_op(op, []), do: [{if(fills_apart?(op), do: op), [op]}]
 
   defp place_op(op, [{cut, [last | _earlier] = current} | done] = placed) do
     cond do
-      computed?(op) or recreates_entity?(op, current) -> [{op, [op]} | placed]
-      computed?(last) or segment_kind(op) != segment_kind(last) -> [{nil, [op]} | placed]
+      fills_apart?(op) or recreates_entity?(op, current) -> [{op, [op]} | placed]
+      fills_apart?(last) or segment_kind(op) != segment_kind(last) -> [{nil, [op]} | placed]
       true -> [{cut, [op | current]} | done]
     end
   end
@@ -438,6 +459,13 @@ defmodule Hologram.Migration.Renderer do
   defp put_backfill(%{op: :add_column} = op, backfills) do
     case Map.fetch(backfills, {op.table, op.column}) do
       {:ok, value} -> Map.put(op, :backfill, value)
+      :error -> op
+    end
+  end
+
+  defp put_backfill(%{op: :alter_column} = op, backfills) do
+    case Map.fetch(backfills, {op.table, op.column}) do
+      {:ok, value} -> Map.merge(op, %{fill: value, fill_source: :backfill})
       :error -> op
     end
   end
@@ -458,6 +486,11 @@ defmodule Hologram.Migration.Renderer do
       :none ->
         op
     end
+  end
+
+  # A tightening's own backfill wins over the declared default, and only needs the companions.
+  defp put_declared_default(%{op: :alter_column, fill: _value} = op, mapping) do
+    Map.put(op, :fill_companions, companions(mapping, op))
   end
 
   # A column turning required the same way: its NULLs take the declared default before it
@@ -615,6 +648,12 @@ defmodule Hologram.Migration.Renderer do
     end)
   end
 
+  defp render_chunk([%{op: :change_attribute} = op] = chunk, model) do
+    if computed?(op),
+      do: render_computed_tightening(op, model),
+      else: render_plain_chunk(chunk, model)
+  end
+
   defp render_chunk(chunk, model), do: render_plain_chunk(chunk, model)
 
   defp render_chunks(chunks, pre_model) do
@@ -678,8 +717,45 @@ defmodule Hologram.Migration.Renderer do
     {added_ops ++ [fill_op] ++ tighten_ops, next_model}
   end
 
+  # The column stands, so only the rows holding nil fill, right before it tightens. The fold has
+  # refused a member already required, so the diff always holds the tightening.
+  defp render_computed_tightening(op, model) do
+    next_model = Model.fold(model, [op], validate_filled_adds: false)
+    next_mapping = Mapper.derive_from_model!(next_model)
+    entry = Map.fetch!(next_mapping, op.entity)
+    table = entry.table
+    column = Enum.find(entry.columns, &(&1.source == {:attribute, op.name})).name
+
+    fill_op =
+      op
+      |> fill_column_op(model, next_model, next_mapping, table, column)
+      |> Map.merge(%{
+        companions: companions(next_mapping, %{table: table, column: column}),
+        required: true
+      })
+
+    diff_ops =
+      model
+      |> term()
+      |> Schema.diff(Schema.from_mapping(next_mapping), renames: false)
+
+    %{op: :alter_column} =
+      tightening =
+      Enum.find(diff_ops, &match?(%{op: :alter_column, table: ^table, column: ^column}, &1))
+
+    physical_ops =
+      Enum.flat_map(diff_ops, fn
+        ^tightening -> [fill_op, Map.put(tightening, :filled, true)]
+        other -> [other]
+      end)
+
+    {physical_ops, next_model}
+  end
+
   defp fill_column_op(op, model, next_model, mapping, table, column) do
-    [%{backfill: {:computed, value}, kind: kind}] = Value.fills([op], model)
+    [%{backfill: {:computed, value}, kind: kind, nulls_only: nulls_only}] =
+      Value.fills([op], model)
+
     {^kind, {_name, type, rules} = member} = Value.fill_member(op, next_model)
     target = Value.fill_target(kind, member, op)
 
@@ -687,13 +763,14 @@ defmodule Hologram.Migration.Renderer do
       op: :fill_column,
       table: table,
       column: column,
+      companions: [],
       entity: op.entity,
       enum_uses: SQL.enum_uses(value, op.entity, mapping, target),
       line: op.line,
       mapping: mapping,
       max_bytes: Map.get(op, :max_bytes),
       member: op.name,
-      nulls_only: false,
+      nulls_only: nulls_only,
       rules: rules,
       sort_keys: SQL.sort_keys(value, op.entity, mapping),
       sql: SQL.render(value, op.entity, mapping, target),
@@ -716,7 +793,7 @@ defmodule Hologram.Migration.Renderer do
       pre_term
       |> Schema.diff(cleared_term, renames: false)
       |> Enum.concat(Schema.diff(cleared_term, Schema.from_mapping(next_mapping), renames: false))
-      |> attach_backfills(chunk)
+      |> attach_backfills(chunk, next_model)
       |> Enum.map(&put_declared_default(&1, next_mapping))
       |> prepend_grant_deletes(chunk)
 
@@ -1094,8 +1171,7 @@ defmodule Hologram.Migration.Renderer do
     if carries_backfill?(opts), do: raise_unapplied_backfill!(op)
   end
 
-  defp validate_backfill_applies!(%{op: kind, changes: changes} = op)
-       when kind in [:change_attribute, :change_relationship] do
+  defp validate_backfill_applies!(%{op: :change_relationship, changes: changes} = op) do
     if carries_backfill?(changes), do: raise_unapplied_backfill!(op)
   end
 
@@ -1106,7 +1182,7 @@ defmodule Hologram.Migration.Renderer do
     raise Hologram.CompileError,
       message:
         "#{op.op} #{inspect(op.name)} of #{inspect(op.entity)} on line #{op.line} carries a " <>
-          "backfill that can't be applied yet - only one on add_attribute can for now"
+          "backfill that can't be applied yet - only one on an attribute can for now"
   end
 
   @spec raise_apart!(list(%{atom => any}), String.t()) :: no_return

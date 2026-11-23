@@ -645,18 +645,32 @@ defmodule Hologram.Migrator do
     SchemaReconciler.backfill_companions!(op.columns, op.mapping)
   end
 
-  # A fill of every row writes through every index taking writes, a fill of the NULLs only through
-  # those holding them - see drop_removed_indexes/3. The tightening after it needs to know no row
-  # was left NULL, and a declared default doesn't step in: the expression said what each row holds.
+  # Only the rows holding nil take the expression, so the ones that already hold a value keep it,
+  # and only the filled rows' keys and rules are asked about. With no row holding nil there's
+  # nothing to fill, and an enum value this transaction added stays unused.
+  defp apply_op(%{op: :fill_column, nulls_only: true} = op, later_ops) do
+    if count_result(DDL.null_check_statement(op.table, op.column)) > 0 do
+      drop_removed_indexes(op.table, {:fill, op.column}, later_ops)
+      FillCheck.check_bytes!(op)
+      Preflight.check_computed_fill!(op)
+      FillCheck.fill_nulls!(op)
+      check_filled!(op)
+      FillCheck.check!(op, on_page: fill_companions_writer(op))
+      FillCheck.drop_filled_ids!()
+    end
+  end
+
+  # A fill of every row writes through every index taking writes - see drop_removed_indexes/3. The
+  # tightening after it needs to know no row was left NULL, and a declared default doesn't step
+  # in: the expression said what each row holds.
   # sobelow_skip ["SQL.Query"]
   defp apply_op(%{op: :fill_column} = op, later_ops) do
-    drop_removed_indexes(op.table, fill_change(op), later_ops)
+    drop_removed_indexes(op.table, :update, later_ops)
 
     {fragment, params} = op.sql
     table = ~s("#{Mapper.data_schema()}".#{Mapper.quote_identifier(op.table)})
     column = Mapper.quote_identifier(op.column)
-    only_nulls = if op.nulls_only, do: ~s| WHERE "$r0".#{column} IS NULL|, else: ""
-    statement = ~s|UPDATE #{table} AS "$r0" SET #{column} = #{fragment}#{only_nulls}|
+    statement = ~s|UPDATE #{table} AS "$r0" SET #{column} = #{fragment}|
 
     {:ok, _result} = Connection.query(statement, params)
 
@@ -1162,9 +1176,9 @@ defmodule Hologram.Migrator do
     end
   end
 
-  defp fill_change(%{nulls_only: true, column: column}), do: {:fill, column}
+  defp fill_companions_writer(%{companions: []}), do: nil
 
-  defp fill_change(_op), do: :update
+  defp fill_companions_writer(op), do: &write_fill_companions(op, &1)
 
   defp fill_column(table, column, encoded_value) do
     fill_statement = DDL.fill_statement(table, column)
@@ -1206,6 +1220,41 @@ defmodule Hologram.Migrator do
     statement = "UPDATE #{table} SET #{set_sql} WHERE #{column} IS NULL"
 
     {:ok, _result} = Connection.query(statement, Enum.map(assignments, &elem(&1, 1)))
+  end
+
+  # One page of the rows a fill of NULLs wrote, as [id, value] lists: their sort and search keys,
+  # computed here because they aren't expressible in SQL.
+  # sobelow_skip ["SQL.Query"]
+  defp write_fill_companions(_op, []), do: :ok
+
+  defp write_fill_companions(op, rows) do
+    table = ~s("#{Mapper.data_schema()}".#{Mapper.quote_identifier(op.table)})
+
+    keyed =
+      op.companions
+      |> Enum.with_index(2)
+      |> Enum.map(fn {{kind, name}, position} ->
+        {Mapper.quote_identifier(name), "$#{position}::text[]", "k#{position}",
+         Enum.map(rows, fn [_id, value] -> companion_key(kind, value) end)}
+      end)
+
+    assignments =
+      Enum.map_join(keyed, ", ", fn {name, _param, key, _keys} -> ~s(#{name} = "$v".#{key}) end)
+
+    arrays = Enum.map_join(keyed, ", ", fn {_name, param, _key, _keys} -> param end)
+    aliases = Enum.map_join(keyed, ", ", fn {_name, _param, key, _keys} -> key end)
+
+    statement =
+      ~s|UPDATE #{table} AS "$t" SET #{assignments} | <>
+        ~s|FROM unnest($1::text[], #{arrays}) AS "$v"(id, #{aliases}) | <>
+        ~s|WHERE "$t"."id" = "$v".id::uuid|
+
+    ids = Enum.map(rows, fn [id, _value] -> id end)
+
+    {:ok, _result} =
+      Connection.query(statement, [
+        ids | Enum.map(keyed, fn {_name, _param, _key, keys} -> keys end)
+      ])
   end
 
   defp follow_index(

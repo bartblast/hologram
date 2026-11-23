@@ -43,6 +43,44 @@ defmodule Hologram.Migration.Value.SQL do
   end
 
   @doc """
+  Returns the statement counting the keys of the given unique index columns that would repeat once
+  the NULLs of the given column, one of them, take the given rendered expression, reading the row
+  as "$r0". Only keys holding a row the fill writes count. Nulls in a key compare as values when
+  nulls_distinct is false, matching the index.
+  """
+  @spec filled_repeat_statement(String.t(), list(String.t()), String.t(), boolean, String.t()) ::
+          String.t()
+  def filled_repeat_statement(table, columns, filled_column, nulls_distinct, fragment) do
+    keys =
+      columns
+      |> Enum.with_index()
+      |> Enum.map(fn {column, index} ->
+        read = ~s("$r0".#{Mapper.quote_identifier(column)})
+        expression = if column == filled_column, do: "COALESCE(#{read}, #{fragment})", else: read
+
+        {expression, ~s("$k#{index}")}
+      end)
+
+    selected = Enum.map_join(keys, ", ", fn {expression, key} -> "#{expression} AS #{key}" end)
+    grouped = Enum.map_join(keys, ", ", &elem(&1, 1))
+
+    not_null =
+      if nulls_distinct do
+        " WHERE " <>
+          Enum.map_join(keys, " AND ", fn {_expression, key} -> "#{key} IS NOT NULL" end)
+      else
+        ""
+      end
+
+    filled = ~s("$r0".#{Mapper.quote_identifier(filled_column)} IS NULL)
+    source = ~s("#{Mapper.data_schema()}".#{Mapper.quote_identifier(table)})
+
+    ~s|SELECT COUNT(*) FROM (SELECT 1 FROM (SELECT #{selected}, #{filled} AS "$filled" | <>
+      ~s|FROM #{source} AS "$r0") AS "$keys"#{not_null} GROUP BY #{grouped} | <>
+      ~s|HAVING COUNT(*) > 1 AND COUNT(*) FILTER (WHERE "$filled") > 0) AS duplicates|
+  end
+
+  @doc """
   Returns what the given resolved backfill needs its enum types to accept, as pairs of a type name
   and a value: each literal, and every value of another attribute's enum it copies into the
   target's type. PostgreSQL refuses a value in the transaction that added it to its type.

@@ -208,6 +208,10 @@ defmodule Hologram.Migration.Value.Check do
     "as a #{inspect(type)} #{Validator.requirement_description(reason)}"
   end
 
+  defp fill_word(%{fill_source: :backfill}), do: "backfill"
+
+  defp fill_word(_op), do: "default"
+
   defp final_bound(nil, _final_model), do: nil
 
   defp final_bound({entity, name}, final_model),
@@ -353,7 +357,8 @@ defmodule Hologram.Migration.Value.Check do
     if MapSet.member?(added, {op.after.type, value}) do
       raise Hologram.CompileError,
         message:
-          ~s(the default #{inspect(value)} of column "#{op.column}" on table "#{op.table}" is ) <>
+          ~s(the #{fill_word(op)} #{inspect(value)} of column "#{op.column}" on table ) <>
+            ~s("#{op.table}" is ) <>
             "an enum value this file adds to its type - PostgreSQL can't use a value in the " <>
             "transaction adding it (#1687), so move the change making the column required to " <>
             "the next migration file"

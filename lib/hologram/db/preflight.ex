@@ -6,6 +6,7 @@ defmodule Hologram.DB.Preflight do
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
   alias Hologram.DB.Introspection
+  alias Hologram.Migration.Value.SQL
 
   @doc """
   Validates that the existing rows can follow the given op, against the database as it
@@ -90,7 +91,7 @@ defmodule Hologram.DB.Preflight do
     mapping
     |> unique_indexes(table)
     |> Enum.filter(&(column_name in &1.columns))
-    |> check_filled_keys!(table, column_name, encoded_value)
+    |> check_filled_keys!(table, column_name, encoded_value, "the default")
   end
 
   @doc """
@@ -135,9 +136,41 @@ defmodule Hologram.DB.Preflight do
   """
   @spec check_fill!(%{atom => any}) :: :ok
   def check_fill!(op) do
+    source = if op[:fill_source] == :backfill, do: "the backfill", else: "the default"
+
     op.table
     |> standing_unique_indexes(op.column, not_ready_invalid_indexes())
-    |> check_filled_keys!(op.table, op.column, op.fill)
+    |> check_filled_keys!(op.table, op.column, op.fill, source)
+  end
+
+  @doc """
+  Validates that filling the NULLs of the given fill_column op's column with its expression makes
+  no rows repeat a key of a unique index standing over the column at this moment, as check_fill!/1
+  does for one value. Each filled row can take its own value, so the keys are counted with the
+  column read as the expression wherever it holds NULL.
+
+  Returns :ok, or raises naming the column, the key and how many keys would repeat.
+  """
+  @spec check_computed_fill!(%{atom => any}) :: :ok
+  def check_computed_fill!(op) do
+    {fragment, params} = op.sql
+
+    op.table
+    |> standing_unique_indexes(op.column, not_ready_invalid_indexes())
+    |> Enum.each(fn index ->
+      statement =
+        SQL.filled_repeat_statement(
+          op.table,
+          index.columns,
+          op.column,
+          index.nulls_distinct,
+          fragment
+        )
+
+      {:ok, %{rows: [[count]]}} = Connection.query(statement, params)
+
+      raise_filled_duplicate_keys!(op.table, op.column, index.columns, count, "the backfill")
+    end)
   end
 
   @doc """
@@ -340,7 +373,7 @@ defmodule Hologram.DB.Preflight do
 
   defp refusable?(_op), do: false
 
-  defp check_filled_keys!(indexes, table, column_name, encoded_value) do
+  defp check_filled_keys!(indexes, table, column_name, encoded_value, source) do
     Enum.each(indexes, fn index ->
       statement =
         DDL.filled_duplicate_check_statement(
@@ -352,7 +385,7 @@ defmodule Hologram.DB.Preflight do
 
       {:ok, %{rows: [[count]]}} = Connection.query(statement, [encoded_value])
 
-      raise_filled_duplicate_keys!(table, column_name, index.columns, count)
+      raise_filled_duplicate_keys!(table, column_name, index.columns, count, source)
     end)
   end
 
@@ -542,13 +575,13 @@ defmodule Hologram.DB.Preflight do
             "the unique index over it is not built yet, #{reason} - update the rows"
   end
 
-  defp raise_filled_duplicate_keys!(_table, _column, _columns, 0), do: :ok
+  defp raise_filled_duplicate_keys!(_table, _column, _columns, 0, _source), do: :ok
 
-  defp raise_filled_duplicate_keys!(table, column, columns, count) do
+  defp raise_filled_duplicate_keys!(table, column, columns, count, source) do
     key = Enum.map_join(columns, ", ", &~s("#{&1}"))
 
     raise ~s(cannot make column "#{column}" on table "#{table}" required - ) <>
-            "filling its NULLs with the default would make #{count} " <>
+            "filling its NULLs with #{source} would make #{count} " <>
             "#{pluralize_keys(count)} repeat over (#{key}) - " <>
             "fix the data, keep the attribute optional: true, or drop the unique declaration"
   end

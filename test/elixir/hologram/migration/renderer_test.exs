@@ -904,6 +904,53 @@ defmodule Hologram.Migration.RendererTest do
       assert %{transactional: _transactional} = render(ops, pre_model)
     end
 
+    test "refuses a constant tightening using the added value" do
+      pre_model =
+        model(%{
+          MyApp.Task => %{attributes: [{:kind, :enum, [optional: true, values: [:draft]]}]}
+        })
+
+      ops = [
+        add_value(:kind, :fresh),
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :kind,
+          changes: [optional: false, backfill: :fresh],
+          line: 7
+        }
+      ]
+
+      assert_raise Hologram.CompileError,
+                   ~r/the backfill "fresh" of column "kind".*#1687/,
+                   fn -> render(ops, pre_model) end
+    end
+
+    test "refuses a copy into a standing type that the file added a value to" do
+      pre_model =
+        model(%{
+          MyApp.Task => %{
+            attributes: [
+              {:grade, :enum, [optional: true, values: [:a]]},
+              {:kind, :enum, [values: [:a, :fresh]]}
+            ]
+          }
+        })
+
+      ops = [
+        add_value(:grade, :fresh),
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :grade,
+          changes: [optional: false, backfill: %Value{term: {:name, [:kind]}}],
+          line: 7
+        }
+      ]
+
+      assert_raise Hologram.CompileError, @refusal, fn -> render(ops, pre_model) end
+    end
+
     test "accepts a value a rebuild has carried into a new type", %{pre_model: pre_model} do
       ops = [
         add_value(:kind, :fresh),
@@ -938,6 +985,86 @@ defmodule Hologram.Migration.RendererTest do
     end
   end
 
+  describe "render/2, a backfill on a tightening" do
+    setup do
+      pre_model =
+        model(%{
+          MyApp.Task => %{
+            attributes: [
+              {:notes, :string, [optional: true]},
+              {:rank, :integer, [optional: true]}
+            ]
+          }
+        })
+
+      [pre_model: pre_model]
+    end
+
+    defp tighten(name, backfill, line \\ 7) do
+      %{
+        op: :change_attribute,
+        entity: MyApp.Task,
+        name: name,
+        changes: [optional: false, backfill: backfill],
+        line: line
+      }
+    end
+
+    test "stamps a constant as the fill, naming the companions", %{pre_model: pre_model} do
+      %{transactional: [alter]} = render([tighten(:notes, "none")], pre_model)
+
+      assert %{
+               op: :alter_column,
+               column: "notes",
+               fill: "none",
+               fill_source: :backfill,
+               fill_companions: [sort_key: "notes_$sort", search_key: "notes_$search"]
+             } = alter
+    end
+
+    test "wins over the declared default", %{pre_model: pre_model} do
+      op = put_in(tighten(:notes, "none").changes[:default], "other")
+
+      assert %{transactional: [%{fill: "none"}]} = render([op], pre_model)
+    end
+
+    test "fills the rows holding nil before a computed tightening", %{pre_model: pre_model} do
+      op = tighten(:notes, %Value{term: {:coalesce, [{:name, [:notes]}, {:value, ""}]}})
+
+      assert %{transactional: [fill, alter]} = render([op], pre_model)
+
+      assert %{
+               op: :fill_column,
+               column: "notes",
+               companions: [sort_key: "notes_$sort", search_key: "notes_$search"],
+               nulls_only: true,
+               required: true
+             } = fill
+
+      assert %{op: :alter_column, column: "notes", filled: true} = alter
+      refute Map.has_key?(alter, :fill)
+    end
+
+    test "keeps a constant tightening apart from a type change beside it", %{
+      pre_model: pre_model
+    } do
+      change = %{
+        op: :change_attribute,
+        entity: MyApp.Task,
+        name: :rank,
+        changes: [type: :string],
+        line: 6
+      }
+
+      %{transactional: ops} = render([change, tighten(:rank, "0")], pre_model)
+
+      assert [
+               %{op: :alter_column, before: %{type: "int8"}, after: %{type: "text", null: true}},
+               %{op: :alter_column, before: %{type: "text"}, fill: "0"}
+             ] = Enum.filter(ops, &(&1.op == :alter_column))
+    end
+  end
+
   describe "render/2, a backfill that can't be applied yet" do
     setup do
       pre_model =
@@ -965,34 +1092,12 @@ defmodule Hologram.Migration.RendererTest do
 
       assert_error Hologram.CompileError,
                    "add_relationship :parent of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only one on add_attribute can for now",
+                     "can't be applied yet - only one on an attribute can for now",
                    fn -> render([computed_op], pre_model) end
 
       assert_error Hologram.CompileError,
                    "add_relationship :parent of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only one on add_attribute can for now",
-                   fn -> render([op], pre_model) end
-    end
-
-    test "refuses one on a changed attribute", %{pre_model: pre_model} do
-      op = %{
-        op: :change_attribute,
-        entity: MyApp.Task,
-        name: :notes,
-        changes: [optional: false, backfill: "none"],
-        line: 7
-      }
-
-      computed_op = put_in(op, [:changes, :backfill], %Value{term: {:name, [:notes]}})
-
-      assert_error Hologram.CompileError,
-                   "change_attribute :notes of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only one on add_attribute can for now",
-                   fn -> render([computed_op], pre_model) end
-
-      assert_error Hologram.CompileError,
-                   "change_attribute :notes of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only one on add_attribute can for now",
+                     "can't be applied yet - only one on an attribute can for now",
                    fn -> render([op], pre_model) end
     end
 
@@ -1009,12 +1114,12 @@ defmodule Hologram.Migration.RendererTest do
 
       assert_error Hologram.CompileError,
                    "change_relationship :owner of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only one on add_attribute can for now",
+                     "can't be applied yet - only one on an attribute can for now",
                    fn -> render([computed_op], pre_model) end
 
       assert_error Hologram.CompileError,
                    "change_relationship :owner of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only one on add_attribute can for now",
+                     "can't be applied yet - only one on an attribute can for now",
                    fn -> render([op], pre_model) end
     end
 
@@ -1030,7 +1135,7 @@ defmodule Hologram.Migration.RendererTest do
 
       assert_error Hologram.CompileError,
                    "add_relationship :parent of MyApp.Task on line 7 carries a backfill that " <>
-                     "can't be applied yet - only one on add_attribute can for now",
+                     "can't be applied yet - only one on an attribute can for now",
                    fn -> render([op], pre_model) end
     end
 

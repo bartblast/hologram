@@ -1056,6 +1056,305 @@ defmodule Hologram.Migration.BackfillTest do
     end
   end
 
+  describe "run/3, a backfill on a tightening" do
+    setup do
+      attribute = fn name, type, opts, line ->
+        %{op: :add_attribute, entity: MyApp.Task, name: name, type: type, opts: opts, line: line}
+      end
+
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 2},
+          attribute.(:code, :string, [optional: true], 3),
+          attribute.(:title, :string, [optional: true], 4),
+          attribute.(:rank, :integer, [optional: true], 5),
+          attribute.(:slug, :string, [optional: true, unique: true], 6)
+        ])
+
+      [create: create, first_model: Model.fold(Model.empty(), create.ops)]
+    end
+
+    defp tighten(name, backfill, changes \\ []) do
+      %{
+        op: :change_attribute,
+        entity: MyApp.Task,
+        name: name,
+        changes: [optional: false, backfill: backfill] ++ changes,
+        line: 3
+      }
+    end
+
+    defp copy_of(name), do: %Value{term: {:name, [name]}}
+
+    defp nullable?(column), do: not column_flags("my_app_task", column).not_null
+
+    # A key no fill computes, so a row the fill leaves alone is told from one it wrote.
+    defp insert_keyed(code, title) do
+      insert_row("my_app_task", [
+        {"code", code},
+        {"title", title},
+        {"title_$sort", "kept-key"}
+      ])
+    end
+
+    for {label, backfill} <- [
+          {"constant", "filled"},
+          {"computed", quote(do: %Value{term: {:value, "filled"}})}
+        ] do
+      test "fills only the rows holding nil with a #{label} backfill",
+           %{scratch: scratch} = context do
+        rows = fn ->
+          insert_keyed("a", "kept")
+          insert_row("my_app_task", code: "b")
+        end
+
+        apply_scenario(context, rows, [tighten(:title, unquote(backfill))])
+
+        route(scratch, fn ->
+          assert rows_by_code(["title", "title_$sort", "title_$search"]) == [
+                   ["kept", "kept-key", nil],
+                   ["filled", SortKey.compute("filled"), SortKey.search_key("filled")]
+                 ]
+
+          refute nullable?("title")
+        end)
+      end
+    end
+
+    test "fills each row from its own fields", %{scratch: scratch} = context do
+      rows = fn ->
+        insert_row("my_app_task", code: "a", title: "kept")
+        insert_row("my_app_task", code: "b")
+        insert_row("my_app_task", code: "c")
+      end
+
+      apply_scenario(context, rows, [tighten(:title, copy_of(:code))])
+
+      route(scratch, fn ->
+        assert rows_by_code(["title"]) == [["kept"], ["b"], ["c"]]
+      end)
+    end
+
+    test "fills an enum attribute from another", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      enums =
+        migration("20260813142236", [
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :source,
+            type: :enum,
+            opts: [optional: true, values: [:a, :b]],
+            line: 2
+          },
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :target,
+            type: :enum,
+            opts: [optional: true, values: [:a, :b]],
+            line: 3
+          }
+        ])
+
+      enum_model = Model.fold(first_model, enums.ops)
+      file = migration("20260813142237", [tighten(:target, copy_of(:source))])
+
+      route(scratch, fn ->
+        assert run([create, enums], enum_model, @context) == :ok
+
+        insert_row("my_app_task", [{"code", "a"}, {"source", "b"}])
+
+        assert run([create, enums, file], Model.fold(enum_model, file.ops), @context) == :ok
+        assert rows_by_code(["target"]) == [["b"]]
+      end)
+    end
+
+    test "fills more rows holding nil than a page, each with its keys",
+         %{scratch: scratch} = context do
+      rows = fn ->
+        {:ok, _result} =
+          Connection.query(
+            ~s|INSERT INTO "hologram_data"."my_app_task" ("id", "code", "created_at", | <>
+              ~s|"server_created_at", "server_updated_at", "updated_at", "$revisions") | <>
+              ~s|SELECT gen_random_uuid(), 'c' \|\| n, now(), now(), now(), now(), '{}' | <>
+              ~s|FROM generate_series(1, 1005) AS n|
+          )
+      end
+
+      apply_scenario(context, rows, [tighten(:title, copy_of(:code))])
+
+      route(scratch, fn ->
+        {:ok, %{rows: [[wrong]]}} =
+          Connection.query(
+            ~s|SELECT COUNT(*) FROM "hologram_data"."my_app_task" | <>
+              ~s|WHERE "title" IS DISTINCT FROM "code" OR "title_$sort" IS NULL|
+          )
+
+        assert wrong == 0
+      end)
+    end
+
+    test "fills two tightenings of one file", %{scratch: scratch} = context do
+      ops = [tighten(:title, copy_of(:code)), tighten(:slug, copy_of(:code))]
+
+      apply_scenario(context, fn -> insert_row("my_app_task", code: "a") end, ops)
+
+      route(scratch, fn ->
+        assert rows_by_code(["title", "slug"]) == [["a", "a"]]
+      end)
+    end
+
+    test "tightens with nothing to fill", %{scratch: scratch} = context do
+      rows = fn -> insert_row("my_app_task", code: "a", title: "kept") end
+
+      apply_scenario(context, rows, [tighten(:title, copy_of(:code))])
+
+      route(scratch, fn ->
+        assert rows_by_code(["title"]) == [["kept"]]
+        refute nullable?("title")
+      end)
+    end
+
+    test "refuses a row the expression leaves nil, schema unchanged", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_row("my_app_task", code: "a", rank: 1)
+        insert_row("my_app_task", code: nil, rank: 2)
+
+        assert_error RuntimeError, ~r/column "title".* leaves 1 row without a value/, fn ->
+          apply_file([tighten(:title, copy_of(:code))], create, first_model)
+        end
+
+        assert rows_by_code(["title"]) == [[nil], [nil]]
+        assert nullable?("title")
+      end)
+    end
+
+    for {label, backfill} <- [
+          {"constant", "same"},
+          {"computed", quote(do: %Value{term: {:name, [:title]}})}
+        ] do
+      test "refuses a #{label} backfill making a standing unique key repeat", %{
+        create: create,
+        first_model: first_model,
+        scratch: scratch
+      } do
+        route(scratch, fn ->
+          assert run([create], first_model, @context) == :ok
+
+          insert_row("my_app_task", code: "a", title: "same")
+          insert_row("my_app_task", code: "b", title: "same")
+
+          assert_error RuntimeError,
+                       ~r/filling its NULLs with the backfill would make 1 key repeat over \("slug"\)/,
+                       fn ->
+                         apply_file([tighten(:slug, unquote(backfill))], create, first_model)
+                       end
+
+          assert rows_by_code(["slug"]) == [[nil], [nil]]
+        end)
+      end
+    end
+
+    test "passes a computed key that repeats no other row", %{scratch: scratch} = context do
+      rows = fn ->
+        insert_row("my_app_task", code: "a", slug: "b")
+        insert_row("my_app_task", code: "c")
+      end
+
+      apply_scenario(context, rows, [tighten(:slug, copy_of(:code))])
+
+      route(scratch, fn ->
+        assert rows_by_code(["slug"]) == [["b"], ["c"]]
+      end)
+    end
+
+    test "wins over the declared default", %{scratch: scratch} = context do
+      ops = [tighten(:title, "filled", default: "declared")]
+
+      apply_scenario(context, fn -> insert_row("my_app_task", code: "a") end, ops)
+
+      route(scratch, fn ->
+        assert rows_by_code(["title"]) == [["filled"]]
+      end)
+    end
+
+    test "judges only the filled rows against a format", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      op = tighten(:title, copy_of(:code), format: ~r/^[a-z]+$/)
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_row("my_app_task", code: "a", title: "Kept As Is")
+        insert_row("my_app_task", code: "BAD")
+
+        assert_error RuntimeError, ~r/must match .*\(1 row\)/, fn ->
+          apply_file([op], create, first_model)
+        end
+
+        assert nullable?("title")
+      end)
+    end
+
+    test "applies a type change and a constant tightening of one attribute",
+         %{scratch: scratch} = context do
+      ops = [
+        %{
+          op: :change_attribute,
+          entity: MyApp.Task,
+          name: :rank,
+          changes: [type: :string],
+          line: 2
+        },
+        tighten(:rank, "0")
+      ]
+
+      rows = fn ->
+        insert_row("my_app_task", code: "a", rank: 5)
+        insert_row("my_app_task", code: "b")
+      end
+
+      apply_scenario(context, rows, ops)
+
+      route(scratch, fn ->
+        assert rows_by_code(["rank"]) == [["5"], ["0"]]
+      end)
+    end
+
+    test "refuses a value too long for a standing unique index before writing it", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      long = String.duplicate("x", 3000)
+
+      route(scratch, fn ->
+        assert run([create], first_model, @context) == :ok
+
+        insert_row("my_app_task", code: long)
+
+        assert_error RuntimeError, ~r/must hold at most \d+ bytes .*\(1 row\)/, fn ->
+          apply_file([tighten(:slug, copy_of(:code))], create, first_model)
+        end
+
+        assert rows_by_code(["slug"]) == [[nil]]
+      end)
+    end
+  end
+
   describe "run/3, a computed fill breaking its member's declared rules" do
     setup %{chain: [create | _rest], first_model: first_model} do
       [create: create, first_model: first_model]
