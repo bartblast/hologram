@@ -58,8 +58,8 @@ defmodule Hologram.Query.Expression do
   @new_row_words [:can, :has_role]
 
   @new_row_functions %{
-    can?: "can(:update, new(project))",
-    has_role?: "has_role(:member, new(project))"
+    can?: {:can, "can(:update, new(project))"},
+    has_role?: {:has_role, "has_role(:member, new(project))"}
   }
 
   @quantifiers [:all, :any, :none]
@@ -1464,7 +1464,7 @@ defmodule Hologram.Query.Expression do
        when is_map_key(@new_row_functions, word) and is_list(args) do
     fix =
       if names.new_row and names.bindings == [],
-        do: " - write #{Map.fetch!(@new_row_functions, word)}",
+        do: " - #{new_row_function_fix(word, args)}",
         else: ""
 
     compile_error!(
@@ -1475,6 +1475,33 @@ defmodule Hologram.Query.Expression do
   end
 
   defp predicate_list!(ast, names, env), do: unsupported!(ast, names, env)
+
+  # The call with its own operation or role and target when a plain atom and a new() path say what
+  # it asks, since suggesting other ones would change that, with the user Hologram.Auth's function
+  # takes first left out. Anything else, a pin among them, only the word's spelling can answer.
+  defp new_row_function_fix(word, args) do
+    {replacement, example} = Map.fetch!(@new_row_functions, word)
+
+    case args do
+      [asked, target] -> new_row_function_fix(replacement, example, asked, target)
+      [_user, asked, target] -> new_row_function_fix(replacement, example, asked, target)
+      _other -> "write it like #{example}"
+    end
+  end
+
+  defp new_row_function_fix(replacement, example, asked, target) do
+    if plain_atom?(asked) and new_path?(target),
+      do: "write #{Macro.to_string({replacement, [], [asked, target]})}",
+      else: "write it like #{example}"
+  end
+
+  # An atom that prints with a colon: not nil, a boolean or one spelled as a module.
+  defp plain_atom?(value) do
+    is_atom(value) and
+      value
+      |> inspect()
+      |> String.starts_with?(":")
+  end
 
   # A quantifier takes a relationship alone, or a row bound to one and a condition reading it. The
   # binding and the relationship are judged before a missing condition, so a hint never names a

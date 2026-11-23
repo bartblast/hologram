@@ -314,6 +314,42 @@ defmodule Hologram.Policy.ExpressionTest do
                    fn -> lower_spec("[when: has_role?(:member, new(project))]") end
     end
 
+    test "keeps the operation and the target in the name it suggests for can?" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write can(:read, new(project)), got: can?(:read, new(project))",
+                   fn -> lower_spec("[when: can?(:read, new(project))]") end
+    end
+
+    test "keeps the role and the target in the name it suggests for has_role?" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: has_role? isn't available in a condition - write has_role(:admin, new(project.owner)), got: has_role?(:admin, new(project.owner))",
+                   fn -> lower_spec("[when: has_role?(:admin, new(project.owner))]") end
+    end
+
+    test "leaves out the user can? takes first in the name it suggests" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write can(:read, new(project)), got: can?(user, :read, new(project))",
+                   fn -> lower_spec("[when: can?(user, :read, new(project))]") end
+    end
+
+    test "gives an example for a pinned operation" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write it like can(:update, new(project)), got: can?(^operation, new(project))",
+                   fn -> lower_spec("[when: can?(^operation, new(project))]") end
+    end
+
+    test "gives an example for an atom spelled as a module" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write it like can(:update, new(project)), got: can?(Foo, new(project))",
+                   fn -> lower_spec(~s/[when: can?(:"Elixir.Foo", new(project))]/) end
+    end
+
+    test "gives an example when can? isn't asked of a row after the change" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/policies.ex:12: can? isn't available in a condition - write it like can(:update, new(project)), got: can?(:read, project)",
+                   fn -> lower_spec("[when: can?(:read, project)]") end
+    end
+
     test "raises on can? in a condition" do
       assert_error Hologram.CompileError,
                    "lib/my_app/policies.ex:12: can? isn't available in a condition - write can(:update, new(project)), got: can?(:update, new(project))",
