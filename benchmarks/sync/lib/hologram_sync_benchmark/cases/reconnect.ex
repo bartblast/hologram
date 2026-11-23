@@ -307,10 +307,7 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
 
     wave_from = now_ms()
     returning = prepared.clients -- prepared.left_out
-    :ok = Clients.come_back_all(returning, opts[:wave_spread_ms])
-    _reports = Clients.await_caught_up(returning, opts[:wave_limit] * 1_000)
-
-    {wave_numbers, writer_error} = stop_wave_writer(writer)
+    {wave_numbers, writer_error} = await_wave(returning, writer, opts)
     :ok = await_wave_writes(prepared, wave_numbers)
     wave_to = now_ms()
 
@@ -347,6 +344,20 @@ defmodule HologramSyncBenchmark.Cases.Reconnect do
       waits_ms: waits_ms(reports),
       writer_error: writer_error
     }
+  end
+
+  # Brings the clients back, waits for them, and returns what the writer wrote. The writer isn't
+  # linked to the step, so a wave that crashes kills it here, or it would write until the node
+  # stops and then wait forever for a stop nobody sends.
+  defp await_wave(returning, writer, opts) do
+    :ok = Clients.come_back_all(returning, opts[:wave_spread_ms])
+    _reports = Clients.await_caught_up(returning, opts[:wave_limit] * 1_000)
+
+    stop_wave_writer(writer)
+  catch
+    kind, reason ->
+      if writer, do: Process.exit(writer, :kill)
+      :erlang.raise(kind, reason, __STACKTRACE__)
   end
 
   # Writes at a fixed rate until stopped, each to a row of its own, numbered on from the writes
