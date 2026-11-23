@@ -59,7 +59,8 @@ HOLOGRAM_START=1 mix run --no-start bench.exs --case boot
 14. `backlog` holds one transaction open above a marked write, so when that write commits the dispatcher delivers it alone with the whole backlog above it. "Held-up write" runs from that commit to the last client having it, against "ordinary write" with nothing held up, and "memory rise" is the node's highest reading over it. "Read ms, direct" is the read of the batches above it, called by hand five times on the node, the median, as a cross-check on what the delivery pays. "List KB" is the size of what that read returns, which goes to every session, and "list MB across sessions" that times the clients. "Whole backlog" runs from ending the blocking transaction to the last client having the backlog's last write, when the dispatcher reads the whole backlog as one window. A dash means it took longer than 120 s, or a client lost its stream first, which "streams lost" shows, and either is a figure rather than a failed run.
 15. `catchups` runs every number whatever the one before it did, with sync's database pool sized to match, as it is by default. The library has no setting for the number, so the benchmark tells the deployed node's gate directly. "Last caught up" can't drop below the wave's spread, however fast the node is, so the number to read is "after the last return": how long the queue took to clear once every client was back. More at once clears it sooner and takes more of the database, so read that against "app p99 during". A run stops counting as that number if the gate restarts during it, since a new gate goes back to the default.
 16. `big_set` hides nearly all its posts from the clients with their read rule, so they hold the tag and a few posts, and what's measured is the server reading the set rather than clients downloading it. "Read of the set" is the read each batch touching the tag makes, called by hand on the node, the median of three, and "set MB" what it returns. "Write into it" links a post to the tag, against "write outside it", a write to a post in no set, and "memory rise" is the node's highest reading over the writes into it. Those writes make the dispatcher read the set, but a session scans it only when it drops the tag or is handed it, so the case then hides the tag from every client ("tag dropped") and shows it again ("tag handed back"), each timed from its commit to the last client. Its two entity types join every case's synced types, so every fill and catch-up reads them too, empty outside this case.
-17. A section dated before 2026-11-19 measured sync as it was before it moved to read access (#1601).
+17. With `--fill-group`, the `board` and `tenants` cases fill that many clients at a time, each group once the one before is done, and record in a section of their own whose name ends in `_groups`. Without it every client downloads at once, so a step can stop at the memory limit before live sync is measured. Fill times then cover all the groups, and the fill's CPU shows a dash.
+18. A section dated before 2026-11-19 measured sync as it was before it moved to read access (#1601).
 
 ## Results
 
@@ -113,6 +114,72 @@ Clients per node: **100 (1 fill restarted, #1635; 200 stopped at the 4 GB memory
 | 50 | 2.00 | 3000/3000 | 73.0 | 101 | 117 | 120 | 0 | 0 | 0 | 1071 | 21.4 | 7.09 | 2062 | 16.5 | 4.16 | yes |
 | 100 | 2.00 | 6000/6000 | 138 | 198 | 239 | 283 | 0 | 0 | 0 | 2532 | 25.3 | 7.18 | 2064 | 12.7 | 5.67 | yes |
 <!-- /case:board -->
+
+<!-- case:board_groups -->
+### Shared board, filled in groups
+
+Run 2026-11-22 18:16 UTC on commit eb20796a4, Apple M1 Pro, 10 cores, 16 GB, macOS 26.6.2, load average 4.61 when the run started, PostgreSQL 15.14 (Homebrew), synchronous_commit on, fsync on, wal_sync_method open_datasync, Elixir 1.20.0 on OTP 29.
+
+- 2000 cards read with a bare `allow :read`, which lets every client read every card, so every write reaches every client
+- anonymous clients, steps of 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000 clients
+- a step stops, and the sweep with it, when the server node's memory passes 4 GB
+- clients fill 20 at a time, each group once the one before is done
+- steady writes at 2 per second for 30 s
+- a step passes when every client fills within 300 s and every write reaches every client it should and no other, with the steady writes' p99 within 1000 ms
+
+Clients per node: **at least 5000**
+
+#### Fill
+
+| Clients | Filled | Fill p50 ms | Fill p99 ms | Fills restarted | Heap kills | Server CPU ms | KB per client |
+|---|---|---|---|---|---|---|---|
+| 1 | 1/1 | 82.9 | 82.9 | 0 | 0 | - | - |
+| 2 | 2/2 | 77.2 | 77.9 | 0 | 0 | - | - |
+| 5 | 5/5 | 83.8 | 85.7 | 0 | 0 | - | - |
+| 10 | 10/10 | 95.4 | 105 | 0 | 0 | - | - |
+| 20 | 20/20 | 136 | 140 | 0 | 0 | - | 580 |
+| 50 | 50/50 | 111 | 149 | 0 | 0 | - | 518 |
+| 100 | 100/100 | 90.3 | 146 | 0 | 0 | - | 540 |
+| 200 | 200/200 | 100 | 147 | 0 | 0 | - | 529 |
+| 500 | 500/500 | 92.7 | 142 | 0 | 0 | - | 545 |
+| 1000 | 1000/1000 | 89.3 | 138 | 0 | 0 | - | 541 |
+| 2000 | 2000/2000 | 91.3 | 108 | 0 | 0 | - | 525 |
+| 5000 | 5000/5000 | 100 | 122 | 0 | 0 | - | 333 |
+
+#### Single writes, median of 5
+
+| Clients | To the last client ms | Server CPU ms | Cut short |
+|---|---|---|---|
+| 1 | 4.53 | 3.90 | 0 |
+| 2 | 4.20 | 4.65 | 0 |
+| 5 | 3.92 | 4.88 | 0 |
+| 10 | 3.74 | 5.60 | 0 |
+| 20 | 5.40 | 5.67 | 0 |
+| 50 | 5.59 | 10.4 | 0 |
+| 100 | 7.78 | 22.0 | 0 |
+| 200 | 5.05 | 24.1 | 0 |
+| 500 | 11.4 | 59.9 | 0 |
+| 1000 | 17.6 | 108 | 0 |
+| 2000 | 28.3 | 196 | 0 |
+| 5000 | 52.9 | 404 | 0 |
+
+#### Steady writes
+
+| Clients | Writes/s | Delivered | p50 ms | p95 ms | p99 ms | Max ms | Leaked | Streams lost | Sessions cut | CPU ms per write | CPU ms per write per client | DB commits per write | DB rows scanned per write | DB rows fetched per write | DB ms per write | Step passed |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 2.00 | 60/60 | 3.97 | 5.00 | 5.70 | 5.70 | 0 | 0 | 0 | 4.04 | 4.04 | 7.08 | 137 | 42.4 | 1.85 | yes |
+| 2 | 2.00 | 120/120 | 4.04 | 5.07 | 5.39 | 5.46 | 0 | 0 | 0 | 3.99 | 2.00 | 6.80 | 156 | 36.8 | 1.56 | yes |
+| 5 | 2.00 | 300/300 | 3.62 | 4.32 | 5.11 | 5.22 | 0 | 0 | 0 | 3.80 | 0.76 | 7.07 | 134 | 44.1 | 1.50 | yes |
+| 10 | 2.00 | 600/600 | 3.71 | 4.68 | 5.04 | 5.09 | 0 | 0 | 0 | 4.62 | 0.46 | 6.86 | 147 | 45.5 | 1.62 | yes |
+| 20 | 2.00 | 1200/1200 | 3.75 | 4.36 | 4.52 | 4.80 | 0 | 0 | 0 | 4.27 | 0.21 | 6.84 | 107 | 38.0 | 1.42 | yes |
+| 50 | 2.00 | 3000/3000 | 4.34 | 5.04 | 5.58 | 5.85 | 0 | 0 | 0 | 10.0 | 0.20 | 7.08 | -0.65 | 1.29 | 1.42 | yes |
+| 100 | 2.00 | 6000/6000 | 5.87 | 6.85 | 7.18 | 7.53 | 0 | 0 | 0 | 18.5 | 0.19 | 7.07 | 6.17 | 3.16 | 1.39 | yes |
+| 200 | 2.00 | 12000/12000 | 4.43 | 10.1 | 39.6 | 41.5 | 0 | 0 | 0 | 23.7 | 0.12 | 6.93 | 40.7 | 0.70 | 1.21 | yes |
+| 500 | 2.00 | 30000/30000 | 9.32 | 12.1 | 12.8 | 14.1 | 0 | 0 | 0 | 66.4 | 0.13 | 6.99 | -7.00 | 0.26 | 1.01 | yes |
+| 1000 | 2.00 | 60000/60000 | 12.5 | 17.7 | 18.8 | 20.4 | 0 | 0 | 0 | 113 | 0.11 | 6.93 | 95.4 | 36.6 | 0.99 | yes |
+| 2000 | 2.00 | 120000/120000 | 19.2 | 27.8 | 29.5 | 33.4 | 0 | 0 | 0 | 203 | 0.10 | 6.96 | 54.6 | 27.6 | 0.96 | yes |
+| 5000 | 2.00 | 300000/300000 | 34.2 | 53.2 | 56.7 | 62.9 | 0 | 0 | 0 | 398 | 0.08 | 7.17 | 97.1 | 28.6 | 1.06 | yes |
+<!-- /case:board_groups -->
 
 <!-- case:board_roles -->
 ### Shared board read by role
@@ -177,6 +244,69 @@ Clients per node: **below 1 (1 client failed: 59 deliveries missing, 1 session c
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | 1.99 | 1/60 | 6807 | 6807 | 6807 | 6807 | 0 | 0 | 1 | - | - | - | - | - | - | no |
 <!-- /case:tenants -->
+
+<!-- case:tenants_groups -->
+### Multi-tenant app, filled in groups
+
+Run 2026-11-22 18:43 UTC on commit eb20796a4, Apple M1 Pro, 10 cores, 16 GB, macOS 26.6.2, load average 6.14 when the run started, PostgreSQL 15.14 (Homebrew), synchronous_commit on, fsync on, wal_sync_method open_datasync, Elixir 1.20.0 on OTP 29.
+
+- 400 tenants of 5 members with 100 tasks each, 40000 tasks in all, read with `allow :read, when: any(member <- tenant.members, member.user_id == user_id())`, so a write reaches the clients of its tenant's members
+- signed-in clients, one per user, filling whole tenants in order, steps of 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000 clients
+- a step stops, and the sweep with it, when the server node's memory passes 4 GB
+- clients fill 20 at a time, each group once the one before is done
+- steady writes at 2 per second for 30 s
+- a step passes when every client fills within 300 s and every write reaches every client it should and no other, with the steady writes' p99 within 1000 ms
+
+Clients per node: **at least 2000**
+
+#### Fill
+
+| Clients | Filled | Fill p50 ms | Fill p99 ms | Fills restarted | Heap kills | Server CPU ms | KB per client |
+|---|---|---|---|---|---|---|---|
+| 1 | 1/1 | 85.6 | 85.6 | 0 | 0 | - | - |
+| 2 | 2/2 | 85.2 | 85.3 | 0 | 0 | - | - |
+| 5 | 5/5 | 106 | 119 | 0 | 0 | - | - |
+| 10 | 10/10 | 165 | 179 | 0 | 0 | - | - |
+| 20 | 20/20 | 295 | 296 | 0 | 0 | - | 282 |
+| 50 | 50/50 | 267 | 336 | 0 | 0 | - | 236 |
+| 100 | 100/100 | 292 | 331 | 0 | 0 | - | 226 |
+| 200 | 200/200 | 247 | 379 | 0 | 0 | - | 185 |
+| 500 | 500/500 | 250 | 374 | 0 | 0 | - | 173 |
+| 1000 | 1000/1000 | 233 | 353 | 0 | 0 | - | 165 |
+| 2000 | 2000/2000 | 232 | 275 | 0 | 0 | - | 160 |
+
+#### Single writes, median of 5
+
+| Clients | To the last client ms | Server CPU ms | Cut short |
+|---|---|---|---|
+| 1 | 4.91 | 5.07 | 0 |
+| 2 | 4.88 | 5.34 | 0 |
+| 5 | 7.25 | 6.27 | 0 |
+| 10 | 5.97 | 6.70 | 0 |
+| 20 | 5.62 | 7.67 | 0 |
+| 50 | 8.13 | 8.54 | 0 |
+| 100 | 6.79 | 9.65 | 0 |
+| 200 | 7.31 | 12.3 | 0 |
+| 500 | 11.4 | 20.2 | 0 |
+| 1000 | 15.4 | 33.2 | 0 |
+| 2000 | 24.5 | 47.5 | 0 |
+
+#### Steady writes
+
+| Clients | Writes/s | Delivered | p50 ms | p95 ms | p99 ms | Max ms | Leaked | Streams lost | Sessions cut | CPU ms per write | CPU ms per write per client | DB commits per write | DB rows scanned per write | DB rows fetched per write | DB ms per write | Step passed |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 2.00 | 60/60 | 5.08 | 6.68 | 8.54 | 8.54 | 0 | 0 | 0 | 1.27 | 1.27 | 6.85 | 68.8 | 17.1 | 1.36 | yes |
+| 2 | 2.00 | 120/120 | 5.10 | 6.63 | 7.00 | 7.07 | 0 | 0 | 0 | 5.35 | 2.68 | 7.07 | 98.5 | 42.9 | 1.33 | yes |
+| 5 | 2.00 | 300/300 | 5.20 | 7.01 | 7.50 | 7.61 | 0 | 0 | 0 | 4.53 | 0.91 | 6.83 | 84.1 | 35.8 | 1.27 | yes |
+| 10 | 2.00 | 300/300 | 5.45 | 7.06 | 7.90 | 8.02 | 0 | 0 | 0 | 4.96 | 0.50 | 7.14 | 92.2 | 44.8 | 1.30 | yes |
+| 20 | 2.00 | 300/300 | 5.57 | 7.71 | 8.45 | 8.53 | 0 | 0 | 0 | 7.24 | 0.36 | 7.15 | 105 | 49.6 | 1.34 | yes |
+| 50 | 2.00 | 300/300 | 5.12 | 7.65 | 36.1 | 36.2 | 0 | 0 | 0 | 7.29 | 0.15 | 7.20 | 108 | 32.3 | 1.12 | yes |
+| 100 | 2.00 | 300/300 | 5.88 | 7.83 | 11.5 | 11.7 | 0 | 0 | 0 | 9.52 | 0.10 | 7.05 | 114 | 34.3 | 1.69 | yes |
+| 200 | 2.00 | 300/300 | 7.76 | 9.19 | 10.4 | 10.4 | 0 | 0 | 0 | 14.6 | 0.07 | 7.00 | 140 | 49.6 | 1.41 | yes |
+| 500 | 2.00 | 300/300 | 10.9 | 13.4 | 23.1 | 24.2 | 0 | 0 | 0 | 20.2 | 0.04 | 6.76 | 131 | 40.1 | 1.59 | yes |
+| 1000 | 2.00 | 300/300 | 15.5 | 17.8 | 18.8 | 19.9 | 0 | 0 | 0 | 30.6 | 0.03 | 7.11 | 106 | 35.0 | 1.78 | yes |
+| 2000 | 2.00 | 300/300 | 22.9 | 26.0 | 26.7 | 28.5 | 0 | 0 | 0 | 46.7 | 0.02 | 7.29 | 112 | 40.8 | 2.47 | yes |
+<!-- /case:tenants_groups -->
 
 <!-- case:access -->
 ### One write changing access to many rows
@@ -243,6 +373,256 @@ Clients per node: **at least 100**
 | 10 | 10/10 | 10 | 2899 | 2875 | 2898 | 0 | 0 | 0 | 9.51 | 504772 | 114 | - | yes |
 | 100 | 100/100 | 100 | 24216 | 24181 | 24211 | 0 | 0 | 0 | 115 | 5007266 | 1004 | 10030 | yes |
 <!-- /case:deploy_tenants -->
+
+<!-- case:reconnect -->
+### Reconnect wave after a deploy, shared board
+
+Run 2026-11-22 13:09 UTC on commit c4a007596, Apple M1 Pro, 10 cores, 16 GB, macOS 26.6.2, load average 1.89 when the run started, PostgreSQL 15.14 (Homebrew), synchronous_commit on, fsync on, wal_sync_method open_datasync, Elixir 1.20.0 on OTP 29.
+
+- 2000 cards read with a bare `allow :read`, which lets every client read every card
+- 100 writes made while the clients are away, each to a row of its own
+- each client comes back at a random moment within 5000 ms, greeting with its replica identity as a browser does
+- 0 writes per second while they do, each to a row of its own
+- anonymous clients, coming back with their places after a node restart, steps of 100, 500, 1000, 2000, 5000 clients
+- a step stops, and the sweep with it, when the server node's memory passes 4 GB
+- a step passes when every client is caught up within 120 s of the first one coming back, holding every write it should and no other, with none told to start over
+
+Clients per node: **at least 5000**
+
+#### Wave
+
+| Clients | Caught up | Last caught up ms | After the last return ms | Own wait p50 ms | Own wait p99 ms | Return restarts | Heap kills | Sessions cut | Server CPU s | DB commits | DB rows scanned | DB ms | Peak sync backends | Peak other backends | App p50 ms before | App p99 ms before | App p50 ms during | App p99 ms during | App requests failed | Step passed |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 100 | 100/100 | 4867 | 10.9 | 11.9 | 27.1 | 0 | 0 | 0 | 0.49 | 1542 | 447517 | 119 | 0 | 1 | 5.64 | 9.36 | 3.49 | 7.51 | 0 | yes |
+| 500 | 500/500 | 4974 | 11.8 | 10.8 | 32.9 | 0 | 0 | 0 | 2.58 | 8043 | 2209923 | 519 | 2 | 1 | 5.88 | 9.97 | 3.26 | 6.76 | 0 | yes |
+| 1000 | 1000/1000 | 5002 | 10.5 | 11.2 | 23.2 | 0 | 0 | 0 | 5.64 | 16113 | 4412903 | 1058 | 2 | 1 | 5.76 | 10.0 | 4.12 | 8.93 | 0 | yes |
+| 2000 | 2000/2000 | 5350 | 357 | 77.7 | 413 | 0 | 0 | 0 | 12.9 | 32129 | 8818232 | 2182 | 4 | 3 | 5.73 | 8.87 | 48.3 | 454 | 0 | yes |
+| 5000 | 5000/5000 | 14085 | 9070 | 6368 | 9030 | 0 | 0 | 0 | 34.4 | 80155 | 22035831 | 5930 | 4 | 5 | 5.68 | 8.90 | 3821 | 10133 | 0 | yes |
+<!-- /case:reconnect -->
+
+<!-- case:reconnect_burst -->
+### Reconnect wave after a deploy, shared board, arriving in a burst
+
+Run 2026-11-22 13:17 UTC on commit c4a007596, Apple M1 Pro, 10 cores, 16 GB, macOS 26.6.2, load average 2.39 when the run started, PostgreSQL 15.14 (Homebrew), synchronous_commit on, fsync on, wal_sync_method open_datasync, Elixir 1.20.0 on OTP 29.
+
+- 2000 cards read with a bare `allow :read`, which lets every client read every card
+- 100 writes made while the clients are away, each to a row of its own
+- each client comes back at a random moment within 250 ms, greeting with its replica identity as a browser does
+- 0 writes per second while they do, each to a row of its own
+- anonymous clients, coming back with their places after a node restart, steps of 100, 500, 1000, 2000, 5000 clients
+- a step stops, and the sweep with it, when the server node's memory passes 4 GB
+- a step passes when every client is caught up within 120 s of the first one coming back, holding every write it should and no other, with none told to start over
+
+Clients per node: **at least 5000**
+
+#### Wave
+
+| Clients | Caught up | Last caught up ms | After the last return ms | Own wait p50 ms | Own wait p99 ms | Return restarts | Heap kills | Sessions cut | Server CPU s | DB commits | DB rows scanned | DB ms | Peak sync backends | Peak other backends | App p50 ms before | App p99 ms before | App p50 ms during | App p99 ms during | App requests failed | Step passed |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 100 | 100/100 | 292 | 43.9 | 43.5 | 70.3 | 0 | 0 | 0 | 0.62 | 1682 | 445874 | 117 | 1 | 0 | 5.69 | 9.65 | 6.83 | 35.2 | 0 | yes |
+| 500 | 500/500 | 1577 | 1326 | 978 | 1488 | 0 | 0 | 0 | 2.84 | 8083 | 2208198 | 521 | 4 | 1 | 6.49 | 11.0 | 6.28 | 339 | 0 | yes |
+| 1000 | 1000/1000 | 3099 | 2844 | 2168 | 2952 | 0 | 0 | 0 | 5.49 | 16056 | 4411106 | 1040 | 3 | 5 | 6.38 | 10.6 | 6.42 | 1005 | 0 | yes |
+| 2000 | 2000/2000 | 6153 | 5893 | 4199 | 5897 | 0 | 0 | 0 | 11.7 | 32129 | 8818927 | 2138 | 4 | 5 | 6.21 | 10.6 | 6.53 | 2010 | 0 | yes |
+| 5000 | 5000/5000 | 16994 | 16716 | 11853 | 16643 | 0 | 0 | 0 | 32.1 | 80156 | 22036932 | 5820 | 4 | 6 | 5.95 | 10.1 | 7.81 | 6089 | 0 | yes |
+<!-- /case:reconnect_burst -->
+
+<!-- case:reconnect_writes -->
+### Reconnect wave after a deploy, shared board, with writes during the wave
+
+Run 2026-11-22 13:52 UTC on commit c4a007596, Apple M1 Pro, 10 cores, 16 GB, macOS 26.6.2, load average 2.37 when the run started, PostgreSQL 15.14 (Homebrew), synchronous_commit on, fsync on, wal_sync_method open_datasync, Elixir 1.20.0 on OTP 29.
+
+- 20000 cards read with a bare `allow :read`, which lets every client read every card
+- 4000 writes made while the clients are away, each to a row of its own
+- each client comes back at a random moment within 5000 ms, greeting with its replica identity as a browser does
+- 20 writes per second while they do, each to a row of its own
+- anonymous clients, coming back with their places after a node restart, steps of 100, 500 clients
+- a step stops, and the sweep with it, when the server node's memory passes 4 GB
+- a step passes when every client is caught up within 40 s of the first one coming back, holding every write it should and no other, with none told to start over
+
+Clients per node: **at least 500**
+
+#### Wave
+
+| Clients | Caught up | Last caught up ms | After the last return ms | Own wait p50 ms | Own wait p99 ms | Return restarts | Heap kills | Sessions cut | Server CPU s | DB commits | DB rows scanned | DB ms | Peak sync backends | Peak other backends | App p50 ms before | App p99 ms before | App p50 ms during | App p99 ms during | App requests failed | Step passed |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 100 | 100/100 | 5165 | 193 | 172 | 248 | 0 | 0 | 0 | 14.1 | 4092 | 10579468 | 2426 | 3 | 1 | 6.72 | 11.6 | 5.15 | 10.9 | 0 | yes |
+| 500 | 500/500 | 22567 | 17586 | 8435 | 17417 | 0 | 0 | 0 | 85.6 | 19163 | 55698192 | 12805 | 3 | 2 | 6.97 | 12.3 | 6.21 | 17.2 | 0 | yes |
+
+#### Returning sessions
+
+| Clients | Writes during the wave | Most waiting | KB waiting, most in one | KB catching up, most in one | MB catching up, most at once | Longest mailbox | Gate reads missed | Turns seen | Turn p50 ms | Turn max ms |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 100 | 106 | 2 | 3.31 | 10870 | 34.3 | 6 | 0 | 100 | 162 | 192 |
+| 500 | 457 | 376 | 27.6 | 11413 | 36.1 | 6 | 0 | 500 | 173 | 233 |
+<!-- /case:reconnect_writes -->
+
+<!-- case:reconnect_tenants -->
+### Reconnect wave after a deploy, multi-tenant app
+
+Run 2026-11-22 13:39 UTC on commit c4a007596, Apple M1 Pro, 10 cores, 16 GB, macOS 26.6.2, load average 2.41 when the run started, PostgreSQL 15.14 (Homebrew), synchronous_commit on, fsync on, wal_sync_method open_datasync, Elixir 1.20.0 on OTP 29.
+
+- 400 tenants of 5 members with 100 tasks each, 40000 tasks in all, read with `allow :read, when: any(member <- tenant.members, member.user_id == user_id())`
+- 100 writes made while the clients are away, each to a row of its own
+- each client comes back at a random moment within 5000 ms, greeting with its replica identity as a browser does
+- 0 writes per second while they do, each to a row of its own
+- signed-in clients, one per user, filling whole tenants in order, coming back with their places after a node restart, steps of 100, 500, 1000, 2000 clients
+- a step stops, and the sweep with it, when the server node's memory passes 4 GB
+- a step passes when every client is caught up within 120 s of the first one coming back, holding every write it should and no other, with none told to start over
+
+Clients per node: **at least 2000**
+
+#### Wave
+
+| Clients | Caught up | Last caught up ms | After the last return ms | Own wait p50 ms | Own wait p99 ms | Return restarts | Heap kills | Sessions cut | Server CPU s | DB commits | DB rows scanned | DB ms | Peak sync backends | Peak other backends | App p50 ms before | App p99 ms before | App p50 ms during | App p99 ms during | App requests failed | Step passed |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 100 | 100/100 | 4982 | 28.9 | 28.9 | 48.9 | 0 | 0 | 0 | 0.25 | 1714 | 8130528 | 2203 | 3 | 1 | 6.67 | 11.3 | 3.51 | 7.29 | 0 | yes |
+| 500 | 500/500 | 6869 | 1876 | 830 | 1861 | 0 | 0 | 0 | 1.72 | 8051 | 40615128 | 24310 | 4 | 1 | 6.17 | 10.8 | 3.56 | 8.38 | 0 | yes |
+| 1000 | 1000/1000 | 13589 | 8626 | 4459 | 8535 | 0 | 0 | 0 | 3.39 | 15919 | 81221474 | 48054 | 4 | 1 | 5.95 | 17.3 | 3.34 | 7.87 | 0 | yes |
+| 2000 | 2000/2000 | 27250 | 22250 | 11147 | 22043 | 0 | 0 | 0 | 6.81 | 32019 | 162429459 | 96150 | 4 | 1 | 5.68 | 8.57 | 3.44 | 9.17 | 0 | yes |
+<!-- /case:reconnect_tenants -->
+
+<!-- case:reconnect_tenants_burst -->
+### Reconnect wave after a deploy, multi-tenant app, arriving in a burst
+
+Run 2026-11-22 13:45 UTC on commit c4a007596, Apple M1 Pro, 10 cores, 16 GB, macOS 26.6.2, load average 2.25 when the run started, PostgreSQL 15.14 (Homebrew), synchronous_commit on, fsync on, wal_sync_method open_datasync, Elixir 1.20.0 on OTP 29.
+
+- 400 tenants of 5 members with 100 tasks each, 40000 tasks in all, read with `allow :read, when: any(member <- tenant.members, member.user_id == user_id())`
+- 100 writes made while the clients are away, each to a row of its own
+- each client comes back at a random moment within 250 ms, greeting with its replica identity as a browser does
+- 0 writes per second while they do, each to a row of its own
+- signed-in clients, one per user, filling whole tenants in order, coming back with their places after a node restart, steps of 100, 500, 1000, 2000 clients
+- a step stops, and the sweep with it, when the server node's memory passes 4 GB
+- a step passes when every client is caught up within 120 s of the first one coming back, holding every write it should and no other, with none told to start over
+
+Clients per node: **at least 2000**
+
+#### Wave
+
+| Clients | Caught up | Last caught up ms | After the last return ms | Own wait p50 ms | Own wait p99 ms | Return restarts | Heap kills | Sessions cut | Server CPU s | DB commits | DB rows scanned | DB ms | Peak sync backends | Peak other backends | App p50 ms before | App p99 ms before | App p50 ms during | App p99 ms during | App requests failed | Step passed |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 100 | 100/100 | 1465 | 1218 | 672 | 1221 | 0 | 0 | 0 | 0.36 | 1618 | 8130960 | 5041 | 4 | 1 | 5.91 | 8.56 | 3.76 | 11.5 | 0 | yes |
+| 500 | 500/500 | 7906 | 7654 | 4184 | 7606 | 0 | 0 | 0 | 1.69 | 8158 | 40615668 | 25943 | 4 | 2 | 6.39 | 11.0 | 3.91 | 293 | 0 | yes |
+| 1000 | 1000/1000 | 15690 | 15437 | 8381 | 15541 | 0 | 0 | 0 | 3.36 | 15931 | 81219052 | 51459 | 4 | 1 | 5.68 | 8.72 | 3.38 | 834 | 0 | yes |
+| 2000 | 2000/2000 | 31268 | 31006 | 16770 | 30789 | 0 | 0 | 0 | 7.01 | 31980 | 162430323 | 102501 | 4 | 1 | 5.87 | 9.07 | 3.40 | 1779 | 0 | yes |
+<!-- /case:reconnect_tenants_burst -->
+
+<!-- case:catchups -->
+### How many catch-ups a node runs at once
+
+Run 2026-11-22 13:25 UTC on commit c4a007596, Apple M1 Pro, 10 cores, 16 GB, macOS 26.6.2, load average 2.95 when the run started, PostgreSQL 15.14 (Homebrew), synchronous_commit on, fsync on, wal_sync_method open_datasync, Elixir 1.20.0 on OTP 29.
+
+- 2000 cards read with a bare `allow :read`, which lets every client read every card
+- 100 writes made while the clients are away, each to a row of its own
+- each client comes back at a random moment within 5000 ms, greeting with its replica identity as a browser does
+- 0 writes per second while they do, each to a row of its own
+- 1000 anonymous clients
+- the same wave at 1, 2, 4, 8, 16 catch-ups at once, with sync's database pool the same size, each on a fresh log and fresh nodes
+- a wave passes when every client is caught up within 120 s, holding every write it should and no other
+
+Queue cleared after the last client came back: **1.61 s at 1, 0.01 s at 2, 0.02 s at 4, 0.01 s at 8, 0.01 s at 16**
+
+#### Per number of catch-ups at once
+
+| Catch-ups at once | Caught up | Last caught up ms | After the last return ms | Return restarts | Own wait p50 ms | Own wait p99 ms | Server CPU s | DB ms | Peak sync backends | App p50 ms during | App p99 ms during | App requests failed | Step passed | Why not |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1000/1000 | 6583 | 1608 | 0 | 874 | 1576 | 5.05 | 1022 | 1 | 3.98 | 8.00 | 0 | yes | - |
+| 2 | 1000/1000 | 5001 | 10.0 | 0 | 12.0 | 61.7 | 5.56 | 1035 | 2 | 4.49 | 14.3 | 0 | yes | - |
+| 4 | 1000/1000 | 4991 | 15.4 | 0 | 11.3 | 34.6 | 5.69 | 1045 | 2 | 4.36 | 15.7 | 0 | yes | - |
+| 8 | 1000/1000 | 4994 | 12.4 | 0 | 11.2 | 18.3 | 5.74 | 1066 | 2 | 4.50 | 8.88 | 0 | yes | - |
+| 16 | 1000/1000 | 4986 | 10.5 | 0 | 11.3 | 23.4 | 5.69 | 1078 | 3 | 4.32 | 10.4 | 0 | yes | - |
+<!-- /case:catchups -->
+
+<!-- case:catchups_burst -->
+### How many catch-ups a node runs at once, arriving in a burst
+
+Run 2026-11-22 14:33 UTC on commit eb20796a4, Apple M1 Pro, 10 cores, 16 GB, macOS 26.6.2, load average 2.29 when the run started, PostgreSQL 15.14 (Homebrew), synchronous_commit on, fsync on, wal_sync_method open_datasync, Elixir 1.20.0 on OTP 29.
+
+- 2000 cards read with a bare `allow :read`, which lets every client read every card
+- 100 writes made while the clients are away, each to a row of its own
+- each client comes back at a random moment within 250 ms, greeting with its replica identity as a browser does
+- 0 writes per second while they do, each to a row of its own
+- 1000 anonymous clients
+- the same wave at 1, 2, 3, 4, 5, 6, 7, 8, 16 catch-ups at once, with sync's database pool the same size, each on a fresh log and fresh nodes
+- a wave passes when every client is caught up within 120 s, holding every write it should and no other
+
+Queue cleared after the last client came back: **7.56 s at 1, 4.40 s at 2, 3.44 s at 3, 2.91 s at 4, 2.61 s at 5, 2.41 s at 6, 2.24 s at 7, 2.14 s at 8, 1.96 s at 16**
+
+#### Per number of catch-ups at once
+
+| Catch-ups at once | Caught up | Last caught up ms | After the last return ms | Return restarts | Own wait p50 ms | Own wait p99 ms | Server CPU s | DB ms | Peak sync backends | App p50 ms during | App p99 ms during | App requests failed | Step passed | Why not |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1000/1000 | 7810 | 7557 | 0 | 4431 | 7725 | 4.79 | 987 | 1 | 3.57 | 964 | 0 | yes | - |
+| 2 | 1000/1000 | 4659 | 4404 | 0 | 2926 | 4516 | 5.27 | 984 | 2 | 4.77 | 988 | 0 | yes | - |
+| 3 | 1000/1000 | 3687 | 3436 | 0 | 2341 | 3638 | 5.60 | 1023 | 2 | 5.37 | 1002 | 0 | yes | - |
+| 4 | 1000/1000 | 3162 | 2908 | 0 | 2184 | 3052 | 5.68 | 1037 | 3 | 6.04 | 1006 | 0 | yes | - |
+| 5 | 1000/1000 | 2870 | 2614 | 0 | 2073 | 2737 | 5.77 | 1046 | 3 | 7.93 | 1015 | 0 | yes | - |
+| 6 | 1000/1000 | 2670 | 2414 | 0 | 1884 | 2576 | 5.90 | 1070 | 4 | 9.68 | 1017 | 0 | yes | - |
+| 7 | 1000/1000 | 2495 | 2241 | 0 | 1877 | 2354 | 6.01 | 1092 | 4 | 15.9 | 991 | 0 | yes | - |
+| 8 | 1000/1000 | 2398 | 2143 | 0 | 1829 | 2257 | 6.04 | 1109 | 5 | 45.2 | 1009 | 0 | yes | - |
+| 16 | 1000/1000 | 2209 | 1956 | 0 | 1683 | 2091 | 8.31 | 1239 | 9 | 168 | 1013 | 0 | yes | - |
+<!-- /case:catchups_burst -->
+
+<!-- case:session_memory -->
+### Memory per connected session
+
+Run 2026-11-22 13:06 UTC on commit c4a007596, Apple M1 Pro, 10 cores, 16 GB, macOS 26.6.2, load average 1.56 when the run started, PostgreSQL 15.14 (Homebrew), synchronous_commit on, fsync on, wal_sync_method open_datasync, Elixir 1.20.0 on OTP 29.
+
+- cards read with a bare `allow :read`, so every client holds every card, 1000, 10000, 100000 of them, each seeded on its own
+- 10 anonymous clients, 3 from 100000 rows up, each connecting once the one before it is filled, sitting idle when read
+- a build with no permission checks in the browser, so rows carry no verdicts. With them, a first arrival also keeps a verdict entry per row, and a returning session doesn't
+- a run stops when the server node's memory passes 4 GB
+
+Memory per session: **1579 KB as it sits idle, 1567 KB after collection, for 100000 rows, 16.0 bytes of ids per row**
+
+#### Per session, median
+
+| Rows | Clients | First arrival KB | After collection KB | Of which ids KB | Rest KB | Bytes of ids per row | Returning KB | Returning after collection KB | Returning bytes of ids per row | Returning, back to caught up ms | Reading its ids ms | Stream KB |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1000 | 10 | 29.7 | 19.7 | 15.7 | 4.04 | 16.0 | 20.4 | 19.7 | 16.1 | 11.9 | 3.95 | 370 |
+| 10000 | 10 | 170 | 160 | 156 | 4.04 | 16.0 | 161 | 160 | 16.0 | 14.2 | 3.76 | 31.2 |
+| 100000 | 3 | 1579 | 1567 | 1563 | 4.04 | 16.0 | 1567 | 1567 | 16.0 | 43.8 | 38.7 | 31.2 |
+<!-- /case:session_memory -->
+
+<!-- case:backlog -->
+### A long transaction holding up the dispatcher
+
+Run 2026-11-22 13:57 UTC on commit c4a007596, Apple M1 Pro, 10 cores, 16 GB, macOS 26.6.2, load average 3.00 when the run started, PostgreSQL 15.14 (Homebrew), synchronous_commit on, fsync on, wal_sync_method open_datasync, Elixir 1.20.0 on OTP 29.
+
+- 2000 cards read with a bare `allow :read`, 100 anonymous clients connected
+- 8 writers commit batches of 10 effects for 1000 replicas while one transaction holds the dispatcher up
+- each size runs on a fresh log and a fresh server node, on a Postgres server of its own
+- a delivery is waited on for at most 120 s, and a dash means it didn't reach every client in that time, or a client lost its stream first
+- a run stops when the server node's memory passes 4 GB
+
+Read of the batches above a delivered one: **99.2 ms with 300001 log rows above it, naming 1000 replicas, 83.9 KB copied to each session**
+
+#### Per backlog size
+
+| Log rows above | Replicas named | Clients | Read ms, direct | List KB | List MB across sessions | Ordinary write ms | Held-up write ms | Memory rise MB | Whole backlog ms | Backlog memory rise MB | Streams lost | Heap kills | Sessions cut | Dispatcher restarted |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 30001 | 1000 | 100 | 11.1 | 83.9 | 8.19 | 3.36 | 15.1 | 0.83 | 684 | 661 | 0 | 0 | 0 | no |
+| 300001 | 1000 | 100 | 99.2 | 83.9 | 8.19 | 3.69 | 105 | 9.10 | 3532 | 1165 | 0 | 0 | 0 | no |
+<!-- /case:backlog -->
+
+<!-- case:big_set -->
+### One write touching a row with a big set
+
+Run 2026-11-22 14:04 UTC on commit c4a007596, Apple M1 Pro, 10 cores, 16 GB, macOS 26.6.2, load average 3.69 when the run started, PostgreSQL 15.14 (Homebrew), synchronous_commit on, fsync on, wal_sync_method open_datasync, Elixir 1.20.0 on OTP 29.
+
+- one tag with a set of hidden posts, plus 7 posts its 100 anonymous clients may read, so they hold the tag and those few
+- each size is seeded on its own and runs on a fresh server node
+- 3 ordinary writes to a post outside the set, then 3 writes linking a post into it, each waited on for at most 120 s, and a dash means none reached every client in that time, or a client lost its stream first
+- then the tag is hidden from every client and shown again, which has each session scan the whole set
+- a run stops when the server node's memory passes 4 GB
+
+A write into the set: **14.8 ms to the last client with 30000 posts in the set, against 3.72 ms for a write outside it (300000 posts stopped at the 4 GB memory limit)**
+
+#### Per set size
+
+| Posts in the set | Clients | Read of the set ms, direct | Set MB | Write outside it ms | Write into it ms | Memory rise MB | Tag dropped ms | Tag handed back ms | Drop and hand back memory rise MB | Streams lost | Heap kills | Sessions cut |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 30000 | 100 | 13.4 | 0.92 | 3.72 | 14.8 | 3.07 | 1933 | 3721 | 1725 | 0 | 0 | 0 |
+<!-- /case:big_set -->
 
 <!-- case:lock -->
 ### The pg_notify commit lock
