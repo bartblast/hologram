@@ -1,5 +1,10 @@
 "use strict";
 
+// Imported by path and installed by hand for the tests that need a real store, for the reasons
+// durability_test.mjs gives.
+import fakeIndexedDB from "../../assets/node_modules/fake-indexeddb/build/esm/fakeIndexedDB.js";
+import FDBKeyRange from "../../assets/node_modules/fake-indexeddb/build/esm/FDBKeyRange.js";
+
 import {
   assert,
   defineRuntimeGlobals,
@@ -7,6 +12,7 @@ import {
   waitForEventLoop,
 } from "./support/helpers.mjs";
 
+import Batch from "../../assets/js/batch.mjs";
 import Batches from "../../assets/js/batches.mjs";
 import Clock from "../../assets/js/clock.mjs";
 import Durability from "../../assets/js/durability.mjs";
@@ -173,7 +179,7 @@ describe("Batches", () => {
     // Before its restore a tab that leads holds its page's identity, not the one the stored queue
     // was numbered under - and has not taken that queue up. Ready, it sends.
     it("sends nothing from a tab that leads its group until it is ready", async () => {
-      const reading = sinon.stub(Durability, "batchesAbove").resolves([]);
+      const reading = sinon.stub(Durability, "queuedBatches").resolves([]);
 
       sendStub.resolves(confirmed());
 
@@ -282,7 +288,7 @@ describe("Batches", () => {
     it("takes up what the store holds while holding it", async () => {
       SyncStream.stopReason = "model_hash";
 
-      sinon.stub(Durability, "batchesAbove").resolves([
+      sinon.stub(Durability, "queuedBatches").resolves([
         {
           actorUserId: null,
           landed: [],
@@ -428,7 +434,7 @@ describe("Batches", () => {
 
     // The store is the order, not the messages: a batch filed by a tab that closed straight after
     // is in the queue with nothing said about it, and it ships before anything numbered above it.
-    it("takes up what the store holds above what it has seen, before sending", async () => {
+    it("takes up what the store holds, before sending", async () => {
       const filed = {
         actorUserId: null,
         landed: [],
@@ -436,9 +442,7 @@ describe("Batches", () => {
         writes: [creating("t3", "filed elsewhere")],
       };
 
-      // Once, the way the store answers it: the read is exclusive of what this tab has already
-      // seen, so a record it has taken up is not offered again.
-      const reading = sinon.stub(Durability, "batchesAbove").resolves([]);
+      const reading = sinon.stub(Durability, "queuedBatches").resolves([]);
 
       reading.onFirstCall().resolves([filed]);
 
@@ -470,6 +474,352 @@ describe("Batches", () => {
 
       assert.isTrue(sendStub.calledOnce);
       assert.deepStrictEqual(Batches.pending, []);
+    });
+
+    // Every tab then holds the batch before a frame or an answer about it can reach it, whether or
+    // not the message from the tab that filed it ever comes.
+    it("announces a batch to the group right before sending it", async () => {
+      const announcing = sinon.stub(Tabs, "postNow");
+
+      sendStub.resolves(confirmed());
+
+      const batch = sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      sinon.assert.calledOnceWithExactly(announcing, {
+        kind: "sealed",
+        record: batch.record(),
+      });
+
+      assert.isTrue(announcing.calledBefore(sendStub));
+    });
+
+    it("announces nothing while the tab holds its writes", async () => {
+      const announcing = sinon.stub(Tabs, "postNow");
+
+      SyncStream.stopReason = "model_hash";
+
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      assert.isFalse(announcing.called);
+    });
+
+    // A stubbed read can't tell the old loop from this one: only a real store says what a read
+    // started at a given moment would have found.
+    describe("with a real store", () => {
+      let previousIndexedDB, previousKeyRange, sent;
+
+      beforeEach(async () => {
+        previousIndexedDB = globalThis.indexedDB;
+        previousKeyRange = globalThis.IDBKeyRange;
+
+        globalThis.indexedDB = fakeIndexedDB;
+        globalThis.IDBKeyRange = FDBKeyRange;
+
+        globalThis.Hologram.sync = {
+          model: TODO_MODEL,
+          modelHash: "model-a",
+          protocolVersion: 7,
+        };
+
+        await Durability.reset();
+        await Durability.open();
+
+        sent = [];
+
+        sendStub.callsFake(async (batch) => {
+          sent.push(batch.seq);
+
+          return confirmed();
+        });
+      });
+
+      afterEach(async () => {
+        await Durability.reset();
+
+        if (previousIndexedDB === undefined) {
+          delete globalThis.indexedDB;
+        } else {
+          globalThis.indexedDB = previousIndexedDB;
+        }
+
+        if (previousKeyRange === undefined) {
+          delete globalThis.IDBKeyRange;
+        } else {
+          globalThis.IDBKeyRange = previousKeyRange;
+        }
+      });
+
+      // What another tab does when it files a batch and hasn't said so yet, or never will.
+      const filedElsewhere = async (id, actorUserId = null) => {
+        const batch = new Batch(null);
+
+        batch.actorUserId = actorUserId;
+        batch.append(creating(id, id));
+
+        await Durability.fileBatch(batch);
+
+        return batch;
+      };
+
+      // Holds this tab's next filing back until the answer is called, the way a slow store does.
+      const holdNextFiling = () => {
+        const file = Durability.fileBatch.bind(Durability);
+
+        let release;
+
+        const held = new Promise((resolve) => {
+          release = resolve;
+        });
+
+        const filing = sinon.stub(Durability, "fileBatch");
+
+        filing.onFirstCall().callsFake((batch) => held.then(() => file(batch)));
+        filing.callsFake(file);
+
+        return release;
+      };
+
+      it("sends a lower batch nobody announced ahead of an announced one", async () => {
+        await filedElsewhere("t1");
+
+        const announced = await filedElsewhere("t2");
+
+        Batches.adopt([announced.record()]);
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, [1, 2]);
+      });
+
+      it("sends a batch once when its message arrives after it went out", async () => {
+        const late = await filedElsewhere("t1");
+        const announced = await filedElsewhere("t2");
+
+        Batches.adopt([announced.record()]);
+
+        await Batches.flush();
+
+        Batches.adopt([late.record()]);
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, [1, 2]);
+      });
+
+      // The head has no number when the sender first looks at it, and gets one above whatever
+      // another tab files in the meantime.
+      it("sends a batch another tab filed while the head was being filed first", async () => {
+        const release = holdNextFiling();
+
+        sealed(creating("t2", "own"));
+
+        const flushing = Batches.flush();
+
+        await waitForEventLoop();
+
+        await filedElsewhere("t1");
+
+        release();
+
+        await flushing;
+
+        assert.deepStrictEqual(sent, [1, 2]);
+      });
+
+      it("reads the store again for a batch closed during the read", async () => {
+        const release = holdNextFiling();
+        const read = Durability.queuedBatches.bind(Durability);
+
+        const reading = sinon.stub(Durability, "queuedBatches").callsFake(read);
+
+        reading.onFirstCall().callsFake(async (below) => {
+          const records = await read(below);
+
+          sealed(creating("t2", "own"));
+
+          await filedElsewhere("t1");
+
+          release();
+
+          return records;
+        });
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, [1, 2]);
+      });
+
+      // Guards the loop against waiting on, or spinning over, a record it will never take up.
+      it("goes past another user's lower batch and leaves it in the store", async () => {
+        await filedElsewhere("t1", "u2");
+        await filedElsewhere("t2");
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, [2]);
+
+        assert.deepStrictEqual(
+          (await Durability.queuedBatches()).map((record) => record.seq),
+          [1],
+        );
+      });
+
+      // Held, the queue never drains down to it, and the batch would stay off this tab's screen.
+      it("takes up a higher batch nobody announced while holding its writes", async () => {
+        SyncStream.stopReason = "model_hash";
+
+        const held = await filedElsewhere("t1");
+
+        await filedElsewhere("t2");
+
+        Batches.adopt([held.record()]);
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, []);
+
+        assert.deepStrictEqual(
+          Batches.pending.map((batch) => batch.seq),
+          [1, 2],
+        );
+      });
+
+      it("takes up a higher batch nobody announced when refused for its build", async () => {
+        sinon.stub(Logger, "debug");
+
+        sendStub.callsFake(async () => ({
+          reason: Serializer.serialize(Type.atom("stale_build")),
+          status: "rejected",
+        }));
+
+        const held = await filedElsewhere("t1");
+
+        await filedElsewhere("t2");
+
+        Batches.adopt([held.record()]);
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(
+          Batches.pending.map((batch) => batch.seq),
+          [1, 2],
+        );
+      });
+
+      // Nothing is about to announce it by sending it, and the tabs would show different writes.
+      it("tells the group about a batch it took up while holding its writes", async () => {
+        const announcing = sinon.stub(Tabs, "postNow");
+
+        SyncStream.stopReason = "model_hash";
+
+        const held = await filedElsewhere("t1");
+        const unannounced = await filedElsewhere("t2");
+
+        Batches.adopt([held.record()]);
+
+        await Batches.flush();
+
+        sinon.assert.calledWithExactly(announcing, {
+          kind: "sealed",
+          record: unannounced.record(),
+        });
+      });
+
+      it("announces a batch it took up while holding its writes only once", async () => {
+        const announcing = sinon.stub(Tabs, "postNow");
+
+        SyncStream.stopReason = "model_hash";
+
+        const held = await filedElsewhere("t1");
+
+        await filedElsewhere("t2");
+
+        Batches.adopt([held.record()]);
+
+        await Batches.flush();
+        await Batches.flush();
+
+        sinon.assert.calledOnce(announcing);
+      });
+
+      // Found by the read that stops at the head, so the read of the whole queue finds it held.
+      it("tells the group about a lower batch it found while holding its writes", async () => {
+        const announcing = sinon.stub(Tabs, "postNow");
+
+        SyncStream.stopReason = "model_hash";
+
+        const unannounced = await filedElsewhere("t1");
+        const announced = await filedElsewhere("t2");
+
+        Batches.adopt([announced.record()]);
+
+        await Batches.flush();
+
+        sinon.assert.calledOnceWithExactly(announcing, {
+          kind: "sealed",
+          record: unannounced.record(),
+        });
+      });
+
+      it("tells the group about every batch it found while a send keeps failing", async () => {
+        const announcing = sinon.stub(Tabs, "postNow");
+
+        sinon.stub(console, "warn");
+
+        sendStub.callsFake(async () => {
+          throw new Error("offline");
+        });
+
+        await filedElsewhere("t1");
+        await filedElsewhere("t2");
+
+        await Batches.flush();
+        await Batches.flush();
+
+        // Each found once, and the head again before each of its two sends.
+        assert.deepStrictEqual(
+          announcing.args.map(([message]) => message.record.seq),
+          [1, 2, 1, 1],
+        );
+      });
+
+      // While the server can't be reached the head stays, so the queue doesn't drain down to it.
+      it("takes up a higher batch nobody announced when a send fails", async () => {
+        sinon.stub(console, "warn");
+
+        sendStub.callsFake(async () => {
+          throw new Error("offline");
+        });
+
+        const held = await filedElsewhere("t1");
+
+        await filedElsewhere("t2");
+
+        Batches.adopt([held.record()]);
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(
+          Batches.pending.map((batch) => batch.seq),
+          [1, 2],
+        );
+      });
+
+      it("sends a higher batch nobody announced once the queue has drained", async () => {
+        const held = await filedElsewhere("t1");
+
+        await filedElsewhere("t2");
+
+        Batches.adopt([held.record()]);
+
+        await Batches.flush();
+
+        assert.deepStrictEqual(sent, [1, 2]);
+      });
     });
 
     it("tells the group what the server answered", async () => {

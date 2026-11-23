@@ -3637,6 +3637,49 @@ describe("Tabs", () => {
     });
   });
 
+  describe("postNow()", () => {
+    it("reaches a tab listening on the group's channel", async () => {
+      const group = nextGroup();
+
+      await Tabs.join(group, stubs());
+
+      let received;
+
+      const hasReceived = new Promise((resolve) => {
+        received = resolve;
+      });
+
+      sibling(group).onmessage = (event) => received(event.data);
+
+      Tabs.postNow({kind: "sealed"});
+
+      assert.deepStrictEqual(await hasReceived, {kind: "sealed"});
+    });
+
+    // A batch has to be announced before the request for it starts, whatever is still waiting on
+    // a store write.
+    it("goes out ahead of a message waiting for its write", async () => {
+      const group = nextGroup();
+
+      await Tabs.join(group, stubs());
+
+      const posting = sinon.spy(BroadcastChannel.prototype, "postMessage");
+
+      Tabs.post({kind: "frame"}, new Promise(() => {}));
+      Tabs.postNow({kind: "sealed"});
+
+      sinon.assert.calledOnceWithExactly(posting, {kind: "sealed"});
+    });
+
+    it("says nothing outside a group", () => {
+      const posting = sinon.spy(BroadcastChannel.prototype, "postMessage");
+
+      Tabs.postNow({kind: "sealed"});
+
+      sinon.assert.notCalled(posting);
+    });
+  });
+
   describe("post()", () => {
     it("reaches a tab listening on the group's channel", async () => {
       const group = nextGroup();

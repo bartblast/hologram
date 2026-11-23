@@ -316,28 +316,40 @@ describe("Durability", () => {
     Replica.offer({id: "r-fresh", token: "statement-fresh"});
   };
 
-  describe("batchesAbove()", () => {
-    it("answers the records above the number, oldest first", async () => {
+  describe("queuedBatches()", () => {
+    it("answers the whole queue, oldest first", async () => {
       await Durability.open();
       await Durability.load();
       await writeBatches([batchRecord(9), batchRecord(2), batchRecord(5)]);
 
-      assert.deepStrictEqual(await Durability.batchesAbove(2), [
+      assert.deepStrictEqual(await Durability.queuedBatches(), [
+        batchRecord(2),
         batchRecord(5),
         batchRecord(9),
       ]);
     });
 
-    it("answers nothing for a number nothing was filed above", async () => {
+    it("answers only the records below a number, oldest first", async () => {
+      await Durability.open();
+      await Durability.load();
+      await writeBatches([batchRecord(9), batchRecord(2), batchRecord(5)]);
+
+      assert.deepStrictEqual(await Durability.queuedBatches(9), [
+        batchRecord(2),
+        batchRecord(5),
+      ]);
+    });
+
+    it("answers nothing for a number nothing was filed below", async () => {
       await Durability.open();
       await Durability.load();
       await writeBatches([batchRecord(2), batchRecord(5)]);
 
-      assert.deepStrictEqual(await Durability.batchesAbove(5), []);
+      assert.deepStrictEqual(await Durability.queuedBatches(2), []);
     });
 
     it("answers nothing in memory mode", async () => {
-      assert.deepStrictEqual(await Durability.batchesAbove(0), []);
+      assert.deepStrictEqual(await Durability.queuedBatches(), []);
       assert.equal(Durability.mode, "memory");
     });
 
@@ -348,16 +360,9 @@ describe("Durability", () => {
       await Durability.load();
       await writeBatches([batchRecord(2)]);
 
-      const range = globalThis.IDBKeyRange;
+      sinon.stub(FDBObjectStore.prototype, "getAll").throws(new Error("read"));
 
-      try {
-        globalThis.IDBKeyRange = undefined;
-
-        assert.deepStrictEqual(await Durability.batchesAbove(0), []);
-      } finally {
-        globalThis.IDBKeyRange = range;
-      }
-
+      assert.deepStrictEqual(await Durability.queuedBatches(), []);
       assert.equal(Durability.mode, "indexeddb");
     });
   });
@@ -1290,7 +1295,7 @@ describe("Durability", () => {
 
       await Durability.fileBatch(batch);
 
-      const [record] = await Durability.batchesAbove(0);
+      const [record] = await Durability.queuedBatches();
 
       assert.strictEqual(record.writes[0].deltas.n, 9007199254740993n);
     });

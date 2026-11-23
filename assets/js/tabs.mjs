@@ -400,6 +400,13 @@ export default class Tabs {
       });
   }
 
+  // Says something to the other tabs at once, ahead of anything `post` has waiting. For the tab
+  // sending a batch, announcing it: that has to reach them before any frame or answer about it, and
+  // it vouches for nothing waiting ahead of it, since the batch is already in the store.
+  static postNow(message) {
+    Tabs.#channel?.postMessage(message);
+  }
+
   // This tab has everything it starts with - the rows its own page carried, and what a previous
   // page load left in the browser - so what the server has said since may land on it now. Whatever
   // was held goes through in the order it arrived, and then a lead the group handed this tab while
@@ -543,8 +550,8 @@ export default class Tabs {
   //
   // A BATCH another tab filed is taken up into a queue the store has not handed over yet. Taken
   // before the mount, it is passed over for a signed-in user, since the mount is what says whose
-  // batches this page takes up, and nothing takes it up later: the restore takes up only what its
-  // read of the store found. And in a tab that leads, taking one up wakes the sender, which would
+  // batches this page takes up, and a tab that follows may not hear of it again: the restore takes
+  // up only what its read of the store found. And in a tab that leads, taking one up wakes the sender, which would
   // send the stored queue under the page's own identity rather than the one it was numbered under.
   //
   // A tab ASKING for the group's state is asking for an identity and a place, which this tab holds

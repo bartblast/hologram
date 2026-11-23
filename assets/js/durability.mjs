@@ -102,31 +102,35 @@ export default class Durability {
   // The last identity write started, for a send to wait on (see replicaWritten).
   static #replicaWrite = Promise.resolve();
 
-  // The batches this browser has filed above a number, oldest first - what a tab reads before it
-  // sends, so that what it ships is the queue as the DATABASE holds it rather than as messages
-  // happened to reach it.
+  // The batches this browser has filed, oldest first, or only those numbered below `below` - what
+  // a tab reads before it sends, so that what it ships is the queue as the DATABASE holds it rather
+  // than as messages happened to reach it.
   //
   // Why it is read at all: any tab of a group can file a batch, and it says so on the channel - but
-  // a message can be missed by a tab that was starting up, and a tab that filed one and closed
-  // before saying anything sends no message at all. The store is the record either way, and reading
-  // it back is reading it in number order, which is the order batches must go out in.
+  // a message can arrive late, can be missed by a tab that was starting up, and is never sent by a
+  // tab that closed straight after filing. The store is the record either way, and reading it back
+  // is reading it in number order, which is the order batches must go out in.
+  //
+  // Below a number because that's all a sender needs to know before sending the batch holding it,
+  // and a queue drained one send at a time would otherwise read every record again for each one.
   //
   // A READ, so it is deliberately not `#write`: it starts no read-write transaction, and it is not
   // counted as work in flight, which is what a test waits on to know a WRITE has landed. A read
   // that fails answers nothing rather than tearing the storage down - nothing has been lost, and
   // the next send asks again.
-  static async batchesAbove(seq) {
+  static async queuedBatches(below = null) {
     if (Durability.mode === "memory") {
       return [];
     }
 
     try {
       const transaction = Durability.#db.transaction([QUEUE], "readonly");
+      const queue = transaction.objectStore(QUEUE);
 
       const records = await Durability.#request(
-        transaction
-          .objectStore(QUEUE)
-          .getAll(globalThis.IDBKeyRange.lowerBound(seq, true)),
+        below === null
+          ? queue.getAll()
+          : queue.getAll(globalThis.IDBKeyRange.upperBound(below, true)),
       );
 
       return records ?? [];
@@ -491,7 +495,7 @@ export default class Durability {
   // ONE read-only transaction, the rows read in the callback of the place's own request: a write
   // landing between two transactions could leave the rows of one place beside another.
   //
-  // A READ, like batchesAbove: not counted as work in flight, and one that fails answers nothing
+  // A READ, like queuedBatches: not counted as work in flight, and one that fails answers nothing
   // rather than tearing the storage down. So does memory mode, where there is nothing to read.
   // Whatever goes wrong, it answers: a tab waits on it before it hears its group again.
   static async readBase(cursor) {
