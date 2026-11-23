@@ -665,12 +665,109 @@ defmodule Hologram.Migration.GeneratorTest do
 
       rendered = render(plan, @module)
 
-      assert rendered =~ "#   add_relationship :owner, MyApp.User, backfill: <id>"
+      assert rendered =~ "#   add_relationship :owner, MyApp.User, backfill: <id or expression>"
       assert rendered =~ "#   add_relationship :owner, MyApp.User, optional: true"
       refute rendered =~ "default:"
     end
 
-    test "renders a fill question with the op spelled out three ways" do
+    test "renders a tightening question with its answers" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :fill,
+            entity: MyApp.Task,
+            attributes: [:title],
+            members: [{:change_attribute, :title, [optional: false]}],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      expected = """
+      change_entity MyApp.Task do
+        # RESOLVE: :title is required, and MyApp.Task already holds rows - they need a value.
+        # Write the op with one of these, then delete the resolve! line. API:
+        #   change_attribute :title, optional: false, backfill: <value or expression>  - the rows holding nil receive it, once, computed from each row when it names the row's fields
+        #   change_attribute :title, optional: false, backfill: fn field -> <query words> end  - the same, in one update
+        #   change_attribute :title, optional: false, backfill: fn field -> <Elixir> end  - the same, run row by row
+        #   change_attribute :title, optional: false  - every row already holds a value - the apply refuses otherwise
+        #   keep optional: true on :title in the entity type  - no op, the nils stay
+        resolve! :fill, attributes: [:title]
+      end
+      """
+
+      assert render(plan, @module) == module_text(@module, expected)
+    end
+
+    test "writes a tightening beside a type change as two ops when it backfills" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :fill,
+            entity: MyApp.Task,
+            attributes: [:rank],
+            members: [{:change_attribute, :rank, [optional: false, type: :string]}],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      rendered = render(plan, @module)
+
+      assert rendered =~
+               "#   change_attribute :rank, type: :string  - first, as an op of its own"
+
+      assert rendered =~ "#   change_attribute :rank, optional: false, backfill: <value or"
+
+      assert rendered =~
+               "#   change_attribute :rank, optional: false, type: :string  - every row already"
+    end
+
+    test "keeps the other changes in the answer leaving the member optional" do
+      plan = %{
+        ops: [],
+        questions: [
+          %{
+            kind: :fill,
+            entity: MyApp.Task,
+            attributes: [:rank],
+            members: [{:change_attribute, :rank, [max: 10, optional: false]}],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      assert render(plan, @module) =~
+               "#   change_attribute :rank, max: 10  - keep optional: true on :rank in the " <>
+                 "entity type, the nils stay"
+    end
+
+    test "writes a block creating an entity type above the others" do
+      plan = %{
+        ops: [
+          %{
+            op: :add_relationship,
+            entity: MyApp.Alpha,
+            name: :zed,
+            type: MyApp.Zed,
+            opts: [optional: true]
+          },
+          %{op: :create_entity, entity: MyApp.Zed}
+        ],
+        questions: []
+      }
+
+      rendered = render(plan, @module)
+
+      {create_at, _length} = :binary.match(rendered, "create_entity MyApp.Zed")
+      {change_at, _length} = :binary.match(rendered, "change_entity MyApp.Alpha")
+
+      assert create_at < change_at
+    end
+
+    test "renders a fill question with its answers" do
       plan = %{
         ops: [],
         questions: [
@@ -688,9 +785,11 @@ defmodule Hologram.Migration.GeneratorTest do
       change_entity MyApp.Task do
         # RESOLVE: :title is required, and MyApp.Task already holds rows - they need a value.
         # Write the op with one of these, then delete the resolve! line. API:
-        #   add_attribute :title, :string, backfill: <value>  - existing rows receive it, once
-        #   add_attribute :title, :string, default: <value>   - every row created without one, from now on
-        #   add_attribute :title, :string, optional: true     - existing rows stay empty
+        #   add_attribute :title, :string, backfill: <value or expression>  - existing rows receive it, once, computed from each row when it names the row's fields
+        #   add_attribute :title, :string, backfill: fn field -> <query words> end  - the same, in one update
+        #   add_attribute :title, :string, backfill: fn field -> <Elixir> end  - the same, run row by row
+        #   add_attribute :title, :string, default: <value>  - every row created without one, from now on
+        #   add_attribute :title, :string, optional: true  - existing rows stay empty
         resolve! :fill, attributes: [:title]
       end
       """

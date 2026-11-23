@@ -63,7 +63,8 @@ defmodule Hologram.Migration.Generator do
   formatted with the given function.
 
   Entity renames come first, so every later line names the entity as the current model
-  does - then the entity blocks in alphabetical order, then the flat ops. The default
+  does - then the blocks creating entity types, so a relationship never sits above the type it
+  targets, then the other entity blocks, each group in alphabetical order, then the flat ops. The default
   formatting writes the vocabulary parens-free, as a project importing Hologram's formatter
   config formats it; the generate task formats with the project's own config, so a fresh
   file is what the project's mix format would write.
@@ -162,9 +163,20 @@ defmodule Hologram.Migration.Generator do
       "#{inspect(question.to)}"
   end
 
+  defp backfill_lines(call, value, rows) do
+    [
+      "#{call}, backfill: #{value}  - #{rows} receive it, once, computed from each row when " <>
+        "it names the row's fields",
+      "#{call}, backfill: fn field -> <query words> end  - the same, in one update",
+      "#{call}, backfill: fn field -> <Elixir> end  - the same, run row by row"
+    ]
+  end
+
   defp block_op?(op) do
     Map.has_key?(op, :entity) and op.op not in @flat_entity_ops
   end
+
+  defp created?(ops), do: Enum.any?(ops, &(&1.op == :create_entity))
 
   defp entity_of(op), do: Map.get(op, :entity)
 
@@ -173,29 +185,31 @@ defmodule Hologram.Migration.Generator do
   # Written out per attribute with its own name and type, so the answer is an edit of a
   # line rather than a recall of the option's spelling.
   defp fill_entries(members) do
-    Enum.flat_map(members, fn {kind, name, type, opts} ->
-      declared_opts = render_opts(opts)
-      suffix = if declared_opts == "", do: "", else: ", " <> declared_opts
-      call = "#{kind} #{inspect(name)}, #{inspect(type)}#{suffix}"
+    Enum.flat_map(members, fn
+      {kind, name, changes} ->
+        tightening_lines(kind, name, changes)
 
-      fill_lines(kind, call)
+      {kind, name, type, opts} ->
+        declared_opts = render_opts(opts)
+        suffix = if declared_opts == "", do: "", else: ", " <> declared_opts
+
+        fill_lines(kind, "#{kind} #{inspect(name)}, #{inspect(type)}#{suffix}")
     end)
   end
 
   # A to-one takes no default, since a default id would point every new row at one target.
   defp fill_lines(:add_relationship, call) do
-    [
-      "#{call}, backfill: <id>   - existing rows receive it, once",
-      "#{call}, optional: true   - existing rows stay empty"
-    ]
+    call
+    |> backfill_lines("<id or expression>", "existing rows")
+    |> Enum.concat(["#{call}, optional: true  - existing rows stay empty"])
   end
 
   defp fill_lines(_kind, call) do
-    [
-      "#{call}, backfill: <value>  - existing rows receive it, once",
-      "#{call}, default: <value>   - every row created without one, from now on",
-      "#{call}, optional: true     - existing rows stay empty"
-    ]
+    backfill_lines(call, "<value or expression>", "existing rows") ++
+      [
+        "#{call}, default: <value>  - every row created without one, from now on",
+        "#{call}, optional: true  - existing rows stay empty"
+      ]
   end
 
   defp format(text) do
@@ -257,7 +271,7 @@ defmodule Hologram.Migration.Generator do
       |> Map.keys()
       |> Enum.concat(Map.keys(questions_by_entity))
       |> Enum.uniq()
-      |> Enum.sort_by(&inspect/1)
+      |> Enum.sort_by(&{not created?(Map.get(ops_by_entity, &1, [])), inspect(&1)})
       |> Enum.map(fn entity_type ->
         {:block, entity_type, Map.get(ops_by_entity, entity_type, []),
          Map.get(questions_by_entity, entity_type, [])}
@@ -272,6 +286,16 @@ defmodule Hologram.Migration.Generator do
     text
     |> String.split("\n")
     |> Enum.map_join("\n", &"#{@indent}#{&1}")
+  end
+
+  # What's left of the change once the member stays optional, which still has to be written.
+  defp keep_optional_line(_kind, name, []) do
+    "keep optional: true on #{inspect(name)} in the entity type  - no op, the nils stay"
+  end
+
+  defp keep_optional_line(kind, name, other_changes) do
+    "#{render_call(Atom.to_string(kind), [name], other_changes)}  - keep optional: true on " <>
+      "#{inspect(name)} in the entity type, the nils stay"
   end
 
   # A key naming a member the question asks about is withheld with it, and the two answers
@@ -699,6 +723,32 @@ defmodule Hologram.Migration.Generator do
     do: is_list(Keyword.get(changes, :type))
 
   defp takes_key_field?(_op), do: false
+
+  # A backfill can't sit beside a type change, since it would hold values of the new type while
+  # the column has the old one, so that answer is two ops.
+  defp tightening_lines(kind, name, changes) do
+    value =
+      if kind == :change_relationship, do: "<id or expression>", else: "<value or expression>"
+
+    plain = render_call(Atom.to_string(kind), [name], changes)
+
+    {type_lines, tightening} =
+      if Keyword.has_key?(changes, :type) do
+        first = render_call(Atom.to_string(kind), [name], Keyword.delete(changes, :optional))
+
+        {["#{first}  - first, as an op of its own, when a backfill follows"],
+         render_call(Atom.to_string(kind), [name], optional: false)}
+      else
+        {[], plain}
+      end
+
+    type_lines ++
+      backfill_lines(tightening, value, "the rows holding nil") ++
+      [
+        "#{plain}  - every row already holds a value - the apply refuses otherwise",
+        keep_optional_line(kind, name, Keyword.delete(changes, :optional))
+      ]
+  end
 
   defp verify_finalized(:nothing_to_do, migrations, current_model) do
     ShadowVerifier.verify!(migrations, current_model)

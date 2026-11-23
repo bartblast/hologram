@@ -167,7 +167,7 @@ defmodule Hologram.Migration.Diff do
     class_plan =
       add_ops
       |> class_plan(change_ops, delete_ops, deleted, added, question_fun)
-      |> withhold_unfilled_adds(entity_type)
+      |> withhold_unfilled(entity_type, new_members, old_members)
 
     merge_plans([class_plan | enum_plans])
   end
@@ -324,7 +324,7 @@ defmodule Hologram.Migration.Diff do
 
     add_ops
     |> class_plan(change_ops, delete_ops, deleted, added, question_fun)
-    |> withhold_unfilled_adds(entity_type)
+    |> withhold_unfilled(entity_type, new_members, old_members)
   end
 
   # A created entity type whose attribute name set equals a deleted one's looks like a
@@ -468,6 +468,10 @@ defmodule Hologram.Migration.Diff do
 
   defp extends_delta(%{extends: extends}), do: extends
 
+  defp fill_member(%{changes: changes} = op), do: {op.op, op.name, changes}
+
+  defp fill_member(op), do: {op.op, op.name, op.type, op.opts}
+
   defp key_ops(kind, entity_type, keys) do
     Enum.map(keys, &%{op: kind, entity: entity_type, fields: &1})
   end
@@ -597,6 +601,25 @@ defmodule Hologram.Migration.Diff do
 
   defp unfilled_add?(_op), do: false
 
+  # A member turning required with nothing to fill its nils: no default, or one that can't fill
+  # them because the type changes in the same op. A to-many holds no nil, and one narrowing to a
+  # to-one is refused whatever the answer, so it isn't asked about.
+  defp unfilled_tightening?(%{op: :change_attribute} = op, members, _old_members) do
+    {_name, _type, opts} = List.keyfind!(members, op.name, 0)
+
+    op.changes[:optional] == false and
+      (is_nil(opts[:default]) or Keyword.has_key?(op.changes, :type))
+  end
+
+  defp unfilled_tightening?(%{op: :change_relationship} = op, members, old_members) do
+    {_name, type, _opts} = List.keyfind!(members, op.name, 0)
+    {_name, old_type, _opts} = List.keyfind!(old_members, op.name, 0)
+
+    op.changes[:optional] == false and not is_list(type) and not is_list(old_type)
+  end
+
+  defp unfilled_tightening?(_op, _members, _old_members), do: false
+
   defp withhold_key_ops(%{kind: kind} = question, delete_ops, add_ops)
        when kind in [:attributes, :relationships] do
     held_deletes = Enum.filter(delete_ops, &names_any?(&1.fields, question.deleted))
@@ -614,12 +637,14 @@ defmodule Hologram.Migration.Diff do
   defp withhold_key_ops(question, _delete_ops, _add_ops), do: {question, []}
 
   # An attribute or to-one added to an entity the history already carries meets rows that predate
-  # it, and a required one leaves them without a value. Which value is the author's to
-  # know - the model cannot hold it, and the database it will meet is not the one being
-  # generated against - so the op is withheld and asked about, the same way an ambiguous
-  # rename is. Entities created in this file are exempt: their table is born empty.
-  defp withhold_unfilled_adds({ops, questions}, entity_type) do
-    {unfilled, filled} = Enum.split_with(ops, &unfilled_add?/1)
+  # it, and a required one leaves them without a value, as a member turning required does for the
+  # rows holding nil. Which value is the author's to know - the model cannot hold it, and the
+  # database it will meet is not the one being generated against - so the op is withheld and
+  # asked about, the same way an ambiguous rename is. Entities created in this file are exempt:
+  # their table is born empty.
+  defp withhold_unfilled({ops, questions}, entity_type, members, old_members) do
+    {unfilled, filled} =
+      Enum.split_with(ops, &(unfilled_add?(&1) or unfilled_tightening?(&1, members, old_members)))
 
     if unfilled == [] do
       {ops, questions}
@@ -628,7 +653,7 @@ defmodule Hologram.Migration.Diff do
         kind: :fill,
         entity: entity_type,
         attributes: Enum.map(unfilled, & &1.name),
-        members: Enum.map(unfilled, &{&1.op, &1.name, &1.type, &1.opts}),
+        members: Enum.map(unfilled, &fill_member/1),
         withheld_ops: unfilled
       }
 

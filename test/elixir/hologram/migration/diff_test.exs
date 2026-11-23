@@ -330,7 +330,7 @@ defmodule Hologram.Migration.DiffTest do
       replayed =
         model(%{
           MyApp.Task => %{
-            attributes: [{:estimate, :integer, [default: 0, min: 0, optional: true]}],
+            attributes: [{:estimate, :integer, [default: 0, min: 0]}],
             relationships: [{:tags, [MyApp.Tag], []}],
             roles: [{:owner, [granted_to: :creator]}]
           }
@@ -351,7 +351,7 @@ defmodule Hologram.Migration.DiffTest do
                    op: :change_attribute,
                    entity: MyApp.Task,
                    name: :estimate,
-                   changes: [default: nil, max: 10, optional: false, type: :float]
+                   changes: [default: nil, max: 10, type: :float]
                  },
                  %{
                    op: :change_relationship,
@@ -440,6 +440,103 @@ defmodule Hologram.Migration.DiffTest do
                  }
                ]
              }
+    end
+
+    test "withholds an attribute turning required with no default into a question" do
+      replayed = model(%{MyApp.Task => %{attributes: [{:title, :string, [optional: true]}]}})
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      op = %{op: :change_attribute, entity: MyApp.Task, name: :title, changes: [optional: false]}
+
+      assert diff(replayed, current) == %{
+               ops: [],
+               questions: [
+                 %{
+                   kind: :fill,
+                   entity: MyApp.Task,
+                   attributes: [:title],
+                   members: [{:change_attribute, :title, [optional: false]}],
+                   withheld_ops: [op]
+                 }
+               ]
+             }
+    end
+
+    test "emits an attribute turning required with a default" do
+      replayed =
+        model(%{MyApp.Task => %{attributes: [{:title, :string, [default: "a", optional: true]}]}})
+
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, [default: "a"]}]}})
+
+      assert %{ops: [%{op: :change_attribute}], questions: []} = diff(replayed, current)
+    end
+
+    test "withholds a type change turning required, which its default can't fill" do
+      replayed = model(%{MyApp.Task => %{attributes: [{:rank, :integer, [optional: true]}]}})
+      current = model(%{MyApp.Task => %{attributes: [{:rank, :string, [default: "x"]}]}})
+
+      assert %{
+               ops: [],
+               questions: [
+                 %{
+                   kind: :fill,
+                   members: [
+                     {:change_attribute, :rank, [default: "x", optional: false, type: :string]}
+                   ]
+                 }
+               ]
+             } = diff(replayed, current)
+    end
+
+    test "asks nothing of a to-many dropping optional" do
+      replayed =
+        model(%{
+          MyApp.Tag => %{},
+          MyApp.Task => %{relationships: [{:tags, [MyApp.Tag], [optional: true]}]}
+        })
+
+      current =
+        model(%{MyApp.Tag => %{}, MyApp.Task => %{relationships: [{:tags, [MyApp.Tag], []}]}})
+
+      assert %{ops: [%{op: :change_relationship}], questions: []} = diff(replayed, current)
+    end
+
+    test "asks nothing of a to-many narrowing to a required to-one, which is refused" do
+      replayed =
+        model(%{
+          MyApp.Tag => %{},
+          MyApp.Task => %{relationships: [{:tags, [MyApp.Tag], [optional: true]}]}
+        })
+
+      current =
+        model(%{MyApp.Tag => %{}, MyApp.Task => %{relationships: [{:tags, MyApp.Tag, []}]}})
+
+      assert %{
+               ops: [%{op: :change_relationship, changes: [optional: false, type: MyApp.Tag]}],
+               questions: []
+             } = diff(replayed, current)
+    end
+
+    test "withholds a to-one turning required into a question" do
+      replayed =
+        model(%{
+          MyApp.Task => %{relationships: [{:owner, MyApp.User, [optional: true]}]},
+          MyApp.User => %{}
+        })
+
+      current =
+        model(%{MyApp.Task => %{relationships: [{:owner, MyApp.User, []}]}, MyApp.User => %{}})
+
+      assert %{
+               ops: [],
+               questions: [
+                 %{
+                   kind: :fill,
+                   attributes: [:owner],
+                   members: [{:change_relationship, :owner, [optional: false]}]
+                 }
+               ]
+             } = diff(replayed, current)
     end
 
     test "emits an optional to-one and a to-many without a question" do
