@@ -110,8 +110,8 @@ defmodule Hologram.Auth.ContextTest do
       assert with_actor(nil, fn -> session?() end)
     end
 
-    test "is true for an atom user id" do
-      assert with_actor(:admin, fn -> session?() end)
+    test "is true for an integer user id" do
+      assert with_actor(7, fn -> session?() end)
     end
 
     test "is false again after with_actor/2" do
