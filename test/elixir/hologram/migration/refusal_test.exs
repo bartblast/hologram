@@ -58,16 +58,6 @@ defmodule Hologram.Migration.RefusalTest do
     Enum.map(rows, fn [version] -> version end)
   end
 
-  defp insert_task(title, amount, status) do
-    statement = """
-    INSERT INTO "hologram_data"."my_app_task"
-      ("id", "title", "amount", "status", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
-    VALUES (gen_random_uuid(), $1, $2, $3, now(), now(), now(), now(), '{}')
-    """
-
-    {:ok, _result} = Connection.query(statement, [title, amount, status])
-  end
-
   # A file adding an optional enum, and one making it required with a default that the same file
   # adds to the enum only below a rename, so the value isn't there yet when the column fills.
   defp grade_files(first_model) do
@@ -104,6 +94,29 @@ defmodule Hologram.Migration.RefusalTest do
       ])
 
     {add_grade, Model.fold(first_model, add_grade.ops), tighten}
+  end
+
+  # Separate from task_rows/0 because only the tests that add grade have the column.
+  defp grade_rows do
+    statement = """
+    SELECT "title", "amount", "status"::text, "grade"::text
+    FROM "hologram_data"."my_app_task"
+    ORDER BY "title"
+    """
+
+    {:ok, %{rows: rows}} = Connection.query(statement)
+
+    rows
+  end
+
+  defp insert_task(title, amount, status) do
+    statement = """
+    INSERT INTO "hologram_data"."my_app_task"
+      ("id", "title", "amount", "status", "created_at", "server_created_at", "server_updated_at", "updated_at", "$revisions")
+    VALUES (gen_random_uuid(), $1, $2, $3, now(), now(), now(), now(), '{}')
+    """
+
+    {:ok, _result} = Connection.query(statement, [title, amount, status])
   end
 
   defp migration(version, ops) do
@@ -300,7 +313,7 @@ defmodule Hologram.Migration.RefusalTest do
       route(scratch, fn ->
         assert run([create, add_grade], grade_model, @context) == :ok
 
-        rows_before = task_rows()
+        rows_before = grade_rows()
         schema_before = Introspection.schema()
         full_model = Model.fold(grade_model, tighten.ops)
 
@@ -315,7 +328,7 @@ defmodule Hologram.Migration.RefusalTest do
 
         assert applied_versions_list() == ["20260813091522", "20260813091523"]
         assert Introspection.schema() == schema_before
-        assert task_rows() == rows_before
+        assert grade_rows() == rows_before
       end)
     end
 
