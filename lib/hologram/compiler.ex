@@ -4767,15 +4767,24 @@ defmodule Hologram.Compiler do
   # of a delegation or of a grant reference, the set of a quantifier - whose model a client needs to
   # follow them, whether or not they declare a rule or a role of their own. The dependency edges
   # name every one, a set's rows by the chain its pairs are named with when the condition reads
-  # nothing on them.
+  # nothing on them. They leave out what only a condition on the row after a change walks.
   defp related_checked_entity_types(checked_types) do
-    checked_types
-    |> Enum.to_list()
-    |> Edges.derive()
-    |> Enum.flat_map(fn {{checked_type, _operation}, edges} ->
-      Enum.flat_map(edges, &edge_entity_types(checked_type, &1))
-    end)
-    |> MapSet.new()
+    edge_types =
+      checked_types
+      |> Enum.to_list()
+      |> Edges.derive()
+      |> Enum.flat_map(fn {{checked_type, _operation}, edges} ->
+        Enum.flat_map(edges, &edge_entity_types(checked_type, &1))
+      end)
+
+    new_row_types =
+      Enum.flat_map(checked_types, fn checked_type ->
+        checked_type
+        |> Policy.new_row_chains()
+        |> Enum.flat_map(&chain_types(checked_type, &1))
+      end)
+
+    MapSet.new(edge_types ++ new_row_types)
   end
 
   # The given entity types with every type their derived fields holding rows and their inverses

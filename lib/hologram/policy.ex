@@ -630,6 +630,24 @@ defmodule Hologram.Policy do
 
   def operation_rules(policy, operation), do: Map.get(policy, operation, [])
 
+  @doc """
+  Returns the chains of relationship names the given entity type's conditions on the row after a change walk, sorted, which no dependency edge names since they judge no stored row. A role or an operation asked of that row counts up to the row before its target: a role's target declares it, and a target declaring no rule is one no client holds a row of.
+  """
+  @spec new_row_chains(module) :: list(list(atom))
+  def new_row_chains(entity_type) do
+    entity_type
+    |> build()
+    |> Map.values()
+    |> Enum.concat()
+    |> Enum.uniq()
+    |> Enum.filter(&Map.has_key?(&1, :exact))
+    |> Enum.flat_map(fn %{exact: %{predicates: predicates}} = rule ->
+      new_row_read_chains(entity_type, read_clauses(rule)) ++ new_row_check_hops(predicates)
+    end)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
   # The clauses among the given ones asking about the row after the change by a role or an
   # operation, those in a disjunction's alternatives included.
   @doc false
@@ -1970,6 +1988,34 @@ defmodule Hologram.Policy do
   end
 
   defp new_row_check_chains(_entity_type, _rule, _reads), do: []
+
+  # The chains the given clauses walk, those a derived field's definition reads included, a count's
+  # among them.
+  defp new_row_read_chains(entity_type, clauses) do
+    {references, chains} = Derived.set_reads(entity_type, clauses)
+
+    read_chains =
+      entity_type
+      |> Derived.expanded_references(references)
+      |> Enum.flat_map(fn
+        {[], _name} -> []
+        {relationship_names, _name} -> [relationship_names]
+      end)
+
+    read_chains ++ chains
+  end
+
+  # The rows a role or an operation asked of the row after the change passes through on the way to
+  # its target.
+  defp new_row_check_hops(predicates) do
+    predicates
+    |> new_row_checks()
+    |> Enum.map(fn
+      {:has_role, {_role_names, chain}} -> Enum.drop(chain, -1)
+      {:can, {_operation, chain}} -> Enum.drop(chain, -1)
+    end)
+    |> Enum.reject(&(&1 == []))
+  end
 
   # The set links a rule's condition reads: those of its quantifiers, and those of the derived
   # fields their conditions name - a derived value is read at both polarities, since it can be

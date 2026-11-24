@@ -17,6 +17,7 @@ defmodule Hologram.PolicyTest do
       held_chains: 2,
       line_held_chains: 2,
       locked_set_links: 1,
+      new_row_chains: 1,
       operation_key: 1,
       operation_reads: 2,
       operation_rules: 2,
@@ -2447,6 +2448,70 @@ defmodule Hologram.PolicyTest do
     test "names the set a derived field in a quantifier's condition reads" do
       assert locked_set_links([CountedTagsRule]) ==
                MapSet.new([{:edge, LockedCard, :tags, :source, LockedCard}])
+    end
+  end
+
+  describe "new_row_chains/1" do
+    defmodule NewChainMember do
+      use Hologram.Entity
+    end
+
+    defmodule NewChainProject do
+      use Hologram.Entity
+
+      relationship :members, [NewChainMember]
+
+      derived :member_count, :integer, fn members -> count(members) end
+    end
+
+    defmodule NewChainLabel do
+      use Hologram.Entity
+
+      relationship :project, NewChainProject, optional: true
+
+      derived :staffed, :boolean, fn project -> project.member_count > 0 end
+    end
+
+    defmodule NewChainCountedTask do
+      use Hologram.Entity
+
+      relationship :labels, [NewChainLabel]
+
+      allow :update, when: none(label <- new(labels), label.staffed == true)
+    end
+
+    defmodule NewChainAskingTask do
+      use Hologram.Entity
+
+      relationship :project, Hologram.PolicyTest.NewCheckProject, optional: true
+
+      allow :update, when: can(:read, new(project.team))
+    end
+
+    test "names the chain of a set read on the row after the change" do
+      assert new_row_chains(Policy.Module61) == [[:project, :members]]
+    end
+
+    test "names a path and a set read on the row after the change" do
+      assert new_row_chains(Policy.Module59) == [[:labels], [:project]]
+    end
+
+    test "follows a count a derived field reads inside a quantifier" do
+      put_derived_definitions([NewChainProject, NewChainLabel])
+
+      assert [:labels, :project] in new_row_chains(NewChainCountedTask)
+    end
+
+    test "stops a role check at the row before its target" do
+      assert new_row_chains(Hologram.PolicyTest.NewCheckTask) == [[:project]]
+    end
+
+    test "stops an operation check at the row before its target" do
+      assert new_row_chains(NewChainAskingTask) == [[:project]]
+    end
+
+    test "is empty for a type no rule of which reads the row after a change" do
+      assert new_row_chains(Policy.Module62) == []
     end
   end
 

@@ -101,6 +101,9 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module58, as: ChangedProject
   alias Hologram.Test.Fixtures.Policy.Module59, as: ChangedTask
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module61, as: ExactOnlyTask
+  alias Hologram.Test.Fixtures.Policy.Module62, as: ExactOnlyProject
+  alias Hologram.Test.Fixtures.Policy.Module63, as: ExactOnlyMember
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module8, as: TwoHopDelegationPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Readers.Module22, as: ReadersTeam
@@ -9804,6 +9807,15 @@ defmodule Hologram.CompilerTest do
 
       assert without_terms(decoded_rules([Entity42])[label]) ==
                without_terms(baked_model([Entity42])[label])
+    end
+
+    # The browser walks a set's chain through these types' entries to judge one change, though
+    # neither declares a rule or a role and the rule's planned form reads neither.
+    test "includes the types only a condition on the row after a change reads" do
+      rules = decoded_rules([ExactOnlyTask, ExactOnlyProject, ExactOnlyMember])
+
+      assert Map.has_key?(rules, inspect(ExactOnlyProject))
+      assert Map.has_key?(rules, inspect(ExactOnlyMember))
     end
 
     # The runtime script spells them as JavaScript, and a sync frame carries JSON.
