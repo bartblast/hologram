@@ -27,6 +27,7 @@ defmodule Hologram.DB.Writer do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.Entity.Metadata
+  alias Hologram.Job
   alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Reflection
@@ -37,8 +38,6 @@ defmodule Hologram.DB.Writer do
   @doc false
   @spec create(struct) :: {:ok, struct} | {:error, %{atom => list(atom | {atom, any})}}
   def create(entity) do
-    refuse_unrecordable_job!(entity)
-
     stamped = stamp_job(entity)
 
     {:ok, result} =
@@ -79,14 +78,14 @@ defmodule Hologram.DB.Writer do
     applied
   end
 
-  # Naming the row by type and id carries no claim, so under an actor this is delete/1 of a
+  # Naming the row by type and id carries no claim, so in a session this is delete/1 of a
   # struct that carries none - the verb's own operation, evaluated against the locked row.
-  # Without an actor there is nothing to evaluate and the row is deleted raw, inside a transaction
+  # With no session there is nothing to evaluate and the row is deleted raw, inside a transaction
   # of the verb's own, so a deadlock PostgreSQL resolves against it is rerun like any other.
   @doc false
   @spec delete(module, String.t()) :: :ok | {:error, %{referenced_by: module, relationship: atom}}
   def delete(entity_type, id) do
-    if Context.actor_user_id() do
+    if Context.session?() do
       delete(%{struct!(entity_type) | id: id})
     else
       {:ok, applied} =
@@ -112,6 +111,9 @@ defmodule Hologram.DB.Writer do
     end
 
     entity_type = entity.__struct__
+
+    refuse_framework_attributes!(entity_type, Map.keys(attribute_ops))
+
     {attribute_changes, attribute_deltas} = split_attribute_ops(attribute_ops)
 
     fields = changed_fields(entity_type, Map.keys(attribute_ops), Map.keys(relationship_ops))
@@ -145,17 +147,20 @@ defmodule Hologram.DB.Writer do
   end
 
   # The type-indexed twin of update/1: no struct, so no recorded changes and no claim - the
-  # changes are given outright and judged by the fields they name. Without an actor the row is
+  # changes are given outright and judged by the fields they name. With no session the row is
   # updated raw, inside a transaction of the verb's own, so a deadlock PostgreSQL resolves against
   # it is rerun like any other.
   @doc false
   @spec update(module, String.t(), map | keyword) ::
           :ok | {:error, %{atom => list(atom | {atom, any})}}
   def update(entity_type, id, changes) do
-    if Context.actor_user_id() do
-      EntityOperations.validate_update!(entity_type, changes)
+    EntityOperations.validate_update!(entity_type, changes)
 
-      names = Enum.map(changes, fn {name, _value} -> name end)
+    names = Enum.map(changes, fn {name, _value} -> name end)
+
+    refuse_framework_attributes!(entity_type, names)
+
+    if Context.session?() do
       fields = changed_fields(entity_type, names, [])
       change = %{deltas: %{}, edges: %{}, stamp: nil, values: Map.new(changes)}
 
@@ -259,11 +264,11 @@ defmodule Hologram.DB.Writer do
   end
 
   # Which authority the write is on. A trust claim is the server's own and evaluates nothing. A
-  # client claim is a write a browser sent, the verb's own operation evaluated whether or not an
-  # actor is set: a client is never the trusted tier, so an anonymous session's write is judged
-  # with the anonymous semantics. No claim under an actor is the verb's own operation on the acting
-  # user's authority, which is what keeps every write under an actor evaluated. No claim and no
-  # actor is the trusted tier, and writes raw.
+  # client claim is a write a browser sent, the verb's own operation evaluated whether or not a
+  # session is set: a client is never the trusted tier. No claim in a session is the verb's own
+  # operation on the session user's authority, with the anonymous semantics for a signed-out
+  # visitor, which is what keeps every write a session makes evaluated. No claim and no session is
+  # the trusted tier, and writes raw.
   defp evaluate!(%{__meta__: %Metadata{claim: :trust}}, _operation, _row), do: :ok
 
   defp evaluate!(%{__meta__: %Metadata{claim: :client}}, operation, row) do
@@ -271,7 +276,7 @@ defmodule Hologram.DB.Writer do
   end
 
   defp evaluate!(_entity, operation, row) do
-    if Context.actor_user_id() do
+    if Context.session?() do
       evaluate_operation!(operation, row)
     else
       :ok
@@ -355,7 +360,7 @@ defmodule Hologram.DB.Writer do
   end
 
   defp evaluate_update!(_entity, row, fields, change) do
-    if Context.actor_user_id() do
+    if Context.session?() do
       check_fields!(row, fields, change)
     else
       @not_judged
@@ -421,27 +426,39 @@ defmodule Hologram.DB.Writer do
     end)
   end
 
-  # A job runs as the user who enqueued it, and one recording nobody runs on the trusted tier. A user
-  # id no user entity can have - an app's own serial id - can't be recorded, so a job enqueued under
-  # one would run unchecked: it is refused, and server code that means it claims the server's
-  # authority instead.
-  defp refuse_unrecordable_job!(%entity_type{__meta__: %Metadata{claim: claim}}) do
-    actor_user_id = Context.actor_user_id()
+  # What a job records decides who it runs as, so no update may set it, whatever the claim: request
+  # code forwarding params could otherwise choose the user a job runs as, or make it run as the
+  # server. The worker records a job's progress through EntityOperations, below this check.
+  defp refuse_framework_attributes!(entity_type, names) do
+    framework_name =
+      if Reflection.job?(entity_type) do
+        Enum.find(Job.framework_attribute_names(), &(&1 in names))
+      end
 
-    if Reflection.job?(entity_type) and claim != :trust and actor_user_id != nil and
-         Context.actor_entity_id() == nil do
-      raise Hologram.AccessDeniedError,
+    if framework_name do
+      raise MisuseError,
         message:
-          "cannot create #{inspect(entity_type)} as user #{inspect(actor_user_id)} - the user id isn't a user entity's, so the job would run with no user and skip every rule. Create it with trust: true to run it as the server."
+          "#{inspect(framework_name)} of #{inspect(entity_type)} is set by the framework - an update can't change it"
     end
 
     :ok
   end
 
+  # Only code the server trusts runs a job as the server: code outside a session, or a trust claim
+  # with no user to record. A client's write never does, and a job with no mark runs as an anonymous
+  # session, so anything unforeseen fails closed.
+  defp run_as_server?(%{__meta__: %Metadata{claim: :client}}), do: false
+
+  defp run_as_server?(%{__meta__: %Metadata{claim: :trust}}) do
+    Context.actor_entity_id() == nil
+  end
+
+  defp run_as_server?(_entity), do: not Context.session?()
+
   # A job records who enqueued it, and that is a fact of the write rather than of the struct: the
-  # ambient actor as a user entity's id at the moment it is written - nobody on the trusted tier,
-  # and nobody for an actor no user entity can be, which only a trust claim gets here. Stamped
-  # before the claim is evaluated, so a policy naming the field judges the value the row will
+  # ambient actor as a user entity's id at the moment it is written, nobody on the trusted tier or
+  # for an actor no user entity can be, and whether it runs as the server. Stamped before the claim
+  # is evaluated, so a policy naming the field judges the value the row will
   # hold - and stamped over whatever the struct carries, the way the executor stamps the
   # timestamps.
   #
@@ -449,7 +466,12 @@ defmodule Hologram.DB.Writer do
   # likes, and the queue is ordered by this time, so a job it wrote must not be able to jump it.
   defp stamp_job(entity) do
     if Reflection.job?(entity.__struct__) do
-      %{entity | actor_id: Context.actor_entity_id(), scheduled_at: DateTime.utc_now()}
+      %{
+        entity
+        | actor_id: Context.actor_entity_id(),
+          run_as_server: run_as_server?(entity),
+          scheduled_at: DateTime.utc_now()
+      }
     else
       entity
     end

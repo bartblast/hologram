@@ -7,6 +7,7 @@ import {
   defineRuntimeGlobals,
 } from "./support/helpers.mjs";
 
+import Bitstring from "../../assets/js/bitstring.mjs";
 import Erlang_Re from "../../assets/js/erlang/re.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Model from "../../assets/js/model.mjs";
@@ -153,6 +154,7 @@ describe("Model", () => {
             "actor_id",
             "attempt",
             "error",
+            "run_as_server",
             "scheduled_at",
             "status",
           ],
@@ -1088,6 +1090,24 @@ describe("Model", () => {
         "Draft copy",
       );
       assert.equal(Model.unbox(Type.bitstring("t1"), "uuid"), "t1");
+    });
+
+    it("unboxes a string holding a lone surrogate the way the server stores it", () => {
+      assert.equal(
+        Model.unbox(Type.bitstring("a\uD800b"), "string"),
+        "a\uFFFDb",
+      );
+    });
+
+    it("keeps a whole surrogate pair in a string", () => {
+      assert.equal(
+        Model.unbox(Type.bitstring("a\u{1F600}b"), "string"),
+        "a\u{1F600}b",
+      );
+    });
+
+    it("unboxes a binary that isn't text without throwing", () => {
+      assert.isFalse(Model.unbox(Bitstring.fromBytes([255]), "string"));
     });
 
     it("unboxes a boolean, an integer and a float as plain values", () => {

@@ -8,13 +8,12 @@ defmodule HologramSyncBenchmark.Cases.Deploy do
   #
   # The clients come back with no cursor, greeting with a policy hash that isn't the server's. A
   # client whose cursor names other rules is told to start over and then filled exactly as one
-  # with no cursor (`Hologram.Sync.Catchup.gap/3` checks the rules before reading the log), so the
-  # server's cost is the same, and this doesn't depend on the cursor's format, which the pivot
-  # changes. The stale hash is what makes the server send its rules, as after a real deploy. After
-  # the pivot a returning browser reports what it holds, so a real refill may cost less than this.
-  # One thing points the other way: a real browser also greets with its replica id and token,
-  # which the server verifies and looks up with one pooled query per client before the session
-  # starts. These clients make no writes, so they send none, and a burst here leaves those out.
+  # with no cursor (`Hologram.Sync.Catchup.check/3` checks the rules before reading the log), so
+  # the server's cost is the same, and this doesn't depend on the cursor's format. The stale hash
+  # is what makes the server send its rules, as after a real deploy. A real browser also greets
+  # with its replica id and token, which costs the server one pooled query per client before the
+  # session starts and one more per entity type its fill reads. These clients make no writes, so
+  # they send none, and a burst here leaves those out.
 
   alias HologramSyncBenchmark.Cases.Board
   alias HologramSyncBenchmark.Cases.Tenants
@@ -203,7 +202,6 @@ defmodule HologramSyncBenchmark.Cases.Deploy do
       "memory rise #{Report.cell(result.memory_rise / 1_048_576)} MB, " <>
       "#{result.connect_retries} connect retries, " <>
       "#{fill.restarts} restarts, #{result.heap_kills} heap kills" <>
-      if(result.heap_kills != fill.restarts, do: " (MISMATCH)", else: "") <>
       if(result.autovacuum_ran, do: ", AUTOVACUUM RAN", else: "")
   end
 

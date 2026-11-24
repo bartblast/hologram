@@ -6790,7 +6790,7 @@ describe("trustedWriteMessage()", () => {
   it("spells the scope and the verb into the sentence", () => {
     assert.equal(
       trustedWriteMessage("type-wide", "revoked"),
-      "type-wide roles are revoked only by trusted code running without an acting user",
+      "type-wide roles are revoked only by server code claiming trust: true or running outside a session",
     );
   });
 });
@@ -6862,6 +6862,26 @@ describe("grant_role/3", () => {
         type: GATED_GRANT,
       },
     ]);
+  });
+
+  it("appends the same create through grant_role/4 with no options", () => {
+    const result = Elixir_Hologram_Auth["grant_role/4"](
+      Type.bitstring(GATED_BOB),
+      Type.atom("viewer"),
+      document(),
+      Type.list(),
+    );
+
+    assert.deepStrictEqual(result, Type.atom("ok"));
+
+    const writes = Batches.current().writes;
+
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].op, "create");
+    assert.equal(
+      writes[0].id,
+      deriveGrantId(GATED_BOB, GATED_DOCUMENT, GATED_DOC, "viewer"),
+    );
   });
 
   it("takes the user as a struct as well as a bare id", () => {
@@ -6962,7 +6982,7 @@ describe("grant_role/3", () => {
           Type.alias(GATED_DOCUMENT),
         ),
       "Hologram.AccessDeniedError",
-      "type-wide roles are granted only by trusted code running without an acting user",
+      "type-wide roles are granted only by server code claiming trust: true or running outside a session",
     );
   });
 
@@ -7032,6 +7052,181 @@ describe("grant_role/3", () => {
   });
 });
 
+describe("the trust claim on the grant verbs", () => {
+  const trustOpts = () =>
+    Type.keywordList([[Type.atom("trust"), Type.boolean(true)]]);
+
+  const otherOpts = () =>
+    Type.keywordList([[Type.atom("nope"), Type.boolean(true)]]);
+
+  const user = () => Type.bitstring(GATED_BOB);
+  const admin = () => Type.alias("MyApp.Roles.Admin");
+
+  const document = () =>
+    Type.struct(GATED_DOCUMENT, [[Type.atom("id"), Type.bitstring(GATED_DOC)]]);
+
+  const trustMessage =
+    "trust is the server's authority - a client cannot claim it";
+
+  it("grant_role/3 refuses :global", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["grant_role/3"](
+          user(),
+          admin(),
+          Type.atom("global"),
+        ),
+      "Hologram.AccessDeniedError",
+      "global roles are granted only by server code claiming trust: true or running outside a session",
+    );
+  });
+
+  it("grant_role/3 refuses options in the entity's place", () => {
+    assertBoxedError(
+      () => Elixir_Hologram_Auth["grant_role/3"](user(), admin(), trustOpts()),
+      "Hologram.MisuseError",
+      "grant_role takes an entity, an entity type or :global as its third argument, got: [trust: true] - options go fourth",
+    );
+  });
+
+  it("grant_role/4 refuses it for a global role", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["grant_role/4"](
+          user(),
+          admin(),
+          Type.atom("global"),
+          trustOpts(),
+        ),
+      "Hologram.MisuseError",
+      trustMessage,
+    );
+  });
+
+  it("grant_role/4 refuses options that are not a list", () => {
+    for (const opts of [Type.atom("nope"), Type.integer(1), Type.tuple()]) {
+      assertBoxedError(
+        () =>
+          Elixir_Hologram_Auth["grant_role/4"](
+            user(),
+            Type.atom("viewer"),
+            document(),
+            opts,
+          ),
+        "Hologram.MisuseError",
+        `grant_role takes trust: true as its only option, got: ${Interpreter.inspect(opts)}`,
+      );
+    }
+  });
+
+  it("grant_role/4 refuses it", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["grant_role/4"](
+          user(),
+          Type.atom("viewer"),
+          document(),
+          trustOpts(),
+        ),
+      "Hologram.MisuseError",
+      trustMessage,
+    );
+  });
+
+  it("grant_role/4 refuses any other option", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["grant_role/4"](
+          user(),
+          Type.atom("viewer"),
+          document(),
+          otherOpts(),
+        ),
+      "Hologram.MisuseError",
+      "grant_role takes trust: true as its only option, got: [nope: true]",
+    );
+  });
+
+  it("revoke_role/3 refuses :global", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["revoke_role/3"](
+          user(),
+          admin(),
+          Type.atom("global"),
+        ),
+      "Hologram.AccessDeniedError",
+      "global roles are revoked only by server code claiming trust: true or running outside a session",
+    );
+  });
+
+  it("revoke_role/3 refuses options in the entity's place", () => {
+    assertBoxedError(
+      () => Elixir_Hologram_Auth["revoke_role/3"](user(), admin(), trustOpts()),
+      "Hologram.MisuseError",
+      "revoke_role takes an entity, an entity type or :global as its third argument, got: [trust: true] - options go fourth",
+    );
+  });
+
+  it("revoke_role/4 refuses it for a global role", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["revoke_role/4"](
+          user(),
+          admin(),
+          Type.atom("global"),
+          trustOpts(),
+        ),
+      "Hologram.MisuseError",
+      trustMessage,
+    );
+  });
+
+  it("revoke_role/4 refuses options that are not a list", () => {
+    for (const opts of [Type.atom("nope"), Type.integer(1), Type.tuple()]) {
+      assertBoxedError(
+        () =>
+          Elixir_Hologram_Auth["revoke_role/4"](
+            user(),
+            Type.atom("viewer"),
+            document(),
+            opts,
+          ),
+        "Hologram.MisuseError",
+        `revoke_role takes trust: true as its only option, got: ${Interpreter.inspect(opts)}`,
+      );
+    }
+  });
+
+  it("revoke_role/4 refuses it", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["revoke_role/4"](
+          user(),
+          Type.atom("viewer"),
+          document(),
+          trustOpts(),
+        ),
+      "Hologram.MisuseError",
+      trustMessage,
+    );
+  });
+
+  it("revoke_role/4 refuses any other option", () => {
+    assertBoxedError(
+      () =>
+        Elixir_Hologram_Auth["revoke_role/4"](
+          user(),
+          Type.atom("viewer"),
+          document(),
+          otherOpts(),
+        ),
+      "Hologram.MisuseError",
+      "revoke_role takes trust: true as its only option, got: [nope: true]",
+    );
+  });
+});
+
 describe("grant_role/2", () => {
   it("raises - a global grant is trusted-only", () => {
     assertBoxedError(
@@ -7041,7 +7236,7 @@ describe("grant_role/2", () => {
           Type.alias("MyApp.Roles.Admin"),
         ),
       "Hologram.AccessDeniedError",
-      "global roles are granted only by trusted code running without an acting user",
+      "global roles are granted only by server code claiming trust: true or running outside a session",
     );
   });
 });
@@ -7094,6 +7289,26 @@ describe("revoke_role/3", () => {
     Batches.reset();
     LocalDatabase.actorUserId = null;
     LocalDatabase.actorEntityId = null;
+  });
+
+  it("appends the same delete through revoke_role/4 with no options", () => {
+    const result = Elixir_Hologram_Auth["revoke_role/4"](
+      Type.bitstring(GATED_BOB),
+      Type.atom("viewer"),
+      document(),
+      Type.list(),
+    );
+
+    assert.deepStrictEqual(result, Type.atom("ok"));
+
+    const writes = Batches.current().writes;
+
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].op, "delete");
+    assert.equal(
+      writes[0].id,
+      deriveGrantId(GATED_BOB, GATED_DOCUMENT, GATED_DOC, "viewer"),
+    );
   });
 
   it("appends a delete of the held row carrying its revisions and its grant", () => {
@@ -7195,7 +7410,7 @@ describe("revoke_role/3", () => {
           Type.alias(GATED_DOCUMENT),
         ),
       "Hologram.AccessDeniedError",
-      "type-wide roles are revoked only by trusted code running without an acting user",
+      "type-wide roles are revoked only by server code claiming trust: true or running outside a session",
     );
   });
 
@@ -7241,7 +7456,7 @@ describe("revoke_role/2", () => {
           Type.alias("MyApp.Roles.Admin"),
         ),
       "Hologram.AccessDeniedError",
-      "global roles are revoked only by trusted code running without an acting user",
+      "global roles are revoked only by server code claiming trust: true or running outside a session",
     );
   });
 });

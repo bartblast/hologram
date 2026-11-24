@@ -14,7 +14,7 @@ defmodule HologramSyncTests.ConsistencyTest do
   # when it was sent, nor a set or pair naming one (check 2). The plan comes from the seed:
   # SYNC_SEED, ExUnit's by default.
   #
-  # TODO: remove this note once #1770 is fixed - until then a stale pair fails check 1 now and then.
+  # TODO: remove this note once #1827 is fixed - until then a stale pair fails check 1 now and then.
   @tag :randomized
   @tag timeout: :infinity
   test "clients converge on what they may read and never receive what they may not" do

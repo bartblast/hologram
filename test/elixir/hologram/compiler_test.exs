@@ -25,17 +25,30 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Sync.Frame
 
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity1, as: ImplEntity1
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity10, as: ImplEntity10
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity11, as: ImplEntity11
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity12, as: ImplEntity12
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity13, as: ImplEntity13
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity14, as: ImplEntity14
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity15, as: ImplEntity15
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity2, as: ImplEntity2
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity3, as: ImplEntity3
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity4, as: ImplEntity4
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity5, as: ImplEntity5
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity6, as: ImplEntity6
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity8, as: ImplEntity8
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Entity9, as: ImplEntity9
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Page1, as: ImplPage1
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Page2, as: ImplPage2
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Page3, as: ImplPage3
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Page4, as: ImplPage4
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Page5, as: ImplPage5
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page7, as: ImplPage7
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page8, as: ImplPage8
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Page9, as: ImplPage9
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Protocol, as: ImplProtocol
   alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct1, as: ImplStruct1
+  alias Hologram.Test.Fixtures.Compiler.ImplReach.Struct2, as: ImplStruct2
   alias Hologram.Test.Fixtures.Compiler.QueryChains.Module1, as: QueryChainsModule1
   alias Hologram.Test.Fixtures.Component.Module37, as: OtherContextComponent
   alias Hologram.Test.Fixtures.Entity.Derived.Module2, as: DerivedModule2
@@ -1549,6 +1562,33 @@ defmodule Hologram.CompilerTest do
       assert PageModule7 in pages_checking_permissions(page_reach(graph))
     end
 
+    test "names a page whose client code grants a role with options", %{call_graph: call_graph} do
+      graph = CallGraph.clone(call_graph)
+      CallGraph.remove_vertex(graph, {Hologram.Auth, :can?, 3})
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :grant_role, 4})
+
+      assert PageModule7 in pages_checking_permissions(page_reach(graph))
+    end
+
+    test "names a page whose client code revokes a role with options", %{call_graph: call_graph} do
+      graph = CallGraph.clone(call_graph)
+      CallGraph.remove_vertex(graph, {Hologram.Auth, :can?, 3})
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :revoke_role, 4})
+
+      assert PageModule7 in pages_checking_permissions(page_reach(graph))
+    end
+
+    # The two-argument verbs only ever refuse in a browser, so they have no grant rows to sync.
+    test "leaves out a page whose client code only calls the two-argument grant verbs", %{
+      call_graph: call_graph
+    } do
+      graph = CallGraph.clone(call_graph)
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :grant_role, 2})
+      CallGraph.add_edge(graph, {PageModule7, :template, 0}, {Hologram.Auth, :revoke_role, 2})
+
+      refute PageModule7 in pages_checking_permissions(page_reach(graph))
+    end
+
     # A role check reads grant rows without going through the permission check, so nothing is
     # taken out of the clone.
     test "names a page whose client code asks about a global role", %{call_graph: call_graph} do
@@ -2350,6 +2390,280 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "read_impl_mfas/3" do
+    test "reads nothing for no MFAs" do
+      assert read_impl_mfas(%{}, nil, nil) == %{}
+    end
+
+    test "leaves an implementation's own type out of what it names", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt
+    } do
+      impl = Module.safe_concat(ImplProtocol, ImplEntity1)
+
+      result = read_impl_mfas(%{key: [{impl, :run, 1}]}, call_graph, ir_plt)
+
+      refute ImplEntity1 in result.key.names
+      assert :label in result.key.atoms
+    end
+
+    test "names the root of a query written in one piece, its own type included", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt
+    } do
+      impl = Module.safe_concat(ImplProtocol, ImplEntity2)
+
+      result = read_impl_mfas(%{key: [{impl, :run, 1}]}, call_graph, ir_plt)
+
+      assert ImplEntity2 in result.key.names
+      assert [%{root: ImplEntity2}] = result.key.query_chains
+    end
+
+    test "tells code that checks permissions", %{call_graph: call_graph, ir_plt: ir_plt} do
+      impl = Module.safe_concat(ImplProtocol, ImplStruct2)
+
+      result = read_impl_mfas(%{key: [{impl, :run, 1}]}, call_graph, ir_plt)
+
+      assert result.key.checks_permissions?
+    end
+
+    test "tells code that doesn't check permissions", %{call_graph: call_graph, ir_plt: ir_plt} do
+      impl = Module.safe_concat(ImplProtocol, ImplEntity1)
+
+      result = read_impl_mfas(%{key: [{impl, :run, 1}]}, call_graph, ir_plt)
+
+      refute result.key.checks_permissions?
+    end
+
+    test "tells code reaching a component that reads the session user", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt
+    } do
+      result = read_impl_mfas(%{key: [{SessionUserComponent, :template, 0}]}, call_graph, ir_plt)
+
+      assert result.key.reads_session_user?
+    end
+  end
+
+  describe "fold_held_impls/5" do
+    setup %{call_graph: call_graph} do
+      split_graph =
+        call_graph
+        |> CallGraph.clone()
+        |> CallGraph.remove_manually_ported_mfas()
+
+      [split_graph: split_graph]
+    end
+
+    test "syncs what the implementation of a type reached only by a relationship name names", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      split_graph: split_graph
+    } do
+      base_reach = derive_impl_reach([ImplPage7], call_graph, module_info_plt)
+      refute ImplEntity8 in build_sync_constants(base_reach, module_info_plt).synced_types
+
+      {reach, _walks} = fold_held_impls(base_reach, %{}, split_graph, call_graph, ir_plt)
+      constants = build_sync_constants(reach, module_info_plt)
+
+      assert ImplEntity8 in constants.synced_types
+      assert ImplEntity8 in constants.page_types[ImplPage7]
+    end
+
+    test "syncs what an app's implementation for the struct of a held row's field names", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      split_graph: split_graph
+    } do
+      base_reach = derive_impl_reach([ImplPage9], call_graph, module_info_plt)
+
+      {reach, walks} = fold_held_impls(base_reach, %{}, split_graph, call_graph, ir_plt)
+
+      # This app's fixtures name Date in code every page gets, so the page's own walk enters the
+      # implementation too. The walk's types are what an app without that relies on.
+      for {types, _walk} <- walks[ImplPage9] do
+        assert Date in types
+      end
+
+      assert ImplEntity15 in build_sync_constants(reach, module_info_plt).synced_types
+    end
+
+    test "reads nothing of an implementation Hologram ships for its own type", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt
+    } do
+      mfa = {Inspect.Hologram.Entity.Metadata, :inspect, 2}
+
+      assert %{key: read} = read_impl_mfas(%{key: [mfa]}, call_graph, ir_plt)
+
+      assert read.atoms == MapSet.new()
+      assert read.names == MapSet.new()
+    end
+
+    test "follows implementations until nothing new is named", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      split_graph: split_graph
+    } do
+      base_reach = derive_impl_reach([ImplPage7], call_graph, module_info_plt)
+
+      {reach, _walks} = fold_held_impls(base_reach, %{}, split_graph, call_graph, ir_plt)
+
+      assert ImplEntity11 in build_sync_constants(reach, module_info_plt).synced_types
+    end
+
+    test "an implementation doesn't sync the type it's written for", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      split_graph: split_graph
+    } do
+      base_reach = derive_impl_reach([ImplPage3], call_graph, module_info_plt)
+
+      {reach, _walks} = fold_held_impls(base_reach, %{}, split_graph, call_graph, ir_plt)
+
+      refute ImplEntity1 in build_sync_constants(reach, module_info_plt).synced_types
+    end
+
+    test "doesn't count a function of a protocol no code calls", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      split_graph: split_graph
+    } do
+      base_reach = derive_impl_reach([ImplPage7], call_graph, module_info_plt)
+
+      {reach, _walks} = fold_held_impls(base_reach, %{}, split_graph, call_graph, ir_plt)
+
+      refute ImplEntity9 in build_sync_constants(reach, module_info_plt).synced_types
+    end
+
+    test "doesn't count a protocol only the implementation of a type the page doesn't hold calls",
+         %{
+           call_graph: call_graph,
+           ir_plt: ir_plt,
+           module_info_plt: module_info_plt,
+           split_graph: split_graph
+         } do
+      base_reach = derive_impl_reach([ImplPage7], call_graph, module_info_plt)
+
+      {reach, _walks} = fold_held_impls(base_reach, %{}, split_graph, call_graph, ir_plt)
+
+      refute ImplEntity10 in build_sync_constants(reach, module_info_plt).synced_types
+    end
+
+    test "counts a protocol only a plain struct's implementation calls on a held type", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      split_graph: split_graph
+    } do
+      base_reach = derive_impl_reach([ImplPage8], call_graph, module_info_plt)
+
+      {reach, _walks} = fold_held_impls(base_reach, %{}, split_graph, call_graph, ir_plt)
+
+      assert ImplEntity10 in build_sync_constants(reach, module_info_plt).synced_types
+    end
+
+    test "keeps the queries the implementations write", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      split_graph: split_graph
+    } do
+      base_reach = derive_impl_reach([ImplPage7], call_graph, module_info_plt)
+
+      {reach, _walks} = fold_held_impls(base_reach, %{}, split_graph, call_graph, ir_plt)
+
+      roots = MapSet.new(reach[ImplPage7].query_chains, & &1.root)
+
+      assert ImplEntity8 in roots
+      assert ImplEntity11 in roots
+    end
+
+    test "leaves the given reach without what it folded", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      split_graph: split_graph
+    } do
+      base_reach = derive_impl_reach([ImplPage7], call_graph, module_info_plt)
+
+      {reach, _walks} = fold_held_impls(base_reach, %{}, split_graph, call_graph, ir_plt)
+
+      refute ImplEntity8 in base_reach[ImplPage7].modules
+      assert ImplEntity8 in reach[ImplPage7].modules
+    end
+
+    test "holds no type only the rules of a checking page read", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      split_graph: split_graph
+    } do
+      reach_by_page = mentioning_reach([PathPolicyEntity], true)
+
+      assert Entity17 in build_sync_constants(reach_by_page, module_info_plt).page_types[
+               PageModule18
+             ]
+
+      {_reach, walks} = fold_held_impls(reach_by_page, %{}, split_graph, call_graph, ir_plt)
+
+      refute walks[PageModule18]
+             |> Map.keys()
+             |> Enum.any?(&MapSet.member?(&1, Entity17))
+    end
+
+    test "holds no type no session may read", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      split_graph: split_graph
+    } do
+      reach_by_page = mentioning_reach([ImplEntity6], false, false, [:hidden])
+
+      assert ImplEntity12 in build_sync_constants(reach_by_page, module_info_plt).page_types[
+               PageModule18
+             ]
+
+      {_reach, walks} = fold_held_impls(reach_by_page, %{}, split_graph, call_graph, ir_plt)
+
+      refute walks[PageModule18]
+             |> Map.keys()
+             |> Enum.any?(&MapSet.member?(&1, ImplEntity12))
+    end
+
+    test "puts what a kept walk read on the page without walking it", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      module_info_plt: module_info_plt,
+      split_graph: split_graph
+    } do
+      base_reach = derive_impl_reach([ImplPage7], call_graph, module_info_plt)
+      {_reach, walks} = fold_held_impls(base_reach, %{}, split_graph, call_graph, ir_plt)
+
+      kept_walks =
+        Map.new(walks, fn {page_module, walks_by_types} ->
+          marked =
+            Map.new(walks_by_types, fn {types, walk} ->
+              read = %{walk.read | checks_permissions?: true}
+
+              {types, %{walk | read: read}}
+            end)
+
+          {page_module, marked}
+        end)
+
+      {reach, returned} = fold_held_impls(base_reach, kept_walks, split_graph, call_graph, ir_plt)
+
+      assert reach[ImplPage7].checks_permissions?
+      assert returned == kept_walks
+    end
+  end
+
   describe "validate_query_chains!/2" do
     test "passes every page of the suite", %{
       call_graph: call_graph,
@@ -3148,7 +3462,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"frameworkAttributes":["actor_id","attempt","error","scheduled_at","status"]/
+               ~s/"frameworkAttributes":["actor_id","attempt","error","run_as_server","scheduled_at","status"]/
              )
     end
 
@@ -7629,6 +7943,131 @@ defmodule Hologram.CompilerTest do
 
     test "returns an empty map for no chunks" do
       assert fold_small_chunks(%{}, %{}) == %{}
+    end
+
+    test "folds nothing into a chunk holding a held type" do
+      mfas_by_signature = %{
+        MapSet.new([Time]) => [{String.Chars.Time, :to_string, 1}],
+        MapSet.new([Date, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+      }
+
+      size_by_signature = %{MapSet.new([Time]) => 300, MapSet.new([Date, Time]) => 4_000}
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature, MapSet.new([Date])) ==
+               mfas_by_signature
+    end
+
+    test "folds a small chunk into its next superset when the smallest holds a held type" do
+      mfas_by_signature = %{
+        MapSet.new([Time]) => [{String.Chars.Time, :to_string, 1}],
+        MapSet.new([Date, Time]) => [{Calendar.ISO, :zero_pad, 2}],
+        MapSet.new([DateTime, Time, Version]) => [{Calendar.ISO, :time_to_string, 4}]
+      }
+
+      size_by_signature = %{
+        MapSet.new([Time]) => 300,
+        MapSet.new([Date, Time]) => 4_000,
+        MapSet.new([DateTime, Time, Version]) => 4_000
+      }
+
+      assert fold_small_chunks(mfas_by_signature, size_by_signature, MapSet.new([Date])) == %{
+               MapSet.new([Date, Time]) => [{Calendar.ISO, :zero_pad, 2}],
+               MapSet.new([DateTime, Time, Version]) => [
+                 {Calendar.ISO, :time_to_string, 4},
+                 {String.Chars.Time, :to_string, 1}
+               ]
+             }
+    end
+  end
+
+  describe "list_impl_types/1" do
+    test "lists a type with an entry other than its own struct functions" do
+      entries_by_type = %{
+        Date => [
+          {Date, :__struct__, 0},
+          {Date, :__struct__, 1},
+          {String.Chars.Date, :to_string, 1}
+        ]
+      }
+
+      assert list_impl_types(entries_by_type) == MapSet.new([Date])
+    end
+
+    test "leaves out a type with only its struct functions" do
+      entries_by_type = %{Date => [{Date, :__struct__, 0}, {Date, :__struct__, 1}]}
+
+      assert list_impl_types(entries_by_type) == MapSet.new()
+    end
+  end
+
+  describe "list_row_types/1" do
+    test "holds the given entity types, their system attributes' struct and what every row holds" do
+      assert list_row_types([ImplEntity15]) ==
+               MapSet.new([
+                 DateTime,
+                 Hologram.Entity.Metadata,
+                 Hologram.Entity.NotIncluded,
+                 Hologram.Entity.ServerOnly,
+                 ImplEntity15
+               ])
+    end
+
+    test "holds the struct of an attribute's type" do
+      assert Date in list_row_types([ImplEntity13])
+    end
+
+    test "leaves out the struct of a server-only attribute's type" do
+      refute Time in list_row_types([ImplEntity13])
+    end
+
+    test "holds the struct of a derived field's type" do
+      assert Time in list_row_types([ImplEntity14])
+    end
+
+    test "holds nothing for no entity types" do
+      assert list_row_types([]) == MapSet.new()
+    end
+  end
+
+  describe "merge_held_chunks/2" do
+    test "merges every chunk holding a held type, under the union of their signatures" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, Time]) => [{Calendar.ISO, :zero_pad, 2}],
+        MapSet.new([DateTime]) => [{String.Chars.DateTime, :to_string, 1}]
+      }
+
+      assert merge_held_chunks(mfas_by_signature, MapSet.new([Date, DateTime])) == %{
+               MapSet.new([Date, DateTime, Time]) => [
+                 {Calendar.ISO, :zero_pad, 2},
+                 {String.Chars.Date, :to_string, 1},
+                 {String.Chars.DateTime, :to_string, 1}
+               ]
+             }
+    end
+
+    test "leaves a chunk holding no held type alone" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Version]) => [{Version, :__struct__, 0}]
+      }
+
+      assert merge_held_chunks(mfas_by_signature, MapSet.new([Date])) == mfas_by_signature
+    end
+
+    test "returns the chunks as they are with no held types" do
+      mfas_by_signature = %{
+        MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}],
+        MapSet.new([Date, Time]) => [{Calendar.ISO, :zero_pad, 2}]
+      }
+
+      assert merge_held_chunks(mfas_by_signature, MapSet.new()) == mfas_by_signature
+    end
+
+    test "returns the chunks as they are when none holds a held type" do
+      mfas_by_signature = %{MapSet.new([Date]) => [{String.Chars.Date, :to_string, 1}]}
+
+      assert merge_held_chunks(mfas_by_signature, MapSet.new([Time])) == mfas_by_signature
     end
   end
 

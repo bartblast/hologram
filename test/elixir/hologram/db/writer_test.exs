@@ -36,6 +36,7 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.Test.Fixtures.Policy.Module10, as: PolicyModule10
   alias Hologram.Test.Fixtures.Policy.Module11, as: PolicyModule11
   alias Hologram.Test.Fixtures.Policy.Module2
+  alias Hologram.Test.Fixtures.Policy.Module26
   alias Hologram.Test.Fixtures.Policy.Module36
   alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
   alias Hologram.Test.Fixtures.Policy.Module39, as: ChannelMessage
@@ -78,6 +79,17 @@ defmodule Hologram.DB.WriterTest do
     count
   end
 
+  defp job_framework_values do
+    [
+      actor_id: nil,
+      attempt: 0,
+      error: "failed",
+      run_as_server: false,
+      scheduled_at: DateTime.utc_now(),
+      status: :done
+    ]
+  end
+
   defp granted_roles(user_id, entity_id) do
     select_sql =
       ~s|SELECT "role" FROM "hologram_data"."hologram_role_grant" | <>
@@ -107,6 +119,153 @@ defmodule Hologram.DB.WriterTest do
     {:ok, %Postgrex.Result{rows: [[old]]}} = Connection.query(statement)
 
     old
+  end
+
+  describe "a signed-out session" do
+    test "is refused a create no rule gives a visitor" do
+      entity = Module2.new(public: true)
+
+      expected_msg =
+        ~s(not allowed to create Hologram.Test.Fixtures.Policy.Module2 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> create(entity) end)
+      end
+
+      assert DB.read(Module2, entity.id) == nil
+    end
+
+    test "creates what a rule gives a visitor" do
+      entity = Module9.new()
+
+      assert {:ok, %Module9{}} = as_user(nil, fn -> create(entity) end)
+      assert DB.read(Module9, entity.id) != nil
+    end
+
+    test "is refused an update of a struct no rule gives a visitor" do
+      entity =
+        %{priority: 5}
+        |> Module1.new()
+        |> DB.create!()
+
+      changed = put_attribute(entity, :priority, 7)
+
+      expected_msg =
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}" - no allow line that holds covers :priority)
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> update(changed) end)
+      end
+
+      assert DB.read(Module1, entity.id).priority == 5
+    end
+
+    test "is refused an update by type and id no rule gives a visitor" do
+      entity =
+        %{priority: 5}
+        |> Module1.new()
+        |> DB.create!()
+
+      expected_msg =
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}" - no allow line that holds covers :priority)
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> update(Module1, entity.id, priority: 7) end)
+      end
+
+      assert DB.read(Module1, entity.id).priority == 5
+    end
+
+    test "updates what a rule gives a visitor" do
+      entity = DB.create!(Module9.new())
+
+      assert as_user(nil, fn -> update(Module9, entity.id, archived: true) end) == :ok
+      assert DB.read(Module9, entity.id).archived == true
+    end
+
+    test "updates a struct a rule gives a visitor" do
+      entity = DB.create!(Module9.new())
+      changed = put_attribute(entity, :archived, true)
+
+      assert as_user(nil, fn -> update(changed) end) == :ok
+      assert DB.read(Module9, entity.id).archived == true
+    end
+
+    test "deletes a struct a rule gives a visitor" do
+      entity = DB.create!(Module26.new())
+
+      assert as_user(nil, fn -> delete(entity) end) == :ok
+      assert DB.read(Module26, entity.id) == nil
+    end
+
+    test "deletes by type and id what a rule gives a visitor" do
+      entity = DB.create!(Module26.new())
+
+      assert as_user(nil, fn -> delete(Module26, entity.id) end) == :ok
+      assert DB.read(Module26, entity.id) == nil
+    end
+
+    test "is refused a delete of a struct no rule gives a visitor" do
+      entity = DB.create!(Module1.new())
+
+      expected_msg =
+        ~s(not allowed to delete Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> delete(entity) end)
+      end
+
+      assert DB.read(Module1, entity.id) != nil
+    end
+
+    test "is refused a delete by type and id no rule gives a visitor" do
+      entity = DB.create!(Module1.new())
+
+      expected_msg =
+        ~s(not allowed to delete Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(nil, fn -> delete(Module1, entity.id) end)
+      end
+
+      assert DB.read(Module1, entity.id) != nil
+    end
+
+    test "creates past the rules with a trust claim" do
+      entity = Module2.new(public: true)
+
+      trusted_entity = trust(entity)
+
+      assert {:ok, %Module2{}} = as_user(nil, fn -> create(trusted_entity) end)
+      assert DB.read(Module2, entity.id) != nil
+    end
+
+    test "updates past the rules with a trust claim" do
+      entity =
+        %{priority: 5}
+        |> Module1.new()
+        |> DB.create!()
+
+      result =
+        as_user(nil, fn ->
+          entity
+          |> put_attribute(:priority, 7)
+          |> trust()
+          |> update()
+        end)
+
+      assert result == :ok
+      assert DB.read(Module1, entity.id).priority == 7
+    end
+
+    test "deletes past the rules with a trust claim" do
+      entity = DB.create!(Module1.new())
+
+      trusted_entity = trust(entity)
+
+      assert as_user(nil, fn -> delete(trusted_entity) end) == :ok
+      assert DB.read(Module1, entity.id) == nil
+    end
   end
 
   describe "create/1" do
@@ -259,38 +418,50 @@ defmodule Hologram.DB.WriterTest do
       assert count == 0
     end
 
-    test "refuses a job under a user id no user entity can have" do
+    test "creates a job under a user id no user entity can have, to run under the rules" do
       job = JobModule1.new()
 
-      expected_msg =
-        "cannot create Hologram.Test.Fixtures.Job.Module1 as user 7 - the user id isn't a user entity's, so the job would run with no user and skip every rule. Create it with trust: true to run it as the server."
+      assert {:ok, %JobModule1{actor_id: nil, run_as_server: false}} =
+               as_user(7, fn -> create(job) end)
 
-      assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(7, fn -> create(job) end)
-      end
-
-      assert DB.read(JobModule1, job.id) == nil
+      assert %{actor_id: nil, run_as_server: false} = DB.read(JobModule1, job.id)
     end
 
-    test "creates a job claiming trust under a user id no user entity can have, with no actor" do
+    test "creates a job claiming trust under a user id no user entity can have, as the server" do
       job = trust(JobModule1.new())
 
-      assert {:ok, %JobModule1{actor_id: nil}} = as_user(7, fn -> create(job) end)
-      assert DB.read(JobModule1, job.id).actor_id == nil
+      assert {:ok, %JobModule1{actor_id: nil, run_as_server: true}} =
+               as_user(7, fn -> create(job) end)
+
+      assert %{actor_id: nil, run_as_server: true} = DB.read(JobModule1, job.id)
     end
 
-    test "refuses Job.create/3 under a user id no user entity can have" do
-      expected_msg =
-        "cannot create Hologram.Test.Fixtures.Job.Module1 as user 7 - the user id isn't a user entity's, so the job would run with no user and skip every rule. Create it with trust: true to run it as the server."
-
-      assert_error AccessDeniedError, expected_msg, fn ->
-        as_user(7, fn -> Job.create(JobModule1) end)
-      end
+    test "creates a job through Job.create/3 under a user id no user entity can have" do
+      assert {:ok, %JobModule1{actor_id: nil, run_as_server: false}} =
+               as_user(7, fn -> Job.create(JobModule1) end)
     end
 
     test "creates a job through Job.create/3 claiming trust under a user id no user entity can have" do
-      assert {:ok, %JobModule1{actor_id: nil}} =
+      assert {:ok, %JobModule1{actor_id: nil, run_as_server: true}} =
                as_user(7, fn -> Job.create(JobModule1, %{}, trust: true) end)
+    end
+
+    # A browser's write is never the server's, whatever state the process is in.
+    test "leaves a client's job unmarked with no session" do
+      job = JobModule1.new()
+      %Metadata{} = metadata = job.__meta__
+      client_job = %{job | __meta__: %{metadata | claim: :client}}
+
+      assert {:ok, %JobModule1{run_as_server: false}} = create(client_job)
+      assert DB.read(JobModule1, job.id).run_as_server == false
+    end
+
+    # The stamp is the write's own, so a value the struct carries can't choose how the job runs.
+    test "stamps a job's server mark over what the struct carries" do
+      job = %{JobModule1.new() | run_as_server: true}
+
+      assert {:ok, %JobModule1{run_as_server: false}} = as_user(nil, fn -> create(job) end)
+      assert DB.read(JobModule1, job.id).run_as_server == false
     end
 
     test "skips evaluation for a trust claim and still grants creator roles" do
@@ -438,6 +609,24 @@ defmodule Hologram.DB.WriterTest do
   end
 
   describe "update/1" do
+    test "refuses each attribute the framework sets on a job, even with a trust claim" do
+      job = Job.create!(JobModule1)
+
+      for {name, value} <- job_framework_values() do
+        expected_msg =
+          "#{inspect(name)} of Hologram.Test.Fixtures.Job.Module1 is set by the framework - an update can't change it"
+
+        assert_error MisuseError, expected_msg, fn ->
+          job
+          |> put_attribute(name, value)
+          |> trust()
+          |> update()
+        end
+      end
+
+      assert DB.read(JobModule1, job.id).run_as_server == true
+    end
+
     test "a denied write rolls back the writes made before it" do
       user = create_user("roller@example.com")
       earlier_entity = Module1.new()
@@ -1234,6 +1423,30 @@ defmodule Hologram.DB.WriterTest do
   end
 
   describe "update/3" do
+    test "refuses each attribute the framework sets on a job, with no session" do
+      job = Job.create!(JobModule1)
+
+      for {name, value} <- job_framework_values() do
+        expected_msg =
+          "#{inspect(name)} of Hologram.Test.Fixtures.Job.Module1 is set by the framework - an update can't change it"
+
+        assert_error MisuseError, expected_msg, fn ->
+          update(JobModule1, job.id, [{name, value}])
+        end
+      end
+    end
+
+    test "refuses a job's actor in a session" do
+      job = Job.create!(JobModule1)
+
+      expected_msg =
+        ":actor_id of Hologram.Test.Fixtures.Job.Module1 is set by the framework - an update can't change it"
+
+      assert_error MisuseError, expected_msg, fn ->
+        as_user(nil, fn -> update(JobModule1, job.id, actor_id: nil) end)
+      end
+    end
+
     test "raises for a role grant without an acting user" do
       expected_msg =
         "cannot update Hologram.Auth.RoleGrant - a role grant is never changed in place, revoke the role and grant the new one instead"

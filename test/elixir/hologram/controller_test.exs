@@ -75,6 +75,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module54
   alias Hologram.Test.Fixtures.Controller.Module55
   alias Hologram.Test.Fixtures.Controller.Module56
+  alias Hologram.Test.Fixtures.Controller.Module57
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
   alias Hologram.Test.Fixtures.Controller.Module9
@@ -187,7 +188,7 @@ defmodule Hologram.ControllerTest do
     {boot_data["replicaId"], boot_data["replicaToken"]}
   end
 
-  defp handshake_request_body(instance_id, receipts) do
+  defp handshake_request_body(instance_id, receipts, extra_entries \\ []) do
     serialized_receipts =
       Enum.map(receipts, fn token -> "b0#{binary_to_hex(token)}" end)
 
@@ -195,10 +196,11 @@ defmodule Hologram.ControllerTest do
       2,
       %{
         "t" => "m",
-        "d" => [
-          ["ainstance_id", "b0#{binary_to_hex(instance_id)}"],
-          ["areceipts", %{"t" => "l", "d" => serialized_receipts}]
-        ]
+        "d" =>
+          [
+            ["ainstance_id", "b0#{binary_to_hex(instance_id)}"],
+            ["areceipts", %{"t" => "l", "d" => serialized_receipts}]
+          ] ++ extra_entries
       }
     ]
   end
@@ -239,6 +241,23 @@ defmodule Hologram.ControllerTest do
     |> Plug.Test.conn("/hologram/sse/handshake", "")
     |> Plug.Test.init_test_session(session_data)
     |> put_req_cookies(cookies)
+    |> Map.put(:body_params, %{"_json" => parsed_json})
+    |> handle_sse_handshake_request()
+  end
+
+  defp post_handshake_wanting_replica(session_data, {replica_id, token}) do
+    parsed_json =
+      "test-instance-id"
+      |> handshake_request_body([], [
+        ["areplica_id", "b0#{binary_to_hex(replica_id)}"],
+        ["areplica_token", "b0#{binary_to_hex(token)}"]
+      ])
+      |> Jason.encode!()
+      |> Jason.decode!()
+
+    :post
+    |> Plug.Test.conn("/hologram/sse/handshake", "")
+    |> Plug.Test.init_test_session(session_data)
     |> Map.put(:body_params, %{"_json" => parsed_json})
     |> handle_sse_handshake_request()
   end
@@ -1142,6 +1161,25 @@ defmodule Hologram.ControllerTest do
                serialized_term(%Component.Action{
                  name: :my_action,
                  params: %{actor: "019ff5c2-0000-7000-8000-000000000001"},
+                 target: "my_target_1"
+               })
+    end
+
+    test "runs a signed-out visitor's middleware in a session" do
+      conn =
+        execute_command_request(%{
+          module: Module50,
+          name: :my_command_reporting_middleware_session,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response["action"] ==
+               serialized_term(%Component.Action{
+                 name: :my_action,
+                 params: %{in_session: true},
                  target: "my_target_1"
                })
     end
@@ -3284,6 +3322,18 @@ defmodule Hologram.ControllerTest do
       assert Plug.Conn.get_resp_header(conn, "x-my-header") == ["my_value"]
     end
 
+    test "runs a signed-out visitor's middleware in a session" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module57, :dummy_module_57_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module57")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module57)
+
+      assert Plug.Conn.get_resp_header(conn, "x-in-session") == ["true"]
+    end
+
     test "sends the response headers a layout's init/3 set" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module39, :dummy_module_39_digest)
 
@@ -3854,6 +3904,96 @@ defmodule Hologram.ControllerTest do
 
       assert {:ok, %{"handshakeId" => handshake_id}} = Jason.decode(conn.resp_body)
       assert {:ok, _info} = UUID.info(handshake_id)
+    end
+
+    test "mints an identity for the session when the one it shows belongs to the session" do
+      shown = {"shown-id", ReplicaIdentity.issue("shown-id", "test-session-id", nil)}
+
+      conn = post_handshake_wanting_replica(%{hologram_session_id: "test-session-id"}, shown)
+
+      assert %{"replica" => %{"id" => id, "token" => token}} = Jason.decode!(conn.resp_body)
+      assert {:ok, _info} = UUID.info(id)
+      assert ReplicaIdentity.verify(token, id, "test-session-id", nil) == :ok
+      assert ReplicaIdentity.verify(token, id, "another-session", nil) == {:error, :mismatch}
+    end
+
+    test "mints an identity for the user when the one it shows belongs to the user" do
+      shown = {"shown-id", ReplicaIdentity.issue("shown-id", "test-session-id", "test-user-id")}
+
+      conn =
+        post_handshake_wanting_replica(
+          %{hologram_session_id: "test-session-id", hologram_user_id: "test-user-id"},
+          shown
+        )
+
+      assert %{"replica" => %{"id" => id, "token" => token}} = Jason.decode!(conn.resp_body)
+      assert ReplicaIdentity.verify(token, id, "another-session", "test-user-id") == :ok
+      assert ReplicaIdentity.verify(token, id, "test-session-id", nil) == {:error, :mismatch}
+
+      assert ReplicaIdentity.verify(token, id, "test-session-id", "another-user") ==
+               {:error, :mismatch}
+    end
+
+    # A page opened before the sign-in holds a session's identity, which goes on working after it.
+    test "keeps the new identity with the session when somebody has signed in on it" do
+      shown = {"shown-id", ReplicaIdentity.issue("shown-id", "test-session-id", nil)}
+
+      conn =
+        post_handshake_wanting_replica(
+          %{hologram_session_id: "test-session-id", hologram_user_id: "test-user-id"},
+          shown
+        )
+
+      assert %{"replica" => %{"id" => id, "token" => token}} = Jason.decode!(conn.resp_body)
+      assert ReplicaIdentity.verify(token, id, "test-session-id", nil) == :ok
+    end
+
+    # Minted for the session, the writes this tab has queued would be applied as the new user.
+    test "refuses a new identity when another user holds the session now" do
+      shown = {"shown-id", ReplicaIdentity.issue("shown-id", "test-session-id", "alice")}
+
+      conn =
+        post_handshake_wanting_replica(
+          %{hologram_session_id: "test-session-id", hologram_user_id: "bob"},
+          shown
+        )
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response["replicaRefused"] == true
+      refute Map.has_key?(response, "replica")
+    end
+
+    test "refuses a new identity for a statement that isn't genuine" do
+      conn =
+        post_handshake_wanting_replica(
+          %{hologram_session_id: "test-session-id"},
+          {"shown-id", "not-a-statement"}
+        )
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response["replicaRefused"] == true
+      refute Map.has_key?(response, "replica")
+    end
+
+    test "mints a different replica identity each time it is asked" do
+      session_data = %{hologram_session_id: "test-session-id"}
+      shown = {"shown-id", ReplicaIdentity.issue("shown-id", "test-session-id", nil)}
+
+      first = Jason.decode!(post_handshake_wanting_replica(session_data, shown).resp_body)
+      second = Jason.decode!(post_handshake_wanting_replica(session_data, shown).resp_body)
+
+      assert first["replica"]["id"] != second["replica"]["id"]
+    end
+
+    test "says nothing about an identity unless asked" do
+      conn = post_handshake("test-instance-id", %{hologram_session_id: "test-session-id"})
+
+      response = Jason.decode!(conn.resp_body)
+
+      refute Map.has_key?(response, "replica")
+      refute Map.has_key?(response, "replicaRefused")
     end
 
     test "returns the heartbeat interval the stream will use" do

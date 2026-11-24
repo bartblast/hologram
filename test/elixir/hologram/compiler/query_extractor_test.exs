@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Commons.PLT
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module142
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module146
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module55
@@ -409,6 +410,205 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert_raise Hologram.CompileError,
                    ~r/derived field :keyed_read in .+ reads nil off a map keyed by a field of the row/,
                    fn -> derived_definition(Module142, :keyed_read, ir_plt) end
+    end
+
+    test "refuses a function reading a field of the row handed to a call the build runs", %{
+      ir_plt: ir_plt
+    } do
+      fixture = "test/elixir/support/fixtures/compiler/query_extractor/module_145.ex"
+      line = source_line(fixture, "Enum.uniq_by(fn x -> if x == 1, do: first")
+
+      assert_raise Hologram.CompileError,
+                   ~r/#{fixture}:#{line}: derived field :closure_reading_fields in .+ passes a field of the row to Enum\.uniq_by\/2/,
+                   fn -> derived_definition(Module146, :closure_reading_fields, ir_plt) end
+    end
+
+    # Two functions holding equal values are equal, so the count depends on the row.
+    test "refuses functions holding fields of the row compared by a call the build runs", %{
+      ir_plt: ir_plt
+    } do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :closures_compared in .+ passes a field of the row to Enum\.uniq\/1/,
+                   fn -> derived_definition(Module146, :closures_compared, ir_plt) end
+    end
+
+    test "refuses a function naming a field of the row on a path it doesn't take", %{
+      ir_plt: ir_plt
+    } do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :field_on_path_not_taken in .+ passes a field of the row to Enum\.map\/2/,
+                   fn -> derived_definition(Module146, :field_on_path_not_taken, ir_plt) end
+    end
+
+    test "refuses a function returning a field of the row it made itself", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :closure_making_field in .+ returns a field of the row from a function handed to another call/,
+                   fn -> derived_definition(Module146, :closure_making_field, ir_plt) end
+    end
+
+    # The inner functions capture nothing, so they're equal, whatever x the outer one was given.
+    test "keeps only what a function names, so equal functions compare equal", %{ir_plt: ir_plt} do
+      {{:query, query}, _read_modules} =
+        derived_definition(Module146, :closures_from_one_fn, ir_plt)
+
+      assert query.take == 1
+    end
+
+    test "reads a value holding an improper list", %{ir_plt: ir_plt} do
+      {{:query, query}, _read_modules} = derived_definition(Module146, :improper_list, ir_plt)
+
+      assert query.take == 1
+    end
+
+    test "refuses a branch on strings joined from fields of the row", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :computed_joined in .+ passes a field of the row to :erlang\.==\/2/,
+                   fn -> derived_definition(Module146, :computed_joined, ir_plt) end
+    end
+
+    test "refuses a branch on a value a condition on the row picks", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :computed_picked in .+ passes a field of the row to :erlang\.==\/2/,
+                   fn -> derived_definition(Module146, :computed_picked, ir_plt) end
+    end
+
+    test "refuses a branch on whether a condition on the row holds", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :computed_condition in .+ branches on a field of the row/,
+                   fn -> derived_definition(Module146, :computed_condition, ir_plt) end
+    end
+
+    # The picked key can be the one read, so the value depends on the row.
+    test "refuses a read of a map keyed by a value a condition on the row picks", %{
+      ir_plt: ir_plt
+    } do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :computed_key in .+ reads :limit off a map keyed by a field of the row/,
+                   fn -> derived_definition(Module146, :computed_key, ir_plt) end
+    end
+
+    test "decides an anonymous function's guard on its argument", %{ir_plt: ir_plt} do
+      {{:query, query}, _read_modules} = derived_definition(Module146, :guard_held, ir_plt)
+
+      assert query.take == 5
+
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :guard_on_argument in .+ calls an anonymous function with 1, which no clause matches - the code raises FunctionClauseError there/,
+                   fn -> derived_definition(Module146, :guard_on_argument, ir_plt) end
+    end
+
+    test "decides an anonymous function's guard on a value from outside it", %{ir_plt: ir_plt} do
+      {{:query, query}, _read_modules} =
+        derived_definition(Module146, :guard_on_outer_value_held, ir_plt)
+
+      assert query.take == 5
+
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :guard_on_outer_value in .+ calls an anonymous function with 1, which no clause matches/,
+                   fn -> derived_definition(Module146, :guard_on_outer_value, ir_plt) end
+    end
+
+    test "decides an anonymous function's literal parameter", %{
+      ir_plt: ir_plt
+    } do
+      {{:query, query}, _read_modules} =
+        derived_definition(Module146, :literal_param_matched, ir_plt)
+
+      assert query.take == 5
+
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :literal_param in .+ calls an anonymous function with 2, which no clause matches/,
+                   fn -> derived_definition(Module146, :literal_param, ir_plt) end
+    end
+
+    test "decides an anonymous function's repeated parameter", %{
+      ir_plt: ir_plt
+    } do
+      {{:query, query}, _read_modules} =
+        derived_definition(Module146, :repeated_param_equal, ir_plt)
+
+      assert query.take == 5
+
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :repeated_param in .+ calls an anonymous function with 1, 2, which no clause matches/,
+                   fn -> derived_definition(Module146, :repeated_param, ir_plt) end
+    end
+
+    test "keeps the last value of equal map keys when the literal key is last", %{
+      ir_plt: ir_plt
+    } do
+      {{:query, query}, _read_modules} =
+        derived_definition(Module146, :map_equal_keys_literal_last, ir_plt)
+
+      assert query.take == 3
+    end
+
+    test "keeps the last value of equal map keys when the variable key is last", %{
+      ir_plt: ir_plt
+    } do
+      {{:query, query}, _read_modules} =
+        derived_definition(Module146, :map_equal_keys_variable_last, ir_plt)
+
+      assert query.take == 3
+    end
+
+    # The query reads nil on a row with no messages, and on that row it's the key read.
+    test "refuses a read of a map keyed by a query over the row's set", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :keyed_by_one in .+ reads nil off a map keyed by a field of the row/,
+                   fn -> derived_definition(Module146, :keyed_by_one, ir_plt) end
+    end
+
+    test "keeps a refusal inside a function when a helper the build runs rescues it", %{
+      ir_plt: ir_plt
+    } do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :refusal_rescued in .+ pattern-matches in its body/,
+                   fn -> derived_definition(Module146, :refusal_rescued, ir_plt) end
+    end
+
+    test "reports a refusal inside a function over the error a helper raises instead", %{
+      ir_plt: ir_plt
+    } do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :refusal_replaced in .+ pattern-matches in its body/,
+                   fn -> derived_definition(Module146, :refusal_replaced, ir_plt) end
+    end
+
+    # The first half pins that a raw Erlang error still reaches a helper's catch as it was raised,
+    # even when the error names a formatter that returns something unusable.
+    test "reports a refusal over a helper's throw, and leaves the errors it catches alone", %{
+      ir_plt: ir_plt
+    } do
+      {{:query, raw_error_query}, _read_modules} =
+        derived_definition(Module146, :erlang_error_caught, ir_plt)
+
+      assert raw_error_query.take == 1
+
+      {{:query, formatted_error_query}, _read_modules} =
+        derived_definition(Module146, :formatted_error_caught, ir_plt)
+
+      assert formatted_error_query.take == 2
+
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :refusal_thrown_over in .+ pattern-matches in its body/,
+                   fn -> derived_definition(Module146, :refusal_thrown_over, ir_plt) end
+    end
+
+    # The task rescues what the function raises and hands back a fallback the code never produces.
+    test "refuses a function run in another process, even when that process rescues", %{
+      ir_plt: ir_plt
+    } do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :refusal_in_task in .+ runs a function in another process/,
+                   fn -> derived_definition(Module146, :refusal_in_task, ir_plt) end
+    end
+
+    # The task is linked to the walk, so a raise inside it would kill the walk instead of refusing.
+    test "refuses a harmless function run in a linked task", %{ir_plt: ir_plt} do
+      assert_raise Hologram.CompileError,
+                   ~r/derived field :harmless_in_task in .+ runs a function in another process/,
+                   fn -> derived_definition(Module146, :harmless_in_task, ir_plt) end
     end
 
     test "takes the case clause a known value matches", %{ir_plt: ir_plt} do

@@ -68,6 +68,140 @@ describe("Calendar", () => {
     });
   });
 
+  describe("storableDate()", () => {
+    it("accepts the first and the last day a date column holds", () => {
+      assert.isTrue(Calendar.storableDate(-4713n, 11n, 24n));
+      assert.isTrue(Calendar.storableDate(5874897n, 12n, 31n));
+    });
+
+    it("refuses the day before the first and the day after the last", () => {
+      assert.isFalse(Calendar.storableDate(-4713n, 11n, 23n));
+      assert.isFalse(Calendar.storableDate(5874898n, 1n, 1n));
+    });
+
+    it("refuses a year a Number would round", () => {
+      assert.isFalse(Calendar.storableDate(10n ** 30n, 1n, 1n));
+      assert.isFalse(Calendar.storableDate(-(10n ** 30n), 1n, 1n));
+    });
+  });
+
+  describe("storableDateTime()", () => {
+    it("accepts the first and the last second", () => {
+      assert.isTrue(
+        Calendar.storableDateTime(-4713n, 11n, 24n, 0n, 0n, 0n, 0n),
+      );
+
+      assert.isTrue(
+        Calendar.storableDateTime(9999n, 12n, 31n, 23n, 59n, 59n, 0n),
+      );
+    });
+
+    it("refuses the second before the first and after the last", () => {
+      assert.isFalse(
+        Calendar.storableDateTime(-4713n, 11n, 23n, 23n, 59n, 59n, 0n),
+      );
+
+      assert.isFalse(Calendar.storableDateTime(10000n, 1n, 1n, 0n, 0n, 0n, 0n));
+    });
+
+    it("judges the instant the offset gives", () => {
+      assert.isTrue(
+        Calendar.storableDateTime(10000n, 1n, 1n, 0n, 0n, 0n, 3600n),
+      );
+
+      assert.isFalse(
+        Calendar.storableDateTime(9999n, 12n, 31n, 23n, 59n, 59n, -1n),
+      );
+
+      assert.isTrue(
+        Calendar.storableDateTime(-4713n, 11n, 23n, 23n, 0n, 0n, -3600n),
+      );
+
+      assert.isFalse(
+        Calendar.storableDateTime(-4713n, 11n, 24n, 0n, 0n, 0n, 1n),
+      );
+    });
+
+    // Each date with the offset that lands it exactly on the last storable second, so a day
+    // miscounted anywhere before it moves the answer. The Unix seconds are Elixir's.
+    it("counts leap days, before and after year 0", () => {
+      const lastSecond = 253402300799n;
+
+      for (const [year, month, day, unixSeconds] of [
+        [2000n, 2n, 29n, 951782400n],
+        [2000n, 3n, 1n, 951868800n],
+        [-4n, 2n, 29n, -62288352000n],
+        [-4n, 3n, 1n, -62288265600n],
+      ]) {
+        const offset = unixSeconds - lastSecond;
+
+        assert.isTrue(
+          Calendar.storableDateTime(year, month, day, 0n, 0n, 0n, offset),
+        );
+
+        assert.isFalse(
+          Calendar.storableDateTime(year, month, day, 0n, 0n, 0n, offset - 1n),
+        );
+      }
+    });
+
+    it("refuses a year a JavaScript Date can't reach", () => {
+      assert.isFalse(
+        Calendar.storableDateTime(300000n, 1n, 1n, 0n, 0n, 0n, 0n),
+      );
+    });
+
+    it("takes the first and last whole year a JavaScript Date holds", () => {
+      assert.isTrue(
+        Calendar.storableDateTime(
+          -271820n,
+          1n,
+          1n,
+          0n,
+          0n,
+          0n,
+          -8893380182399n,
+        ),
+      );
+
+      assert.isTrue(
+        Calendar.storableDateTime(
+          275759n,
+          12n,
+          31n,
+          23n,
+          59n,
+          59n,
+          8850844684799n,
+        ),
+      );
+    });
+
+    it("refuses the years just past those, with offsets landing in range", () => {
+      assert.isFalse(
+        Calendar.storableDateTime(
+          -271821n,
+          12n,
+          31n,
+          0n,
+          0n,
+          0n,
+          -8429111164800n,
+        ),
+      );
+
+      assert.isFalse(
+        Calendar.storableDateTime(275760n, 1n, 1n, 0n, 0n, 0n, 8850844684800n),
+      );
+    });
+
+    it("refuses such a year even when its offset brings the instant back in range", () => {
+      assert.isFalse(
+        Calendar.storableDateTime(300000n, 1n, 1n, 0n, 0n, 0n, 9400000000000n),
+      );
+    });
+  });
+
   describe("validTime()", () => {
     it("accepts the first and the last instant of the day", () => {
       assert.isTrue(Calendar.validTime(0, 0, 0, 0, 0));

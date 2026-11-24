@@ -466,7 +466,9 @@ defmodule Hologram.Query do
   holds then, which is what lets two writers moving one attribute add up instead of one
   overwriting the other. Only the recorded amount is written, never the field. The attribute's
   constraints are judged on that result at the write, so a move that would cross a declared
-  minimum, maximum or range is reported by DB.update/1.
+  minimum, maximum or range is reported by DB.update/1. In the browser only the server can judge
+  that result: DB.update/1 answers :ok and the move applies at once, and if the server refuses
+  it, all of the action's writes roll back.
 
   Stages apply in order and the struct holds one op per attribute: moving an attribute the
   struct already carries a put value for folds the amount into that value (put 10 then

@@ -1,9 +1,11 @@
 defmodule Hologram.DB.SupervisorTest do
-  use Hologram.Test.BasicCase, async: true
+  # Not async: a test here takes down a telemetry handler every process shares.
+  use Hologram.Test.BasicCase, async: false
 
   import Hologram.DB.Supervisor
 
   alias Hologram.DB
+  alias Hologram.DB.EctoGuard
   alias Hologram.DB.IndexBuilder
   alias Hologram.DB.QueryCache
   alias Hologram.Job
@@ -30,6 +32,18 @@ defmodule Hologram.DB.SupervisorTest do
                    type: :supervisor
                  }
                ]}}
+  end
+
+  test "init/1 starts watching Ecto repos" do
+    event = [:ecto, :repo, :init]
+    id = {EctoGuard, event}
+    :telemetry.detach(id)
+
+    init(nil)
+
+    handlers = :telemetry.list_handlers(event)
+
+    assert Enum.any?(handlers, &(&1.id == id))
   end
 
   describe "children/1" do

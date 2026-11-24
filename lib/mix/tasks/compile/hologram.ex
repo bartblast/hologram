@@ -438,17 +438,29 @@ defmodule Mix.Tasks.Compile.Hologram do
       # lists again, if it derives at all (see partition_kept_page_reach/4).
       impl_seeds = impl_seeds(cache.data_layer, call_graph, graph_unchanged?)
 
+      new_impls =
+        list_new_impls(
+          module_digests_diff,
+          new_module_info_plt,
+          old_module_info_plt,
+          previous_infos
+        )
+
+      data_layer_reaching_modules =
+        data_layer_reaching_modules(reaching_modules, new_impls, new_module_info_plt)
+
       {kept_page_reach, pages_to_list} =
         partition_kept_page_reach(
           cache.data_layer,
           page_modules,
           impl_seeds,
-          data_layer_reaching_modules(
-            reaching_modules,
-            module_digests_diff,
-            new_module_info_plt
-          )
+          data_layer_reaching_modules
         )
+
+      # The walks of the implementations of the types each kept page holds through rows that still
+      # hold (see keep_held_impl_walks/3).
+      kept_held_impl_walks =
+        keep_held_impl_walks(cache.data_layer, kept_page_reach, data_layer_reaching_modules)
 
       # Whether the vocabulary the queries and the operation asks are judged against can have moved
       # (see data_model_changed?/2).
@@ -477,6 +489,13 @@ defmodule Mix.Tasks.Compile.Hologram do
           %{
             data_model_changed?: data_model_changed?,
             derived_stale?: derived_stale?,
+            held_impls_changed?:
+              held_impls_changed?(
+                cache.data_layer,
+                Map.keys(kept_page_reach),
+                kept_held_impl_walks,
+                new_impls
+              ),
             kept_page_reach: kept_page_reach,
             own_dumps?: own_dumps?(before_dump_stamp, module_info_plt_dump_path),
             pages_to_list: pages_to_list,
@@ -486,8 +505,10 @@ defmodule Mix.Tasks.Compile.Hologram do
         )
 
       # The chunks' MFAs are listed on the runtime's copy too, and so is the data layer's reach of
-      # every page it lists again.
-      runtime_graph_kept? = Enum.all?([runtime_kept?, chunk_analysis_kept?, pages_to_list == []])
+      # every page it lists again, and of every page it walks for the types it holds through rows.
+      runtime_graph_kept? =
+        Enum.all?([runtime_kept?, chunk_analysis_kept?, pages_to_list == [], data_layer_kept?])
+
       call_graph_for_runtime = build_runtime_graph(call_graph, runtime_graph_kept?, sup)
 
       templatable_modules = page_modules ++ component_modules
@@ -513,10 +534,11 @@ defmodule Mix.Tasks.Compile.Hologram do
         module_digests_diff: module_digests_diff
       })
 
-      # The statement the data model bundle sets the client's data layer constants with: rendered by
-      # the derivation, or kept with the data layer it was derived with.
-      sync_constants_js =
-        sync_constants_js(data_layer_kept?, %{
+      # The statement the data model bundle sets the client's data layer constants with and the
+      # struct types a synced row can hold: from the derivation, or kept with the data layer it was
+      # derived with.
+      %{js: sync_constants_js, row_types: row_types} =
+        data_layer_output(data_layer_kept?, %{
           call_graph: call_graph,
           call_graph_for_runtime: call_graph_for_runtime,
           derived_stale?: derived_stale?,
@@ -524,6 +546,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           impl_seeds: impl_seeds,
           ir_plt: ir_plt,
           kept_data_layer: cache.data_layer,
+          kept_held_impl_walks: kept_held_impl_walks,
           kept_page_reach: kept_page_reach,
           module_info_plt: new_module_info_plt,
           opts: opts,
@@ -531,6 +554,27 @@ defmodule Mix.Tasks.Compile.Hologram do
           query_shapes: query_shapes,
           supervisor: sup
         })
+
+      # The types whose implementations every page preloads, in one chunk. They can move on an
+      # unchanged graph, since a role module edit derives the data layer again without touching it,
+      # and then the chunks are grouped again, on a runtime graph made for that if none was.
+      held_types = MapSet.intersection(row_types, impl_types(cache.chunks, chunk_reach))
+      chunk_analysis_kept? = chunk_analysis_kept?(chunk_analysis_kept?, cache.chunks, held_types)
+
+      {chunk_reach, call_graph_for_runtime} =
+        ensure_chunk_reach(chunk_reach, call_graph_for_runtime, chunk_analysis_kept?, %{
+          call_graph: call_graph,
+          component_modules: component_modules,
+          ir_plt: ir_plt,
+          page_modules: page_modules,
+          supervisor: sup
+        })
+
+      # Taken again, since that walk can have found a type the kept chunks don't know of. What it
+      # built has to reach the graph dump too.
+      impl_types = impl_types(cache.chunks, chunk_reach)
+      held_types = MapSet.intersection(row_types, impl_types)
+      graph_unchanged? = graph_still_unchanged?(graph_unchanged?, chunk_reach)
 
       runtime_analysis = runtime_analysis(cache.runtime, call_graph_for_runtime, runtime_kept?)
       runtime_mfas = runtime_analysis.mfas
@@ -542,7 +586,8 @@ defmodule Mix.Tasks.Compile.Hologram do
           cache.chunks,
           chunk_reach,
           call_graph_for_runtime,
-          runtime_mfas
+          runtime_mfas,
+          held_types
         )
 
       # What the runtime's dynamic calls open for every page, taken while the runtime graph still
@@ -743,14 +788,14 @@ defmodule Mix.Tasks.Compile.Hologram do
           ir_plt,
           encode_plt,
           async_mfas,
-          Keyword.put(
-            chunk_entry_file_opts,
-            :sizes,
-            reusable_chunk_sizes(
-              cache.chunks,
-              reaching_modules,
-              cache.encoding_inputs == encoding_inputs
-            )
+          Keyword.merge(chunk_entry_file_opts,
+            held_types: held_types,
+            sizes:
+              reusable_chunk_sizes(
+                cache.chunks,
+                reaching_modules,
+                cache.encoding_inputs == encoding_inputs
+              )
           )
         )
 
@@ -781,7 +826,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       Cache.put_template_modules(template_modules)
       Cache.put_template_refs(template_refs)
 
-      keep_chunk_state(kept_chunk_bundles_info, chunks, chunk_sizes)
+      chunk_types = %{held_types: held_types, impl_types: impl_types}
+
+      keep_chunk_state(kept_chunk_bundles_info, chunks, chunk_sizes, chunk_types)
       keep_runtime_state(cache.runtime, runtime_entry_files_info, runtime_dynamic_calls)
 
       # The after picture, for the first compile in the next VM: the bundles on disk, what they were
@@ -853,12 +900,14 @@ defmodule Mix.Tasks.Compile.Hologram do
         call_graph: call_graph_for_pages,
         chunk_entry_files_info: chunk_entry_files_info,
         chunk_sizes: chunk_sizes,
+        chunk_types: chunk_types,
         chunks: chunks,
         client_config: client_config,
         data_model_bundle: data_model_bundle,
         encode_plt: encode_plt,
         entry_file_opts: entry_file_opts,
         gate: gate,
+        held_types: held_types,
         ir_plt: ir_plt,
         kept_chunk_bundles_info: kept_chunk_bundles_info,
         links: links,
@@ -1078,14 +1127,64 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # The copy of the graph the runtime's MFAs and the chunks' are listed on, and the data layer's
-  # reach of every page it lists again, without the manually ported MFAs. None when all three are
-  # kept: nothing lists them then.
+  # reach of every page it lists again or walks for the types it holds through rows, without the
+  # manually ported MFAs. None when the runtime, the chunk analysis and the data layer are all kept
+  # and no page is listed again: nothing reads it then.
   defp build_runtime_graph(_call_graph, true, _sup), do: nil
 
   defp build_runtime_graph(call_graph, false, sup) do
     call_graph
     |> CallGraph.clone(supervisor: sup)
     |> CallGraph.remove_manually_ported_mfas()
+  end
+
+  # Whether the chunk analysis a compile could keep by its graph is still good: the kept chunks were
+  # grouped with these held types.
+  defp chunk_analysis_kept?(false, _kept_chunks, _held_types), do: false
+
+  defp chunk_analysis_kept?(true, kept_chunks, held_types) do
+    kept_chunks.held_types == held_types
+  end
+
+  # The chunk reach and the runtime graph of a compile that found it must group the chunks again
+  # after all. The runtime graph is copied again when the walk grew the graph, since the chunks are
+  # listed on it, and a copy taken before the walk lacks what it built.
+  defp ensure_chunk_reach(nil, runtime_graph, false, context) do
+    chunk_reach =
+      build_chunk_reach(
+        context.call_graph,
+        context.ir_plt,
+        context.page_modules,
+        context.component_modules,
+        false
+      )
+
+    {chunk_reach, late_runtime_graph(runtime_graph, chunk_reach.built_modules, context)}
+  end
+
+  defp ensure_chunk_reach(chunk_reach, runtime_graph, _chunk_analysis_kept?, _context) do
+    {chunk_reach, runtime_graph}
+  end
+
+  defp late_runtime_graph(runtime_graph, [], _context) when runtime_graph != nil do
+    runtime_graph
+  end
+
+  defp late_runtime_graph(_runtime_graph, _built_modules, context) do
+    build_runtime_graph(context.call_graph, false, context.supervisor)
+  end
+
+  # Whether the graph is still the one the last finished compile ended with, after the chunks' walk.
+  defp graph_still_unchanged?(false, _chunk_reach), do: false
+
+  defp graph_still_unchanged?(true, chunk_reach), do: chunk_built_modules(chunk_reach) == []
+
+  # The struct types with an implementation of a client protocol: a fact of the graph, so a compile
+  # that kept the chunk analysis finds it in the kept chunks.
+  defp impl_types(kept_chunks, nil), do: kept_chunks.impl_types
+
+  defp impl_types(_kept_chunks, chunk_reach) do
+    Compiler.list_impl_types(chunk_reach.entries_by_type)
   end
 
   # The chunk bundles among the given built ones, by the signature each was built for: a chunk's
@@ -1266,13 +1365,14 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # The chunk registry PLT is dumped with the page digest PLT (see dump_page_digest_plt/2): the
   # chunks each struct type needs, and the chunks each page a compile has built preloads, the ones
-  # the types its client code names need and the ones the types the runtime's code names need.
+  # the types its client code names need, the ones the types the runtime's code names need and the
+  # one with the implementations of the types synced rows can hold.
   defp dump_chunk_registry_plt(bundles, context) do
     {chunk_registry_plt, chunk_registry_plt_dump_path} =
       Compiler.build_chunk_registry_plt(
         bundles.chunks,
         bundles.page_chunk_types,
-        context.runtime_types,
+        Enum.concat(context.runtime_types, context.held_types),
         Keyword.put(context.opts, :supervisor, context.supervisor)
       )
 
@@ -1296,13 +1396,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # The modules whose edit can move what the data layer read of a page: the ones reaching the edit,
-  # and the protocols of the added implementations, since a page dispatching one of those can enter
-  # the new implementation, and no page holds a module that didn't exist.
-  defp data_layer_reaching_modules(reaching_modules, module_digests_diff, module_info_plt) do
-    module_digests_diff.added_modules
-    |> Enum.filter(
-      &match?({:ok, %{protocol_implementation?: true}}, PLT.get(module_info_plt, &1))
-    )
+  # and the protocols of the new implementations (see list_new_impls/4), since a page dispatching
+  # one of those can enter the implementation, and no page's read holds it yet.
+  defp data_layer_reaching_modules(reaching_modules, new_impls, module_info_plt) do
+    new_impls
     |> MapSet.new(&CallGraph.implemented_protocol(&1, module_info_plt))
     |> MapSet.union(reaching_modules)
   end
@@ -1314,12 +1411,21 @@ defmodule Mix.Tasks.Compile.Hologram do
   # wrote the module info dump since this VM's last one (see own_dumps?/2): one that did derived
   # against other module infos, and its data layer dumps may be the ones there. A page is gone when
   # the kept reach holds a page the build no longer has. A component or a protocol implementation is
-  # read only through the pages reaching it, so an edit of one lists those pages again.
+  # read through the pages reaching it, so an edit of one lists those pages again, or through the
+  # walks of the types a page holds through rows, which an edit makes stale without listing the page
+  # (see held_impls_changed?/4).
   defp data_layer_kept?(nil, _parts, _opts), do: false
 
   defp data_layer_kept?(kept_data_layer, parts, opts) do
-    parts.pages_to_list == [] and not parts.data_model_changed? and not parts.derived_stale? and
-      kept_data_layer[:query_shapes] == parts.query_shapes and
+    nothing_read_moved? =
+      not Enum.any?([
+        parts.pages_to_list != [],
+        parts.data_model_changed?,
+        parts.derived_stale?,
+        parts.held_impls_changed?
+      ])
+
+    nothing_read_moved? and kept_data_layer[:query_shapes] == parts.query_shapes and
       map_size(parts.kept_page_reach) == map_size(kept_data_layer.pages) and
       parts.own_dumps? and data_layer_dumps_exist?(opts)
   end
@@ -1382,10 +1488,21 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> Compiler.pages_checking_permissions()
       |> Enum.concat(Compiler.pages_checking_permissions_in_impls(listed_reach, call_graph))
 
-    reach_by_page =
+    base_reach_by_page =
       listed_reach
       |> Compiler.build_kept_page_reach(permission_checking_pages, module_info_plt, ir_plt)
       |> then(&Map.merge(context.kept_page_reach, &1))
+
+    # Everything below counts the implementations of the types a page holds through rows. What's
+    # kept is the reach from before that, so that one removed takes what it named with it.
+    {reach_by_page, held_impl_walks} =
+      Compiler.fold_held_impls(
+        base_reach_by_page,
+        context.kept_held_impl_walks,
+        call_graph_for_runtime,
+        call_graph,
+        ir_plt
+      )
 
     # Checked on every derivation, the kept pages' queries too: a model change can make one that
     # was valid refused.
@@ -1442,6 +1559,10 @@ defmodule Mix.Tasks.Compile.Hologram do
     # built together (see Hologram.Compiler.build_sync_constants_js/1).
     sync_constants_js = Compiler.build_sync_constants_js(sync_constants)
 
+    # Not narrowed to the types a session may read, unlike what the data layer folds: a deploy that
+    # adds a read rule can hand an open tab rows of such a type, and code that never runs is harmless.
+    row_types = Compiler.list_row_types(sync_constants.synced_types)
+
     # The dumps once everything above passed, so that a derivation that raises leaves the dumps of
     # the last one that did not, which the kept data layer state describes.
     dump_index_needs_plt(index_needs_plt, index_needs_plt_dump_path)
@@ -1450,13 +1571,15 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Cache.put_data_layer(%{
       derived: derived,
+      held_impl_walks: held_impl_walks,
       impl_seeds: context.impl_seeds,
-      pages: reach_by_page,
+      pages: base_reach_by_page,
       query_shapes: context.query_shapes,
+      row_types: row_types,
       sync_constants_js: sync_constants_js
     })
 
-    sync_constants_js
+    %{js: sync_constants_js, row_types: row_types}
   end
 
   # The index needs PLT is dumped once, after the data layer is validated and before the batches,
@@ -1605,7 +1728,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     put_chunk_state(
       Map.merge(context.kept_chunk_bundles_info, built_chunk_bundles_info),
       context.chunks,
-      context.chunk_sizes
+      context.chunk_sizes,
+      context.chunk_types
     )
   end
 
@@ -1664,8 +1788,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   # The kept chunk state is replaced before the batches by one that names the kept bundles alone: a
   # compile that fails while bundling leaves the next one keeping those and rebuilding the rest.
   # The batch that builds the rest records them next to the kept ones.
-  defp keep_chunk_state(kept_chunk_bundles_info, chunks, chunk_sizes) do
-    put_chunk_state(kept_chunk_bundles_info, chunks, chunk_sizes)
+  defp keep_chunk_state(kept_chunk_bundles_info, chunks, chunk_sizes, chunk_types) do
+    put_chunk_state(kept_chunk_bundles_info, chunks, chunk_sizes, chunk_types)
   end
 
   # The runtime bundle carries the functions every page leaves out, so it is rebuilt when its MFAs,
@@ -1744,6 +1868,61 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp impl_seeds(_kept_data_layer, call_graph, _graph_unchanged?) do
     CallGraph.page_impl_seeds(call_graph)
   end
+
+  # Whether the walks of the implementations of the types pages hold through rows can have moved
+  # though no page is listed again: a kept page's walk met the edit, or there is a new protocol
+  # implementation (see list_new_impls/4), which a page holding its type can enter though nothing it
+  # reaches was edited. One removed is among the modules of the walks that entered it.
+  defp held_impls_changed?(%{held_impl_walks: walks}, kept_pages, kept_walks, new_impls) do
+    new_impls != [] or Map.take(walks, kept_pages) != kept_walks
+  end
+
+  defp held_impls_changed?(_kept_data_layer, _kept_pages, _kept_walks, _new_impls), do: true
+
+  # The protocol implementations this compile brought: the added modules that are one, and the
+  # edited ones that implement another protocol than before or none did, since a walk dispatching
+  # their protocol can't have entered them. `defimpl A.B, for: C` and `defimpl A, for: B.C` are one
+  # module. What an edited module was is in the entries a warm compile replaced, or in the dump a
+  # cold one diffed against.
+  defp list_new_impls(module_digests_diff, module_info_plt, old_module_info_plt, previous_infos) do
+    edited_to_new_protocol =
+      Enum.filter(module_digests_diff.edited_modules, fn module ->
+        previous_info =
+          with :error <- Map.fetch(previous_infos, module) do
+            PLT.get(old_module_info_plt, module)
+          end
+
+        info_protocol(previous_info) != info_protocol(PLT.get(module_info_plt, module))
+      end)
+
+    Enum.filter(
+      module_digests_diff.added_modules ++ edited_to_new_protocol,
+      &impl_info?(PLT.get(module_info_plt, &1))
+    )
+  end
+
+  defp impl_info?({:ok, %{protocol_implementation?: true}}), do: true
+
+  defp impl_info?(_module_info), do: false
+
+  defp info_protocol({:ok, %{implemented_protocol: protocol}}), do: protocol
+
+  defp info_protocol(_module_info), do: nil
+
+  # The kept walks of the implementations of the types each kept page holds through rows (see
+  # Hologram.Compiler.fold_held_impls/5), without the walks of a page one of whose walks reached or
+  # named a module reaching the edit.
+  defp keep_held_impl_walks(%{held_impl_walks: walks}, kept_page_reach, reaching_modules) do
+    walks
+    |> Map.take(Map.keys(kept_page_reach))
+    |> Map.reject(fn {_page_module, walks_by_types} ->
+      Enum.any?(walks_by_types, fn {_types, walk} ->
+        not MapSet.disjoint?(walk.modules, reaching_modules)
+      end)
+    end)
+  end
+
+  defp keep_held_impl_walks(_kept_data_layer, _kept_page_reach, _reaching_modules), do: %{}
 
   # The page's kept reach when it still holds: the page has one, and neither the modules it names
   # nor the ones the implementations it can dispatch to reach meet the modules reaching the edit.
@@ -1827,9 +2006,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     %{bundles | chunks: Map.merge(context.kept_chunk_bundles_info, built_chunk_bundles_info)}
   end
 
-  # Records the given chunk bundles with the chunks they were built from and the sizes those were
-  # folded by.
-  defp put_chunk_state(bundle_infos, chunks, chunk_sizes) do
+  # Records the given chunk bundles with the chunks they were built from, the sizes those were
+  # folded by, and the types they were grouped with.
+  defp put_chunk_state(bundle_infos, chunks, chunk_sizes, chunk_types) do
     modules =
       chunks
       |> chunk_mfas()
@@ -1837,6 +2016,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Cache.put_chunks(%{
       bundle_infos: bundle_infos,
+      held_types: chunk_types.held_types,
+      impl_types: chunk_types.impl_types,
       mfas_by_signature: chunks,
       modules: modules,
       sizes: chunk_sizes
@@ -1947,9 +2128,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   # The data layer's statement for the data model bundle: the kept data layer's when it is kept (see
   # data_layer_kept?/3), else the one derived now (see derive_data_layer!/1).
-  defp sync_constants_js(true, context), do: context.kept_data_layer.sync_constants_js
+  defp data_layer_output(true, %{kept_data_layer: kept_data_layer}) do
+    %{js: kept_data_layer.sync_constants_js, row_types: kept_data_layer.row_types}
+  end
 
-  defp sync_constants_js(false, context), do: derive_data_layer!(context)
+  defp data_layer_output(false, context), do: derive_data_layer!(context)
 
   # Marks that a compile started in this VM, a run that finds nothing changed included, and puts in
   # the opts whether it is the VM's first (see nothing_changed?/1 and unload_replaced_modules/3).
@@ -2159,7 +2342,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # chunked type's MFAs without the runtime's, regrouped. A compile that did not grow the graph for
   # the chunks (see build_chunk_reach/5) finds the ones the chunk bundles on disk were built from,
   # as folded.
-  defp list_chunk_mfas_by_signature(kept_chunks, nil, _call_graph_for_runtime, _runtime_mfas) do
+  defp list_chunk_mfas_by_signature(kept_chunks, nil, _graph, _runtime_mfas, _held_types) do
     kept_chunks.mfas_by_signature
   end
 
@@ -2167,7 +2350,8 @@ defmodule Mix.Tasks.Compile.Hologram do
          _kept_chunks,
          chunk_reach,
          call_graph_for_runtime,
-         runtime_mfas
+         runtime_mfas,
+         held_types
        ) do
     call_graph_for_runtime
     |> CallGraph.list_chunk_mfas_by_type(
@@ -2176,6 +2360,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       runtime_mfas
     )
     |> Compiler.group_mfas_by_signature()
+    |> Compiler.merge_held_chunks(held_types)
   end
 
   # What the runtime's dynamic calls open is taken from the runtime's MFAs, so a compile that kept

@@ -294,7 +294,7 @@ defmodule Hologram.Sync.Frame do
   @doc """
   Returns the delta telling a client to keep only the given rows of the given entity type, each
   named by its hash under the given salt (see `drop_hash/2`), and to drop every other row of the
-  type it holds.
+  type it holds, along with every pair naming a row of the type off the list.
 
   For a returning client whose user lost a grant reaching every row of a type: the rows the grant
   hid can't be listed without reading the whole type, while the rows the user may still read are
@@ -315,11 +315,13 @@ defmodule Hologram.Sync.Frame do
 
   @doc """
   Returns the delta telling a client to drop whichever of the given rows of the given entity type
-  it holds, each named by its hash under the given salt rather than by its id (see `drop_hash/2`).
+  it holds, and the pairs naming them, each named by its hash under the given salt rather than by
+  its id (see `drop_hash/2`).
 
   For rows a client may hold that the session can't say it does: their user lost them before the
   session read what a returning client holds. Telling a client the ids of rows it never had would
-  tell it rows exist that it may not read, while a hash names a row only to a client that has it.
+  tell it rows exist that it may not read, while a hash names a row only to a client that already
+  has its id, in the row or in a pair a cut stream left naming it.
   """
   @spec unsync_hashed(module, String.t(), list(String.t())) :: map
   def unsync_hashed(entity_type, salt, ids) do

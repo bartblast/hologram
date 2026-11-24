@@ -686,8 +686,7 @@ defmodule Hologram.Policy do
   and its relationships, a to-one by its relationship name - the names `only:` and `except:` take
   and `can?(user, {:update, field}, row)` asks about. Inverses, derived fields and system
   attributes are left out, since no update sets them, and so are a job's framework-owned
-  attributes, the framework's to set: an update changing one is covered by the whole-row rules
-  alone.
+  attributes, the framework's to set: no update can change one.
   """
   @spec update_fields(module) :: list(atom)
   def update_fields(entity_type) do
