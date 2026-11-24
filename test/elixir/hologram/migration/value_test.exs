@@ -1631,15 +1631,6 @@ defmodule Hologram.Migration.ValueTest do
       end
     end
 
-    test "refuses an unquote in the body" do
-      for form <- ["unquote(@swap)", "unquote_splicing(@swap)"] do
-        message =
-          refusal(~s|fn title -> #{form}; String.upcase(title) end|)
-
-        assert message =~ "read a value of the file as @x"
-      end
-    end
-
     test "accepts a guard the migration defines" do
       module =
         compiled("""
@@ -1814,29 +1805,16 @@ defmodule Hologram.Migration.ValueTest do
       end
     end
 
-    test "refuses a remote unquote in the body, which splices in a function's name" do
-      for expression <- [
-            "String.unquote(@fun)(title)",
-            "title |> String.unquote(@fun)",
-            "Kernel.|>(title, String.unquote(@fun))"
-          ] do
-        assert refusal("fn title -> #{expression} end") =~
-                 "can't unquote inside its body - read a value of the file as @x"
-      end
-    end
-
-    # The function the body runs in splices in the unquotes of a quote a pipe passes them to.
     test "refuses an unquote even inside a quote" do
       for expression <- [
             "quote(do: unquote(title))",
             "quote(do: [unquote_splicing([title])])",
             "quote(unquote: false, do: unquote(title))",
-            "quote(unquote(title), do: 1)",
-            "[do: unquote(title)] |> quote()",
-            "Kernel.|>([do: unquote(title)], quote())"
+            "quote(do: String.unquote(:upcase)(title))",
+            "quote(do: title |> String.unquote(:upcase))"
           ] do
         assert refusal("fn title -> inspect(#{expression}) <> title end") =~
-                 "can't unquote"
+                 ~r/can't unquote(_splicing)? inside its body - read a value of the file as @x/
       end
     end
 

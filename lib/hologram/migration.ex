@@ -985,11 +985,25 @@ defmodule Hologram.Migration do
     {:__hologram_fn_backfill__, [], [index, Value.fn_value(reading), reading.body]}
   end
 
+  # The function an op is compiled into splices in the code an unquote outside a quote returns, so
+  # quoted code in what it returns runs there, and an attribute it reads gets the value the module
+  # body assigned last. Where whether the function splices is up to its other unquotes, which
+  # another op can add, the unquote is refused too, even where on its own it would be a piped
+  # quote's own.
+  defp refuse_spliced_unquote!(form, meta, caller) do
+    raise Hologram.CompileError,
+      message:
+        "an op can't #{form} where the function it's compiled into may splice the code in, " <>
+          "like outside a quote, in a body piped into one or in a quote's separate options " <>
+          "(line #{statement_line(meta, caller)}) - write @x for a value of the file, or put " <>
+          "a quote's body in its parentheses"
+  end
+
   # An op is stored in the migration module's body, and the module's __hologram_migration__/0
   # returns the stored ops (see validate_placement!/1). What the op leaves in the body are the
-  # snapshots of the attributes it reads (see snapshot_attribute_reads/3).
+  # snapshots of the attributes it reads (see snapshot_attribute_reads/4).
   defp register(quoted, caller) do
-    {quoted, snapshots} = snapshot_attribute_reads(quoted, caller, [])
+    {quoted, snapshots} = snapshot_attribute_reads(quoted, caller, true, [])
 
     Module.put_attribute(caller.module, @ops_attribute, expand_aliases(quoted, caller))
 
@@ -1038,14 +1052,33 @@ defmodule Hologram.Migration do
   # assigned last. Each read becomes a read of a snapshot attribute of its own, set at the
   # op's line by an assignment the op leaves in the body. Snapshots are numbered per module,
   # so a recompile names them alike, and carry the attribute's name, which an error about
-  # the value then shows. A quote's code is data, so only what it runs is snapshot.
-  defp snapshot_attribute_reads(ast, caller, snapshots)
+  # the value then shows. A quote's code is data, so only what it runs is snapshot, and the
+  # splicing says whether the function splices in an unquote there (see
+  # Value.map_reduce_quote/5), which is refused (see refuse_spliced_unquote!/3).
+  defp snapshot_attribute_reads(ast, caller, splicing, snapshots)
 
-  defp snapshot_attribute_reads({form, _meta, _args} = node, caller, snapshots)
+  defp snapshot_attribute_reads({form, meta, [_value]}, caller, splicing, _snapshots)
+       when form in [:unquote, :unquote_splicing] and splicing != false do
+    refuse_spliced_unquote!(form, meta, caller)
+  end
+
+  defp snapshot_attribute_reads(
+         {{:., _dot_meta, [_receiver, :unquote]}, meta, [_value]},
+         caller,
+         splicing,
+         _snapshots
+       )
+       when splicing != false do
+    refuse_spliced_unquote!(:unquote, meta, caller)
+  end
+
+  defp snapshot_attribute_reads({form, _meta, _args} = node, caller, splicing, snapshots)
        when form in [:quote, :|>] or is_tuple(form) do
-    case Value.map_reduce_quote(node, caller, snapshots, &snapshot_quote_code(&1, caller, &2, &3)) do
+    snapshot_code = &snapshot_quote_code(&1, caller, &2, &3, &4)
+
+    case Value.map_reduce_quote(node, caller, splicing, snapshots, snapshot_code) do
       {:ok, node, all_snapshots} -> {node, all_snapshots}
-      :error -> snapshot_call_attribute_reads(node, caller, snapshots)
+      :error -> snapshot_call_attribute_reads(node, caller, splicing, snapshots)
     end
   end
 
@@ -1055,6 +1088,7 @@ defmodule Hologram.Migration do
   defp snapshot_attribute_reads(
          {:@, meta, [{name, _name_meta, context}]} = read,
          caller,
+         _splicing,
          snapshots
        )
        when is_atom(name) and (is_atom(context) or context == []) do
@@ -1070,36 +1104,38 @@ defmodule Hologram.Migration do
     {{:@, meta, [{snapshot, meta, nil}]}, [assignment | snapshots]}
   end
 
-  defp snapshot_attribute_reads({_form, _meta, _args} = node, caller, snapshots) do
-    snapshot_call_attribute_reads(node, caller, snapshots)
+  defp snapshot_attribute_reads({_form, _meta, _args} = node, caller, splicing, snapshots) do
+    snapshot_call_attribute_reads(node, caller, splicing, snapshots)
   end
 
-  defp snapshot_attribute_reads({left, right}, caller, snapshots) do
-    {[left, right], all_snapshots} = snapshot_attribute_reads([left, right], caller, snapshots)
+  defp snapshot_attribute_reads({left, right}, caller, splicing, snapshots) do
+    {[left, right], all_snapshots} =
+      snapshot_attribute_reads([left, right], caller, splicing, snapshots)
 
     {{left, right}, all_snapshots}
   end
 
-  defp snapshot_attribute_reads(list, caller, snapshots) when is_list(list) do
-    Enum.map_reduce(list, snapshots, &snapshot_attribute_reads(&1, caller, &2))
+  defp snapshot_attribute_reads(list, caller, splicing, snapshots) when is_list(list) do
+    Enum.map_reduce(list, snapshots, &snapshot_attribute_reads(&1, caller, splicing, &2))
   end
 
-  defp snapshot_attribute_reads(other, _caller, snapshots), do: {other, snapshots}
+  defp snapshot_attribute_reads(other, _caller, _splicing, snapshots), do: {other, snapshots}
 
-  defp snapshot_call_attribute_reads({form, meta, args}, caller, snapshots) do
-    {[form, args], all_snapshots} = snapshot_attribute_reads([form, args], caller, snapshots)
+  defp snapshot_call_attribute_reads({form, meta, args}, caller, splicing, snapshots) do
+    {[form, args], all_snapshots} =
+      snapshot_attribute_reads([form, args], caller, splicing, snapshots)
 
     {{form, meta, args}, all_snapshots}
   end
 
   # Whether a quote unquotes its body can be up to options only the compiler reads, and then an
   # attribute the body unquotes may or may not be read, so it's refused.
-  defp snapshot_quote_code(code, caller, snapshots, true) do
-    snapshot_attribute_reads(code, caller, snapshots)
+  defp snapshot_quote_code(code, caller, snapshots, true, splicing) do
+    snapshot_attribute_reads(code, caller, splicing, snapshots)
   end
 
-  defp snapshot_quote_code(code, caller, snapshots, :unknown) do
-    case snapshot_attribute_reads(code, caller, []) do
+  defp snapshot_quote_code(code, caller, snapshots, :unknown, splicing) do
+    case snapshot_attribute_reads(code, caller, splicing, []) do
       {_code, []} ->
         {code, snapshots}
 

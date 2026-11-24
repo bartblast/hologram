@@ -315,9 +315,6 @@ defmodule Hologram.MigrationTest do
             # A quote's separate options are code even in a quote of a quote.
             {"fn title -> coalesce(title, ^inspect(quote(do: quote(unquote(@o), do: 1)))) end",
              ~s("1")},
-            # The function the pin runs in splices this unquote in itself.
-            {"fn title -> coalesce(title, ^inspect([unquote: false, do: unquote(@o)] |> quote())) end",
-             ~s("1")},
             {"fn title -> coalesce(title, ^inspect([] |> quote(do: unquote(@o)))) end", ~s("1")}
           ] do
         module =
@@ -357,7 +354,12 @@ defmodule Hologram.MigrationTest do
             "quote(unquote: false, do: unquote(@o))",
             # Left of the pipe are the quote's separate options.
             "[unquote: false] |> quote(do: unquote(@o))",
-            "Kernel.|>([bind_quoted: [y: 2]], quote(do: unquote(@o)))"
+            "Kernel.|>([bind_quoted: [y: 2]], quote(do: unquote(@o)))",
+            # The function splices nothing in code a quote runs, so a quote piped there follows
+            # its own options.
+            "quote(do: unquote([unquote: false, do: unquote(@o)] |> quote()))",
+            "quote(do: unquote([bind_quoted: [y: 1], do: unquote(@o)] |> quote()))",
+            "quote(bind_quoted: [x: [unquote: false, do: unquote(@o)] |> quote()], do: x)"
           ] do
         module =
           compile_migration("20260813091522", """
@@ -393,6 +395,62 @@ defmodule Hologram.MigrationTest do
                  "an op can't unquote @o in a quote whose options only the compiler can read, " <>
                    "like an attribute (line 9) - write the options out, or don't unquote the " <>
                    "attribute"
+      end
+    end
+
+    test "refuses an unquote the function an op is compiled into splices in" do
+      pins = [
+        "unquote(quote(do: @o))",
+        "unquote(@ast)",
+        "[unquote: false, do: unquote(@o)] |> quote()",
+        "[bind_quoted: [y: 1], do: unquote(title)] |> quote()",
+        "Kernel.|>([do: unquote(@o)], quote())",
+        "[do: String.unquote(@fun)(1)] |> quote()",
+        # The function splices in a quote's separate options when it has another unquote, which
+        # another op can add.
+        "quote([bind_quoted: [x: unquote(@o)]], do: x)",
+        "quote([bind_quoted: [x: [do: unquote(@o)] |> quote()]], do: x)",
+        "[do: quote([bind_quoted: [x: unquote(@o)]], do: x)] |> quote()",
+        "[unquote: false, do: quote(unquote(@o), do: 1)] |> quote()"
+      ]
+
+      elixir_bodies = [
+        "unquote(@o) <> title",
+        "String.unquote(@fun)(title)",
+        "title |> String.unquote(@fun)",
+        "Kernel.|>(title, String.unquote(@fun))",
+        "inspect([do: unquote(title)] |> quote()) <> title"
+      ]
+
+      options =
+        ["default: unquote(@o)"] ++
+          Enum.map(pins, &"backfill: fn title -> coalesce(title, ^inspect(#{&1})) end") ++
+          Enum.map(elixir_bodies, &"backfill: fn title -> #{&1} end")
+
+      for {option, form} <- [
+            {"default: [unquote_splicing([@o])]", :unquote_splicing},
+            {"backfill: fn title -> Enum.join([unquote_splicing([@o]), title]) end",
+             :unquote_splicing}
+            | Enum.map(options, &{&1, :unquote})
+          ] do
+        body = """
+        @ast quote(do: @o)
+        @fun :upcase
+        @o "1"
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string, #{option}
+        end
+        """
+
+        error =
+          assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+
+        assert error.message ==
+                 "an op can't #{form} where the function it's compiled into may splice the " <>
+                   "code in, like outside a quote, in a body piped into one or in a quote's " <>
+                   "separate options (line 9) - write @x for a value of the file, or put a " <>
+                   "quote's body in its parentheses"
       end
     end
 

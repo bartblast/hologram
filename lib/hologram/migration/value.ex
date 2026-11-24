@@ -46,8 +46,13 @@ defmodule Hologram.Migration.Value do
           run_calls: list({atom, non_neg_integer})
         }
 
-  # What map_reduce_quote/4 calls on each part of a quote that runs.
-  @type quote_mapper :: (Macro.t(), any, true | :unknown -> {Macro.t(), any})
+  # What map_reduce_quote/5 calls on each part of a quote that runs.
+  @type quote_mapper :: (Macro.t(), any, true | :unknown, splicing -> {Macro.t(), any})
+
+  # Whether the function the code is written in splices in an unquote there itself, as def does
+  # with an unquote outside any quote: true, false, or :unknown when that's up to the function's
+  # other unquotes.
+  @type splicing :: boolean | :unknown
 
   @typep scope :: %{args: list(atom), env: Macro.Env.t(), in_fn: boolean}
 
@@ -217,33 +222,47 @@ defmodule Hologram.Migration.Value do
 
   @doc """
   Maps the code a quote runs where it's written, when the given node is one: its options, and
-  what its body unquotes unless the options turn that off. The function takes each, the
-  accumulator and true, or :unknown when only the compiler can read whether the body unquotes,
-  like when an attribute holds the options. A body piped into a quote is unquoted whatever the
-  options say: the function the quote is written in reads its unquotes before the pipe expands,
-  and splices them in itself.
+  what its body unquotes. The given splicing says whether the function the node is written in
+  splices in an unquote there itself, as def does with one outside any quote: true, false, or
+  :unknown when that's up to the function's other unquotes. That function splices before pipes
+  expand, so it splices the unquotes of a body piped into a quote whatever the quote's options
+  say. An unquote the function splices in is mapped whole, as code with that splicing.
 
-  Returns :error for a node that isn't a quote.
+  The given function takes each part, the accumulator, true or :unknown when only the compiler
+  can tell whether the part runs, like under options an attribute holds, and the splicing inside
+  the part.
+
+  Returns :error for a node that isn't a quote, or a pipe that doesn't expand to one.
   """
-  @spec map_reduce_quote(Macro.t(), Macro.Env.t(), any, quote_mapper) ::
+  @spec map_reduce_quote(Macro.t(), Macro.Env.t(), splicing, any, quote_mapper) ::
           {:ok, Macro.t(), any} | :error
-  def map_reduce_quote({:quote, meta, args}, _env, acc, fun) when is_list(args) do
-    {args, acc} = map_reduce_quote_args(args, quote_unquotes(args), acc, fun)
+  def map_reduce_quote({:quote, meta, args}, _env, splicing, acc, fun) when is_list(args) do
+    unquotes = quote_unquotes(args)
+    options_splicing = options_splicing(args, splicing)
+    {args, acc} = map_reduce_quote_args(args, unquotes, options_splicing, acc, fun)
 
     {:ok, {:quote, meta, args}, acc}
   end
 
-  def map_reduce_quote({pipe, meta, [left, {:quote, quote_meta, args}]} = node, env, acc, fun) do
+  def map_reduce_quote(
+        {pipe, meta, [left, {:quote, quote_meta, args}]} = node,
+        env,
+        splicing,
+        acc,
+        fun
+      ) do
     case {unpiped_call(node, env), args} do
-      # The function the quote is written in splices in the unquotes of a body left of the pipe.
+      # Left of the pipe is the body, which isn't in a quote, so splicing in it is as beside the
+      # pipe.
       {{:quote, _meta, [^left]}, _written} ->
-        {[left], all_acc} = map_reduce_quote_args([left], true, acc, fun)
+        unquotes = quote_unquotes([left])
+        {[left], all_acc} = map_reduce_quote_args([left], unquotes, splicing, acc, fun)
 
         {:ok, {pipe, meta, [left, {:quote, quote_meta, args}]}, all_acc}
 
-      # Left of the pipe are the quote's separate options.
+      # Left of the pipe are the quote's separate options, which aren't in a quote either.
       {{:quote, _meta, [^left, block]}, [block]} ->
-        {options, options_acc} = fun.(left, acc, true)
+        {options, options_acc} = fun.(left, acc, true, splicing)
         unquotes = quote_unquotes([left, block])
         {block, all_acc} = map_reduce_quote_block(block, unquotes, options_acc, fun)
 
@@ -254,7 +273,7 @@ defmodule Hologram.Migration.Value do
     end
   end
 
-  def map_reduce_quote(_node, _env, _acc, _fun), do: :error
+  def map_reduce_quote(_node, _env, _splicing, _acc, _fun), do: :error
 
   @doc """
   Lowers the given `backfill:` value of a migration op to the AST the op carries.
@@ -672,91 +691,117 @@ defmodule Hologram.Migration.Value do
     end)
   end
 
-  defp map_reduce_quote_args([options, block], unquotes, acc, fun) do
-    {options, options_acc} = fun.(options, acc, true)
+  defp map_reduce_quote_args([options, block], unquotes, splicing, acc, fun) do
+    {options, options_acc} = fun.(options, acc, true, splicing)
     {block, all_acc} = map_reduce_quote_block(block, unquotes, options_acc, fun)
 
     {[options, block], all_acc}
   end
 
-  defp map_reduce_quote_args(args, unquotes, acc, fun) do
+  defp map_reduce_quote_args(args, unquotes, splicing, acc, fun) do
     Enum.map_reduce(args, acc, fn arg, acc ->
       if Keyword.keyword?(arg) do
-        Enum.map_reduce(arg, acc, &map_reduce_quote_option(&1, unquotes, &2, fun))
+        Enum.map_reduce(arg, acc, &map_reduce_quote_option(&1, unquotes, splicing, &2, fun))
       else
-        fun.(arg, acc, true)
+        fun.(arg, acc, true, splicing)
       end
     end)
   end
 
-  # With separate options, Elixir ignores any beside the do.
+  # With separate options, Elixir ignores any beside the do. The block is in a quote, so the
+  # function splices nothing in it.
   defp map_reduce_quote_block(block, unquotes, acc, fun) do
     if Keyword.keyword?(block) do
       Enum.map_reduce(block, acc, fn
-        {:do, _body} = option, acc -> map_reduce_quote_option(option, unquotes, acc, fun)
+        {:do, _body} = option, acc -> map_reduce_quote_option(option, unquotes, false, acc, fun)
         ignored, acc -> {ignored, acc}
       end)
     else
-      fun.(block, acc, true)
+      fun.(block, acc, true, false)
     end
   end
 
-  defp map_reduce_quote_option({:do, body}, false, acc, _fun), do: {{:do, body}, acc}
+  defp map_reduce_quote_option({:do, body}, false, false, acc, _fun), do: {{:do, body}, acc}
 
-  defp map_reduce_quote_option({:do, body}, unquotes, acc, fun) do
-    {body, acc} = map_reduce_unquoted(body, acc, &fun.(&1, &2, unquotes))
+  defp map_reduce_quote_option({:do, body}, unquotes, splicing, acc, fun) do
+    {body, acc} = map_reduce_unquoted(body, unquotes, splicing, acc, fun)
 
     {{:do, body}, acc}
   end
 
-  defp map_reduce_quote_option({key, value}, _unquotes, acc, fun) do
-    {value, acc} = fun.(value, acc, true)
+  defp map_reduce_quote_option({key, value}, _unquotes, splicing, acc, fun) do
+    {value, acc} = fun.(value, acc, true, splicing)
 
     {{key, value}, acc}
   end
 
-  # A nested quote keeps its body's unquotes for itself, but not its separate options'.
-  defp map_reduce_unquoted({:quote, meta, [options, body]}, acc, fun) do
-    {options, acc} = map_reduce_unquoted(options, acc, fun)
+  # Walks the body of a quote for its unquotes, which run as the given unquotes say, unless the
+  # function splices them in itself. Unquoted code runs on its own, outside the quote, so the
+  # function splices nothing in it. A nested quote keeps its body's unquotes for itself, but its
+  # separate options are unquoted (see options_splicing/2).
+  defp map_reduce_unquoted({:quote, meta, [options, body]}, unquotes, splicing, acc, fun) do
+    options_splicing = options_splicing([options, body], splicing)
+    {options, acc} = map_reduce_unquoted(options, unquotes, options_splicing, acc, fun)
 
     {{:quote, meta, [options, body]}, acc}
   end
 
-  defp map_reduce_unquoted({:quote, _meta, args} = node, acc, _fun) when is_list(args),
-    do: {node, acc}
+  defp map_reduce_unquoted({:quote, _meta, args} = node, _unquotes, _splicing, acc, _fun)
+       when is_list(args),
+       do: {node, acc}
 
-  defp map_reduce_unquoted({form, meta, [value]}, acc, fun)
+  defp map_reduce_unquoted({form, _meta, [_value]} = node, _unquotes, splicing, acc, fun)
+       when form in [:unquote, :unquote_splicing] and splicing != false,
+       do: fun.(node, acc, true, splicing)
+
+  defp map_reduce_unquoted({form, meta, [value]}, unquotes, _splicing, acc, fun)
        when form in [:unquote, :unquote_splicing] do
-    {value, acc} = fun.(value, acc)
+    {value, acc} = fun.(value, acc, unquotes, false)
 
     {{form, meta, [value]}, acc}
   end
 
+  defp map_reduce_unquoted(
+         {{:., _dot_meta, [_receiver, :unquote]}, _meta, [_value]} = node,
+         _unquotes,
+         splicing,
+         acc,
+         fun
+       )
+       when splicing != false,
+       do: fun.(node, acc, true, splicing)
+
   # Elixir has no remote unquote_splicing, and the receiver is still unquoted.
-  defp map_reduce_unquoted({{:., dot_meta, [receiver, :unquote]}, meta, [value]}, acc, fun) do
-    {receiver, receiver_acc} = map_reduce_unquoted(receiver, acc, fun)
-    {value, all_acc} = fun.(value, receiver_acc)
+  defp map_reduce_unquoted(
+         {{:., dot_meta, [receiver, :unquote]}, meta, [value]},
+         unquotes,
+         splicing,
+         acc,
+         fun
+       ) do
+    {receiver, receiver_acc} = map_reduce_unquoted(receiver, unquotes, splicing, acc, fun)
+    {value, all_acc} = fun.(value, receiver_acc, unquotes, false)
 
     {{{:., dot_meta, [receiver, :unquote]}, meta, [value]}, all_acc}
   end
 
-  defp map_reduce_unquoted({form, meta, args}, acc, fun) do
-    {[form, args], acc} = map_reduce_unquoted([form, args], acc, fun)
+  defp map_reduce_unquoted({form, meta, args}, unquotes, splicing, acc, fun) do
+    {[form, args], acc} = map_reduce_unquoted([form, args], unquotes, splicing, acc, fun)
 
     {{form, meta, args}, acc}
   end
 
-  defp map_reduce_unquoted({left, right}, acc, fun) do
-    {[left, right], acc} = map_reduce_unquoted([left, right], acc, fun)
+  defp map_reduce_unquoted({left, right}, unquotes, splicing, acc, fun) do
+    {[left, right], acc} = map_reduce_unquoted([left, right], unquotes, splicing, acc, fun)
 
     {{left, right}, acc}
   end
 
-  defp map_reduce_unquoted(list, acc, fun) when is_list(list) do
-    Enum.map_reduce(list, acc, &map_reduce_unquoted(&1, &2, fun))
+  defp map_reduce_unquoted(list, unquotes, splicing, acc, fun) when is_list(list) do
+    Enum.map_reduce(list, acc, &map_reduce_unquoted(&1, unquotes, splicing, &2, fun))
   end
 
-  defp map_reduce_unquoted(other, acc, _fun), do: {other, acc}
+  defp map_reduce_unquoted(other, _unquotes, _splicing, acc, _fun), do: {other, acc}
 
   # What query(...) wraps, in a tuple since the wrapped expression can be nil, or nil when the body
   # isn't marked.
@@ -802,6 +847,15 @@ defmodule Hologram.Migration.Value do
   end
 
   defp option_backfills(_options), do: []
+
+  # The function leaves a quote's args as written, so it splices nothing in them, except in
+  # separate options. Elixir looks for unquotes to splice everywhere but there, so it splices
+  # there only when the function has another unquote.
+  defp options_splicing([_options, _block], false), do: false
+
+  defp options_splicing([_options, _block], _splicing), do: :unknown
+
+  defp options_splicing(_args, _splicing), do: false
 
   # The names of a bare name or a dot chain on one, nil for anything else. A call with
   # parentheses is no path.
@@ -946,19 +1000,6 @@ defmodule Hologram.Migration.Value do
           | acc
         ]
     end
-  end
-
-  # Quoted code is data, so a quote reads its options, and what its body unquotes unless they turn
-  # that off. Options only the compiler can read, like an attribute, leave the body to the
-  # compiler.
-  defp quote_reads(args) do
-    {_args, reads} =
-      map_reduce_quote_args(args, quote_unquotes(args), [], fn
-        code, reads, true -> {code, [code | reads]}
-        code, reads, :unknown -> {code, reads}
-      end)
-
-    reads
   end
 
   # Whether a quote with the given args unquotes its body: true or false as its options spell it,
@@ -1225,16 +1266,44 @@ defmodule Hologram.Migration.Value do
     {:constant, normalize_constant(value, type)}
   end
 
-  # What the code runs: pipes expanded, and a quote reduced to what it reads, since its code is
-  # data.
-  defp run_code(expr, env) do
-    Macro.prewalk(expr, fn node ->
-      case unpiped_call(node, env) do
-        {:quote, meta, args} when is_list(args) -> {:__block__, meta, quote_reads(args)}
-        unpiped -> unpiped
-      end
-    end)
+  # What the code runs: pipes expanded, and a quote reduced to the code it runs, since its own
+  # code is data. Code only the compiler can tell runs, like under quote options an attribute
+  # holds, is left to the compiler.
+  defp run_code(expr, env), do: run_code(expr, env, true)
+
+  defp run_code({_form, meta, args} = node, env, splicing) when is_list(args) do
+    case map_reduce_quote(node, env, splicing, [], &run_quote_code(&1, &2, &3, &4, env)) do
+      {:ok, _quote, code} ->
+        {:__block__, meta, Enum.reverse(code)}
+
+      :error ->
+        case unpiped_call(node, env) do
+          ^node ->
+            {form, meta, args} = node
+
+            {run_code(form, env, splicing), meta, run_code(args, env, splicing)}
+
+          unpiped ->
+            run_code(unpiped, env, splicing)
+        end
+    end
   end
+
+  defp run_code({left, right}, env, splicing) do
+    {run_code(left, env, splicing), run_code(right, env, splicing)}
+  end
+
+  defp run_code(list, env, splicing) when is_list(list) do
+    Enum.map(list, &run_code(&1, env, splicing))
+  end
+
+  defp run_code(other, _env, _splicing), do: other
+
+  defp run_quote_code(code, found, true, splicing, env) do
+    {code, [run_code(code, env, splicing) | found]}
+  end
+
+  defp run_quote_code(code, found, :unknown, _splicing, _env), do: {code, found}
 
   defp segment_sizes({:-, _meta, [left, right]}) do
     left
@@ -1500,9 +1569,10 @@ defmodule Hologram.Migration.Value do
 
   # An Elixir body's aliases are expanded where the op is written, and its calls judged by the
   # imports there, so one it changes for itself would run another function than the one written.
-  # Quoted code changes nothing, but an unquote can splice one in unseen. Even a quote's own
-  # unquote is refused: the function the body runs in splices in itself the unquotes of a quote a
-  # pipe passes them to, since it reads them before the pipe expands.
+  # Quoted code changes nothing, but an unquote can splice one in unseen. The unquotes the
+  # function the body runs in splices in itself are refused where the op is written (see
+  # Hologram.Migration), and a quote's own unquote is refused here too, so that no unquote has to
+  # be told apart.
   defp validate_no_scope_change!(body, scope) do
     {_ast, unquoted} =
       body
