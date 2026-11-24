@@ -103,6 +103,7 @@ defmodule Hologram.Sync.Supervisor do
      notifications: @notifications,
      on_loss: &cut_sessions_on_loss/0,
      publish: &FinalSeq.publish/1,
+     published: &FinalSeq.published/0,
      read_edge: ReadEdge}
   end
 end

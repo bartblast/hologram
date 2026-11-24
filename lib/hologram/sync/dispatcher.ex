@@ -93,9 +93,15 @@ defmodule Hologram.Sync.Dispatcher do
 
   `:publish` is called with the seq every number at or below which is final, each time the place
   moves, so that queries can tell a final number from one a running save may yet be ordered below
-  (see `Hologram.Sync.FinalSeq`). It is called with 0 when the dispatcher starts with nowhere to
-  resume from and once a loss is found. It is optional, and does nothing unless given: only the
-  node's own dispatcher publishes.
+  (see `Hologram.Sync.FinalSeq`). A round that moves the limit publishes it before the handler is
+  called, so a session joining too late to be in the round's list reads it as it joins. A
+  dispatcher resuming publishes its place or the limit published before it, whichever is higher,
+  so a restart in the middle of a round never lowers it. It is called with 0 when the dispatcher
+  starts with nowhere to resume from and once a loss is found. It is optional, and does nothing
+  unless given: only the node's own dispatcher publishes.
+
+  `:published` reads the limit last published on this node, which a dispatcher resuming publishes
+  again when it is above its place. It is optional, and reads 0 unless given.
 
   `:recheck_interval_ms` is how soon a round waiting for a save looks again, 10 ms unless the
   option says otherwise.
@@ -129,6 +135,9 @@ defmodule Hologram.Sync.Dispatcher do
       poll_interval_ms: Keyword.get(opts, :poll_interval_ms, @default_poll_interval_ms),
       prepared_since: nil,
       publish: Keyword.get(opts, :publish, fn _seq -> :ok end),
+      published: Keyword.get(opts, :published, fn -> 0 end),
+      # The seq last published, which nothing short of a loss publishes below.
+      published_seq: 0,
       # The id of the log the place is in, taken from the first round's run when the place isn't
       # resumed (see `Hologram.DB.Oplog.log_id/0`).
       log_id: nil,
@@ -161,10 +170,12 @@ defmodule Hologram.Sync.Dispatcher do
     {cursor, log_id} = if state.cursor, do: {state.cursor, nil}, else: remembered(state.read_edge)
 
     # A place resumed was final when it was put, and stays final unless a loss is found, which
-    # publishes 0. Nothing to resume from leaves no number final until the first round's limit.
-    publish_place(state, cursor)
+    # publishes 0. So does a limit a round published before it put the place and then crashed: a
+    # loss clears the edge before it publishes 0, so a place resumed is from the same log. Nothing
+    # to resume from leaves no number final until the first round's limit.
+    resumed = publish_resumed(state, cursor)
 
-    {:noreply, dispatch(%{state | cursor: cursor, log_id: log_id})}
+    {:noreply, dispatch(%{resumed | cursor: cursor, log_id: log_id})}
   end
 
   @impl GenServer
@@ -322,9 +333,9 @@ defmodule Hologram.Sync.Dispatcher do
   defp move_to(state, place) do
     if state.read_edge, do: ReadEdge.put(state.read_edge, {place, state.log_id})
 
-    publish_place(state, place)
+    {seq, _tx, _at} = place
 
-    %{state | cursor: place}
+    %{publish_above(state, seq) | cursor: place}
   end
 
   # The seqs sent are taken out of the ranges not sent, and the ones skipped above the highest sent
@@ -371,12 +382,24 @@ defmodule Hologram.Sync.Dispatcher do
   # go out and the place stays.
   defp read_to(state, nil), do: read_to(state, state.cursor)
 
+  # The limit is a fact about the database once it is worked out, so it is published before the
+  # sessions are listed: one registering after the list reads it as it joins, and one that read
+  # before it is in the list (see `Hologram.Sync.Session`). Published before the round is read, so
+  # a round skipped below keeps it noted.
   defp read_to(
-         %{cursor: {cursor_seq, _tx, _at} = cursor} = state,
+         %{cursor: {cursor_seq, _tx, _at}} = state,
          {limit_seq, _limit_tx, _limit_at} = limit_place
        ) do
-    sent_through = max(state.sent_through || cursor_seq, cursor_seq)
     final_seq = max(limit_seq, cursor_seq)
+
+    state
+    |> publish_above(final_seq)
+    |> hand_on(limit_place, final_seq)
+  end
+
+  defp hand_on(%{cursor: {cursor_seq, _tx, _at} = cursor} = state, limit_place, final_seq) do
+    {limit_seq, _limit_tx, _limit_at} = limit_place
+    sent_through = max(state.sent_through || cursor_seq, cursor_seq)
 
     effects = Oplog.read_unsent(sent_through, state.unsent)
     noted = note_sent(state, Enum.map(effects, & &1.seq), sent_through, limit_seq)
@@ -402,16 +425,41 @@ defmodule Hologram.Sync.Dispatcher do
     if state.read_edge, do: ReadEdge.put(state.read_edge, nil)
 
     # Whatever was read may be lost, so no number reads as final until a new limit is worked out.
-    publish_place(state, nil)
+    cleared = publish_none(state)
 
-    finish_recovery(%{state | pending_rotation: rotated_log_id})
+    finish_recovery(%{cleared | pending_rotation: rotated_log_id})
+  end
+
+  # A seq at or below the one last published is final already, so only a higher one is published:
+  # a round without a limit yet, as one resumed has, keeps its place, which can be below the limit
+  # published before it.
+  defp publish_above(%{published_seq: published_seq} = state, seq) when seq <= published_seq,
+    do: state
+
+  defp publish_above(state, seq) do
+    state.publish.(seq)
+
+    %{state | published_seq: seq}
+  end
+
+  defp publish_none(state) do
+    state.publish.(0)
+
+    %{state | published_seq: 0}
   end
 
   # The place's seq is final: the place is the limit, or a cursor above it every save at or below
-  # which was read.
-  defp publish_place(state, nil), do: state.publish.(0)
+  # which was read. So is the limit published before it, which a dispatcher that crashed after
+  # publishing it and before putting its place leaves above the place.
+  defp publish_resumed(state, nil), do: publish_none(state)
 
-  defp publish_place(state, {seq, _tx, _at}), do: state.publish.(seq)
+  defp publish_resumed(state, {seq, _tx, _at}) do
+    resumed_seq = max(seq, state.published.())
+
+    state.publish.(resumed_seq)
+
+    %{state | published_seq: resumed_seq}
+  end
 
   defp remembered(nil), do: {nil, nil}
 

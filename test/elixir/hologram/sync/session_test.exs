@@ -168,6 +168,7 @@ defmodule Hologram.Sync.SessionTest do
       |> Keyword.put_new(:client, self())
       |> Keyword.put_new(:outbox, raw: true)
       |> Keyword.put_new(:page, @page)
+      |> Keyword.put_new(:read_final, fn -> 0 end)
       |> Keyword.put_new(:policy_hash, @policy_hash)
       |> Keyword.put_new(:types_hash, @types_hash)
       |> Keyword.put(:read_fill, fn entity_type, actor_user_id, replica_id, synced_types ->
@@ -218,6 +219,44 @@ defmodule Hologram.Sync.SessionTest do
         else: rest
 
     Keyword.put_new(session_opts, :read_edge, fn -> {edge_place, @log_id} end)
+  end
+
+  # An edge at the given seq and a published limit at the other. The edge is read once before the
+  # session registers, to see whether it has one, and again once it has, so the limit's read tells
+  # the test whether the session was registered then, and whether the last edge read before it was.
+  defp ordered_reads(edge_seq, final_seq) do
+    test_pid = self()
+
+    read_edge = fn ->
+      Process.put(:edge_read_registered?, registered?())
+
+      {at_seq(edge_seq), @log_id}
+    end
+
+    read_final = fn ->
+      send(test_pid, {:final_read, registered?(), Process.get(:edge_read_registered?, false)})
+
+      final_seq
+    end
+
+    [read_edge: read_edge, read_final: read_final]
+  end
+
+  defp registered? do
+    Enum.any?(Sessions.list(), fn {pid, _user_id} -> pid == self() end)
+  end
+
+  # A round read from the edge, as the round whose list the session was in is, reaches the client
+  # with its limit.
+  defp assert_told_from_edge(edge_seq, final_seq) do
+    routed = create("routed")
+
+    [live_effect(:put_entity, Module2, routed.id, %{"a" => true, "c" => "routed"})]
+    |> Enum.map(&Map.merge(&1, %{inserted_at: @logged_at, seq: final_seq, tx: @logged_tx}))
+    |> Live.route(at_seq(edge_seq), nil, final_seq)
+
+    assert_receive {:sync_deltas, _cursor, [%{id: routed_id}], _seq, ^final_seq}
+    assert routed_id == routed.id
   end
 
   defp edge_of(nil), do: 0
@@ -3198,6 +3237,39 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, nil, [%{op: :put_entity} | _rows], _applied_seq, nil}
       assert_receive {:sync_synced, {:types, [Module2], _applied_seq}, nil, 200}
       assert_receive {:sync_synced, :all, _cursor, 200}
+    end
+
+    # A round publishes its limit before it lists the sessions to tell, so one joining after the
+    # list reads it as it joins - every save at or below it ended before the fill read anything. It
+    # is read once the session is registered and has read the edge, and the place stays the edge's,
+    # so the round that listed the session, read from the edge, is still told.
+    test "dates a fill's markers by the published limit when it is above the edge" do
+      create("filled")
+      page_types(%{@page => [Module2]})
+
+      start_session!(ordered_reads(200, 209))
+
+      assert_receive {:final_read, true, true}
+      assert_receive {:sync_synced, {:types, [Module2], _applied_seq}, nil, 209}
+      assert_receive {:sync_synced, :all, cursor, 209}
+      assert {:ok, {200, _tx, _at}, _log_id, _policy_hash, _types_hash} = Cursor.decode(cursor)
+
+      assert_told_from_edge(200, 209)
+    end
+
+    # The client holds what the limit vouches for only once the gap is told, so the chunks don't
+    # claim it and the marker does.
+    test "dates a catch-up's end by the published limit when it is above the edge" do
+      renamed = create("renamed")
+      gap = [logged(:patch_entity, Module2, renamed.id, %{"c" => "renamed"}, 301)]
+
+      start_session!([gap: gap] ++ ordered_reads(300, 309))
+
+      assert_receive {:final_read, true, true}
+      assert_receive {:sync_deltas, _cursor, [%{id: _id}], _seq, 300}
+      assert_receive {:sync_synced, :all, _all_cursor, 309}
+
+      assert_told_from_edge(300, 309)
     end
 
     test "tells how far they are on a batch's last frame alone" do

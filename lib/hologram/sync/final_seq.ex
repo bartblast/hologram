@@ -77,7 +77,12 @@ defmodule Hologram.Sync.FinalSeq do
     end
   end
 
-  defp published do
+  @doc """
+  Returns the limit this node's dispatcher last published, or 0 when nothing was published, with
+  no pin or sandbox in the way - what a sync session joining takes as final beside the read edge.
+  """
+  @spec published() :: non_neg_integer
+  def published do
     case :persistent_term.get(@ref_key, nil) do
       nil -> 0
       ref -> :atomics.get(ref, 1)

@@ -33,6 +33,7 @@ defmodule Hologram.Sync.Session do
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Fill
+  alias Hologram.Sync.FinalSeq
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Gate
   alias Hologram.Sync.Held
@@ -71,6 +72,12 @@ defmodule Hologram.Sync.Session do
   lives within one id. A session waits to join until there is one. It defaults to reading the
   node's read edge.
 
+  `:read_final` reads the limit the node's dispatcher last published (see
+  `Hologram.Sync.FinalSeq.published/0`), read right after the edge. A round publishes its limit
+  before it lists the sessions to tell, so a session joining after the list was taken, which the
+  round never tells, reads it here, and claims it as final once what it reads after holds it. It
+  defaults to reading the node's published limit.
+
   `:policy_hash` is the hash of the rules this session judges rows by (see
   `Hologram.Policy.hash/0`), taken once where the session is started and stamped on every place a
   frame hands over: a place is a claim about what the client holds, and what it holds is what these
@@ -103,7 +110,8 @@ defmodule Hologram.Sync.Session do
   A client arriving with nothing is filled at once, after the session joins the node's sessions:
   every batch read after that reaches the session, and the fill, read after it, holds every
   save that ended before. Each type ends with a marker saying the client holds all of it, and the
-  last with one saying it holds everything, dated by the edge read. A batch the session handles
+  last with one saying it holds everything, at the edge read, its numbers final up to the higher of
+  the edge and the limit the node published, read right after it. A batch the session handles
   after the fill claims the place it was read from, and one read from a place below that edge is
   passed over: the fill holds it, and its rows can be older than the fill's.
 
@@ -195,6 +203,7 @@ defmodule Hologram.Sync.Session do
       policy_hash: Keyword.fetch!(opts, :policy_hash),
       pot: Pot.new(),
       read_edge: Keyword.get(opts, :read_edge, &read_node_edge/0),
+      read_final: Keyword.get(opts, :read_final, &FinalSeq.published/0),
       read_fill: Keyword.get(opts, :read_fill, &Fill.read/4),
       read_gap: read_gap,
       read_ids: Keyword.get(opts, :read_ids, &Fill.read_ids/2),
@@ -246,9 +255,10 @@ defmodule Hologram.Sync.Session do
         {:stop, {:shutdown, :edge_gone}, state}
 
       {edge, log_id} ->
+        joined_final = state.read_final.()
         state = %{state | log_id: log_id, page_types: page_types(state.page)}
 
-        {:noreply, Pool.run(fn -> fill(state, edge) end)}
+        {:noreply, Pool.run(fn -> fill(state, edge, joined_final) end)}
     end
   rescue
     # The frames and markers name the model the server runs, which a hold refuses to read. The
@@ -382,17 +392,17 @@ defmodule Hologram.Sync.Session do
   # on every page. The rows travel with no place, since mid-fill the client holds no whole pot, and
   # with the number read beside them (see `Hologram.Sync.Fill.read/4`).
   #
-  # The edge dates the whole fill: every save with a serial at or below it ended before the first
-  # type was read, so every row it wrote is in what the fill reads. The rows travel saying nothing
-  # of it, since mid-type the client holds only part of what a number would vouch for, and each
-  # type's marker says it of that type.
+  # The higher of the edge and the limit published as the session joined dates the whole fill:
+  # every save with a serial at or below it ended before the first type was read, so every row it
+  # wrote is in what the fill reads. The rows travel saying nothing of it, since mid-type the client
+  # holds only part of what a number would vouch for, and each type's marker says it of that type.
   #
   # Each type's rows are held as they go out. A set a row goes out with names every row of its
   # type the user may read when the row is read, and a row of a type read later can be gone or
   # hidden by then and never reach the client - so the rows the sets name that the client never got
   # are kept among the ones it was told to drop, and a later removal of a pair naming one is told.
-  defp fill(state, {edge_seq, _tx, _at} = edge) do
-    state = %{state | final_seq: edge_seq, held_below: edge_seq, place: edge}
+  defp fill(state, {edge_seq, _tx, _at} = edge, joined_final) do
+    state = %{state | final_seq: max(edge_seq, joined_final), held_below: edge_seq, place: edge}
     synced_types = state.synced_types
 
     page_types =
@@ -513,18 +523,22 @@ defmodule Hologram.Sync.Session do
 
     case state.read_edge.() do
       nil -> cut(state, {:shutdown, :edge_gone})
-      {edge, log_id} -> catch_up_to(read_held(%{state | log_id: log_id}), edge)
+      {edge, log_id} -> catch_up_to(%{state | log_id: log_id}, edge, state.read_final.())
     end
   rescue
     Hologram.StaleModelError -> cut(state, {:shutdown, :model_held})
   end
 
-  defp catch_up_to(held, edge) do
+  # The published limit is read before the held ids and the gap, so both hold every save at or
+  # below it - and claimed only once the gap is told, since the client holds none of it before.
+  defp catch_up_to(state, edge, joined_final) do
+    held = read_held(state)
+
     case held.read_gap.() do
       {:ok, gap} ->
         held
         |> tell_gap(gap, edge)
-        |> caught_up(edge)
+        |> caught_up(edge, joined_final)
 
       {:full_resync, reason} ->
         cut(held, {:full_resync, reason})
@@ -619,7 +633,7 @@ defmodule Hologram.Sync.Session do
     }
 
     # A chunk with nothing for the client sends no frame to say how far the numbers are final: the
-    # marker ending the catch-up says it (see `caught_up/2`).
+    # marker ending the catch-up says it (see `caught_up/3`).
     told =
       tell_part(state, part, trust_held?: false, keep_salt: context.keep_salt, tell_final?: false)
 
@@ -715,16 +729,16 @@ defmodule Hologram.Sync.Session do
     end)
   end
 
-  # Once the gap is told, the client holds what every save at or below the edge wrote, so the
-  # marker claims the edge, the numbers up to it are final, and a batch read from below it is
-  # passed over. A batch told after
-  # with a serial at or below the last one read now - also one starting at or below the gap's edge
-  # and ending above it - can be in some of what the catch-up read and not in the rest, so it hands
-  # its rows over whole (see `trusts_held?/2`).
-  defp caught_up(state, {edge_seq, _tx, _at} = edge) do
+  # Once the gap is told, the client holds what every save at or below the edge wrote, and at or
+  # below the limit published as the session joined, which was read before the gap. So the marker
+  # claims the edge, the numbers are final up to the higher of the two, and a batch read from below
+  # the edge is passed over. A batch told after it holding a serial at or below the last one read
+  # now - also one starting at or below the gap's edge and ending above it - can be in some of what
+  # the catch-up read and not in the rest, so it hands its rows over whole (see `trusts_held?/2`).
+  defp caught_up(state, {edge_seq, _tx, _at} = edge, joined_final) do
     announce_all(%{
       state
-      | final_seq: higher_seq(state.final_seq, edge_seq),
+      | final_seq: higher_seq(state.final_seq, max(edge_seq, joined_final)),
         held_below: edge_seq,
         place: max_place(state.place, edge),
         read_gap: nil,
@@ -1138,8 +1152,9 @@ defmodule Hologram.Sync.Session do
   end
 
   # How far the numbers are final, told in a frame of its own once it moves. The session joins the
-  # node's sessions in the callback that fills it or catches it up, so a limit moved meanwhile is
-  # read once the client holds a whole pot - and one read before the edge says nothing new.
+  # node's sessions in the callback that fills it or catches it up and reads the published limit
+  # right after, which covers a round whose list it missed - and a round that listed it tells a
+  # limit only when it is above the one read.
   defp tell_final(state, final_seq) do
     if above?(final_seq, state.final_seq) do
       state

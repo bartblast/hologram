@@ -332,7 +332,29 @@ defmodule Hologram.Sync.DispatcherTest do
         )
 
       assert_receive {:published, ^seq}
+      :sys.get_state(dispatcher)
       refute_received {:published, 0}
+
+      settle(dispatcher)
+    end
+
+    # A round publishes its limit before it puts its place, so a dispatcher restarted between the
+    # two resumes below what queries already read as final.
+    test "publishes the limit published before it at start when it is above the place resumed" do
+      {seq, _tx, _at} = first = seed(200, @entity_id)
+      published_seq = seq + 9
+
+      dispatcher =
+        start_dispatcher!(
+          advance: sandbox_advance(running: ["a"]),
+          publish: publishing(),
+          published: fn -> published_seq end,
+          read_edge: start_read_edge!({first, Oplog.log_id()})
+        )
+
+      assert_receive {:published, ^published_seq}
+      :sys.get_state(dispatcher)
+      refute_received {:published, ^seq}
 
       settle(dispatcher)
     end
@@ -351,6 +373,33 @@ defmodule Hologram.Sync.DispatcherTest do
       settle(dispatcher)
     end
 
+    # A session registering after the round's list reads the published limit as it joins, which
+    # covers the round only if the limit was published before the list was taken.
+    test "publishes the limit a round reached before handing the round on" do
+      place = seed(200, @entity_id)
+      test_pid = self()
+
+      handler = fn _effects, _place, _sent, final_seq ->
+        send(test_pid, {:handling, final_seq})
+
+        receive do
+          :go -> :ok
+        end
+      end
+
+      dispatcher = start_dispatcher!(cursor: place, handler: handler, publish: publishing())
+      :sys.get_state(dispatcher)
+
+      {seq, _tx, _at} = seed(201, @entity_id)
+      wake(dispatcher)
+
+      assert_receive {:handling, ^seq}
+      assert_received {:published, ^seq}
+
+      send(dispatcher, :go)
+      settle(dispatcher)
+    end
+
     test "publishes nothing final once a loss is found" do
       {seq, tx, inserted_at} = seed(200, @entity_id)
 
@@ -359,6 +408,9 @@ defmodule Hologram.Sync.DispatcherTest do
 
       assert_receive :lost
       assert_received {:published, 0}
+
+      # The limit worked out after the loss is below the place resumed, and still goes out.
+      assert_receive {:published, ^seq}
 
       settle(dispatcher)
     end
